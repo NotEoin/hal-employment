@@ -6,9 +6,23 @@ fixed. The tunable preferences are the constants at the top of this module.
 """
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 SALARY_FLOOR = 30_000
+
+EXCLUDED_FILE = Path(__file__).resolve().parent.parent / "excluded-companies.txt"
+_SUFFIXES = re.compile(r"\b(ltd|limited|plc|inc|llc|group|holdings|technologies|technology|"
+                       r"systems|uk|international|corporation|corp)\b")
+
+
+def company_key(name: str) -> str:
+    """Normalises a company name for exclusion matching."""
+    return re.sub(r"[^a-z0-9]", "", _SUFFIXES.sub("", (name or "").lower()))
+
+
+EXCLUDED = {company_key(line) for line in EXCLUDED_FILE.read_text().splitlines()
+            if line.strip() and not line.startswith("#")} if EXCLUDED_FILE.exists() else set()
 
 LONDON = r"\blondon\b|\bcity of london\b|\bcanary wharf\b|\bshoreditch\b|\bkings? cross\b"
 # City and anywhere on or near the local tram.
@@ -104,6 +118,9 @@ def score(job: dict) -> tuple[float, str]:
     title = job["title"] or ""
     text = job.get("description") or ""
     notes = []
+
+    if company_key(job.get("company")) in EXCLUDED:
+        return 0, "excluded employer"
 
     where, loc_pts = place(job.get("location"), text)
     if not where:
