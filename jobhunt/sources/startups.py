@@ -85,7 +85,8 @@ def eighty_thousand_hours():
 WORKABLE_SEARCH = "https://jobs.workable.com/api/v1/jobs"
 WORKABLE_QUERIES = ["software engineer", "software developer", "graduate developer", "junior developer",
                     "machine learning", "AI engineer", "data engineer", "python developer",
-                    "backend engineer", "security engineer", "research engineer"]
+                    "backend engineer", "security engineer", "research engineer",
+                    "graduate internship", "software engineering intern", "AI intern"]
 WORKABLE_PLACES = ["London, UK", "City, UK", "Town, UK"]
 
 

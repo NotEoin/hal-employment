@@ -87,6 +87,11 @@ STUDENTS_ONLY = re.compile(
     r"currently (enrolled|studying)|enrolled in a (full-time )?(bachelor|master|degree|undergraduate)|"
     r"graduating in 202[7-9]|expected to graduate in 202[7-9]|penultimate year|final[- ]year students?|"
     r"(class|cohort) of 202[7-9]|depending on (your )?graduation date", re.I)
+# Internships are listed separately, and only when graduates may apply.
+INTERNSHIP = re.compile(r"\bintern(ship)?\b", re.I)
+GRADUATES_WELCOME = re.compile(r"recent(ly)? graduat|have graduated|open to graduates|graduates (are )?welcome|"
+                               r"off-cycle|graduate internship|graduated (in|within)|no longer (a )?student", re.I)
+UNPAID = re.compile(r"\bunpaid\b|\bexpenses only\b|\bvoluntary\b", re.I)
 ENTRY = re.compile(r"\b(graduate|grad|junior|jr\.?|entry[- ]level|early careers?|new grad|"
                    r"associate (software|engineer|developer)|engineer i\b|level 1|"
                    r"ktp associate|trainee|0-2 years|recent graduates?)\b", re.I)
@@ -109,6 +114,12 @@ YEARS = re.compile(
     r"(?:\w+[\s,/-]+){0,4}?(?:experience|building|developing|of (?:software|engineering|industry|"
     r"commercial|professional|production|hands-on))", re.I)
 MONEY = re.compile(r"\u00a3\s?(\d{2,3})(?:,(\d{3})|(k))", re.I)
+
+
+def graduate_internship(title: str, text: str) -> bool:
+    """True for a paid internship that the advert explicitly opens to graduates."""
+    return bool(INTERNSHIP.search(title) and GRADUATES_WELCOME.search(text)
+                and not STUDENTS_ONLY.search(text) and not UNPAID.search(text))
 
 
 def place(location: str, text: str) -> tuple[str | None, int]:
@@ -171,7 +182,7 @@ def score(job: dict) -> tuple[float, str]:
             return 0, f"not an engineering role: {title}"
         if TOO_SENIOR.search(title):
             return 0, "too senior"
-        if NOT_FOR_GRADS.search(title):
+        if NOT_FOR_GRADS.search(title) and not graduate_internship(title, text):
             return 0, "internship/placement/apprenticeship/PhD"
 
     if GAMBLING_WORK.search(text):
@@ -186,6 +197,9 @@ def score(job: dict) -> tuple[float, str]:
         notes.append(pattern)
 
     s = 40 + loc_pts + pattern_pts
+    if graduate_internship(title, text):
+        s -= 10
+        notes.append("graduate internship")
     if job["source"] == "hn" and TOO_SENIOR.search(title) and not ENTRY.search(text):
         s -= 15
         notes.append("seems senior-only")

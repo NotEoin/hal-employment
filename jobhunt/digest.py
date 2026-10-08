@@ -13,7 +13,11 @@ def build(con) -> tuple[str, str]:
     acts = actions(con)
     new = con.execute("""SELECT company, title, location, score, score_notes, url FROM jobs
                          WHERE first_seen >= datetime('now','-1 day') AND score >= 55 AND active=1
+                         AND score_notes NOT LIKE '%graduate internship%'
                          ORDER BY score DESC LIMIT 12""").fetchall()
+    interns = con.execute("""SELECT company, title, location, score, url FROM jobs
+                             WHERE first_seen >= datetime('now','-1 day') AND score > 0 AND active=1
+                             AND score_notes LIKE '%graduate internship%' ORDER BY score DESC LIMIT 6""").fetchall()
     moved = con.execute("""SELECT j.company, j.title, ev.detail FROM events ev JOIN jobs j ON j.id = ev.job_id
                            WHERE ev.kind='status' AND ev.at >= datetime('now','-1 day')
                            AND j.status IN ('applied','assessment','interview','offer','rejected')
@@ -28,6 +32,9 @@ def build(con) -> tuple[str, str]:
         out += ["CHANGED IN THE LAST DAY"] + [f"  - {r['company']} - {r['title']}: {r['detail']}" for r in moved] + [""]
     out += ["NEW STRONG MATCHES"]
     out += [f"  {r['score']:.0f}  {r['company']} - {r['title']} | {r['location']}\n      {r['url']}" for r in new] or ["  None today."]
+    if interns:
+        out += ["", "GRADUATE INTERNSHIPS"]
+        out += [f"  {r['score']:.0f}  {r['company']} - {r['title']} | {r['location']}\n      {r['url']}" for r in interns]
     out += ["", "PIPELINE  " + "  ".join(f"{k} {v}" for k, v in counts.items()),
             f"Unreviewed matches scoring 60+: {queue}   (python -m jobhunt list -m 60)"]
     subject = f"[jobhunt] {today}: {len(acts)} need you, {len(new)} new matches"

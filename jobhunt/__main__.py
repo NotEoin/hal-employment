@@ -184,6 +184,8 @@ def cmd_list(args):
         params.append(args.status)
     if args.status in ("new", "shortlisted", "ready"):
         where.append("active = 1")
+    internships = "COALESCE(score_notes, '') LIKE '%graduate internship%'"
+    where.append(internships if args.internships else f"NOT {internships}")
     if args.new_today:
         where.append("first_seen >= datetime('now', '-1 day')")
     rows = con.execute(
@@ -318,6 +320,7 @@ def main():
     s.add_argument("-m", "--min", type=float)
     s.add_argument("-n", type=int, default=30)
     s.add_argument("--new-today", action="store_true")
+    s.add_argument("--internships", action="store_true", help="list graduate internships instead of jobs")
     s.set_defaults(fn=cmd_list)
 
     s = sub.add_parser("show"); s.add_argument("id"); s.add_argument("--full", action="store_true"); s.set_defaults(fn=cmd_show)

@@ -14,7 +14,7 @@ from .ats import strip_html
 BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 SEARCHES = ["research software engineer", "software developer", "software engineer",
             "machine learning", "artificial intelligence", "data scientist", "KTP associate",
-            "research assistant computer science", "cyber security"]
+            "research assistant computer science", "cyber security", "internship"]
 PLACES = ["London", "City"]
 BASE = "https://www.jobs.ac.uk"
 
