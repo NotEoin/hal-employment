@@ -411,6 +411,8 @@ def ingest_alert(con, sender: str, subject: str, body: str, when: str) -> None:
     if not m:
         return
     title, company, loc = m.group("title"), m.group("company"), m.group("loc")
+    if match_job(con, company, title, "confirmed"):
+        return  # already tracked from another source or an application
     job = {
         "id": f"indeed:{norm(company)}:{re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')}",
         "source": "indeed", "company": company, "title": title, "location": loc or "",
