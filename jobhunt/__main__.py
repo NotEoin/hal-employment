@@ -151,6 +151,13 @@ def cmd_add(args):
     print(job["id"])
 
 
+def cmd_screen(args):
+    from . import screen
+    con = db.connect()
+    for job_id, ok, reason in screen.screen(con, args.min, args.n):
+        print(f"{'PASS' if ok else 'fail'}  {job_id[:60]:60}  {reason}")
+
+
 def cmd_check(args):
     from . import pack
     con = db.connect()
@@ -337,6 +344,9 @@ def main():
     s = sub.add_parser("add", help="track an advert found by hand, skipping the filters")
     s.add_argument("url"); s.add_argument("--company", required=True); s.add_argument("--title", required=True)
     s.add_argument("--location", default=""); s.add_argument("--salary"); s.set_defaults(fn=cmd_add)
+    s = sub.add_parser("screen", help="ask the local model which jobs a new graduate could get")
+    s.add_argument("-m", "--min", type=float, default=50); s.add_argument("-n", type=int, default=60)
+    s.set_defaults(fn=cmd_screen)
     s = sub.add_parser("check"); s.add_argument("id", nargs="?"); s.add_argument("--ready", action="store_true")
     s.set_defaults(fn=cmd_check)
     s = sub.add_parser("pack"); s.add_argument("id", nargs="?"); s.add_argument("--shortlisted", action="store_true")
