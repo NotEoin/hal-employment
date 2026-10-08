@@ -22,7 +22,9 @@ def company_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", _SUFFIXES.sub("", name))
 
 
-# Adverts for gambling work or bonded training schemes, at any employer.
+# Adverts for adult content, gambling work or bonded training schemes, at any employer.
+ADULT_WORK = re.compile(r"\badult (content|entertainment|industry|creators?)\b|\b18\+ (content|platform)|"
+                        r"\bnsfw\b|\bporn", re.I)
 GAMBLING_WORK = re.compile(r"\b(igaming|sportsbook|online casino|casino games|betting (company|operator|"
                            r"platform|exchange|industry)|gambling (company|operator|industry))\b", re.I)
 TRAINING_BOND = re.compile(r"training bond|repay (the )?(cost of )?(your )?training|training (cost|fee)s? "
@@ -185,6 +187,8 @@ def score(job: dict) -> tuple[float, str]:
         if NOT_FOR_GRADS.search(title) and not graduate_internship(title, text):
             return 0, "internship/placement/apprenticeship/PhD"
 
+    if ADULT_WORK.search(text):
+        return 0, "adult content"
     if GAMBLING_WORK.search(text):
         return 0, "gambling"
     if TRAINING_BOND.search(text):
