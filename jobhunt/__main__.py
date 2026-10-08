@@ -137,6 +137,17 @@ def cmd_pack(args):
         print(f"  {pack.build(con, job_id, use_web=not args.no_web)}")
 
 
+def cmd_check(args):
+    from . import pack
+    con = db.connect()
+    rows = con.execute("SELECT * FROM jobs WHERE status = 'ready'").fetchall() if args.ready else [_find(con, args.id)]
+    for r in rows:
+        pack_md = pack.PACKS / pack.slug(f"{r['company']}-{r['title']}") / "pack.md"
+        if pack_md.exists():
+            pack.add_company_check(pack_md, r["company"])
+            print(f"checked {r['company']}")
+
+
 def cmd_vault(args):
     from . import vault
     print(vault.write(db.connect()) or f"vault not found: {vault.VAULT}")
@@ -309,6 +320,8 @@ def main():
     s = sub.add_parser("digest"); s.add_argument("--dry-run", action="store_true")
     s.add_argument("--spoken", action="store_true"); s.set_defaults(fn=cmd_digest)
     sub.add_parser("vault").set_defaults(fn=cmd_vault)
+    s = sub.add_parser("check"); s.add_argument("id", nargs="?"); s.add_argument("--ready", action="store_true")
+    s.set_defaults(fn=cmd_check)
     s = sub.add_parser("pack"); s.add_argument("id", nargs="?"); s.add_argument("--shortlisted", action="store_true")
     s.add_argument("--no-web", action="store_true"); s.set_defaults(fn=cmd_pack)
     s = sub.add_parser("inbox"); s.add_argument("-k", "--kind"); s.add_argument("-n", type=int, default=60)

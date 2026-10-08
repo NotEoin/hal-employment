@@ -10,7 +10,7 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from . import coursework, cv, db, llm, research
+from . import coursework, cv, db, llm, reputation, research
 from .config import ROOT
 from .vault import VAULT
 
@@ -132,12 +132,15 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
                 llm.chat_json(VERIFY, f"Facts:\n{facts}\n\nEvidence map:\n{fit.get('matches', [])}"
                               f"\n\nDrafts:\n{drafts}", role="main").get("unsupported", [])]
     flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
+    company_flags, company_md = reputation.check(job["company"])
+    flagged += company_flags
     if fit.get("eligible") is False:
         flagged.insert(0, f"ELIGIBILITY: {fit.get('eligibility_notes', 'may not be eligible')}")
     elif "current students" in (job["score_notes"] or ""):
         flagged.insert(0, "ELIGIBILITY: the advert appears to be for current students; confirm graduates can apply")
 
     md = _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged)
+    md = md.replace("## Role\n", company_md + "\n## Role\n", 1)
     pack_md = out_dir / "pack.md"
     pack_md.write_text(md)
     if VAULT.exists():
@@ -147,6 +150,25 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
         db.set_status(con, job_id, "ready", f"pack drafted in {out_dir.name}")
     con.commit()
     return pack_md
+
+
+def add_company_check(pack_md: Path, company: str) -> None:
+    """Adds or refreshes the company check in an existing pack and its vault copy."""
+    flags, section = reputation.check(company)
+    text = re.sub(r"## Company check\n.*?(?=\n## )", "", pack_md.read_text(), flags=re.S)
+    if flags:
+        bullets = "".join(f"- {f}\n" for f in flags)
+        if "## Check before sending\n\n" in text:
+            text = text.replace("## Check before sending\n\n", "## Check before sending\n\n" + bullets, 1)
+        else:
+            text = text.replace("\n## Role\n", f"\n## Check before sending\n\n{bullets}\n## Role\n", 1)
+    text = text.replace("\n## Role\n", "\n" + section + "\n## Role\n", 1)
+    pack_md.write_text(text)
+    title = text.splitlines()[0].removeprefix("# ")
+    company_name, _, role = title.partition(": ")
+    vault_copy = APPLICATIONS / f"{slug(company_name)} - {slug(role)}.md"
+    if vault_copy.exists():
+        vault_copy.write_text(text)
 
 
 def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged) -> str:

@@ -22,6 +22,9 @@ def company_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", _SUFFIXES.sub("", name))
 
 
+# Sectors Firstname will not work in, matched in the advert text.
+DISREPUTABLE_WORK = re.compile(r"\b(tobacco|vap(e|ing) products|e-cigarettes?|payday loans?|high-cost (short-term )?"
+                               r"credit|multi-level marketing|network marketing|firearms|ammunition)\b", re.I)
 # Adverts for adult content, gambling work or bonded training schemes, at any employer.
 ADULT_WORK = re.compile(r"\badult (content|entertainment|industry|creators?)\b|\b18\+ (content|platform)|"
                         r"\bnsfw\b|\bporn", re.I)
@@ -187,6 +190,8 @@ def score(job: dict) -> tuple[float, str]:
         if NOT_FOR_GRADS.search(title) and not graduate_internship(title, text):
             return 0, "internship/placement/apprenticeship/PhD"
 
+    if DISREPUTABLE_WORK.search(text):
+        return 0, "excluded sector"
     if ADULT_WORK.search(text):
         return 0, "adult content"
     if GAMBLING_WORK.search(text):
