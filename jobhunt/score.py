@@ -58,8 +58,20 @@ DEFENCE_NAME = re.compile(r"defen[cs]e|military|weapons?|munitions|armaments|\ba
 # Roles that need a security clearance the candidate would already have to hold.
 CLEARANCE_HELD = re.compile(r"\b(sc|dv|ctc|esc)[- ]clear(ed|ance)\b|active (sc|dv) clearance|"
                             r"(hold|holding|have) (a |an )?(current |active |valid )?(sc|dv|security) clearance", re.I)
-EXCLUDED = {company_key(line) for line in EXCLUDED_FILE.read_text().splitlines()
-            if line.strip() and not line.startswith("#")} if EXCLUDED_FILE.exists() else set()
+def _exclusions() -> tuple[set[str], set[str]]:
+    """Returns (always excluded, train-and-place) company keys from the exclusion file."""
+    always, train_and_place, section = set(), set(), ""
+    lines = EXCLUDED_FILE.read_text().splitlines() if EXCLUDED_FILE.exists() else []
+    for line in lines:
+        if line.startswith("#"):
+            section = line.lower()
+        elif line.strip():
+            is_training = "training" in section or "train-and-place" in section
+            (train_and_place if is_training else always).add(company_key(line))
+    return always, train_and_place
+
+
+EXCLUDED, TRAIN_AND_PLACE = _exclusions()
 
 LONDON = r"\blondon\b|\bcity of london\b|\bcanary wharf\b|\bshoreditch\b|\bkings? cross\b"
 # City and anywhere on or near the local tram.
@@ -186,12 +198,16 @@ def score(job: dict) -> tuple[float, str]:
     text = job.get("description") or ""
     notes = []
 
-    if company_key(job.get("company")) in EXCLUDED or DEFENCE_NAME.search(job.get("company") or ""):
+    key = company_key(job.get("company"))
+    if key in EXCLUDED or DEFENCE_NAME.search(job.get("company") or ""):
         return 0, "excluded employer"
+    # Train-and-place schemes are acceptable in City only.
+    train_and_place = (key in TRAIN_AND_PLACE or TRAINING_PROVIDER.search(job.get("company") or "")
+                       or TRAINING_BOND.search(text))
+    if train_and_place and not re.search(CITY_AREA, (job.get("location") or "").lower()):
+        return 0, "train-and-place outside City"
     if CLEARANCE_HELD.search(f"{title}\n{text}"):
         return 0, "needs existing security clearance"
-    if TRAINING_PROVIDER.search(job.get("company") or ""):
-        return 0, "training provider"
 
     where, loc_pts = place(job.get("location"), text)
     if not where:
@@ -212,8 +228,6 @@ def score(job: dict) -> tuple[float, str]:
         return 0, "adult content"
     if GAMBLING_WORK.search(text):
         return 0, "gambling"
-    if TRAINING_BOND.search(text):
-        return 0, "training bond"
 
     pattern, pattern_pts = workplace(job.get("location"), text)
     if pattern_pts is None:
@@ -222,6 +236,9 @@ def score(job: dict) -> tuple[float, str]:
         notes.append(pattern)
 
     s = 40 + loc_pts + pattern_pts
+    if train_and_place:
+        s -= 8
+        notes.append("train-and-place: check bond and repayment terms")
     if graduate_internship(title, text):
         s -= 10
         notes.append("graduate internship")
