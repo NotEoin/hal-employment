@@ -1,0 +1,120 @@
+"""The editable application documents for one job: CV, cover letter, message, answers.
+
+Drafts come from the job's pack (packs/<slug>/pack.md). Edits are stored in the
+applications table, and the CV and cover letter PDFs in the pack directory are
+re-rendered from the edited text.
+"""
+import json
+import re
+from pathlib import Path
+
+from . import cv, db, letter, pack
+
+SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
+
+
+def pack_dir(job) -> Path:
+    return pack.PACKS / pack.slug(f"{job['company']}-{job['title']}")
+
+
+def read_pack(job) -> dict:
+    """Returns the pack's sections, keyed by heading, or {} if no pack was drafted."""
+    md = pack_dir(job) / "pack.md"
+    if not md.exists():
+        return {}
+    return {m.group(1).strip(): m.group(2).strip() for m in SECTION.finditer(md.read_text())}
+
+
+def _bullets(text: str) -> list[str]:
+    return [line[2:].strip() for line in text.splitlines() if line.startswith("- ")]
+
+
+def _unwrap(text: str) -> str:
+    """Joins hard-wrapped lines back into paragraphs."""
+    return "\n\n".join(" ".join(p.split()) for p in re.split(r"\n\s*\n", text.strip()) if p.strip())
+
+
+def summary(job) -> dict:
+    """Returns the read-only parts of a pack for display: flags, role, company and fit."""
+    s = read_pack(job)
+    fit = []
+    for line in s.get("Fit", "").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) == 3 and cells[0] not in ("Requirement", "---"):
+            fit.append({"requirement": cells[0], "evidence": cells[1], "strength": cells[2]})
+    gaps = re.search(r"Gaps to address or accept: (.*)", s.get("Fit", ""))
+    return {"flags": _bullets(s.get("Check before sending", "")),
+            "role": s.get("Role", ""),
+            "company": re.sub(r"\n- Source: .*", "", s.get("Company", "")).strip(),
+            "sources": re.findall(r"- Source: (\S+)", s.get("Company", "")),
+            "company_check": _bullets(s.get("Company check", "")),
+            "fit": fit,
+            "gaps": gaps.group(1) if gaps else "",
+            "has_pack": bool(s)}
+
+
+def drafts(job) -> dict:
+    """Returns the documents as drafted in the pack."""
+    s = read_pack(job)
+    msg = s.get("Message to the hiring manager", "")
+    to = re.match(r"To: (.*)\n", msg)
+    answers = re.findall(r"\*\*(.+?)\*\*\n\n(.*?)(?=\n\*\*|\Z)", s.get("Form answers", ""), re.S)
+    variant = {}
+    if (pack_dir(job) / "cv.json").exists():
+        variant = json.loads((pack_dir(job) / "cv.json").read_text())
+    return {
+        "letter": s.get("Cover letter", ""),
+        "message_to": to.group(1) if to else "",
+        "message": msg[to.end():].strip() if to else msg,
+        "answers": [{"question": q.strip(), "answer": _unwrap(a)} for q, a in answers],
+        "cv_title": variant.get("title", ""),
+        "cv_summary": variant.get("summary", ""),
+        "approved": False,
+    }
+
+
+def load(con, job) -> dict:
+    """Returns the current documents: the stored edits, else the pack's drafts."""
+    row = con.execute("SELECT docs FROM applications WHERE job_id = ?", (job["id"],)).fetchone()
+    if row and row["docs"]:
+        return json.loads(row["docs"])
+    return drafts(job)
+
+
+def save(con, job, docs: dict) -> None:
+    """Stores edited documents and re-renders the CV and cover letter PDFs."""
+    con.execute("""INSERT INTO applications (job_id, stage, docs, updated) VALUES (?, 'documents', ?, ?)
+                   ON CONFLICT(job_id) DO UPDATE SET docs = excluded.docs, updated = excluded.updated""",
+                (job["id"], json.dumps(docs), db.now()))
+    con.commit()
+    render(job, docs)
+
+
+def files(job) -> dict:
+    """Returns the paths of the documents to upload, where they exist."""
+    d = pack_dir(job)
+    return {k: str(p) for k, p in (("cv", d / "Firstname-Lastname-CV.pdf"),
+                                    ("letter", d / "Firstname-Lastname-Cover-Letter.pdf")) if p.exists()}
+
+
+def render(job, docs: dict) -> dict:
+    """Renders the CV and cover letter PDFs from the documents; returns their paths."""
+    d = pack_dir(job)
+    variant_path = d / "cv.json"
+    if variant_path.exists() and (docs.get("cv_title") or docs.get("cv_summary")):
+        variant = json.loads(variant_path.read_text())
+        variant["title"] = docs.get("cv_title") or variant["title"]
+        variant["summary"] = docs.get("cv_summary") or variant["summary"]
+        cv.render(variant, d)
+    body = _ascii(docs.get("letter", ""))
+    if body.strip():
+        letter.render(body, d / "Firstname-Lastname-Cover-Letter.pdf",
+                      [f"{job['company']} recruitment team"], f"Application: {_ascii(job['title'])}")
+    return files(job)
+
+
+def _ascii(text: str) -> str:
+    """Replaces the typographic characters the PDF fonts cannot draw."""
+    table = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-",
+             "\u2014": ", ", "\u2026": "...", "\u00a0": " ", "\u00a3": "GBP "}
+    return "".join(table.get(ch, ch) for ch in text).encode("ascii", "ignore").decode()
