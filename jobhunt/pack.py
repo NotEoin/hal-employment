@@ -23,6 +23,7 @@ ANALYSE = """You analyse a job advert for a UK graduate software engineer. Reply
  "nice_to_have": [up to 6 short requirements stated as desirable],
  "contacts": [named people or email addresses in the advert, with their role if given],
  "questions": [application questions the advert asks candidates to answer],
+ "employer": the company the successful candidate will work for,
  "eligibility": [hard conditions on who may apply: current enrolment, graduation
    year, start date, right to work, location, minimum experience]}
 Use only what the advert says."""
@@ -139,7 +140,9 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
                 llm.chat_json(VERIFY, f"Facts:\n{facts}\n\nCourse notes:\n{course_notes}\n\nEvidence map:\n{fit.get('matches', [])}"
                               f"\n\nDrafts:\n{drafts}", role="main").get("unsupported", [])]
     flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
-    company_flags, company_md = reputation.check(job["company"])
+    # KTP posts are listed under the scheme; the employer is the host company in the advert.
+    employer = (analysis.get("employer") or job["company"]) if job["company"] == "KTP" else job["company"]
+    company_flags, company_md = reputation.check(employer)
     flagged += company_flags
     if history:
         flagged.insert(0, f"REAPPLICATION: you applied here before: {history}")

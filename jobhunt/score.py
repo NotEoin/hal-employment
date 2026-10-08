@@ -39,7 +39,8 @@ EXPERIENCE_REQUIRED = re.compile(
     r"(commercial |professional |industry |hands-on |production )?experience (in|with|of|as|building|developing)|"
     r"\b(commercial|professional|industry) experience (in|with|of|as|building|developing|is required)|"
     r"\bextensive \w+ experience|\b(strong|solid),? proven experience|\btrack record of|"
-    r"meaningful production ownership", re.I)
+    r"meaningful production ownership|\b(several|many|a few|multiple) years\b|\bmid[- ]level role|"
+    r"experience level: (mid|senior|mid-senior)", re.I)
 # Postgraduate degrees required; a BSc graduate does not qualify.
 POSTGRAD_REQUIRED = re.compile(r"\b(msc|ph\.?d|master'?s( degree)?)\b[^.\n]{0,30}\b(in|required|degree)\b", re.I)
 UNDERGRAD_OK = re.compile(r"\b(bsc|bachelor'?s?|undergraduate|first[- ]class|2[.:]1)\b", re.I)
@@ -222,6 +223,10 @@ def score(job: dict) -> tuple[float, str]:
     if STUDENTS_ONLY.search(text):
         s -= 25
         notes.append("may require current students")
+
+    if job["source"] == "indeed":
+        s -= 10
+        notes.append("alert only, find the advert")
 
     yrs = min_years(text)
     if yrs is not None and yrs >= 1:

@@ -47,11 +47,18 @@ def companies_house(company: str) -> list[str]:
     """Returns the top Companies House search results as one-line descriptions."""
     page = get(COMPANIES_HOUSE + urllib.parse.quote_plus(company), headers=BROWSER, timeout=20)
     results = []
+    key = _key(company)
     for block in re.findall(r'<li class="type-company">(.*?)</li>', page, re.S):
         text = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", block))).strip()
-        if "{{" not in text:
+        # Only registrations whose name starts with the employer's name are the employer.
+        if "{{" not in text and key and _key(text).startswith(key):
             results.append(text[:160])
     return results[:3]
+
+
+def _key(name: str) -> str:
+    name = re.sub(r"\b(ltd|limited|plc|group|holdings|uk|the)\b", "", name.lower())
+    return re.sub(r"[^a-z0-9]", "", name)[:12]
 
 
 def check(company: str) -> tuple[list[str], str]:
@@ -77,10 +84,10 @@ def check(company: str) -> tuple[list[str], str]:
     if registered is None:
         lines.append("- Companies House: lookup failed")
     elif not registered:
-        lines.append("- Companies House: no UK registration found under this name")
-        flags.append("company check: no Companies House match; confirm the legal entity")
+        lines.append("- Companies House: no registration found under this exact name; "
+                     "the employer may trade under another legal name")
     else:
         lines += [f"- Companies House: {r}" for r in registered]
-        if any(re.search(r"dissolved|liquidation|administration", r, re.I) for r in registered[:1]):
-            flags.append("company check: top Companies House match is dissolved or insolvent")
+        if all(re.search(r"dissolved|liquidation|administration", r, re.I) for r in registered):
+            flags.append("company check: every Companies House match is dissolved or insolvent")
     return flags, "\n".join(lines) + "\n"
