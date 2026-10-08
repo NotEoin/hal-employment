@@ -23,15 +23,21 @@ def screen(con, min_score: float = 50, limit: int = 60) -> list[tuple[str, bool,
                           ORDER BY score DESC LIMIT ?""", (min_score, limit)).fetchall()
     results = []
     for r in rows:
-        verdict = llm.chat_json(SCREEN, f"{r['title']} at {r['company']}\n\n{(r['description'] or '')[:8000]}",
-                                role="main", timeout=180)
-        eligible = verdict.get("eligible") is True
-        reason = str(verdict.get("reason", ""))[:160]
-        if eligible:
-            con.execute("UPDATE jobs SET score_notes = score_notes || ', screened eligible' WHERE id = ?", (r["id"],))
-        else:
-            con.execute("UPDATE jobs SET score = 0, score_notes = ? WHERE id = ?",
-                        (f"screened out: {reason}", r["id"]))
-        con.commit()
+        eligible, reason = screen_one(con, r)
         results.append((r["id"], eligible, reason))
     return results
+
+
+def screen_one(con, job) -> tuple[bool, str]:
+    """Screens one job row, records the verdict, and returns (eligible, reason)."""
+    verdict = llm.chat_json(SCREEN, f"{job['title']} at {job['company']}\n\n{(job['description'] or '')[:8000]}",
+                            role="main", timeout=180)
+    eligible = verdict.get("eligible") is True
+    reason = str(verdict.get("reason", ""))[:160]
+    if eligible:
+        con.execute("UPDATE jobs SET score_notes = COALESCE(score_notes, '') || ', screened eligible' WHERE id = ?",
+                    (job["id"],))
+    else:
+        con.execute("UPDATE jobs SET score = 0, score_notes = ? WHERE id = ?", (f"screened out: {reason}", job["id"]))
+    con.commit()
+    return eligible, reason

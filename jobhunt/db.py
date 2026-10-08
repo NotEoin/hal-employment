@@ -9,7 +9,8 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "jobs.db"
 STATUSES = [
     "new",          # discovered, not looked at
     "shortlisted",  # worth applying, pack to be drafted
-    "ready",        # pack drafted, waiting to be submitted
+    "ready",        # pack drafted, waiting in the queue
+    "applying",     # chosen from the queue; documents and form under review
     "applied",
     "assessment",   # online test / take-home
     "interview",
@@ -67,6 +68,40 @@ CREATE TABLE IF NOT EXISTS emails (
 CREATE INDEX IF NOT EXISTS emails_job ON emails(job_id, date);
 
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
+
+CREATE TABLE IF NOT EXISTS applications (
+    job_id   TEXT PRIMARY KEY REFERENCES jobs(id),
+    stage    TEXT NOT NULL,                 -- documents | form | filled | submitted
+    docs     TEXT,                          -- JSON: letter, message, answers, cv title and summary
+    form     TEXT,                          -- JSON: the form fields and the values to enter
+    prep     TEXT,                          -- interview preparation notes, Markdown
+    updated  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS todos (
+    id        INTEGER PRIMARY KEY,
+    job_id    TEXT REFERENCES jobs(id),
+    kind      TEXT NOT NULL,                -- offer | interview | assessment | reply | apply | message | task
+    title     TEXT NOT NULL,
+    detail    TEXT,
+    url       TEXT,
+    priority  INTEGER NOT NULL DEFAULT 5,   -- 0 is most urgent
+    due       TEXT,
+    source    TEXT UNIQUE,                  -- what created it, e.g. 'email:<msgid>'
+    created   TEXT NOT NULL,
+    done      TEXT
+);
+CREATE INDEX IF NOT EXISTS todos_open ON todos(done, priority);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id      INTEGER PRIMARY KEY,
+    at      TEXT NOT NULL,
+    level   TEXT NOT NULL,                  -- info | good | urgent | error
+    title   TEXT NOT NULL,
+    body    TEXT,
+    job_id  TEXT REFERENCES jobs(id),
+    read    INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -76,7 +111,9 @@ def now() -> str:
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(path)
+    # The web server and its worker share the file; wait out each other's writes.
+    con = sqlite3.connect(path, timeout=30, check_same_thread=False)
+    con.execute("PRAGMA journal_mode = WAL")
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     con.executescript(SCHEMA)
@@ -117,6 +154,10 @@ def mark_gone(con: sqlite3.Connection, source: str, company: str, seen_ids: set[
         con.execute("UPDATE jobs SET active=0 WHERE id=?", (r["id"],))
         if r["status"] in ("new", "shortlisted", "ready"):
             set_status(con, r["id"], "closed", "posting removed from board")
+        elif r["status"] == "applying":
+            alert(con, "urgent", "Posting removed mid-application",
+                  "The advert has gone from the company's board; submit soon or check it is still open.",
+                  r["id"])
     return len(gone)
 
 
@@ -133,3 +174,22 @@ def log(con: sqlite3.Connection, job_id: str, kind: str, detail: str, at: str | 
         "INSERT INTO events (job_id, at, kind, detail) VALUES (?, ?, ?, ?)",
         (job_id, at or now(), kind, detail),
     )
+
+
+def alert(con: sqlite3.Connection, level: str, title: str, body: str = "",
+          job_id: str | None = None) -> int:
+    """Records an alert for the web interface and returns its id."""
+    cur = con.execute("INSERT INTO alerts (at, level, title, body, job_id) VALUES (?, ?, ?, ?, ?)",
+                      (now(), level, title, body, job_id))
+    return cur.lastrowid
+
+
+def add_todo(con: sqlite3.Connection, kind: str, title: str, *, job_id: str | None = None,
+             detail: str = "", url: str | None = None, priority: int = 5, due: str | None = None,
+             source: str | None = None) -> int | None:
+    """Adds a to-do item; returns its id, or None if `source` already made one."""
+    cur = con.execute(
+        """INSERT OR IGNORE INTO todos (job_id, kind, title, detail, url, priority, due, source, created)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (job_id, kind, title, detail, url, priority, due, source, now()))
+    return cur.lastrowid if cur.rowcount else None
