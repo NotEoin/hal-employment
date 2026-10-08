@@ -94,9 +94,11 @@ def facts_text() -> str:
     for e in d["education"]:
         parts += [e.get("qualification", ""), e.get("grade", ""), e.get("meta", ""), e.get("detail", "")]
     parts += [f"{g[0]}: {', '.join(g[1])}" for g in d["skills"]]
-    parts += [f"Project {p['name']} ({p['stack']}): {p['body']}" for p in d["projects"]]
+    parts += [f"Personal project, {p['name']} ({p['stack']}): {p['body']}" for p in d["projects"]]
     parts.append(d.get("moreProjects", ""))
     parts += [f"{x['role']}, {x['org']} ({x['dates']}): {x['body']}" for x in d["experience"]]
     parts += [f"{a[0]}: {a[1]}" for a in d.get("additional", [])]
+    parts.append("Recently graduated; available to start immediately; UK and Irish citizen, "
+                 "no sponsorship needed.")
     text = "\n".join(p for p in parts if p)
     return re.sub(r"\*\*", "", text)

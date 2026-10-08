@@ -42,7 +42,9 @@ excerpt shows the requirement; cite it as "<module> (<code>) coursework: <topic>
 Never cite the summary or a skills list as evidence,
 except for a requirement that names a language or tool. "strong" means the evidence
 directly demonstrates the requirement. A requirement with no evidence goes in gaps.
-Judge eligibility against the conditions given and the candidate's dates."""
+Judge eligibility against the conditions given and the candidate's dates. Experience
+from internships, academic work or personal projects counts where the advert allows it;
+a preference ("desirable", "ideally", "a plus") is not a condition."""
 
 LETTER = """Write a cover letter from Firstname Lastname for this job. At most 220 words, in
 three short paragraphs: why this company and role specifically; the two or three
