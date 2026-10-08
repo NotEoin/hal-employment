@@ -22,6 +22,8 @@ def company_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", _SUFFIXES.sub("", name))
 
 
+# Course and placement providers recruit trainees, often for a fee or a bond.
+TRAINING_PROVIDER = re.compile(r"\btraining\b|\bacademy\b|bootcamp|career switch|\bupskill", re.I)
 # Recruiters advertise for unnamed clients, so the employer can't be checked.
 AGENCY = re.compile(r"recruit|staffing|resourcing|talent|search|consulting\b|\bnoir\b|hays|reed specialist|"
                     r"harvey nash|robert walters|michael page|computer futures|jefferson frank", re.I)
@@ -181,6 +183,8 @@ def score(job: dict) -> tuple[float, str]:
 
     if company_key(job.get("company")) in EXCLUDED or DEFENCE_NAME.search(job.get("company") or ""):
         return 0, "excluded employer"
+    if TRAINING_PROVIDER.search(job.get("company") or ""):
+        return 0, "training provider"
 
     where, loc_pts = place(job.get("location"), text)
     if not where:
