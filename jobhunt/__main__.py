@@ -13,6 +13,9 @@
     python -m jobhunt digest [--dry-run|--spoken]   email the daily summary, or print it for speech
     python -m jobhunt vault               rewrite the pipeline note in Hal's Employment vault
     python -m jobhunt pack ID|--shortlisted [--no-web]   draft application packs
+    python -m jobhunt serve [--port N] [--open]   run the Hal Employment web interface
+    python -m jobhunt queue               the jobs waiting in the queue, best first
+    python -m jobhunt todo [add TEXT|done ID]   the to-do list
 
 IDs can be given as any unique prefix or substring.
 """
@@ -108,6 +111,8 @@ def cmd_mail(args):
     from . import gmail
     con = db.connect()
     attention = gmail.sync(con, args.days)
+    from . import tasks
+    tasks.sync(con)
     rows = con.execute("SELECT kind, COUNT(*) n FROM emails GROUP BY kind ORDER BY n DESC").fetchall()
     print("emails:", ", ".join(f"{r['kind']} {r['n']}" for r in rows))
     from . import vault
@@ -192,6 +197,38 @@ def cmd_check(args):
         if pack_md.exists():
             pack.add_company_check(pack_md, r["company"])
             print(f"checked {r['company']}")
+
+
+def cmd_serve(args):
+    from .web import server
+    server.serve(args.port, args.open)
+
+
+def cmd_queue(args):
+    from . import replenish
+    con = db.connect()
+    rows = con.execute("""SELECT * FROM jobs WHERE status = 'ready' AND active = 1
+                          ORDER BY score DESC, first_seen DESC LIMIT ?""", (replenish.TARGET,)).fetchall()
+    for r in rows:
+        print(f"{(r['score'] or 0):4.0f}  {r['company'][:22]:22}  {r['title'][:50]:50}  {r['id']}")
+    print(f"({len(rows)} of {replenish.TARGET}; open http://127.0.0.1:{CONFIG.get('web_port', 8737)}/ to apply)")
+
+
+def cmd_todo(args):
+    con = db.connect()
+    if args.op == "add":
+        db.add_todo(con, "task", " ".join(args.rest))
+        con.commit()
+    elif args.op == "done":
+        con.execute("UPDATE todos SET done = ? WHERE id = ?", (db.now(), int(args.rest[0])))
+        con.commit()
+    rows = con.execute("""SELECT t.*, j.company FROM todos t LEFT JOIN jobs j ON j.id = t.job_id
+                          WHERE t.done IS NULL ORDER BY t.priority, t.due IS NULL, t.due, t.created""").fetchall()
+    for r in rows:
+        flag = "!" if r["priority"] <= 1 else " "
+        print(f"{flag} {r['id']:4}  {r['title']}" + (f"  (due {r['due']})" if r["due"] else ""))
+    if not rows:
+        print("Nothing to do.")
 
 
 def cmd_vault(args):
@@ -366,6 +403,11 @@ def main():
     s = sub.add_parser("digest"); s.add_argument("--dry-run", action="store_true")
     s.add_argument("--spoken", action="store_true"); s.set_defaults(fn=cmd_digest)
     sub.add_parser("vault").set_defaults(fn=cmd_vault)
+    sub.add_parser("queue").set_defaults(fn=cmd_queue)
+    s = sub.add_parser("todo"); s.add_argument("op", nargs="?", choices=["add", "done"])
+    s.add_argument("rest", nargs="*"); s.set_defaults(fn=cmd_todo)
+    s = sub.add_parser("serve", help="run the Hal Employment web interface")
+    s.add_argument("--port", type=int); s.add_argument("--open", action="store_true"); s.set_defaults(fn=cmd_serve)
     s = sub.add_parser("add", help="track an advert found by hand, skipping the filters")
     s.add_argument("url"); s.add_argument("--company", required=True); s.add_argument("--title", required=True)
     s.add_argument("--location", default=""); s.add_argument("--salary"); s.set_defaults(fn=cmd_add)

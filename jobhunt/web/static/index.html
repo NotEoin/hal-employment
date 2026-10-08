@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hal Employment</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23111'/%3E%3Ccircle cx='16' cy='16' r='9' fill='%23d6332a'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23ffd166'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="shell">
+    <nav class="side">
+      <a class="brand" href="#/queue">
+        <span class="eye" id="eye"></span>
+        <span><strong>Hal</strong> Employment</span>
+      </a>
+      <a class="nav" data-route="queue" href="#/queue">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Queue<span class="badge" id="b-queue"></span></a>
+      <a class="nav" data-route="applications" href="#/applications">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16v12H4zM9 7V5h6v2"/></svg>Applications<span class="badge" id="b-apps"></span></a>
+      <a class="nav" data-route="todos" href="#/todos">
+        <svg viewBox="0 0 24 24"><path d="M5 12l4 4L19 6"/></svg>To do<span class="badge" id="b-todos"></span></a>
+      <a class="nav" data-route="alerts" href="#/alerts">
+        <svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20h4"/></svg>Alerts<span class="badge" id="b-alerts"></span></a>
+      <div class="side-foot">
+        <div class="worker" id="worker" title="What Hal is doing">
+          <span class="dot"></span><span id="worker-text">Connecting...</span>
+        </div>
+        <div class="side-actions">
+          <button class="ghost small" id="btn-mail" title="Sync the job inbox now">Check email</button>
+          <button class="ghost small" id="btn-pause" title="Pause or resume queue filling">Pause</button>
+          <button class="ghost small" id="btn-theme" title="Switch light and dark">Theme</button>
+        </div>
+      </div>
+    </nav>
+    <main id="main" tabindex="-1"></main>
+  </div>
+  <div id="toasts" aria-live="polite"></div>
+  <div id="modal" class="modal" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
