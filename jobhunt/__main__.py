@@ -169,6 +169,20 @@ def cmd_screen(args):
         print(f"{'PASS' if ok else 'fail'}  {job_id[:60]:60}  {reason}")
 
 
+def cmd_letter(args):
+    import re as _re
+    from . import letter, pack
+    con = db.connect()
+    r = _find(con, args.id)
+    out_dir = pack.PACKS / pack.slug(f"{r['company']}-{r['title']}")
+    section = _re.search(r"## Cover letter\n(.*?)(?=\n## )", (out_dir / "pack.md").read_text(), _re.S)
+    if not section:
+        sys.exit("no cover letter in this pack")
+    recipient = args.to.split("|") if args.to else [f"{r['company']} recruitment team"]
+    subject = args.subject or f"Application: {r['title']}"
+    print(letter.render(section.group(1), out_dir / "Firstname-Lastname-Cover-Letter.pdf", recipient, subject))
+
+
 def cmd_check(args):
     from . import pack
     con = db.connect()
@@ -358,6 +372,9 @@ def main():
     s = sub.add_parser("screen", help="ask the local model which jobs a new graduate could get")
     s.add_argument("-m", "--min", type=float, default=50); s.add_argument("-n", type=int, default=60)
     s.set_defaults(fn=cmd_screen)
+    s = sub.add_parser("letter", help="render a pack's cover letter as a PDF in the CV's style")
+    s.add_argument("id"); s.add_argument("--to", help="recipient lines separated by |"); s.add_argument("--subject")
+    s.set_defaults(fn=cmd_letter)
     s = sub.add_parser("check"); s.add_argument("id", nargs="?"); s.add_argument("--ready", action="store_true")
     s.set_defaults(fn=cmd_check)
     s = sub.add_parser("pack"); s.add_argument("id", nargs="?"); s.add_argument("--shortlisted", action="store_true")
