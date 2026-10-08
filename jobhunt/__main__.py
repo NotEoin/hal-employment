@@ -224,7 +224,7 @@ def cmd_stats(args):
     con = db.connect()
     for r in con.execute("SELECT status, COUNT(*) n FROM jobs WHERE status != 'new' OR score > 0 GROUP BY status ORDER BY n DESC"):
         print(f"{r['status']:12} {r['n']}")
-    for r in con.execute("SELECT source, COUNT(*) n, SUM(score>0) rel FROM jobs WHERE active=1 GROUP BY source"):
+    for r in con.execute("SELECT source, COUNT(*) n, COALESCE(SUM(score>0), 0) rel FROM jobs WHERE active=1 GROUP BY source"):
         print(f"  {r['source']:16} {r['n']:5} open, {r['rel']} relevant")
 
 
