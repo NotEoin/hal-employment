@@ -22,6 +22,9 @@ def company_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", _SUFFIXES.sub("", name))
 
 
+# Recruiters advertise for unnamed clients, so the employer can't be checked.
+AGENCY = re.compile(r"recruit|staffing|resourcing|talent|search|consulting\b|\bnoir\b|hays|reed specialist|"
+                    r"harvey nash|robert walters|michael page|computer futures|jefferson frank", re.I)
 # Sectors Firstname will not work in, matched in the advert text.
 DISREPUTABLE_WORK = re.compile(r"\b(tobacco|vap(e|ing) products|e-cigarettes?|payday loans?|high-cost (short-term )?"
                                r"credit|multi-level marketing|network marketing|firearms|ammunition)\b", re.I)
@@ -81,7 +84,8 @@ NOT_FIELD = re.compile(
     r"designer|legal|counsel|finance|accountant|payroll|hr|people partner|customer (success|support)|"
     r"mechanical|electrical|civil|chemi(st|cal)|structural|hvac|field (service|engineer)|"
     r"technician|nurse|clinical|content|copywriter|writer|operations manager|executive assistant|"
-    r"office|facilities|procurement|buyer|warehouse|driver|rigger|animator|artist|producer)\b", re.I)
+    r"office|facilities|procurement|buyer|warehouse|driver|rigger|animator|artist|producer|"
+    r"menswear|womenswear|fashion|garment|apparel|textile|footwear|product developer)\b", re.I)
 TOO_SENIOR = re.compile(
     r"\b(senior|sr\.?|staff|principal|lead|head|director|manager|vp|vice president|chief|"
     r"architect|distinguished|fellow)\b|\b(iii|iv|l[5-9]|e[5-9])\b", re.I)
@@ -224,6 +228,8 @@ def score(job: dict) -> tuple[float, str]:
         s -= 25
         notes.append("may require current students")
 
+    if AGENCY.search(job.get("company") or ""):
+        notes.append("recruitment agency, employer unnamed")
     if job["source"] == "indeed":
         s -= 10
         notes.append("alert only, find the advert")
