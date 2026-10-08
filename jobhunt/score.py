@@ -53,7 +53,11 @@ NO_EXPERIENCE_NEEDED = re.compile(r"\b(no|without) (prior |previous |commercial 
                                   r"experience (is )?(not required|not necessary|a plus|a bonus|desirable|"
                                   r"is nice to have)", re.I)
 # Employers that name themselves after defence work, whether or not they are listed.
-DEFENCE_NAME = re.compile(r"defen[cs]e|military|weapons?|munitions|armaments", re.I)
+DEFENCE_NAME = re.compile(r"defen[cs]e|military|weapons?|munitions|armaments|\barmy\b|\bnavy\b|"
+                          r"royal air force|\braf\b|royal marines|armed forces|\bmod\b", re.I)
+# Roles that need a security clearance the candidate would already have to hold.
+CLEARANCE_HELD = re.compile(r"\b(sc|dv|ctc|esc)[- ]clear(ed|ance)\b|active (sc|dv) clearance|"
+                            r"(hold|holding|have) (a |an )?(current |active |valid )?(sc|dv|security) clearance", re.I)
 EXCLUDED = {company_key(line) for line in EXCLUDED_FILE.read_text().splitlines()
             if line.strip() and not line.startswith("#")} if EXCLUDED_FILE.exists() else set()
 
@@ -87,7 +91,8 @@ NOT_FIELD = re.compile(
     r"mechanical|electrical|civil|chemi(st|cal)|structural|hvac|field (service|engineer)|"
     r"technician|nurse|clinical|content|copywriter|writer|operations manager|executive assistant|"
     r"office|facilities|procurement|buyer|warehouse|driver|rigger|animator|artist|producer|"
-    r"menswear|womenswear|fashion|garment|apparel|textile|footwear|product developer)\b", re.I)
+    r"menswear|womenswear|fashion|garment|apparel|textile|footwear|product developer|geotechnical|"
+    r"geological|surveyor|quantity surveyor|estimator)\b", re.I)
 TOO_SENIOR = re.compile(
     r"\b(senior|sr\.?|staff|principal|lead|head|director|manager|vp|vice president|chief|"
     r"architect|distinguished|fellow)\b|\b(iii|iv|l[5-9]|e[5-9])\b", re.I)
@@ -183,6 +188,8 @@ def score(job: dict) -> tuple[float, str]:
 
     if company_key(job.get("company")) in EXCLUDED or DEFENCE_NAME.search(job.get("company") or ""):
         return 0, "excluded employer"
+    if CLEARANCE_HELD.search(f"{title}\n{text}"):
+        return 0, "needs existing security clearance"
     if TRAINING_PROVIDER.search(job.get("company") or ""):
         return 0, "training provider"
 
