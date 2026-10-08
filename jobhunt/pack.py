@@ -121,7 +121,8 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     context = (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
                + (f"Earlier applications to this employer: {history}. Do not mention them unless asked.\n"
                   if history else "") +
-               f"Firstname graduated recently and is available to start now.\n"
+               f"Firstname graduated recently. Mention availability only if the advert's start date is "
+               f"flexible; for a fixed intake, refer to that intake instead.\n"
                f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}")
     letter = llm.chat(LETTER, context, role="writer").strip()
     message = llm.chat(MESSAGE, context, role="writer").strip()
@@ -208,10 +209,11 @@ def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, tr
               for m in fit.get("matches", [])]
     gaps = fit.get("gaps", [])
     lines += ["", "Gaps to address or accept: " + ("; ".join(gaps) if gaps else "none found"), ""]
-    contacts = analysis.get("contacts") or []
+    contacts = [", ".join(str(v) for v in c.values() if v) if isinstance(c, dict) else str(c)
+                for c in analysis.get("contacts") or []]
     lines += ["## Cover letter", "", "Dear Hiring Team,", "", letter, "", "Kind regards,", "Firstname Lastname", ""]
     lines += ["## Message to the hiring manager", "",
-              "To: " + (", ".join(map(str, contacts)) if contacts else
+              "To: " + ("; ".join(contacts) if contacts else
                         f"find the engineering lead on LinkedIn (search \"{job['company']} engineering manager\")"),
               "", message, ""]
     lines += ["## Form answers", ""]
