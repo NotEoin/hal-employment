@@ -117,7 +117,10 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
                         + f"\n\nCourse notes:\n{course_notes or 'none'}",
                         role="main")
 
+    history = previous_applications(con, job)
     context = (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
+               + (f"Earlier applications to this employer: {history}. Do not mention them unless asked.\n"
+                  if history else "") +
                f"Firstname graduated recently and is available to start now.\n"
                f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}")
     letter = llm.chat(LETTER, context, role="writer").strip()
@@ -136,6 +139,8 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
     company_flags, company_md = reputation.check(job["company"])
     flagged += company_flags
+    if history:
+        flagged.insert(0, f"REAPPLICATION: you applied here before: {history}")
     if fit.get("eligible") is False:
         flagged.insert(0, f"ELIGIBILITY: {fit.get('eligibility_notes', 'may not be eligible')}")
     elif "current students" in (job["score_notes"] or ""):
@@ -152,6 +157,21 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
         db.set_status(con, job_id, "ready", f"pack drafted in {out_dir.name}")
     con.commit()
     return pack_md
+
+
+def previous_applications(con, job) -> str:
+    """Summarises earlier applications to the same employer, from the tracker."""
+    from .gmail import norm
+    rows = con.execute("SELECT id, company, title, status FROM jobs WHERE id != ? AND status IN "
+                       "('applied','assessment','interview','offer','rejected','withdrawn')", (job["id"],)).fetchall()
+    same = [r for r in rows if norm(r["company"]) and norm(r["company"]) == norm(job["company"])]
+    parts = []
+    for r in same:
+        events = con.execute("SELECT at, detail FROM events WHERE job_id = ? AND kind = 'status' ORDER BY at",
+                             (r["id"],)).fetchall()
+        path = ", ".join(f"{e['detail'].split(':')[0]} {e['at'][:10]}" for e in events)
+        parts.append(f"{r['title']} ({path})")
+    return "; ".join(parts)
 
 
 def add_company_check(pack_md: Path, company: str) -> None:

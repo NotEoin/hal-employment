@@ -137,6 +137,20 @@ def cmd_pack(args):
         print(f"  {pack.build(con, job_id, use_web=not args.no_web)}")
 
 
+def cmd_add(args):
+    from . import research
+    con = db.connect()
+    text = research.page_text(args.url, limit=20000)
+    job = {"id": f"manual:{re.sub(r'[^a-z0-9]+', '-', (args.company + '-' + args.title).lower()).strip('-')}",
+           "source": "manual", "company": args.company, "title": args.title, "location": args.location,
+           "url": args.url, "description": text, "salary": args.salary, "posted_at": None, "board_size": None}
+    db.upsert(con, job)
+    con.execute("UPDATE jobs SET score = NULL, score_notes = 'added by hand' WHERE id = ?", (job["id"],))
+    db.set_status(con, job["id"], "shortlisted", "added by hand")
+    con.commit()
+    print(job["id"])
+
+
 def cmd_check(args):
     from . import pack
     con = db.connect()
@@ -320,6 +334,9 @@ def main():
     s = sub.add_parser("digest"); s.add_argument("--dry-run", action="store_true")
     s.add_argument("--spoken", action="store_true"); s.set_defaults(fn=cmd_digest)
     sub.add_parser("vault").set_defaults(fn=cmd_vault)
+    s = sub.add_parser("add", help="track an advert found by hand, skipping the filters")
+    s.add_argument("url"); s.add_argument("--company", required=True); s.add_argument("--title", required=True)
+    s.add_argument("--location", default=""); s.add_argument("--salary"); s.set_defaults(fn=cmd_add)
     s = sub.add_parser("check"); s.add_argument("id", nargs="?"); s.add_argument("--ready", action="store_true")
     s.set_defaults(fn=cmd_check)
     s = sub.add_parser("pack"); s.add_argument("id", nargs="?"); s.add_argument("--shortlisted", action="store_true")
