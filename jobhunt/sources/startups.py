@@ -101,8 +101,8 @@ def workable_search(max_pages: int = 3):
                                       headers=BROWSER, timeout=30))
                 for j in data.get("jobs", []):
                     company = (j.get("company") or {}).get("title") or ""
-                    desc = "\n\n".join(strip_html(j.get(k)) for k in
-                                       ("description", "requirementsSection", "benefitsSection"))
+                    desc = f"Workplace: {j.get('workplace') or 'unknown'}\n\n" + "\n\n".join(
+                        strip_html(j.get(k)) for k in ("description", "requirementsSection", "benefitsSection"))
                     jobs[j["id"]] = {
                         "id": f"workable-search:{j['id']}", "source": "workable-search", "company": company,
                         "title": j.get("title") or "", "location": " / ".join(j.get("locations") or []),

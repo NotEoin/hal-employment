@@ -29,7 +29,14 @@ EXCLUDED = {company_key(line) for line in EXCLUDED_FILE.read_text().splitlines()
 LONDON = r"\blondon\b|\bcity of london\b|\bcanary wharf\b|\bshoreditch\b|\bkings? cross\b"
 # City and anywhere on or near the local tram.
 CITY_AREA = r"\bcity\b|\btown\b|\bregion\b"
-UK_REMOTE = r"remote[^/]{0,25}\b(uk|united kingdom|gb|england)\b|\b(uk|united kingdom)[^/]{0,10}remote|\bremote\s*\(?(uk|emea|europe)\)?"
+# Firstname wants an office: on-site is preferred, hybrid accepted, fully remote excluded.
+FULLY_REMOTE = re.compile(r"fully remote|100% remote|remote[- ]first|remote[- ]only|work from anywhere|"
+                          r"remote[- ]based|this is a remote (role|position)|workplace: remote|"
+                          r"distributed (team|company)", re.I)
+HYBRID = re.compile(r"\bhybrid\b|days? (a|per) week in (the |our )?office|days? in (the |our )?office|"
+                    r"workplace: hybrid|flexible working", re.I)
+ON_SITE = re.compile(r"\bon-?site\b|\bin[- ]office\b|office[- ]based|\bin[- ]person\b|"
+                     r"5 days (a week )?in|five days (a week )?in|workplace: on_site", re.I)
 # Remote with no country at all: worth a look, but often US-only.
 REMOTE_ANY = r"\bremote\b|\banywhere\b"
 # A remote role pinned to somewhere else is not open to a UK resident.
@@ -89,17 +96,25 @@ def place(location: str, text: str) -> tuple[str | None, int]:
         return "City", 10      # smaller market, far fewer applicants per role
     if re.search(LONDON, loc):
         return "London", 6
-    if re.search(UK_REMOTE, loc):
-        return "UK remote", 4
     if not loc.strip() or (re.search(REMOTE_ANY, loc) and not re.search(ELSEWHERE, loc)):
-        # With no usable location field, fall back to places named in the description.
+        # With no usable location field, fall back to an office named in the description.
         body = (text or "")[:3000].lower()
         if re.search(CITY_AREA, body):
             return "City (from text)", 6
         if re.search(LONDON, body):
             return "London (from text)", 3
-        if re.search(UK_REMOTE, body) or re.search(r"\b(uk|united kingdom)\b", body):
-            return "UK remote (from text)", 2
+    return None, 0
+
+
+def workplace(location: str, text: str) -> tuple[str | None, int | None]:
+    """Returns the working pattern and its score adjustment; None means fully remote."""
+    head = f"{location or ''}\n{(text or '')[:4000]}"
+    if FULLY_REMOTE.search(head) and not (ON_SITE.search(head) or HYBRID.search(head)):
+        return "remote", None
+    if ON_SITE.search(head) and not HYBRID.search(head):
+        return "on-site", 5
+    if HYBRID.search(head) or re.search(REMOTE_ANY, (location or "").lower()):
+        return "hybrid", -3
     return None, 0
 
 
@@ -138,7 +153,13 @@ def score(job: dict) -> tuple[float, str]:
         if NOT_FOR_GRADS.search(title):
             return 0, "internship/placement/apprenticeship/PhD"
 
-    s = 40 + loc_pts
+    pattern, pattern_pts = workplace(job.get("location"), text)
+    if pattern_pts is None:
+        return 0, "fully remote"
+    if pattern:
+        notes.append(pattern)
+
+    s = 40 + loc_pts + pattern_pts
     if job["source"] == "hn" and TOO_SENIOR.search(title) and not ENTRY.search(text):
         s -= 15
         notes.append("seems senior-only")
