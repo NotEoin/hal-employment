@@ -10,7 +10,7 @@
     python -m jobhunt probe NAME [NAME ...] [--save]   find a company's ATS board
     python -m jobhunt mail [--days N]     sync the job inbox, update statuses, alert on what needs you
     python -m jobhunt inbox [-k KIND] [-n N]   classified recruiting email
-    python -m jobhunt digest [--dry-run]  email the daily summary
+    python -m jobhunt digest [--dry-run|--spoken]   email the daily summary, or print it for speech
     python -m jobhunt vault               rewrite the pipeline note in Hal's Employment vault
     python -m jobhunt pack ID|--shortlisted [--no-web]   draft application packs
 
@@ -114,7 +114,8 @@ def cmd_mail(args):
 
 def cmd_digest(args):
     from . import digest
-    print(digest.send(db.connect(), args.dry_run))
+    con = db.connect()
+    print(digest.spoken(con) if args.spoken else digest.send(con, args.dry_run))
 
 
 def cmd_pack(args):
@@ -298,7 +299,8 @@ def main():
     sub.add_parser("rescore").set_defaults(fn=cmd_rescore)
     s = sub.add_parser("mail"); s.add_argument("--days", type=int); s.add_argument("-q", "--quiet", action="store_true")
     s.set_defaults(fn=cmd_mail)
-    s = sub.add_parser("digest"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(fn=cmd_digest)
+    s = sub.add_parser("digest"); s.add_argument("--dry-run", action="store_true")
+    s.add_argument("--spoken", action="store_true"); s.set_defaults(fn=cmd_digest)
     sub.add_parser("vault").set_defaults(fn=cmd_vault)
     s = sub.add_parser("pack"); s.add_argument("id", nargs="?"); s.add_argument("--shortlisted", action="store_true")
     s.add_argument("--no-web", action="store_true"); s.set_defaults(fn=cmd_pack)
