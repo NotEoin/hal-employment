@@ -151,7 +151,8 @@ def cmd_inbox(args):
 
 def cmd_rescore(args):
     con = db.connect()
-    rows = con.execute("SELECT * FROM jobs").fetchall()
+    # Applications found in email have no advert to score.
+    rows = con.execute("SELECT * FROM jobs WHERE source != 'email'").fetchall()
     for r in rows:
         s, why = score(dict(r))
         con.execute("UPDATE jobs SET score=?, score_notes=? WHERE id=?", (s, why, r["id"]))
@@ -221,7 +222,7 @@ def cmd_note(args):
 
 def cmd_stats(args):
     con = db.connect()
-    for r in con.execute("SELECT status, COUNT(*) n FROM jobs WHERE score > 0 GROUP BY status ORDER BY n DESC"):
+    for r in con.execute("SELECT status, COUNT(*) n FROM jobs WHERE status != 'new' OR score > 0 GROUP BY status ORDER BY n DESC"):
         print(f"{r['status']:12} {r['n']}")
     for r in con.execute("SELECT source, COUNT(*) n, SUM(score>0) rel FROM jobs WHERE active=1 GROUP BY source"):
         print(f"  {r['source']:16} {r['n']:5} open, {r['rel']} relevant")
