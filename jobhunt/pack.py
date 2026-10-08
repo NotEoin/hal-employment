@@ -38,7 +38,7 @@ FIT = """Match a candidate's evidence to a job's requirements. Reply with JSON o
  "gaps": [requirements the CV gives no evidence for],
  "eligible": true | false, "eligibility_notes": why, in one sentence}
 Rules: use only the CV text and the course notes. A course note counts only if its
-excerpt shows the requirement; cite it as "<module> (<code>) coursework: <topic>".
+excerpt shows the requirement; cite it as "<module name> coursework: <topic>", never by code.
 Never cite the summary or a skills list as evidence,
 except for a requirement that names a language or tool. "strong" means the evidence
 directly demonstrates the requirement. A requirement with no evidence goes in gaps.
@@ -48,7 +48,8 @@ a preference ("desirable", "ideally", "a plus") is not a condition."""
 
 LETTER = """Write a cover letter from Firstname Lastname for this job. At most 220 words, in
 three short paragraphs: why this company and role specifically; the two or three
-strongest pieces of evidence, each tied to a requirement; a one-line close. No
+strongest pieces of evidence, each tied to a requirement; a one-line close. Name
+university modules by title, never by code. No
 greeting line or sign-off; those are added separately. Use only the facts given."""
 
 MESSAGE = """Write a short message from Firstname Lastname to the hiring manager or engineering
@@ -135,7 +136,7 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     drafts = "\n\n".join([letter, message, *(a.get("answer", "") for a in answers)])
     flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, job_text, about)]
     flagged += [f"unsupported claim: {c}" for c in
-                llm.chat_json(VERIFY, f"Facts:\n{facts}\n\nEvidence map:\n{fit.get('matches', [])}"
+                llm.chat_json(VERIFY, f"Facts:\n{facts}\n\nCourse notes:\n{course_notes}\n\nEvidence map:\n{fit.get('matches', [])}"
                               f"\n\nDrafts:\n{drafts}", role="main").get("unsupported", [])]
     flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
     company_flags, company_md = reputation.check(job["company"])

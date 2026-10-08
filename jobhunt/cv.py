@@ -93,6 +93,9 @@ def facts_text() -> str:
     parts = [d["title"], d["summary"]]
     for e in d["education"]:
         parts += [e.get("qualification", ""), e.get("grade", ""), e.get("meta", ""), e.get("detail", "")]
+        for year in e.get("modules") or []:
+            marks = ", ".join(f"{name} {mark}" for name, mark in year.get("rows", []))
+            parts.append(f"{year.get('year')} modules (overall {year.get('mark')}): {marks}")
     parts += [f"{g[0]}: {', '.join(g[1])}" for g in d["skills"]]
     parts += [f"Personal project, {p['name']} ({p['stack']}): {p['body']}" for p in d["projects"]]
     parts.append(d.get("moreProjects", ""))
