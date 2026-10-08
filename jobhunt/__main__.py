@@ -124,7 +124,16 @@ def cmd_digest(args):
 
 
 def cmd_pack(args):
-    from . import llm, pack
+    from . import cv, llm, pack
+    if args.cv_only:
+        con = db.connect()
+        for r in con.execute("SELECT * FROM jobs WHERE status = 'ready'"):
+            out_dir = pack.PACKS / pack.slug(f"{r['company']}-{r['title']}")
+            if out_dir.exists():
+                variant, _ = cv.tailor(f"{r['title']}\n{r['description'] or ''}")
+                cv.render(variant, out_dir)
+                print(f"  {out_dir.name}")
+        return
     if not llm.available():
         sys.exit("Ollama is not reachable; packs are drafted by the local models.")
     con = db.connect()
@@ -351,7 +360,9 @@ def main():
     s = sub.add_parser("check"); s.add_argument("id", nargs="?"); s.add_argument("--ready", action="store_true")
     s.set_defaults(fn=cmd_check)
     s = sub.add_parser("pack"); s.add_argument("id", nargs="?"); s.add_argument("--shortlisted", action="store_true")
-    s.add_argument("--no-web", action="store_true"); s.set_defaults(fn=cmd_pack)
+    s.add_argument("--no-web", action="store_true")
+    s.add_argument("--cv-only", action="store_true", help="re-render tailored CVs for drafted packs")
+    s.set_defaults(fn=cmd_pack)
     s = sub.add_parser("inbox"); s.add_argument("-k", "--kind"); s.add_argument("-n", type=int, default=60)
     s.set_defaults(fn=cmd_inbox)
     sub.add_parser("stats").set_defaults(fn=cmd_stats)
