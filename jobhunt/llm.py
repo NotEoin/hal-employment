@@ -5,6 +5,7 @@ lineup applies here too. If Ollama is unreachable, calls raise LLMUnavailable
 and callers fall back to rules.
 """
 import json
+import os
 import re
 import shlex
 import urllib.request
@@ -37,7 +38,8 @@ ROLES = {"main": "HAL_MODEL", "fast": "HAL_FAST_MODEL", "writer": "HAL_WRITER_MO
 def _settings(role: str = "main"):
     c = hal_conf()
     url = CONFIG.get("ollama_url") or c.get("HAL_OLLAMA_URL") or "http://localhost:11434"
-    model = CONFIG.get(f"{role}_model") or c.get(ROLES[role]) or c.get("HAL_MODEL")
+    model = (os.environ.get(f"JOBHUNT_{role.upper()}_MODEL") or CONFIG.get(f"{role}_model")
+             or c.get(ROLES[role]) or c.get("HAL_MODEL"))
     if not model:
         raise LLMUnavailable("no local model configured (Hal cloud profile, and no ollama_model in config.toml)")
     return url.rstrip("/"), model

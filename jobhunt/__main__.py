@@ -12,6 +12,7 @@
     python -m jobhunt inbox [-k KIND] [-n N]   classified recruiting email
     python -m jobhunt digest [--dry-run]  email the daily summary
     python -m jobhunt vault               rewrite the pipeline note in Hal's Employment vault
+    python -m jobhunt pack ID|--shortlisted [--no-web]   draft application packs
 
 IDs can be given as any unique prefix or substring.
 """
@@ -114,6 +115,21 @@ def cmd_mail(args):
 def cmd_digest(args):
     from . import digest
     print(digest.send(db.connect(), args.dry_run))
+
+
+def cmd_pack(args):
+    from . import llm, pack
+    if not llm.available():
+        sys.exit("Ollama is not reachable; packs are drafted by the local models.")
+    con = db.connect()
+    if args.shortlisted:
+        ids = [r["id"] for r in con.execute(
+            "SELECT id FROM jobs WHERE status = 'shortlisted' AND active = 1 ORDER BY score DESC")]
+    else:
+        ids = [_find(con, args.id)["id"]]
+    for job_id in ids:
+        print(f"{job_id}: drafting...", flush=True)
+        print(f"  {pack.build(con, job_id, use_web=not args.no_web)}")
 
 
 def cmd_vault(args):
@@ -284,6 +300,8 @@ def main():
     s.set_defaults(fn=cmd_mail)
     s = sub.add_parser("digest"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(fn=cmd_digest)
     sub.add_parser("vault").set_defaults(fn=cmd_vault)
+    s = sub.add_parser("pack"); s.add_argument("id", nargs="?"); s.add_argument("--shortlisted", action="store_true")
+    s.add_argument("--no-web", action="store_true"); s.set_defaults(fn=cmd_pack)
     s = sub.add_parser("inbox"); s.add_argument("-k", "--kind"); s.add_argument("-n", type=int, default=60)
     s.set_defaults(fn=cmd_inbox)
     sub.add_parser("stats").set_defaults(fn=cmd_stats)

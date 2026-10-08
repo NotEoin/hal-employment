@@ -38,6 +38,11 @@ TOO_SENIOR = re.compile(
     r"architect|distinguished|fellow)\b|\b(iii|iv|l[5-9]|e[5-9])\b", re.I)
 NOT_FOR_GRADS = re.compile(r"\b(intern(ship)?|placement|summer|spring week|apprentice(ship)?|"
                            r"year in industry|industrial placement|work experience|phd)\b", re.I)
+# Schemes for current students; a graduate of 2026 is usually ineligible.
+STUDENTS_ONLY = re.compile(
+    r"currently (enrolled|studying)|enrolled in a (full-time )?(bachelor|master|degree|undergraduate)|"
+    r"graduating in 202[7-9]|expected to graduate in 202[7-9]|penultimate year|final[- ]year students?|"
+    r"(class|cohort) of 202[7-9]|depending on (your )?graduation date", re.I)
 ENTRY = re.compile(r"\b(graduate|grad|junior|jr\.?|entry[- ]level|early careers?|new grad|"
                    r"associate (software|engineer|developer)|engineer i\b|level 1|"
                    r"ktp associate|trainee|0-2 years|recent graduates?)\b", re.I)
@@ -123,6 +128,10 @@ def score(job: dict) -> tuple[float, str]:
     elif ENTRY.search(text[:4000]):
         s += 12
         notes.append("open to grads")
+
+    if STUDENTS_ONLY.search(text):
+        s -= 25
+        notes.append("may require current students")
 
     yrs = min_years(text)
     if yrs is not None:
