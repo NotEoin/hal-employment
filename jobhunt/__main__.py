@@ -33,7 +33,8 @@ STANDALONE = {"hn": hn.fetch, "ktp": ktp.fetch, "yc": startups.yc, "80k": startu
               "workable-search": startups.workable_search, "jobsacuk": academic.fetch,
               "adzuna": aggregators.adzuna, "reed": aggregators.reed}
 # Sources whose listings lack the advert text, fetched per job after the cheap checks.
-DETAIL = {**ats.DETAIL, "yc": startups.yc_detail, "jobsacuk": academic.detail, "reed": aggregators.reed_detail}
+DETAIL = {**ats.DETAIL, "yc": startups.yc_detail, "jobsacuk": academic.detail, "reed": aggregators.reed_detail,
+          "adzuna": aggregators.adzuna_detail}
 
 
 def _fetch_board(b):
@@ -67,7 +68,7 @@ def cmd_discover(args):
                 j.setdefault("board_size", None)
         for j in jobs:
             total += 1
-            needs_detail = not j["description"] or j["source"] in ("yc", "reed")
+            needs_detail = not j["description"] or j["source"] in ("yc", "reed", "adzuna")
             if needs_detail and j["source"] in DETAIL and prefilter(j):
                 known = con.execute("SELECT description FROM jobs WHERE id=?", (j["id"],)).fetchone()
                 if known and known["description"]:

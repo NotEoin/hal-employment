@@ -1,11 +1,12 @@
 """Adzuna and Reed: UK job aggregators with free developer APIs.
 
 Each needs a key in ~/.config/jobhunt/ and returns nothing without one, so
-discovery runs the same with or without them. Reed has a graduate filter and
-returns full adverts per job; Adzuna's search returns a snippet.
+discovery runs the same with or without them. Both searches return snippets;
+full adverts are fetched for jobs that pass the first checks.
 """
 import base64
 import json
+import re
 import urllib.parse
 from pathlib import Path
 
@@ -79,3 +80,13 @@ def reed_detail(job: dict) -> str:
     key = _key("reed")
     job_id = job["id"].split(":", 1)[1]
     return strip_html(_reed(f"jobs/{job_id}", key).get("jobDescription")) if key else job["description"]
+
+
+def adzuna_detail(job: dict) -> str:
+    """Returns the full advert from Adzuna's job page; the API returns a snippet."""
+    page = get(job["url"], headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 "
+                                                  "Firefox/130.0"}, timeout=30)
+    text = strip_html(re.sub(r"<(script|style|nav|footer|header|svg|noscript)[^>]*>.*?</\1>", " ", page,
+                             flags=re.S | re.I))
+    start = text.find(job["title"])
+    return text[start if start != -1 else 0:][:12000]
