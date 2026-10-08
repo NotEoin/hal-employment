@@ -21,6 +21,8 @@ def company_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", _SUFFIXES.sub("", (name or "").lower()))
 
 
+# Employers that name themselves after defence work, whether or not they are listed.
+DEFENCE_NAME = re.compile(r"defen[cs]e|military|weapons?|munitions|armaments", re.I)
 EXCLUDED = {company_key(line) for line in EXCLUDED_FILE.read_text().splitlines()
             if line.strip() and not line.startswith("#")} if EXCLUDED_FILE.exists() else set()
 
@@ -51,7 +53,8 @@ TOO_SENIOR = re.compile(
     r"\b(senior|sr\.?|staff|principal|lead|head|director|manager|vp|vice president|chief|"
     r"architect|distinguished|fellow)\b|\b(iii|iv|l[5-9]|e[5-9])\b", re.I)
 NOT_FOR_GRADS = re.compile(r"\b(intern(ship)?|placement|summer|spring week|apprentice(ship)?|"
-                           r"year in industry|industrial placement|work experience|phd)\b", re.I)
+                           r"year in industry|industrial placement|work experience|phd|professor|"
+                           r"post-?doc(toral)?|lecturer|reader in)\b", re.I)
 # Schemes for current students; a graduate of 2026 is usually ineligible.
 STUDENTS_ONLY = re.compile(
     r"currently (enrolled|studying)|enrolled in a (full-time )?(bachelor|master|degree|undergraduate)|"
@@ -119,7 +122,7 @@ def score(job: dict) -> tuple[float, str]:
     text = job.get("description") or ""
     notes = []
 
-    if company_key(job.get("company")) in EXCLUDED:
+    if company_key(job.get("company")) in EXCLUDED or DEFENCE_NAME.search(job.get("company") or ""):
         return 0, "excluded employer"
 
     where, loc_pts = place(job.get("location"), text)

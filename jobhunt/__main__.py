@@ -27,9 +27,12 @@ from .config import BOARDS_PATH, CONFIG, boards
 from .http import NotFound
 from .notify import notify
 from .score import prefilter, score
-from .sources import ats, hn, ktp
+from .sources import academic, ats, hn, ktp, startups
 
-STANDALONE = {"hn": hn.fetch, "ktp": ktp.fetch}
+STANDALONE = {"hn": hn.fetch, "ktp": ktp.fetch, "yc": startups.yc, "80k": startups.eighty_thousand_hours,
+              "workable-search": startups.workable_search, "jobsacuk": academic.fetch}
+# Sources whose listings lack the advert text, fetched per job after the cheap checks.
+DETAIL = {**ats.DETAIL, "yc": startups.yc_detail, "jobsacuk": academic.detail}
 
 
 def _fetch_board(b):
@@ -63,13 +66,14 @@ def cmd_discover(args):
                 j.setdefault("board_size", None)
         for j in jobs:
             total += 1
-            if not j["description"] and j["source"] in ats.DETAIL and prefilter(j):
+            needs_detail = not j["description"] or j["source"] == "yc"
+            if needs_detail and j["source"] in DETAIL and prefilter(j):
                 known = con.execute("SELECT description FROM jobs WHERE id=?", (j["id"],)).fetchone()
                 if known and known["description"]:
                     j["description"] = known["description"]
                 else:
                     try:
-                        j["description"] = ats.DETAIL[j["source"]](j)
+                        j["description"] = DETAIL[j["source"]](j)
                     except Exception as e:
                         errors.append(f"{j['id']} detail: {e}")
             if db.upsert(con, j):

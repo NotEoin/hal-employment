@@ -16,13 +16,13 @@ SKIP_HOSTS = re.compile(r"linkedin|glassdoor|indeed|crunchbase|tracxn|wikipedia|
                         r"ashbyhq|workable|smartrecruiters|ycombinator|facebook|twitter|x\.com|youtube")
 
 
-def search(query: str, limit: int = 5) -> list[str]:
-    """Returns result URLs for a query, excluding aggregator sites."""
+def search(query: str, limit: int = 5, skip_aggregators: bool = True) -> list[str]:
+    """Returns result URLs for a query, excluding aggregator sites by default."""
     page = get(SEARCH + urllib.parse.quote_plus(query), headers=BROWSER_UA, timeout=15)
     urls = []
     for href in re.findall(r'class="result__a" href="([^"]+)"', page):
         target = urllib.parse.parse_qs(urllib.parse.urlparse(html.unescape(href)).query).get("uddg")
-        if target and not SKIP_HOSTS.search(target[0]):
+        if target and not (skip_aggregators and SKIP_HOSTS.search(target[0])):
             urls.append(target[0])
     return urls[:limit]
 
