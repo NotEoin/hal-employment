@@ -18,9 +18,29 @@ _SUFFIXES = re.compile(r"\b(ltd|limited|plc|inc|llc|group|holdings|technologies|
 
 def company_key(name: str) -> str:
     """Normalises a company name for exclusion matching."""
-    return re.sub(r"[^a-z0-9]", "", _SUFFIXES.sub("", (name or "").lower()))
+    name = re.sub(r"\(.*?\)|https?://\S+", "", (name or "").lower())
+    return re.sub(r"[^a-z0-9]", "", _SUFFIXES.sub("", name))
 
 
+# Adverts for gambling work or bonded training schemes, at any employer.
+GAMBLING_WORK = re.compile(r"\b(igaming|sportsbook|online casino|casino games|betting (company|operator|"
+                           r"platform|exchange|industry)|gambling (company|operator|industry))\b", re.I)
+TRAINING_BOND = re.compile(r"training bond|repay (the )?(cost of )?(your )?training|training (cost|fee)s? "
+                           r"(will be|are) (repayable|recoverable)|exit fee|minimum (service|commitment) "
+                           r"(period|of \d+ (months|years))", re.I)
+# Wording that means prior work experience is required. Negations are checked separately.
+EXPERIENCE_REQUIRED = re.compile(
+    r"\b(proven|significant|solid|demonstrable|substantial|extensive|previous|prior|relevant) "
+    r"(commercial |professional |industry |hands-on |production )?experience (in|with|of|as|building|developing)|"
+    r"\b(commercial|professional|industry) experience (in|with|of|as|building|developing|is required)|"
+    r"\bextensive \w+ experience|\b(strong|solid),? proven experience|\btrack record of|"
+    r"meaningful production ownership", re.I)
+# Postgraduate degrees required; a BSc graduate does not qualify.
+POSTGRAD_REQUIRED = re.compile(r"\b(msc|ph\.?d|master'?s( degree)?)\b[^.\n]{0,30}\b(in|required|degree)\b", re.I)
+UNDERGRAD_OK = re.compile(r"\b(bsc|bachelor'?s?|undergraduate|first[- ]class|2[.:]1)\b", re.I)
+NO_EXPERIENCE_NEEDED = re.compile(r"\b(no|without) (prior |previous |commercial |professional )*experience|"
+                                  r"experience (is )?(not required|not necessary|a plus|a bonus|desirable|"
+                                  r"is nice to have)", re.I)
 # Employers that name themselves after defence work, whether or not they are listed.
 DEFENCE_NAME = re.compile(r"defen[cs]e|military|weapons?|munitions|armaments", re.I)
 EXCLUDED = {company_key(line) for line in EXCLUDED_FILE.read_text().splitlines()
@@ -86,7 +106,8 @@ SKILLS = {
 
 YEARS = re.compile(
     r"(\d{1,2})\s*(?:\+|plus)?\s*(?:-|to|\u2013)?\s*(?:\d{1,2})?\s*\+?\s*years?['\u2019]?\s*(?:of\s+)?"
-    r"(?:\w+[\s,/-]+){0,4}?experience", re.I)
+    r"(?:\w+[\s,/-]+){0,4}?(?:experience|building|developing|of (?:software|engineering|industry|"
+    r"commercial|professional|production|hands-on))", re.I)
 MONEY = re.compile(r"\u00a3\s?(\d{2,3})(?:,(\d{3})|(k))", re.I)
 
 
@@ -153,6 +174,11 @@ def score(job: dict) -> tuple[float, str]:
         if NOT_FOR_GRADS.search(title):
             return 0, "internship/placement/apprenticeship/PhD"
 
+    if GAMBLING_WORK.search(text):
+        return 0, "gambling"
+    if TRAINING_BOND.search(text):
+        return 0, "training bond"
+
     pattern, pattern_pts = workplace(job.get("location"), text)
     if pattern_pts is None:
         return 0, "fully remote"
@@ -175,15 +201,12 @@ def score(job: dict) -> tuple[float, str]:
         notes.append("may require current students")
 
     yrs = min_years(text)
-    if yrs is not None:
-        if yrs >= 5:
-            return 0, f"asks {yrs}+ years"
-        if yrs >= 3:
-            s -= 20
-            notes.append(f"asks {yrs}+ yrs")
-        elif yrs == 2:
-            s -= 6
-            notes.append("asks 2 yrs")
+    if yrs is not None and yrs >= 1:
+        return 0, f"asks {yrs}+ years"
+    if EXPERIENCE_REQUIRED.search(text) and not NO_EXPERIENCE_NEEDED.search(text):
+        return 0, "asks for prior experience"
+    if POSTGRAD_REQUIRED.search(text) and not UNDERGRAD_OK.search(text):
+        return 0, "asks for a postgraduate degree"
 
     skill_pts = sum(w for pat, w in SKILLS.items() if re.search(pat, text, re.I))
     s += min(skill_pts, 20)
