@@ -1,0 +1,422 @@
+"""Read the job inbox, turn recruiting email into application status.
+
+Read-only: the mailbox is opened with EXAMINE and bodies fetched with
+BODY.PEEK, so nothing is marked read, moved or deleted. Each message is
+classified once, by rules with a local-model fallback, and stored in the
+emails table with its job. Applications made outside the pipeline get a job.
+
+Kinds:
+  applied     you sent an application (outbound email)
+  confirmed   'we received your application'
+  assessment  online test / coding challenge / take-home
+  interview   invitation to interview or to book a call
+  offer
+  rejected
+  human       a real person wrote about an application: read and reply
+  alert       job-alert digest (Indeed, LinkedIn, Gradcracker, ...)
+  admin       security codes, GDPR notices, account mail
+  other
+"""
+import difflib
+import email
+import email.header
+import email.utils
+import html
+import imaplib
+import re
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from . import db, llm
+from .score import score
+
+ADDRESS = "firstname.lastname@example.com"
+PASSWORD_FILE = Path("~/.config/jobhunt/gmail-app-password").expanduser()
+FIRST_SYNC_DAYS = 400
+
+# Application status each kind moves a job to, and how far along that is.
+STATUS_FOR = {"applied": "applied", "confirmed": "applied", "assessment": "assessment",
+              "interview": "interview", "offer": "offer", "rejected": "rejected"}
+RANK = {"applied": 1, "assessment": 2, "interview": 3, "offer": 4}
+ATTENTION = {"assessment", "interview", "offer", "human"}
+
+
+ALERT_SENDERS = re.compile(r"match\.indeed\.com|jobalerts?-noreply@linkedin|jobs-noreply@linkedin|"
+                           r"gradcracker\.com|jobs2web\.com|@e\.jm\.indeed|@jm\.indeed|"
+                           r"@trackr|the-trackr|jobs\.ac\.uk|cv-library|welcometothejungle|otta\.com|"
+                           r"workinstartups|totaljobs|reed\.co\.uk|glassdoor", re.I)
+SOCIAL = re.compile(r"@(e\.|em\.)?linkedin\.com|@facebookmail|bitwarden|github\.com|accounts\.google", re.I)
+ADMIN = re.compile(r"security code|verification code|^welcome to |verify your (email|account)|confirm your email|"
+                   r"gdpr|privacy (and compliance )?notification|password|account (created|activated)|"
+                   r"registration|^\[jobhunt\]", re.I)
+APP_CONTEXT = re.compile(r"\b(appl(y|ying|ied|ication)|candida(te|cy)|position|vacanc|role|interview|"
+                         r"assessment|recruit|hiring|talent)\b", re.I)
+
+OFFER = re.compile(r"pleased to (offer|extend)|offer of employment|formal offer|"
+                   r"delighted to offer|(make|making) you an offer", re.I)
+REJECTED = re.compile(
+    r"unfortunately|regret to inform|not (be )?(progress|proceed|mov)ing (forward|further|with)|"
+    r"(will|shall|are) not (be )?(progressing|moving forward|proceeding|taking)|"
+    r"decided not to (progress|proceed|move)|not been (successful|selected)|unsuccessful|"
+    r"not (been )?selected for further|not in a position to (pursue|progress|offer)|"
+    r"filled (our|the) (open )?position|no longer (interviewing|considering)|position has (now )?been filled|"
+    r"other candidates whose|decided to pursue other|won'?t be (moving|progressing)", re.I)
+INTERVIEW = re.compile(
+    r"invite you (to|for) (an? )?(\w+ )?(interview|call|chat|conversation)|"
+    r"(like|love) to (invite|schedule|arrange|set up|book)|interview (invitation|invite)|"
+    r"(book|select|choose|pick) (a|your) (time|slot)|calendly\.com|goodtime\.io|"
+    r"(send|share|let us know) (us )?your availability|next stage (is|will be) an? (\w+ )?(interview|call)|"
+    r"(pleased|happy|delighted) to (let you know|inform you|invite)", re.I)
+ASSESSMENT = re.compile(
+    r"hackerrank|codility|codesignal|coderpad|testgorilla|hirevue|pymetrics|shl\.com|"
+    r"cappfinity|arctic shores|sova|talentlens|(online|technical|coding|numerical|aptitude|"
+    r"situational judgement) (assessment|test|challenge|exercise)|take[- ]home|"
+    r"complete (the|an|our|your) (\w+ )?(assessment|test|challenge)", re.I)
+CONFIRMED = re.compile(
+    r"(received|receipt of) your application|thank(s| you)[\w ]{0,12} for (your )?(\w+ )?(applying|application|"
+    r"interest)|application (has been )?(submitted|received)|application submitted|"
+    r"we('ll| will) (be in touch|review|contact)", re.I)
+
+NOREPLY = re.compile(r"no-?reply|donotreply|do-not-reply|notifications?@|mailer|system@|"
+                     r"@[\w.-]*(greenhouse|ashbyhq|lever|workday|myworkday|successfactors|icims|"
+                     r"smartrecruiters|workable|teamtailor|recruitee|personio|jobs2web)", re.I)
+
+
+def classify(sender: str, rcpt: str, subject: str, body: str) -> str:
+    s = f"{subject}\n{body[:4000]}"
+    if ADDRESS in sender.lower():
+        if re.search(r"^\[jobhunt\]", subject):
+            return "admin"
+        others = [a for a in re.findall(r"[\w.+-]+@[\w.-]+", rcpt) if a.lower() != ADDRESS]
+        if others and re.search(r"\bappl(y|ication)\b|\bCV\b|r[e\u00e9]sum[e\u00e9]", s, re.I):
+            return "applied"
+        return "other"
+    if ALERT_SENDERS.search(sender) or re.search(r" is hiring\b|new jobs?\b.*\bmore\b|jobs? for you|"
+                                                  r"deadlines this week|new opportunities at", subject, re.I):
+        return "alert"
+    if "indeedapply@indeed" in sender.lower():
+        return "confirmed"
+    if re.search(r"linkedin", sender, re.I) and re.search(r"new messages?\b", subject, re.I):
+        return "human"  # may be a recruiter InMail, readable only on LinkedIn
+    if SOCIAL.search(sender):
+        return "other"
+    if ADMIN.search(subject) and not REJECTED.search(s):
+        return "admin"
+    if not APP_CONTEXT.search(s):
+        return "other"
+    if OFFER.search(s):
+        return "offer"
+    if REJECTED.search(s):
+        return "rejected"
+    if INTERVIEW.search(s):
+        return "interview"
+    if ASSESSMENT.search(s):
+        return "assessment"
+    if CONFIRMED.search(s):
+        return "confirmed"
+    # Mail from a person about an application needs reading even when no rule fires.
+    return "human" if not NOREPLY.search(sender) else "other"
+
+
+
+STOP = r"(?:\s+[-\u2013|:]|\s*[!.,]|\s+(?:for|and|we|is|has|team|in)\b|\s*$)"
+COMPANY_PATTERNS = [
+    r"items were sent to (.+?)\. ?Good luck",                                   # Indeed Apply
+    r"(?:applying|application|applied) (?:to|at|with) (?!the |our |a |this )([A-Z][\w&.'\u2019 -]{1,40}?)" + STOP,
+    r"(?:interest in|working for|work for|career(?: opportunity)? (?:at|with)|position at|role at|joining|join) "
+    r"(?!the |our |a |this )([A-Z][\w&.'\u2019 -]{1,40}?)" + STOP,
+    r"^Dear ([A-Z][\w&.' -]{1,40}?) (?:team|hiring)",                         # outbound application email
+]
+ROLE_PATTERNS = [
+    r"Indeed Application: (.+)$",
+    r"position of (.+?)(?:\s+\d{6,}|[.!]|,\s|$)",
+    r"(?:for|of|to) the (?:role|position) of (.+?)(?:\s+\d{6,}|[.!(]|,\s|\s+at\b|$)",
+    r"(?:for|of|to) the (.+?) (?:role|position)\b",
+    r"application for (?:the )?(.+?)(?: role| position|[.,!]| at |$)",
+    r"Application at [^-]+ - (.+)$",
+    r"Application to (.+?) position",
+    r"^(.+?) Status Update$",
+    r"^Application: (.+?) - ",
+    r"apply for the (.+?) role",
+    r"^(.+?)\.? - (?:Application Received|[A-Z][\w ]+ University)$",
+]
+SENDER_NOISE = re.compile(r"\b(recruitment|recruiting|hiring team|careers?|talent( acquisition)?|"
+                          r"jobs|team|hr|notifications?|no-?reply|via \w+|from)\b", re.I)
+GENERIC = {"group", "department", "office", "service", "services", "indeed", "indeed apply", "greenhouse", "workday", "lever", "ashby", "linkedin", "us",
+           "you", "firstname", "the team", "our team", "your application"}
+
+
+def _first(patterns, *texts):
+    for p in patterns:
+        for t in texts:
+            m = re.search(p, t, re.M)
+            if m:
+                v = re.sub(r"^(our|the|a|an)\s+", "", m.group(1).strip(" -\u2013:'\u2019\""), flags=re.I)
+                if v and v.lower() not in GENERIC and len(v) <= 80:
+                    return v
+    return None
+
+
+def company_of(sender: str, rcpt: str, subject: str, body: str, kind: str) -> str | None:
+    if kind == "applied":
+        found = _first(COMPANY_PATTERNS[3:], body[:300])
+        if found:
+            return found
+        dom = re.search(r"@([\w-]+)\.", rcpt or "")
+        return dom.group(1).title() if dom else None
+    display = email.utils.parseaddr(sender)[0]
+    if re.search(r"\b(recruitment|recruiting|hiring team|careers|talent)\b", display, re.I):
+        org = SENDER_NOISE.sub("", display).strip(" -\u2013|\"")
+        if org and org.lower() not in GENERIC:
+            return org
+    third_party = re.match(r"^([A-Z][\w&.]+) (?:Assessment|Interview|Online Test|Video Interview)\b", subject)
+    if third_party:  # assessment vendors name the employer in the subject
+        return third_party.group(1)
+    found = _first(COMPANY_PATTERNS, subject, body[:1500])
+    if found:
+        return found
+    name = display
+    name = SENDER_NOISE.sub("", name).strip(" -\u2013|\"")
+    if name and name.lower() not in GENERIC and "@" not in name:
+        return name
+    dom = re.search(r"@([\w-]+)\.", sender)
+    if dom and dom.group(1).lower() not in ("myworkday", "greenhouse", "ashbyhq", "gmail", "us", "eu"):
+        return dom.group(1).title()
+    local = re.search(r"([\w-]+)@myworkday", sender)  # Workday tenants send as <tenant>@myworkday.com
+    return local.group(1).upper() if local else None
+
+
+def role_of(subject: str, body: str) -> str | None:
+    return _first(ROLE_PATTERNS, subject, body[:1500])
+
+
+REFINE_PROMPT = """You read emails from a job seeker's inbox. Reply with JSON only:
+{"kind": one of "confirmed","assessment","interview","offer","rejected","human","other",
+ "company": the hiring company's name (not the ATS or job board, e.g. not Greenhouse, Workday, Indeed), or null,
+ "role": the job title applied for, or null}
+"human" means a real person wrote and probably expects a reply. "other" means not about an application."""
+
+
+def refine(sender, subject, body, kind, company, role):
+    """Ask the local model when the rules are unsure. Rules win if it's down."""
+    try:
+        out = llm.chat_json(REFINE_PROMPT, f"From: {sender}\nSubject: {subject}\n\n{body[:3000]}",
+                            role="fast", timeout=90)
+    except llm.LLMUnavailable:
+        return kind, company, role
+    k = out.get("kind")
+    if k in STATUS_FOR or k in ("human", "other"):
+        kind = k if kind in ("human", "other") else kind  # rule-based status calls take precedence
+    return kind, company or out.get("company"), role or out.get("role")
+
+
+
+ALIASES = {"jingdong": "jd", "jingdongretail": "jd", "relaytech": "relay", "fdmgroup": "fdm"}
+
+
+def norm(company: str | None) -> str:
+    c = (company or "").lower()
+    c = re.sub(r"\.(com|io|ai|co\.uk|co)\b", "", c)
+    c = re.sub(r"\b(ltd|limited|inc|plc|llc|group|technologies|technology|tech|data|uk|holdings|"
+               r"careers|the|labs?)\b", "", c)
+    c = re.sub(r"[^a-z0-9]", "", c)
+    return ALIASES.get(c, c)
+
+
+def _similar(a: str | None, b: str | None) -> float:
+    if not a or not b:
+        return 0
+    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+
+def match_job(con, company: str | None, role: str | None, kind: str) -> str | None:
+    if not company:
+        return None
+    key = norm(company)
+    if not key:
+        return None
+    rows = [r for r in con.execute("SELECT id, company, title, status FROM jobs").fetchall()
+            if (k := norm(r["company"])) and (k == key or (len(key) >= 4 and (k.startswith(key) or key.startswith(k))))]
+    if not rows:
+        return None
+    if role:
+        best = max(rows, key=lambda r: _similar(r["title"], role))
+        if _similar(best["title"], role) >= 0.75:
+            return best["id"]
+    # An unmatched status update belongs to the live application at that
+    # company, or the most recent one if there are several.
+    live = [r for r in rows if r["status"] in RANK]
+    if len(live) == 1 and (kind != "confirmed" or not role):
+        return live[0]["id"]
+    if live and kind in ("rejected", "assessment", "interview", "offer"):
+        return max(live, key=lambda r: r["id"])["id"]
+    return None
+
+
+def ensure_job(con, company: str, role: str | None, when: str, url: str | None = None) -> str:
+    """An application made outside the pipeline still gets a tracked job."""
+    job_id = f"email:{norm(company)}:{re.sub(r'[^a-z0-9]+', '-', (role or 'unknown role').lower()).strip('-')}"
+    if not con.execute("SELECT 1 FROM jobs WHERE id=?", (job_id,)).fetchone():
+        con.execute(
+            """INSERT INTO jobs (id, source, company, title, url, first_seen, last_seen, active, status)
+               VALUES (?, 'email', ?, ?, ?, ?, ?, 1, 'new')""",
+            (job_id, company, role or "(role not stated)", url, when, when))
+    return job_id
+
+
+def advance(con, job_id: str, kind: str, detail: str, at: str | None = None) -> bool:
+    """Move a job's status forward; returns True if it changed."""
+    new = STATUS_FOR.get(kind)
+    if not new:
+        return False
+    cur = con.execute("SELECT status FROM jobs WHERE id=?", (job_id,)).fetchone()["status"]
+    if new == "rejected":
+        ok = cur not in ("rejected", "offer", "withdrawn")
+    else:
+        ok = RANK[new] > RANK.get(cur, 0) or cur in ("rejected", "closed")
+    if ok:
+        db.set_status(con, job_id, new, detail, at)
+    return ok
+
+
+
+def _dec(s: str | None) -> str:
+    return "".join(t.decode(c or "utf-8", "replace") if isinstance(t, bytes) else t
+                   for t, c in email.header.decode_header(s or "")).strip()
+
+
+def body_text(msg) -> str:
+    """Prefer HTML (it often names the company where the plain part does not)."""
+    best = ""
+    for p in msg.walk():
+        ct = p.get_content_type()
+        if ct not in ("text/plain", "text/html") or p.get("Content-Disposition", "").startswith("attachment"):
+            continue
+        raw = p.get_payload(decode=True) or b""
+        t = raw.decode(p.get_content_charset() or "utf-8", "replace")
+        if ct == "text/html":
+            t = re.sub(r"<(style|script|head)[^>]*>.*?</\1>", " ", t, flags=re.S | re.I)
+            t = re.sub(r"<[^>]+>", " ", t)
+        t = html.unescape(t)
+        t = re.sub(r"[\u034f\u00ad\u200b-\u200d\ufeff]+", "", t)  # preheader padding
+        t = re.sub(r"\s+", " ", t).strip()
+        if ct == "text/html" or not best:
+            best = t
+    return best
+
+
+def connect() -> imaplib.IMAP4_SSL:
+    if not PASSWORD_FILE.exists():
+        raise SystemExit(f"No Gmail app password at {PASSWORD_FILE}")
+    M = imaplib.IMAP4_SSL("imap.gmail.com")
+    M.login(ADDRESS, PASSWORD_FILE.read_text().strip().replace(" ", ""))
+    M.select('"[Gmail]/All Mail"', readonly=True)
+    return M
+
+
+def _search(M, query: str) -> list[bytes]:
+    M.literal = query.encode("utf-8")
+    typ, data = M.uid("SEARCH", "CHARSET", "UTF-8", "X-GM-RAW")
+    return data[0].split() if data and data[0] else []
+
+
+def _unseen(M, uids, known: set[str]) -> list[bytes]:
+    out = []
+    for i in range(0, len(uids), 500):
+        typ, data = M.uid("FETCH", b",".join(uids[i:i + 500]), "(X-GM-MSGID)")
+        for line in data:
+            line = line.decode() if isinstance(line, bytes) else line[0].decode()
+            m = re.search(r"X-GM-MSGID (\d+) UID (\d+)|UID (\d+) X-GM-MSGID (\d+)", line)
+            if m:
+                msgid, uid = (m.group(1), m.group(2)) if m.group(1) else (m.group(4), m.group(3))
+                if msgid not in known:
+                    out.append(uid.encode())
+    return out
+
+
+def _fetch(M, uids):
+    for i in range(0, len(uids), 50):
+        typ, data = M.uid("FETCH", b",".join(uids[i:i + 50]), "(X-GM-MSGID X-GM-THRID BODY.PEEK[])")
+        for part in data:
+            if not isinstance(part, tuple):
+                continue
+            head = part[0].decode()
+            msgid = re.search(r"X-GM-MSGID (\d+)", head).group(1)
+            thrid = re.search(r"X-GM-THRID (\d+)", head).group(1)
+            yield msgid, thrid, email.message_from_bytes(part[1])
+
+
+def sync(con, days: int | None = None) -> list[dict]:
+    """Fetch new mail, classify, update jobs. Returns the emails needing attention."""
+    last = con.execute("SELECT v FROM meta WHERE k='mail_synced'").fetchone()
+    if days is None:
+        days = FIRST_SYNC_DAYS if not last else max(
+            2, (datetime.now(timezone.utc) - datetime.fromisoformat(last["v"])).days + 2)
+    M = connect()
+    try:
+        known = {r["msgid"] for r in con.execute("SELECT msgid FROM emails")}
+        uids = _unseen(M, _search(M, f"newer_than:{days}d"), known)
+        fresh = []
+        for msgid, thrid, msg in _fetch(M, uids):
+            if msgid in known:
+                continue
+            when = email.utils.parsedate_to_datetime(msg["Date"]) if msg["Date"] else datetime.now(timezone.utc)
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            fresh.append((when.astimezone(timezone.utc).isoformat(timespec="seconds"), msgid, thrid, msg))
+    finally:
+        M.logout()
+
+    attention = []
+    for when, msgid, thrid, msg in sorted(fresh, key=lambda x: x[0]):  # status must advance in order
+        sender, rcpt, subject = _dec(msg["From"]), _dec(msg["To"]), _dec(msg["Subject"])
+        body = body_text(msg)
+        kind = classify(sender, rcpt, subject, body)
+        company = role = job_id = None
+        if kind in STATUS_FOR or kind == "human":
+            company = company_of(sender, rcpt, subject, body, kind)
+            role = role_of(subject, body)
+            if kind == "human" or not company or not role:
+                kind, company, role = refine(sender, subject, body, kind, company, role)
+            job_id = match_job(con, company, role, kind)
+            if not job_id and norm(company) and kind in STATUS_FOR:
+                job_id = ensure_job(con, company, role, when)
+            if job_id:
+                db.log(con, job_id, "email", f"{kind}: {subject}", when)
+                advance(con, job_id, kind, f"email: {subject}", when)
+        elif kind == "alert":
+            ingest_alert(con, sender, subject, body, when)
+        con.execute(
+            """INSERT INTO emails (msgid, thrid, date, sender, rcpt, subject, kind, company, role, job_id, snippet)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (msgid, thrid, when, sender, rcpt, subject, kind, company, role, job_id, body[:600]))
+        recent = datetime.fromisoformat(when) > datetime.now(timezone.utc) - timedelta(days=3)
+        if kind in ATTENTION and recent:
+            attention.append({"kind": kind, "company": company, "role": role, "subject": subject,
+                              "sender": sender, "date": when, "job_id": job_id})
+    con.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('mail_synced', ?)", (db.now(),))
+    con.commit()
+    return attention
+
+
+
+INDEED_SUBJECT = re.compile(r"^(?P<title>.+?) (?:@|at) (?P<company>.+?)(?: in (?P<loc>.+?) and \d+ more new jobs?)?$")
+
+
+def ingest_alert(con, sender: str, subject: str, body: str, when: str) -> None:
+    """Indeed match emails name one job per subject: keep it as a lead."""
+    if "indeed" not in sender.lower():
+        return
+    m = INDEED_SUBJECT.match(subject)
+    if not m:
+        return
+    title, company, loc = m.group("title"), m.group("company"), m.group("loc")
+    job = {
+        "id": f"indeed:{norm(company)}:{re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')}",
+        "source": "indeed", "company": company, "title": title, "location": loc or "",
+        "url": "https://uk.indeed.com/jobs?" + __import__("urllib.parse").parse.urlencode({"q": f'"{title}" {company}'}),
+        "description": body[:4000], "salary": None, "posted_at": when, "board_size": None,
+    }
+    if db.upsert(con, job):
+        s, why = score(job)
+        con.execute("UPDATE jobs SET score=?, score_notes=? WHERE id=?", (s, why, job["id"]))
