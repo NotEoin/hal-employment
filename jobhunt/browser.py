@@ -190,9 +190,12 @@ class Browser:
         PROFILE.mkdir(parents=True, exist_ok=True)
         mode = os.environ.get("JOBHUNT_APPLY_BROWSER") or CONFIG.get("apply_browser", "window")
         headless = mode == "headless"
+        # Wayland refuses a window's request to raise itself, so "Show browser
+        # window" only works when the window runs through XWayland.
+        args = ["--ozone-platform=x11"] if not headless and os.environ.get("DISPLAY") else []
         self._ctx = self._pw.chromium.launch_persistent_context(
             str(PROFILE), headless=headless, viewport={"width": 1280, "height": 900},
-            locale="en-GB", timezone_id="Europe/London")
+            locale="en-GB", timezone_id="Europe/London", args=args)
         self._ctx.on("close", lambda _: setattr(self, "_ctx", None))
         self.pages = {}
         return self._ctx
