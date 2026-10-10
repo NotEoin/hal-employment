@@ -80,7 +80,7 @@ function scoreRing(s) { const v = Math.max(0, Math.min(100, Math.round(s || 0)))
 const STATUS_CHIP = { applying: "info", applied: "", assessment: "warn", interview: "warn", offer: "good", rejected: "bad", withdrawn: "", ready: "info", skipped: "" };
 
 // Router -----------------------------------------------------------------------
-const routes = { queue: viewQueue, applications: viewApplications, todos: viewTodos, alerts: viewAlerts, job: viewJob };
+const routes = { queue: viewQueue, applications: viewApplications, todos: viewTodos, alerts: viewAlerts, stats: viewStats, job: viewJob };
 async function route() {
   const [name, ...rest] = (location.hash.slice(2) || "queue").split("/");
   state.route = name;
@@ -486,6 +486,87 @@ function paneAfter(d) {
     await guard(() => api(`job/${enc(id)}/note`, { text })); viewJob(id);
   };
   bindTodos(pane, () => viewJob(id));
+}
+
+// Statistics -------------------------------------------------------------------
+const dayMonth = iso => new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
+// Columns for applications sent each week. Only the peak and the current week carry
+// a number; the rest are read from the axis, the hover readout or the table.
+function weekChart(weeks) {
+  const W = 720, H = 220, left = 28, right = 8, top = 18, bottom = 26;
+  const peak = Math.max(...weeks.map(w => w.count));
+  const step = Math.max(1, Math.ceil(peak / 4)), max = Math.max(step, Math.ceil(peak / step) * step);
+  const band = (W - left - right) / weeks.length, bar = Math.min(18, band * 0.6), plot = H - top - bottom;
+  const y = v => top + plot - (v / max) * plot;
+  const ticks = Array.from({ length: max / step + 1 }, (_, i) => i * step);
+  const labelled = new Set([weeks.length - 1, weeks.findIndex(w => w.count === peak)]);
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Applications sent per week, last ${weeks.length} weeks">
+    ${ticks.map(t => `<line class="grid" x1="${left}" x2="${W - right}" y1="${y(t)}" y2="${y(t)}"/>
+      <text x="${left - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`).join("")}
+    ${weeks.map((w, i) => {
+      const x = left + band * i + (band - bar) / 2, h = (w.count / max) * plot, r = Math.min(4, h);
+      const mark = w.count ? `<path class="mark" d="M${x},${top + plot} v${-(h - r)} q0,${-r} ${r},${-r} h${bar - 2 * r} q${r},0 ${r},${r} v${h - r} z"/>` : "";
+      return `<g><rect class="hit" tabindex="0" x="${left + band * i}" y="${top}" width="${band}" height="${plot}"
+          data-tip="${w.count}|week of ${esc(dayMonth(w.start))}" aria-label="${w.count} sent in the week of ${esc(dayMonth(w.start))}"/>${mark}
+        ${labelled.has(i) && w.count ? `<text class="value" x="${x + bar / 2}" y="${y(w.count) - 5}" text-anchor="middle">${w.count}</text>` : ""}
+        <text x="${x + bar / 2}" y="${H - 8}" text-anchor="middle">${esc(dayMonth(w.start))}</text></g>`;
+    }).join("")}</svg>`;
+}
+
+async function viewStats() {
+  const s = await api("stats");
+  const pct = s.total ? Math.round(100 * s.heard / s.total) : 0;
+  const change = s.last7 - s.previous7;
+  const tiles = [
+    ["Sent today", s.today, s.today ? "applications" : "none yet today"],
+    ["Sent, last 7 days", s.last7, `${change > 0 ? "+" : ""}${change} on the week before`],
+    ["Sent in total", s.total, s.undated ? `${s.undated} without a sent date` : "all tracked"],
+    ["Heard back", s.heard, `${pct}% of those sent`],
+    ["Reply wait", s.reply_days === null ? "n/a" : `${Math.round(s.reply_days)} d`, "median to first reply"],
+    ["Ready to apply", s.ready, `${s.applying} in progress`],
+  ];
+  const most = Math.max(1, ...s.standing.map(x => x.count));
+  main.innerHTML = `<div class="head"><div><h1>Statistics</h1><p>What has gone out, what has come back, and what is still waiting.</p></div></div>
+    <div class="tiles">${tiles.map(([k, v, d]) => `<div class="card tile"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(d)}</div></div>`).join("")}</div>
+    <div class="card pad viz" id="weeks"><div class="bar" style="margin:0"><h3 class="grow">Applications sent per week</h3>
+        <button class="small ghost" data-table>Show as table</button></div>
+      <div data-chart>${weekChart(s.weeks)}</div>
+      <table data-rows hidden><tr><th>Week starting</th><th class="num">Sent</th></tr>
+        ${s.weeks.map(w => `<tr><td>${esc(dayMonth(w.start))}</td><td class="num">${w.count}</td></tr>`).join("")}</table></div>
+    <div class="split" style="margin-top:16px">
+      <div class="card pad"><h3 style="margin:0;font-size:14px">Where sent applications stand</h3>
+        ${s.standing.length ? `<div class="hbars">${s.standing.map(x => `<div>${esc(x.label)}</div>
+          <div class="track" title="${x.count} of ${s.total}"><div class="fill" style="width:${Math.round(78 * x.count / most)}%"></div><span class="n">${x.count}</span></div>`).join("")}</div>`
+          : `<p class="muted">Nothing sent yet.</p>`}</div>
+      <div class="card pad"><h3 style="margin:0 0 8px;font-size:14px">By source</h3>
+        <table><tr><th>Source</th><th class="num">Sent</th><th class="num">Heard back</th><th class="num">Rejected</th></tr>
+        ${s.sources.map(r => `<tr><td>${esc(r.source)}</td><td class="num">${r.sent}</td><td class="num">${r.heard}</td><td class="num">${r.rejected}</td></tr>`).join("")}</table></div>
+    </div>
+    <div class="card pad" style="margin-top:16px"><h3 style="margin:0 0 8px;font-size:14px">Waiting longest for a reply</h3>
+      ${s.waiting.length ? `<table><tr><th>Company</th><th>Role</th><th class="num">Days</th></tr>
+        ${s.waiting.map(w => `<tr><td><a href="#/job/${enc(w.id)}">${esc(w.company)}</a></td><td>${esc(w.title.slice(0, 90))}</td><td class="num">${w.days}</td></tr>`).join("")}</table>`
+        : `<p class="muted">Nothing is waiting on a reply.</p>`}</div>`;
+  const viz = $("#weeks"), tip = document.createElement("div");
+  tip.className = "tip"; tip.hidden = true; viz.append(tip);
+  $$(".hit", viz).forEach(hit => {
+    const show = () => {
+      const [count, week] = hit.dataset.tip.split("|"), box = hit.getBoundingClientRect(), frame = viz.getBoundingClientRect();
+      tip.replaceChildren(Object.assign(document.createElement("b"), { textContent: count }), ` sent, ${week}`);
+      tip.hidden = false;
+      // Kept inside the card, so the readout for the newest week is not cut off.
+      const half = tip.offsetWidth / 2, centre = box.left + box.width / 2 - frame.left;
+      tip.style.left = `${Math.max(half + 8, Math.min(frame.width - half - 8, centre))}px`;
+      tip.style.top = `${box.top - frame.top - 4}px`;
+    };
+    hit.onpointerenter = hit.onfocus = show;
+    hit.onpointerleave = hit.onblur = () => { tip.hidden = true; };
+  });
+  $("[data-table]", viz).onclick = e => {
+    const table = $("[data-rows]", viz).toggleAttribute("hidden");
+    $("[data-chart]", viz).hidden = !table;
+    e.target.textContent = table ? "Show as table" : "Show as chart";
+  };
 }
 
 // To do ------------------------------------------------------------------------

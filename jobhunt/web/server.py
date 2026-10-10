@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import autofill, browser, contacts, db, documents, extension, gpu, pack, prep, replenish, tasks
+from .. import autofill, browser, contacts, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
 from ..config import CONFIG
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -411,6 +411,8 @@ class Handler(BaseHTTPRequestHandler):
             if route == "alerts":
                 rows = con.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT 100")
                 return {"alerts": [dict(r) for r in rows]}
+            if route == "stats":
+                return stats.summary(con)
             if route.startswith("job/"):
                 return self.job(con, unquote(route[4:]))
             raise LookupError(f"no route {route}")
