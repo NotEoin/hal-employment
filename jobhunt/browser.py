@@ -14,7 +14,7 @@ import queue
 import re
 import threading
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 
 from .config import CONFIG, ROOT
 
@@ -149,6 +149,14 @@ BOT_CHECK = re.compile(r"just a moment|verify (that )?you are (a )?human|human v
 ATS_FRAME = ("greenhouse.io", "ashbyhq.com", "lever.co", "workable.com", "smartrecruiters.com", "recruitee.com",
              "personio.", "teamtailor.com", "bamboohr.com", "jobvite.com", "icims.com", "pinpointhq.com")
 MAX_PRESSES = 4  # Apply controls followed before giving up on finding the form
+SEARCH = "https://duckduckgo.com/?q="
+RESULTS_JS = r"""
+() => [...document.querySelectorAll("article[data-testid='result']")].map(a => {
+  const title = a.querySelector("a[data-testid='result-title-a']"), snippet = a.querySelector("[data-result='snippet']");
+  return { url: title ? title.href : '', title: title ? title.innerText.trim() : '',
+           snippet: snippet ? snippet.innerText.replace(/\s+/g, ' ').trim() : '' };
+}).filter(r => r.url)
+"""
 
 
 def application_url(job) -> str:
@@ -556,6 +564,35 @@ def _read_here(b: Browser, job_id: str) -> dict:
     return _report(page, _read(page), "", False)
 
 
+def _search(b: Browser, queries: list[str], pause: float) -> tuple[list[list[dict]], bool]:
+    """Runs web searches in one tab and returns each query's results, and whether the engine refused.
+
+    The searches run here because search engines refuse requests that do not
+    come from a browser window.
+    """
+    opened = b._ctx is None
+    page = b.context().new_page()
+    found, refused = [], False
+    try:
+        for i, query in enumerate(queries):
+            if i:
+                page.wait_for_timeout(pause * 1000)
+            page.goto(SEARCH + quote_plus(query), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+            try:
+                page.wait_for_selector("article[data-testid='result']", timeout=10_000)
+            except Exception:  # noqa: BLE001 - no results, or the engine's bot check
+                refused = "anomaly" in page.content()
+                if refused:
+                    break
+            found.append(page.evaluate(RESULTS_JS))
+    finally:
+        page.close()
+        if opened:
+            # A window opened only to search has nothing else to show.
+            b._ctx.close()
+    return found, refused
+
+
 def _look(b: Browser, job_id: str, shot: str) -> dict:
     """Describes what the job's tab shows now: its buttons, any open dialog, and a picture."""
     page = b.page(job_id)
@@ -606,6 +643,10 @@ def peek(job_id: str) -> dict:
 
 def next_step(job_id: str) -> dict:
     return BROWSER.call(_next, job_id)
+
+
+def search(queries: list[str], pause: float = 0) -> tuple[list[list[dict]], bool]:
+    return BROWSER.call(_search, queries, pause)
 
 
 def look(job_id: str, shot: Path) -> dict:

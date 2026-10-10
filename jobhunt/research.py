@@ -27,25 +27,6 @@ def search(query: str, limit: int = 5, skip_aggregators: bool = True) -> list[st
     return urls[:limit]
 
 
-class Blocked(Exception):
-    """The search engine refused a query, usually for asking too often."""
-
-
-def results(query: str) -> list[dict]:
-    """Returns a query's results as {url, title, snippet}, aggregator sites included."""
-    page = get(SEARCH + urllib.parse.quote_plus(query), headers=BROWSER_UA, timeout=15)
-    plain = lambda t: html.unescape(re.sub(r"<[^>]+>", "", t)).strip()  # noqa: E731
-    found = []
-    for href, title, snippet in re.findall(
-            r'class="result__a" href="([^"]+)"[^>]*>(.*?)</a>.*?class="result__snippet"[^>]*>(.*?)</a>', page, re.S):
-        target = urllib.parse.parse_qs(urllib.parse.urlparse(html.unescape(href)).query).get("uddg")
-        if target:
-            found.append({"url": target[0], "title": plain(title), "snippet": plain(snippet)})
-    if not found and re.search(r"anomaly|challenge", page, re.I):
-        raise Blocked(query)
-    return found
-
-
 def page_text(url: str, limit: int = 6000) -> str:
     """Returns the readable text of a web page, truncated to `limit` characters."""
     raw = get(url, headers=BROWSER_UA, timeout=15)

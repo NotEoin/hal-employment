@@ -4,14 +4,15 @@ Candidates come from three places: people the advert names, people who wrote
 to the job inbox about the job, and public search results for the employer's
 engineering and hiring leads. The local model picks the best few; without it,
 rules on job titles do. LinkedIn itself is never opened: profile links come
-from a search engine's result page and are for the applicant to visit by hand.
+from a search engine's result page, read in Hal's browser, and are for the
+applicant to visit by hand.
 """
 import email.utils
 import json
 import re
 import time
 
-from . import db, documents, gpu, llm, research
+from . import browser, db, documents, gpu, llm
 
 SEARCH_PAUSE = 8  # seconds between queries, so the search engine does not refuse them
 _last_query = 0.0
@@ -45,7 +46,7 @@ def _profile(result: dict, company: str) -> dict | None:
     """Reads a search result for a LinkedIn profile into a person, or None if it is not one at the employer."""
     if not re.match(r"https://([a-z]{2,3}\.)?linkedin\.com/in/", result["url"]):
         return None
-    title = re.sub(r"\s*[|\-–]\s*LinkedIn\s*$", "", result["title"])
+    title = re.sub(r"\s*[|\-\u2013]\s*LinkedIn\s*$", "", result["title"])
     name, _, role = title.partition(" - ")
     # A surname that matches the company is not evidence of working there.
     if not re.search(rf"\b{re.escape(_employer(company))}\b", f"{role} {result['snippet']}", re.I):
@@ -82,23 +83,20 @@ def from_inbox(con, job) -> list[dict]:
 def from_search(job) -> tuple[list[dict], str]:
     """Returns the employer's people found by public search, and a note if the search was cut short."""
     global _last_query
-    people, seen, note = [], set(), ""
-    for query in QUERIES:
-        time.sleep(max(0.0, _last_query + SEARCH_PAUSE - time.monotonic()))
-        _last_query = time.monotonic()
-        try:
-            found = research.results(query.format(company=_employer(job["company"])))
-        except research.Blocked:
-            note = "the search engine refused some queries; search again later"
-            break
-        except Exception as e:  # noqa: BLE001 - the people already found are still worth ranking
-            note = f"the search did not finish: {e}"
-            break
-        for result in found:
-            person = _profile(result, job["company"])
-            if person and person["url"] not in seen:
-                seen.add(person["url"])
-                people.append(person)
+    time.sleep(max(0.0, _last_query + SEARCH_PAUSE - time.monotonic()))
+    queries = [q.format(company=_employer(job["company"])) for q in QUERIES]
+    try:
+        pages, refused = browser.search(queries, SEARCH_PAUSE)
+        note = "the search engine refused some queries; search again later" if refused else ""
+    except Exception as e:  # noqa: BLE001 - the advert and the inbox may still name someone
+        pages, note = [], f"the search did not run: {str(e).splitlines()[0][:160]}"
+    _last_query = time.monotonic()
+    people, seen = [], set()
+    for result in (r for page in pages for r in page):
+        person = _profile(result, job["company"])
+        if person and person["url"] not in seen:
+            seen.add(person["url"])
+            people.append(person)
     return people, note
 
 
