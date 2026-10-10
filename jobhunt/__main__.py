@@ -16,6 +16,7 @@
     python -m jobhunt serve [--port N] [--open]   run the Hal Employment web interface
     python -m jobhunt queue               the jobs waiting in the queue, best first
     python -m jobhunt todo [add TEXT|done ID]   the to-do list
+    python -m jobhunt contacts ID         find who to message about an application
 
 IDs can be given as any unique prefix or substring.
 """
@@ -231,6 +232,16 @@ def cmd_todo(args):
         print("Nothing to do.")
 
 
+def cmd_contacts(args):
+    from . import contacts
+    con = db.connect()
+    found = contacts.find(con, _find(con, args.id))
+    for p in found["people"]:
+        print(f"{p['name']}  |  {p['role']}  |  {p['source']}{'' if p['sure'] else '  (check)'}")
+        print(f"    {p.get('url') or p.get('email') or ''}  {p['why']}")
+    print(f"({len(found['people'])} suggested by {found['by']}{'; ' + found['note'] if found['note'] else ''})")
+
+
 def cmd_vault(args):
     from . import vault
     print(vault.write(db.connect()) or f"vault not found: {vault.VAULT}")
@@ -404,6 +415,7 @@ def main():
     s.add_argument("--spoken", action="store_true"); s.set_defaults(fn=cmd_digest)
     sub.add_parser("vault").set_defaults(fn=cmd_vault)
     sub.add_parser("queue").set_defaults(fn=cmd_queue)
+    s = sub.add_parser("contacts"); s.add_argument("id"); s.set_defaults(fn=cmd_contacts)
     s = sub.add_parser("todo"); s.add_argument("op", nargs="?", choices=["add", "done"])
     s.add_argument("rest", nargs="*"); s.set_defaults(fn=cmd_todo)
     s = sub.add_parser("serve", help="run the Hal Employment web interface")

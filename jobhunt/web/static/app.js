@@ -429,6 +429,8 @@ async function markApplied(id) {
 
 function paneAfter(d) {
   const id = d.job.id, app = d.application;
+  const running = d.action && d.action.state === "running";
+  const people = (app.contacts && app.contacts.people) || [];
   const statuses = ["applied", "assessment", "interview", "offer", "rejected", "withdrawn"];
   const pane = $("#pane");
   pane.innerHTML = `<div class="split">
@@ -443,8 +445,18 @@ function paneAfter(d) {
     </div>
     <div>
       <div class="card pad"><h4 class="muted small-t" style="margin:0 0 8px">TO DO</h4>${d.todos.length ? d.todos.map(todoRow).join("") : `<p class="muted">Nothing for this job.</p>`}</div>
-      <div class="card pad" style="margin-top:16px"><h4 class="muted small-t" style="margin:0 0 8px">MESSAGE TO THE HIRING MANAGER</h4>
-        <p class="small-t muted">To: ${esc(d.docs.message_to)}</p><textarea readonly>${esc(d.docs.message)}</textarea>
+      <div class="card pad" style="margin-top:16px"><div class="bar" style="margin:0 0 8px"><h4 class="muted small-t grow" style="margin:0">MESSAGE TO THE HIRING MANAGER</h4>
+        <button class="small" data-people ${running ? "disabled" : ""}>${app.contacts ? "Search again" : "Find who to message"}</button></div>
+        ${people.map((p, i) => `<div class="person"><div><b>${esc(p.name)}</b> <span class="chip">${esc(p.source)}</span>
+            ${p.sure ? "" : `<span class="chip warn" title="Hal is not sure this is the right person">check</span>`}</div>
+          <div class="small-t muted">${esc([p.role, p.why].filter(Boolean).join(". "))}</div>
+          <div class="bar" style="margin:4px 0 10px">${/^https:\/\//.test(p.url || "") ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">Open profile</a>` : ""}
+            ${p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""}
+            <span class="grow"></span><button class="small" data-copy-for="${i}">Copy message for ${esc(p.name.split(" ")[0])}</button></div></div>`).join("")}
+        ${people.length ? "" : `<p class="small-t muted">${app.contacts ? "Hal found nobody to suggest." : "To: " + esc(d.docs.message_to)}</p>`}
+        ${app.contacts && app.contacts.note ? `<p class="small-t muted">Note: ${esc(app.contacts.note)}.</p>` : ""}
+        ${people.length ? `<p class="small-t muted">Found from the advert, your job inbox and public web search. Hal never opens LinkedIn; you send the message.</p>` : ""}
+        <textarea readonly>${esc(d.docs.message)}</textarea>
         <div class="bar"><button class="small" data-copy>Copy</button></div></div>
       ${d.emails.length ? `<div class="card pad" style="margin-top:16px"><h4 class="muted small-t" style="margin:0 0 8px">EMAIL</h4>
         <ul class="timeline">${d.emails.map(e => `<li><b>${esc(e.kind)}</b> ${esc(e.date.slice(0, 10))} ${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.subject)}</a>` : esc(e.subject)}</li>`).join("")}</ul></div>` : ""}
@@ -458,6 +470,11 @@ function paneAfter(d) {
   });
   $("[data-prep]", pane).onclick = () => startAction(id, "prep", {});
   $("[data-copy]", pane).onclick = () => navigator.clipboard.writeText(d.docs.message).then(() => toast("Copied"));
+  $("[data-people]", pane).onclick = () => startAction(id, "contacts", {});
+  $$("[data-copy-for]", pane).forEach(b => b.onclick = () => {
+    const first = people[+b.dataset.copyFor].name.split(" ")[0];
+    navigator.clipboard.writeText(d.docs.message.replace(/\[Hiring Manager(?:'s)? Name\]/i, first)).then(() => toast("Copied"));
+  });
   $("[data-note]", pane).onclick = async () => {
     const text = $("#note").value.trim(); if (!text) return;
     await guard(() => api(`job/${enc(id)}/note`, { text })); viewJob(id);
@@ -472,7 +489,7 @@ function todoRow(t) {
     <div class="body"><div class="t">${esc(t.title)}</div>
       <div class="small-t muted">${[t.detail && esc(t.detail), t.due && "due " + esc(t.due),
         t.job_id && state.route !== "job" ? `<a href="#/job/${enc(t.job_id)}">${esc(t.company || "job")}</a>` : "",
-        t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener">open email</a>` : ""].filter(Boolean).join(" &middot; ")}</div></div>
+        t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener">${t.kind === "message" ? "open profile" : "open email"}</a>` : ""].filter(Boolean).join(" &middot; ")}</div></div>
     <button class="ghost small x" data-del title="Delete">Delete</button></div>`;
 }
 function bindTodos(root, refresh) {

@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS applications (
     docs     TEXT,                          -- JSON: letter, message, answers, cv title and summary
     form     TEXT,                          -- JSON: the form fields and the values to enter
     prep     TEXT,                          -- interview preparation notes, Markdown
+    contacts TEXT,                          -- JSON: who to message about the application (contacts.find)
     updated  TEXT NOT NULL
 );
 
@@ -117,6 +118,11 @@ def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     con.executescript(SCHEMA)
+    if "contacts" not in {r["name"] for r in con.execute("PRAGMA table_info(applications)")}:
+        try:
+            con.execute("ALTER TABLE applications ADD COLUMN contacts TEXT")
+        except sqlite3.OperationalError:  # another process added it first
+            pass
     return con
 
 

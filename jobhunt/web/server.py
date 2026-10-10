@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import autofill, browser, db, documents, gpu, pack, prep, replenish, tasks
+from .. import autofill, browser, contacts, db, documents, gpu, pack, prep, replenish, tasks
 from ..config import CONFIG
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -47,9 +47,10 @@ def _job(con, job_id: str):
 def _app(con, job_id: str) -> dict:
     row = con.execute("SELECT * FROM applications WHERE job_id = ?", (job_id,)).fetchone()
     if row is None:
-        return {"stage": None, "form": None, "prep": None}
+        return {"stage": None, "form": None, "prep": None, "contacts": None}
     return {"stage": row["stage"], "form": json.loads(row["form"]) if row["form"] else None,
-            "prep": row["prep"], "updated": row["updated"]}
+            "prep": row["prep"], "updated": row["updated"],
+            "contacts": json.loads(row["contacts"]) if row["contacts"] else None}
 
 
 def _set_app(con, job_id: str, **cols) -> None:
@@ -224,6 +225,13 @@ def act_prep(con, job_id: str) -> str:
     return "preparation notes ready"
 
 
+def act_contacts(con, job_id: str) -> str:
+    found = contacts.find(con, _job(con, job_id))
+    count = len(found["people"])
+    return (f"{count} people suggested" if count else "nobody found to suggest") \
+        + (f"; {found['note']}" if found["note"] else "")
+
+
 def act_mail(con, _job_id: str) -> str:
     from .. import gmail
     from ..notify import notify
@@ -257,6 +265,7 @@ def worker() -> None:
                 worked, msg = replenish.step(
                     con, lambda m: WORKER.update(activity="working", detail=m, at=db.now()))
                 WORKER.update(activity="working" if worked else "idle", detail=msg, at=db.now())
+            worked = contacts.step(con) or worked
         except Exception as e:  # noqa: BLE001 - the worker must outlive any one failure
             traceback.print_exc()
             WORKER.update(activity="error", detail=str(e), at=db.now())
@@ -511,6 +520,8 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": True}
         if action == "prep":
             return run_action(job_id, "preparing notes", act_prep, job_id)
+        if action == "contacts":
+            return run_action(job_id, "finding who to message", act_contacts, job_id)
         if action == "note":
             db.log(con, job_id, "note", body["text"])
             con.commit()
