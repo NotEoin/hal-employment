@@ -149,6 +149,9 @@ BOT_CHECK = re.compile(r"just a moment|verify (that )?you are (a )?human|human v
 ATS_FRAME = ("greenhouse.io", "ashbyhq.com", "lever.co", "workable.com", "smartrecruiters.com", "recruitee.com",
              "personio.", "teamtailor.com", "bamboohr.com", "jobvite.com", "icims.com", "pinpointhq.com")
 MAX_PRESSES = 4  # Apply controls followed before giving up on finding the form
+# Human checks: reCAPTCHA, hCaptcha and Cloudflare Turnstile, whose frame hides in a closed shadow root.
+CAPTCHA = ("iframe[src*='recaptcha'], iframe[src*='hcaptcha'], iframe[src*='challenges.cloudflare.com'], "
+           "input[name='cf-turnstile-response'], .cf-turnstile")
 SEARCH = "https://duckduckgo.com/?q="
 RESULTS_JS = r"""
 () => [...document.querySelectorAll("article[data-testid='result']")].map(a => {
@@ -354,7 +357,7 @@ def _report(page, fields: list[dict], needs: str, pressed: bool) -> dict:
     return {"url": page.url, "title": page.title(), "fields": fields, "needs": needs, "sent": sent,
             "site": _site(page.url), "closed": not form and CLOSED.search(headings) is not None,
             "applied": APPLIED.search(text) is not None,
-            "captcha": page.locator("iframe[src*='recaptcha'], iframe[src*='hcaptcha']").count() > 0}
+            "captcha": page.locator(CAPTCHA).count() > 0}
 
 
 def _advance(b: Browser, job_id: str, pressed: bool = False) -> dict:
@@ -550,6 +553,9 @@ def _submit(b: Browser, job_id: str, shot: str) -> dict:
     text = page.locator("body").inner_text()
     invalid = page.locator("[aria-invalid=true]:visible").count()
     challenge = page.locator("iframe[src*='recaptcha/api2/bframe'], iframe[src*='hcaptcha']:visible").count()
+    # Turnstile leaves its hidden answer field empty until the check passes.
+    challenge += page.evaluate(
+        "() => [...document.querySelectorAll(\"input[name='cf-turnstile-response']\")].filter(e => !e.value).length")
     confirmed = SUCCESS.search(text)
     return {"submitted": bool(confirmed), "invalid": invalid, "challenge": challenge > 0,
             "screenshot": shot, "url": page.url, "excerpt": confirmed.group(0) if confirmed else ""}

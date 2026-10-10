@@ -211,7 +211,8 @@ def act_submit(con, job_id: str) -> str:
         mark_applied(con, job, "submitted by Hal from the web interface")
         return "application submitted"
     if out["challenge"]:
-        raise RuntimeError("the site wants a captcha solved; finish it in the browser window, then mark it applied")
+        raise RuntimeError("the site's human check has not passed; if it will not pass in Hal's window, "
+                           "send this one from your own browser, then press \"I applied myself\"")
     if out["invalid"]:
         raise RuntimeError(f"the form reports {out['invalid']} invalid fields; see the screenshot")
     raise RuntimeError("no confirmation seen; check the browser window before marking it applied")
