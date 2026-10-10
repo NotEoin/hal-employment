@@ -94,7 +94,7 @@ function halExtract() {
     if (!label || (kind === 'file' && /^(attach|choose files?|upload( files?)?|browse|select files?)$/i.test(label)))
       label = question(el) || label;
     const f = { hid, kind, type, label, required: required(el), form: owner,
-                name: el.name || el.id || '', current: kind === 'file' ? '' : el.value };
+                name: el.name || el.id || '', current: kind === 'file' ? [...el.files].map(x => x.name).join(', ') : el.value };
     if (kind === 'file') f.context = clean([el.id, el.name, question(el), el.accept || ''].join(' '));
     if (kind === 'select') f.options = [...el.options].map(o => clean(o.text))
       .filter(t => t && !/^(select|choose|please select)/i.test(t));

@@ -315,7 +315,7 @@ function fieldControl(f) {
   const v = f.value;
   const opts = f.options || [];
   if (f.kind === "file") return `<div class="small-t">${f.skip ? '<span class="muted">Left empty</span>' : esc(v ? v.split("/").pop() : "Nothing to upload")}</div>`;
-  if (f.type === "password") return `<div class="small-t muted">Typed by you in Hal's window</div>`;
+  if (f.type === "password") return `<div class="small-t muted">Typed by you into the form</div>`;
   if (f.kind === "checkbox") return `<label class="toggle"><input type="checkbox" data-v ${v ? "checked" : ""}> ${v ? "Ticked" : "Not ticked"}</label>`;
   if (f.kind === "checkgroup") return `<div class="radios">${opts.map(o => `<label><input type="checkbox" data-multi value="${esc(o)}" ${(v || []).includes(o) ? "checked" : ""}> ${esc(o)}</label>`).join("")}</div>`;
   if ((f.kind === "radio" || f.kind === "select" || f.kind === "combobox") && opts.length)
@@ -330,16 +330,20 @@ function paneForm(d) {
   const id = d.job.id, app = d.application, form = app.form;
   const pane = $("#pane");
   const running = d.action && d.action.state === "running";
+  // Forms are driven in Hal's own browser window, or in a tab of yours through the extension.
+  const s = state.last || {}, own = s.browser === "extension", where = s.where || "Hal's window";
+  const offline = own && !s.extension ? `<div class="progress error">The Hal extension is not connected. Open Brave with the
+    Hal Employment extension switched on; it links up within half a minute.</div>` : "";
   if (!form || (!form.fields.length && !form.filled)) {
     pane.innerHTML = `<div class="card pad">
       <h3 style="margin-top:0">Let Hal fill in the application</h3>
       <p class="muted">Hal opens the form at <a href="${esc(d.apply_url)}" target="_blank" rel="noopener">${esc(d.apply_url.slice(0, 90))}</a>
-      in its own browser window, reads every question, and proposes an answer from your profile, these documents and the local model.
-      You check everything here before anything is entered, and nothing is sent until you press Submit.</p>
+      ${own ? "in a tab of your browser" : "in its own browser window"}, reads every question, and proposes an answer from your profile, these documents and the local model.
+      You check everything here before anything is entered, and nothing is sent until you press Submit${own ? " on the form yourself" : ""}.</p>${offline}
       ${form && !form.fields.length ? `<div class="progress error">No form was found on ${esc(form.url)}. If the site needs a login or a few clicks,
-        do that in Hal's browser window, then press "Read the page in Hal's window".</div>` : ""}
+        do that in ${esc(where)}, then press "Read the page in ${esc(where)}".</div>` : ""}
       <div class="bar"><button class="primary" data-open ${running ? "disabled" : ""}>Read the form</button>
-      <button data-here ${running ? "disabled" : ""}>Read the page in Hal's window</button>
+      <button data-here ${running ? "disabled" : ""}>Read the page in ${esc(where)}</button>
       <span class="grow"></span><button class="ghost" data-manual>I applied myself</button></div></div>`;
     $("[data-open]", pane).onclick = () => startAction(id, "form-open", { here: false });
     $("[data-here]", pane).onclick = () => startAction(id, "form-open", { here: true });
@@ -348,7 +352,7 @@ function paneForm(d) {
   }
   const need = form.fields.filter(f => (f.value === null || f.value === "" || (Array.isArray(f.value) && !f.value.length)) && !f.skip);
   const needReq = need.filter(f => f.required);
-  pane.innerHTML = `
+  pane.innerHTML = `${offline}
     <div class="card pad" style="margin-bottom:16px">
       <div class="bar" style="margin:0">
         <div class="grow"><b>${form.step > 1 ? `Step ${form.step}: ` : ""}${esc(form.title || "Application form")}</b><div class="small-t muted">${esc(form.url)}</div></div>
@@ -372,15 +376,17 @@ function paneForm(d) {
         <button class="primary" data-fill ${running ? "disabled" : ""}>Approve and fill</button></div></div>
       <div class="card pad">
         ${form.filled ? `<h4 class="muted small-t" style="margin:0 0 8px">FILLED FORM ${esc(ago(form.filled.at)).toUpperCase()}</h4>
-          <div class="shot-wrap"><img class="shot" src="${fileUrl(form.filled.screenshot)}" alt="The filled form"></div>
-          <div class="bar"><button data-show>Show browser window</button><span class="grow"></span>
+          ${form.filled.screenshot ? `<div class="shot-wrap"><img class="shot" src="${fileUrl(form.filled.screenshot)}" alt="The filled form"></div>`
+            : `<p class="muted">The answers are in the form, in its tab.</p>`}
+          <div class="bar"><button class="${own ? "primary" : ""}" data-show>Show the form</button><span class="grow"></span>
             ${form.filled.next ? `<button class="primary" data-next ${running ? "disabled" : ""}>Next step</button>`
-              : `<button class="good" data-submit ${running || app.stage !== "filled" ? "disabled" : ""}>Submit application</button>`}</div>
+              : own ? "" : `<button class="good" data-submit ${running || app.stage !== "filled" ? "disabled" : ""}>Submit application</button>`}</div>
           <p class="small-t muted">${form.filled.next ? "This form has more steps. Hal moves on by itself when a step fills without problems."
+            : own ? `Check the form, pass any human check, and press its Submit button yourself. Hal marks the job applied when the site confirms it; if it does not, press "I applied myself".`
             : `Submit presses the form's own submit button. Or submit it yourself in Hal's window and press "I applied myself".`}</p>`
         : `<h4 class="muted small-t" style="margin:0 0 8px">NEXT</h4><p class="muted">Check each answer, change anything that is not right,
-          then press <b>Approve and fill</b>. Hal enters the values in the browser window and shows you a picture of the result here.</p>
-          <div class="bar"><button data-show>Show browser window</button></div>`}
+          then press <b>Approve and fill</b>. Hal enters the values ${own ? "into the form in its tab" : "in the browser window and shows you a picture of the result here"}.</p>
+          <div class="bar"><button data-show>Show the form</button></div>`}
         ${form.submit ? `<div class="section"><h4>After submitting</h4>
           <div class="progress ${form.submit.submitted ? "done" : "error"}">${form.submit.submitted ? "The site confirmed the application" : "No confirmation seen"}</div>
           <div class="shot-wrap"><img class="shot" src="${fileUrl(form.submit.screenshot)}" alt="The page after submitting"></div></div>` : ""}
@@ -405,7 +411,7 @@ function paneForm(d) {
     if (left.length && !await confirmBox("Some required questions are empty", `${left.length} required field(s) have no answer. The site will likely refuse the form. Fill anyway?`, "Fill anyway")) return;
     await save(); startAction(id, "form-fill", {});
   };
-  $$("[data-show]", pane).forEach(b => b.onclick = () => guard(() => api(`job/${enc(id)}/form-show`, {}), "Brought Hal's window to the front"));
+  $$("[data-show]", pane).forEach(b => b.onclick = () => guard(() => api(`job/${enc(id)}/form-show`, {}), "Brought the form to the front"));
   const next = $("[data-next]", pane);
   next && (next.onclick = () => startAction(id, "form-next", {}));
   const submit = $("[data-submit]", pane);
@@ -550,6 +556,8 @@ async function poll() {
   if (state.lastAlert !== null) {
     for (const a of s.new_alerts) {
       toast(a.title + (a.body ? ": " + a.body.split("\n")[0] : ""), a.level === "urgent" ? "urgent" : "");
+      // An application the site has just confirmed changes the page being looked at.
+      if (a.level === "good" && state.route === "job" && state.job && a.job_id === state.job.job.id) viewJob(a.job_id);
       if (document.hidden && "Notification" in window && Notification.permission === "granted" && a.level !== "info")
         new Notification(a.title, { body: a.body || "", tag: "hal-" + a.id });
     }

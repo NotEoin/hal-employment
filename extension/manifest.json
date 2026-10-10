@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Hal Employment",
+  "version": "0.1",
+  "description": "Lets Hal read and fill job application forms in tabs it opens for you. Hal never submits a form.",
+  "permissions": ["tabs", "scripting", "storage", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Hal Employment" }
+}

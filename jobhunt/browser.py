@@ -110,8 +110,7 @@ class Browser:
             except Exception:  # noqa: BLE001
                 self._ctx = None
         PROFILE.mkdir(parents=True, exist_ok=True)
-        mode = os.environ.get("JOBHUNT_APPLY_BROWSER") or CONFIG.get("apply_browser", "window")
-        headless = mode == "headless"
+        headless = mode() == "headless"
         # Wayland refuses a window's request to raise itself, so "Show browser
         # window" only works when the window runs through XWayland.
         args = ["--ozone-platform=x11"] if not headless and os.environ.get("DISPLAY") else []
@@ -295,7 +294,7 @@ def _advance(b: Browser, job_id: str, pressed: bool = False) -> dict:
     return _report(page, fields, needs, pressed)
 
 
-def _open(b: Browser, job_id: str, url: str) -> dict:
+def _open_form(b: Browser, job_id: str, url: str) -> dict:
     """Opens the job's application page and works through to its form."""
     page = b.page(job_id) or b.context().new_page()
     b.follow(job_id, page)
@@ -317,8 +316,9 @@ def _peek(b: Browser, job_id: str) -> dict:
         return {"gone": True}
     try:
         fields = page.evaluate(EXTRACT_JS)
+        text = page.locator("body").inner_text()
         return {"needs": _needs(page, fields), "form": _is_form(fields), "url": page.url,
-                "sent": SUCCESS.search(page.locator("body").inner_text()) is not None}
+                "sent": SUCCESS.search(text) is not None, "applied": APPLIED.search(text) is not None}
     except Exception:  # noqa: BLE001 - the page is between two addresses
         return {"busy": True}
 
@@ -329,7 +329,7 @@ def _step_button(page, pattern):
     return found.last if found.count() else None
 
 
-def _next(b: Browser, job_id: str) -> dict:
+def _next_step(b: Browser, job_id: str) -> dict:
     """Presses the form's Next button and reads the step that follows."""
     page = b.page(job_id)
     if page is None:
@@ -514,41 +514,59 @@ def _show(b: Browser, job_id: str) -> bool:
     return True
 
 
+def mode() -> str:
+    """Returns where forms are driven: Hal's own "window" or "headless" browser, or the "extension"."""
+    return os.environ.get("JOBHUNT_APPLY_BROWSER") or CONFIG.get("apply_browser", "window")
+
+
+def where() -> str:
+    """Names the place the applicant looks for the form, for messages."""
+    return "the job's tab" if mode() == "extension" else "Hal's window"
+
+
+def _via(task, *args):
+    """Runs a task in Hal's own browser, or in the applicant's through the extension."""
+    if mode() == "extension":
+        from . import extension
+        return getattr(extension, task.__name__.lstrip("_"))(*args)
+    return BROWSER.call(task, *args)
+
+
 def open_form(job_id: str, url: str) -> dict:
-    return BROWSER.call(_open, job_id, url)
+    return _via(_open_form, job_id, url)
 
 
 def fill(job_id: str, fields: list[dict], shot: Path) -> dict:
-    return BROWSER.call(_fill, job_id, fields, str(shot))
+    return _via(_fill, job_id, fields, str(shot))
 
 
 def submit(job_id: str, shot: Path) -> dict:
-    return BROWSER.call(_submit, job_id, str(shot))
+    return _via(_submit, job_id, str(shot))
 
 
 def read_here(job_id: str) -> dict:
-    return BROWSER.call(_read_here, job_id)
+    return _via(_read_here, job_id)
 
 
 def resume(job_id: str, passed: str, wall: str) -> dict:
-    return BROWSER.call(_resume, job_id, passed, wall)
+    return _via(_resume, job_id, passed, wall)
 
 
 def peek(job_id: str) -> dict:
-    return BROWSER.call(_peek, job_id)
+    return _via(_peek, job_id)
 
 
 def next_step(job_id: str) -> dict:
-    return BROWSER.call(_next, job_id)
+    return _via(_next_step, job_id)
 
 
 def search(queries: list[str], pause: float = 0) -> tuple[list[list[dict]], bool]:
-    return BROWSER.call(_search, queries, pause)
+    return _via(_search, queries, pause)
 
 
 def look(job_id: str, shot: Path) -> dict:
-    return BROWSER.call(_look, job_id, str(shot))
+    return _via(_look, job_id, str(shot))
 
 
 def show(job_id: str) -> bool:
-    return BROWSER.call(_show, job_id)
+    return _via(_show, job_id)

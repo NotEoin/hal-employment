@@ -183,7 +183,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
         text = f"{label} {f.get('context', '')}"
         if f.get("type") == "password":
             # Passwords never pass through Hal or its database.
-            f.update(skip=True, source="skipped", note="type this in Hal's browser window yourself")
+            f.update(skip=True, source="skipped", note="type this into the form yourself")
             continue
         if f["kind"] == "file":
             if re.search(r"cover", text, re.I) and files.get("letter"):

@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import autofill, browser, contacts, db, documents, gpu, pack, prep, replenish, tasks
+from .. import autofill, browser, contacts, db, documents, extension, gpu, pack, prep, replenish, tasks
 from ..config import CONFIG
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -34,6 +34,7 @@ CSRF_HEADER = "X-Hal"
 
 WORKER = {"activity": "starting", "detail": "", "at": db.now(), "paused": False}
 ACTIONS: dict[str, dict] = {}
+WATCHING: set[str] = set()  # jobs whose filled form Hal is watching for the site's confirmation
 POOL = ThreadPoolExecutor(max_workers=3, thread_name_prefix="action")
 
 
@@ -103,13 +104,13 @@ def _past_walls(con, job, found: dict) -> dict:
     while found["needs"] and not found["sent"]:
         need, wall = found["needs"], found["url"]
         ask = ASKS[need].format(site=found["site"])
-        ACTIONS[job_id]["message"] = f"waiting for you to {ask} in Hal's window; Hal carries on by itself"
+        ACTIONS[job_id]["message"] = f"waiting for you to {ask} in {browser.where()}; Hal carries on by itself"
         browser.show(job_id)
-        db.alert(con, "urgent", f"Hal needs you: {job['company']}", f"{ask[0].upper()}{ask[1:]} in Hal's window.", job_id)
+        db.alert(con, "urgent", f"Hal needs you: {job['company']}", f"{ask[0].upper()}{ask[1:]} in {browser.where()}.", job_id)
         con.commit()
         while True:
             if time.time() > deadline:
-                raise RuntimeError(f"gave up waiting for you to {ask}; do that in Hal's window, then read the page there")
+                raise RuntimeError(f"gave up waiting for you to {ask}; do that in {browser.where()}, then read the page there")
             time.sleep(3)
             now = browser.peek(job_id)
             if now.get("gone"):
@@ -138,7 +139,7 @@ def _take_form(con, job, found: dict, step: int) -> str:
         return f"{found['site']} says you have already applied; marked as applied"
     if found["sent"]:
         _set_app(con, job_id, stage="form", form=form)
-        return "the site says your application was sent; check Hal's window, then press \"I applied myself\""
+        return f"the site says your application was sent; check {browser.where()}, then press \"I applied myself\""
     if not fields and step > 1:
         # A step with nothing to answer, such as a review page, is shown as it stands.
         out = browser.fill(job_id, [], browser.SHOTS / pack.slug(job_id) / "filled.png")
@@ -147,7 +148,7 @@ def _take_form(con, job, found: dict, step: int) -> str:
         return f"step {step} has nothing to fill in; check it, then " + ("move on" if out["next"] else "submit")
     _set_app(con, job_id, stage="form", form=form)
     if not fields:
-        return "no form found on that page; open it in the browser window, then read it again"
+        return f"no form found on that page; open it in {browser.where()}, then read it again"
     left = sum(1 for f in fields if f.get("value") in (None, "", []) and not f.get("skip"))
     note = f"; Hal answered {answered}" if answered else (f"; {waiting}" if waiting else "")
     return (f"step {step}: " if step > 1 else "") + f"{len(fields)} fields read, {left} need you{note}"
@@ -169,7 +170,7 @@ def act_next(con, job_id: str) -> str:
     found = browser.next_step(job_id)
     if found["stayed"]:
         marked = f"; it marks {found['invalid']} fields as wrong" if found["invalid"] else ""
-        raise RuntimeError(f"the form did not move on{marked}; check Hal's window")
+        raise RuntimeError(f"the form did not move on{marked}; check {browser.where()}")
     return _take_form(con, job, _past_walls(con, job, found), form.get("step", 1) + 1)
 
 
@@ -195,10 +196,42 @@ def act_fill(con, job_id: str) -> str:
     if out["errors"]:
         return f"form filled with {len(out['errors'])} problems"
     if out["next"] and any(f.get("type") == "password" for f in form["fields"]):
-        return "form filled, apart from your password; type it in Hal's window, then press Next step"
+        return f"form filled, apart from your password; type it in {browser.where()}, then press Next step"
     if out["next"]:
         return act_next(con, job_id)
+    if browser.mode() == "extension":
+        watch_sent(job_id)
+        return "form filled; check it in its tab and press Submit there"
     return "form filled; check it, then submit"
+
+
+def watch_sent(job_id: str) -> None:
+    """Marks the application as applied once the site confirms it, after the applicant submits by hand."""
+    if job_id in WATCHING:
+        return
+    WATCHING.add(job_id)
+
+    def watch():
+        con = db.connect()
+        try:
+            deadline = time.time() + 2 * WAIT_FOR_YOU
+            while time.time() < deadline and _app(con, job_id)["stage"] == "filled":
+                time.sleep(4)
+                try:
+                    now = browser.peek(job_id)
+                except RuntimeError:
+                    continue
+                if now.get("gone"):
+                    return
+                # A form's own wording can thank the applicant; only the page after it counts.
+                if not now.get("busy") and not now["form"] and (now["sent"] or now["applied"]):
+                    mark_applied(con, _job(con, job_id), "the site confirmed the application")
+                    return
+        finally:
+            WATCHING.discard(job_id)
+            con.close()
+
+    threading.Thread(target=watch, name="watch", daemon=True).start()
 
 
 def act_submit(con, job_id: str) -> str:
@@ -211,7 +244,7 @@ def act_submit(con, job_id: str) -> str:
         mark_applied(con, job, "submitted by Hal from the web interface")
         return "application submitted"
     if out["challenge"]:
-        raise RuntimeError("the site's human check has not passed; if it will not pass in Hal's window, "
+        raise RuntimeError(f"the site's human check has not passed; if it will not pass in {browser.where()}, "
                            "send this one from your own browser, then press \"I applied myself\"")
     if out["invalid"]:
         raise RuntimeError(f"the form reports {out['invalid']} invalid fields; see the screenshot")
@@ -289,7 +322,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the extension's browser closed while its request was held open
 
     def _json(self, data, code: int = 200) -> None:
         self._send(code, json.dumps(data, default=str).encode(), "application/json")
@@ -393,6 +429,7 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT * FROM alerts WHERE id > ? ORDER BY id LIMIT 10", (since,))],
             "last_alert": one("SELECT COALESCE(MAX(id), 0) FROM alerts"),
             "worker": WORKER, "actions": ACTIONS,
+            "browser": browser.mode(), "where": browser.where(), "extension": extension.connected(),
         }
 
     def job(self, con, job_id: str) -> dict:
@@ -411,6 +448,11 @@ class Handler(BaseHTTPRequestHandler):
     # POST routes
 
     def api_post(self, route: str, body: dict):
+        if route == "ext/poll":
+            return extension.poll()
+        if route == "ext/result":
+            extension.deliver(body)
+            return {"ok": True}
         con = db.connect()
         try:
             if route.startswith("job/"):
