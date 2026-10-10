@@ -126,11 +126,13 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
                f"Firstname graduated recently. Mention availability only if the advert's start date is "
                f"flexible; for a fixed intake, refer to that intake instead.\n"
                f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}")
-    letter = llm.chat(LETTER, context, role="writer").strip()
-    message = llm.chat(MESSAGE, context, role="writer").strip()
+    letter = llm.undash(llm.chat(LETTER, context, role="writer").strip())
+    message = llm.undash(llm.chat(MESSAGE, context, role="writer").strip())
     questions = analysis.get("questions") or []
     answers = llm.chat_json(ANSWERS, "Questions:\n" + "\n".join(f"- {q}" for q in [*questions, *COMMON_QUESTIONS])
                             + f"\n\n{context}", role="writer").get("answers", [])
+    for a in answers:
+        a["answer"] = llm.undash(a.get("answer", ""))
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)

@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-from . import cv, db, letter, pack
+from . import cv, db, letter, llm, pack
 
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
 
@@ -63,10 +63,11 @@ def drafts(job) -> dict:
     if (pack_dir(job) / "cv.json").exists():
         variant = json.loads((pack_dir(job) / "cv.json").read_text())
     return {
-        "letter": s.get("Cover letter", ""),
+        # Packs drafted before long dashes were removed at the source still hold them.
+        "letter": llm.undash(s.get("Cover letter", "")),
         "message_to": to.group(1) if to else "",
-        "message": msg[to.end():].strip() if to else msg,
-        "answers": [{"question": q.strip(), "answer": _unwrap(a)} for q, a in answers],
+        "message": llm.undash(msg[to.end():].strip() if to else msg),
+        "answers": [{"question": q.strip(), "answer": llm.undash(_unwrap(a))} for q, a in answers],
         "cv_title": variant.get("title", ""),
         "cv_summary": variant.get("summary", ""),
         "approved": False,

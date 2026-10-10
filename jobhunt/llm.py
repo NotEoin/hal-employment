@@ -74,6 +74,12 @@ def chat_json(system: str, user: str, **kw) -> dict:
         return json.loads(m.group(0)) if m else {}
 
 
+def undash(text: str) -> str:
+    """Rewrites the long dashes models favour: a hyphen in number ranges, a comma elsewhere."""
+    text = re.sub(r"(?<=\d)\s*[\u2013\u2014]\s*(?=\d)", "-", text)
+    return re.sub(r"\s*[\u2013\u2014]\s*", ", ", text)
+
+
 def available() -> bool:
     try:
         url, _ = _settings()

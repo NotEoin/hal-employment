@@ -261,6 +261,8 @@ def ask_model(job, fields: list[dict], docs: dict) -> tuple[int, str | None]:
                 value = value[0]
         if f["kind"] == "checkbox":
             value = str(value).lower() in ("true", "yes", "1")
+        if isinstance(value, str) and not f.get("options"):
+            value = llm.undash(value)
         f.update(value=value, source="hal", note="" if a.get("sure") else "Hal is unsure; check this")
         answered += 1
     return answered, None
