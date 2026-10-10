@@ -26,6 +26,10 @@ SERVABLE = (pack.PACKS.resolve(), browser.SHOTS.resolve())
 # Statuses that make up an application in progress or sent.
 IN_FLIGHT = ("applying", "applied", "assessment", "interview", "offer")
 WORKER_PAUSE = 60  # seconds between queue checks when there is nothing to do
+WAIT_FOR_YOU = 15 * 60  # seconds Hal waits on a page only the applicant can pass
+# What Hal asks for when a page on the way to the form needs the applicant.
+ASKS = {"sign-in": "sign in to {site}", "check": "pass the check on {site}",
+        "apply": "press Apply on {site} (you are signed in there, so it may send your stored CV at once)"}
 CSRF_HEADER = "X-Hal"
 
 WORKER = {"activity": "starting", "detail": "", "at": db.now(), "paused": False}
@@ -91,21 +95,81 @@ def run_action(job_id: str, name: str, fn, *args) -> dict:
     return ACTIONS[job_id]
 
 
-def act_open_form(con, job_id: str, here: bool) -> str:
-    job = _job(con, job_id)
-    url = browser.application_url(job)
-    found = browser.read_here(job_id) if here else browser.open_form(job_id, url)
+def _past_walls(con, job, found: dict) -> dict:
+    """Waits while the page needs the applicant, then lets Hal carry on to the form."""
+    job_id = job["id"]
+    deadline = time.time() + WAIT_FOR_YOU
+    while found["needs"] and not found["sent"]:
+        need, wall = found["needs"], found["url"]
+        ask = ASKS[need].format(site=found["site"])
+        ACTIONS[job_id]["message"] = f"waiting for you to {ask} in Hal's window; Hal carries on by itself"
+        browser.show(job_id)
+        db.alert(con, "urgent", f"Hal needs you: {job['company']}", f"{ask[0].upper()}{ask[1:]} in Hal's window.", job_id)
+        con.commit()
+        while True:
+            if time.time() > deadline:
+                raise RuntimeError(f"gave up waiting for you to {ask}; do that in Hal's window, then read the page there")
+            time.sleep(3)
+            now = browser.peek(job_id)
+            if now.get("gone"):
+                raise RuntimeError("the form's tab was closed; ask Hal to open the form again")
+            if now.get("busy"):
+                continue
+            if now["form"] or (now["url"] != wall or now["sent"] if need == "apply" else now["needs"] != need):
+                break
+        ACTIONS[job_id]["message"] = "carrying on to the form"
+        found = browser.resume(job_id, need, wall)
+    return found
+
+
+def _take_form(con, job, found: dict, step: int) -> str:
+    """Proposes answers for the fields Hal found and saves them as the application's current step."""
+    job_id = job["id"]
     docs = documents.load(con, job)
     fields = autofill.propose(job, found["fields"], docs, documents.files(job))
     answered, waiting = autofill.ask_model(job, fields, docs)
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": fields,
-            "model": waiting or "", "filled": None, "submit": None}
+            "model": waiting or "", "filled": None, "submit": None, "step": step}
+    if found["closed"]:
+        raise RuntimeError("the advert says this job is no longer open; discard it from the queue")
+    if found["applied"]:
+        mark_applied(con, job, f"{found['site']} shows the application as sent")
+        return f"{found['site']} says you have already applied; marked as applied"
+    if found["sent"]:
+        _set_app(con, job_id, stage="form", form=form)
+        return "the site says your application was sent; check Hal's window, then press \"I applied myself\""
+    if not fields and step > 1:
+        # A step with nothing to answer, such as a review page, is shown as it stands.
+        out = browser.fill(job_id, [], browser.SHOTS / pack.slug(job_id) / "filled.png")
+        form["filled"] = {"at": db.now(), "screenshot": out["screenshot"], "errors": 0, "next": out["next"]}
+        _set_app(con, job_id, stage="filled", form=form)
+        return f"step {step} has nothing to fill in; check it, then " + ("move on" if out["next"] else "submit")
     _set_app(con, job_id, stage="form", form=form)
     if not fields:
         return "no form found on that page; open it in the browser window, then read it again"
     left = sum(1 for f in fields if f.get("value") in (None, "", []) and not f.get("skip"))
     note = f"; Hal answered {answered}" if answered else (f"; {waiting}" if waiting else "")
-    return f"{len(fields)} fields read, {left} need you{note}"
+    return (f"step {step}: " if step > 1 else "") + f"{len(fields)} fields read, {left} need you{note}"
+
+
+def act_open_form(con, job_id: str, here: bool) -> str:
+    job = _job(con, job_id)
+    if here:
+        step = (_app(con, job_id)["form"] or {}).get("step", 1)
+        return _take_form(con, job, browser.read_here(job_id), step)
+    found = browser.open_form(job_id, browser.application_url(job))
+    return _take_form(con, job, _past_walls(con, job, found), 1)
+
+
+def act_next(con, job_id: str) -> str:
+    """Moves a form of several pages on to its next step and proposes answers for it."""
+    job = _job(con, job_id)
+    form = _app(con, job_id)["form"]
+    found = browser.next_step(job_id)
+    if found["stayed"]:
+        marked = f"; it marks {found['invalid']} fields as wrong" if found["invalid"] else ""
+        raise RuntimeError(f"the form did not move on{marked}; check Hal's window")
+    return _take_form(con, job, _past_walls(con, job, found), form.get("step", 1) + 1)
 
 
 def act_draft_rest(con, job_id: str) -> str:
@@ -124,9 +188,16 @@ def act_fill(con, job_id: str) -> str:
     out = browser.fill(job_id, form["fields"], browser.SHOTS / pack.slug(job_id) / "filled.png")
     for f in form["fields"]:
         f["error"] = out["errors"].get(f["hid"], "")
-    form["filled"] = {"at": db.now(), "screenshot": out["screenshot"], "errors": len(out["errors"])}
+    form["filled"] = {"at": db.now(), "screenshot": out["screenshot"], "errors": len(out["errors"]),
+                      "next": out["next"]}
     _set_app(con, job_id, stage="filled", form=form)
-    return "form filled" + (f" with {len(out['errors'])} problems" if out["errors"] else "; check it, then submit")
+    if out["errors"]:
+        return f"form filled with {len(out['errors'])} problems"
+    if out["next"] and any(f.get("type") == "password" for f in form["fields"]):
+        return "form filled, apart from your password; type it in Hal's window, then press Next step"
+    if out["next"]:
+        return act_next(con, job_id)
+    return "form filled; check it, then submit"
 
 
 def act_submit(con, job_id: str) -> str:
@@ -416,13 +487,20 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": True}
         if action == "form-fill":
             return run_action(job_id, "filling the form", act_fill, job_id)
+        if action == "form-next":
+            return run_action(job_id, "moving to the next step", act_next, job_id)
+        if action == "form-look":
+            return browser.look(job_id, browser.SHOTS / pack.slug(job_id) / "look.png")
         if action == "form-show":
             if not browser.show(job_id):
                 browser.open_form(job_id, browser.application_url(job))
             return {"ok": True}
         if action == "submit":
-            if _app(con, job_id)["stage"] != "filled":
+            app = _app(con, job_id)
+            if app["stage"] != "filled":
                 raise RuntimeError("fill the form and check it before submitting")
+            if app["form"]["filled"].get("next"):
+                raise RuntimeError("this step is not the last; move on to the next step first")
             return run_action(job_id, "submitting", act_submit, job_id)
         if action == "applied":
             mark_applied(con, job, body.get("how") or "submitted by hand")

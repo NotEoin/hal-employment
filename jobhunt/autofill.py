@@ -174,15 +174,25 @@ def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
     prof = profile()
     prof["how_heard"] = HOW_HEARD.get(job["source"], "Company careers page")
     answers = docs.get("answers") or []
+    uploads = [f for f in fields if f["kind"] == "file"]
+    named = any(re.search(r"cover|resume|r\u00e9sum\u00e9|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
+                for f in uploads)
     for f in fields:
         f.update(value=None, source="you", note="")
         label = f.get("label") or ""
         text = f"{label} {f.get('context', '')}"
+        if f.get("type") == "password":
+            # Passwords never pass through Hal or its database.
+            f.update(skip=True, source="skipped", note="type this in Hal's browser window yourself")
+            continue
         if f["kind"] == "file":
             if re.search(r"cover", text, re.I) and files.get("letter"):
                 f.update(value=files["letter"], source="documents: cover letter")
             elif re.search(r"resume|r\u00e9sum\u00e9|\bcv\b", text, re.I) and files.get("cv"):
                 f.update(value=files["cv"], source="documents: CV")
+            elif not named and f is uploads[0] and files.get("cv"):
+                # A form whose uploads name no document wants the CV in the first.
+                f.update(value=files["cv"], source="documents: CV", note="taken to be the CV upload; check this")
             else:
                 f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
             continue

@@ -6,18 +6,22 @@ values approved in the web interface land in the controls they were proposed
 for. Nothing is submitted except by `submit`, which the web interface calls
 only on an explicit request. Requires the playwright package (see .venv).
 """
+import collections
 import concurrent.futures
+import json
 import os
 import queue
 import re
 import threading
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from .config import CONFIG, ROOT
 
 PROFILE = ROOT / "data" / "browser-profile"
 SHOTS = ROOT / "data" / "apply"
+# Sites the applicant has signed in to in Hal's browser, where Apply may send a stored CV at once.
+SIGNED_IN = ROOT / "data" / "signed-in.json"
 NAV_TIMEOUT = 45_000  # ms
 
 # Reads every visible control into a field list, grouping radio and checkbox
@@ -77,6 +81,8 @@ EXTRACT_JS = r"""
       && ((el.labels && el.labels[0] && visible(el.labels[0])) || (el.parentElement && visible(el.parentElement))));
     if (type !== 'file' && !shown) continue;
     if (el.closest('[aria-hidden=true]') && type !== 'file') continue;
+    if (el.closest('[role=search]')) continue;
+    const owner = el.form ? [...document.forms].indexOf(el.form) : -1;
     if (type === 'radio' || type === 'checkbox') {
       const key = el.name ? type + ':' + el.name : null;
       const q = question(el);
@@ -86,7 +92,7 @@ EXTRACT_JS = r"""
         let g = groups[key];
         if (!g) {
           g = groups[key] = { hid: 'h' + (n++), kind: type === 'radio' ? 'radio' : 'checkgroup',
-                              label: q, required: false, options: [], current: [] };
+                              label: q, required: false, options: [], current: [], form: owner };
           fields.push(g);
         }
         el.setAttribute('data-hal-id', g.hid + ':' + g.options.length);
@@ -98,7 +104,8 @@ EXTRACT_JS = r"""
       const hid = 'h' + (n++);
       el.setAttribute('data-hal-id', hid);
       const label = (own && !/^(yes|on|i agree)$/i.test(own)) ? own : (q || opt);
-      fields.push({ hid, kind: 'checkbox', label, context: q, required: required(el), current: el.checked });
+      fields.push({ hid, kind: 'checkbox', label, context: q, required: required(el), current: el.checked,
+                    form: owner });
       continue;
     }
     const hid = 'h' + (n++);
@@ -111,7 +118,7 @@ EXTRACT_JS = r"""
     // Upload widgets label the button ("Attach", "Choose file"); the question names the document.
     if (!label || (kind === 'file' && /^(attach|choose files?|upload( files?)?|browse|select files?)$/i.test(label)))
       label = question(el) || label;
-    const f = { hid, kind, type, label, required: required(el),
+    const f = { hid, kind, type, label, required: required(el), form: owner,
                 name: el.name || el.id || '', current: kind === 'file' ? '' : el.value };
     if (kind === 'file') f.context = clean([el.id, el.name, question(el), el.accept || ''].join(' '));
     if (kind === 'select') f.options = [...el.options].map(o => clean(o.text))
@@ -123,12 +130,25 @@ EXTRACT_JS = r"""
 }
 """
 
-APPLY_BUTTON = re.compile(r"^\s*(apply|apply now|apply for (this|the) (job|role|position)|"
-                          r"start (your )?application|i'?m interested)\s*$", re.I)
+APPLY_BUTTON = re.compile(r"^\s*(easy )?(apply|apply now|apply for (this|the) (job|role|position|vacancy)|"
+                          r"apply (on|at) (the )?(company|employer)('s)? (web)?site|"
+                          r"(start|begin|continue) (your |my )?application|i'?m interested)[\s\u00bb\u203a>]*$", re.I)
+NEXT_BUTTON = re.compile(r"^\s*(next|next step|continue|proceed|save (and|&) (continue|next))\s*$", re.I)
 SUBMIT_BUTTON = re.compile(r"^\s*(submit( application| my application)?|send application|apply|"
                            r"complete application)\s*$", re.I)
 SUCCESS = re.compile(r"thank(s| you)[^.]{0,40}(appl|submi|interest)|application (has been )?(received|submitted)|"
                      r"we('ve| have) received|successfully submitted", re.I)
+APPLIED = re.compile(r"you(('ve| have) already| have|'ve)? applied (for|to) this (job|role|position|vacancy)", re.I)
+SIGN_IN = re.compile(r"\b(sign|log)[ -]?in\b|\blogin\b|\bregister\b|create (an |your )?account", re.I)
+SIGN_OUT = re.compile(r"^\s*(sign|log) ?out\s*$", re.I)
+CLOSED = re.compile(r"(no longer|not) (available|accepting applications|open)|not available anymore|"
+                    r"(job|position|vacancy|role) (has )?(been filled|expired|closed)", re.I)
+BOT_CHECK = re.compile(r"just a moment|verify (that )?you are (a )?human|human verification|are you a robot|"
+                       r"attention required", re.I)
+# Application forms that employers embed in a frame on their own careers page.
+ATS_FRAME = ("greenhouse.io", "ashbyhq.com", "lever.co", "workable.com", "smartrecruiters.com", "recruitee.com",
+             "personio.", "teamtailor.com", "bamboohr.com", "jobvite.com", "icims.com", "pinpointhq.com")
+MAX_PRESSES = 4  # Apply controls followed before giving up on finding the form
 
 
 def application_url(job) -> str:
@@ -157,7 +177,7 @@ class Browser:
         self._work: queue.Queue = queue.Queue()
         self._thread: threading.Thread | None = None
         self._ctx = None
-        self.pages: dict[str, object] = {}
+        self.pages: dict[str, list] = {}
 
     def call(self, fn, *args, timeout: float = 600):
         """Runs fn(browser, *args) on the browser thread and returns its result."""
@@ -201,12 +221,19 @@ class Browser:
         return self._ctx
 
     def page(self, job_id: str):
-        """Returns the open tab for a job's application, or None."""
-        p = self.pages.get(job_id)
-        if p is not None and not p.is_closed():
-            return p
-        self.pages.pop(job_id, None)
-        return None
+        """Returns the newest open tab for a job's application, or None."""
+        tabs = self.pages.get(job_id, [])
+        tabs[:] = [p for p in tabs if not p.is_closed()]
+        return tabs[-1] if tabs else None
+
+    def follow(self, job_id: str, page) -> None:
+        """Makes a tab the job's current one, along with any tab it opens later."""
+        tabs = self.pages.setdefault(job_id, [])
+        if page not in tabs:
+            page.on("popup", lambda popup: self.follow(job_id, popup))
+        else:
+            tabs.remove(page)
+        tabs.append(page)
 
 
 BROWSER = Browser()
@@ -214,8 +241,11 @@ BROWSER = Browser()
 
 def _is_form(fields: list[dict]) -> bool:
     """True when the fields look like an application form rather than a search box or banner."""
-    labelled = [f for f in fields if f.get("label")]
-    return len(labelled) >= 3 or any(f["kind"] == "file" for f in fields)
+    if any(f["kind"] == "file" for f in fields):
+        return True
+    # An advert's search box and alert sign-up are separate small forms; an application is one large one.
+    per_form = collections.Counter(f.get("form") for f in fields if f.get("label"))
+    return max(per_form.values(), default=0) >= 3
 
 
 # Cookie banners block clicks underneath them; refusing optional cookies is preferred.
@@ -239,42 +269,183 @@ def _dismiss_banners(page) -> None:
 
 
 def _settle(page) -> None:
+    if "adzuna." in urlparse(page.url).netloc and "/land/" in page.url:
+        # Adzuna links show a holding page that hands over to the advertiser a few seconds later.
+        try:
+            page.wait_for_url(lambda u: "adzuna." not in urlparse(u).netloc, timeout=15_000)
+        except Exception:  # noqa: BLE001 - some adverts are hosted on Adzuna itself
+            pass
     try:
         page.wait_for_load_state("networkidle", timeout=15_000)
     except Exception:  # noqa: BLE001 - some pages poll forever; the DOM is ready regardless
         pass
 
 
-def _open(b: Browser, job_id: str, url: str) -> dict:
-    """Opens the application form and returns its fields."""
-    page = b.page(job_id) or b.context().new_page()
-    b.pages[job_id] = page
-    page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
-    _settle(page)
-    _dismiss_banners(page)
-    # Job pages often hold only the advert; follow up to two "Apply" buttons to the form.
-    fields = page.evaluate(EXTRACT_JS)
-    for _ in range(2):
-        if _is_form(fields):
-            break
-        button = page.get_by_role("link", name=APPLY_BUTTON).or_(page.get_by_role("button", name=APPLY_BUTTON))
-        if button.count() == 0:
-            break
-        try:
-            with page.context.expect_page(timeout=5_000) as popup:
-                button.first.click()
-            page = popup.value
-            b.pages[job_id] = page
-        except Exception:  # noqa: BLE001 - the button navigated the same tab or opened a dialog
-            pass
+def _site(url: str) -> str:
+    """Returns the site a page belongs to, such as reed.co.uk for secure.reed.co.uk."""
+    labels = urlparse(url).netloc.split(":")[0].split(".")
+    keep = 3 if len(labels) > 2 and labels[-2] in ("co", "com", "org", "ac", "gov") else 2
+    return ".".join(labels[-keep:])
+
+
+def _signed_in_sites() -> set[str]:
+    try:
+        return set(json.loads(SIGNED_IN.read_text()))
+    except (OSError, ValueError):
+        return set()
+
+
+def _needs(page, fields: list[dict]) -> str:
+    """Names what only the applicant can do on this page: "sign-in", "check", or "" for nothing."""
+    if _is_form(fields):
+        return ""
+    if BOT_CHECK.search(page.title()):
+        return "check"
+    if page.locator("input[type=password]:visible").count():
+        return "sign-in"
+    # Sign-in pages that ask for the email address first show no password box yet.
+    if 0 < len(fields) <= 2 and _apply_control(page) is None \
+            and SIGN_IN.search(f"{page.title()} {urlparse(page.url).path}"):
+        return "sign-in"
+    return ""
+
+
+def _signed_in(page) -> bool:
+    """True when the applicant has an account session on the page's site."""
+    return _site(page.url) in _signed_in_sites() \
+        or page.locator("a, button").filter(has_text=SIGN_OUT).filter(visible=True).count() > 0
+
+
+def _read(page) -> list[dict]:
+    try:
+        return page.evaluate(EXTRACT_JS)
+    except Exception:  # noqa: BLE001 - the page moved to another address mid-read
+        page.wait_for_timeout(1_500)
         _settle(page)
-        _dismiss_banners(page)
-        fields = page.evaluate(EXTRACT_JS)
+        return page.evaluate(EXTRACT_JS)
+
+
+def _apply_control(page):
+    """Returns the first visible Apply link or button on the page, or None."""
+    found = page.get_by_role("link", name=APPLY_BUTTON).or_(page.get_by_role("button", name=APPLY_BUTTON))
+    found = found.filter(visible=True)
+    return found.first if found.count() else None
+
+
+def _report(page, fields: list[dict], needs: str, pressed: bool) -> dict:
+    form = _is_form(fields)
+    if needs:
+        # A sign-in page's inputs are not questions to answer; the applicant signs in by hand.
+        fields = []
     for f in fields:
         if f["kind"] == "combobox":
             f["options"] = _combobox_options(page, f["hid"])
-    return {"url": page.url, "title": page.title(), "fields": fields,
+    text = "" if form else page.locator("body").inner_text()
+    sent = pressed and SUCCESS.search(text) is not None
+    headings = " ".join([page.title(), *page.locator("h1, h2").all_inner_texts()[:4]])
+    return {"url": page.url, "title": page.title(), "fields": fields, "needs": needs, "sent": sent,
+            "site": _site(page.url), "closed": not form and CLOSED.search(headings) is not None,
+            "applied": APPLIED.search(text) is not None,
             "captcha": page.locator("iframe[src*='recaptcha'], iframe[src*='hcaptcha']").count() > 0}
+
+
+def _advance(b: Browser, job_id: str, pressed: bool = False) -> dict:
+    """Presses through advert pages towards the application form and reports where it stopped.
+
+    Stops at the form, at a page only the applicant can pass (`needs`), or when
+    no Apply control is left. `pressed` says Apply was just pressed on a site
+    the applicant is signed in to, where a confirmation on the page means the
+    application went out.
+    """
+    page = b.page(job_id)
+    if page is None:
+        raise RuntimeError("the form's tab was closed; ask Hal to open the form again")
+    for presses in range(MAX_PRESSES + 1):
+        _settle(page)
+        _dismiss_banners(page)
+        fields = _read(page)
+        needs = _needs(page, fields)
+        if needs or _is_form(fields) or presses == MAX_PRESSES:
+            break
+        frame = page.locator(", ".join(f"iframe[src*='{host}']" for host in ATS_FRAME))
+        if frame.count():
+            # A form inside a frame cannot be read or filled from the page around it.
+            page.goto(frame.first.evaluate("e => e.src"), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+            continue
+        control = _apply_control(page)
+        if control is None:
+            break
+        if _signed_in(page):
+            # Signed in, Apply may send the stored CV at once; only a site known to ask first is pressed.
+            if _site(page.url) not in CONFIG.get("signed_in_apply", []):
+                needs = "apply"
+                break
+            pressed = True
+        try:
+            control.click(timeout=5_000)
+        except Exception:  # noqa: BLE001 - usually a newsletter pop-up lying over the control
+            link = control.get_attribute("href")
+            if not link:
+                break
+            page.goto(urljoin(page.url, link), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+        page.wait_for_timeout(1_500)
+        page = b.page(job_id) or page  # the press may have opened the form in a new tab
+    return _report(page, fields, needs, pressed)
+
+
+def _open(b: Browser, job_id: str, url: str) -> dict:
+    """Opens the job's application page and works through to its form."""
+    page = b.page(job_id) or b.context().new_page()
+    b.follow(job_id, page)
+    page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+    return _advance(b, job_id)
+
+
+def _resume(b: Browser, job_id: str, passed: str, wall: str) -> dict:
+    """Carries on towards the form once the applicant has done what the page at `wall` needed."""
+    if passed == "sign-in":
+        SIGNED_IN.write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
+    return _advance(b, job_id, pressed=passed == "apply")
+
+
+def _peek(b: Browser, job_id: str) -> dict:
+    """Reports the state of the job's tab without pressing anything."""
+    page = b.page(job_id)
+    if page is None:
+        return {"gone": True}
+    try:
+        fields = page.evaluate(EXTRACT_JS)
+        return {"needs": _needs(page, fields), "form": _is_form(fields), "url": page.url,
+                "sent": SUCCESS.search(page.locator("body").inner_text()) is not None}
+    except Exception:  # noqa: BLE001 - the page is between two addresses
+        return {"busy": True}
+
+
+def _step_button(page, pattern):
+    """Returns the visible button of a multi-page form matching the pattern, or None."""
+    found = page.get_by_role("button", name=pattern).filter(visible=True)
+    return found.last if found.count() else None
+
+
+def _next(b: Browser, job_id: str) -> dict:
+    """Presses the form's Next button and reads the step that follows."""
+    page = b.page(job_id)
+    if page is None:
+        raise RuntimeError("the form's tab was closed; ask Hal to open the form again")
+    button = _step_button(page, NEXT_BUTTON)
+    if button is None:
+        raise RuntimeError("no Next button found; move on in the browser window, then read the page there")
+    # Marks this step's controls so a form that refuses to move on can be told from a new step.
+    page.evaluate("() => document.querySelectorAll('[data-hal-id]').forEach(e => e.setAttribute('data-hal-step', ''))")
+    button.click()
+    page.wait_for_timeout(1_000)
+    _settle(page)
+    page = b.page(job_id) or page
+    stayed = page.locator("[data-hal-step]:visible").count() > 0
+    if stayed:
+        return {"stayed": True, "invalid": page.locator("[aria-invalid=true]:visible").count()}
+    fields = _read(page)
+    return {"stayed": False, **_report(page, fields, _needs(page, fields), False)}
 
 
 def _combobox_options(page, hid: str) -> list[str]:
@@ -336,7 +507,8 @@ def _fill(b: Browser, job_id: str, fields: list[dict], shot: str) -> dict:
             errors[f["hid"]] = str(e).splitlines()[0][:200]
     Path(shot).parent.mkdir(parents=True, exist_ok=True)
     _shoot_form(page, shot)
-    return {"errors": errors, "screenshot": shot}
+    return {"errors": errors, "screenshot": shot, "next": _step_button(page, NEXT_BUTTON) is not None
+            and _step_button(page, SUBMIT_BUTTON) is None}
 
 
 def _shoot_form(page, shot: str) -> None:
@@ -380,15 +552,24 @@ def _read_here(b: Browser, job_id: str) -> dict:
     page = b.page(job_id)
     if page is None:
         raise RuntimeError("no browser tab is open for this job; open the form first")
-    page = page.context.pages[-1] if page.context.pages else page
-    b.pages[job_id] = page
     _dismiss_banners(page)
-    fields = page.evaluate(EXTRACT_JS)
-    for f in fields:
-        if f["kind"] == "combobox":
-            f["options"] = _combobox_options(page, f["hid"])
-    return {"url": page.url, "title": page.title(), "fields": fields,
-            "captcha": page.locator("iframe[src*='recaptcha'], iframe[src*='hcaptcha']").count() > 0}
+    return _report(page, _read(page), "", False)
+
+
+def _look(b: Browser, job_id: str, shot: str) -> dict:
+    """Describes what the job's tab shows now: its buttons, any open dialog, and a picture."""
+    page = b.page(job_id)
+    if page is None:
+        raise RuntimeError("no browser tab is open for this job; open the form first")
+    Path(shot).parent.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=shot)
+
+    def texts(selector: str, limit: int) -> list[str]:
+        return [" ".join(t.split())[:limit] for t in page.locator(selector).all_inner_texts() if t.strip()]
+
+    return {"url": page.url, "title": page.title(), "screenshot": shot,
+            "buttons": texts("button:visible, [role=button]:visible, input[type=submit]:visible", 60)[:40],
+            "dialogs": texts("[role=dialog]:visible, dialog:visible", 1500)[:3]}
 
 
 def _show(b: Browser, job_id: str) -> bool:
@@ -413,6 +594,22 @@ def submit(job_id: str, shot: Path) -> dict:
 
 def read_here(job_id: str) -> dict:
     return BROWSER.call(_read_here, job_id)
+
+
+def resume(job_id: str, passed: str, wall: str) -> dict:
+    return BROWSER.call(_resume, job_id, passed, wall)
+
+
+def peek(job_id: str) -> dict:
+    return BROWSER.call(_peek, job_id)
+
+
+def next_step(job_id: str) -> dict:
+    return BROWSER.call(_next, job_id)
+
+
+def look(job_id: str, shot: Path) -> dict:
+    return BROWSER.call(_look, job_id, str(shot))
 
 
 def show(job_id: str) -> bool:

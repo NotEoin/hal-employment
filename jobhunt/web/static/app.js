@@ -315,6 +315,7 @@ function fieldControl(f) {
   const v = f.value;
   const opts = f.options || [];
   if (f.kind === "file") return `<div class="small-t">${f.skip ? '<span class="muted">Left empty</span>' : esc(v ? v.split("/").pop() : "Nothing to upload")}</div>`;
+  if (f.type === "password") return `<div class="small-t muted">Typed by you in Hal's window</div>`;
   if (f.kind === "checkbox") return `<label class="toggle"><input type="checkbox" data-v ${v ? "checked" : ""}> ${v ? "Ticked" : "Not ticked"}</label>`;
   if (f.kind === "checkgroup") return `<div class="radios">${opts.map(o => `<label><input type="checkbox" data-multi value="${esc(o)}" ${(v || []).includes(o) ? "checked" : ""}> ${esc(o)}</label>`).join("")}</div>`;
   if ((f.kind === "radio" || f.kind === "select" || f.kind === "combobox") && opts.length)
@@ -329,7 +330,7 @@ function paneForm(d) {
   const id = d.job.id, app = d.application, form = app.form;
   const pane = $("#pane");
   const running = d.action && d.action.state === "running";
-  if (!form || !form.fields.length) {
+  if (!form || (!form.fields.length && !form.filled)) {
     pane.innerHTML = `<div class="card pad">
       <h3 style="margin-top:0">Let Hal fill in the application</h3>
       <p class="muted">Hal opens the form at <a href="${esc(d.apply_url)}" target="_blank" rel="noopener">${esc(d.apply_url.slice(0, 90))}</a>
@@ -350,7 +351,7 @@ function paneForm(d) {
   pane.innerHTML = `
     <div class="card pad" style="margin-bottom:16px">
       <div class="bar" style="margin:0">
-        <div class="grow"><b>${esc(form.title || "Application form")}</b><div class="small-t muted">${esc(form.url)}</div></div>
+        <div class="grow"><b>${form.step > 1 ? `Step ${form.step}: ` : ""}${esc(form.title || "Application form")}</b><div class="small-t muted">${esc(form.url)}</div></div>
         <span class="chip ${needReq.length ? "bad" : "good"}">${needReq.length ? needReq.length + " required left" : "All required answered"}</span>
         ${need.length - needReq.length ? `<span class="chip warn">${need.length - needReq.length} optional empty</span>` : ""}
         ${form.captcha ? `<span class="chip warn" title="The site may ask you to solve a captcha when you submit">captcha on page</span>` : ""}
@@ -373,8 +374,10 @@ function paneForm(d) {
         ${form.filled ? `<h4 class="muted small-t" style="margin:0 0 8px">FILLED FORM ${esc(ago(form.filled.at)).toUpperCase()}</h4>
           <div class="shot-wrap"><img class="shot" src="${fileUrl(form.filled.screenshot)}" alt="The filled form"></div>
           <div class="bar"><button data-show>Show browser window</button><span class="grow"></span>
-            <button class="good" data-submit ${running || app.stage !== "filled" ? "disabled" : ""}>Submit application</button></div>
-          <p class="small-t muted">Submit presses the form's own submit button. Or submit it yourself in Hal's window and press "I applied myself".</p>`
+            ${form.filled.next ? `<button class="primary" data-next ${running ? "disabled" : ""}>Next step</button>`
+              : `<button class="good" data-submit ${running || app.stage !== "filled" ? "disabled" : ""}>Submit application</button>`}</div>
+          <p class="small-t muted">${form.filled.next ? "This form has more steps. Hal moves on by itself when a step fills without problems."
+            : `Submit presses the form's own submit button. Or submit it yourself in Hal's window and press "I applied myself".`}</p>`
         : `<h4 class="muted small-t" style="margin:0 0 8px">NEXT</h4><p class="muted">Check each answer, change anything that is not right,
           then press <b>Approve and fill</b>. Hal enters the values in the browser window and shows you a picture of the result here.</p>
           <div class="bar"><button data-show>Show browser window</button></div>`}
@@ -403,6 +406,8 @@ function paneForm(d) {
     await save(); startAction(id, "form-fill", {});
   };
   $$("[data-show]", pane).forEach(b => b.onclick = () => guard(() => api(`job/${enc(id)}/form-show`, {}), "Brought Hal's window to the front"));
+  const next = $("[data-next]", pane);
+  next && (next.onclick = () => startAction(id, "form-next", {}));
   const submit = $("[data-submit]", pane);
   submit && (submit.onclick = async () => {
     if (!await confirmBox(`Submit your application to ${d.job.company}?`, "Hal will press the form's submit button. This sends the application and cannot be undone.", "Submit application", "good")) return;
