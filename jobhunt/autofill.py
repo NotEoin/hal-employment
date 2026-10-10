@@ -11,7 +11,7 @@ import importlib
 import re
 import sys
 
-from . import cv, gpu, llm
+from . import cv, gpu, llm, score
 from .config import CONFIG
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
@@ -51,6 +51,7 @@ def profile() -> dict:
         "right_to_work": "Yes", "work_status": "British or Irish citizen", "sponsorship": "No",
         "notice": "None, available immediately", "start": "Immediately",
         "salary": "Open to the advertised range",
+        "salary_unadvertised": "Open to discussion, in line with the market rate for the role",
         "university": "University", "degree": "Degree",
         "grade": "Grade", "grad_year": "Year",
         "office": "Yes", "relocate": "Yes",
@@ -173,6 +174,9 @@ def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
     """
     prof = profile()
     prof["how_heard"] = HOW_HEARD.get(job["source"], "Company careers page")
+    if not re.search(r"\d", job["salary"] or "") and score.max_salary(job["description"] or "") is None:
+        # There is no advertised range to defer to when the advert names no pay.
+        prof["salary"] = prof["salary_unadvertised"]
     answers = docs.get("answers") or []
     uploads = [f for f in fields if f["kind"] == "file"]
     named = any(re.search(r"cover|resume|r\u00e9sum\u00e9|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
