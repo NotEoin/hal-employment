@@ -35,6 +35,8 @@ FACT_LABEL = 75
 # Answers at least this long are prose Firstname should read before it is sent.
 WRITTEN = 80
 MODEL_BATCH = 10
+# Answers longer than this are essays: never reused as they stand, only shown to the model as the applicant's writing.
+ESSAY = 400
 
 
 def contact() -> tuple[str, str, str]:
@@ -124,7 +126,7 @@ RULES = [
     (r"graduat", "grad_year", [re.compile(r"2026", re.I)]),
 ]
 # Sections about someone or something other than the applicant now: their questions are never
-# answered with his own details, and dates there belong to that course or job.
+# answered with the applicant's own details, and dates there belong to that course or job.
 OTHER_PERSON = re.compile(r"referee|references?\b|emergency|next of kin|employment history|work history|"
                           r"(previous|past|current|former) (employ|job|role|position)|employer details|"
                           r"\bmanager\b|supervisor|dependant|spouse|partner'?s", re.I)
@@ -265,8 +267,6 @@ def remember(con, fields: list[dict], company: str = "") -> int:
         value = f.get("value")
         if f.get("source") != "you" or value in (None, "", []) or f["kind"] == "file" or f.get("type") == "password":
             continue
-        if isinstance(value, str) and len(value) > 400:
-            continue  # an essay answers one employer's question, not the next one's
         question = _key(f, company)
         if len(question) < 3:
             continue
@@ -290,7 +290,10 @@ def _recall(con, f: dict, company: str = ""):
         if not close:
             return None
         row = con.execute("SELECT answer FROM answers WHERE question = ?", (close[0],)).fetchone()
-    return _fit(f, db.json_value(row["answer"]), [])
+    value = db.json_value(row["answer"])
+    if isinstance(value, str) and len(value) > ESSAY:
+        return None  # an essay answers one employer's question; it shows the model the applicant's voice instead
+    return _fit(f, value, [])
 
 
 WHY = re.compile(r"why (do you want|are you (interested|applying)|this (role|company|team)|us\b|join)|"
@@ -312,7 +315,7 @@ Fields are listed in page order with the section heading they sit under. A field
 section about another person or another job (a referee, an emergency contact, a previous
 employer or manager) asks about that person or job, never about Firstname: answer it only from
 facts about them, else give "". Dates in an education or employment history are the dates
-of that course or job, not his availability. Salary: if the advert states no pay, never
+of that course or job, not Firstname's availability. Salary: if the advert states no pay, never
 mention an advertised range.
 Never invent personal details (addresses, dates of birth, reference numbers, names of
 people) or claim experience, skills or circumstances the facts do not state: if the
@@ -322,8 +325,8 @@ person should check."""
 REVIEW = """You check answers that simple keyword rules put into a job application form for
 Firstname Lastname. Each line gives a field's id, the section it sits under, its question, and the
 answer chosen. Reply with JSON only: {"wrong": [{"hid": ..., "why": a few words}]}.
-List a field only when its answer plainly does not answer that question where it sits: his
-own name or email in a referee's details, his availability date as the start date of a
+List a field only when its answer plainly does not answer that question where it sits: Firstname's
+own name or email in a referee's details, an availability date as the start date of a
 course, an answer to some other question, a choice that contradicts the question. Leave out
 anything that is plausibly right; most answers are."""
 # Sources of answers chosen by keyword, which the review pass checks against the question.
@@ -433,10 +436,16 @@ def _facts(job, docs: dict, con) -> str:
         if before:
             parts.append("Earlier applications to this employer: "
                          + "; ".join(f"{r['title']} ({r['status']})" for r in before))
-        told = con.execute("SELECT label, answer FROM answers ORDER BY updated DESC LIMIT 60").fetchall()
-        if told:
-            parts.append("Answers he has given on other forms:\n"
-                         + "\n".join(f"- {r['label']}: {db.json_value(r['answer'])}" for r in told))
+        told = [(r["label"], db.json_value(r["answer"]))
+                for r in con.execute("SELECT label, answer FROM answers ORDER BY updated DESC LIMIT 200")]
+        short = [(q, a) for q, a in told if not (isinstance(a, str) and len(a) > ESSAY)][:60]
+        essays = [(q, a) for q, a in told if isinstance(a, str) and len(a) > ESSAY][:2]
+        if short:
+            parts.append("Answers he has given on other forms:\n" + "\n".join(f"- {q}: {a}" for q, a in short))
+        if essays:
+            parts.append("Answers Firstname wrote for other employers, as examples of Firstname's voice and phrasing "
+                         "(write fresh answers for this job; never copy their claims about other employers):\n"
+                         + "\n\n".join(f"Q: {q}\nA: {a[:1500]}" for q, a in essays))
     if docs.get("answers"):
         parts.append("Drafted answers:\n" + "\n".join(f"- {a['question']}: {a['answer']}" for a in docs["answers"]))
     if docs.get("letter"):

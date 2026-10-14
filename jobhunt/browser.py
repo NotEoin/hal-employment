@@ -1005,6 +1005,13 @@ def show(job_id: str) -> bool:
     return _via(_show, job_id)
 
 
+def mark(job_id: str, fields: list[dict], panel: dict) -> None:
+    """Outlines the filled answers in the applicant's tab; Hal's own window shows them in the web interface."""
+    if mode() == "extension":
+        from . import extension
+        extension.mark(job_id, fields, panel)
+
+
 def close(job_id: str) -> None:
     if mode() != "extension":
         BROWSER.call(_close, job_id)

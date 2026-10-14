@@ -86,6 +86,7 @@ class Practice(unittest.TestCase):
         (autofill.profile, autofill.ask_model, autofill.choose_control, documents.render, documents.files,
          documents.load, gmail.security_code, server.browser.search, db.connect) = cls.saved
         cls.httpd.shutdown()
+        cls.httpd.server_close()
         cls.tmp.cleanup()
 
     def job(self, name: str, page: str):
@@ -278,6 +279,41 @@ class InYourBrowser(Practice):
         self.assertEqual(page.input_value("#heard"), "Company website")
         self.assertEqual(page.input_value("#notice"), "0")
         self.assertEqual(page.input_value("#dob"), "")
+
+    def test_marks_the_page_then_follows_the_applicant_through_to_submitting(self):
+        job_id = self.job("ext-journey", "form.html")
+        server.act_auto(self.con, job_id)
+        page = self.tab("form.html")
+        marks = page.evaluate("""() => Object.fromEntries(['#fn', '#dob', '#notice'].map(
+            s => [s, document.querySelector(s).closest('[data-hal-mark]')?.getAttribute('data-hal-mark') || null]))""")
+        self.assertEqual(marks, {"#fn": "ok", "#dob": "answer", "#notice": "ok"})
+        self.assertIn("1 to answer", page.inner_text("#hal-panel .counts"))
+        self.assertIn("Date of birth", page.inner_text("#hal-panel ul"))
+
+        # The applicant answers what Hal could not, changes one of its answers, and moves on.
+        seen = {}
+        page.fill("#dob", "01/02/2003")
+        page.fill("#ln", "Byron")
+        self.assertEqual(page.evaluate("() => document.querySelector('#dob').closest('[data-hal-mark]').dataset.halMark"),
+                         "edited")
+        self.assertTrue(server._watch_step(self.con, job_id, seen))
+        page.click("#next")
+        self.assertTrue(server._watch_step(self.con, job_id, seen))
+        form = self.form(job_id)
+        self.assertEqual((form["step"], form["state"]), (2, "ready"))
+        self.assertEqual(page.input_value("#why"), PROSE)
+        self.assertEqual(page.evaluate("() => document.querySelector('#why').closest('[data-hal-mark]').dataset.halMark"),
+                         "check")
+        # The first page's upload, hidden with the rest of that page, is not outlined.
+        self.assertIsNone(page.evaluate("() => document.querySelector('#app').getAttribute('data-hal-mark')"))
+
+        # Hal never submits; once the applicant does, the site's thanks marks the job applied.
+        self.assertEqual(self.status(job_id), "applying")
+        page.click("#send")
+        self.assertFalse(server._watch_step(self.con, job_id, seen))
+        self.assertEqual(self.status(job_id), "applied")
+        kept = {r["question"]: db.json_value(r["answer"]) for r in self.con.execute("SELECT * FROM answers")}
+        self.assertEqual((kept["date of birth"], kept["last name"]), ("01/02/2003", "Byron"))
 
 
 class Answers(unittest.TestCase):

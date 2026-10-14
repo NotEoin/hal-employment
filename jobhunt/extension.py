@@ -161,7 +161,8 @@ def peek(job_id: str) -> dict:
         return {"gone": True} if "tab was closed" in str(e) else {"busy": True}
     return {"needs": _needs(facts), "form": _is_form(facts["fields"]), "url": facts["url"],
             "sent": SUCCESS.search(facts["text"]) is not None, "applied": APPLIED.search(facts["text"]) is not None,
-            "challenge": facts["unchecked"], "password": False}
+            "challenge": facts["unchecked"], "password": False,
+            "values": {f["sig"]: f.get("current") for f in facts["fields"]}}
 
 
 def read_here(job_id: str) -> dict:
@@ -195,6 +196,10 @@ def next_step(job_id: str) -> dict:
 
 def submit(job_id: str, shot) -> dict:
     raise RuntimeError("press Submit yourself in the job's tab; Hal marks it applied when the site confirms it")
+
+
+def mark(job_id: str, fields: list[dict], panel: dict) -> None:
+    _ask("mark", job=job_id, fields=fields, panel=panel)
 
 
 def show(job_id: str) -> bool:

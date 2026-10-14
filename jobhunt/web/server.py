@@ -40,7 +40,7 @@ CSRF_HEADER = "X-Hal"
 WORKER = {"activity": "starting", "detail": "", "at": db.now(), "paused": False}
 ACTIONS: dict[str, dict] = {}
 KEPT: dict[str, dict] = {}  # by job, the answers its owner typed, by field, kept when a form is filled again
-WATCHING: set[str] = set()  # jobs whose filled form Hal is watching for the site's confirmation
+WATCHING: set[str] = set()  # jobs whose tab Hal is watching for new pages and the site's confirmation
 # Most of an action's time is spent waiting on the browser thread, the model, or the applicant.
 POOL = ThreadPoolExecutor(max_workers=6, thread_name_prefix="action")
 
@@ -92,18 +92,24 @@ def run_action(job_id: str, name: str, fn, *args) -> dict:
     def wrapper():
         con = db.connect()
         try:
-            msg = fn(con, *args) or "done"
-            ACTIONS[job_id].update(state="done", message=msg, at=db.now())
-        except Exception as e:  # noqa: BLE001 - shown to the user, who can retry
-            if not isinstance(e, RuntimeError):
-                traceback.print_exc()
-            ACTIONS[job_id].update(state="error", message=f"{e}", at=db.now())
-            _note(con, job_id, "stuck", f"{e}")
+            _carry_out(con, job_id, fn, *args)
         finally:
             con.close()
 
     POOL.submit(wrapper)
     return ACTIONS[job_id]
+
+
+def _carry_out(con, job_id: str, fn, *args) -> None:
+    """Runs an action already recorded as running, and records how it ended."""
+    try:
+        msg = fn(con, *args) or "done"
+        ACTIONS[job_id].update(state="done", message=msg, at=db.now())
+    except Exception as e:  # noqa: BLE001 - shown to the user, who can retry
+        if not isinstance(e, RuntimeError):
+            traceback.print_exc()
+        ACTIONS[job_id].update(state="error", message=f"{e}", at=db.now())
+        _note(con, job_id, "stuck", f"{e}")
 
 
 def _say(job_id: str, text: str) -> None:
@@ -293,6 +299,8 @@ def _hold(con, job, form: dict) -> str:
         parts.append("a password to type in the form yourself")
     last = form["final"]
     does = "submit" if last else "move to the next step"
+    if browser.mode() == "extension":
+        return _hold_in_tab(con, job, form, parts)
     if parts:
         state, message = "needs", f"Filled in, apart from {', and '.join(parts)}. Finish those, then approve to {does}."
     else:
@@ -306,6 +314,129 @@ def _hold(con, job, form: dict) -> str:
                  f"{'Needs you' if parts else 'Ready to approve'}: {job['company']}", message, job_id)
         con.commit()
     return message
+
+
+def _hold_in_tab(con, job, form: dict, parts: list[str]) -> str:
+    """Leaves the filled page in the applicant's tab, marked up for checking, and watches for what they do next."""
+    job_id = job["id"]
+    press = "Submit" if form["final"] else "Next"
+    if parts:
+        state, message = "needs", f"Filled in, apart from {', and '.join(parts)}. Finish those in the job's tab, then press {press} there."
+    else:
+        state, message = "ready", f"Filled in. Check the highlighted answers in the job's tab, then press {press} there."
+    form.update(state=state, message=message)
+    _set_app(con, job_id, stage="filled", form=form)
+    _mark(job, form)
+    if form["final"] or parts:
+        db.alert(con, "urgent" if parts else "info", f"{'Needs you' if parts else 'Ready for you'}: {job['company']}",
+                 message, job_id)
+        con.commit()
+    watch_tab(job_id)
+    return message
+
+
+def _marks(form: dict) -> list[dict]:
+    """Says, for each field, how it should look in the page: fine, to check, to answer, or refused."""
+    out = []
+    for f in form["fields"]:
+        value, note = f.get("value"), f.get("error") or f.get("note") or ""
+        blank = value in (None, "", [], False)
+        if f.get("type") == "password":
+            state, note = "answer", "type this yourself"
+        elif f.get("error"):
+            state = "error"
+        elif blank and f.get("required") and not f.get("skip"):
+            state = "answer"
+        elif blank or f.get("skip"):
+            continue
+        elif f.get("source") != "you" and (f.get("written") or f.get("source") == "hal"
+                                           or re.search(r"unsure|looked wrong|check", note)):
+            state = "check"
+        else:
+            state = "ok"
+        out.append({"hid": f["hid"], "kind": f["kind"], "state": state, "label": (f.get("label") or "")[:120],
+                    "note": note[:160], "written": bool(f.get("written"))})
+    return out
+
+
+def _mark(job, form: dict) -> None:
+    """Outlines the answers in the applicant's tab and shows the panel listing what to look at."""
+    try:
+        browser.mark(job["id"], _marks(form), {
+            "company": job["company"], "title": job["title"], "step": form.get("step", 1), "final": form["final"],
+            "docs": sorted(documents.files(job)), "message": form.get("message", "")})
+    except RuntimeError:
+        pass  # the tab moved on or closed; the next page is marked when it is filled
+
+
+def _same_answer(f: dict, shown) -> bool:
+    """True when the page shows the answer Hal entered, allowing for the ways sites reformat one."""
+    def norm(v):
+        if isinstance(v, list):
+            return sorted(norm(x) for x in v)
+        return " ".join(str(v).split()).lower() if v not in (None, False) else ""
+    value = f.get("value")
+    if f.get("maxlength") and isinstance(value, str):
+        value = value[:f["maxlength"]]
+    return norm(value) == norm(shown)
+
+
+def _learn(con, job, form: dict, values: dict) -> int:
+    """Takes the answers its owner changed or added in the form itself, and remembers them for the next form."""
+    changed = []
+    for f in form.get("fields", []):
+        if f.get("sig") not in values or f["kind"] == "file" or f.get("type") == "password":
+            continue
+        shown = values[f["sig"]]
+        if shown in (None, "", [], False) or _same_answer(f, shown):
+            continue
+        f.update(value=shown, source="you", note="changed by you in the form", skip=False)
+        changed.append(f)
+    if changed:
+        autofill.remember(con, changed, job["company"])
+        autofill.mark_written(form["fields"])
+    return len(changed)
+
+
+def act_page(con, job_id: str, last: dict | None = None) -> str:
+    """Fills what the job's tab shows that is still empty: a new page of the form, or questions just added.
+
+    Args:
+        last: What the fields of the page before showed when last seen, by field, to learn the owner's changes from.
+    """
+    job = _job(con, job_id)
+    form = _app(con, job_id)["form"] or {}
+    _say(job_id, "reading the page")
+    found = browser.read_here(job_id)
+    known = {f.get("sig") for f in form.get("fields", [])}
+    seen = {f["sig"] for f in found["fields"]}
+    if not form.get("fields") or len(known & seen) * 2 < len(known):
+        # A different page: what was entered on the one before is kept, then this one is answered.
+        step, done = 1, []
+        if form.get("fields"):
+            _learn(con, job, form, last or {})
+            step, done = form.get("step", 1) + 1, [*form.get("done", []), _summary(form)]
+        return _drive(con, job, found, step, done)
+    # The same page: its owner's changes stand, and only what is empty is filled.
+    shown = {f["sig"]: f.get("current") for f in found["fields"]}
+    _learn(con, job, form, shown)
+    docs = documents.load(con, job)
+    fresh = autofill.propose(job, [f for f in found["fields"] if f["sig"] not in known], docs, documents.files(job), con)
+    form["fields"].extend(fresh)
+    autofill.ask_model(job, form["fields"], docs, con)
+    by_sig = {f["sig"]: f for f in found["fields"]}
+    empty = [{**f, "hid": by_sig[f["sig"]]["hid"]} for f in form["fields"]
+             if f.get("sig") in by_sig and shown.get(f["sig"]) in (None, "", [], False)
+             and f.get("value") not in (None, "", [], False) and not f.get("skip")]
+    if empty:
+        _say(job_id, f"filling in {len(empty)} empty answers")
+        out = browser.fill(job_id, empty, _shot(job_id))
+        for f in form["fields"]:
+            if f.get("sig") in by_sig:
+                f["hid"] = by_sig[f["sig"]]["hid"]
+                f["error"] = out["errors"].get(f["hid"], f.get("error", "") if f in empty else "")
+        form["final"] = not out["next"]
+    return _hold(con, job, form)
 
 
 def _terminal(con, job, found: dict) -> str | None:
@@ -363,7 +494,8 @@ def _drive(con, job, found: dict, step: int, done: list) -> str:
         form = _answer(con, job, found, step, done)
         _enter(con, job, form)
         empty, refused, prose = _open_points(form)
-        if form["final"] or empty or refused or prose or form["filled"].get("password") or step >= MAX_STEPS:
+        if browser.mode() == "extension" or form["final"] or empty or refused or prose \
+                or form["filled"].get("password") or step >= MAX_STEPS:
             return _hold(con, job, form)
         found, step, done = _move_on(con, job, form)
 
@@ -482,7 +614,7 @@ def _send(con, job, form: dict) -> str:
     """Presses the form's submit button, on the owner's approval, and sees the application through."""
     job_id = job["id"]
     if browser.mode() == "extension":
-        watch_sent(job_id)
+        watch_tab(job_id)
         return "approved; press Submit in the job's tab, and Hal marks it applied when the site confirms"
     _say(job_id, "submitting")
     db.log(con, job_id, "note", "approved for sending in the web interface")
@@ -574,33 +706,77 @@ def act_refill(con, job_id: str, edits: list[dict]) -> str:
     return _hold(con, job, form) or "form filled"
 
 
-def watch_sent(job_id: str) -> None:
-    """Marks the application as applied once the site confirms it, after the applicant submits by hand."""
+WATCH_PAUSE = 3  # seconds between looks at a tab Hal is watching
+WATCH_FOR = 3 * 60 * 60  # seconds a tab is watched after Hal last filled it
+
+
+def watch_tab(job_id: str) -> None:
+    """Watches the job's tab while its owner works through the form: fills each new page or question
+    as it appears, and marks the job applied once the site confirms it."""
     if job_id in WATCHING:
         return
     WATCHING.add(job_id)
 
     def watch():
         con = db.connect()
+        seen: dict = {}
         try:
-            deadline = time.time() + 2 * WAIT_FOR_YOU
-            while time.time() < deadline and _app(con, job_id)["stage"] == "filled":
-                time.sleep(4)
-                try:
-                    now = browser.peek(job_id)
-                except RuntimeError:
+            deadline = time.time() + WATCH_FOR
+            while time.time() < deadline:
+                time.sleep(WATCH_PAUSE)
+                busy = ACTIONS.get(job_id, {}).get("state") == "running"
+                if busy:
+                    deadline = time.time() + WATCH_FOR
                     continue
-                if now.get("gone"):
+                if not _watch_step(con, job_id, seen):
                     return
-                # A form's own wording can thank the applicant; only the page after it counts.
-                if not now.get("busy") and not now["form"] and (now["sent"] or now["applied"]):
-                    mark_applied(con, _job(con, job_id), "the site confirmed the application")
-                    return
+        except Exception:  # noqa: BLE001 - a watch that fails leaves the form as it is
+            traceback.print_exc()
         finally:
             WATCHING.discard(job_id)
             con.close()
 
     threading.Thread(target=watch, name="watch", daemon=True).start()
+
+
+def _watch_step(con, job_id: str, seen: dict) -> bool:
+    """Takes one look at the job's tab and acts on what changed; returns False when there is nothing left to watch.
+
+    `seen` carries what the page's fields showed at the last look, which is what the
+    owner sent once the page has gone.
+    """
+    if _app(con, job_id)["stage"] == "submitted":
+        return False
+    try:
+        now = browser.peek(job_id)
+    except RuntimeError:
+        return True
+    if now.get("gone"):
+        return False
+    if now.get("busy"):
+        return True
+    form = _app(con, job_id)["form"] or {}
+    if not now["form"]:
+        # A form's own wording can thank the applicant; only the page after it counts.
+        if now["sent"] or now["applied"]:
+            job = _job(con, job_id)
+            if _learn(con, job, form, seen.get("values", {})):
+                _set_app(con, job_id, form=form)
+            mark_applied(con, job, "the site confirmed the application")
+            return False
+        return True
+    values = now.get("values", {})
+    known = {f.get("sig") for f in form.get("fields", [])}
+    moved = len(known & set(values)) * 2 < len(known)
+    added = [sig for sig in values if sig not in known]
+    if moved or added:
+        ACTIONS[job_id] = {"name": "filling the next page" if moved else "answering new questions",
+                           "state": "running", "message": "", "at": db.now()}
+        _carry_out(con, job_id, act_page, job_id, seen.get("values") if moved else None)
+        seen.clear()
+        return True
+    seen["values"] = values
+    return True
 
 
 def act_prep(con, job_id: str) -> str:
@@ -696,6 +872,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.api_get(url.path[5:], parse_qs(url.query)))
             if url.path == "/files":
                 return self.serve_file(parse_qs(url.query).get("path", [""])[0])
+            m = re.fullmatch(r"/doc/([^/]+)/(cv|letter)", url.path)
+            if m:
+                return self.serve_doc(unquote(m.group(1)), m.group(2))
             name = "index.html" if url.path in ("/", "") else url.path.lstrip("/").removeprefix("static/")
             target = (STATIC / name).resolve()
             if STATIC not in target.parents or not target.is_file():
@@ -729,6 +908,17 @@ class Handler(BaseHTTPRequestHandler):
         if not any(root in path.parents for root in SERVABLE) or not path.is_file():
             return self._send(404, b"not found", "text/plain")
         self._send(200, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+
+    def serve_doc(self, job_id: str, which: str) -> None:
+        """Shows a job's CV or cover letter full size, for the panel in the job's tab."""
+        con = db.connect()
+        try:
+            path = documents.files(_job(con, job_id)).get(which)
+        finally:
+            con.close()
+        if not path:
+            return self._send(404, f"no {which} for this job yet".encode(), "text/plain")
+        self._send(200, Path(path).read_bytes(), "application/pdf")
 
     # GET routes
 
@@ -886,6 +1076,9 @@ class Handler(BaseHTTPRequestHandler):
             return {"docs": documents.drafts(job)}
         if action in ("auto", "form-open"):
             return run_action(job_id, "applying", act_auto, job_id, bool(body.get("here")))
+        if action == "page":
+            # Asked from the job's tab: fill what that page shows that is still empty.
+            return run_action(job_id, "filling this page", act_page, job_id)
         if action == "form-draft":
             return run_action(job_id, "drafting answers", act_draft_rest, job_id)
         if action == "form-save":

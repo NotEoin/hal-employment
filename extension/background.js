@@ -112,6 +112,14 @@ const COMMANDS = {
     }
     return inTab((await jobTab(job)).id, "fill", { fields, files });
   },
+  async mark({ job, fields, panel }) {
+    const tab = await jobTab(job);
+    const out = await inTab(tab.id, "mark", { fields, panel });
+    const left = fields.filter(f => f.state !== "ok").length;
+    await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: left ? "#d4a72c" : "#2da44e" });
+    await chrome.action.setBadgeText({ tabId: tab.id, text: left ? String(left) : "✓" });
+    return out;
+  },
   async show({ job }) {
     const tab = await tabFor(job);
     if (!tab) return { shown: false };
@@ -147,6 +155,39 @@ const COMMANDS = {
     return { pages, refused };
   },
 };
+
+async function jobOf(tabId) {
+  await writing;
+  const { jobs = {} } = await chrome.storage.session.get("jobs");
+  return Object.keys(jobs).find(job => jobs[job].includes(tabId)) || null;
+}
+
+async function post(path, body = {}) {
+  const reply = await fetch(`${await hal()}/api/${path}`, { method: "POST", headers: HEADERS, body: JSON.stringify(body) });
+  const out = await reply.json().catch(() => ({}));
+  if (!reply.ok) throw new Error(out.error || `the helper answered ${reply.status}`);
+  return out;
+}
+
+// The panel Hal draws in a job's tab asks for things through here, where the helper can be reached.
+chrome.runtime.onMessage.addListener((message, sender) => {
+  const ask = message && message.hal;
+  if (!ask || !sender.tab) return;
+  (async () => {
+    const job = await jobOf(sender.tab.id);
+    if (!job) return;
+    // No opener: a tab the job's tab opens is taken for the next page of its form.
+    const at = { index: sender.tab.index + 1 };
+    if (ask.cmd === "fill") {
+      await chrome.action.setBadgeText({ tabId: sender.tab.id, text: "…" });
+      await post(`job/${encodeURIComponent(job)}/page`);
+    } else if (ask.cmd === "open") {
+      await chrome.tabs.create({ url: `${await hal()}/#/job/${encodeURIComponent(job)}`, ...at });
+    } else if (ask.cmd === "doc" && /^(cv|letter)$/.test(ask.which)) {
+      await chrome.tabs.create({ url: `${await hal()}/doc/${encodeURIComponent(job)}/${ask.which}`, ...at });
+    }
+  })().catch(e => console.warn("Hal:", e.message));
+});
 
 let looping = false;
 async function loop() {

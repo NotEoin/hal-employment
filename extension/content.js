@@ -243,5 +243,164 @@
     return { errors };
   }
 
-  window.halPage = { read, press, fill, results: () => halResults() };
+  // Marking up a filled page --------------------------------------------------
+
+  const MARKS = `
+    [data-hal-mark] { outline-offset: 3px !important; border-radius: 2px; }
+    [data-hal-mark=ok] { outline: 2px solid rgba(22, 163, 74, .55) !important; }
+    [data-hal-mark=check] { outline: 2px solid #f59e0b !important; }
+    [data-hal-mark=answer], [data-hal-mark=error] { outline: 2px solid #dc2626 !important; }
+    [data-hal-mark=edited] { outline: 2px solid rgba(37, 99, 235, .6) !important; }`;
+
+  // The box to outline: the control itself, or for hidden and tiny controls the nearest box around them that shows.
+  function shown(el) {
+    if (!el.checkVisibility()) {
+      // A styled tick box hides its input and shows its label; anything else hidden is on a step not on show.
+      const label = el.labels && el.labels[0];
+      if (!label || !label.checkVisibility()) return null;
+      el = label;
+    }
+    for (let node = el, depth = 0; node && depth < 5; node = node.parentElement, depth++) {
+      const r = node.getBoundingClientRect();
+      if (r.width >= 40 && r.height >= 14) return node;
+    }
+    return el;
+  }
+  function markTarget(f) {
+    if (f.kind !== 'radio' && f.kind !== 'checkgroup') {
+      const el = tagged(f.hid);
+      return el && shown(el);
+    }
+    const parts = halAll(`[data-hal-id^="${f.hid}:"]`).map(el => (el.labels && el.labels[0]) || el)
+      .filter(el => el.checkVisibility());
+    if (!parts.length) return null;
+    let box = parts[0];
+    while (box.parentElement && !parts.every(x => box.contains(x))) box = box.parentElement;
+    return box;
+  }
+
+  const LABEL = { check: 'Check', answer: 'Answer', error: 'Refused' };
+  const PANEL = `
+    :host { all: initial; }
+    .p { position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; width: 320px; max-height: 70vh;
+         display: flex; flex-direction: column; font: 13px/1.4 system-ui, sans-serif; color: #1f2328;
+         background: #fff; border: 1px solid #d0d7de; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+    .h { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #d0d7de; }
+    .h b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .counts { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px 0; }
+    .c { padding: 1px 8px; border-radius: 999px; font-size: 12px; }
+    .c.check { background: #fff4d6; color: #7a4d00; } .c.answer { background: #ffe1e1; color: #8a1111; }
+    .c.ok { background: #dcf5e3; color: #11602e; } .c.edited { background: #dbe8ff; color: #183f8f; }
+    .msg { padding: 8px 12px 0; color: #59636e; }
+    ul { list-style: none; margin: 8px 0 0; padding: 0 6px; overflow: auto; }
+    li button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 6px; border-radius: 6px; cursor: pointer; }
+    li button:hover, li button:focus-visible { background: #f3f4f6; }
+    .t { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+    .t.check { color: #9a6700; } .t.answer, .t.error { color: #cf222e; } .t.edited { color: #1f5fd6; }
+    .n { color: #59636e; font-size: 12px; }
+    .f { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-top: 1px solid #d0d7de; margin-top: 8px; }
+    .f button, .h button { font: inherit; padding: 4px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa;
+                           color: inherit; cursor: pointer; }
+    .f button.main { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .p.min ul, .p.min .counts, .p.min .msg, .p.min .f { display: none; }
+    @media (prefers-color-scheme: dark) {
+      .p { background: #1c2128; color: #e6edf3; border-color: #3d444d; } .h, .f { border-color: #3d444d; }
+      li button:hover { background: #262c36; } .n, .msg { color: #9198a1; }
+      .f button, .h button { background: #262c36; border-color: #3d444d; }
+      .c.check { background: #3b2e0a; color: #f2cc60; } .c.answer { background: #4a1414; color: #ffa198; }
+      .c.ok { background: #12361f; color: #7ee2a8; } .c.edited { background: #142b55; color: #a5c8ff; }
+    }`;
+
+  const ask = message => chrome.runtime.sendMessage({ hal: message }).catch(() => {});
+
+  function drawPanel(p, items) {
+    let host = document.getElementById('hal-panel');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'hal-panel';
+      host.attachShadow({ mode: 'open' });
+      document.documentElement.append(host);
+    }
+    const root = host.shadowRoot;
+    const left = items.filter(i => i.target.getAttribute('data-hal-mark') !== 'edited');
+    const count = state => items.filter(i => i.target.getAttribute('data-hal-mark') === state).length;
+    const counts = [['answer', count('answer') + count('error'), 'to answer'], ['check', count('check'), 'to check'],
+                    ['edited', count('edited'), 'changed by you'], ['ok', p.filled, 'filled']].filter(c => c[1]);
+    const docs = { cv: 'CV', letter: 'Cover letter' };
+    const minimised = root.querySelector('.p.min') !== null;
+    root.innerHTML = `<style>${PANEL}</style><div class="p ${minimised ? 'min' : ''}">
+      <div class="h"><b></b><button data-min title="Minimise">${minimised ? '+' : '–'}</button></div>
+      <div class="counts">${counts.map(([k, n, t]) => `<span class="c ${k}">${n} ${t}</span>`).join('')}</div>
+      <div class="msg"></div><ul></ul>
+      <div class="f"><button class="main" data-fill title="Fill whatever on this page is still empty">Fill empty fields</button>
+        ${p.panel.docs.map(d => `<button data-doc="${d}">${docs[d] || d}</button>`).join('')}
+        <button data-open>Open in Hal</button></div></div>`;
+    root.querySelector('b').textContent = `Hal${p.panel.step > 1 ? ` · step ${p.panel.step}` : ''} · ${p.panel.company}`;
+    root.querySelector('.msg').textContent = left.length
+      ? `Nothing is sent until you press ${p.panel.final ? 'Submit' : 'Next'}.`
+      : `All answered. Press ${p.panel.final ? 'Submit' : 'Next'} when you are happy.`;
+    const list = root.querySelector('ul');
+    for (const i of items) {
+      const state = i.target.getAttribute('data-hal-mark');
+      if (state === 'ok') continue;
+      const li = document.createElement('li'), b = document.createElement('button');
+      b.innerHTML = `<div class="t ${state}"></div><div class="q"></div><div class="n"></div>`;
+      b.children[0].textContent = state === 'edited' ? 'Changed by you' : LABEL[state];
+      b.children[1].textContent = i.f.label || '(unlabelled)';
+      b.children[2].textContent = state === 'edited' ? '' : i.f.note;
+      b.onclick = () => {
+        i.target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const input = i.target.matches('input, textarea, select, [contenteditable]') ? i.target
+          : i.target.querySelector('input:not([type=hidden]), textarea, select, [contenteditable]');
+        if (input) input.focus({ preventScroll: true });
+      };
+      li.append(b);
+      list.append(li);
+    }
+    root.querySelector('[data-min]').onclick = () => {
+      root.querySelector('.p').classList.toggle('min');
+      root.querySelector('[data-min]').textContent = root.querySelector('.p.min') ? '+' : '–';
+    };
+    root.querySelector('[data-fill]').onclick = () => ask({ cmd: 'fill' });
+    root.querySelector('[data-open]').onclick = () => ask({ cmd: 'open' });
+    root.querySelectorAll('[data-doc]').forEach(b => b.onclick = () => ask({ cmd: 'doc', which: b.dataset.doc }));
+  }
+
+  function mark(p) {
+    if (!document.getElementById('hal-marks')) {
+      const style = document.createElement('style');
+      style.id = 'hal-marks';
+      style.textContent = MARKS;
+      (document.head || document.documentElement).append(style);
+    }
+    for (const el of halAll('[data-hal-mark]')) el.removeAttribute('data-hal-mark');
+    const items = [];
+    for (const f of p.fields) {
+      const target = markTarget(f);
+      if (!target) continue;
+      target.setAttribute('data-hal-mark', f.state);
+      items.push({ f, target });
+    }
+    const panel = { ...p, filled: items.filter(i => i.f.state === 'ok').length };
+    window.halMarked = { panel, items };
+    drawPanel(panel, items);
+    const first = items.find(i => i.f.state !== 'ok');
+    if (first) first.target.scrollIntoView({ block: 'center' });
+    return { marked: items.length };
+  }
+
+  // An answer the applicant changes is theirs: its mark turns blue and it leaves the list to check.
+  if (!window.halListening) {
+    window.halListening = true;
+    const edited = e => {
+      const target = e.target.closest && e.target.closest('[data-hal-mark]');
+      if (!target || !e.isTrusted || target.getAttribute('data-hal-mark') === 'edited') return;
+      target.setAttribute('data-hal-mark', 'edited');
+      if (window.halMarked) drawPanel(window.halMarked.panel, window.halMarked.items);
+    };
+    document.addEventListener('input', edited, true);
+    document.addEventListener('change', edited, true);
+  }
+
+  window.halPage = { read, press, fill, mark, results: () => halResults() };
 })();
