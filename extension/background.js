@@ -35,6 +35,10 @@ chrome.tabs.onCreated.addListener(tab => {
   // A form that opens in a new tab belongs to the job whose tab opened it.
   withJobs(jobs => Object.values(jobs).forEach(ids => ids.includes(tab.openerTabId) && ids.push(tab.id)));
 });
+// A page the browser loaded ahead of time swaps in under a new tab id; the job keeps the tab.
+chrome.tabs.onReplaced.addListener((added, removed) => {
+  withJobs(jobs => Object.keys(jobs).forEach(job => { jobs[job] = jobs[job].map(t => t === removed ? added : t); }));
+});
 chrome.tabs.onRemoved.addListener(id => {
   withJobs(jobs => Object.keys(jobs).forEach(job => { jobs[job] = jobs[job].filter(t => t !== id); }));
 });

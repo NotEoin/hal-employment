@@ -66,7 +66,8 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
         raise RuntimeError("the Hal extension did not answer; check Brave is still open") from None
     if result["ok"]:
         return result["value"]
-    if result["error"] == "gone":
+    # A tab closed between finding it and acting in it is reported by the browser in its own words.
+    if result["error"] == "gone" or result["error"].startswith("No tab with id"):
         raise RuntimeError("the form's tab was closed; ask Hal to open the form again")
     raise RuntimeError(result["error"])
 
