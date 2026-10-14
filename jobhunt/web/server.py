@@ -5,6 +5,7 @@ the queue full and turns email into to-dos; browser and model work for one
 application runs in the background and is reported through /api/state.
 Stdlib only, apart from Playwright for form filling.
 """
+import base64
 import json
 import mimetypes
 import re
@@ -18,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import adopt, autofill, browser, contacts, cv, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
+from .. import adopt, autofill, browser, contacts, cv, cvbuild, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
 from ..config import CONFIG
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -817,8 +818,19 @@ def base_cv() -> dict:
     pdf = BASE_CV / "Firstname-Lastname-CV.pdf"
     if not pdf.exists():
         cv.render(cv.load(), BASE_CV)
-    return {"cv": cv.for_editing(), "site": cv._apply(cv.site(), [], keep_hidden=True),
-            "changes": len(cv.overrides()), "pdf": str(pdf)}
+    built = json.loads(cv.BUILT.read_text()) if cv.BUILT.exists() else None
+    return {"cv": cv.for_editing(), "site": cv._apply(cv.origin(), [], keep_hidden=True), "origin": cv.origin_name(),
+            "changes": len(cv.overrides()), "pdf": str(pdf), "sources": cvbuild.sources(),
+            "options": {**cvbuild.OPTIONS, **((built or {}).get("options") or {})},
+            "built": built and {"at": built["built"], "flags": built["flags"],
+                                "pdf": str(cvbuild.PREVIEW / "Firstname-Lastname-CV.pdf")}}
+
+
+def act_build_cv(con, _job_id: str, options: dict) -> str:
+    """Builds a draft CV from the applicant's material, for them to read before using it."""
+    out = cvbuild.build(options, lambda message: _say("_cvbuild", message))
+    n = len(out["flags"])
+    return f"your CV is built; {n} thing{'s' if n != 1 else ''} to check" if n else "your CV is built"
 
 
 def act_rerender_cvs(con, _job_id: str) -> str:
@@ -1115,6 +1127,20 @@ class Handler(BaseHTTPRequestHandler):
                 cv.render(cv.load(), BASE_CV)
                 run_action("_cv", "updating application CVs", act_rerender_cvs, "_cv")
                 return {**base_cv(), "saved": len(changes)}
+            if route == "cv/source":
+                data = base64.b64decode(body["data"]) if body.get("data") else None
+                name = cvbuild.add(body.get("name") or "notes", body.get("text") or "", data)
+                return {"name": name, "sources": cvbuild.sources()}
+            if route == "cv/source/remove":
+                cvbuild.remove(body["name"])
+                return {"sources": cvbuild.sources()}
+            if route == "cv/build":
+                return run_action("_cvbuild", "building your CV", act_build_cv, "_cvbuild", body.get("options") or {})
+            if route == "cv/origin":
+                cv.set_origin(body["origin"])
+                cv.render(cv.load(), BASE_CV)
+                run_action("_cv", "updating application CVs", act_rerender_cvs, "_cv")
+                return base_cv()
             if route == "worker":
                 WORKER["paused"] = bool(body.get("paused"))
                 return WORKER

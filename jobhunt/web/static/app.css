@@ -64,9 +64,9 @@ main { padding: 28px clamp(16px, 3vw, 40px) 80px; max-width: 1280px; width: 100%
 .head p { margin: 4px 0 0; color: var(--muted); }
 .kbd { font: 12px var(--mono); padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--panel); }
 
-button, a.button { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 8px 14px;
+button, a.button, label.button { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 8px 14px;
   font-weight: 550; display: inline-flex; align-items: center; gap: 6px; transition: background .15s, border-color .15s, transform .05s; }
-button:hover, a.button:hover { border-color: var(--faint); }
+button:hover, a.button:hover, label.button:hover { border-color: var(--faint); }
 a.button { text-decoration: none; color: inherit; }
 button[hidden], a.button[hidden] { display: none; }
 button:active { transform: translateY(1px); }
@@ -74,7 +74,7 @@ button:disabled { opacity: .5; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 button.primary:hover { filter: brightness(1.06); }
 button.good { background: var(--good); border-color: var(--good); color: #fff; }
-button.ghost, a.button.ghost { background: transparent; }
+button.ghost, a.button.ghost, label.button.ghost { background: transparent; }
 button.small, a.button.small { padding: 4px 10px; font-size: 12px; border-radius: 7px; }
 button.link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 500; }
 
@@ -262,3 +262,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 textarea.fit { min-height: 0; }
 .cv-skill .cv-top { margin-bottom: 4px; font-size: 13px; }
 label.f .link { margin-left: 6px; color: var(--warn); font-weight: 500; }
+.sources { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.source { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; }
+.source .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52ch; }
+label.check { display: flex; gap: 8px; align-items: baseline; margin: 8px 0; }
+.opt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.opt-row input { margin-top: 5px; width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.flags-box { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.flags-box ul { margin: 6px 0 0; padding-left: 18px; }

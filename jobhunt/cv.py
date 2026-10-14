@@ -30,7 +30,11 @@ TRACKS = {
 }
 
 
-OVERRIDES = Path(__file__).resolve().parent.parent / "data" / "cv-overrides.json"
+DATA = Path(__file__).resolve().parent.parent / "data"
+OVERRIDES = DATA / "cv-overrides.json"  # changes to the website's CV
+BUILT = DATA / "cv-built.json"  # the CV built from the applicant's material (cvbuild.py), with what to check
+BUILT_OVERRIDES = DATA / "cv-built-overrides.json"  # changes to the built CV
+ORIGIN = DATA / "cv-origin"  # "built" when Hal's CV starts from the built one rather than the website's
 # Entries are matched across versions by what names them, not by position, so the site can add or reorder them.
 NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}
 PAIRS = ("skills", "additional")  # entries written as [name, value]; only the value is edited
@@ -42,9 +46,30 @@ def site() -> dict:
     return json.loads(CV_JSON.read_text())
 
 
+def origin_name() -> str:
+    """Which CV Hal's starts from: "site", the website's, or "built", the one built from the applicant's material."""
+    built = ORIGIN.exists() and ORIGIN.read_text().strip() == "built" and BUILT.exists()
+    return "built" if built else "site"
+
+
+def set_origin(name: str) -> None:
+    ORIGIN.parent.mkdir(parents=True, exist_ok=True)
+    ORIGIN.write_text(("built" if name == "built" else "site") + "\n")
+
+
+def origin() -> dict:
+    """The CV Hal's starts from, before the applicant's changes."""
+    return json.loads(BUILT.read_text())["cv"] if origin_name() == "built" else site()
+
+
+def _overrides_path() -> Path:
+    return BUILT_OVERRIDES if origin_name() == "built" else OVERRIDES
+
+
 def overrides() -> list[dict]:
-    """The applicant's changes to the site's CV, for Hal's applications only."""
-    return json.loads(OVERRIDES.read_text()) if OVERRIDES.exists() else []
+    """The applicant's changes to the CV Hal's starts from, for Hal's applications only."""
+    path = _overrides_path()
+    return json.loads(path.read_text()) if path.exists() else []
 
 
 def _find(data: dict, section: str, key):
@@ -81,18 +106,18 @@ def printable(data: dict) -> dict:
 
 
 def load() -> dict:
-    """Hal's base CV: the site's, with the applicant's changes."""
-    return _apply(site(), overrides())
+    """Hal's base CV: the one it starts from, with the applicant's changes."""
+    return _apply(origin(), overrides())
 
 
 def for_editing() -> dict:
-    """The base CV for the CV builder: entries left out are kept, flagged, and every entry carries its site name."""
-    return _apply(site(), overrides(), keep_hidden=True)
+    """The base CV for the CV builder: entries left out are kept, flagged, and every entry carries its original name."""
+    return _apply(origin(), overrides(), keep_hidden=True)
 
 
 def save_base(edited: dict) -> list[dict]:
-    """Stores where an edited base CV differs from the site's, and returns those changes."""
-    original = site()
+    """Stores where an edited base CV differs from the one it starts from, and returns those changes."""
+    original = origin()
     changes = [{"field": f, "value": edited[f]} for f in TEXT if f in edited and edited[f] != original.get(f)]
     for section in (*NAMED_BY, *PAIRS):
         for item in edited.get(section) or []:
@@ -109,8 +134,9 @@ def save_base(edited: dict) -> list[dict]:
                     continue
                 if value != was.get(field):
                     changes.append({"section": section, "key": key, "field": field, "value": value})
-    OVERRIDES.parent.mkdir(parents=True, exist_ok=True)
-    OVERRIDES.write_text(json.dumps(changes, indent=1) + "\n")
+    path = _overrides_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(changes, indent=1) + "\n")
     return changes
 
 
@@ -172,7 +198,11 @@ def render(variant: dict, out_dir: Path) -> Path:
 
 def facts_text() -> str:
     """Returns the CV as plain text, the only facts a draft may use."""
-    d = load()
+    return facts_text_of(load())
+
+
+def facts_text_of(d: dict) -> str:
+    """Returns a CV as plain text."""
     parts = [d["title"], d["summary"]]
     for e in d["education"]:
         parts += [e.get("qualification", ""), e.get("grade", ""), e.get("meta", ""), e.get("detail", "")]

@@ -591,7 +591,7 @@ const CV_LISTS = [["education", "Education", ["qualification", "grade", "meta", 
                   ["experience", "Experience", ["role", "org", "dates", "body"]],
                   ["projects", "Projects", ["name", "stack", "body"]]];
 const CV_LONG = new Set(["detail", "body"]);
-function cvEditor(box, cv, { site = null, reorder = false, onChange = () => {} } = {}) {
+function cvEditor(box, cv, { site = null, original = "the website's", reorder = false, onChange = () => {} } = {}) {
   const at = path => path.split(".").reduce((o, k) => o?.[k], cv);
   const put = (path, value) => {
     const keys = path.split("."), last = keys.pop();
@@ -611,7 +611,7 @@ function cvEditor(box, cv, { site = null, reorder = false, onChange = () => {} }
   const changed = path => {
     const was = theirs(path);
     return was !== undefined && JSON.stringify(was) !== JSON.stringify(at(path))
-      ? `<button class="link small-t" data-revert="${path}">Changed · use the website's</button>` : "";
+      ? `<button class="link small-t" data-revert="${path}">Changed · use ${original}</button>` : "";
   };
   const field = (path, label, long) => `<label class="f">${esc(label)} ${changed(path)}</label>` + (long
     ? `<textarea data-p="${path}" class="fit" rows="${Math.min(14, Math.max(2, Math.ceil(String(at(path) || "").length / 70)))}">${esc(at(path) || "")}</textarea>`
@@ -648,25 +648,132 @@ function cvEditor(box, cv, { site = null, reorder = false, onChange = () => {} }
 
 async function viewCv() {
   const d = await api("cv");
-  const base = d.cv;
+  const tab = state.cvTab || "edit";
+  const from = d.origin === "built" ? "the CV Hal built from your material" : "your website's CV";
   main.innerHTML = `<div class="head"><div><h1>Your CV</h1>
-      <p>Every application's CV is made from this one. It starts as your website's CV; what you change here goes only into Hal's
-      applications, and the website stays as it is. For each job, Hal puts the most relevant projects and skills first and may
-      change the title line; you can edit any one application's CV from its Documents step.</p></div></div>
-    <div class="split docs">
-      <div class="card pad"><div id="builder"></div>
-        <div class="bar"><span class="muted small-t grow" id="cv-status">${d.changes ? `${d.changes} change${d.changes > 1 ? "s" : ""} from the website's CV` : "The same as the website's CV"}</span>
+      <p>Every application's CV is made from this one. For each job, Hal puts the most relevant projects and skills first and
+      may change the title line; you can edit any one application's CV from its Documents step.</p></div></div>
+    <div class="tabs">${[["edit", "Edit"], ["build", "Build from your material"]].map(([k, n]) =>
+      `<button class="tab ${tab === k ? "on" : ""}" data-cvtab="${k}">${n}</button>`).join("")}</div>
+    <div id="cv-pane"></div>`;
+  $$("[data-cvtab]", main).forEach(b => b.onclick = () => { state.cvTab = b.dataset.cvtab; viewCv(); });
+  (tab === "edit" ? cvEditTab : cvBuildTab)($("#cv-pane"), d, from);
+}
+
+function cvEditTab(pane, d, from) {
+  const status = r => r.changes ? `${r.changes} change${r.changes > 1 ? "s" : ""} from ${from}` : `The same as ${from}`;
+  pane.innerHTML = `<div class="split docs">
+      <div class="card pad"><p class="small-t muted" style="margin-top:0">This starts from ${from}. What you change here goes only
+        into Hal's applications${d.origin === "site" ? "; the website stays as it is" : ""}.</p><div id="builder"></div>
+        <div class="bar"><span class="muted small-t grow" id="cv-status">${status(d)}</span>
           <button class="primary" data-save>Save and update applications</button></div></div>
       <div class="card pad preview-card"><div class="tabs"><button class="tab on">Preview</button><span class="grow"></span>
         <button class="small ghost" data-expand>Expand</button></div><div id="preview">${pdfPages(d.pdf)}</div></div>
     </div>`;
-  cvEditor($("#builder"), base, { site: d.site });
-  $("[data-expand]", main).onclick = () => viewPdf(d.pdf);
-  $("[data-save]", main).onclick = async () => {
-    const r = await guard(() => api("cv", { cv: base }), "Saved. Hal is updating the CVs of applications still to send.");
+  cvEditor($("#builder"), d.cv, { site: d.site, original: d.origin === "built" ? "the built CV's" : "the website's" });
+  $("[data-expand]", pane).onclick = () => viewPdf(d.pdf);
+  $("[data-save]", pane).onclick = async () => {
+    const r = await guard(() => api("cv", { cv: d.cv }), "Saved. Hal is updating the CVs of applications still to send.");
     $("#preview").innerHTML = pdfPages(r.pdf);
-    $("#cv-status").textContent = r.changes ? `${r.changes} change${r.changes > 1 ? "s" : ""} from the website's CV` : "The same as the website's CV";
+    $("#cv-status").textContent = status(r);
   };
+}
+
+const CV_OPTIONS = [["website", "Also read my website CV"], ["results", "Open entries with results, measured where my material measures them"],
+                    ["two_pages", "Keep to two pages"], ["interests", "Include community work and interests"]];
+const CV_FOCUS = { general: "Software engineering in general", backend: "Backend and distributed systems", ml: "Machine learning and applied AI", security: "Security engineering" };
+function cvBuildTab(pane, d) {
+  const o = d.options, b = d.built;
+  const action = state.last?.actions?._cvbuild;
+  const building = action && action.state === "running";
+  pane.innerHTML = `<div class="split docs">
+    <div class="card pad">
+      <h3 style="margin-top:0">Your material</h3>
+      <p class="small-t muted">Anything about you: old CVs, transcripts, project write-ups, references, notes. Text, PDF and Word files
+        are read as plain text. Hal writes the CV from what these say and nothing else.</p>
+      ${d.sources.length ? `<div class="sources">${d.sources.map(x => `<div class="source"><div class="grow"><b>${esc(x.name)}</b>
+          <div class="small-t muted">${x.chars.toLocaleString()} characters · ${esc(x.preview.slice(0, 90))}</div></div>
+          <button class="small ghost" data-remove="${esc(x.name)}">Remove</button></div>`).join("")}</div>`
+        : `<p class="muted">Nothing added yet.</p>`}
+      <label class="f">Name</label><input type="text" data-src-name placeholder="For example: transcript, dissertation summary, old CV">
+      <label class="f">Text</label><textarea data-src-text rows="6" placeholder="Paste text here"></textarea>
+      <div class="bar"><button data-add>Add text</button>
+        <label class="button ghost">Upload files<input type="file" data-upload multiple accept=".txt,.md,.pdf,.docx,.json,.csv" hidden></label></div>
+      <h3>Options</h3>
+      ${CV_OPTIONS.map(([k, label]) => `<label class="check"><input type="checkbox" data-opt="${k}" ${o[k] ? "checked" : ""}> ${esc(label)}</label>`).join("")}
+      <label class="f">Aim the title and summary at</label><select data-opt="focus">${Object.entries(CV_FOCUS).map(([k, n]) =>
+        `<option value="${k}" ${o.focus === k ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+      <div class="opt-row"><label class="f">Projects on the CV<input type="number" data-opt="projects" min="1" max="6" value="${o.projects}"></label>
+        <label class="f">Show module marks from<input type="number" data-opt="modules_min" min="0" max="100" value="${o.modules_min}"></label></div>
+      <div class="bar"><span class="grow small-t muted" id="build-status">${building ? esc(action.message || "building") + "..." : ""}</span>
+        <button class="primary" data-build ${building ? "disabled" : ""}>Build my CV</button></div>
+    </div>
+    <div class="card pad preview-card">
+      ${b ? `<div class="tabs"><button class="tab on">Built ${esc(ago(b.at))}</button><span class="grow"></span>
+          <button class="small ghost" data-expand>Expand</button></div>
+        ${b.flags.length ? `<div class="flags-box"><b class="small-t">Check before using it</b><ul class="flags">${b.flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div>` : ""}
+        <div class="bar" style="margin:0 0 12px">${d.origin === "built"
+          ? `<span class="chip good">In use as your CV</span><span class="grow"></span><button class="small ghost" data-origin="site">Go back to the website's CV</button>`
+          : `<span class="grow small-t muted">Using it replaces the website's CV as the start of Hal's; the website stays as it is.</span>
+             <button class="good" data-origin="built">Use this as my CV</button>`}</div>
+        <div id="built-preview">${pdfPages(b.pdf)}</div>`
+      : `<div class="empty"><h3>Nothing built yet</h3><p class="muted">Add your material, choose the options, then press "Build my CV".
+          Building reads every source with the local model, so it takes a few minutes.</p></div>`}
+    </div></div>`;
+  const options = () => Object.fromEntries($$("[data-opt]", pane).map(el =>
+    [el.dataset.opt, el.type === "checkbox" ? el.checked : el.type === "number" ? +el.value : el.value]));
+  $$("[data-remove]", pane).forEach(el => el.onclick = async () => {
+    if (!await confirmBox(`Remove ${el.dataset.remove}?`, "Hal will no longer build your CV from it.", "Remove")) return;
+    await guard(() => api("cv/source/remove", { name: el.dataset.remove })); viewCv();
+  });
+  $("[data-add]", pane).onclick = async () => {
+    const text = $("[data-src-text]", pane).value;
+    await guard(() => api("cv/source", { name: $("[data-src-name]", pane).value || "notes", text }), "Added"); viewCv();
+  };
+  $("[data-upload]", pane).onchange = async e => {
+    for (const file of e.target.files) {
+      const data = await new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.onerror = fail; r.readAsDataURL(file); });
+      await guard(() => api("cv/source", { name: file.name, data }), `Added ${file.name}`);
+    }
+    viewCv();
+  };
+  $("[data-build]", pane).onclick = async () => {
+    const a = await guard(() => api("cv/build", { options: options() }));
+    if (state.last) state.last.actions._cvbuild = a;
+    $("[data-build]", pane).disabled = true;
+    $("#build-status").textContent = "starting...";
+    waitForBuild();
+  };
+  $$("[data-origin]", pane).forEach(el => el.onclick = async () => {
+    const built = el.dataset.origin === "built";
+    if (!await confirmBox(built ? "Use the built CV?" : "Go back to the website's CV?",
+      built ? "Hal's CV will start from the built one. Edits you made to the website's CV in Hal are kept for if you switch back."
+            : "Hal's CV will start from the website's again. Edits you made to the built CV are kept for if you switch back.",
+      built ? "Use it" : "Go back")) return;
+    await guard(() => api("cv/origin", { origin: el.dataset.origin }), "Done. Hal is updating the CVs of applications still to send.");
+    viewCv();
+  });
+  const expand = $("[data-expand]", pane);
+  expand && (expand.onclick = () => viewPdf(b.pdf));
+  if (building) waitForBuild();
+}
+// Follows a CV build, which runs for minutes, until it ends.
+async function waitForBuild() {
+  if (state.cvWaiting) return;
+  state.cvWaiting = true;
+  try {
+    for (;;) {
+      await new Promise(r => setTimeout(r, 2000));
+      const a = (await api("state")).actions._cvbuild;
+      const el = $("#build-status");
+      if (!a || a.state !== "running") {
+        if (a) toast(a.state === "done" ? a.message : `The build stopped: ${a.message}`, a.state === "done" ? "" : "error");
+        if (state.route === "cv") viewCv();
+        return;
+      }
+      if (el) el.textContent = (a.message || "building") + "...";
+    }
+  } finally { state.cvWaiting = false; }
 }
 
 async function viewStats() {

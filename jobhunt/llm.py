@@ -51,7 +51,9 @@ def _settings(role: str = "main"):
     return url.rstrip("/"), model
 
 
-def chat(system: str, user: str, *, role: str = "main", json_out: bool = False, timeout: float = 180) -> str:
+def chat(system: str, user: str, *, role: str = "main", json_out: bool = False, timeout: float = 180,
+         ctx: int | None = None) -> str:
+    """Asks a local model; `ctx` widens its context window, in tokens, for long material."""
     url, model = _settings(role)
     payload = {
         "model": model,
@@ -62,6 +64,8 @@ def chat(system: str, user: str, *, role: str = "main", json_out: bool = False, 
     if json_out:                    # extraction wants determinism; prose keeps the model's own settings
         payload["format"] = "json"
         payload["options"] = {"temperature": 0.1}
+    if ctx:
+        payload["options"] = {**payload.get("options", {}), "num_ctx": ctx}
     req = urllib.request.Request(f"{url}/api/chat", data=json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
