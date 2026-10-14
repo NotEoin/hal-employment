@@ -17,10 +17,11 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import autofill, browser, db, documents, gmail  # noqa: E402
+from jobhunt import autofill, browser, db, documents, extension, gmail  # noqa: E402
 from jobhunt.web import server  # noqa: E402
 
 SITE = Path(__file__).parent / "site"
+EXTENSION = Path(__file__).resolve().parent.parent / "extension"
 PROFILE = {
     "first_name": "Ada", "last_name": "Lovelace", "full_name": "Ada Lovelace", "preferred_name": "Ada",
     "email": "ada@example.org", "phone": "07000 000000", "city": "London", "country": "United Kingdom",
@@ -50,7 +51,9 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-class Applying(unittest.TestCase):
+class Practice(unittest.TestCase):
+    """Serves the practice site and stands in for the applicant's profile, documents, model and inbox."""
+
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
@@ -63,7 +66,7 @@ class Applying(unittest.TestCase):
         cv.write_bytes(b"%PDF-1.4\n%%EOF\n")
         browser.PROFILE, browser.SHOTS, browser.SIGNED_IN = tmp / "profile", tmp / "shots", tmp / "signed-in.json"
         cls.saved = (autofill.profile, autofill.ask_model, autofill.choose_control, documents.render,
-                     documents.files, documents.load, gmail.security_code, server.browser.search)
+                     documents.files, documents.load, gmail.security_code, server.browser.search, db.connect)
         autofill.profile = lambda: dict(PROFILE)
         autofill.ask_model = fake_model
         autofill.choose_control = lambda job, found: ""
@@ -72,18 +75,17 @@ class Applying(unittest.TestCase):
         documents.load = lambda con, job: {"letter": "", "answers": []}
         gmail.security_code = lambda since: "A1b2C3d4"
         server.browser.search = lambda queries, pause=0: ([[]], False)
-        cls.con = db.connect(tmp / "jobs.db")
+        # Whatever opens the database itself, such as the web helper, opens the test's copy.
+        connect = db.connect
+        db.connect = lambda path=tmp / "jobs.db": connect(path)
+        cls.con = db.connect()
 
     @classmethod
     def tearDownClass(cls):
-        (autofill.profile, autofill.ask_model, autofill.choose_control, documents.render, documents.files,
-         documents.load, gmail.security_code, server.browser.search) = cls.saved
-        try:
-            browser.BROWSER.call(lambda b: b._ctx and b._ctx.close())
-        except Exception:  # noqa: BLE001 - the browser never started
-            pass
-        cls.httpd.shutdown()
         cls.con.close()
+        (autofill.profile, autofill.ask_model, autofill.choose_control, documents.render, documents.files,
+         documents.load, gmail.security_code, server.browser.search, db.connect) = cls.saved
+        cls.httpd.shutdown()
         cls.tmp.cleanup()
 
     def job(self, name: str, page: str):
@@ -103,11 +105,23 @@ class Applying(unittest.TestCase):
     def status(self, job_id: str) -> str:
         return self.con.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()["status"]
 
-    def page_text(self, job_id: str) -> str:
-        return browser.BROWSER.call(lambda b: b.tab(job_id).locator("body").inner_text())
-
     def field(self, job_id: str, label: str) -> dict:
         return next(f for f in self.form(job_id)["fields"] if f["label"].startswith(label))
+
+
+class Applying(Practice):
+    """Forms filled in Hal's own browser."""
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            browser.BROWSER.call(lambda b: b._ctx and b._ctx.close())
+        except Exception:  # noqa: BLE001 - the browser never started
+            pass
+        super().tearDownClass()
+
+    def page_text(self, job_id: str) -> str:
+        return browser.BROWSER.call(lambda b: b.tab(job_id).locator("body").inner_text())
 
     def test_reads_each_question_with_its_own_label_and_options(self):
         job_id = self.job("read", "form.html")
@@ -213,6 +227,57 @@ class Applying(unittest.TestCase):
         browser.BROWSER.call(lambda b: b.tab(job_id).close())
         server.act_auto(self.con, job_id, here=True)
         self.assertEqual(self.form(job_id)["state"], "needs")
+
+
+class InYourBrowser(Practice):
+    """Forms filled through the extension, in a browser that loads it as the applicant's Brave does."""
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        super().setUpClass()
+        tmp = Path(cls.tmp.name)
+        server.SERVABLE, cls.servable = (*server.SERVABLE, tmp.resolve()), server.SERVABLE
+        cls.helper = http.server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        threading.Thread(target=cls.helper.serve_forever, daemon=True).start()
+        os.environ["JOBHUNT_APPLY_BROWSER"] = "extension"
+        cls.pw = sync_playwright().start()
+        cls.ctx = cls.pw.chromium.launch_persistent_context(
+            str(tmp / "brave"), channel="chromium", headless=True,
+            args=[f"--disable-extensions-except={EXTENSION}", f"--load-extension={EXTENSION}"])
+        worker = cls.ctx.service_workers[0] if cls.ctx.service_workers else cls.ctx.wait_for_event("serviceworker")
+        worker.evaluate("url => chrome.storage.local.set({hal: url})", f"http://127.0.0.1:{cls.helper.server_address[1]}")
+        for _ in range(60):
+            if extension.connected():
+                break
+            cls.ctx.pages[0].wait_for_timeout(500)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.ctx.close()
+        cls.pw.stop()
+        cls.helper.shutdown()
+        cls.helper.server_close()
+        server.SERVABLE = cls.servable
+        os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
+        super().tearDownClass()
+
+    def tab(self, address: str):
+        # Playwright hears of tabs the extension opened only while it is waiting on something.
+        self.ctx.pages[0].wait_for_timeout(300)
+        return next(t for t in reversed(self.ctx.pages) if address in t.url)
+
+    def test_fills_the_first_page_and_leaves_what_it_cannot_answer(self):
+        job_id = self.job("ext-fill", "form.html")
+        said = server.act_auto(self.con, job_id)
+        self.assertIn("1 required question", said)
+        page = self.tab("form.html")
+        self.assertEqual(page.input_value("#fn"), "Ada")
+        self.assertEqual(page.inner_text("#uni-shown"), "University")
+        self.assertTrue(page.is_checked("#rtw-y"))
+        self.assertEqual(page.input_value("#heard"), "Company website")
+        self.assertEqual(page.input_value("#notice"), "0")
+        self.assertEqual(page.input_value("#dob"), "")
 
 
 class Answers(unittest.TestCase):

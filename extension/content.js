@@ -27,13 +27,36 @@
     }
   }
 
-  async function comboboxOptions(el) {
+  // Dropdowns: opened, read through page.js's halOptions, and closed again without disturbing the form.
+  function openList(el) {
+    el.focus();
     tap(el);
-    await sleep(300);
-    const options = [...document.querySelectorAll('[role=option]')].filter(visible)
-      .map(o => o.innerText.trim()).filter(Boolean);
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    return options.slice(0, 400);
+    if (!halOptions(el.getAttribute('data-hal-id')).length)
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+  }
+  function closeList(el) {
+    el.blur();
+    if (document.querySelector('[data-hal-opt]'))
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  }
+  // A list fetched from the site as it opens is given time to arrive.
+  async function listed(hid, waits = 3) {
+    let options = [];
+    for (let i = 0; i < waits && !options.length; i++) { await sleep(300); options = halOptions(hid); }
+    return options;
+  }
+  async function comboboxOptions(el) {
+    const hid = el.getAttribute('data-hal-id');
+    halStale();
+    openList(el);
+    let options = await listed(hid);
+    if (!options.length) {
+      // The first press can be spent closing the list of the control before.
+      openList(el);
+      options = await listed(hid, 2);
+    }
+    closeList(el);
+    return options;
   }
 
   async function read(p) {
@@ -89,25 +112,96 @@
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  // Text goes in through the browser's own editing command, as typing or pasting would: the
+  // page sees ordinary input events, rich-text editors update their model, and Ctrl+Z works.
+  function typeText(el, text, custom) {
+    el.focus();
+    if (custom) document.getSelection().selectAllChildren(el);
+    else try { el.select(); } catch { /* a box that cannot be selected is replaced below */ }
+    const typed = document.execCommand('insertText', false, text);
+    const now = custom ? el.innerText : el.value;
+    if (!typed || norm(now) !== norm(text)) {
+      if (custom) el.innerText = text;
+      else setValue(el, text);
+    }
+  }
+
+  const norm = t => String(t ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  function bestOption(options, value) {
+    const v = norm(value);
+    for (const test of [o => norm(o) === v, o => norm(o).startsWith(v), o => norm(o).includes(v)]) {
+      const i = options.findIndex(test);
+      if (i >= 0) return i;
+    }
+    return -1;
+  }
+
+  // A date box takes yyyy-mm-dd, whatever way the answer writes the date.
+  function isoDate(value) {
+    const m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(String(value).trim());
+    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    const d = new Date(value);
+    return isNaN(d) ? String(value) : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  const isOn = el => el.checked === true || el.getAttribute('aria-checked') === 'true'
+    || el.getAttribute('aria-pressed') === 'true' || /(^|[\s_-])(active|selected|checked)/i.test(el.className);
+  // Styled radios and tick boxes hide the control; its label takes the click instead.
   function setChecked(el, want) {
-    if (el.checked !== want) el.click();
+    if (isOn(el) === want) return;
+    el.click();
+    if (isOn(el) !== want && el.labels && el.labels[0]) el.labels[0].click();
+  }
+
+  // Chooses `value` in a dropdown: opens it, types to narrow a long or searched list, presses the option.
+  async function pick(el, f, value) {
+    value = String(value);
+    halStale();
+    openList(el);
+    let options = await listed(f.hid);
+    if (!options.length) { openList(el); options = await listed(f.hid, 2); }
+    let index = bestOption(options, value);
+    if (index < 0 && f.typeable) {
+      // "London, United Kingdom" may be wanted as a city or as a country.
+      const parts = value.split(',').map(x => x.trim()).filter(Boolean);
+      for (const query of new Set([value, ...parts, value.split(/\s+/)[0].replace(/,$/, '')])) {
+        typeText(el, query, false);
+        for (let i = 0; i < 8 && index < 0; i++) {
+          await sleep(400);
+          options = halOptions(f.hid);
+          index = bestOption(options, value);
+          if (index < 0 && options.length && query !== value) index = bestOption(options, query);
+        }
+        if (index >= 0) break;
+      }
+    }
+    const option = index >= 0 && halAll(`[data-hal-opt="${index}"]`)[0];
+    if (!option) {
+      closeList(el);
+      throw new Error(`no option matching "${value}"` + (options.length ? `; it offers ${options.slice(0, 6).join(', ')}` : ''));
+    }
+    tap(option);
+    await sleep(250);
   }
 
   async function fillOne(f, files) {
     const value = f.value;
     if (f.kind === 'radio' || f.kind === 'checkgroup') {
-      const wanted = Array.isArray(value) ? value : [value];
+      const wanted = (Array.isArray(value) ? value : [value]).map(norm);
+      const missing = wanted.find(w => !f.options.some(o => norm(o) === w));
+      if (missing !== undefined) throw new Error(`no option "${missing}"`);
+      const first = tagged(`${f.hid}:0`);
+      if (first) first.scrollIntoView({ block: 'center' });
       f.options.forEach((option, i) => {
         const el = tagged(`${f.hid}:${i}`);
-        if (f.kind === 'radio' && wanted.includes(option)) setChecked(el, true);
-        else if (f.kind === 'checkgroup') setChecked(el, wanted.includes(option));
+        const chosen = wanted.includes(norm(option));
+        if (el && (chosen || f.kind === 'checkgroup')) setChecked(el, chosen);
       });
       return;
     }
     const el = tagged(f.hid);
     if (!el) throw new Error('the field is no longer on the page');
-    if (f.kind === 'checkbox') setChecked(el, Boolean(value));
-    else if (f.kind === 'file') {
+    if (f.kind === 'file') {
       const file = files[value];
       const bytes = Uint8Array.from(atob(file.data), c => c.charCodeAt(0));
       const transfer = new DataTransfer();
@@ -115,30 +209,36 @@
       el.files = transfer.files;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
-    } else if (f.kind === 'select') {
-      const option = [...el.options].find(o => o.text.replace(/\s+/g, ' ').trim() === value);
-      if (!option) throw new Error(`no option "${value}"`);
-      setValue(el, option.value);
-    } else if (f.kind === 'combobox') {
-      el.focus();
-      tap(el);
-      setValue(el, String(value));
-      await sleep(600);
-      const options = [...document.querySelectorAll('[role=option]')].filter(visible);
-      const option = options.find(o => o.innerText.trim() === String(value)) || options[0];
-      if (!option) throw new Error('no option appeared to choose');
-      tap(option);
-    } else {
-      el.focus();
-      setValue(el, String(value));
-      el.dispatchEvent(new Event('blur', { bubbles: true }));
+      // The site reads the file before the form is ready to go on.
+      await sleep(1000);
+      return;
     }
+    el.scrollIntoView({ block: 'center' });
+    if (f.kind === 'checkbox') setChecked(el, Boolean(value));
+    else if (f.kind === 'select') {
+      const options = [...el.options];
+      const index = bestOption(options.map(o => o.text), value);
+      if (index < 0) throw new Error(`no option "${value}"`);
+      el.focus();
+      setValue(el, options[index].value);
+    } else if (f.kind === 'combobox') {
+      await pick(el, f, value);
+    } else {
+      let text = el.type === 'date' ? isoDate(value) : String(value);
+      if (el.maxLength > 0) text = text.slice(0, el.maxLength);
+      if (el.type === 'date') { el.focus(); setValue(el, text); }
+      else typeText(el, text, el.isContentEditable);
+    }
+    // Many forms check and keep an answer only when the box is left.
+    el.blur();
   }
 
   async function fill(p) {
     const errors = {};
     for (const f of p.fields) {
       try { await fillOne(f, p.files); } catch (e) { errors[f.hid] = String(e.message || e).slice(0, 200); }
+      // One answer at a time, at about the pace of a quick paste, so each is taken before the next.
+      await sleep(120 + Math.random() * 200);
     }
     return { errors };
   }

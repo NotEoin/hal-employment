@@ -3,6 +3,8 @@
 // Only tabs Hal opened for a job, and tabs those open, are ever touched.
 
 const HAL = "http://127.0.0.1:8737";
+// The helper's address: the default, unless storage names another (the tests run their own helper).
+const hal = async () => (await chrome.storage.local.get("hal")).hal || HAL;
 const HEADERS = { "X-Hal": "1", "Content-Type": "application/json" };
 const SEARCH = "https://duckduckgo.com/?q=";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -103,7 +105,7 @@ const COMMANDS = {
     // Files come through the worker: a page may not fetch from the helper itself.
     const files = {};
     for (const path of paths) {
-      const reply = await fetch(`${HAL}/files?path=${encodeURIComponent(path)}`);
+      const reply = await fetch(`${await hal()}/files?path=${encodeURIComponent(path)}`);
       if (!reply.ok) throw new Error(`could not read ${path.split("/").pop()}`);
       files[path] = { name: path.split("/").pop(), type: reply.headers.get("Content-Type") || "application/pdf",
                       data: base64(await reply.arrayBuffer()) };
@@ -154,7 +156,7 @@ async function loop() {
     for (;;) {
       let command;
       try {
-        const reply = await fetch(`${HAL}/api/ext/poll`, {
+        const reply = await fetch(`${await hal()}/api/ext/poll`, {
           method: "POST", headers: HEADERS, body: "{}", signal: AbortSignal.timeout(25000) });
         command = await reply.json();
       } catch {
@@ -169,7 +171,7 @@ async function loop() {
       } catch (e) {
         result = { id: command.id, ok: false, error: String(e.message || e) };
       }
-      await fetch(`${HAL}/api/ext/result`, { method: "POST", headers: HEADERS, body: JSON.stringify(result) })
+      await fetch(`${await hal()}/api/ext/result`, { method: "POST", headers: HEADERS, body: JSON.stringify(result) })
         .catch(() => {});
     }
   } finally {
