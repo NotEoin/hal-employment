@@ -270,3 +270,15 @@ label.check { display: flex; gap: 8px; align-items: baseline; margin: 8px 0; }
 .opt-row input { margin-top: 5px; width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .flags-box { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
 .flags-box ul { margin: 6px 0 0; padding-left: 18px; }
+/* CV scores */
+.score-head { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.score-head .big { font-size: 42px; font-weight: 700; line-height: 1; }
+.score-head .big span { font-size: 15px; color: var(--muted); font-weight: 500; }
+.big.good { color: var(--good); } .big.warn { color: var(--warn); } .big.bad { color: var(--bad); }
+.score-group { margin-top: 18px; }
+.check-row { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.dot-score { width: 9px; height: 9px; border-radius: 50%; flex: none; transform: translateY(-1px); }
+.dot-score.good { background: var(--good); } .dot-score.warn { background: var(--warn); } .dot-score.bad { background: var(--bad); }
+table.fit { width: 100%; border-collapse: collapse; margin-top: 12px; }
+table.fit th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+table.fit td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }

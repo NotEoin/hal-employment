@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import adopt, autofill, browser, contacts, cv, cvbuild, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
+from .. import adopt, autofill, browser, contacts, cv, cvbuild, cvscore, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
 from ..config import CONFIG
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -819,11 +819,45 @@ def base_cv() -> dict:
     if not pdf.exists():
         cv.render(cv.load(), BASE_CV)
     built = json.loads(cv.BUILT.read_text()) if cv.BUILT.exists() else None
-    return {"cv": cv.for_editing(), "site": cv._apply(cv.origin(), [], keep_hidden=True), "origin": cv.origin_name(),
+    review = json.loads(REVIEW.read_text()) if REVIEW.exists() else None
+    if review:
+        review["stale"] = review.get("of") != cvscore.fingerprint(cv.load())
+    return {"score": cvscore.score(cv.load(), pdf), "review": review,"cv": cv.for_editing(), "site": cv._apply(cv.origin(), [], keep_hidden=True), "origin": cv.origin_name(),
             "changes": len(cv.overrides()), "pdf": str(pdf), "sources": cvbuild.sources(),
             "options": {**cvbuild.OPTIONS, **((built or {}).get("options") or {})},
             "built": built and {"at": built["built"], "flags": built["flags"],
                                 "pdf": str(cvbuild.PREVIEW / "Firstname-Lastname-CV.pdf")}}
+
+
+REVIEW = cv.DATA / "cv-review.json"  # the model's last read of the base CV
+
+
+def act_review_cv(con, _job_id: str) -> str:
+    """Has the local model read the base CV as a recruiter would."""
+    base = cv.load()
+    out = cvscore.review(cv.facts_text_of(base))
+    if out["note"]:
+        raise RuntimeError(out["note"])
+    REVIEW.write_text(json.dumps({**out, "at": db.now(), "of": cvscore.fingerprint(base)}) + "\n")
+    return f"reviewed: {out['average']} out of 5 on average"
+
+
+def _match_path(job) -> Path:
+    return documents.pack_dir(job) / "match.json"
+
+
+def act_match(con, job_id: str) -> str:
+    """Checks this application's CV against its advert: requirements met, and skills named."""
+    job = _job(con, job_id)
+    docs = documents.load(con, job)
+    mine = documents.current_cv(job, docs)
+    out = cvscore.match(job, cv.facts_text_of(mine), docs.get("letter") or "")
+    if out["note"] and out["coverage"] is None:
+        raise RuntimeError(out["note"])
+    path = _match_path(job)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({**out, "at": db.now()}) + "\n")
+    return f"{out['label']}: {out['coverage']}% of what the advert asks for"
 
 
 def act_build_cv(con, _job_id: str, options: dict) -> str:
@@ -1079,6 +1113,9 @@ class Handler(BaseHTTPRequestHandler):
         return {"job": {**_card(con, r), "description": r["description"]},
                 "summary": documents.summary(r), "docs": docs, "files": documents.files(r),
                 "cv": documents.current_cv(r, docs), "cv_edited": bool(docs.get("cv")),
+                "match": json.loads(_match_path(r).read_text()) if _match_path(r).exists() else None,
+                "cv_score": cvscore.score(documents.current_cv(r, docs), documents.pack_dir(r) / "Firstname-Lastname-CV.pdf")
+                            if (documents.pack_dir(r) / "Firstname-Lastname-CV.pdf").exists() else None,
                 "application": _app(con, job_id), "events": [dict(e) for e in events],
                 "todos": [dict(t) for t in todos],
                 "emails": [{**dict(e), "url": tasks.thread_url(e["thrid"])} for e in emails],
@@ -1136,6 +1173,11 @@ class Handler(BaseHTTPRequestHandler):
                 return {"sources": cvbuild.sources()}
             if route == "cv/build":
                 return run_action("_cvbuild", "building your CV", act_build_cv, "_cvbuild", body.get("options") or {})
+            if route == "cv/words":
+                cvscore.add_words(body.get("words") or [])
+                return {"ok": True}
+            if route == "cv/review":
+                return run_action("_cvreview", "reading your CV as a recruiter", act_review_cv, "_cvreview")
             if route == "cv/origin":
                 cv.set_origin(body["origin"])
                 cv.render(cv.load(), BASE_CV)
@@ -1194,6 +1236,8 @@ class Handler(BaseHTTPRequestHandler):
             return run_action(job_id, "applying", act_auto, job_id, bool(body.get("here")))
         if action == "adopt":
             return run_action(job_id, "filling your tab", act_adopt, job_id, body.get("url", ""))
+        if action == "match":
+            return run_action(job_id, "checking your CV against the advert", act_match, job_id)
         if action == "page":
             # Asked from the job's tab: fill what that page shows that is still empty.
             return run_action(job_id, "filling this page", act_page, job_id)

@@ -18,7 +18,7 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import adopt, autofill, browser, cv, cvbuild, db, documents, extension, gmail  # noqa: E402
+from jobhunt import adopt, autofill, browser, cv, cvbuild, cvscore, db, documents, extension, gmail  # noqa: E402
 from jobhunt.web import server  # noqa: E402
 
 SITE = Path(__file__).parent / "site"
@@ -408,6 +408,13 @@ class BaseCv(unittest.TestCase):
         self.assertEqual((base["skills"][0][1], base["summary"]), (["Python"], "Builds careful things."))
         self.assertNotIn("_key", base["projects"][0])
 
+    def test_skill_groups_can_be_rearranged(self):
+        mine = cv.for_editing()
+        mine["skills"] = [["Languages", ["Python"]], ["Tools", ["Git"]]]
+        cv.save_base(mine)
+        self.site["skills"].append(["Web", ["React"]])
+        self.assertEqual(cv.load()["skills"], [["Languages", ["Python"]], ["Tools", ["Git"]]])
+
     def test_a_renamed_entry_is_still_matched_to_the_websites(self):
         mine = cv.for_editing()
         mine["projects"][0]["name"] = "Hal, a local assistant"
@@ -482,6 +489,65 @@ class BuildingCv(unittest.TestCase):
     def test_nothing_is_built_without_material(self):
         with self.assertRaisesRegex(RuntimeError, "add some material"):
             cvbuild.build({"website": False})
+
+
+class Scoring(unittest.TestCase):
+    """Hal's CV layout read back as a parser reads it, and the CV graded by rule."""
+
+    def cv(self, body: str) -> dict:
+        base = cv.printable(cv.site())
+        base["projects"] = [{**base["projects"][0], "body": body}]
+        base["experience"] = []
+        return base
+
+    def render(self, data: dict) -> Path:
+        return cv.render(data, Path(tempfile.mkdtemp()))
+
+    def test_bullets_and_marks_read_back_in_order(self):
+        pdf = self.render(self.cv("- Built a thing that answers from notes.\n- Wrote 113 tests that run anywhere."))
+        text = cvscore.pdf_text(pdf)
+        self.assertIn("- Built a thing that answers from notes.", text)
+        self.assertRegex(text, r"Selected modules \(out of 100\): [^\n]*\d")
+        self.assertEqual(cvscore.parsing(self.cv(""), pdf)[4]["score"], 1.0)  # tables read back in order
+
+    def test_bullets_with_results_outscore_a_paragraph_of_duties(self):
+        duties = self.cv("Responsible for the backend. Helped with various features and worked on testing.")
+        results = self.cv("- Built the backend in Flask, serving 3 clients.\n- Cut test time from 9 to 2 minutes "
+                          "by running suites in parallel.")
+        worse, better = cvscore.score(duties, self.render(duties)), cvscore.score(results, self.render(results))
+        self.assertGreater(better["mark"], worse["mark"])
+        verbs = [next(c["score"] for g in r["groups"] for c in g["checks"] if c["name"].startswith("Lines open"))
+                 for r in (worse, better)]
+        self.assertLess(verbs[0], verbs[1])
+
+    def test_a_cv_no_parser_can_read_is_capped(self):
+        empty = Path(tempfile.mkdtemp()) / "image.pdf"
+        empty.write_bytes(b"%PDF-1.4\n%%EOF\n")
+        self.assertLessEqual(cvscore.score(self.cv("- Built it."), empty)["mark"], 10)
+
+    def test_a_labelled_line_is_judged_by_its_verb(self):
+        self.assertTrue(cvscore.strong_start("Dissertation, A Title: tested whether models segment images"))
+        self.assertTrue(cvscore.strong_start("Built a pipeline over four datasets: results cached by config"))
+        self.assertFalse(cvscore.strong_start("Responsible for: testing"))
+
+    def test_evidence_the_cv_does_not_hold_counts_as_missing(self):
+        job = {"title": "Engineer", "company": "Acme", "description": "You have strong Python. A 2:1 degree is required."}
+        replies = iter([{"requirements": [
+                            {"need": "Python", "kind": "must", "weight": 3, "quote": "You have strong Python."},
+                            {"need": "Degree", "kind": "knockout", "weight": 3, "quote": "A 2:1 degree is required"},
+                            {"need": "Rust", "kind": "must", "weight": 2, "quote": "made up by the model"}]},
+                        {"evidence": [{"id": 1, "match": "direct", "quote": "Built a parser in Python"},
+                                      {"id": 2, "match": "direct", "quote": "a 2:1 in Physics"}]}])
+        saved = cvscore.llm.chat_json, cvscore.gpu.busy
+        cvscore.llm.chat_json, cvscore.gpu.busy = lambda *a, **k: next(replies), lambda: None
+        try:
+            out = cvscore.match(job, "- Built a parser in Python.\nDegree, Grade")
+        finally:
+            cvscore.llm.chat_json, cvscore.gpu.busy = saved
+        # The requirement the advert never stated is dropped; the degree evidence is not in the CV.
+        self.assertEqual([r["need"] for r in out["requirements"]], ["Python", "Degree"])
+        self.assertEqual([r["match"] for r in out["requirements"]], ["direct", "missing"])
+        self.assertEqual((out["label"], out["knockouts_unmet"]), ("Long shot", ["Degree"]))
 
 
 class Answers(unittest.TestCase):

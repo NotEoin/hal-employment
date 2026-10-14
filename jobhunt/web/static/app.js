@@ -277,6 +277,7 @@ function paneDocs(d) {
     ${s.flags.length ? `<div class="card pad" style="margin-bottom:16px"><h4 style="margin:0 0 8px" class="muted small-t">CHECK BEFORE SENDING</h4>
       <ul class="flags">${s.flags.map(f => `<li class="${flagClass(f)}">${esc(f)}</li>`).join("")}</ul></div>` : ""}
     ${!s.has_pack ? `<div class="progress error">No pack was drafted for this job; the documents are empty.</div>` : ""}
+    ${fitCard(d)}
     <div class="split docs">
       <div class="card pad">
         <div class="tabs">${tabs.map(([k, n]) => `<button class="tab ${state.tab === k ? "on" : ""}" data-tab="${k}">${n}</button>`).join("")}</div>
@@ -328,6 +329,7 @@ function paneDocs(d) {
     $("[data-expand]", pane).onclick = () => viewPdf(file);
   };
   $$("[data-tab]", pane).forEach(b => b.onclick = () => { state.tab = b.dataset.tab; draw(); });
+  $("[data-match]", pane).onclick = () => startAction(id, "match", {});
   const save = async () => {
     const r = await guard(() => api(`job/${enc(id)}/docs`, { docs }), "Saved and re-rendered");
     d.files = r.files;
@@ -619,7 +621,7 @@ function cvEditor(box, cv, { site = null, original = "the website's", reorder = 
   const mover = (section, i, n) => reorder ? `<button class="small ghost" data-move="${section}.${i}.-1" ${i ? "" : "disabled"} title="Move up">↑</button>
     <button class="small ghost" data-move="${section}.${i}.1" ${i < n - 1 ? "" : "disabled"} title="Move down">↓</button>` : "";
   const draw = () => {
-    box.innerHTML = `<p class="small-t muted" style="margin:0">Words between ** and ** are printed in bold.</p>
+    box.innerHTML = `<p class="small-t muted" style="margin:0">Words between ** and ** are printed in bold; lines that start with "- " are printed as bullets.</p>
       ${field("title", "Title line")}${field("summary", "Summary", true)}
       ${CV_LISTS.map(([section, name, fields]) => `<h4 class="cv-h">${name}</h4>${(cv[section] || []).map((item, i, all) => `
         <div class="cv-entry ${item.hidden ? "out" : ""}"><div class="cv-top"><b class="grow">${esc(item[fields[0]])}</b>${mover(section, i, all.length)}
@@ -653,11 +655,11 @@ async function viewCv() {
   main.innerHTML = `<div class="head"><div><h1>Your CV</h1>
       <p>Every application's CV is made from this one. For each job, Hal puts the most relevant projects and skills first and
       may change the title line; you can edit any one application's CV from its Documents step.</p></div></div>
-    <div class="tabs">${[["edit", "Edit"], ["build", "Build from your material"]].map(([k, n]) =>
+    <div class="tabs">${[["edit", "Edit"], ["score", `Score: ${d.score.mark} (${d.score.grade})`], ["build", "Build from your material"]].map(([k, n]) =>
       `<button class="tab ${tab === k ? "on" : ""}" data-cvtab="${k}">${n}</button>`).join("")}</div>
     <div id="cv-pane"></div>`;
   $$("[data-cvtab]", main).forEach(b => b.onclick = () => { state.cvTab = b.dataset.cvtab; viewCv(); });
-  (tab === "edit" ? cvEditTab : cvBuildTab)($("#cv-pane"), d, from);
+  ({ edit: cvEditTab, score: cvScoreTab, build: cvBuildTab })[tab]($("#cv-pane"), d, from);
 }
 
 function cvEditTab(pane, d, from) {
@@ -677,6 +679,80 @@ function cvEditTab(pane, d, from) {
     $("#preview").innerHTML = pdfPages(r.pdf);
     $("#cv-status").textContent = status(r);
   };
+}
+
+// A scorecard: the mark, then each group's checks, weakest first, with what to change.
+function scorecard(sc) {
+  const tone = v => v >= 0.85 ? "good" : v >= 0.6 ? "warn" : "bad";
+  return `<div class="score-head"><div class="big ${tone(sc.mark / 100)}">${sc.mark}<span>/100</span></div>
+      <div><b>Grade ${sc.grade}</b><div class="small-t muted">${sc.capped.length ? `Held down by: ${esc(sc.capped.join(", "))}.`
+        : "The same CV always gets the same mark: every check below is a rule, not an opinion."}</div></div></div>
+    ${sc.groups.map(g => `<div class="score-group"><div class="bar" style="margin:0"><h4 class="cv-h grow" style="margin:0">${esc(g.name)}</h4>
+        <span class="chip ${tone((g.score ?? 0) / 100)}">${g.score ?? "-"}</span></div>
+      ${[...g.checks].sort((a, b) => a.score - b.score).map(c => `<div class="check-row">
+        <span class="dot-score ${tone(c.score)}" title="${Math.round(c.score * 100)} of 100"></span>
+        <div class="grow"><b>${esc(c.name)}</b> <span class="small-t muted">${esc(c.found)}</span>
+          ${c.fix ? `<div class="small-t">${esc(c.fix)}</div>` : ""}
+          ${c.words && c.words.length ? `<button class="small ghost" data-words="${esc(c.words.join(" "))}">These are all spelled correctly</button>` : ""}
+          </div></div>`).join("")}</div>`).join("")}`;
+}
+
+function cvScoreTab(pane, d) {
+  const r = d.review, running = state.last?.actions?._cvreview?.state === "running";
+  pane.innerHTML = `<div class="split docs">
+    <div class="card pad" id="scorecard">${scorecard(d.score)}</div>
+    <div class="card pad"><h3 style="margin-top:0">A recruiter's read</h3>
+      <p class="small-t muted">The local model reads your CV as a UK graduate recruiter would and grades it 1-5 on each point.
+        Models vary from one read to the next, so this sits beside the mark rather than in it.</p>
+      ${r ? `${r.stale ? `<div class="progress">This read is of an earlier version of your CV.</div>` : ""}
+        <p><b>${r.average} out of 5</b> on average, ${esc(ago(r.at))}</p>
+        ${r.checks.map(c => `<div class="check-row"><span class="dot-score ${c.score >= 0.75 ? "good" : c.score >= 0.5 ? "warn" : "bad"}"></span>
+          <div class="grow"><b>${esc(c.name)}</b> <span class="small-t muted">${esc(c.found)}</span>
+          ${c.fix ? `<div class="small-t">${esc(c.fix)}</div>` : ""}</div></div>`).join("")}`
+        : `<p class="muted">Not read yet.</p>`}
+      <div class="bar"><span class="grow small-t muted" id="review-status">${running ? "reading..." : ""}</span>
+        <button data-review ${running ? "disabled" : ""}>${r ? "Read it again" : "Ask Hal to read it"}</button></div></div></div>`;
+  $$("[data-words]", pane).forEach(b => b.onclick = async () => {
+    await guard(() => api("cv/words", { words: b.dataset.words.split(" ") }), "Added to your word list");
+    viewCv();
+  });
+  $("[data-review]", pane).onclick = async () => {
+    await guard(() => api("cv/review", {}));
+    $("[data-review]", pane).disabled = true;
+    $("#review-status").textContent = "reading... (a minute or two)";
+    for (;;) {
+      await new Promise(ok => setTimeout(ok, 2500));
+      const a = (await api("state")).actions._cvreview;
+      if (!a || a.state !== "running") {
+        if (a && a.state === "error") toast(a.message, "error");
+        if (state.route === "cv") viewCv();
+        return;
+      }
+    }
+  };
+}
+
+// How well this application's CV fits its advert: requirement by requirement, with the CV's own words as evidence.
+function fitCard(d) {
+  const m = d.match, sc = d.cv_score, running = d.action && d.action.state === "running";
+  const label = { "Strong": "good", "Reasonable stretch": "warn", "Long shot": "bad" };
+  const icon = { direct: ["good", "Shown"], adjacent: ["warn", "Close"], missing: ["bad", "Not shown"] };
+  return `<div class="card pad" style="margin-bottom:16px"><div class="bar" style="margin:0">
+      <h3 class="grow" style="margin:0">Fit for this job</h3>
+      ${sc ? `<span class="chip ${sc.mark >= 85 ? "good" : sc.mark >= 60 ? "warn" : "bad"}" title="This application's CV, graded by rule">CV ${sc.mark} (${sc.grade})</span>` : ""}
+      ${m ? `<span class="chip ${label[m.label] || ""}">${esc(m.label || "")}${m.coverage != null ? `: ${m.coverage}%` : ""}</span>` : ""}
+      <button class="small" data-match ${running ? "disabled" : ""}>${m ? "Check again" : "Check fit"}</button></div>
+    ${m ? `${m.knockouts_unmet.length ? `<div class="progress error" style="margin-top:10px">Conditions the CV does not show you meet:
+        ${esc(m.knockouts_unmet.join("; "))}</div>` : ""}
+      <table class="fit"><tr><th>The advert asks for</th><th></th><th>Where your CV shows it</th></tr>
+        ${m.requirements.map(r => `<tr><td><b>${esc(r.need)}</b><div class="small-t muted">${esc(r.kind)}${r.weight === 3 ? ", central" : ""}: "${esc(r.advert)}"</div></td>
+          <td><span class="chip ${icon[r.match][0]}">${icon[r.match][1]}</span></td><td class="small-t">${r.evidence ? `"${esc(r.evidence)}"` : ""}</td></tr>`).join("")}</table>
+      ${m.keywords.missing.length ? `<p class="small-t"><b>Skills the advert names that your CV does not:</b> ${esc(m.keywords.missing.join(", "))}.
+        If you have used any of them, add them where you used them; if not, leave them out.</p>` : ""}
+      <p class="small-t muted">Checked ${esc(ago(m.at))}. Every quote is checked against the advert and your CV; a requirement whose evidence
+        could not be found in your CV counts as not shown.</p>`
+    : `<p class="small-t muted" style="margin:8px 0 0">Hal lists what the advert asks for, then looks for each in this application's CV,
+        quoting both. It takes a minute or two with the local model.</p>`}</div>`;
 }
 
 const CV_OPTIONS = [["website", "Also read my website CV"], ["results", "Open entries with results, measured where my material measures them"],

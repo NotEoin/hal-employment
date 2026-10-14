@@ -38,7 +38,8 @@ ORIGIN = DATA / "cv-origin"  # "built" when Hal's CV starts from the built one r
 # Entries are matched across versions by what names them, not by position, so the site can add or reorder them.
 NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}
 PAIRS = ("skills", "additional")  # entries written as [name, value]; only the value is edited
-TEXT = ("title", "summary", "moreProjects", "closing")
+# Whole fields the applicant may set: text, and for Hal's layout the number of projects drawn in full.
+TEXT = ("title", "summary", "moreProjects", "closing", "pdfProjects")
 
 
 def site() -> dict:
@@ -102,6 +103,8 @@ def printable(data: dict) -> dict:
     for section in NAMED_BY:
         data[section] = [{k: v for k, v in x.items() if k not in ("_key", "hidden")}
                          for x in data.get(section) or [] if not x.get("hidden")]
+    for section in PAIRS:
+        data[section] = [x for x in data.get(section) or [] if x[1]]
     return data
 
 
@@ -119,6 +122,12 @@ def save_base(edited: dict) -> list[dict]:
     """Stores where an edited base CV differs from the one it starts from, and returns those changes."""
     original = origin()
     changes = [{"field": f, "value": edited[f]} for f in TEXT if f in edited and edited[f] != original.get(f)]
+    for section in PAIRS:
+        names = [x[0] for x in edited.get(section) or []]
+        if names != [x[0] for x in original.get(section) or []]:
+            # Groups added, renamed or reordered: the section is kept whole, as the applicant wrote it.
+            changes.append({"field": section, "value": edited.get(section) or []})
+            edited = {**edited, section: []}
     for section in (*NAMED_BY, *PAIRS):
         for item in edited.get(section) or []:
             key = item[0] if section in PAIRS else item.get("_key", item.get(NAMED_BY[section]))
@@ -179,21 +188,11 @@ def _pdf_builder():
 
 
 def render(variant: dict, out_dir: Path) -> Path:
-    """Writes the variant's JSON and PDF into `out_dir` and returns the PDF path."""
+    """Writes the variant's JSON and its PDF, in Hal's layout for applications, into `out_dir`."""
+    from . import cvpdf
     out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = out_dir / "cv.json"
-    pdf_path = out_dir / "Firstname-Lastname-CV.pdf"
-    json_path.write_text(json.dumps(printable(variant), indent=2) + "\n")
-    builder = _pdf_builder()
-    builder.CONTENT, builder.OUT = json_path, pdf_path
-    try:
-        builder.build()
-    except ValueError:
-        # The builder prints OUT relative to the site root, which fails for a path
-        # outside it; the PDF is already written by then.
-        if not pdf_path.exists():
-            raise
-    return pdf_path
+    (out_dir / "cv.json").write_text(json.dumps(printable(variant), indent=2) + "\n")
+    return cvpdf.render(variant, out_dir)
 
 
 def facts_text() -> str:
