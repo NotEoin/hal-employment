@@ -8,6 +8,7 @@ Stdlib only, apart from Playwright for form filling.
 import json
 import mimetypes
 import re
+import subprocess
 import threading
 import time
 import traceback
@@ -42,6 +43,7 @@ ACTIONS: dict[str, dict] = {}
 KEPT: dict[str, dict] = {}  # by job, the answers its owner typed, by field, kept when a form is filled again
 WATCHING: set[str] = set()  # jobs whose tab Hal is watching for new pages and the site's confirmation
 # Most of an action's time is spent waiting on the browser thread, the model, or the applicant.
+PAGES: dict[tuple, bytes] = {}  # document pages drawn as images, by file, its change time and page number
 POOL = ThreadPoolExecutor(max_workers=6, thread_name_prefix="action")
 
 
@@ -900,6 +902,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.api_get(url.path[5:], parse_qs(url.query)))
             if url.path == "/files":
                 return self.serve_file(parse_qs(url.query).get("path", [""])[0])
+            if url.path == "/pages":
+                q = parse_qs(url.query)
+                return self.serve_page(q.get("path", [""])[0], int(q.get("page", ["1"])[0]))
             m = re.fullmatch(r"/doc/([^/]+)/(cv|letter)", url.path)
             if m:
                 return self.serve_doc(unquote(m.group(1)), m.group(2))
@@ -936,6 +941,25 @@ class Handler(BaseHTTPRequestHandler):
         if not any(root in path.parents for root in SERVABLE) or not path.is_file():
             return self._send(404, b"not found", "text/plain")
         self._send(200, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+
+    def serve_page(self, raw: str, page: int) -> None:
+        """Draws one page of a PDF as an image, so a document reads at the full width of the pane showing it."""
+        path = Path(unquote(raw)).resolve()
+        if not any(root in path.parents for root in SERVABLE) or path.suffix != ".pdf" or not path.is_file():
+            return self._send(404, b"not found", "text/plain")
+        key = (str(path), path.stat().st_mtime, page)
+        if key not in PAGES:
+            try:
+                out = subprocess.run(["pdftoppm", "-png", "-r", "160", "-f", str(page), "-l", str(page), str(path)],
+                                     capture_output=True, timeout=30, check=False)
+            except (OSError, subprocess.TimeoutExpired):
+                return self._send(404, b"no renderer", "text/plain")
+            if out.returncode or not out.stdout:
+                return self._send(404, b"no such page", "text/plain")
+            if len(PAGES) > 64:
+                PAGES.clear()
+            PAGES[key] = out.stdout
+        self._send(200, PAGES[key], "image/png")
 
     def serve_doc(self, job_id: str, which: str) -> None:
         """Shows a job's CV or cover letter full size, for the panel in the job's tab."""

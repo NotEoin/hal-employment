@@ -277,7 +277,7 @@ function paneDocs(d) {
     ${s.flags.length ? `<div class="card pad" style="margin-bottom:16px"><h4 style="margin:0 0 8px" class="muted small-t">CHECK BEFORE SENDING</h4>
       <ul class="flags">${s.flags.map(f => `<li class="${flagClass(f)}">${esc(f)}</li>`).join("")}</ul></div>` : ""}
     ${!s.has_pack ? `<div class="progress error">No pack was drafted for this job; the documents are empty.</div>` : ""}
-    <div class="split">
+    <div class="split docs">
       <div class="card pad">
         <div class="tabs">${tabs.map(([k, n]) => `<button class="tab ${state.tab === k ? "on" : ""}" data-tab="${k}">${n}</button>`).join("")}</div>
         <div id="editor"></div>
@@ -285,7 +285,9 @@ function paneDocs(d) {
           <button class="primary" data-save>Save and re-render</button></div>
         <p class="small-t muted">Hal uploads these PDFs and pastes this text into the form. If you change them after the form is filled, press "Start again" on the form so it takes the new ones.</p>
       </div>
-      <div class="card pad"><div class="tabs"><button class="tab on" id="prev-label">Preview</button></div><div id="preview"></div></div>
+      <div class="card pad preview-card"><div class="tabs"><button class="tab on" id="prev-label">Preview</button><span class="grow"></span>
+        <button class="small ghost" data-expand>Expand</button><a class="button small ghost" data-full target="_blank" rel="noopener">Open full size</a></div>
+        <div id="preview"></div></div>
     </div>`;
   const editor = $("#editor");
   const draw = () => {
@@ -306,8 +308,11 @@ function paneDocs(d) {
     copy && (copy.onclick = () => navigator.clipboard.writeText(docs.message).then(() => toast("Copied")));
     const file = state.tab === "cv" ? d.files.cv : d.files.letter;
     $("#prev-label").textContent = state.tab === "cv" ? "CV preview" : "Cover letter preview";
-    $("#preview").innerHTML = file ? `<iframe class="pdf" src="${fileUrl(file)}"></iframe>` :
-      `<div class="empty"><p>No PDF yet. Save to render it.</p></div>`;
+    $("#preview").innerHTML = file ? pdfPages(file) : `<div class="empty"><p>No PDF yet. Save to render it.</p></div>`;
+    const full = $("[data-full]", pane);
+    full.href = `/doc/${enc(id)}/${state.tab === "cv" ? "cv" : "letter"}`;
+    full.hidden = $("[data-expand]", pane).hidden = !file;
+    $("[data-expand]", pane).onclick = () => viewPdf(file);
   };
   $$("[data-tab]", pane).forEach(b => b.onclick = () => { state.tab = b.dataset.tab; draw(); });
   const save = async () => {
@@ -322,6 +327,26 @@ function paneDocs(d) {
     Object.assign(docs, r.docs); draw();
   };
   draw();
+}
+
+// A document's pages drawn as images at the full width of their box, so they read at a usable size.
+// Pages past the last fail to load and are dropped.
+function pdfPages(file) {
+  const t = Date.now();
+  return `<div class="pages">${[1, 2, 3, 4].map(n => `<img src="/pages?path=${enc(file)}&page=${n}&t=${t}" alt="Page ${n}"
+    onerror="this.remove()">`).join("")}</div>`;
+}
+
+// A document over the whole window; Escape or a click outside closes it.
+function viewPdf(file) {
+  const box = document.createElement("div");
+  box.className = "viewer";
+  box.innerHTML = pdfPages(file);
+  const close = () => { box.remove(); document.removeEventListener("keydown", key); };
+  const key = e => { if (e.key === "Escape") close(); };
+  box.onclick = e => { if (e.target === box) close(); };
+  document.addEventListener("keydown", key);
+  document.body.append(box);
 }
 
 function fieldControl(f) {
@@ -409,12 +434,16 @@ function paneForm(d) {
         ${filled ? `<h4 class="muted small-t" style="margin:0 0 8px">THE FORM AS HAL FILLED IT, ${esc(ago(form.filled.at)).toUpperCase()}</h4>
           ${form.filled.screenshot ? `<div class="shot-wrap"><img class="shot" src="${fileUrl(form.filled.screenshot)}" alt="The filled form"></div>`
             : `<p class="muted">The form is in ${esc(where)}.</p>`}
-          <div class="bar"><button class="primary" data-show>Show the form</button><span class="grow"></span>
+          ${own && form.press !== "apply" ? `<div class="bar"><button class="primary" data-show>Show the form</button>
+              ${Object.keys(d.files).map(k => `<a class="button ghost" href="/doc/${enc(id)}/${k}" target="_blank" rel="noopener">${k === "cv" ? "CV" : "Cover letter"}</a>`).join("")}</div>
+            <p class="small-t muted">Check the outlined answers in the job's tab and change anything you like there. Then press
+              ${form.final ? "Submit" : "Next"} on the form yourself. Hal fills each new page as it appears and marks the job applied
+              when the site confirms it. Changes you make in the form are remembered for the next one.</p>`
+          : `<div class="bar"><button class="primary" data-show>Show the form</button><span class="grow"></span>
             <button class="good" data-approve ${running ? "disabled" : ""}>Approve and ${does}</button></div>
           <p class="small-t muted">${form.press === "apply" ? `Approving presses Apply on the advert, which sends the CV stored in your account there.`
-            : own ? `Look over the form in its tab. When you approve, Hal enters any changes you made here; you press the form's own Submit button, and Hal marks the job applied when the site confirms it.`
             : form.final ? `Look over the form in ${esc(where)}: it is filled in and nothing has been sent. Approving enters any changes you made here, then presses the form's own submit button. That cannot be undone.`
-            : `This form has more pages. Approving moves it on; Hal stops again at the last page before anything is sent.`}</p>`
+            : `This form has more pages. Approving moves it on; Hal stops again at the last page before anything is sent.`}</p>`}`
         : `<h4 class="muted small-t" style="margin:0 0 8px">${running ? "HAL IS FILLING THE FORM IN" : "NOT FILLED IN YET"}</h4>
           <p class="muted">${running ? "The answers on the left are going into the form now." : `Press "Start again" to have Hal fill the form in.`}</p>`}
         ${form.submit ? `<div class="section"><h4>After submitting</h4>
