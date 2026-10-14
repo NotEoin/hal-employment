@@ -36,6 +36,10 @@
 </section>
 <section id="step2" class="hide">
  <div class="field"><label for="why">Why do you want to work here? *</label><textarea id="why" name="why" required maxlength="2000"></textarea></div>
+ <fieldset><legend>3. Referee</legend>
+  <div class="field"><label for="rn">Name</label><input id="rn" name="ref_name"></div>
+  <div class="field"><label for="re">Email</label><input id="re" name="ref_email" type="email"></div>
+ </fieldset>
  <div class="field"><label><input type="checkbox" name="consent" required> I agree to the privacy policy *</label></div>
  <div class="field"><label><input type="checkbox" name="news"> Send me the newsletter</label></div>
  <p class="err hide" id="err2" role="alert">Please complete the required fields.</p>
@@ -80,7 +84,8 @@ $('#send').onclick = () => {
   if (q.get('code') && $('#code').value !== 'A1b2C3d4') { $('#code-row').classList.remove('hide'); return; }
   window.halSent = { first: $('#fn').value, uni: chosen, rtw: document.querySelector('[name=rtw]:checked').value,
                      sponsor: $('[name=sponsor]').checked, news: $('[name=news]').checked, why: $('#why').value,
-                     cv: $('[name=resume]').files[0].name, heard: $('#heard').value, dob: $('#dob').value };
+                     cv: $('[name=resume]').files[0].name, heard: $('#heard').value, dob: $('#dob').value,
+                     referee: $('#rn').value + $('#re').value };
   document.body.innerHTML = '<h1>Thank you for applying</h1><p>Your application has been received.</p><pre id="sent">' + JSON.stringify(window.halSent) + '</pre>';
 };
 </script></body></html>

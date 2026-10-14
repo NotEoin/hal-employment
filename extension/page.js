@@ -191,6 +191,22 @@ function halExtract() {
     return had ? had[1] : 'h' + (n++);
   };
 
+  // Section headings, in page order: "Referee 1" or "Education" says whose details a bare "Name" or "Start date" asks for.
+  const heads = halAll('h1, h2, h3, h4, h5, legend, [role=heading], [class*="section-title" i], [class*="sectionTitle"], '
+      + '[class*="section-header" i], [class*="sectionHeader"]')
+    .filter(h => visible(h) && clean(h.innerText) && clean(h.innerText).length <= 80);
+  const sectionOf = (el, label) => {
+    let found = '';
+    for (const h of heads) {
+      if (!(h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) || h.contains(el)) continue;
+      // A legend heads only its own fieldset.
+      if (h.tagName === 'LEGEND' && !(h.parentElement && h.parentElement.contains(el))) continue;
+      const text = clean(h.innerText);
+      if (text !== label) found = text;
+    }
+    return found;
+  };
+
   const fields = [];
   for (const g of groups) {
     const lead = g.lead, el = lead.el, box = boxOf(g);
@@ -277,6 +293,8 @@ function halExtract() {
     const problem = errorIn(box, el);
     if (problem || el.getAttribute('aria-invalid') === 'true') f.invalid = problem || 'marked invalid';
     f.form = el.form ? [...document.forms].indexOf(el.form) : -1;
+    const section = sectionOf(el, f.label);
+    if (section) f.section = section;
     f.sig = [f.kind, f.name || '', f.label.slice(0, 120)].join('|');
     fields.push(f);
   }

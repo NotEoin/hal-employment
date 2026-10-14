@@ -123,6 +123,14 @@ RULES = [
     (r"grade|classification|\bgpa\b|\bresults?\b", "grade", [re.compile(r"first|1st", re.I)]),
     (r"graduat", "grad_year", [re.compile(r"2026", re.I)]),
 ]
+# Sections about someone or something other than the applicant now: their questions are never
+# answered with his own details, and dates there belong to that course or job.
+OTHER_PERSON = re.compile(r"referee|references?\b|emergency|next of kin|employment history|work history|"
+                          r"(previous|past|current|former) (employ|job|role|position)|employer details|"
+                          r"\bmanager\b|supervisor|dependant|spouse|partner'?s", re.I)
+HISTORY = re.compile(r"education|qualification|academic|employment|experience|training|course", re.I)
+# Answers about the job applied for, which a dated history section is not asking.
+ABOUT_THIS_JOB = {"start", "notice", "salary", "office", "relocate", "how_heard"}
 HEARD_SITE = [re.compile(r"(company|careers?|our) (web)?(site|page)|^website", re.I)]
 HEARD_BOARD = [re.compile(r"job ?board|job (site|website|search)|online (job|search)", re.I)]
 # Places and institutions are typed into search boxes that list nothing until asked.
@@ -137,6 +145,17 @@ def _norm(label: str, company: str = "") -> str:
     # Asked of every employer under its own name or initials.
     text = re.sub(r"\b(how did you (first )?(hear|find out|learn) (about|of)) .*", r"\1 the employer", text)
     return " ".join(re.sub(r"[^a-z0-9 ]", " ", text).split())
+
+
+def _asked(f: dict) -> str:
+    """The question a field asks, with its section when that says whose details it wants."""
+    section = f.get("section") or ""
+    return f"{section}: {f.get('label') or ''}" if OTHER_PERSON.search(section) else f.get("label") or ""
+
+
+def _key(f: dict, company: str = "") -> str:
+    """The question a field asks, reduced for remembering its answer; a referee's "Name" is not the applicant's."""
+    return _norm(_asked(f), company)
 
 
 def _choose(options: list[str], value: str, preferred: list) -> str | None:
@@ -195,10 +214,15 @@ def _diversity(f: dict, prof: dict) -> bool:
 
 def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
     label = f.get("label") or ""
+    section = f.get("section") or ""
+    if OTHER_PERSON.search(section):
+        return None
     listed = f["kind"] in ("select", "radio", "combobox", "checkgroup") and bool(f.get("options"))
     for pattern, key, preferred in RULES:
         if not re.search(pattern, label, re.I):
             continue
+        if key in ABOUT_THIS_JOB and HISTORY.search(section):
+            return None
         # A fact fits a short label, or a list that holds it; a standard answer fits a question of moderate length.
         if len(label) > (RULE_LABEL if key in ANSWERS else 400 if listed else FACT_LABEL):
             return None
@@ -243,12 +267,12 @@ def remember(con, fields: list[dict], company: str = "") -> int:
             continue
         if isinstance(value, str) and len(value) > 400:
             continue  # an essay answers one employer's question, not the next one's
-        question = _norm(f.get("label"), company)
+        question = _key(f, company)
         if len(question) < 3:
             continue
         con.execute("""INSERT INTO answers (question, label, answer, updated) VALUES (?, ?, ?, ?)
                        ON CONFLICT(question) DO UPDATE SET answer = excluded.answer, updated = excluded.updated""",
-                    (question, f["label"], db.json_text(value), db.now()))
+                    (question, _asked(f), db.json_text(value), db.now()))
         kept += 1
     con.commit()
     return kept
@@ -258,7 +282,7 @@ def _recall(con, f: dict, company: str = ""):
     """Returns the answer Firstname gave to this question before, shaped to the field, or None."""
     if con is None:
         return None
-    question = _norm(f.get("label"), company)
+    question = _key(f, company)
     row = con.execute("SELECT answer FROM answers WHERE question = ?", (question,)).fetchone()
     if row is None:
         known = [r["question"] for r in con.execute("SELECT question FROM answers")]
@@ -284,10 +308,36 @@ For free text, write plainly in the first person, within any limit the label or 
 states, and at most 120 words; short factual questions get short answers. If a field
 asks for something only when another answer applies and it does not apply, give "N/A"
 when the field is required and "" otherwise.
+Fields are listed in page order with the section heading they sit under. A field in a
+section about another person or another job (a referee, an emergency contact, a previous
+employer or manager) asks about that person or job, never about Firstname: answer it only from
+facts about them, else give "". Dates in an education or employment history are the dates
+of that course or job, not his availability. Salary: if the advert states no pay, never
+mention an advertised range.
 Never invent personal details (addresses, dates of birth, reference numbers, names of
 people) or claim experience, skills or circumstances the facts do not state: if the
 facts do not answer a field, give "" and sure false. Set sure false for anything a
 person should check."""
+
+REVIEW = """You check answers that simple keyword rules put into a job application form for
+Firstname Lastname. Each line gives a field's id, the section it sits under, its question, and the
+answer chosen. Reply with JSON only: {"wrong": [{"hid": ..., "why": a few words}]}.
+List a field only when its answer plainly does not answer that question where it sits: his
+own name or email in a referee's details, his availability date as the start date of a
+course, an answer to some other question, a choice that contradicts the question. Leave out
+anything that is plausibly right; most answers are."""
+# Sources of answers chosen by keyword, which the review pass checks against the question.
+REVIEWED = ("profile", "your earlier answer", "documents: drafted answer")
+
+
+def profile_for(job) -> dict:
+    """Returns the profile with the answers that depend on the job settled for this one."""
+    prof = profile()
+    prof["how_heard"] = HOW_HEARD.get(job["source"], "Company careers page")
+    if not re.search(r"\d", job["salary"] or "") and score.max_salary(job["description"] or "") is None:
+        # There is no advertised range to defer to when the advert names no pay.
+        prof["salary"] = prof["salary_unadvertised"]
+    return prof
 
 
 def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[dict]:
@@ -300,11 +350,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
         files: Paths of the CV and cover letter PDFs (documents.files).
         con: Database connection, for the answers Firstname has given before.
     """
-    prof = profile()
-    prof["how_heard"] = HOW_HEARD.get(job["source"], "Company careers page")
-    if not re.search(r"\d", job["salary"] or "") and score.max_salary(job["description"] or "") is None:
-        # There is no advertised range to defer to when the advert names no pay.
-        prof["salary"] = prof["salary_unadvertised"]
+    prof = profile_for(job)
     answers = docs.get("answers") or []
     uploads = [f for f in fields if f["kind"] == "file"]
     named = any(re.search(r"cover|resume|résumé|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
@@ -374,7 +420,7 @@ def mark_written(fields: list[dict]) -> list[dict]:
 
 
 def _facts(job, docs: dict, con) -> str:
-    prof = {k: v for k, v in profile().items() if k not in ("salary_unadvertised", "preferred_name")}
+    prof = {k: v for k, v in profile_for(job).items() if k not in ("salary_unadvertised", "preferred_name")}
     parts = [f"Today is {date.today():%d %B %Y}.",
              f"Job: {job['title']} at {job['company']} ({job['location'] or 'location not stated'}).",
              f"Applicant profile: {prof}",
@@ -420,6 +466,8 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
         (answered, reason): how many fields it filled, and why it could not run, if so.
     """
     problems = problems or {}
+    if not problems and not gpu.busy():
+        _review(job, fields)
     open_fields = [f for f in fields if f["kind"] != "file" and f.get("type") != "password"
                    and (f["hid"] in problems or (f.get("value") in (None, "", []) and not f.get("skip")))]
     if not open_fields:
@@ -432,7 +480,9 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
     for start in range(0, len(open_fields), MODEL_BATCH):
         batch = open_fields[start:start + MODEL_BATCH]
         listing = "\n".join(
-            f"- hid={f['hid']} kind={f['kind']} label={f.get('label')!r}"
+            f"- hid={f['hid']} kind={f['kind']}"
+            + (f" section={f['section']!r}" if f.get("section") else "")
+            + f" label={f.get('label')!r}"
             + (f" options={_shortlist(f['options'], facts)!r}" if f.get("options") else "")
             + (f" help={f['help']!r}" if f.get("help") else "")
             + (f" context={f['context']!r}" if f.get("context") else "")
@@ -472,6 +522,29 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
             answered += 1
     mark_written(fields)
     return answered, None
+
+
+def _review(job, fields: list[dict]) -> None:
+    """Has the model look over the keyword answers; any it says miss the question are cleared for it to answer."""
+    chosen = [f for f in fields if not f.get("reviewed") and not f.get("skip") and f["kind"] != "file"
+              and str(f.get("source", "")).startswith(REVIEWED) and f.get("value") not in (None, "", [])]
+    if not chosen:
+        return
+    listing = "\n".join(f"- hid={f['hid']} section={f.get('section') or ''!r} question={f.get('label')!r} "
+                        f"answer={f['value']!r}" for f in chosen)
+    try:
+        reply = llm.chat_json(REVIEW, f"Job: {job['title']} at {job['company']}\n\nAnswers:\n{listing}",
+                              role="main", timeout=180)
+    except llm.LLMUnavailable:
+        return
+    by_hid = {f["hid"]: f for f in chosen}
+    for f in chosen:
+        f["reviewed"] = True
+    for w in reply.get("wrong", []):
+        f = by_hid.get(str(w.get("hid"))) if isinstance(w, dict) else None
+        if f is not None:
+            why = str(w.get("why") or "").strip()
+            f.update(value=None, source="you", note=f"Hal's first answer looked wrong{': ' + why if why else ''}")
 
 
 NAVIGATE = """You help a job applicant reach an application form. Given a web page's title and

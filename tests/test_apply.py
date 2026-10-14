@@ -119,6 +119,7 @@ class Applying(unittest.TestCase):
         self.assertEqual(by_label["Resume/CV"]["kind"], "file")
         self.assertTrue(by_label["First name"]["required"])
         self.assertNotIn("Search", by_label)
+        self.assertEqual(by_label["Date of birth"]["section"], "2. Questions")
         self.assertTrue(found["next"] and not found["submit"])
 
     def test_fills_the_form_waits_for_approval_then_submits(self):
@@ -175,7 +176,7 @@ class Applying(unittest.TestCase):
         sent = browser.BROWSER.call(lambda b: b.tab(job_id).evaluate("() => window.halSent"))
         self.assertEqual(sent, {"first": "Ada", "uni": "University", "rtw": "y", "sponsor": False,
                                 "news": False, "why": PROSE, "cv": "Ada-Lovelace-CV.pdf", "heard": "Company website",
-                                "dob": "01/02/2003"})
+                                "dob": "01/02/2003", "referee": ""})
 
     def test_a_posting_taken_down_is_marked_closed(self):
         job_id = self.job("closed", "closed.html")
@@ -256,6 +257,37 @@ class Answers(unittest.TestCase):
         f = self.propose(kind="select", label="How did you hear about us?",
                          options=["Company website", "Job board", "A friend"])
         self.assertEqual(f["value"], "Job board")
+
+    def test_a_referee_is_not_given_the_applicants_details(self):
+        self.assertIsNone(self.propose(label="Email", section="Referee 1")["value"])
+        self.assertEqual(self.propose(label="Email", section="About you")["value"], "ada@example.org")
+
+    def test_a_course_start_date_is_not_the_applicants_availability(self):
+        self.assertIsNone(self.propose(label="Start date", section="Education")["value"])
+        self.assertEqual(self.propose(label="Earliest start date", section="Availability")["value"], "Immediately")
+
+    def test_a_referees_name_is_remembered_as_the_referees(self):
+        con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        self.addCleanup(con.close)
+        autofill.remember(con, [{"hid": "h0", "kind": "text", "label": "Name", "section": "Referee 1",
+                                 "value": "Grace Hopper", "source": "you"}])
+        mine = self.propose(label="Name", section="Your details")
+        self.assertEqual(mine["value"], "Ada Lovelace")
+        f = {"hid": "h0", "kind": "text", "type": "text", "label": "Name", "section": "Referee 1", "required": True}
+        self.assertEqual(autofill.propose(self.job, [f], {}, {}, con)[0]["value"], "Grace Hopper")
+
+    def test_a_keyword_answer_the_review_rejects_is_answered_again(self):
+        f = self.propose(label="Phone number of your current manager")
+        self.assertEqual(f["source"], "profile: phone")
+        replies = iter([{"wrong": [{"hid": "h0", "why": "asks for the manager's number"}]}, {"answers": []}])
+        saved = autofill.llm.chat_json, autofill.gpu.busy
+        autofill.llm.chat_json, autofill.gpu.busy = lambda *a, **k: next(replies), lambda: None
+        try:
+            autofill.ask_model(self.job, [f], {})
+        finally:
+            autofill.llm.chat_json, autofill.gpu.busy = saved
+        self.assertIsNone(f["value"])
+        self.assertIn("manager's number", f["note"])
 
     def test_a_security_code_is_found_in_its_email(self):
         self.assertEqual(gmail.code_in("Security code for your application",
