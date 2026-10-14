@@ -1,6 +1,7 @@
 // Hal Employment's link to the local web helper. It asks the helper for work,
-// carries each command out in a job tab Hal opened, and reports the result.
-// Only tabs Hal opened for a job, and tabs those open, are ever touched.
+// carries each command out in a job's tab, and reports the result. Only tabs
+// Hal opened for a job, tabs those open, and tabs the applicant hands to Hal
+// with the toolbar button are ever touched.
 
 const HAL = "http://127.0.0.1:8737";
 // The helper's address: the default, unless storage names another (the tests run their own helper).
@@ -188,6 +189,33 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     }
   })().catch(e => console.warn("Hal:", e.message));
 });
+
+// The toolbar button (Alt+Shift+F): the applicant hands Hal the application in this tab.
+async function handTab(tab) {
+  const say = async (text, title) => {
+    await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: text === "!" ? "#cf222e" : "#57606a" });
+    await chrome.action.setBadgeText({ tabId: tab.id, text });
+    await chrome.action.setTitle({ tabId: tab.id, title });
+  };
+  try {
+    await say("…", "Hal is filling this application");
+    const [read] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({
+      url: location.href, title: document.title,
+      heading: (document.querySelector("h1")?.innerText || "").trim().slice(0, 200),
+      site: document.querySelector("meta[property='og:site_name']")?.content || "",
+      text: (document.body?.innerText || "").slice(0, 20000) }) });
+    const found = await post("ext/adopt", read.result);
+    await withJobs(jobs => {
+      for (const job of Object.keys(jobs)) jobs[job] = jobs[job].filter(id => id !== tab.id);
+      jobs[found.job] = [...(jobs[found.job] || []), tab.id];
+    });
+    await post(`job/${encodeURIComponent(found.job)}/adopt`, { url: read.result.url });
+    await chrome.action.setTitle({ tabId: tab.id, title: `Hal: ${found.title} at ${found.company}` });
+  } catch (e) {
+    await say("!", `Hal could not take this tab: ${e.message}`);
+  }
+}
+chrome.action.onClicked.addListener(handTab);
 
 let looping = false;
 async function loop() {

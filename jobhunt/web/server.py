@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import autofill, browser, contacts, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
+from .. import adopt, autofill, browser, contacts, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
 from ..config import CONFIG
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -226,6 +226,13 @@ def _answer(con, job, found: dict, step: int, done: list) -> dict:
     """Proposes answers for the fields Hal found and saves them as the application's current step."""
     job_id = job["id"]
     docs = documents.load(con, job)
+    if not docs.get("letter") and any(
+            (f["kind"] == "file" and re.search(r"cover", f"{f.get('label')} {f.get('context', '')}", re.I))
+            or (f["kind"] in ("text", "textarea") and re.search(r"cover letter", f.get("label") or "", re.I))
+            for f in found["fields"]):
+        _say(job_id, "writing a cover letter, which this form asks for")
+        if documents.draft_letter(con, job):
+            docs = documents.load(con, job)
     _say(job_id, f"answering {len(found['fields'])} questions" + (f" on step {step}" if step > 1 else ""))
     fields = autofill.propose(job, found["fields"], docs, documents.files(job), con)
     # Answers its owner gave on an earlier run at this form stand.
@@ -437,6 +444,27 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
                 f["error"] = out["errors"].get(f["hid"], f.get("error", "") if f in empty else "")
         form["final"] = not out["next"]
     return _hold(con, job, form)
+
+
+def act_adopt(con, job_id: str, url: str) -> str:
+    """Fills an application the applicant opened in a tab of their own and handed to Hal."""
+    job = _job(con, job_id)
+    if job["status"] in ("new", "shortlisted", "ready"):
+        db.set_status(con, job_id, "applying", "opened by you in your own browser")
+        con.commit()
+    form = _app(con, job_id)["form"] or {}
+    if form.get("fields") and adopt.address(form.get("url", "")) != adopt.address(url):
+        # A form Hal filled elsewhere for this job is not this one; this tab starts afresh.
+        _set_app(con, job_id, stage="form", form={**form, "fields": [], "step": 1, "done": [], "url": url})
+    documents.render(job, documents.load(con, job))
+    if (_app(con, job_id)["form"] or {}).get("fields"):
+        return act_page(con, job_id)
+    _say(job_id, "reading your tab")
+    found = browser.read_here(job_id)
+    if not found["fields"]:
+        # An advert rather than its form: Hal finds the way on, as it does from a link.
+        found = browser.resume(job_id, "", url)
+    return _drive(con, job, found, 1, [])
 
 
 def _terminal(con, job, found: dict) -> str | None:
@@ -1001,6 +1029,10 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": True}
         con = db.connect()
         try:
+            if route == "ext/adopt":
+                # A tab the applicant opened: the extension registers it under this job, then starts the fill.
+                job, made = adopt.adopt(con, body)
+                return {"job": job["id"], "made": made, "company": job["company"], "title": job["title"]}
             if route.startswith("job/"):
                 quoted, _, action = route[4:].rpartition("/")
                 if not quoted or "/" in quoted:
@@ -1076,6 +1108,8 @@ class Handler(BaseHTTPRequestHandler):
             return {"docs": documents.drafts(job)}
         if action in ("auto", "form-open"):
             return run_action(job_id, "applying", act_auto, job_id, bool(body.get("here")))
+        if action == "adopt":
+            return run_action(job_id, "filling your tab", act_adopt, job_id, body.get("url", ""))
         if action == "page":
             # Asked from the job's tab: fill what that page shows that is still empty.
             return run_action(job_id, "filling this page", act_page, job_id)

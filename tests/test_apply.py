@@ -17,7 +17,7 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import autofill, browser, db, documents, extension, gmail  # noqa: E402
+from jobhunt import adopt, autofill, browser, db, documents, extension, gmail  # noqa: E402
 from jobhunt.web import server  # noqa: E402
 
 SITE = Path(__file__).parent / "site"
@@ -314,6 +314,61 @@ class InYourBrowser(Practice):
         self.assertEqual(self.status(job_id), "applied")
         kept = {r["question"]: db.json_value(r["answer"]) for r in self.con.execute("SELECT * FROM answers")}
         self.assertEqual((kept["date of birth"], kept["last name"]), ("01/02/2003", "Byron"))
+
+
+    def test_fills_a_tab_the_applicant_opened_and_handed_over(self):
+        job_id = self.job("ext-adopt", "advert.html?jobId=7")
+        server.ACTIONS.pop(job_id)
+        mine = self.ctx.new_page()
+        mine.goto(f"{self.base}/form.html?jobId=7")
+        worker = self.ctx.service_workers[0]
+        worker.evaluate("""async () => {
+            const [tab] = await chrome.tabs.query({ url: '*://127.0.0.1/form.html?jobId=7' });
+            await handTab(tab);
+        }""")
+        for _ in range(120):
+            if server.ACTIONS.get(job_id, {}).get("state") not in (None, "running"):
+                break
+            mine.wait_for_timeout(500)
+        self.assertEqual(server.ACTIONS[job_id]["state"], "done", server.ACTIONS[job_id]["message"])
+        self.assertEqual(mine.input_value("#fn"), "Ada")
+        self.assertIn("1 to answer", mine.inner_text("#hal-panel .counts"))
+
+
+class Adopting(unittest.TestCase):
+    """Matching a tab the applicant opened to a known job, or making one from the page."""
+
+    def setUp(self):
+        self.con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        self.addCleanup(self.con.close)
+        self.saved = adopt.gpu.busy
+        adopt.gpu.busy = lambda: "no model in the tests"
+        self.addCleanup(setattr, adopt.gpu, "busy", self.saved)
+        db.upsert(self.con, {"id": "greenhouse:1", "source": "greenhouse", "company": "Monzo", "title": "Graduate Backend Engineer",
+                             "location": "London", "url": "https://job-boards.greenhouse.io/monzo/jobs/123",
+                             "description": "", "salary": "", "posted_at": None, "board_size": None})
+        db.set_status(self.con, "greenhouse:1", "ready")
+
+    def page(self, url, **more):
+        return {"url": url, "title": "", "heading": "", "site": "", "text": "", **more}
+
+    def test_the_form_under_an_advert_is_that_advert_s_job(self):
+        job, made = adopt.adopt(self.con, self.page("https://job-boards.greenhouse.io/monzo/jobs/123/apply?utm=x"))
+        self.assertEqual((job["id"], made), ("greenhouse:1", False))
+
+    def test_a_job_is_known_by_its_employer_and_title_on_another_site(self):
+        job, _ = adopt.adopt(self.con, self.page("https://monzo.wd3.myworkdayjobs.com/x/apply",
+                                                 title="Graduate Backend Engineer - Monzo Careers"))
+        self.assertEqual(job["id"], "greenhouse:1")
+
+    def test_an_unknown_application_becomes_a_job_named_from_its_page(self):
+        job, made = adopt.adopt(self.con, self.page("https://jobs.lever.co/acme-robotics/abc/apply",
+                                                    heading="Software Engineer, Perception", text="We build robots."))
+        self.assertTrue(made)
+        self.assertEqual((job["company"], job["title"], job["status"]),
+                         ("Acme Robotics", "Software Engineer, Perception", "applying"))
+        again, made = adopt.adopt(self.con, self.page("https://jobs.lever.co/acme-robotics/abc/apply"))
+        self.assertEqual((again["id"], made), (job["id"], False))
 
 
 class Answers(unittest.TestCase):

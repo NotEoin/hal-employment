@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-from . import cv, db, letter, llm, pack
+from . import cv, db, gpu, letter, llm, pack
 
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
 
@@ -102,6 +102,9 @@ def render(job, docs: dict) -> dict:
     """Renders the CV and cover letter PDFs from the documents; returns their paths."""
     d = pack_dir(job)
     variant_path = d / "cv.json"
+    if not variant_path.exists():
+        # A job with no pack, such as one opened by the applicant, still gets a CV ordered for it.
+        cv.render(cv.tailor(pack._job_text(job))[0], d)
     if variant_path.exists() and (docs.get("cv_title") or docs.get("cv_summary")):
         variant = json.loads(variant_path.read_text())
         variant["title"] = docs.get("cv_title") or variant["title"]
@@ -119,3 +122,18 @@ def _ascii(text: str) -> str:
     table = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-",
              "\u2014": ", ", "\u2026": "...", "\u00a0": " ", "\u00a3": "GBP "}
     return "".join(table.get(ch, ch) for ch in text).encode("ascii", "ignore").decode()
+
+
+def draft_letter(con, job) -> str:
+    """Writes a cover letter for a job that has none, when a form asks for one, and renders its PDF."""
+    if gpu.busy():
+        return ""
+    context = (f"Job: {job['title']} at {job['company']}\n\nAdvert:\n{(job['description'] or '')[:6000]}"
+               f"\n\nCV facts:\n{cv.facts_text()}")
+    try:
+        text = llm.undash(llm.chat(pack.LETTER, context, role="writer").strip())
+    except llm.LLMUnavailable:
+        return ""
+    docs = {**load(con, job), "letter": text}
+    save(con, job, docs)
+    return text
