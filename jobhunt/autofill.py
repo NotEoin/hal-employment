@@ -1,17 +1,20 @@
 """Proposes a value for every field of an application form.
 
-Sources, in order: the applicant profile (contact details from the CV site and
-standard answers from config.toml's [applicant] table), the job's documents,
-then the local model for what is left. Each proposal records its source, and a
-field nothing can answer is left for Firstname. Diversity questions default to
-'prefer not to say' unless the profile gives an answer.
+Sources, in order: answers Firstname has given to the same question before, the
+applicant profile (contact details from the CV site and standard answers from
+config.toml's [applicant] table), the job's documents, then the local model
+for what is left. Each proposal records its source, and a field nothing can
+answer is left for Firstname; what he enters is remembered for the next form that
+asks it. Diversity questions default to 'prefer not to say' unless the
+profile gives an answer.
 """
 import difflib
 import importlib
 import re
 import sys
+from datetime import date
 
-from . import cv, gpu, llm, score
+from . import cv, db, gpu, llm, score
 from .config import CONFIG
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
@@ -25,6 +28,13 @@ DECLINE = re.compile(r"prefer not|don'?t wish|do not wish|decline|rather not|not
                      r"choose not|not disclose|no answer", re.I)
 YES = re.compile(r"^\s*yes\b", re.I)
 NO = re.compile(r"^\s*no\b", re.I)
+# Labels longer than this are paragraphs with a question in them; a keyword match there proves little.
+RULE_LABEL = 170
+# A box asking for a fact about Firstname has a short label; a longer one is a question for the model.
+FACT_LABEL = 75
+# Answers at least this long are prose Firstname should read before it is sent.
+WRITTEN = 80
+MODEL_BATCH = 10
 
 
 def contact() -> tuple[str, str, str]:
@@ -49,6 +59,7 @@ def profile() -> dict:
         "website": f"https://{c['site']}",
         "city": "London", "country": "United Kingdom", "location": "London, United Kingdom",
         "right_to_work": "Yes", "work_status": "British or Irish citizen", "sponsorship": "No",
+        "nationality": "British and Irish",
         "notice": "None, available immediately", "start": "Immediately",
         "salary": "Open to the advertised range",
         "salary_unadvertised": "Open to discussion, in line with the market rate for the role",
@@ -61,13 +72,27 @@ def profile() -> dict:
     return p
 
 
+DIVERSITY = re.compile(
+    r"gender|\bsex\b|sexual orientation|ethnic|\brace\b|disab|veteran|religio|\bbelief\b|pronoun|trans(gender|\*)|"
+    r"socio-?economic|free school meals|type of school|household earner|caring responsib|\bcarer\b|care for someone|"
+    r"neurodiver|age (range|group|band)|identify (my|as|your)|first (generation|in your family)|marital|"
+    r"long[- ]term (physical|health)", re.I)
+# Opt-ins that are not part of the application; they are left as the form has them.
+MARKETING = re.compile(r"newsletter|marketing|talent (community|pool|network)|hear (more )?about|"
+                       r"(future|other) (opportunit|vacanc|roles)|job alerts?|notifications?:?$|keep (me|my)", re.I)
+CONSENT = re.compile(r"consent|i agree|agree to|privacy|data (protection|processing)|process(ing)? (of )?(my|your) "
+                     r"(personal )?(data|information)|terms|acknowledge|i (confirm|understand|certify)|"
+                     r"confirm (that|the)|you understand|declaration", re.I)
+
 # (label pattern, profile key, preferred options for a choice, in order)
+# Standard answers to questions, however they are worded.
+ANSWERS = {"sponsorship", "right_to_work", "notice", "start", "salary", "how_heard", "office", "relocate"}
 RULES = [
-    (r"full legal name", "yes", [YES]),
     (r"\bpreferred (first )?name\b", "preferred_name", []),
+    (r"\bmiddle name", "middle_name", []),
     (r"\bfirst name|given name|forename", "first_name", []),
     (r"\blast name|surname|family name", "last_name", []),
-    (r"^(full )?name$|^your name$|full name", "full_name", []),
+    (r"^(full )?(legal )?name\b|^your name$|full name", "full_name", []),
     (r"e-?mail", "email", []),
     (r"phone|mobile|telephone", "phone", []),
     (r"linkedin", "linkedin", []),
@@ -76,27 +101,42 @@ RULES = [
     (r"sponsor", "sponsorship", [NO, re.compile(r"(do not|don'?t|will not|won'?t) (require|need)", re.I)]),
     (r"right to work|legally (entitled|authori[sz]ed|eligible|able)|eligib\w+ to work|authori[sz]ed to work|"
      r"work permit|immigration status|visa status|work status",
-     "right_to_work", [re.compile(r"british or irish|british|irish|uk citizen|citizen", re.I), YES]),
+     "right_to_work", [re.compile(r"british or irish|(british|irish|uk) (citizen|passport|national)|citizen", re.I), YES]),
     (r"notice period", "notice", [re.compile(r"immediate|none|no notice|^0|less than", re.I)]),
     (r"start date|when (can|could) you start|earliest (start|availability)|available to start", "start",
      [re.compile(r"immediate|asap|now", re.I)]),
     (r"salary|compensation|pay expectation|remuneration", "salary", []),
     (r"how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", "how_heard", []),
-    (r"office|on-?site|in person|hybrid|commut", "office", [YES]),
+    (r"\boffice\b|on-?site|in person|hybrid|commut", "office", [YES]),
     (r"relocat", "relocate", [YES]),
-    (r"^country|country of residence", "country", [re.compile(r"united kingdom|^uk\b|great britain", re.I)]),
+    (r"post ?code|\bzip\b", "postcode", []),
+    (r"address( line)? ?1|street address|^address:?$", "address1", []),
+    (r"^country|country of residence|country/region", "country",
+     [re.compile(r"united kingdom|^uk\b|great britain", re.I)]),
+    (r"^(town|city)\b|town ?/ ?city", "city", [re.compile(r"london", re.I)]),
     (r"\bcity\b|where are you (based|located)|current location|^location", "location",
      [re.compile(r"london", re.I), re.compile(r"united kingdom|\buk\b", re.I)]),
-    (r"universit|school|institution|college", "university", []),
-    (r"degree|discipline|major|field of study|subject", "degree", []),
-    (r"grade|classification|\bgpa\b|result", "grade", [re.compile(r"first|1st", re.I)]),
+    (r"nationality|citizenship", "nationality", [re.compile(r"^british", re.I), re.compile(r"^irish", re.I)]),
+    (r"universit|institution|college|\bschool\b", "university", []),
+    (r"degree|discipline|\bmajor\b|field of study|subject", "degree",
+     [re.compile(r"^computer science", re.I), re.compile(r"bachelor of science|\bbsc\b", re.I)]),
+    (r"grade|classification|\bgpa\b|\bresults?\b", "grade", [re.compile(r"first|1st", re.I)]),
     (r"graduat", "grad_year", [re.compile(r"2026", re.I)]),
-    (r"gender|\bsex\b|ethnic|\brace\b|disab|sexual orientation|veteran|religio|pronoun|transgender|"
-     r"socio-?economic|type of school|caring responsib|neurodiver|age range|date of birth|"
-     r"identify (my|as)|free school meals|first (generation|in your family)", "diversity", [DECLINE]),
 ]
-CONSENT = re.compile(r"consent|i agree|agree to|privacy|data (protection|processing)|terms|acknowledge|"
-                     r"confirm (that|the)|contact you about", re.I)
+HEARD_SITE = [re.compile(r"(company|careers?|our) (web)?(site|page)|^website", re.I)]
+HEARD_BOARD = [re.compile(r"job ?board|job (site|website|search)|online (job|search)", re.I)]
+# Places and institutions are typed into search boxes that list nothing until asked.
+SEARCHED = {"city", "location", "country", "university"}
+
+
+def _norm(label: str, company: str = "") -> str:
+    """Reduces a label to its words, with the employer's name taken out so it matches the next employer's."""
+    text = (label or "").lower()
+    if company:
+        text = text.replace(company.lower(), "the employer")
+    # Asked of every employer under its own name or initials.
+    text = re.sub(r"\b(how did you (first )?(hear|find out|learn) (about|of)) .*", r"\1 the employer", text)
+    return " ".join(re.sub(r"[^a-z0-9 ]", " ", text).split())
 
 
 def _choose(options: list[str], value: str, preferred: list) -> str | None:
@@ -112,41 +152,121 @@ def _choose(options: list[str], value: str, preferred: list) -> str | None:
     return close[0] if close else None
 
 
+def _fit(f: dict, value, preferred: list) -> object | None:
+    """Shapes a known answer to the field's kind, or returns None when the field cannot take it."""
+    kind, options = f["kind"], f.get("options") or []
+    if kind in ("select", "radio", "combobox") and options:
+        return _choose(options, value if not isinstance(value, list) else value[0], preferred)
+    if kind == "checkgroup":
+        wanted = value if isinstance(value, list) else [value]
+        chosen = [c for c in (_choose(options, w, preferred) for w in wanted) if c]
+        return chosen or None
+    if kind == "checkbox":
+        return value if isinstance(value, bool) else str(value).lower() in ("yes", "true")
+    if kind in ("select", "radio") or isinstance(value, (list, bool)):
+        return None
+    if f.get("type") == "number" and not re.fullmatch(r"\s*-?[\d.,]+\s*", str(value)):
+        return None  # a box that takes only digits cannot hold a sentence
+    return value
+
+
+def _diversity(f: dict, prof: dict) -> bool:
+    """Answers a diversity question with the profile's choice; returns whether it settled the field."""
+    value = prof.get("diversity") or "Prefer not to say"
+    options = f.get("options") or []
+    note = "diversity question; change it if you want to answer"
+    if f["kind"] in ("select", "radio", "combobox", "checkgroup") and options:
+        choice = _choose(options, value, [DECLINE])
+        if choice:
+            f.update(value=[choice] if f["kind"] == "checkgroup" else choice, source="profile: diversity", note=note)
+        elif not f.get("required"):
+            f.update(skip=True, source="skipped", note="optional diversity question with no 'prefer not to say'")
+        else:
+            return False
+        return True
+    if f["kind"] in ("text", "textarea"):
+        if f.get("required"):
+            f.update(value=value, source="profile: diversity", note=note)
+        else:
+            f.update(skip=True, source="skipped", note="optional diversity question")
+        return True
+    return False
+
+
 def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
     label = f.get("label") or ""
+    listed = f["kind"] in ("select", "radio", "combobox", "checkgroup") and bool(f.get("options"))
     for pattern, key, preferred in RULES:
         if not re.search(pattern, label, re.I):
             continue
-        value = "Yes" if key == "yes" else prof.get(key)
+        # A fact fits a short label, or a list that holds it; a standard answer fits a question of moderate length.
+        if len(label) > (RULE_LABEL if key in ANSWERS else 400 if listed else FACT_LABEL):
+            return None
+        value = prof.get(key)
         if value in (None, ""):
-            continue
-        if f["kind"] in ("select", "radio", "combobox") and f.get("options"):
-            choice = _choose(f["options"], value, preferred)
-            if choice:
-                return choice, f"profile: {key}"
-            continue
-        if f["kind"] == "checkbox":
-            return (str(value).lower() in ("yes", "true"), f"profile: {key}")
-        if f["kind"] == "checkgroup":
-            choice = _choose(f.get("options") or [], value, preferred)
-            if choice:
-                return [choice], f"profile: {key}"
-            continue
-        return value, f"profile: {key}"
+            return None
+        if key == "how_heard":
+            # The list rarely words the source as the profile does; the nearest kind of source is chosen.
+            preferred = HEARD_SITE if re.search(r"careers page|website", str(value), re.I) else HEARD_BOARD
+        if key == "notice" and (f.get("type") == "number" or re.search(r"\b(weeks|days|months)\b", label, re.I)) \
+                and re.search(r"none|immediate", str(value), re.I):
+            value = "0"
+        if f["kind"] == "combobox" and not f.get("options"):
+            # A search box is typed into; any other list that would not open is left to be read again.
+            return (value, f"profile: {key}") if key in SEARCHED and f.get("typeable") else None
+        fitted = _fit(f, value, preferred)
+        return (fitted, f"profile: {key}") if fitted not in (None, []) else None
     return None
 
 
 def _match_answer(label: str, answers: list[dict]) -> str | None:
     """Returns the drafted answer whose question matches the field's label."""
-    best, score = None, 0.0
+    best, score_ = None, 0.0
     for a in answers:
         q = a.get("question", "")
         s = difflib.SequenceMatcher(None, label.lower(), q.lower()).ratio()
         if q and (q.lower() in label.lower() or label.lower() in q.lower()):
             s = max(s, 0.9)
-        if s > score:
-            best, score = a.get("answer"), s
-    return best if score >= 0.6 else None
+        if s > score_:
+            best, score_ = a.get("answer"), s
+    return best if score_ >= 0.6 else None
+
+
+# Answers Firstname has given before --------------------------------------------------
+
+def remember(con, fields: list[dict], company: str = "") -> int:
+    """Stores the answers Firstname entered himself, so the same question is not put to him twice."""
+    kept = 0
+    for f in fields:
+        value = f.get("value")
+        if f.get("source") != "you" or value in (None, "", []) or f["kind"] == "file" or f.get("type") == "password":
+            continue
+        if isinstance(value, str) and len(value) > 400:
+            continue  # an essay answers one employer's question, not the next one's
+        question = _norm(f.get("label"), company)
+        if len(question) < 3:
+            continue
+        con.execute("""INSERT INTO answers (question, label, answer, updated) VALUES (?, ?, ?, ?)
+                       ON CONFLICT(question) DO UPDATE SET answer = excluded.answer, updated = excluded.updated""",
+                    (question, f["label"], db.json_text(value), db.now()))
+        kept += 1
+    con.commit()
+    return kept
+
+
+def _recall(con, f: dict, company: str = ""):
+    """Returns the answer Firstname gave to this question before, shaped to the field, or None."""
+    if con is None:
+        return None
+    question = _norm(f.get("label"), company)
+    row = con.execute("SELECT answer FROM answers WHERE question = ?", (question,)).fetchone()
+    if row is None:
+        known = [r["question"] for r in con.execute("SELECT question FROM answers")]
+        close = difflib.get_close_matches(question, known, n=1, cutoff=0.93)
+        if not close:
+            return None
+        row = con.execute("SELECT answer FROM answers WHERE question = ?", (close[0],)).fetchone()
+    return _fit(f, db.json_value(row["answer"]), [])
 
 
 WHY = re.compile(r"why (do you want|are you (interested|applying)|this (role|company|team)|us\b|join)|"
@@ -156,14 +276,21 @@ FIT = re.compile(r"why (are you|would you be) (a good|the right|suited)|what mak
 
 FILL = """You complete a job application form for Firstname Lastname using only the facts given.
 Reply with JSON only: {"answers": [{"hid": ..., "value": ..., "sure": true | false}]}.
+Give one answer for every field listed.
 For a field with options, the value must be one of the options, copied exactly; for a
-checkgroup, a list of options. For free text, write plainly in the first person, within
-any word limit the label states, and at most 120 words. Use only the facts; if they do
-not answer a field, give "" and sure false. Never claim experience, skills or
-circumstances the facts do not state. Set sure false for anything a person should check."""
+checkgroup, a list of options. A yes/no question about his eligibility, studies, skills
+or history is answered from the facts: if the facts settle it, answer and set sure true.
+For free text, write plainly in the first person, within any limit the label or help
+states, and at most 120 words; short factual questions get short answers. If a field
+asks for something only when another answer applies and it does not apply, give "N/A"
+when the field is required and "" otherwise.
+Never invent personal details (addresses, dates of birth, reference numbers, names of
+people) or claim experience, skills or circumstances the facts do not state: if the
+facts do not answer a field, give "" and sure false. Set sure false for anything a
+person should check."""
 
 
-def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
+def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[dict]:
     """Fills in `value`, `source` and `note` on each field and returns the list.
 
     Args:
@@ -171,6 +298,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
         fields: Fields read from the form by browser.open_form.
         docs: The approved documents (documents.load).
         files: Paths of the CV and cover letter PDFs (documents.files).
+        con: Database connection, for the answers Firstname has given before.
     """
     prof = profile()
     prof["how_heard"] = HOW_HEARD.get(job["source"], "Company careers page")
@@ -179,10 +307,10 @@ def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
         prof["salary"] = prof["salary_unadvertised"]
     answers = docs.get("answers") or []
     uploads = [f for f in fields if f["kind"] == "file"]
-    named = any(re.search(r"cover|resume|r\u00e9sum\u00e9|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
+    named = any(re.search(r"cover|resume|résumé|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
                 for f in uploads)
     for f in fields:
-        f.update(value=None, source="you", note="")
+        f.update(value=None, source="you", note="", skip=False)
         label = f.get("label") or ""
         text = f"{label} {f.get('context', '')}"
         if f.get("type") == "password":
@@ -190,9 +318,11 @@ def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
             f.update(skip=True, source="skipped", note="type this into the form yourself")
             continue
         if f["kind"] == "file":
-            if re.search(r"cover", text, re.I) and files.get("letter"):
+            if re.search(r"autofill|photo|picture|avatar", text, re.I):
+                f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
+            elif re.search(r"cover", text, re.I) and files.get("letter"):
                 f.update(value=files["letter"], source="documents: cover letter")
-            elif re.search(r"resume|r\u00e9sum\u00e9|\bcv\b", text, re.I) and files.get("cv"):
+            elif re.search(r"resume|résumé|\bcv\b", text, re.I) and files.get("cv"):
                 f.update(value=files["cv"], source="documents: CV")
             elif not named and f is uploads[0] and files.get("cv"):
                 # A form whose uploads name no document wants the CV in the first.
@@ -200,17 +330,28 @@ def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
             else:
                 f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
             continue
-        if f["kind"] == "checkbox" and CONSENT.search(text):
-            f.update(value=True, source="profile: consent", note="consent to the employer's terms; check them")
+        recalled = _recall(con, f, job["company"])
+        if recalled not in (None, []):
+            f.update(value=recalled, source="your earlier answer")
             continue
+        if DIVERSITY.search(label) and _diversity(f, prof):
+            continue
+        single = f["kind"] in ("radio", "checkgroup") and len(f.get("options") or []) == 1
+        if f["kind"] == "checkbox" or single:
+            if MARKETING.search(text) and not f.get("required"):
+                f.update(skip=True, source="skipped", note="optional sign-up, left as it is")
+                continue
+            if CONSENT.search(text) or (single and f.get("required")):
+                only = f["options"][0] if single else True
+                f.update(value=[only] if f["kind"] == "checkgroup" else only, source="profile: consent",
+                         note="consent to the employer's terms; check them")
+                continue
         if f["kind"] in ("text", "textarea") and re.search(r"cover letter", label, re.I) and docs.get("letter"):
             f.update(value=docs["letter"], source="documents: cover letter")
             continue
         hit = _rule(f, prof)
         if hit:
             f["value"], f["source"] = hit
-            if hit[1] == "profile: diversity":
-                f["note"] = "diversity question; change it if you want to answer"
             continue
         if f["kind"] in ("text", "textarea"):
             drafted = _match_answer(label, answers)
@@ -220,53 +361,136 @@ def propose(job, fields: list[dict], docs: dict, files: dict) -> list[dict]:
                 drafted = _match_answer("Why are you a good fit for this role?", answers)
             if drafted:
                 f.update(value=drafted, source="documents: drafted answer")
+    return mark_written(fields)
+
+
+def mark_written(fields: list[dict]) -> list[dict]:
+    """Flags the answers that are prose, which Firstname reads before anything is sent."""
+    for f in fields:
+        value = f.get("value")
+        f["written"] = f["kind"] in ("text", "textarea") and isinstance(value, str) and len(value) >= WRITTEN \
+            and not f.get("source", "").startswith("profile")
     return fields
 
 
-def ask_model(job, fields: list[dict], docs: dict) -> tuple[int, str | None]:
+def _facts(job, docs: dict, con) -> str:
+    prof = {k: v for k, v in profile().items() if k not in ("salary_unadvertised", "preferred_name")}
+    parts = [f"Today is {date.today():%d %B %Y}.",
+             f"Job: {job['title']} at {job['company']} ({job['location'] or 'location not stated'}).",
+             f"Applicant profile: {prof}",
+             "He has never worked for, interviewed with or been referred to this employer unless stated below.",
+             f"CV facts:\n{cv.facts_text()}"]
+    if con is not None:
+        before = con.execute("""SELECT title, status FROM jobs WHERE lower(company) = lower(?) AND id != ?
+                                AND status IN ('applied','assessment','interview','offer','rejected','withdrawn')""",
+                             (job["company"], job["id"])).fetchall()
+        if before:
+            parts.append("Earlier applications to this employer: "
+                         + "; ".join(f"{r['title']} ({r['status']})" for r in before))
+        told = con.execute("SELECT label, answer FROM answers ORDER BY updated DESC LIMIT 60").fetchall()
+        if told:
+            parts.append("Answers he has given on other forms:\n"
+                         + "\n".join(f"- {r['label']}: {db.json_value(r['answer'])}" for r in told))
+    if docs.get("answers"):
+        parts.append("Drafted answers:\n" + "\n".join(f"- {a['question']}: {a['answer']}" for a in docs["answers"]))
+    if docs.get("letter"):
+        parts.append(f"Cover letter:\n{docs['letter']}")
+    if job["description"]:
+        parts.append(f"Advert (for context only, not facts about him):\n{job['description'][:1800]}")
+    return "\n\n".join(parts)
+
+
+def _shortlist(options: list[str], facts: str, limit: int = 60) -> list[str]:
+    """Cuts a long option list to those sharing most words with the facts, so the right one is in view."""
+    if len(options) <= limit:
+        return options
+    known = set(re.findall(r"[a-z]{4,}", facts.lower()))
+    ranked = sorted(options, key=lambda o: -len(set(re.findall(r"[a-z]{4,}", o.lower())) & known))
+    keep = set(ranked[:limit - 5]) | {o for o in options if re.search(r"^(other|none|not applicable|n/a)", o, re.I)}
+    return [o for o in options if o in keep]
+
+
+def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | None = None) -> tuple[int, str | None]:
     """Asks the local model for the fields still without a value.
+
+    Args:
+        problems: For fields the form refused, the site's message by field id; those are answered again.
 
     Returns:
         (answered, reason): how many fields it filled, and why it could not run, if so.
     """
-    open_fields = [f for f in fields if f.get("value") in (None, "", []) and not f.get("skip")
-                   and f["kind"] != "file"]
+    problems = problems or {}
+    open_fields = [f for f in fields if f["kind"] != "file" and f.get("type") != "password"
+                   and (f["hid"] in problems or (f.get("value") in (None, "", []) and not f.get("skip")))]
     if not open_fields:
         return 0, None
     reason = gpu.busy()
     if reason:
         return 0, reason
-    listing = "\n".join(
-        f"- hid={f['hid']} kind={f['kind']} label={f.get('label')!r}"
-        + (f" options={f['options']!r}" if f.get("options") else "")
-        + (f" context={f['context']!r}" if f.get("context") else "")
-        + (" (required)" if f.get("required") else "")
-        for f in open_fields)
-    prompt = (f"Job: {job['title']} at {job['company']}\n\nFields:\n{listing}\n\n"
-              f"Applicant profile: {profile()}\n\nCV facts:\n{cv.facts_text()}\n\n"
-              f"Cover letter:\n{docs.get('letter', '')}")
-    try:
-        reply = llm.chat_json(FILL, prompt, role="main", timeout=300)
-    except llm.LLMUnavailable as e:
-        return 0, str(e)
-    by_hid = {f["hid"]: f for f in open_fields}
+    facts = _facts(job, docs, con)
     answered = 0
-    for a in reply.get("answers", []):
-        f = by_hid.get(str(a.get("hid")))
-        value = a.get("value")
-        if f is None or value in (None, "", []):
-            continue
-        if f.get("options"):
-            pool = f["options"]
-            value = [v for v in (value if isinstance(value, list) else [value]) if v in pool]
-            if not value:
+    for start in range(0, len(open_fields), MODEL_BATCH):
+        batch = open_fields[start:start + MODEL_BATCH]
+        listing = "\n".join(
+            f"- hid={f['hid']} kind={f['kind']} label={f.get('label')!r}"
+            + (f" options={_shortlist(f['options'], facts)!r}" if f.get("options") else "")
+            + (f" help={f['help']!r}" if f.get("help") else "")
+            + (f" context={f['context']!r}" if f.get("context") else "")
+            + (f" max_characters={f['maxlength']}" if f.get("maxlength") else "")
+            + (" (required)" if f.get("required") else " (optional)")
+            + (f" REFUSED BY THE FORM: {problems[f['hid']]!r}; previous answer {f.get('value')!r}"
+               if f["hid"] in problems else "")
+            for f in batch)
+        try:
+            reply = llm.chat_json(FILL, f"Fields:\n{listing}\n\n{facts}", role="main", timeout=300)
+        except llm.LLMUnavailable as e:
+            return answered, str(e)
+        by_hid = {f["hid"]: f for f in batch}
+        for a in reply.get("answers", []):
+            if not isinstance(a, dict):
                 continue
-            if f["kind"] != "checkgroup":
-                value = value[0]
-        if f["kind"] == "checkbox":
-            value = str(value).lower() in ("true", "yes", "1")
-        if isinstance(value, str) and not f.get("options"):
-            value = llm.undash(value)
-        f.update(value=value, source="hal", note="" if a.get("sure") else "Hal is unsure; check this")
-        answered += 1
+            f = by_hid.get(str(a.get("hid")))
+            value = a.get("value")
+            if f is None or value in (None, "", []):
+                continue
+            if f.get("options"):
+                pool = f["options"]
+                value = [v for v in (value if isinstance(value, list) else [value]) if v in pool]
+                if not value:
+                    continue
+                if f["kind"] != "checkgroup":
+                    value = value[0]
+            elif f["kind"] in ("radio", "select", "checkgroup"):
+                continue
+            if f["kind"] == "checkbox":
+                value = str(value).lower() in ("true", "yes", "1")
+            if isinstance(value, str) and not f.get("options"):
+                value = llm.undash(value)
+            if f.get("type") == "number" and not re.fullmatch(r"\s*-?[\d.,]+\s*", str(value)):
+                continue
+            f.update(value=value, source="hal", skip=False, note="" if a.get("sure") else "Hal is unsure; check this")
+            answered += 1
+    mark_written(fields)
     return answered, None
+
+
+NAVIGATE = """You help a job applicant reach an application form. Given a web page's title and
+the names of its buttons and links, choose the one control that leads towards applying for the
+job named. Reply with JSON only: {"press": the control's name copied exactly, or "" if none
+leads to an application form, "why": a few words}. Never choose a control that signs in with
+another service (LinkedIn, Indeed, Google), shares the job, or leaves for an unrelated page."""
+
+
+def choose_control(job, found: dict) -> str:
+    """Asks the model which control on a page without a recognised Apply button leads to the form."""
+    names = list(dict.fromkeys(c["name"] for c in found.get("controls", [])))
+    if not names or gpu.busy():
+        return ""
+    prompt = (f"Job: {job['title']} at {job['company']}\nPage title: {found['title']}\n"
+              f"Page address: {found['url']}\nControls:\n" + "\n".join(f"- {n}" for n in names[:60]))
+    try:
+        reply = llm.chat_json(NAVIGATE, prompt, role="main", timeout=120)
+    except llm.LLMUnavailable:
+        return ""
+    press = str(reply.get("press") or "")
+    return press if press in names else ""

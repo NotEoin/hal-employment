@@ -1,4 +1,5 @@
 """SQLite tracker: every job ever seen, its score, and its application history."""
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,6 +80,14 @@ CREATE TABLE IF NOT EXISTS applications (
     updated  TEXT NOT NULL
 );
 
+-- Answers the applicant typed into a form himself, reused when another form asks the same.
+CREATE TABLE IF NOT EXISTS answers (
+    question TEXT PRIMARY KEY,              -- the form's label, lower-cased without punctuation
+    label    TEXT NOT NULL,                 -- the label as the form worded it
+    answer   TEXT NOT NULL,                 -- JSON: a string, a list of options, or true/false
+    updated  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS todos (
     id        INTEGER PRIMARY KEY,
     job_id    TEXT REFERENCES jobs(id),
@@ -108,6 +117,14 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def json_text(value) -> str:
+    return json.dumps(value)
+
+
+def json_value(text: str):
+    return json.loads(text)
 
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:

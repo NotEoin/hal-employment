@@ -101,9 +101,17 @@ async function viewQueue() {
     <div class="head"><div><h1>Your queue</h1>
       <p>${data.jobs.length} of ${data.target} ready${data.reserve ? `, ${data.reserve} more in reserve` : ""}.
       Hal tops it up as you go. <span class="kbd">J</span> <span class="kbd">K</span> move,
-      <span class="kbd">A</span> apply, <span class="kbd">D</span> discard, <span class="kbd">Enter</span> details.</p></div></div>
+      <span class="kbd">A</span> apply, <span class="kbd">D</span> discard, <span class="kbd">Enter</span> details.
+      Apply sends Hal to fill the form in; nothing is submitted until you approve it.</p></div>
+      ${data.jobs.length ? `<div class="bar" style="margin:0"><button class="primary" data-all>Apply to all ${data.jobs.length}</button></div>` : ""}</div>
     ${data.jobs.length ? `<div class="grid">${data.jobs.map(jobCard).join("")}</div>` :
       `<div class="card empty"><h2>The queue is empty</h2><p>${esc(w?.detail || "Hal is looking for more jobs.")}</p></div>`}`;
+  const all = $("[data-all]", main);
+  all && (all.onclick = async () => {
+    if (!await confirmBox(`Apply to all ${data.jobs.length}?`, "Hal opens each application, answers its questions and fills the form in. Each one then waits for you to check the filled form and approve it; nothing is submitted before that.", "Start")) return;
+    await guard(() => api("queue/apply", { count: data.jobs.length }), "Hal has started on them");
+    location.hash = "#/applications";
+  });
   $$(".job", main).forEach((el, i) => {
     el.onclick = e => { if (!e.target.closest("button")) { state.focus = i; openDrawer(state.queue[i].id); } };
     $("[data-apply]", el).onclick = () => applyJob(state.queue[i]);
@@ -206,22 +214,27 @@ async function viewApplications() {
       const list = jobs.filter(j => j.status === k);
       return `<div class="col"><h4>${name}<span>${list.length}</span></h4>${list.map(j => `
         <div class="card mini" data-id="${esc(j.id)}"><div class="t">${esc(j.title)}</div><div class="c">${esc(j.company)}</div>
-        <div class="c">${k === "applying" ? esc(stageName(j.stage)) : esc(ago(j.changed))}</div></div>`).join("") || `<p class="muted small-t">None</p>`}</div>`;
+        <div class="c">${k === "applying" ? standing(j) : esc(ago(j.changed))}</div></div>`).join("") || `<p class="muted small-t">None</p>`}</div>`;
     }).join("")}</div>
     ${closed.length ? `<div class="section"><h4>Closed</h4><div class="card">${closed.map(j => `<div class="todo" data-id="${esc(j.id)}" style="cursor:pointer">
       <div class="body"><div class="t">${esc(j.company)}: ${esc(j.title)}</div></div><span class="chip ${STATUS_CHIP[j.status]}">${esc(j.status)}</span></div>`).join("")}</div></div>` : ""}`;
   $$("[data-id]", main).forEach(el => el.onclick = () => location.hash = "#/job/" + enc(el.dataset.id));
 }
-const stageName = s => ({ documents: "Reviewing documents", form: "Reviewing the form", filled: "Ready to submit", submitted: "Submitted" }[s] || "Not started");
+// Where an application in progress stands: what Hal is doing, or what it is waiting on.
+function standing(j) {
+  const a = state.last?.actions?.[j.id];
+  if (a && a.state === "running") return `<span class="chip info">Hal: ${esc(a.message || a.name)}</span>`;
+  const chip = { ready: ["good", "Ready for you to approve"], needs: ["warn", "Needs you"], stuck: ["bad", "Stuck"], working: ["", "Not finished"] }[j.state];
+  return chip ? `<span class="chip ${chip[0]}" title="${esc(j.message || "")}">${chip[1]}</span>` : "Not started";
+}
 
 // One application --------------------------------------------------------------
-const STEPS = [["documents", "Documents"], ["form", "Application form"], ["submitted", "Submitted"], ["next", "Interview and tests"]];
+const STEPS = [["documents", "Documents"], ["form", "Form and approval"], ["submitted", "Submitted"], ["next", "Interview and tests"]];
 function currentStep(d) {
   const st = d.job.status, stage = d.application.stage;
   if (["assessment", "interview", "offer"].includes(st)) return "next";
   if (["applied", "rejected", "withdrawn"].includes(st) || stage === "submitted") return "submitted";
-  if (stage === "form" || stage === "filled") return "form";
-  return "documents";
+  return "form";
 }
 async function viewJob(id) {
   const d = await api("job/" + enc(id));
@@ -269,7 +282,8 @@ function paneDocs(d) {
         <div class="tabs">${tabs.map(([k, n]) => `<button class="tab ${state.tab === k ? "on" : ""}" data-tab="${k}">${n}</button>`).join("")}</div>
         <div id="editor"></div>
         <div class="bar"><button data-reset class="ghost">Reset to Hal's draft</button><span class="grow"></span>
-          <button data-save>Save</button><button class="primary" data-approve>Approve documents</button></div>
+          <button class="primary" data-save>Save and re-render</button></div>
+        <p class="small-t muted">Hal uploads these PDFs and pastes this text into the form. If you change them after the form is filled, press "Start again" on the form so it takes the new ones.</p>
       </div>
       <div class="card pad"><div class="tabs"><button class="tab on" id="prev-label">Preview</button></div><div id="preview"></div></div>
     </div>`;
@@ -296,13 +310,12 @@ function paneDocs(d) {
       `<div class="empty"><p>No PDF yet. Save to render it.</p></div>`;
   };
   $$("[data-tab]", pane).forEach(b => b.onclick = () => { state.tab = b.dataset.tab; draw(); });
-  const save = async approve => {
-    const r = await guard(() => api(`job/${enc(id)}/docs`, { docs, approve }), approve ? "Documents approved" : "Saved and re-rendered");
+  const save = async () => {
+    const r = await guard(() => api(`job/${enc(id)}/docs`, { docs }), "Saved and re-rendered");
     d.files = r.files;
-    if (approve) { state.stepView = null; viewJob(id); } else draw();
+    draw();
   };
-  $("[data-save]", pane).onclick = () => save(false);
-  $("[data-approve]", pane).onclick = () => save(true);
+  $("[data-save]", pane).onclick = save;
   $("[data-reset]", pane).onclick = async () => {
     if (!await confirmBox("Reset to Hal's draft?", "Your edits to these documents will be lost.", "Reset")) return;
     const r = await guard(() => api(`job/${enc(id)}/docs-reset`, {}));
@@ -331,66 +344,83 @@ function paneForm(d) {
   const pane = $("#pane");
   const running = d.action && d.action.state === "running";
   // Forms are driven in Hal's own browser window, or in a tab of yours through the extension.
-  const s = state.last || {}, own = s.browser === "extension", where = s.where || "Hal's window";
-  const offline = own && !s.extension ? `<div class="progress error">The Hal extension is not connected. Open Brave with the
+  const st = state.last || {}, own = st.browser === "extension", where = st.where || "Hal's window";
+  const offline = own && !st.extension ? `<div class="progress error">The Hal extension is not connected. Open Brave with the
     Hal Employment extension switched on; it links up within half a minute.</div>` : "";
+  const controls = `<div class="bar"><button data-restart class="ghost" ${running ? "disabled" : ""}>Start again</button>
+      <button data-here class="ghost" ${running ? "disabled" : ""} title="Use this after moving the form on yourself in ${esc(where)}">Carry on from this page</button>
+      <button data-show>Show the form</button><span class="grow"></span><button class="ghost" data-manual>I applied myself</button></div>`;
+  const bind = () => {
+    $$("[data-restart]", pane).forEach(b => b.onclick = () => startAction(id, "auto", { here: false }));
+    $$("[data-here]", pane).forEach(b => b.onclick = () => startAction(id, "auto", { here: true }));
+    $$("[data-show]", pane).forEach(b => b.onclick = () => guard(() => api(`job/${enc(id)}/form-show`, {}), "Brought the form to the front"));
+    $$("[data-manual]", pane).forEach(b => b.onclick = () => markApplied(id));
+  };
   if (!form || (!form.fields.length && !form.filled)) {
-    pane.innerHTML = `<div class="card pad">
-      <h3 style="margin-top:0">Let Hal fill in the application</h3>
+    const stuck = form && form.state === "stuck";
+    pane.innerHTML = `${offline}<div class="card pad">
+      <h3 style="margin-top:0">${running ? "Hal is working on this application" : stuck ? "Hal could not reach the form" : "Let Hal fill in the application"}</h3>
       <p class="muted">Hal opens the form at <a href="${esc(d.apply_url)}" target="_blank" rel="noopener">${esc(d.apply_url.slice(0, 90))}</a>
-      ${own ? "in a tab of your browser" : "in its own browser window"}, reads every question, and proposes an answer from your profile, these documents and the local model.
-      You check everything here before anything is entered, and nothing is sent until you press Submit${own ? " on the form yourself" : ""}.</p>${offline}
-      ${form && !form.fields.length ? `<div class="progress error">No form was found on ${esc(form.url)}. If the site needs a login or a few clicks,
-        do that in ${esc(where)}, then press "Read the page in ${esc(where)}".</div>` : ""}
-      <div class="bar"><button class="primary" data-open ${running ? "disabled" : ""}>Read the form</button>
-      <button data-here ${running ? "disabled" : ""}>Read the page in ${esc(where)}</button>
-      <span class="grow"></span><button class="ghost" data-manual>I applied myself</button></div></div>`;
-    $("[data-open]", pane).onclick = () => startAction(id, "form-open", { here: false });
-    $("[data-here]", pane).onclick = () => startAction(id, "form-open", { here: true });
-    $("[data-manual]", pane).onclick = () => markApplied(id);
+      ${own ? "in a tab of your browser" : "in its own browser window"}, answers every question from your profile, your documents and the local model,
+      and fills the form in. It then stops, with the filled form on screen, until you approve it. Nothing is submitted before that.</p>
+      ${form && form.message && !running ? `<div class="progress ${stuck ? "error" : ""}">${esc(form.message)}</div>` : ""}
+      ${controls}</div>`;
+    bind();
     return;
   }
-  const need = form.fields.filter(f => (f.value === null || f.value === "" || (Array.isArray(f.value) && !f.value.length)) && !f.skip);
+  const blank = f => (f.value === null || f.value === "" || f.value === false || (Array.isArray(f.value) && !f.value.length)) && !f.skip && f.type !== "password";
+  const need = form.fields.filter(blank);
   const needReq = need.filter(f => f.required);
+  const refused = form.fields.filter(f => f.error);
+  const toRead = form.fields.filter(f => f.written || /unsure/.test(f.note || ""));
+  const filled = app.stage === "filled" && form.filled;
+  const does = form.press === "apply" ? "press Apply" : form.final ? "submit" : "continue";
+  const tone = { ready: "done", needs: "", stuck: "error", working: "" }[form.state] ?? "";
+  // What needs reading comes first: gaps, refusals, then anything Hal wrote in sentences.
+  const rank = f => f.error ? 0 : blank(f) && f.required ? 1 : /unsure/.test(f.note || "") ? 2 : f.written ? 3 : 4;
+  const ordered = form.fields.map((f, i) => [f, i]).sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1]).map(x => x[0]);
   pane.innerHTML = `${offline}
     <div class="card pad" style="margin-bottom:16px">
       <div class="bar" style="margin:0">
         <div class="grow"><b>${form.step > 1 ? `Step ${form.step}: ` : ""}${esc(form.title || "Application form")}</b><div class="small-t muted">${esc(form.url)}</div></div>
         <span class="chip ${needReq.length ? "bad" : "good"}">${needReq.length ? needReq.length + " required left" : "All required answered"}</span>
-        ${need.length - needReq.length ? `<span class="chip warn">${need.length - needReq.length} optional empty</span>` : ""}
-        ${form.captcha ? `<span class="chip warn" title="The site may ask you to solve a captcha when you submit">captcha on page</span>` : ""}
+        ${refused.length ? `<span class="chip bad">${refused.length} not accepted</span>` : ""}
+        ${toRead.length ? `<span class="chip warn">${toRead.length} written by Hal to read</span>` : ""}
+        ${form.captcha ? `<span class="chip warn" title="The site may ask you to pass a human check when the form is submitted">human check on page</span>` : ""}
       </div>
-      ${form.model ? `<p class="small-t muted" style="margin:10px 0 0">Hal's model could not run: ${esc(form.model)}. It will answer the rest when you press "Ask Hal".</p>` : ""}
+      ${form.message && !running ? `<div class="progress ${tone}" style="margin:12px 0 0">${esc(form.message)}</div>` : ""}
+      ${form.stale ? `<div class="progress error" style="margin:12px 0 0">You changed the documents after this form was filled. Press "Start again" so the form takes the new ones.</div>` : ""}
+      ${form.model ? `<p class="small-t muted" style="margin:10px 0 0">Hal's model could not run: ${esc(form.model)}.</p>` : ""}
     </div>
     <div class="split" style="grid-template-columns: minmax(0, 3fr) minmax(0, 2fr)">
-      <div class="card pad"><div class="fields">${form.fields.map(f => {
+      <div class="card pad"><div class="fields">${ordered.map(f => {
         const empty = need.includes(f);
         return `<div class="field ${f.error ? "err" : empty && f.required ? "need" : ""}" data-hid="${esc(f.hid)}">
           <div><div class="q">${esc(f.label || "(unlabelled " + f.kind + ")")}${f.required ? '<span class="req">*</span>' : ""}</div>
-            <div class="meta"><span class="chip ${SOURCE_CHIP(f.source)}">${esc(f.source)}</span></div></div>
-          <div>${fieldControl(f)}${f.note ? `<div class="note">${esc(f.note)}</div>` : ""}${f.error ? `<div class="error">Could not fill: ${esc(f.error)}</div>` : ""}</div></div>`;
+            <div class="meta"><span class="chip ${SOURCE_CHIP(f.source)}">${esc(f.source)}</span>${f.written ? ' <span class="chip warn">read this</span>' : ""}</div></div>
+          <div>${fieldControl(f)}${f.note ? `<div class="note">${esc(f.note)}</div>` : ""}${f.help ? `<div class="note muted">${esc(f.help)}</div>` : ""}${f.error ? `<div class="error">The form says: ${esc(f.error)}</div>` : ""}</div></div>`;
       }).join("")}</div>
-      <div class="bar"><button data-again class="ghost" ${running ? "disabled" : ""}>Read again</button>
-        ${need.length ? `<button data-draft ${running ? "disabled" : ""}>Ask Hal to answer the rest</button>` : ""}
+      ${(form.done || []).map(s => `<details class="section"><summary class="small-t muted">Step ${s.step}, already entered: ${esc(s.title)}</summary>
+        <table>${s.fields.map(f => `<tr><td>${esc(f.label)}</td><td>${esc(f.kind === "file" ? String(f.value || "").split("/").pop() : Array.isArray(f.value) ? f.value.join(", ") : f.value === true ? "Ticked" : f.value ?? "")}</td></tr>`).join("")}</table></details>`).join("")}
+      <div class="bar">${need.length ? `<button data-draft class="ghost" ${running ? "disabled" : ""}>Ask Hal to answer the rest</button>` : ""}
         <span class="grow"></span><button data-save>Save</button>
-        <button class="primary" data-fill ${running ? "disabled" : ""}>Approve and fill</button></div></div>
+        <button data-fill ${running ? "disabled" : ""} title="Types your changes into the form without sending anything">Put my changes in the form</button></div></div>
       <div class="card pad">
-        ${form.filled ? `<h4 class="muted small-t" style="margin:0 0 8px">FILLED FORM ${esc(ago(form.filled.at)).toUpperCase()}</h4>
+        ${filled ? `<h4 class="muted small-t" style="margin:0 0 8px">THE FORM AS HAL FILLED IT, ${esc(ago(form.filled.at)).toUpperCase()}</h4>
           ${form.filled.screenshot ? `<div class="shot-wrap"><img class="shot" src="${fileUrl(form.filled.screenshot)}" alt="The filled form"></div>`
-            : `<p class="muted">The answers are in the form, in its tab.</p>`}
-          <div class="bar"><button class="${own ? "primary" : ""}" data-show>Show the form</button><span class="grow"></span>
-            ${form.filled.next ? `<button class="primary" data-next ${running ? "disabled" : ""}>Next step</button>`
-              : own ? "" : `<button class="good" data-submit ${running || app.stage !== "filled" ? "disabled" : ""}>Submit application</button>`}</div>
-          <p class="small-t muted">${form.filled.next ? "This form has more steps. Hal moves on by itself when a step fills without problems."
-            : own ? `Check the form, pass any human check, and press its Submit button yourself. Hal marks the job applied when the site confirms it; if it does not, press "I applied myself".`
-            : `Submit presses the form's own submit button. Or submit it yourself in Hal's window and press "I applied myself".`}</p>`
-        : `<h4 class="muted small-t" style="margin:0 0 8px">NEXT</h4><p class="muted">Check each answer, change anything that is not right,
-          then press <b>Approve and fill</b>. Hal enters the values ${own ? "into the form in its tab" : "in the browser window and shows you a picture of the result here"}.</p>
-          <div class="bar"><button data-show>Show the form</button></div>`}
+            : `<p class="muted">The form is in ${esc(where)}.</p>`}
+          <div class="bar"><button class="primary" data-show>Show the form</button><span class="grow"></span>
+            <button class="good" data-approve ${running ? "disabled" : ""}>Approve and ${does}</button></div>
+          <p class="small-t muted">${form.press === "apply" ? `Approving presses Apply on the advert, which sends the CV stored in your account there.`
+            : own ? `Look over the form in its tab. When you approve, Hal enters any changes you made here; you press the form's own Submit button, and Hal marks the job applied when the site confirms it.`
+            : form.final ? `Look over the form in ${esc(where)}: it is filled in and nothing has been sent. Approving enters any changes you made here, then presses the form's own submit button. That cannot be undone.`
+            : `This form has more pages. Approving moves it on; Hal stops again at the last page before anything is sent.`}</p>`
+        : `<h4 class="muted small-t" style="margin:0 0 8px">${running ? "HAL IS FILLING THE FORM IN" : "NOT FILLED IN YET"}</h4>
+          <p class="muted">${running ? "The answers on the left are going into the form now." : `Press "Start again" to have Hal fill the form in.`}</p>`}
         ${form.submit ? `<div class="section"><h4>After submitting</h4>
           <div class="progress ${form.submit.submitted ? "done" : "error"}">${form.submit.submitted ? "The site confirmed the application" : "No confirmation seen"}</div>
-          <div class="shot-wrap"><img class="shot" src="${fileUrl(form.submit.screenshot)}" alt="The page after submitting"></div></div>` : ""}
-        <div class="bar"><span class="grow"></span><button class="ghost" data-manual>I applied myself</button></div>
+          ${form.submit.screenshot ? `<div class="shot-wrap"><img class="shot" src="${fileUrl(form.submit.screenshot)}" alt="The page after submitting"></div>` : ""}</div>` : ""}
+        ${controls}
       </div></div>`;
   const collect = () => form.fields.map(f => {
     const row = $(`[data-hid="${CSS.escape(f.hid)}"]`, pane);
@@ -398,28 +428,26 @@ function paneForm(d) {
     const el = row && $("[data-v]", row);
     if (el) value = el.type === "checkbox" ? el.checked : el.value;
     if (row && $$("[data-multi]", row).length) value = $$("[data-multi]", row).filter(x => x.checked).map(x => x.value);
-    if (JSON.stringify(value) !== JSON.stringify(f.value)) edited = true;
+    if (JSON.stringify(value ?? "") !== JSON.stringify(f.value ?? "")) edited = true;
     return { hid: f.hid, value, skip: f.skip, edited };
   });
   const save = () => api(`job/${enc(id)}/form-save`, { fields: collect() });
   $("[data-save]", pane).onclick = () => guard(save, "Saved");
-  $("[data-again]", pane).onclick = () => startAction(id, "form-open", { here: true });
   const draft = $("[data-draft]", pane);
   draft && (draft.onclick = async () => { await save(); startAction(id, "form-draft", {}); });
-  $("[data-fill]", pane).onclick = async () => {
-    const left = collect().filter((f, i) => form.fields[i].required && !form.fields[i].skip && (f.value === "" || f.value === null || (Array.isArray(f.value) && !f.value.length)));
-    if (left.length && !await confirmBox("Some required questions are empty", `${left.length} required field(s) have no answer. The site will likely refuse the form. Fill anyway?`, "Fill anyway")) return;
-    await save(); startAction(id, "form-fill", {});
-  };
-  $$("[data-show]", pane).forEach(b => b.onclick = () => guard(() => api(`job/${enc(id)}/form-show`, {}), "Brought the form to the front"));
-  const next = $("[data-next]", pane);
-  next && (next.onclick = () => startAction(id, "form-next", {}));
-  const submit = $("[data-submit]", pane);
-  submit && (submit.onclick = async () => {
-    if (!await confirmBox(`Submit your application to ${d.job.company}?`, "Hal will press the form's submit button. This sends the application and cannot be undone.", "Submit application", "good")) return;
-    startAction(id, "submit", {});
+  $("[data-fill]", pane).onclick = () => startAction(id, "form-fill", { fields: collect() });
+  const approve = $("[data-approve]", pane);
+  approve && (approve.onclick = async () => {
+    const fields = collect();
+    const left = fields.filter((f, i) => form.fields[i].required && !form.fields[i].skip && form.fields[i].type !== "password" && (f.value === "" || f.value === null || f.value === false || (Array.isArray(f.value) && !f.value.length)));
+    const warn = left.length ? ` ${left.length} required question(s) have no answer here; unless you answered them in the form itself, the site will refuse it.` : "";
+    const ask = form.final || form.press === "apply"
+      ? [`Submit your application to ${d.job.company}?`, `Hal ${form.press === "apply" ? "presses Apply on the advert" : "presses the form's submit button"}. This sends the application and cannot be undone.${warn}`, "Submit application"]
+      : ["Move on to the next page?", `Hal presses Next. Nothing is sent yet; it stops again before the application is submitted.${warn}`, "Continue"];
+    if (!await confirmBox(ask[0], ask[1], ask[2], "good")) return;
+    startAction(id, "approve", { fields });
   });
-  $$("[data-manual]", pane).forEach(b => b.onclick = () => markApplied(id));
+  bind();
 }
 async function startAction(id, action, body) {
   const a = await guard(() => api(`job/${enc(id)}/${action}`, body));

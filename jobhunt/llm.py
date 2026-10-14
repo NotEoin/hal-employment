@@ -8,12 +8,18 @@ import json
 import os
 import re
 import shlex
+import threading
 import urllib.request
 from pathlib import Path
 
 from .config import CONFIG
 
 HAL_ROOT = Path(CONFIG.get("hal_root", "~/hal")).expanduser()
+
+
+# One request at a time: several applications draft at once, and a request waiting behind
+# another on the GPU would otherwise run out its timeout before it started.
+_TURN = threading.Lock()
 
 
 class LLMUnavailable(Exception):
@@ -59,7 +65,7 @@ def chat(system: str, user: str, *, role: str = "main", json_out: bool = False, 
     req = urllib.request.Request(f"{url}/api/chat", data=json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with _TURN, urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read())["message"]["content"]
     except OSError as e:
         raise LLMUnavailable(f"Ollama at {url}: {e}") from e

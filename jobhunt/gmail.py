@@ -314,6 +314,49 @@ def connect() -> imaplib.IMAP4_SSL:
     return M
 
 
+CODE_SUBJECT = re.compile(r"(security|verification|confirmation|one[- ]time|access) code|verify your", re.I)
+CODE_LEAD = re.compile(r"code\b[^.]{0,120}?[:\s]\s*([A-Za-z0-9]{6,10})\b")
+
+
+def code_in(subject: str, body: str) -> str | None:
+    """Finds the security code in an email: the first run of letters and digits after the word 'code'."""
+    for m in CODE_LEAD.finditer(f"{subject}. {body}"):
+        token = m.group(1)
+        # A code mixes digits or cases; an ordinary word after "code" does not.
+        if re.search(r"\d", token) or (token != token.lower() and token != token.upper() and not token.istitle()):
+            return token
+    return None
+
+
+def security_code(since: float) -> str | None:
+    """Returns the code an application site emailed after `since` (epoch seconds), or None.
+
+    Read-only, like every other use of the job inbox.
+    """
+    try:
+        M = connect()
+    except (SystemExit, OSError, imaplib.IMAP4.error):
+        return None
+    try:
+        uids = _search(M, "newer_than:1d code")
+        for _msgid, _thrid, msg in reversed(list(_fetch(M, uids[-8:]))):
+            sent = email.utils.parsedate_to_datetime(msg["Date"]).timestamp() if msg["Date"] else 0
+            subject = _dec(msg["Subject"])
+            if sent < since or not CODE_SUBJECT.search(subject):
+                continue
+            code = code_in(subject, body_text(msg))
+            if code:
+                return code
+        return None
+    except (OSError, imaplib.IMAP4.error, ValueError, TypeError):
+        return None
+    finally:
+        try:
+            M.logout()
+        except (OSError, imaplib.IMAP4.error):
+            pass
+
+
 def _search(M, query: str) -> list[bytes]:
     M.literal = query.encode("utf-8")
     typ, data = M.uid("SEARCH", "CHARSET", "UTF-8", "X-GM-RAW")

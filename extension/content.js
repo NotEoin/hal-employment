@@ -44,8 +44,9 @@
     }
     const frame = [...document.querySelectorAll('iframe[src]')].find(f => p.frames.some(host => f.src.includes(host)));
     const turnstile = [...document.querySelectorAll("input[name='cf-turnstile-response']")];
+    const survey = halSurvey();
     return {
-      url: location.href, title: document.title, fields,
+      url: location.href, title: document.title, fields, controls: survey.controls, alerts: survey.alerts,
       text: (document.body.innerText || '').slice(0, 40000),
       headings: [...document.querySelectorAll('h1, h2')].slice(0, 4).map(h => h.innerText).join(' '),
       password: [...document.querySelectorAll('input[type=password]')].some(visible),
@@ -62,6 +63,12 @@
   }
 
   function press(p) {
+    if (p.kind === 'named') {
+      // A control the helper chose by name, on a page with no Apply button it recognised.
+      const named = [...document.querySelectorAll("a[href], [role=link], " + BUTTONS)].find(el => visible(el) && nameOf(el) === p.name);
+      if (named) named.click();
+      return { pressed: Boolean(named) };
+    }
     const found = p.kind === 'apply' ? controls("a[href], [role=link], " + BUTTONS, p.pattern) : controls(BUTTONS, p.pattern);
     const control = p.kind === 'apply' ? found[0] : found[found.length - 1];
     if (!control) return { pressed: false };

@@ -1,0 +1,86 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Application: Junior Engineer</title>
+<style>
+ .hide{display:none} .field{margin:14px 0} .err{color:#b00}
+ .radio-hidden{position:absolute;opacity:0;width:0;height:0}
+ .menu{border:1px solid #999;position:absolute;background:#fff} .menu div{padding:4px 10px;cursor:pointer}
+ .yesno button.active{background:#333;color:#fff}
+</style></head><body>
+<h1>Apply: Junior Engineer</h1>
+<form id="app" novalidate onsubmit="return false">
+<section id="step1">
+ <fieldset><legend>1. About you</legend>
+  <div class="field"><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+  <div class="field"><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+  <div class="field"><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+  <div class="field"><div class="label">Phone</div><input name="phone" type="tel"></div>
+  <div class="field"><div class="label">Resume/CV *</div><button type="button">Attach</button><input type="file" name="resume" style="width:1px;height:1px" required></div>
+ </fieldset>
+ <fieldset><legend>2. Questions</legend>
+  <div class="field" id="rtw"><p class="question">Do you have the right to work in the UK? *</p>
+   <div><input class="radio-hidden" type="radio" name="rtw" id="rtw-y" value="y" aria-labelledby="rtw-y-l"><label id="rtw-y-l" for="rtw-y">Yes</label>
+        <input class="radio-hidden" type="radio" name="rtw" id="rtw-n" value="n" aria-labelledby="rtw-n-l"><label id="rtw-n-l" for="rtw-n">No</label></div></div>
+  <div class="field" id="sponsor"><label class="q">Will you need visa sponsorship? *</label>
+   <div class="yesno"><input type="checkbox" name="sponsor" style="display:none"><button type="button">Yes</button><button type="button">No</button></div></div>
+  <div class="field hide" id="sponsor-more"><label for="sm">If you need sponsorship, please specify</label><input id="sm" name="sponsor_more"></div>
+  <div class="field" id="uni"><div class="question">Which university did you attend? *</div>
+   <div class="select"><div class="single-value" id="uni-shown"></div>
+    <input id="uni-in" role="combobox" aria-autocomplete="list" aria-label="Which university did you attend?" style="width:4px;border:0">
+    <div class="menu hide" id="uni-menu" role="listbox"></div></div></div>
+  <div class="field"><label for="heard">How did you hear about Practice Ltd? *</label>
+   <select id="heard" name="heard" required><option value="">Select...</option><option>Company website</option><option>Job board</option><option>A friend</option></select></div>
+  <div class="field"><label for="notice">Notice period (in weeks) *</label><input id="notice" name="notice" type="number" required></div>
+  <div class="field"><label for="dob">Date of birth *</label><input id="dob" name="dob" required><span class="err hide" id="dob-err" role="alert">Enter your date of birth</span></div>
+ </fieldset>
+ <p class="err hide" id="err1" role="alert">Please complete the required fields.</p>
+ <button type="button" id="next">Next</button>
+</section>
+<section id="step2" class="hide">
+ <div class="field"><label for="why">Why do you want to work here? *</label><textarea id="why" name="why" required maxlength="2000"></textarea></div>
+ <div class="field"><label><input type="checkbox" name="consent" required> I agree to the privacy policy *</label></div>
+ <div class="field"><label><input type="checkbox" name="news"> Send me the newsletter</label></div>
+ <p class="err hide" id="err2" role="alert">Please complete the required fields.</p>
+ <div class="field hide" id="code-row"><p>Enter the security code we emailed you</p><input id="code" name="security_code" maxlength="8"></div>
+ <button type="submit" id="send">Submit application</button>
+</section>
+</form>
+<script>
+const $ = s => document.querySelector(s), q = new URLSearchParams(location.search);
+const UNIS = ['Other University', 'University', 'Another University', 'University of York'];
+const uni = $('#uni-in'), menu = $('#uni-menu');
+let chosen = '';
+function draw() {
+  menu.innerHTML = '';
+  UNIS.filter(u => u.toLowerCase().includes(uni.value.toLowerCase())).forEach(u => {
+    const o = document.createElement('div'); o.setAttribute('role', 'option'); o.textContent = u;
+    o.onmousedown = e => { e.preventDefault(); chosen = u; $('#uni-shown').textContent = u; uni.value = ''; menu.classList.add('hide'); };
+    menu.append(o);
+  });
+  menu.classList.remove('hide');
+}
+uni.addEventListener('focus', draw); uni.addEventListener('input', draw);
+uni.addEventListener('keydown', e => { if (e.key === 'ArrowDown') draw(); if (e.key === 'Escape') menu.classList.add('hide'); });
+uni.addEventListener('blur', () => setTimeout(() => menu.classList.add('hide'), 50));
+document.querySelectorAll('.yesno button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.yesno button').forEach(x => x.classList.toggle('active', x === b));
+  $('[name=sponsor]').checked = b.textContent === 'Yes';
+  $('#sponsor-more').classList.toggle('hide', b.textContent !== 'Yes');
+});
+$('#next').onclick = () => {
+  const dob = /^\d{2}\/\d{2}\/\d{4}$/.test($('#dob').value);
+  $('#dob-err').classList.toggle('hide', dob); $('#dob').setAttribute('aria-invalid', String(!dob));
+  const ok = [...$('#step1').querySelectorAll('input[required], select[required]')].every(e => e.type === 'file' ? e.files.length : e.value)
+    && document.querySelector('[name=rtw]:checked') && document.querySelector('.yesno .active') && chosen && dob;
+  $('#err1').classList.toggle('hide', Boolean(ok));
+  if (ok) { $('#step1').classList.add('hide'); $('#step2').classList.remove('hide'); history.replaceState(null, '', '?step=2' + (q.get('code') ? '&code=1' : '')); }
+};
+$('#send').onclick = () => {
+  const ok = $('#why').value.trim() && $('[name=consent]').checked;
+  $('#err2').classList.toggle('hide', Boolean(ok));
+  if (!ok) return;
+  if (q.get('code') && $('#code').value !== 'A1b2C3d4') { $('#code-row').classList.remove('hide'); return; }
+  window.halSent = { first: $('#fn').value, uni: chosen, rtw: document.querySelector('[name=rtw]:checked').value,
+                     sponsor: $('[name=sponsor]').checked, news: $('[name=news]').checked, why: $('#why').value,
+                     cv: $('[name=resume]').files[0].name, heard: $('#heard').value, dob: $('#dob').value };
+  document.body.innerHTML = '<h1>Thank you for applying</h1><p>Your application has been received.</p><pre id="sent">' + JSON.stringify(window.halSent) + '</pre>';
+};
+</script></body></html>

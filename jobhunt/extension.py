@@ -13,8 +13,8 @@ import time
 import uuid
 from urllib.parse import urlparse
 
-from .browser import (APPLIED, APPLY_BUTTON, ATS_FRAME, BOT_CHECK, CAPTCHA, CLOSED, COOKIE_BUTTONS, MAX_PRESSES,
-                      NEXT_BUTTON, SIGN_IN, SIGN_OUT, SIGNED_IN, SUBMIT_BUTTON, SUCCESS, _is_form,
+from .browser import (APPLIED, APPLY_BUTTON, ATS_FRAME, BLOCKED, BOT_CHECK, CAPTCHA, CLOSED, COOKIE_BUTTONS,
+                      MAX_PRESSES, NEXT_BUTTON, SIGN_IN, SIGN_OUT, SIGNED_IN, SUBMIT_BUTTON, SUCCESS, _is_form,
                       _signed_in_sites, _site)
 from .config import CONFIG
 
@@ -85,7 +85,8 @@ def _needs(facts: dict) -> str:
     if BOT_CHECK.search(facts["title"]):
         return "check"
     if facts["password"]:
-        return "sign-in"
+        # A registration form that also asks the usual questions is filled in, apart from its password.
+        return "" if _is_form(fields) and len(fields) > 5 else "sign-in"
     # Sign-in pages that ask for the email address first show no password box yet.
     if 0 < len(fields) <= 2 and not facts["apply"] \
             and SIGN_IN.search(f"{facts['title']} {urlparse(facts['url']).path}"):
@@ -99,7 +100,11 @@ def _report(facts: dict, needs: str, pressed: bool) -> dict:
     return {"url": facts["url"], "title": facts["title"], "fields": [] if needs else facts["fields"],
             "needs": needs, "sent": pressed and SUCCESS.search(text) is not None, "site": _site(facts["url"]),
             "closed": not form and CLOSED.search(f"{facts['title']} {facts['headings']}") is not None,
-            "applied": APPLIED.search(text) is not None, "captcha": facts["captcha"]}
+            "blocked": not form and not needs and BLOCKED.search(f"{facts['title']} {facts['text'][:300]}") is not None,
+            "applied": APPLIED.search(text) is not None, "captcha": facts["captcha"],
+            "alerts": facts.get("alerts", []), "next": form and facts["next"] and not facts["submit"],
+            "submit": form and facts["submit"], "password": form and facts["password"],
+            "controls": [] if form or needs else [c for c in facts.get("controls", []) if not c["inNav"]][:60]}
 
 
 def _advance(job_id: str, pressed: bool = False) -> dict:
@@ -133,6 +138,16 @@ def open_form(job_id: str, url: str) -> dict:
     return _advance(job_id)
 
 
+def press_control(job_id: str, name: str) -> dict:
+    if not _ask("press", job=job_id, kind="named", name=name)["pressed"]:
+        raise RuntimeError(f"no control named {name!r} on the page")
+    return _advance(job_id)
+
+
+def enter_code(job_id: str, code: str, shot) -> dict:
+    raise RuntimeError("type the security code in the job's tab, then press Submit there")
+
+
 def resume(job_id: str, passed: str, wall: str) -> dict:
     if passed == "sign-in":
         SIGNED_IN.write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
@@ -145,7 +160,8 @@ def peek(job_id: str) -> dict:
     except RuntimeError as e:
         return {"gone": True} if "tab was closed" in str(e) else {"busy": True}
     return {"needs": _needs(facts), "form": _is_form(facts["fields"]), "url": facts["url"],
-            "sent": SUCCESS.search(facts["text"]) is not None, "applied": APPLIED.search(facts["text"]) is not None}
+            "sent": SUCCESS.search(facts["text"]) is not None, "applied": APPLIED.search(facts["text"]) is not None,
+            "challenge": facts["unchecked"], "password": False}
 
 
 def read_here(job_id: str) -> dict:
@@ -158,8 +174,11 @@ def fill(job_id: str, fields: list[dict], shot) -> dict:
               if f.get("value") not in (None, "", []) and not f.get("skip")]
     paths = [f["value"] for f in wanted if f["kind"] == "file"]
     errors = _ask("fill", timeout=180, job=job_id, fields=wanted, paths=paths)["errors"]
-    facts = _read(job_id, banners=False)
-    return {"errors": errors, "screenshot": None, "next": facts["next"] and not facts["submit"]}
+    facts = _read(job_id, banners=False, options=True)
+    known = {f.get("sig") for f in fields}
+    return {"errors": errors, "screenshot": None, "next": facts["next"] and not facts["submit"],
+            "submit": facts["submit"], "password": facts["password"],
+            "new": [f for f in facts["fields"] if f.get("sig") not in known]}
 
 
 def next_step(job_id: str) -> dict:
@@ -167,8 +186,11 @@ def next_step(job_id: str) -> dict:
         raise RuntimeError("no Next button found; move on in the job's tab, then read the page there")
     facts = _read(job_id, options=True)
     if facts["stayed"]:
-        return {"stayed": True, "invalid": facts["invalid"]}
-    return {"stayed": False, **_report(facts, _needs(facts), False)}
+        problems = [{"hid": f["hid"], "label": f["label"], "message": f["invalid"]} for f in facts["fields"] if f.get("invalid")]
+        problems += [{"hid": None, "label": "", "message": a} for a in facts.get("alerts", [])]
+        return {"stayed": True, "sent": False, "problems": problems, "challenge": facts["unchecked"],
+                "url": facts["url"], "needs": ""}
+    return {"stayed": False, "problems": [], "challenge": False, **_report(facts, _needs(facts), False)}
 
 
 def submit(job_id: str, shot) -> dict:
