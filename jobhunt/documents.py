@@ -98,18 +98,27 @@ def files(job) -> dict:
                                     ("letter", d / "Firstname-Lastname-Cover-Letter.pdf")) if p.exists()}
 
 
+def tailored(job, docs: dict) -> dict:
+    """The CV Hal makes for this job from the base CV, with any title or summary given for it."""
+    variant = cv.tailor(pack._job_text(job))[0]
+    variant["title"] = docs.get("cv_title") or variant["title"]
+    variant["summary"] = docs.get("cv_summary") or variant["summary"]
+    return variant
+
+
+def current_cv(job, docs: dict) -> dict:
+    """The CV this application sends: the applicant's own edit of it, else Hal's tailoring of the base CV."""
+    return docs.get("cv") or tailored(job, docs)
+
+
 def render(job, docs: dict) -> dict:
-    """Renders the CV and cover letter PDFs from the documents; returns their paths."""
+    """Renders the CV and cover letter PDFs from the documents; returns their paths.
+
+    A CV the applicant has not edited for this job is made again from the base CV,
+    so a change to the base reaches every application still to be sent.
+    """
     d = pack_dir(job)
-    variant_path = d / "cv.json"
-    if not variant_path.exists():
-        # A job with no pack, such as one opened by the applicant, still gets a CV ordered for it.
-        cv.render(cv.tailor(pack._job_text(job))[0], d)
-    if variant_path.exists() and (docs.get("cv_title") or docs.get("cv_summary")):
-        variant = json.loads(variant_path.read_text())
-        variant["title"] = docs.get("cv_title") or variant["title"]
-        variant["summary"] = docs.get("cv_summary") or variant["summary"]
-        cv.render(variant, d)
+    cv.render(current_cv(job, docs), d)
     body = _ascii(docs.get("letter", ""))
     if body.strip():
         letter.render(body, d / "Firstname-Lastname-Cover-Letter.pdf",

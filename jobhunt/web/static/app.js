@@ -80,7 +80,7 @@ function scoreRing(s) { const v = Math.max(0, Math.min(100, Math.round(s || 0)))
 const STATUS_CHIP = { applying: "info", applied: "", assessment: "warn", interview: "warn", offer: "good", rejected: "bad", withdrawn: "", ready: "info", skipped: "" };
 
 // Router -----------------------------------------------------------------------
-const routes = { queue: viewQueue, applications: viewApplications, todos: viewTodos, alerts: viewAlerts, stats: viewStats, job: viewJob };
+const routes = { queue: viewQueue, applications: viewApplications, todos: viewTodos, alerts: viewAlerts, stats: viewStats, cv: viewCv, job: viewJob };
 async function route() {
   const [name, ...rest] = (location.hash.slice(2) || "queue").split("/");
   state.route = name;
@@ -294,9 +294,22 @@ function paneDocs(d) {
     $$("[data-tab]", pane).forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
     if (state.tab === "letter") editor.innerHTML = `<textarea class="tall" data-k="letter">${esc(docs.letter)}</textarea>
       <p class="small-t muted">Plain text; blank lines separate paragraphs. Saved as the PDF on the right and pasted into any cover-letter box.</p>`;
-    if (state.tab === "cv") editor.innerHTML = `<label class="f">Title line</label><input type="text" data-k="cv_title" value="${esc(docs.cv_title)}">
-      <label class="f">Summary</label><textarea data-k="cv_summary">${esc(docs.cv_summary)}</textarea>
-      <p class="small-t muted">Projects and skills are ordered for this job automatically, using only what is in cv.json.</p>`;
+    if (state.tab === "cv") {
+      editor.innerHTML = `<p class="small-t muted" style="margin-top:0">${d.cv_edited || docs.cv
+        ? `You have edited this application's CV, so changes to <a href="#/cv">your CV</a> no longer reach it.`
+        : `Made by Hal from <a href="#/cv">your CV</a>: the most relevant projects and skills first, and a title line for this kind of role.
+           Editing it here changes this application only.`}</p><div id="cv-builder"></div>
+        ${docs.cv ? `<div class="bar"><button class="small ghost" data-cv-reset>Go back to Hal's version</button></div>` : ""}`;
+      const draft = docs.cv || structuredClone(d.cv);
+      cvEditor($("#cv-builder"), draft, { reorder: true, onChange: () => { docs.cv = draft; } });
+      const reset = $("[data-cv-reset]", editor);
+      reset && (reset.onclick = async () => {
+        docs.cv = null; d.cv_edited = false;
+        await save();
+        const fresh = await api("job/" + enc(id));
+        d.cv = fresh.cv; draw();
+      });
+    }
     if (state.tab === "message") editor.innerHTML = `<label class="f">To</label><input type="text" data-k="message_to" value="${esc(docs.message_to)}">
       <label class="f">Message</label><textarea class="tall" data-k="message">${esc(docs.message)}</textarea>
       <div class="bar"><button class="small" data-copy>Copy message</button></div>`;
@@ -569,6 +582,91 @@ function weekChart(weeks) {
         ${labelled.has(i) && w.count ? `<text class="value" x="${x + bar / 2}" y="${y(w.count) - 5}" text-anchor="middle">${w.count}</text>` : ""}
         <text x="${x + bar / 2}" y="${H - 8}" text-anchor="middle">${esc(dayMonth(w.start))}</text></g>`;
     }).join("")}</svg>`;
+}
+
+// CV builder -------------------------------------------------------------------
+// Edits a CV in place. Values are bound by path ("projects.1.body"); skills are edited as a comma list.
+// With `site`, each changed field offers the website's wording back; with `reorder`, projects and skills move.
+const CV_LISTS = [["education", "Education", ["qualification", "grade", "meta", "detail"]],
+                  ["experience", "Experience", ["role", "org", "dates", "body"]],
+                  ["projects", "Projects", ["name", "stack", "body"]]];
+const CV_LONG = new Set(["detail", "body"]);
+function cvEditor(box, cv, { site = null, reorder = false, onChange = () => {} } = {}) {
+  const at = path => path.split(".").reduce((o, k) => o?.[k], cv);
+  const put = (path, value) => {
+    const keys = path.split("."), last = keys.pop();
+    keys.reduce((o, k) => o[k], cv)[last] = value;
+    onChange();
+  };
+  // The website's version of the same field, found by the entry's name rather than its place.
+  const theirs = path => {
+    if (!site) return undefined;
+    const [section, index, field] = path.split(".");
+    if (index === undefined) return site[section];
+    const item = cv[section][+index];
+    const match = Array.isArray(item) ? site[section].find(x => x[0] === item[0])
+      : site[section].find(x => x._key === (item._key || item.name || item.qualification || item.role));
+    return match ? match[field] : undefined;
+  };
+  const changed = path => {
+    const was = theirs(path);
+    return was !== undefined && JSON.stringify(was) !== JSON.stringify(at(path))
+      ? `<button class="link small-t" data-revert="${path}">Changed · use the website's</button>` : "";
+  };
+  const field = (path, label, long) => `<label class="f">${esc(label)} ${changed(path)}</label>` + (long
+    ? `<textarea data-p="${path}" class="fit" rows="${Math.min(14, Math.max(2, Math.ceil(String(at(path) || "").length / 70)))}">${esc(at(path) || "")}</textarea>`
+    : `<input type="text" data-p="${path}" value="${esc(at(path) || "")}">`);
+  const mover = (section, i, n) => reorder ? `<button class="small ghost" data-move="${section}.${i}.-1" ${i ? "" : "disabled"} title="Move up">↑</button>
+    <button class="small ghost" data-move="${section}.${i}.1" ${i < n - 1 ? "" : "disabled"} title="Move down">↓</button>` : "";
+  const draw = () => {
+    box.innerHTML = `<p class="small-t muted" style="margin:0">Words between ** and ** are printed in bold.</p>
+      ${field("title", "Title line")}${field("summary", "Summary", true)}
+      ${CV_LISTS.map(([section, name, fields]) => `<h4 class="cv-h">${name}</h4>${(cv[section] || []).map((item, i, all) => `
+        <div class="cv-entry ${item.hidden ? "out" : ""}"><div class="cv-top"><b class="grow">${esc(item[fields[0]])}</b>${mover(section, i, all.length)}
+          <label class="small-t"><input type="checkbox" data-hide="${section}.${i}" ${item.hidden ? "" : "checked"}> On the CV</label></div>
+          ${item.hidden ? "" : fields.filter(f => f in item).map(f => field(`${section}.${i}.${f}`, f === "meta" ? "Place and dates" : f[0].toUpperCase() + f.slice(1), CV_LONG.has(f))).join("")}
+        </div>`).join("")}`).join("")}
+      ${field("moreProjects", "Further projects", true)}
+      <h4 class="cv-h">Skills</h4>${(cv.skills || []).map((g, i, all) => `<div class="cv-skill"><div class="cv-top"><b class="grow">${esc(g[0])}</b>${mover("skills", i, all.length)}</div>
+        <input type="text" data-skills="${i}" value="${esc(g[1].join(", "))}">${changed(`skills.${i}.1`)}</div>`).join("")}
+      <h4 class="cv-h">Additional</h4>${(cv.additional || []).map((a, i) => field(`additional.${i}.1`, a[0], true)).join("")}
+      ${field("closing", "Closing line")}`;
+    $$("[data-p]", box).forEach(el => el.oninput = () => put(el.dataset.p, el.value));
+    $$("[data-skills]", box).forEach(el => el.oninput = () =>
+      put(`skills.${el.dataset.skills}.1`, el.value.split(",").map(x => x.trim()).filter(Boolean)));
+    $$("[data-hide]", box).forEach(el => el.onchange = () => { put(el.dataset.hide + ".hidden", !el.checked); draw(); });
+    $$("[data-revert]", box).forEach(el => el.onclick = e => { e.preventDefault(); put(el.dataset.revert, structuredClone(theirs(el.dataset.revert))); draw(); });
+    $$("[data-move]", box).forEach(el => el.onclick = () => {
+      const [section, i, by] = el.dataset.move.split(".").map((x, n) => n ? +x : x);
+      const list = cv[section];
+      [list[i], list[i + by]] = [list[i + by], list[i]];
+      onChange(); draw();
+    });
+  };
+  draw();
+}
+
+async function viewCv() {
+  const d = await api("cv");
+  const base = d.cv;
+  main.innerHTML = `<div class="head"><div><h1>Your CV</h1>
+      <p>Every application's CV is made from this one. It starts as your website's CV; what you change here goes only into Hal's
+      applications, and the website stays as it is. For each job, Hal puts the most relevant projects and skills first and may
+      change the title line; you can edit any one application's CV from its Documents step.</p></div></div>
+    <div class="split docs">
+      <div class="card pad"><div id="builder"></div>
+        <div class="bar"><span class="muted small-t grow" id="cv-status">${d.changes ? `${d.changes} change${d.changes > 1 ? "s" : ""} from the website's CV` : "The same as the website's CV"}</span>
+          <button class="primary" data-save>Save and update applications</button></div></div>
+      <div class="card pad preview-card"><div class="tabs"><button class="tab on">Preview</button><span class="grow"></span>
+        <button class="small ghost" data-expand>Expand</button></div><div id="preview">${pdfPages(d.pdf)}</div></div>
+    </div>`;
+  cvEditor($("#builder"), base, { site: d.site });
+  $("[data-expand]", main).onclick = () => viewPdf(d.pdf);
+  $("[data-save]", main).onclick = async () => {
+    const r = await guard(() => api("cv", { cv: base }), "Saved. Hal is updating the CVs of applications still to send.");
+    $("#preview").innerHTML = pdfPages(r.pdf);
+    $("#cv-status").textContent = r.changes ? `${r.changes} change${r.changes > 1 ? "s" : ""} from the website's CV` : "The same as the website's CV";
+  };
 }
 
 async function viewStats() {

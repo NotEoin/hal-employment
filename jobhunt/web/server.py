@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import adopt, autofill, browser, contacts, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
+from .. import adopt, autofill, browser, contacts, cv, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
 from ..config import CONFIG
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -809,6 +809,31 @@ def _watch_step(con, job_id: str, seen: dict) -> bool:
     return True
 
 
+BASE_CV = pack.PACKS / "_base-cv"  # where the base CV's preview is drawn
+
+
+def base_cv() -> dict:
+    """The base CV for the builder: as Hal has it, as the website has it, and its preview."""
+    pdf = BASE_CV / "Firstname-Lastname-CV.pdf"
+    if not pdf.exists():
+        cv.render(cv.load(), BASE_CV)
+    return {"cv": cv.for_editing(), "site": cv._apply(cv.site(), [], keep_hidden=True),
+            "changes": len(cv.overrides()), "pdf": str(pdf)}
+
+
+def act_rerender_cvs(con, _job_id: str) -> str:
+    """Draws again the CVs of applications still to be sent, from the base CV as it now stands."""
+    rows = con.execute("SELECT * FROM jobs WHERE status IN ('ready', 'applying')").fetchall()
+    made = 0
+    for job in rows:
+        docs = documents.load(con, job)
+        if docs.get("cv"):
+            continue  # an application's own edit of its CV stands
+        cv.render(documents.tailored(job, docs), documents.pack_dir(job))
+        made += 1
+    return f"{made} application CVs made again from your base CV"
+
+
 def act_prep(con, job_id: str) -> str:
     reason = gpu.busy()
     if reason:
@@ -1009,6 +1034,8 @@ class Handler(BaseHTTPRequestHandler):
                 return {"alerts": [dict(r) for r in rows]}
             if route == "stats":
                 return stats.summary(con)
+            if route == "cv":
+                return base_cv()
             if route.startswith("job/"):
                 return self.job(con, unquote(route[4:]))
             raise LookupError(f"no route {route}")
@@ -1036,8 +1063,10 @@ class Handler(BaseHTTPRequestHandler):
         todos = con.execute("SELECT * FROM todos WHERE job_id = ? ORDER BY done IS NOT NULL, priority", (job_id,))
         emails = con.execute("SELECT date, kind, subject, thrid FROM emails WHERE job_id = ? ORDER BY date DESC",
                              (job_id,))
+        docs = documents.load(con, r)
         return {"job": {**_card(con, r), "description": r["description"]},
-                "summary": documents.summary(r), "docs": documents.load(con, r), "files": documents.files(r),
+                "summary": documents.summary(r), "docs": docs, "files": documents.files(r),
+                "cv": documents.current_cv(r, docs), "cv_edited": bool(docs.get("cv")),
                 "application": _app(con, job_id), "events": [dict(e) for e in events],
                 "todos": [dict(t) for t in todos],
                 "emails": [{**dict(e), "url": tasks.thread_url(e["thrid"])} for e in emails],
@@ -1081,6 +1110,11 @@ class Handler(BaseHTTPRequestHandler):
                             () if body.get("all") else (int(body["id"]),))
                 con.commit()
                 return {"ok": True}
+            if route == "cv":
+                changes = cv.save_base(body["cv"])
+                cv.render(cv.load(), BASE_CV)
+                run_action("_cv", "updating application CVs", act_rerender_cvs, "_cv")
+                return {**base_cv(), "saved": len(changes)}
             if route == "worker":
                 WORKER["paused"] = bool(body.get("paused"))
                 return WORKER

@@ -1,9 +1,12 @@
 """Tailored CV variants built from the portfolio site's cv.json.
 
-A variant reorders projects and skill groups by relevance to the job and may
-swap the title for a track title. Wording comes only from cv.json, so a
-variant can't claim anything the canonical CV doesn't. The PDF is rendered
-by the site's own tools/build-cv-pdf.py, so layout matches the canonical CV.
+Hal's base CV is the site's cv.json with the applicant's own changes laid over
+it (data/cv-overrides.json, edited in the web interface's CV builder), so the
+website keeps its wording while applications use theirs. A variant reorders
+projects and skill groups by relevance to the job and may swap the title for a
+track title; the applicant can then edit any application's variant by hand.
+The PDF is rendered by the site's own tools/build-cv-pdf.py, so layout matches
+the canonical CV.
 """
 import copy
 import importlib.util
@@ -27,8 +30,88 @@ TRACKS = {
 }
 
 
-def load() -> dict:
+OVERRIDES = Path(__file__).resolve().parent.parent / "data" / "cv-overrides.json"
+# Entries are matched across versions by what names them, not by position, so the site can add or reorder them.
+NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}
+PAIRS = ("skills", "additional")  # entries written as [name, value]; only the value is edited
+TEXT = ("title", "summary", "moreProjects", "closing")
+
+
+def site() -> dict:
+    """The CV as the portfolio site has it."""
     return json.loads(CV_JSON.read_text())
+
+
+def overrides() -> list[dict]:
+    """The applicant's changes to the site's CV, for Hal's applications only."""
+    return json.loads(OVERRIDES.read_text()) if OVERRIDES.exists() else []
+
+
+def _find(data: dict, section: str, key):
+    items = data.get(section) or []
+    if section in PAIRS:
+        return next((x for x in items if x[0] == key), None)
+    return next((x for x in items if x.get(NAMED_BY[section]) == key), None)
+
+
+def _apply(data: dict, changes: list[dict], keep_hidden: bool = False) -> dict:
+    data = copy.deepcopy(data)
+    for c in changes:
+        if "section" not in c:
+            data[c["field"]] = c["value"]
+            continue
+        item = _find(data, c["section"], c["key"])
+        if item is not None:
+            item[c["field"]] = c["value"]
+    for section in NAMED_BY:
+        for item in data.get(section) or []:
+            item["_key"] = item[NAMED_BY[section]]
+        if not keep_hidden:
+            data[section] = [x for x in data.get(section) or [] if not x.get("hidden")]
+    return data if keep_hidden else printable(data)
+
+
+def printable(data: dict) -> dict:
+    """The CV as the PDF builder takes it: entries left out are dropped, and the editor's bookkeeping removed."""
+    data = copy.deepcopy(data)
+    for section in NAMED_BY:
+        data[section] = [{k: v for k, v in x.items() if k not in ("_key", "hidden")}
+                         for x in data.get(section) or [] if not x.get("hidden")]
+    return data
+
+
+def load() -> dict:
+    """Hal's base CV: the site's, with the applicant's changes."""
+    return _apply(site(), overrides())
+
+
+def for_editing() -> dict:
+    """The base CV for the CV builder: entries left out are kept, flagged, and every entry carries its site name."""
+    return _apply(site(), overrides(), keep_hidden=True)
+
+
+def save_base(edited: dict) -> list[dict]:
+    """Stores where an edited base CV differs from the site's, and returns those changes."""
+    original = site()
+    changes = [{"field": f, "value": edited[f]} for f in TEXT if f in edited and edited[f] != original.get(f)]
+    for section in (*NAMED_BY, *PAIRS):
+        for item in edited.get(section) or []:
+            key = item[0] if section in PAIRS else item.get("_key", item.get(NAMED_BY[section]))
+            was = _find(original, section, key)
+            if was is None:
+                continue
+            if section in PAIRS:
+                if item[1] != was[1]:
+                    changes.append({"section": section, "key": key, "field": 1, "value": item[1]})
+                continue
+            for field, value in item.items():
+                if field in ("_key", "modules") or (field == "hidden" and not value):
+                    continue
+                if value != was.get(field):
+                    changes.append({"section": section, "key": key, "field": field, "value": value})
+    OVERRIDES.parent.mkdir(parents=True, exist_ok=True)
+    OVERRIDES.write_text(json.dumps(changes, indent=1) + "\n")
+    return changes
 
 
 def _words(text: str) -> set[str]:
@@ -74,7 +157,7 @@ def render(variant: dict, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "cv.json"
     pdf_path = out_dir / "Firstname-Lastname-CV.pdf"
-    json_path.write_text(json.dumps(variant, indent=2) + "\n")
+    json_path.write_text(json.dumps(printable(variant), indent=2) + "\n")
     builder = _pdf_builder()
     builder.CONTENT, builder.OUT = json_path, pdf_path
     try:

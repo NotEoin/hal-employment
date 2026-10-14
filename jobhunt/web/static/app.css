@@ -251,3 +251,14 @@ svg.chart g:hover .mark, svg.chart g:focus-within .mark { opacity: .75; }
 .hbars .fill { height: 14px; min-width: 2px; background: var(--series); border-radius: 0 4px 4px 0; }
 .hbars .n { font-weight: 600; font-variant-numeric: tabular-nums; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* CV builder */
+.cv-h { margin: 22px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.cv-entry { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 12px; margin: 8px 0; }
+.cv-entry.out { opacity: .6; }
+.cv-top { display: flex; align-items: center; gap: 6px; }
+.cv-top label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.cv-skill { margin: 8px 0; }
+textarea.fit { min-height: 0; }
+.cv-skill .cv-top { margin-bottom: 4px; font-size: 13px; }
+label.f .link { margin-left: 6px; color: var(--warn); font-weight: 500; }
