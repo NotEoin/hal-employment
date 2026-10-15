@@ -165,7 +165,9 @@ def sync() -> dict:
     rag = _hal_rag()
     converted = convert()
     store = _store()
-    notes = dict(rag.iter_vault_notes(VAULT))
+    # Index, topic and dashboard notes are navigation, as in Hal's own vault-index.py.
+    notes = {rel: path for rel, path in rag.iter_vault_notes(VAULT)
+             if rag.should_index(path.read_text(encoding="utf-8", errors="replace"))}
     hashes = {rel: rag.file_hash(p) for rel, p in notes.items()}
     changed = [rel for rel, h in hashes.items() if store.manifest.get(rel) != h]
     gone = set(store.manifest) - set(notes)

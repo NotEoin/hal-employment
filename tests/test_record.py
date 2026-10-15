@@ -125,7 +125,9 @@ class Record(unittest.TestCase):
         self.assertFalse(record.search("chess team", min_score=0.5))
 
     def test_an_index_note_is_not_searched(self):
-        self.note("Start Here.md", "---\ntype: index\n---\n# Start here\n\nDrop certificates into Certificates.\n")
+        # Long enough to make a passage: a shorter note would be dropped by the chunker anyway.
+        self.note("Start Here.md", "---\ntype: index\n---\n# Start here\n\nDrop certificates into Certificates, transcripts "
+                                   "into Education and anything else into the Inbox; certificates are read too.\n")
         self.note("Certificates/CITI.md", "# CITI\n\nHuman-subjects research training, completed 5 March 2026.\n")
         record.sync()
         self.assertEqual({h["path"] for h in record.search("certificates", k=5, min_score=0)}, {"Certificates/CITI.md"})
