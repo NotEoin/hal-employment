@@ -36,6 +36,10 @@ SCHEME = re.compile(r"disability confident|guaranteed interview|interview guaran
 ADJUST = re.compile(r"reasonable (adjustment|accommodation)|adjustments?\b|access (needs|requirements)|"
                     r"additional (support|needs|requirements)|extra time|support (you )?(need|require)", re.I)
 DETAILS = re.compile(r"^(if (yes|so)|please (give|provide|specify)|details|give details)", re.I)
+# Caring for someone else, answered with the applicant's `carer` answer. "Cared for" and "care leaver"
+# ask whether they were in care themselves, a different question left to the diversity answer.
+CARER = re.compile(r"\bcarers?\b|caring|look(s|ing)? after|care for (someone|anyone|another|a |an |family|relatives?|"
+                   r"children|dependants?)|unpaid care|provide care", re.I)
 # Questions on how a disability affects the applicant, or on a formal status, are theirs to weigh.
 OWN_CALL = re.compile(r"diagnos|affect|prevent|stop you|limit|ability to|registered|day-to-day", re.I)
 # About the employer's networks or news, not the applicant.
@@ -97,6 +101,7 @@ def profile() -> dict:
 DIVERSITY = re.compile(
     r"gender|\bsex\b|sexual orientation|ethnic|\brace\b|disab|veteran|religio|\bbelief\b|pronoun|trans(gender|\*)|"
     r"socio-?economic|free school meals|type of school|household earner|caring responsib|\bcarer\b|care for someone|"
+    r"care leaver|been in (local authority )?care|"
     r"neurodiver|age (range|group|band)|identify (my|as|your)|first (generation|in your family)|marital|"
     r"long[- ]term (physical|health)", re.I)
 # Opt-ins that are not part of the application; they are left as the form has them.
@@ -266,6 +271,25 @@ def _health(f: dict, prof: dict) -> bool:
     if answer in (None, []):
         return False
     f.update(value=answer, source=f"private: {key}", note="from your private answers (data/private.toml); check it")
+    return True
+
+
+def _carer(f: dict, prof: dict) -> bool:
+    """Answers a question on caring for someone with the applicant's `carer` answer; True if settled."""
+    label, options = f.get("label") or "", f.get("options") or []
+    if not prof.get("carer") or not CARER.search(label) or re.search(r"care leaver|been in care|cared for", label, re.I):
+        return False
+    no = NO.search(prof["carer"])
+    if f["kind"] == "checkbox":
+        answer = not no
+    elif options:
+        answer = _choose(options, prof["carer"], [NO] if no else [YES])
+        answer = [answer] if answer and f["kind"] == "checkgroup" else answer
+    else:
+        answer = prof["carer"]
+    if answer in (None, []):
+        return False
+    f.update(value=answer, source="profile: carer")
     return True
 
 
@@ -442,7 +466,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
             else:
                 f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
             continue
-        if _health(f, prof):
+        if _health(f, prof) or _carer(f, prof):
             continue
         recalled = _recall(con, f, job["company"])
         if recalled not in (None, []):

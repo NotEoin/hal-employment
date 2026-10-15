@@ -728,6 +728,19 @@ class Answers(unittest.TestCase):
             self.assertEqual(f["value"], "Prefer not to say", label)
             self.assertFalse(f["source"].startswith("private"), label)
 
+    def test_a_caring_question_gets_the_applicants_answer(self):
+        """The applicant cares for no one, and says so; whether they were in care themselves is another question."""
+        autofill.profile = lambda: {**PROFILE, "carer": "No"}
+        hours = ["Yes, 1-19 hours a week", "Yes, 20-49 hours a week", "No, I do not provide care", "Prefer not to say"]
+        nomura = self.propose(kind="combobox", label="Do you look after or care for someone with long term physical or "
+                                                     "mental ill health caused by disability or age?", options=hours)
+        self.assertEqual((nomura["value"], nomura["source"]), ("No, I do not provide care", "profile: carer"))
+        self.assertEqual(self.propose(kind="radio", label="Do you have any caring responsibilities?",
+                                      options=["Yes", "No", "Prefer not to say"])["value"], "No")
+        self.assertEqual(self.propose(label="Are you a carer?")["value"], "No")
+        self.assertEqual(self.propose(kind="radio", label="Have you ever been in care, or are you a care leaver?",
+                                      options=["Yes", "No", "Prefer not to say"])["value"], "Prefer not to say")
+
     def test_disability_questions_in_their_many_wordings(self):
         """Each wording gets the answer the applicant chose, or is left for them where only they can judge."""
         self.health()
