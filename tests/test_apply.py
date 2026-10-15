@@ -375,6 +375,56 @@ class Adopting(unittest.TestCase):
         self.assertEqual((again["id"], made), (job["id"], False))
 
 
+class Discarding(unittest.TestCase):
+    """An application already started can be dropped, for a job that turns out to have closed."""
+
+    def setUp(self):
+        self.con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        self.addCleanup(self.con.close)
+        for n, status in (("1", "applying"), ("2", "ready")):
+            db.upsert(self.con, {"id": f"greenhouse:{n}", "source": "greenhouse", "company": "Monzo",
+                                 "title": f"Graduate Engineer {n}", "location": "London", "url": f"https://example.org/{n}",
+                                 "description": "", "salary": "", "posted_at": None, "board_size": None})
+            db.set_status(self.con, f"greenhouse:{n}", status)
+        self.con.commit()
+
+    def discard(self, job_id: str, **body):
+        return server.Handler.job_action(None, self.con, job_id, "discard", body)
+
+    def test_a_closed_job_leaves_the_applications_in_progress_and_stops_its_watch(self):
+        self.discard("greenhouse:1", closed=True, reason="The job has closed")
+        jobs = {j["id"]: j for j in server.applications(self.con)}
+        self.assertEqual(jobs["greenhouse:1"]["status"], "closed")
+        self.assertIn("discarded mid-application: The job has closed",
+                      self.con.execute("SELECT detail FROM events WHERE job_id = 'greenhouse:1' ORDER BY id DESC").fetchone()[0])
+        saved = browser.peek
+        browser.peek = lambda job_id: self.fail("a discarded application's tab was looked at")
+        self.addCleanup(setattr, browser, "peek", saved)
+        self.assertFalse(server._watch_step(self.con, "greenhouse:1", {}))
+
+    def test_another_reason_skips_the_application(self):
+        self.discard("greenhouse:1", reason="Not eligible")
+        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "skipped")
+        self.assertIn("greenhouse:1", [j["id"] for j in server.applications(self.con)])
+
+    def test_a_job_discarded_from_the_queue_is_not_listed_as_an_application(self):
+        self.discard("greenhouse:2", reason="Too senior")
+        self.assertEqual(server._job(self.con, "greenhouse:2")["status"], "skipped")
+        self.assertNotIn("greenhouse:2", [j["id"] for j in server.applications(self.con)])
+
+    def test_an_application_sent_back_to_the_queue_and_discarded_there_is_not_listed(self):
+        server.Handler.job_action(None, self.con, "greenhouse:1", "restore", {})
+        self.discard("greenhouse:1", reason="Too senior")
+        self.assertNotIn("greenhouse:1", [j["id"] for j in server.applications(self.con)])
+
+    def test_an_application_hal_is_working_on_is_not_discarded(self):
+        server.ACTIONS["greenhouse:1"] = {"name": "applying", "state": "running", "message": "", "at": db.now()}
+        self.addCleanup(server.ACTIONS.pop, "greenhouse:1")
+        with self.assertRaisesRegex(RuntimeError, "still working"):
+            self.discard("greenhouse:1", closed=True)
+        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "applying")
+
+
 class BaseCv(unittest.TestCase):
     """Hal's base CV: the website's, with the applicant's changes laid over it."""
 

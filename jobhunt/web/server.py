@@ -75,6 +75,26 @@ def _set_app(con, job_id: str, **cols) -> None:
     con.commit()
 
 
+def applications(con) -> list[dict]:
+    """Every application, furthest along first: those in progress and sent, and those that ended after starting."""
+    # A job closed or skipped straight from 'applying' is an application dropped part way; one sent back to
+    # the queue first and discarded there is not.
+    rows = con.execute(f"""SELECT j.*, a.stage, a.updated,
+            (SELECT MAX(at) FROM events e WHERE e.job_id = j.id AND e.kind = 'status') changed
+            FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
+            WHERE j.status IN ({','.join('?' * len(IN_FLIGHT))}) OR
+                  (j.status IN ('rejected','withdrawn') AND a.job_id IS NOT NULL) OR
+                  (j.status IN ('closed','skipped') AND (SELECT detail FROM events e WHERE e.job_id = j.id
+                   AND e.kind = 'status' ORDER BY e.at DESC, e.id DESC LIMIT 1 OFFSET 1) LIKE 'applying%')
+            ORDER BY CASE j.status WHEN 'offer' THEN 0 WHEN 'interview' THEN 1
+              WHEN 'assessment' THEN 2 WHEN 'applying' THEN 3 WHEN 'applied' THEN 4 ELSE 5 END,
+              changed DESC""", IN_FLIGHT).fetchall()
+    return [{"id": r["id"], "company": r["company"], "title": r["title"], "status": r["status"], "stage": r["stage"],
+             "changed": r["changed"], "location": r["location"], "url": r["url"],
+             "state": (_app(con, r["id"])["form"] or {}).get("state"),
+             "message": (_app(con, r["id"])["form"] or {}).get("message", "")} for r in rows]
+
+
 def _card(con, r) -> dict:
     s = documents.summary(r)
     return {"id": r["id"], "company": r["company"], "title": r["title"], "location": r["location"],
@@ -777,7 +797,7 @@ def _watch_step(con, job_id: str, seen: dict) -> bool:
     `seen` carries what the page's fields showed at the last look, which is what the
     owner sent once the page has gone.
     """
-    if _app(con, job_id)["stage"] == "submitted":
+    if _app(con, job_id)["stage"] == "submitted" or _job(con, job_id)["status"] != "applying":
         return False
     try:
         now = browser.peek(job_id)
@@ -1067,19 +1087,7 @@ class Handler(BaseHTTPRequestHandler):
                 return {"jobs": [_card(con, r) for r in rows[:replenish.TARGET]],
                         "reserve": max(0, len(rows) - replenish.TARGET), "target": replenish.TARGET}
             if route == "applications":
-                rows = con.execute(f"""SELECT j.*, a.stage, a.updated,
-                        (SELECT MAX(at) FROM events e WHERE e.job_id = j.id AND e.kind = 'status') changed
-                        FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
-                        WHERE j.status IN ({','.join('?' * len(IN_FLIGHT))}) OR
-                              (j.status IN ('rejected','withdrawn') AND a.job_id IS NOT NULL)
-                        ORDER BY CASE j.status WHEN 'offer' THEN 0 WHEN 'interview' THEN 1
-                          WHEN 'assessment' THEN 2 WHEN 'applying' THEN 3 WHEN 'applied' THEN 4 ELSE 5 END,
-                          changed DESC""", IN_FLIGHT).fetchall()
-                return {"jobs": [{"id": r["id"], "company": r["company"], "title": r["title"],
-                                  "status": r["status"], "stage": r["stage"], "changed": r["changed"],
-                                  "location": r["location"], "url": r["url"],
-                                  "state": (_app(con, r["id"])["form"] or {}).get("state"),
-                                  "message": (_app(con, r["id"])["form"] or {}).get("message", "")} for r in rows]}
+                return {"jobs": applications(con)}
             if route == "todos":
                 rows = con.execute("""SELECT t.*, j.company, j.title job_title FROM todos t
                                       LEFT JOIN jobs j ON j.id = t.job_id
@@ -1225,7 +1233,12 @@ class Handler(BaseHTTPRequestHandler):
         job = _job(con, job_id)
         if action == "discard":
             reason = (body.get("reason") or "").strip()
-            db.set_status(con, job_id, "skipped", f"discarded from the queue{': ' + reason if reason else ''}")
+            if ACTIONS.get(job_id, {}).get("state") == "running":
+                raise RuntimeError("Hal is still working on this application; discard it when it has finished")
+            # Started applications are often found closed only at the form: "closed" keeps that apart from a choice.
+            where = "mid-application" if job["status"] == "applying" else "from the queue"
+            db.set_status(con, job_id, "closed" if body.get("closed") else "skipped",
+                          f"discarded {where}{': ' + reason if reason else ''}")
             # The same advert listed twice must not come straight back into the queue.
             for d in con.execute("""SELECT id FROM jobs WHERE id != ? AND status IN ('new','shortlisted','ready')
                                     AND lower(company) = lower(?) AND lower(title) = lower(?)""",

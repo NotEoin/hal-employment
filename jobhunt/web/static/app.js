@@ -77,7 +77,7 @@ function confirmBox(title, text, okLabel, cls = "primary") {
 }
 function flagClass(f) { return /^(ELIGIBILITY|REAPPLICATION)/.test(f) ? "bad" : ""; }
 function scoreRing(s) { const v = Math.max(0, Math.min(100, Math.round(s || 0))); return `<div class="score" style="--s:${v}"><span>${s == null ? "-" : v}</span></div>`; }
-const STATUS_CHIP = { applying: "info", applied: "", assessment: "warn", interview: "warn", offer: "good", rejected: "bad", withdrawn: "", ready: "info", skipped: "" };
+const STATUS_CHIP = { applying: "info", applied: "", assessment: "warn", interview: "warn", offer: "good", rejected: "bad", withdrawn: "", ready: "info", skipped: "", closed: "" };
 
 // Router -----------------------------------------------------------------------
 const routes = { queue: viewQueue, applications: viewApplications, todos: viewTodos, alerts: viewAlerts, stats: viewStats, cv: viewCv, record: viewRecord, job: viewJob };
@@ -204,11 +204,33 @@ document.addEventListener("keydown", e => {
   e.preventDefault();
 });
 
+// An application already started, dropped: most often the advert closed before the form could be sent.
+function discardApplication(j) {
+  const reasons = [["The job has closed", true], ["Not eligible", false], ["No longer interested", false], ["Duplicate", false]];
+  modal(`<h3>Discard this application?</h3><p class="muted">${esc(j.company)}: ${esc(j.title)}. Hal stops filling its form and
+      moves it to Closed on the Applications board. Nothing is sent to the employer.</p>
+    <div class="reasons">${reasons.map(([r, c]) => `<button class="small ${c ? "primary" : ""}" data-r="${esc(r)}" data-c="${c}">${esc(r)}</button>`).join("")}</div>
+    <input type="text" id="reason" placeholder="Or type a reason (optional)">
+    <div class="bar"><span class="grow"></span><button data-x>Cancel</button><button data-ok>Discard</button></div>`,
+    (m, close) => {
+      const go = async (reason, closed) => {
+        close();
+        await guard(() => api(`job/${enc(j.id)}/discard`, { reason, closed }), `Discarded ${j.company}`);
+        state.stepView = null;
+        location.hash = "#/applications";
+      };
+      $$("[data-r]", m).forEach(b => b.onclick = () => go(b.dataset.r, b.dataset.c === "true"));
+      $("[data-x]", m).onclick = close;
+      $("[data-ok]", m).onclick = () => go($("#reason", m).value, false);
+      $("#reason", m).onkeydown = e => { if (e.key === "Enter") go(e.target.value, false); };
+    });
+}
+
 // Applications board -----------------------------------------------------------
 async function viewApplications() {
   const { jobs } = await api("applications");
   const cols = [["applying", "In progress"], ["applied", "Applied"], ["assessment", "Assessment"], ["interview", "Interview"], ["offer", "Offer"]];
-  const closed = jobs.filter(j => ["rejected", "withdrawn"].includes(j.status));
+  const closed = jobs.filter(j => ["rejected", "withdrawn", "closed", "skipped"].includes(j.status));
   main.innerHTML = `<div class="head"><div><h1>Applications</h1><p>Everything you have chosen from the queue, by stage.</p></div></div>
     <div class="board">${cols.map(([k, name]) => {
       const list = jobs.filter(j => j.status === k);
@@ -217,7 +239,8 @@ async function viewApplications() {
         <div class="c">${k === "applying" ? standing(j) : esc(ago(j.changed))}</div></div>`).join("") || `<p class="muted small-t">None</p>`}</div>`;
     }).join("")}</div>
     ${closed.length ? `<div class="section"><h4>Closed</h4><div class="card">${closed.map(j => `<div class="todo" data-id="${esc(j.id)}" style="cursor:pointer">
-      <div class="body"><div class="t">${esc(j.company)}: ${esc(j.title)}</div></div><span class="chip ${STATUS_CHIP[j.status]}">${esc(j.status)}</span></div>`).join("")}</div></div>` : ""}`;
+      <div class="body"><div class="t">${esc(j.company)}: ${esc(j.title)}</div></div>
+      <span class="chip ${STATUS_CHIP[j.status]}">${esc({ closed: "job closed", skipped: "discarded" }[j.status] || j.status)}</span></div>`).join("")}</div></div>` : ""}`;
   $$("[data-id]", main).forEach(el => el.onclick = () => location.hash = "#/job/" + enc(el.dataset.id));
 }
 // Where an application in progress stands: what Hal is doing, or what it is waiting on.
@@ -249,7 +272,10 @@ async function viewJob(id) {
       <p>${esc(j.company)} &middot; ${esc(j.location || "")} ${j.salary ? "&middot; " + esc(j.salary) : ""}
       <span class="chip ${STATUS_CHIP[j.status] || ""}">${esc(j.status)}</span></p></div>
       <div class="bar" style="margin:0"><a href="${esc(j.url)}" target="_blank" rel="noopener"><button class="ghost">Advert</button></a>
-      ${j.status === "applying" ? `<button class="ghost" data-back>Back to queue</button>` : ""}</div></div>
+      ${j.status === "applying" ? `<button class="ghost" data-back>Back to queue</button><button class="ghost" data-drop>Discard</button>` : ""}</div></div>
+    ${["closed", "skipped"].includes(j.status) ? `<div class="progress" style="margin-bottom:16px"><span class="grow">${j.status === "closed"
+      ? "The job has closed, so this application was dropped." : "You discarded this application."}</span>
+      <button class="small" data-reopen>Reopen</button></div>` : ""}
     <div class="steps">${STEPS.map(([k, name], i) => `<div class="step ${k === step ? "on" : ""} ${i < reached ? "done" : ""}" data-step="${k}">
       <span class="n">${i < reached ? "&#10003;" : i + 1}</span>${name}</div>`).join("")}</div>
     <div id="action"></div>
@@ -257,6 +283,13 @@ async function viewJob(id) {
   $$("[data-step]", main).forEach(el => el.onclick = () => { state.stepView = el.dataset.step; viewJob(id); });
   const back = $("[data-back]", main);
   back && (back.onclick = async () => { await guard(() => api(`job/${enc(id)}/restore`, {}), "Returned to the queue"); location.hash = "#/queue"; });
+  const drop = $("[data-drop]", main);
+  drop && (drop.onclick = () => discardApplication(j));
+  const reopen = $("[data-reopen]", main);
+  reopen && (reopen.onclick = async () => {
+    await guard(() => api(`job/${enc(id)}/status`, { status: "applying", note: "reopened after discarding" }), "Reopened");
+    viewJob(id);
+  });
   paintAction(d.action);
   ({ documents: paneDocs, form: paneForm, submitted: paneAfter, next: paneAfter })[step](d);
 }
