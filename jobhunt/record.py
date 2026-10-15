@@ -15,15 +15,19 @@ every vault's (System/.rag), so Hal's tools can search the record too
 than by hal_rag so it can run on the CPU (num_gpu 0): a lookup never competes for
 the graphics card. The vectors match Hal's: same model, same prefixes.
 
-Needs numpy (for hal_rag) and `markitdown[pdf,docx,pptx,xlsx,outlook]` in the venv,
-and `pdftotext` (poppler) on the PATH.
+Photos and scans of certificates are read by OCR (tesseract), as is a PDF with no
+text layer. Needs numpy (for hal_rag) and `markitdown[pdf,docx,pptx,xlsx,outlook]`
+in the venv, `pdftotext` and `pdftoppm` (poppler) on the PATH, and optionally
+`tesseract` for OCR.
 """
 import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -36,6 +40,8 @@ OLLAMA = (CONFIG.get("ollama_url") or "http://localhost:11434").rstrip("/")
 MODEL = CONFIG.get("record_embed_model", "nomic-embed-text")
 # What MarkItDown reads; Markdown notes themselves are indexed as they are.
 DOCUMENTS = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".epub", ".msg", ".txt")
+# Photos and scans of certificates, read by OCR.
+IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff")
 MIN_SCORE = 0.55  # nomic-embed-text similarities run high; below this a passage is off the subject
 
 
@@ -61,6 +67,19 @@ class RecordUnavailable(Exception):
 _MARKITDOWN = None
 
 
+def _ocr(path: Path) -> str:
+    """The words in an image, or in each page of a PDF with no text layer, by tesseract; "" without it."""
+    if not shutil.which("tesseract"):
+        return ""
+    if path.suffix.lower() != ".pdf":
+        out = subprocess.run(["tesseract", str(path), "-"], capture_output=True, timeout=120)
+        return out.stdout.decode(errors="replace") if out.returncode == 0 else ""
+    with tempfile.TemporaryDirectory() as tmp:
+        # 300 dpi: tesseract's documented best resolution for printed text.
+        subprocess.run(["pdftoppm", "-r", "300", "-png", str(path), f"{tmp}/page"], capture_output=True, timeout=300)
+        return "\n\n".join(_ocr(page) for page in sorted(Path(tmp).glob("page*.png")))
+
+
 def _text_of(path: Path) -> str:
     """A document as Markdown, keeping its headings, lists and tables; pdftotext for a PDF without headings.
 
@@ -68,6 +87,8 @@ def _text_of(path: Path) -> str:
     cloud service configured, so a document is never fetched from or sent anywhere.
     """
     global _MARKITDOWN
+    if path.suffix.lower() in IMAGES:
+        return _ocr(path)
     text = ""
     try:
         if _MARKITDOWN is None:
@@ -82,6 +103,8 @@ def _text_of(path: Path) -> str:
     if path.suffix.lower() == ".pdf" and (len(text.strip()) < 50 or not re.search(r"^#{1,6} ", text, re.M)):
         out = subprocess.run(["pdftotext", "-layout", str(path), "-"], capture_output=True, timeout=60)
         text = out.stdout.decode(errors="replace") if out.returncode == 0 and out.stdout.strip() else text
+        if len(text.strip()) < 20:  # a scan: the pages are pictures of text
+            text = _ocr(path)
     if not text.strip() and path.suffix.lower() in (".txt", ".md"):
         text = path.read_text(errors="replace")
     return text
@@ -90,7 +113,7 @@ def _text_of(path: Path) -> str:
 def convert() -> list[Path]:
     """Writes a note beside each document that has none, or whose document changed; returns the notes written."""
     written = []
-    for doc in _walk(DOCUMENTS):
+    for doc in _walk(DOCUMENTS + IMAGES):
         note = doc.with_name(f"{doc.stem} ({doc.suffix[1:].upper()}).md")
         if note.exists() and note.stat().st_mtime >= doc.stat().st_mtime:
             continue

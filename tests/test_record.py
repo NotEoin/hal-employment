@@ -7,6 +7,8 @@ real record. Hal's retrieval library must be at config.toml's `hal_root`.
 Run with: .venv/bin/python -m unittest discover tests
 """
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 import zlib
@@ -90,6 +92,16 @@ class Record(unittest.TestCase):
         text = (self.vault / "transcript (PDF).md").read_text()
         self.assertNotIn("| 10 76 |", text)
         self.assertRegex(text, r"Distributed Systems +10 +76")
+
+    @unittest.skipUnless(shutil.which("tesseract"), "tesseract is not installed")
+    def test_a_scanned_certificate_is_read_by_ocr(self):
+        """A photo of a certificate has no text layer, so its words come from OCR."""
+        image = self.vault / "Certificates" / "licence.png"
+        image.parent.mkdir()
+        subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", "-", str(image.with_suffix(""))],
+                       input=tiny_pdf(["Award for Personal Licence Holders", "Completed 2023"]), check=True)
+        record.convert()
+        self.assertIn("Personal Licence Holders", (self.vault / "Certificates" / "licence (PNG).md").read_text())
 
     def test_each_heading_keeps_only_its_own_text(self):
         """One year's module marks never appear in a passage filed under another year's heading."""
