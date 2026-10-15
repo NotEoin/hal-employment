@@ -87,7 +87,8 @@ def _job_text(job) -> str:
 
 def unsupported_numbers(draft: str, *sources: str) -> list[str]:
     """Returns numbers in a draft that appear in none of the sources."""
-    known = set(re.findall(r"\d[\d,.]*", " ".join(sources)))
+    # A number ending a sentence ("2023-2024.") is collected with its full stop; it is the same number.
+    known = {n.rstrip(".,") for n in re.findall(r"\d[\d,.]*", " ".join(sources))}
     return sorted({n for n in re.findall(r"\d[\d,.]*", draft) if n.rstrip(".,") not in known and len(n) > 1})
 
 

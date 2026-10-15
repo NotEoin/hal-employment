@@ -624,6 +624,11 @@ class Answers(unittest.TestCase):
         self.assertIsNone(f["value"])
         self.assertIn("manager's number", f["note"])
 
+    def test_a_number_ending_a_sentence_in_the_source_is_supported(self):
+        """A source's "2023-2024." holds 2024, so a draft giving 2024 is not flagged."""
+        from jobhunt import pack
+        self.assertEqual(pack.unsupported_numbers("Editor, 2023 - 2024", "history column, 2023-2024. Commissioned"), [])
+
     def test_a_security_code_is_found_in_its_email(self):
         self.assertEqual(gmail.code_in("Security code for your application",
                                        "Copy and paste this code into the security code field: aB3dE5fG Then"), "aB3dE5fG")
