@@ -185,7 +185,8 @@ def parsing(cv: dict, pdf: Path) -> list[dict]:
     raw, laid = pdf_text(pdf), pdf_text(pdf, layout=True)
     words = raw.split()
     size_mb = pdf.stat().st_size / 1e6
-    out = [check("Text can be read back", 1.0 if len(words) >= 250 and size_mb < 2.5 else 0.0,
+    # Whether there is a text layer at all; how long the CV is belongs to the length checks.
+    out = [check("Text can be read back", 1.0 if len(words) >= 30 and size_mb < 2.5 else 0.0,
                  f"{len(words)} words read back; file {size_mb * 1000:.0f} kB",
                  "Render the CV from text, under 2.5 MB; an image of a CV cannot be read at all.", 1)]
     # Textkernel rejects text whose symbols or word lengths look like garbage.

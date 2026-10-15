@@ -525,6 +525,18 @@ class Scoring(unittest.TestCase):
         empty.write_bytes(b"%PDF-1.4\n%%EOF\n")
         self.assertLessEqual(cvscore.score(self.cv("- Built it."), empty)["mark"], 10)
 
+    def test_a_short_readable_cv_is_not_capped_as_unreadable(self):
+        """A CV under 250 words still has a text layer; its length is for the length checks to judge."""
+        short = self.cv("- Built a parser in Python, with 40 tests.")
+        short.update(education=[{"qualification": "Degree", "grade": "Grade",
+                                  "meta": "University | Sep 2023 - Jun 2026", "detail": ""}],
+                     skills=[], additional=[], moreProjects="", summary="")
+        pdf = self.render(short)
+        self.assertLess(len(cvscore.pdf_text(pdf).split()), 250)
+        mark = cvscore.score(short, pdf)
+        readable = next(c for g in mark["groups"] for c in g["checks"] if c["name"] == "Text can be read back")
+        self.assertEqual((readable["score"], mark["capped"]), (1.0, []))
+
     def test_a_labelled_line_is_judged_by_its_verb(self):
         self.assertTrue(cvscore.strong_start("Dissertation, A Title: tested whether models segment images"))
         self.assertTrue(cvscore.strong_start("Built a pipeline over four datasets: results cached by config"))
