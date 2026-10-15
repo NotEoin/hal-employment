@@ -265,6 +265,7 @@ class InYourBrowser(Practice):
             args=[f"--disable-extensions-except={EXTENSION}", f"--load-extension={EXTENSION}"])
         worker = cls.ctx.service_workers[0] if cls.ctx.service_workers else cls.ctx.wait_for_event("serviceworker")
         worker.evaluate("url => chrome.storage.local.set({hal: url})", f"http://127.0.0.1:{cls.helper.server_address[1]}")
+        cls.worker = worker
         for _ in range(60):
             if extension.connected():
                 break
@@ -284,6 +285,17 @@ class InYourBrowser(Practice):
         # Playwright hears of tabs the extension opened only while it is waiting on something.
         self.ctx.pages[0].wait_for_timeout(300)
         return next(t for t in reversed(self.ctx.pages) if address in t.url)
+
+    def test_applications_open_together_in_a_window_of_their_own(self):
+        """apply_window = "separate": job tabs share one window, apart from the one the applicant works in."""
+        first = self.worker.evaluate("() => chrome.windows.getLastFocused().then(w => w.id)")
+        for name in ("ext-window-1", "ext-window-2"):
+            server.act_auto(self.con, self.job(name, "form.html"))
+        self.ctx.pages[0].wait_for_timeout(300)
+        tabs = self.worker.evaluate("() => chrome.tabs.query({}).then(ts => ts.map(t => [t.url, t.windowId]))")
+        windows = {w for url, w in tabs if "form.html" in url}
+        self.assertEqual(len(windows), 1)
+        self.assertNotIn(first, windows)
 
     def test_fills_the_first_page_and_leaves_what_it_cannot_answer(self):
         job_id = self.job("ext-fill", "form.html")

@@ -135,7 +135,7 @@ def _advance(job_id: str, pressed: bool = False) -> dict:
 
 
 def open_form(job_id: str, url: str) -> dict:
-    _ask("open", timeout=120, job=job_id, url=url)
+    _ask("open", timeout=120, job=job_id, url=url, window=CONFIG.get("apply_window", "separate"))
     return _advance(job_id)
 
 

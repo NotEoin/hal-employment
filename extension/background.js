@@ -67,6 +67,26 @@ async function inTab(tabId, method, arg) {
   return out.result;
 }
 
+// Hal's own window, holding every application tab when the helper asks for one ("separate"),
+// so they never crowd the window the applicant is working in. Made again if it was closed.
+async function halWindow() {
+  const { halWindow: id } = await chrome.storage.session.get("halWindow");
+  if (id != null) {
+    try { return await chrome.windows.get(id); } catch { /* closed */ }
+  }
+  return null;
+}
+
+async function newTab(url, separate) {
+  const own = separate ? await halWindow() : null;
+  if (own) return chrome.tabs.create({ url, windowId: own.id, active: true });
+  if (!separate) return chrome.tabs.create({ url, active: false });
+  // Opened behind the applicant's window; some window managers bring it forward anyway.
+  const made = await chrome.windows.create({ url, focused: false, type: "normal" });
+  await chrome.storage.session.set({ halWindow: made.id });
+  return made.tabs[0];
+}
+
 async function jobTab(job) {
   const tab = await tabFor(job);
   if (!tab) throw new Error("gone");
@@ -81,11 +101,11 @@ function base64(buffer) {
 }
 
 const COMMANDS = {
-  async open({ job, url }) {
+  async open({ job, url, window = "separate" }) {
     let tab = await tabFor(job);
     if (tab) await chrome.tabs.update(tab.id, { url });
     else {
-      tab = await chrome.tabs.create({ url, active: false });
+      tab = await newTab(url, window === "separate");
       await withJobs(jobs => { jobs[job] = [tab.id]; });
     }
     await loaded(tab.id);
@@ -133,7 +153,9 @@ const COMMANDS = {
     return { shown: true };
   },
   async search({ queries, pause }) {
-    const tab = await chrome.tabs.create({ url: "about:blank", active: false });
+    // Searches run in Hal's window when there is one, out of the applicant's way.
+    const own = await halWindow();
+    const tab = await chrome.tabs.create({ url: "about:blank", active: false, ...(own ? { windowId: own.id } : {}) });
     const pages = [];
     let refused = false;
     try {
@@ -182,7 +204,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     const job = await jobOf(sender.tab.id);
     if (!job) return;
     // No opener: a tab the job's tab opens is taken for the next page of its form.
-    const at = { index: sender.tab.index + 1 };
+    const at = { index: sender.tab.index + 1, windowId: sender.tab.windowId };
     if (ask.cmd === "fill") {
       await chrome.action.setBadgeText({ tabId: sender.tab.id, text: "…" });
       await post(`job/${encodeURIComponent(job)}/page`);
