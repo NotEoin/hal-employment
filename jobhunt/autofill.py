@@ -14,7 +14,7 @@ import re
 import sys
 from datetime import date
 
-from . import cv, db, gpu, llm, record, score
+from . import cv, db, gpu, llm, record, salary
 from .config import CONFIG
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
@@ -63,8 +63,6 @@ def profile() -> dict:
         "right_to_work": "Yes", "work_status": "British or Irish citizen", "sponsorship": "No",
         "nationality": "British and Irish",
         "notice": "None, available immediately", "start": "Immediately",
-        "salary": "Open to the advertised range",
-        "salary_unadvertised": "Open to discussion, in line with the market rate for the role",
         "university": "University", "degree": "Degree",
         "grade": "Grade", "grad_year": "Year",
         "office": "Yes", "relocate": "Yes",
@@ -234,6 +232,12 @@ def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
         if key == "how_heard":
             # The list rarely words the source as the profile does; the nearest kind of source is chosen.
             preferred = HEARD_SITE if re.search(r"careers page|website", str(value), re.I) else HEARD_BOARD
+        if key == "salary" and prof.get("salary_figure"):
+            if f.get("type") == "number":
+                value = prof["salary_figure"]
+            elif listed:
+                choice = salary.band(f["options"], int(prof["salary_figure"]))
+                return ([choice] if f["kind"] == "checkgroup" else choice, "profile: salary") if choice else None
         if key == "notice" and (f.get("type") == "number" or re.search(r"\b(weeks|days|months)\b", label, re.I)) \
                 and re.search(r"none|immediate", str(value), re.I):
             value = "0"
@@ -334,13 +338,14 @@ anything that is plausibly right; most answers are."""
 REVIEWED = ("profile", "your earlier answer", "documents: drafted answer")
 
 
-def profile_for(job) -> dict:
+def profile_for(job, con=None) -> dict:
     """Returns the profile with the answers that depend on the job settled for this one."""
     prof = profile()
     prof["how_heard"] = HOW_HEARD.get(job["source"], "Company careers page")
-    if not re.search(r"\d", job["salary"] or "") and score.max_salary(job["description"] or "") is None:
-        # There is no advertised range to defer to when the advert names no pay.
-        prof["salary"] = prof["salary_unadvertised"]
+    if not prof.get("salary"):
+        # A direct figure: employers who ask want one, and "open to discussion" reads as dodging it.
+        expected = salary.expect(job, con)
+        prof.update(salary=expected["text"], salary_figure=str(expected["figure"]), salary_basis=expected["basis"])
     return prof
 
 
@@ -354,7 +359,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
         files: Paths of the CV and cover letter PDFs (documents.files).
         con: Database connection, for the answers Firstname has given before.
     """
-    prof = profile_for(job)
+    prof = profile_for(job, con)
     answers = docs.get("answers") or []
     uploads = [f for f in fields if f["kind"] == "file"]
     named = any(re.search(r"cover|resume|résumé|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
@@ -402,6 +407,8 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
         hit = _rule(f, prof)
         if hit:
             f["value"], f["source"] = hit
+            if hit[1] == "profile: salary" and prof.get("salary_basis"):
+                f["note"] = f"researched for this job: {prof['salary_basis']}"
             continue
         if f["kind"] in ("text", "textarea"):
             drafted = _match_answer(label, answers)
@@ -424,7 +431,7 @@ def mark_written(fields: list[dict]) -> list[dict]:
 
 
 def _facts(job, docs: dict, con) -> str:
-    prof = {k: v for k, v in profile_for(job).items() if k not in ("salary_unadvertised", "preferred_name")}
+    prof = {k: v for k, v in profile_for(job, con).items() if k not in ("salary_figure", "salary_basis", "preferred_name")}
     parts = [f"Today is {date.today():%d %B %Y}.",
              f"Job: {job['title']} at {job['company']} ({job['location'] or 'location not stated'}).",
              f"Applicant profile: {prof}",

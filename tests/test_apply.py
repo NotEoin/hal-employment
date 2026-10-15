@@ -18,11 +18,22 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import adopt, autofill, browser, cv, cvbuild, cvscore, db, documents, extension, gmail, record  # noqa: E402
+from jobhunt import adopt, autofill, browser, cv, cvbuild, cvscore, db, documents, extension, gmail, record, salary  # noqa: E402
 from jobhunt.web import server  # noqa: E402
 
 # An employment record that does not exist, so no test reads the real one or calls Ollama.
 record.VAULT = Path(tempfile.mkdtemp()) / "no-record"
+_SALARY_SOURCES = salary.itjobswatch, salary.adverts
+
+
+def setUpModule():
+    """No salary research from the web or the real job database: only an advert's own range, else the floor."""
+    salary.itjobswatch = lambda phrase, london: None
+    salary.adverts = lambda con, job, name: []
+
+
+def tearDownModule():
+    salary.itjobswatch, salary.adverts = _SALARY_SOURCES
 
 SITE = Path(__file__).parent / "site"
 EXTENSION = Path(__file__).resolve().parent.parent / "extension"
@@ -30,8 +41,7 @@ PROFILE = {
     "first_name": "Ada", "last_name": "Lovelace", "full_name": "Ada Lovelace", "preferred_name": "Ada",
     "email": "ada@example.org", "phone": "07000 000000", "city": "London", "country": "United Kingdom",
     "location": "London, United Kingdom", "right_to_work": "Yes", "sponsorship": "No",
-    "notice": "None, available immediately", "start": "Immediately", "salary": "Open",
-    "salary_unadvertised": "Open", "university": "University", "degree": "Degree",
+    "notice": "None, available immediately", "start": "Immediately", "salary": "Open", "university": "University", "degree": "Degree",
     "grade": "Grade", "grad_year": "Year", "office": "Yes", "relocate": "Yes",
     "diversity": "Prefer not to say", "nationality": "British and Irish",
 }
@@ -671,6 +681,20 @@ class Answers(unittest.TestCase):
     def test_a_number_box_is_not_given_a_sentence(self):
         self.assertIsNone(self.propose(type="number", label="Salary expectations")["value"])
         self.assertEqual(self.propose(type="number", label="Notice period (in weeks)")["value"], "0")
+
+    def test_a_salary_question_gets_a_researched_figure_with_its_reasoning(self):
+        """No "open to discussion": a range in words, a number in a number box, and the band holding it in a list."""
+        autofill.profile = lambda: {**PROFILE, "salary": ""}
+        saved = salary.expect
+        salary.expect = lambda job, con=None: {"figure": 38000, "text": "£36,000 to £40,000",
+                                               "basis": "ITJobsWatch median for graduate software engineer in London: £38,000"}
+        self.addCleanup(setattr, salary, "expect", saved)
+        words = self.propose(label="What are your salary expectations?")
+        self.assertEqual((words["value"], words["source"]), ("£36,000 to £40,000", "profile: salary"))
+        self.assertIn("ITJobsWatch median", words["note"])
+        self.assertEqual(self.propose(type="number", label="Salary expectations")["value"], "38000")
+        listed = self.propose(kind="select", label="Expected salary", options=["£25,000 - £34,999", "£35,000 - £44,999"])
+        self.assertEqual(listed["value"], "£35,000 - £44,999")
 
     def test_an_optional_sign_up_is_left_alone_and_consent_is_given(self):
         self.assertTrue(self.propose(kind="checkbox", label="Send me the newsletter", required=False)["skip"])
