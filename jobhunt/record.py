@@ -62,7 +62,7 @@ _MARKITDOWN = None
 
 
 def _text_of(path: Path) -> str:
-    """A document as Markdown, keeping its headings, lists and tables; pdftotext for a PDF with neither.
+    """A document as Markdown, keeping its headings, lists and tables; pdftotext for a PDF without headings.
 
     MarkItDown is called only through convert_local on files inside the vault, with plugins off and no
     cloud service configured, so a document is never fetched from or sent anywhere.
@@ -76,10 +76,10 @@ def _text_of(path: Path) -> str:
         text = _MARKITDOWN.convert_local(str(path)).markdown or ""
     except Exception:  # noqa: BLE001 - any converter failure falls back below, or leaves the file unread
         text = ""
-    # On a PDF with no headings or tables (a certificate, a form) MarkItDown parts labels from their
-    # values, while pdftotext's layout mode keeps "Completion Date 05-Mar-2026" on one line.
-    structured = re.search(r"^\s*(#{1,6} |\|.*\|)", text, re.M)
-    if path.suffix.lower() == ".pdf" and (len(text.strip()) < 50 or not structured):
+    # On a PDF without headings MarkItDown parts a form's labels from their values, and its guessed tables
+    # run a transcript's columns together ("10 76" for credits and mark); pdftotext's layout mode keeps
+    # each row on one line with its columns apart. Pipe tables are therefore no sign of structure here.
+    if path.suffix.lower() == ".pdf" and (len(text.strip()) < 50 or not re.search(r"^#{1,6} ", text, re.M)):
         out = subprocess.run(["pdftotext", "-layout", str(path), "-"], capture_output=True, timeout=60)
         text = out.stdout.decode(errors="replace") if out.returncode == 0 and out.stdout.strip() else text
     if not text.strip() and path.suffix.lower() in (".txt", ".md"):
@@ -94,7 +94,8 @@ def convert() -> list[Path]:
         note = doc.with_name(f"{doc.stem} ({doc.suffix[1:].upper()}).md")
         if note.exists() and note.stat().st_mtime >= doc.stat().st_mtime:
             continue
-        text = re.sub(r"[ \t]+", " ", _text_of(doc))
+        # Runs of spaces inside a line are kept: in pdftotext's layout they are what keeps columns apart.
+        text = re.sub(r"[ \t]+\n", "\n", _text_of(doc).replace("\f", "\n"))
         text = re.sub(r"\n{3,}", "\n\n", text).strip()
         if not text:
             continue

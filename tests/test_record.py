@@ -29,6 +29,23 @@ def fake_embed(texts: list[str], kind: str) -> list[list[float]]:
     return out
 
 
+def tiny_pdf(lines: list[str]) -> bytes:
+    """A one-page PDF with each line of text set in Helvetica, built by hand so no PDF library is needed."""
+    text = "".join(f"BT /F1 11 Tf 40 {760 - 16 * i} Td ({line}) Tj ET\n" for i, line in enumerate(lines)).encode()
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+               b"/Resources << /Font << /F1 5 0 R >> >> >>",
+               b"<< /Length %d >>\nstream\n" % len(text) + text + b"endstream",
+               b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    out, offsets = b"%PDF-1.4\n", []
+    for i, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % i + body + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1) + b"".join(b"%010d 00000 n \n" % o for o in offsets)
+    return out + b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+
+
 @unittest.skipUnless((HAL_ROOT / "hal_rag.py").exists(), "Hal's retrieval library is not installed")
 class Record(unittest.TestCase):
     def setUp(self):
@@ -60,6 +77,19 @@ class Record(unittest.TestCase):
         self.assertEqual((hit["path"], hit["heading"]), ("Awards/prize (HTML).md", "Dean's list"))
         # A second sync leaves the note alone, since the document has not changed.
         self.assertEqual(record.sync()["converted"], [])
+
+    def test_a_pdf_table_is_read_in_columns_not_as_a_guessed_markdown_table(self):
+        """A transcript's credits and mark stay apart: MarkItDown's guessed table ran them into one cell ("10 76")."""
+        (self.vault / "transcript.pdf").write_bytes(tiny_pdf(["Code     Module Title          Credits  Mark",
+                                                              "CSC3121  Distributed Systems   10       76"]))
+        saved = record._MARKITDOWN
+        self.addCleanup(setattr, record, "_MARKITDOWN", saved)
+        guessed = "| CSC3121 Distributed Systems | 10 76 |\n| --- | --- |\n"
+        record._MARKITDOWN = type("Guess", (), {"convert_local": lambda self, p: type("R", (), {"markdown": guessed})()})()
+        record.convert()
+        text = (self.vault / "transcript (PDF).md").read_text()
+        self.assertNotIn("| 10 76 |", text)
+        self.assertRegex(text, r"Distributed Systems +10 +76")
 
     def test_each_heading_keeps_only_its_own_text(self):
         """One year's module marks never appear in a passage filed under another year's heading."""
