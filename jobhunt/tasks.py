@@ -3,8 +3,13 @@
 Reads the emails table that `jobhunt mail` fills. Each email needing action
 (assessment, interview, offer, a person writing) becomes one to-do, ranked
 above everything else, and one alert. Idempotent: run it as often as needed.
+
+When the applicant's private answers (data/private.toml) ask for adjustments, an assessment
+invitation also brings a to-do to ask for them before starting: timed tests rarely allow
+extra time once begun.
 """
 from . import db
+from .config import private
 from .gmail import ADDRESS
 
 # How far back a first run looks; older invitations have long expired.
@@ -44,6 +49,13 @@ def sync(con) -> list[int]:
             made.append(todo)
             role = e["job_title"] or e["role"] or ""
             db.alert(con, level, title, f"{role}\n{e['subject'] or ''}".strip(), e["job_id"])
+        if e["kind"] == "assessment" and private().get("adjustments"):
+            asked = db.add_todo(con, "assessment", f"Ask {company} for extra time before starting the test",
+                                job_id=e["job_id"], url=thread_url(e["thrid"]), priority=0,
+                                detail="Reply to the invitation, or use its adjustments link, before you begin. "
+                                       "What to ask for is in your private answers (data/private.toml).",
+                                source=f"adjust:{e['msgid']}")
+            made += [asked] if asked else []
     con.commit()
     return made
 

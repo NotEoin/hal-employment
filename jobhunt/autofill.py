@@ -15,7 +15,7 @@ import sys
 from datetime import date
 
 from . import cv, db, gpu, llm, record, salary
-from .config import CONFIG
+from .config import CONFIG, private
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
              "workable": "Company careers page", "smartrecruiters": "Company careers page",
@@ -28,6 +28,19 @@ DECLINE = re.compile(r"prefer not|don'?t wish|do not wish|decline|rather not|not
                      r"choose not|not disclose|no answer", re.I)
 YES = re.compile(r"^\s*yes\b", re.I)
 NO = re.compile(r"^\s*no\b", re.I)
+# Health questions, answered from data/private.toml: the applicant chose to disclose a disability on
+# equality forms, take up guaranteed-interview schemes and ask for adjustments, and nothing else.
+DISABILITY = re.compile(r"disab|long[- ]term (physical|health|condition)|neurodiver|health condition|impairment", re.I)
+WHICH = re.compile(r"\b(which|what|type|nature|kind|specify|describe|details?|tell us)\b", re.I)
+SCHEME = re.compile(r"disability confident|guaranteed interview|interview guarantee|guaranteed (an )?interview", re.I)
+ADJUST = re.compile(r"reasonable (adjustment|accommodation)|adjustments?\b|access (needs|requirements)|"
+                    r"additional (support|needs|requirements)|extra time", re.I)
+DETAILS = re.compile(r"^(if (yes|so)|please (give|provide|specify)|details|give details)", re.I)
+DIAGNOSIS = re.compile(r"diagnos", re.I)
+# How lists name ADHD, most specific first.
+NEURO = [re.compile(p, re.I) for p in (r"adhd|attention deficit", r"neuro", r"specific learning|learning (difference|difficult)",
+                                       r"cognitive|developmental")]
+HEALTH = ("disability", "disability_type", "guaranteed_interview", "adjustments")
 # Labels longer than this are paragraphs with a question in them; a keyword match there proves little.
 RULE_LABEL = 170
 # A box asking for a fact about Firstname has a short label; a longer one is a question for the model.
@@ -69,6 +82,7 @@ def profile() -> dict:
         "diversity": "Prefer not to say",
     }
     p.update(CONFIG.get("applicant", {}))
+    p.update({k: v for k, v in private().items() if k in HEALTH})
     return p
 
 
@@ -210,6 +224,39 @@ def _diversity(f: dict, prof: dict) -> bool:
             f.update(skip=True, source="skipped", note="optional diversity question")
         return True
     return False
+
+
+def _health(f: dict, prof: dict) -> bool:
+    """Answers a disability, guaranteed-interview or adjustments question from the private answers; True if settled.
+
+    A question about a formal diagnosis is left for the applicant, who knows what papers they hold.
+    """
+    label, kind, options = f.get("label") or "", f["kind"], f.get("options") or []
+    context = f.get("context") or ""
+    listed = kind in ("select", "radio", "combobox", "checkgroup") and bool(options)
+    if SCHEME.search(f"{label} {context}") and prof.get("guaranteed_interview"):
+        key, answer = "guaranteed_interview", True if kind == "checkbox" else _fit(f, prof["guaranteed_interview"], [YES])
+    elif (ADJUST.search(label) or (DETAILS.search(label) and ADJUST.search(context))) and prof.get("adjustments"):
+        written = kind in ("text", "textarea") and not listed
+        key, answer = "adjustments", prof["adjustments"] if written else True if kind == "checkbox" else _fit(f, "Yes", [YES])
+    elif DISABILITY.search(label) and prof.get("disability"):
+        if DIAGNOSIS.search(label):
+            f.update(value=None, source="you", note="asks about a diagnosis; answer this yourself")
+            return True
+        if WHICH.search(label) and prof.get("disability_type"):
+            if listed:
+                choice = next((o for pattern in NEURO for o in options if pattern.search(o)), None)
+                key, answer = "disability_type", [choice] if choice and kind == "checkgroup" else choice
+            else:
+                key, answer = "disability_type", prof["disability_type"]
+        else:
+            key, answer = "disability", True if kind == "checkbox" else _fit(f, prof["disability"], [YES])
+    else:
+        return False
+    if answer in (None, []):
+        return False
+    f.update(value=answer, source=f"private: {key}", note="from your private answers (data/private.toml); check it")
+    return True
 
 
 def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
@@ -385,6 +432,8 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
             else:
                 f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
             continue
+        if _health(f, prof):
+            continue
         recalled = _recall(con, f, job["company"])
         if recalled not in (None, []):
             f.update(value=recalled, source="your earlier answer")
@@ -431,7 +480,8 @@ def mark_written(fields: list[dict]) -> list[dict]:
 
 
 def _facts(job, docs: dict, con) -> str:
-    prof = {k: v for k, v in profile_for(job, con).items() if k not in ("salary_figure", "salary_basis", "preferred_name")}
+    hidden = ("salary_figure", "salary_basis", "preferred_name", *HEALTH)
+    prof = {k: v for k, v in profile_for(job, con).items() if k not in hidden}
     parts = [f"Today is {date.today():%d %B %Y}.",
              f"Job: {job['title']} at {job['company']} ({job['location'] or 'location not stated'}).",
              f"Applicant profile: {prof}",

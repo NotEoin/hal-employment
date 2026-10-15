@@ -18,22 +18,24 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import adopt, autofill, browser, cv, cvbuild, cvscore, db, documents, extension, gmail, record, salary  # noqa: E402
+from jobhunt import (adopt, autofill, browser, cv, cvbuild, cvscore, db, documents, extension, gmail,  # noqa: E402
+                     record, salary, tasks)
 from jobhunt.web import server  # noqa: E402
 
 # An employment record that does not exist, so no test reads the real one or calls Ollama.
 record.VAULT = Path(tempfile.mkdtemp()) / "no-record"
-_SALARY_SOURCES = salary.itjobswatch, salary.adverts
+_SAVED = salary.itjobswatch, salary.adverts, autofill.private, tasks.private
 
 
 def setUpModule():
-    """No salary research from the web or the real job database: only an advert's own range, else the floor."""
+    """No salary research from the web or the real job database, and none of the applicant's private answers."""
     salary.itjobswatch = lambda phrase, london: None
     salary.adverts = lambda con, job, name: []
+    autofill.private = tasks.private = lambda: {}
 
 
 def tearDownModule():
-    salary.itjobswatch, salary.adverts = _SALARY_SOURCES
+    salary.itjobswatch, salary.adverts, autofill.private, tasks.private = _SAVED
 
 SITE = Path(__file__).parent / "site"
 EXTENSION = Path(__file__).resolve().parent.parent / "extension"
@@ -695,6 +697,58 @@ class Answers(unittest.TestCase):
         self.assertEqual(self.propose(type="number", label="Salary expectations")["value"], "38000")
         listed = self.propose(kind="select", label="Expected salary", options=["£25,000 - £34,999", "£35,000 - £44,999"])
         self.assertEqual(listed["value"], "£35,000 - £44,999")
+
+    def health(self):
+        autofill.profile = lambda: {**PROFILE, "disability": "Yes", "disability_type": "Dyslexia", "guaranteed_interview": "Yes",
+                                    "adjustments": "Yes. I would like 25% extra time on timed tests."}
+
+    def test_a_disclosed_disability_is_given_and_other_identity_questions_are_declined(self):
+        """The applicant discloses a disability only: gender and the like stay "Prefer not to say"."""
+        self.health()
+        f = self.propose(kind="radio", label="Do you consider yourself to have a disability?",
+                         options=["Yes", "No", "Prefer not to say"])
+        self.assertEqual((f["value"], f["source"]), ("Yes", "private: disability"))
+        self.assertEqual(self.propose(kind="radio", label="What is your gender?",
+                                      options=["Man", "Woman", "Prefer not to say"])["value"], "Prefer not to say")
+        kinds = self.propose(kind="checkgroup", label="Which of the following best describes your disability?",
+                             options=["Physical impairment", "Neurodivergent condition (e.g. autism, dyslexia)", "Mental health"])
+        self.assertEqual(kinds["value"], ["Neurodivergent condition (e.g. autism, dyslexia)"])
+        self.assertEqual(self.propose(kind="textarea", label="Please describe the nature of your disability")["value"], "Dyslexia")
+
+    def test_a_question_about_a_formal_diagnosis_is_left_for_the_applicant(self):
+        self.health()
+        f = self.propose(kind="radio", label="Do you have a formal diagnosis of your disability?", options=["Yes", "No"])
+        self.assertIsNone(f["value"])
+        self.assertIn("diagnosis", f["note"])
+
+    def test_a_guaranteed_interview_is_taken_and_adjustments_are_asked_for(self):
+        self.health()
+        self.assertIs(self.propose(kind="checkbox", label="I wish to apply under the Disability Confident guaranteed "
+                                                          "interview scheme", required=False)["value"], True)
+        self.assertEqual(self.propose(kind="radio", label="Do you require any reasonable adjustments?",
+                                      options=["Yes", "No"])["value"], "Yes")
+        details = self.propose(kind="textarea", label="If yes, please give details",
+                               context="Reasonable adjustments for the assessment process")
+        self.assertEqual((details["value"], details["source"]), ("Yes. I would like 25% extra time on timed tests.",
+                                                                 "private: adjustments"))
+
+    def test_private_answers_never_reach_the_model_that_writes(self):
+        """Letters and essays are written from facts that hold no health answer."""
+        self.health()
+        self.assertNotIn("Dyslexia", autofill._facts(self.job, {}, None))
+        self.assertNotIn("extra time", autofill._facts(self.job, {}, None))
+
+    def test_a_test_invitation_brings_a_to_do_to_ask_for_extra_time(self):
+        con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        self.addCleanup(con.close)
+        con.execute("""INSERT INTO emails (msgid, thrid, date, sender, rcpt, subject, kind, company, role, job_id, snippet)
+                       VALUES ('m1', '1', ?, 'talent@acme.example', '', 'Your online assessment', 'assessment', 'Acme',
+                               'Engineer', NULL, '')""", (db.now(),))
+        tasks.private = lambda: {"adjustments": "Yes. 25% extra time."}
+        self.addCleanup(setattr, tasks, "private", lambda: {})
+        tasks.sync(con)
+        titles = [r["title"] for r in con.execute("SELECT title FROM todos ORDER BY priority, id")]
+        self.assertEqual(titles, ["Ask Acme for extra time before starting the test", "Complete the Acme assessment"])
 
     def test_an_optional_sign_up_is_left_alone_and_consent_is_given(self):
         self.assertTrue(self.propose(kind="checkbox", label="Send me the newsletter", required=False)["skip"])
