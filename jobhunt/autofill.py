@@ -31,12 +31,20 @@ NO = re.compile(r"^\s*no\b", re.I)
 # Health questions, answered from data/private.toml: the applicant chose to disclose a disability on
 # equality forms, take up guaranteed-interview schemes and ask for adjustments, and nothing else.
 DISABILITY = re.compile(r"disab|long[- ]term (physical|health|condition)|neurodiver|health condition|impairment", re.I)
-WHICH = re.compile(r"\b(which|what|type|nature|kind|specify|describe|details?|tell us)\b", re.I)
+WHICH = re.compile(r"\b(which|what|type|nature|kind|specify|describ\w*|categor\w*|details?|tell us)\b", re.I)
 SCHEME = re.compile(r"disability confident|guaranteed interview|interview guarantee|guaranteed (an )?interview", re.I)
 ADJUST = re.compile(r"reasonable (adjustment|accommodation)|adjustments?\b|access (needs|requirements)|"
-                    r"additional (support|needs|requirements)|extra time", re.I)
+                    r"additional (support|needs|requirements)|extra time|support (you )?(need|require)", re.I)
 DETAILS = re.compile(r"^(if (yes|so)|please (give|provide|specify)|details|give details)", re.I)
-DIAGNOSIS = re.compile(r"diagnos", re.I)
+# Questions on how a disability affects the applicant, or on a formal status, are theirs to weigh.
+OWN_CALL = re.compile(r"diagnos|affect|prevent|stop you|limit|ability to|registered|day-to-day", re.I)
+# About the employer's networks or news, not the applicant.
+NOT_ASKED = re.compile(r"hear (more )?about|information about|network|newsletter", re.I)
+# A disability question about someone the applicant cares for or lives with is a carer question, not theirs:
+# Nomura's "look after someone ... caused by disability" once got "Yes, 1-19 hours a week" (2026-10-15).
+SOMEONE = re.compile(r"look(s|ing)? after|care (for|of)\b|\bcarers?\b|caring|cared for|someone|anyone|another person|"
+                     r"other people|family member|relative|household|dependants?|child(ren)?\b|parent|guardian|partner|"
+                     r"spouse", re.I)
 # How lists name ADHD, most specific first.
 NEURO = [re.compile(p, re.I) for p in (r"adhd|attention deficit", r"neuro", r"specific learning|learning (difference|difficult)",
                                        r"cognitive|developmental")]
@@ -229,27 +237,29 @@ def _diversity(f: dict, prof: dict) -> bool:
 def _health(f: dict, prof: dict) -> bool:
     """Answers a disability, guaranteed-interview or adjustments question from the private answers; True if settled.
 
-    A question about a formal diagnosis is left for the applicant, who knows what papers they hold.
+    Questions on a diagnosis, a registered status or how much a disability limits the applicant
+    are left for them; questions about someone they care for are not theirs at all.
     """
     label, kind, options = f.get("label") or "", f["kind"], f.get("options") or []
     context = f.get("context") or ""
     listed = kind in ("select", "radio", "combobox", "checkgroup") and bool(options)
-    if SCHEME.search(f"{label} {context}") and prof.get("guaranteed_interview"):
+    if SCHEME.search(label) and prof.get("guaranteed_interview"):
         key, answer = "guaranteed_interview", True if kind == "checkbox" else _fit(f, prof["guaranteed_interview"], [YES])
     elif (ADJUST.search(label) or (DETAILS.search(label) and ADJUST.search(context))) and prof.get("adjustments"):
         written = kind in ("text", "textarea") and not listed
         key, answer = "adjustments", prof["adjustments"] if written else True if kind == "checkbox" else _fit(f, "Yes", [YES])
-    elif DISABILITY.search(label) and prof.get("disability"):
-        if DIAGNOSIS.search(label):
-            f.update(value=None, source="you", note="asks about a diagnosis; answer this yourself")
+    elif DISABILITY.search(label) and not SOMEONE.search(label) and not NOT_ASKED.search(label) and prof.get("disability"):
+        yeses = [o for o in options if YES.search(o)]
+        if OWN_CALL.search(label) or len(yeses) > 1:
+            # "Yes, limited a lot" or "a little" is a judgement only the applicant can make.
+            f.update(value=None, source="you", note="asks about a diagnosis, a formal status or how your disability "
+                                                     "affects you; answer this yourself")
             return True
-        if WHICH.search(label) and prof.get("disability_type"):
-            if listed:
-                choice = next((o for pattern in NEURO for o in options if pattern.search(o)), None)
-                key, answer = "disability_type", [choice] if choice and kind == "checkgroup" else choice
-            else:
-                key, answer = "disability_type", prof["disability_type"]
+        neuro = next((o for pattern in NEURO for o in options if pattern.search(o)), None)
+        if WHICH.search(label) and prof.get("disability_type") and (neuro or not listed):
+            key, answer = "disability_type", ([neuro] if kind == "checkgroup" else neuro) if listed else prof["disability_type"]
         else:
+            # "Do you have a disability? If yes, please give details" with Yes/No options asks the first part.
             key, answer = "disability", True if kind == "checkbox" else _fit(f, prof["disability"], [YES])
     else:
         return False

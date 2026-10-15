@@ -43,7 +43,8 @@ PROFILE = {
     "first_name": "Ada", "last_name": "Lovelace", "full_name": "Ada Lovelace", "preferred_name": "Ada",
     "email": "ada@example.org", "phone": "07000 000000", "city": "London", "country": "United Kingdom",
     "location": "London, United Kingdom", "right_to_work": "Yes", "sponsorship": "No",
-    "notice": "None, available immediately", "start": "Immediately", "salary": "Open", "university": "University", "degree": "Degree",
+    "notice": "None, available immediately", "start": "Immediately", "salary": "Open",
+    "university": "University", "degree": "Degree",
     "grade": "Grade", "grad_year": "Year", "office": "Yes", "relocate": "Yes",
     "diversity": "Prefer not to say", "nationality": "British and Irish",
 }
@@ -713,7 +714,43 @@ class Answers(unittest.TestCase):
         kinds = self.propose(kind="checkgroup", label="Which of the following best describes your disability?",
                              options=["Physical impairment", "Neurodivergent condition (e.g. autism, dyslexia)", "Mental health"])
         self.assertEqual(kinds["value"], ["Neurodivergent condition (e.g. autism, dyslexia)"])
-        self.assertEqual(self.propose(kind="textarea", label="Please describe the nature of your disability")["value"], "Dyslexia")
+        described = self.propose(kind="textarea", label="Please describe the nature of your disability")
+        self.assertEqual(described["value"], "Dyslexia")
+
+    def test_caring_for_someone_with_a_disability_is_not_the_applicants_disability(self):
+        """Nomura, 2026-10-15: "look after someone ... caused by disability" was answered "Yes, 1-19 hours a week"."""
+        self.health()
+        carer = ["No", "Yes, 1-19 hours a week", "Yes, 20-49 hours a week", "Yes, 50 hours or more a week", "Prefer not to say"]
+        for label in ("Do you look after or care for someone with long term physical or mental ill health caused by "
+                      "disability or age?", "Does anyone in your household have a disability?",
+                      "Do you have caring responsibilities for a disabled family member?"):
+            f = self.propose(kind="combobox", label=label, options=carer)
+            self.assertEqual(f["value"], "Prefer not to say", label)
+            self.assertFalse(f["source"].startswith("private"), label)
+
+    def test_disability_questions_in_their_many_wordings(self):
+        """Each wording gets the answer the applicant chose, or is left for them where only they can judge."""
+        self.health()
+        yes_no, mine = ["Yes", "No", "Prefer not to say"], "Yes. I would like 25% extra time on timed tests."
+        cases = [
+            ("radio", "Do you have a disability? If yes, please give details below.", yes_no, "", "Yes"),
+            ("radio", "Does your disability affect your ability to carry out the role?", yes_no, "", None),
+            ("radio", "Is your day-to-day activity limited because of a health problem or disability?",
+             ["Yes, limited a lot", "Yes, limited a little", "No"], "", None),
+            ("radio", "Are you registered disabled?", yes_no, "", None),
+            ("textarea", "Please tell us about any disability-related support you need", [], "", mine),
+            ("radio", "Do you have any access requirements for the interview?", ["Yes", "No"], "", "Yes"),
+            ("text", "Preferred pronouns", [], "We are a Disability Confident employer and offer a guaranteed interview",
+             "Prefer not to say"),
+            ("checkgroup", "Please select the category that best describes your impairment",
+             ["Physical", "Learning disability, difficulty or difference (such as dyslexia, ADHD)", "Prefer not to say"], "",
+             ["Learning disability, difficulty or difference (such as dyslexia, ADHD)"]),
+            ("radio", "Would you like to hear about our disability network?", ["Yes", "No"], "", None),
+        ]
+        for kind, label, options, context, expected in cases:
+            with self.subTest(label):
+                f = self.propose(kind=kind, label=label, options=options, context=context)
+                self.assertEqual(f["value"], expected)
 
     def test_a_question_about_a_formal_diagnosis_is_left_for_the_applicant(self):
         self.health()
