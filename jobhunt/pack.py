@@ -10,7 +10,7 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from . import coursework, cv, db, llm, reputation, research
+from . import coursework, cv, db, llm, record, reputation, research
 from .config import ROOT
 from .vault import VAULT
 
@@ -38,8 +38,9 @@ FIT = """Match a candidate's evidence to a job's requirements. Reply with JSON o
   job that shows it, in at most 20 words, "strength": "strong" | "partial"}],
  "gaps": [requirements the CV gives no evidence for],
  "eligible": true | false, "eligibility_notes": why, in one sentence}
-Rules: use only the CV text and the course notes. A course note counts only if its
-excerpt shows the requirement; cite it as "<module name> coursework: <topic>", never by code.
+Rules: use only the CV text, the employment record and the course notes. Cite record evidence as
+"record: <what it is>"; a course note counts only if its excerpt shows the requirement; cite it as
+"<module name> coursework: <topic>", never by code.
 Never cite the summary or a skills list as evidence,
 except for a requirement that names a language or tool. "strong" means the evidence
 directly demonstrates the requirement. A requirement with no evidence goes in gaps.
@@ -115,9 +116,11 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     requirements = analysis.get("must_have", []) + analysis.get("nice_to_have", [])
     conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
     course_notes = coursework.as_text(coursework.evidence(requirements))
+    # What the CV leaves out (certificates, the detail of each job) is looked up in the employment record.
+    kept = record.context(requirements + (analysis.get("questions") or [])) or "none"
     fit = llm.chat_json(FIT, "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
                         + f"\n\nConditions:\n{conditions}\n\nToday: {date.today().isoformat()}\n\nCV:\n{facts}"
-                        + f"\n\nCourse notes:\n{course_notes or 'none'}",
+                        + f"\n\nEmployment record:\n{kept}\n\nCourse notes:\n{course_notes or 'none'}",
                         role="main")
 
     history = previous_applications(con, job)
@@ -126,7 +129,8 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
                   if history else "") +
                f"Firstname graduated recently. Mention availability only if the advert's start date is "
                f"flexible; for a fixed intake, refer to that intake instead.\n"
-               f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}")
+               f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
+               f"\n\nEmployment record (true; use it where the CV is silent):\n{kept}")
     letter = llm.undash(llm.chat(LETTER, context, role="writer").strip())
     message = llm.undash(llm.chat(MESSAGE, context, role="writer").strip())
     questions = analysis.get("questions") or []
@@ -138,10 +142,11 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
     drafts = "\n\n".join([letter, message, *(a.get("answer", "") for a in answers)])
-    flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, job_text, about)]
+    flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, job_text, about, kept)]
     flagged += [f"unsupported claim: {c}" for c in
-                llm.chat_json(VERIFY, f"Facts:\n{facts}\n\nCourse notes:\n{course_notes}\n\nEvidence map:\n{fit.get('matches', [])}"
-                              f"\n\nDrafts:\n{drafts}", role="main").get("unsupported", [])]
+                llm.chat_json(VERIFY, f"Facts:\n{facts}\n\nEmployment record:\n{kept}\n\nCourse notes:\n{course_notes}"
+                              f"\n\nEvidence map:\n{fit.get('matches', [])}\n\nDrafts:\n{drafts}",
+                              role="main").get("unsupported", [])]
     flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
     # KTP posts are listed under the scheme; the employer is the host company in the advert.
     employer = (analysis.get("employer") or job["company"]) if job["company"] == "KTP" else job["company"]

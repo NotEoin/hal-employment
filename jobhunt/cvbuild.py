@@ -14,7 +14,7 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
-from . import cv, db, documents, gpu, llm
+from . import cv, db, documents, gpu, llm, record
 from .pack import PACKS, VERIFY, slug, unsupported_numbers
 
 SOURCES = cv.DATA / "cv-sources"
@@ -24,6 +24,7 @@ MAX_SOURCE = 400_000
 
 OPTIONS = {
     "website": True,    # read the website's CV as one more source
+    "record": True,     # read every note in the employment record (record.py) as well
     "results": True,    # open entries with what was achieved, measured where the sources measure it
     "two_pages": True,  # keep within the two pages the layout is made for
     "interests": True,  # fill the Additional section with community work and interests
@@ -116,6 +117,14 @@ def _material(options: dict) -> list[tuple[str, str]]:
     found = [(p.stem, p.read_text(errors="replace")) for p in sorted(SOURCES.glob("*.txt"))] if SOURCES.exists() else []
     if options.get("website"):
         found.append(("website CV", json.dumps(cv.printable(cv.site()), indent=1)))
+    if options.get("record") and record.VAULT.exists():
+        try:
+            record.convert()
+            notes = [n for n in record._walk((".md",)) if n.name != "Start Here.md"]
+        except record.RecordUnavailable:
+            notes = []
+        found += [(f"record: {n.relative_to(record.VAULT)}", n.read_text(encoding="utf-8", errors="replace"))
+                  for n in notes]
     return found
 
 

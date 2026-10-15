@@ -19,7 +19,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import adopt, autofill, browser, contacts, cv, cvbuild, cvscore, db, documents, extension, gpu, pack, prep, replenish, stats, tasks
+from .. import (adopt, autofill, browser, contacts, cv, cvbuild, cvscore, db, documents, extension, gpu, pack, prep,
+                record, replenish, stats, tasks)
 from ..config import CONFIG
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -915,6 +916,10 @@ def mark_applied(con, job, how: str) -> None:
 
 # Worker -------------------------------------------------------------------------
 
+RECORD_EVERY = 10 * 60  # seconds between looks for new or changed notes in the employment record
+RECORD_SYNC: dict = {"at": 0.0, "last": None}
+
+
 def worker() -> None:
     """Keeps the queue full and the to-do list current, forever."""
     con = db.connect()
@@ -929,6 +934,12 @@ def worker() -> None:
                     con, lambda m: WORKER.update(activity="working", detail=m, at=db.now()))
                 WORKER.update(activity="working" if worked else "idle", detail=msg, at=db.now())
             worked = contacts.step(con) or worked
+            if time.time() - RECORD_SYNC["at"] >= RECORD_EVERY:
+                RECORD_SYNC["at"] = time.time()
+                try:
+                    RECORD_SYNC["last"] = record.sync()
+                except record.RecordUnavailable as e:
+                    RECORD_SYNC["last"] = {"error": str(e)}
         except Exception as e:  # noqa: BLE001 - the worker must outlive any one failure
             traceback.print_exc()
             WORKER.update(activity="error", detail=str(e), at=db.now())
@@ -1082,6 +1093,8 @@ class Handler(BaseHTTPRequestHandler):
                 return stats.summary(con)
             if route == "cv":
                 return base_cv()
+            if route == "record":
+                return {**record.status(), "last_sync": RECORD_SYNC["last"]}
             if route.startswith("job/"):
                 return self.job(con, unquote(route[4:]))
             raise LookupError(f"no route {route}")
@@ -1173,6 +1186,14 @@ class Handler(BaseHTTPRequestHandler):
                 return {"sources": cvbuild.sources()}
             if route == "cv/build":
                 return run_action("_cvbuild", "building your CV", act_build_cv, "_cvbuild", body.get("options") or {})
+            if route == "record/sync":
+                RECORD_SYNC["at"], RECORD_SYNC["last"] = time.time(), record.sync()
+                return {**record.status(), "last_sync": RECORD_SYNC["last"]}
+            if route == "record/ask":
+                question = (body.get("question") or "").strip()
+                if not question:
+                    raise ValueError("ask a question")
+                return record.ask(question)
             if route == "cv/words":
                 cvscore.add_words(body.get("words") or [])
                 return {"ok": True}

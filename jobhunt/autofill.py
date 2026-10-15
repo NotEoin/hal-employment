@@ -14,7 +14,7 @@ import re
 import sys
 from datetime import date
 
-from . import cv, db, gpu, llm, score
+from . import cv, db, gpu, llm, record, score
 from .config import CONFIG
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
@@ -317,6 +317,7 @@ employer or manager) asks about that person or job, never about Firstname: answe
 facts about them, else give "". Dates in an education or employment history are the dates
 of that course or job, not Firstname's availability. Salary: if the advert states no pay, never
 mention an advertised range.
+Passages from the applicant's employment record are facts too: use them for anything the CV leaves out.
 Never invent personal details (addresses, dates of birth, reference numbers, names of
 people) or claim experience, skills or circumstances the facts do not state: if the
 facts do not answer a field, give "" and sure false. Set sure false for anything a
@@ -501,7 +502,10 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
                if f["hid"] in problems else "")
             for f in batch)
         try:
-            reply = llm.chat_json(FILL, f"Fields:\n{listing}\n\n{facts}", role="main", timeout=300)
+            # The employment record holds what the CV leaves out: certificates, the full story of each job.
+            found = record.context([f"{f.get('label') or ''} {f.get('help') or ''}" for f in batch])
+            kept = f"\n\nFrom the applicant's employment record (as true as the CV):\n{found}" if found else ""
+            reply = llm.chat_json(FILL, f"Fields:\n{listing}\n\n{facts}{kept}", role="main", timeout=300)
         except llm.LLMUnavailable as e:
             return answered, str(e)
         by_hid = {f["hid"]: f for f in batch}

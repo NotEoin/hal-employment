@@ -80,7 +80,7 @@ function scoreRing(s) { const v = Math.max(0, Math.min(100, Math.round(s || 0)))
 const STATUS_CHIP = { applying: "info", applied: "", assessment: "warn", interview: "warn", offer: "good", rejected: "bad", withdrawn: "", ready: "info", skipped: "" };
 
 // Router -----------------------------------------------------------------------
-const routes = { queue: viewQueue, applications: viewApplications, todos: viewTodos, alerts: viewAlerts, stats: viewStats, cv: viewCv, job: viewJob };
+const routes = { queue: viewQueue, applications: viewApplications, todos: viewTodos, alerts: viewAlerts, stats: viewStats, cv: viewCv, record: viewRecord, job: viewJob };
 async function route() {
   const [name, ...rest] = (location.hash.slice(2) || "queue").split("/");
   state.route = name;
@@ -746,7 +746,11 @@ function fitCard(d) {
         ${esc(m.knockouts_unmet.join("; "))}</div>` : ""}
       <table class="fit"><tr><th>The advert asks for</th><th></th><th>Where your CV shows it</th></tr>
         ${m.requirements.map(r => `<tr><td><b>${esc(r.need)}</b><div class="small-t muted">${esc(r.kind)}${r.weight === 3 ? ", central" : ""}: "${esc(r.advert)}"</div></td>
-          <td><span class="chip ${icon[r.match][0]}">${icon[r.match][1]}</span></td><td class="small-t">${r.evidence ? `"${esc(r.evidence)}"` : ""}</td></tr>`).join("")}</table>
+          <td>${r.where === "record" ? `<span class="chip info" title="Your employment record shows this; this CV does not">In your record</span>`
+            : `<span class="chip ${icon[r.match][0]}">${icon[r.match][1]}</span>`}</td>
+          <td class="small-t">${r.evidence ? `"${esc(r.evidence)}"` : ""}</td></tr>`).join("")}</table>
+      ${(m.in_record || []).length ? `<p class="small-t"><b>In your record, not on this CV:</b> ${esc(m.in_record.join("; "))}.
+        Hal can mention these in the letter and answers; add them to the CV if they matter to this job.</p>` : ""}
       ${m.keywords.missing.length ? `<p class="small-t"><b>Skills the advert names that your CV does not:</b> ${esc(m.keywords.missing.join(", "))}.
         If you have used any of them, add them where you used them; if not, leave them out.</p>` : ""}
       <p class="small-t muted">Checked ${esc(ago(m.at))}. Every quote is checked against the advert and your CV; a requirement whose evidence
@@ -755,7 +759,7 @@ function fitCard(d) {
         quoting both. It takes a minute or two with the local model.</p>`}</div>`;
 }
 
-const CV_OPTIONS = [["website", "Also read my website CV"], ["results", "Open entries with results, measured where my material measures them"],
+const CV_OPTIONS = [["website", "Also read my website CV"], ["record", "Also read my employment record"], ["results", "Open entries with results, measured where my material measures them"],
                     ["two_pages", "Keep to two pages"], ["interests", "Include community work and interests"]];
 const CV_FOCUS = { general: "Software engineering in general", backend: "Backend and distributed systems", ml: "Machine learning and applied AI", security: "Security engineering" };
 function cvBuildTab(pane, d) {
@@ -904,6 +908,45 @@ async function viewStats() {
     const table = $("[data-rows]", viz).toggleAttribute("hidden");
     $("[data-chart]", viz).hidden = !table;
     e.target.textContent = table ? "Show as table" : "Show as chart";
+  };
+}
+
+// Employment record ------------------------------------------------------------
+async function viewRecord() {
+  const d = await api("record");
+  const last = d.last_sync;
+  main.innerHTML = `<div class="head"><div><h1>Your record</h1>
+      <p>Everything about you that an application might need: certificates, transcripts, references, the full story of each job.
+      Drop notes or documents (PDF, Word, PowerPoint, Excel) into the vault and Hal reads them within ten minutes. Every letter,
+      answer and fit check searches it.</p></div>
+      <div class="bar" style="margin:0"><button data-sync>Read the vault now</button></div></div>
+    <div class="tiles">${[["Notes", d.notes, "indexed"], ["Passages", d.passages, "searchable sections"],
+      ["Indexed", d.indexed || "never", d.exists ? "last change" : "vault missing"]].map(([k, v, t]) =>
+      `<div class="card tile"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(t)}</div></div>`).join("")}</div>
+    <p class="small-t muted">Vault: <code>${esc(d.vault)}</code>${last && last.error ? ` <span class="chip bad">${esc(last.error)}</span>` : ""}</p>
+    <div class="card pad"><form class="add" id="ask" style="margin:0"><input type="text" id="question" placeholder="Ask your record, e.g. when does my CITI training expire?" required>
+      <button class="primary">Ask</button></form><div id="answer"></div></div>`;
+  $("[data-sync]").onclick = async e => {
+    e.target.disabled = true;
+    try {
+      const r = await guard(() => api("record/sync", {}));
+      const s = r.last_sync;
+      toast(`Read ${s.changed} changed note${s.changed === 1 ? "" : "s"}${s.converted.length ? `, converted ${s.converted.length} document${s.converted.length === 1 ? "" : "s"}` : ""}.`);
+      viewRecord();
+    } finally { e.target.disabled = false; }
+  };
+  $("#ask").onsubmit = async e => {
+    e.preventDefault();
+    const out = $("#answer");
+    out.innerHTML = `<p class="muted small-t">Searching your record...</p>`;
+    try {
+      const r = await api("record/ask", { question: $("#question").value });
+      out.innerHTML = `${r.answer ? `<div>${md(r.answer)}</div>` : ""}
+        ${r.note ? `<p class="small-t muted">The model is not running (${esc(r.note)}), so here are the passages it would have read.</p>` : ""}
+        ${r.sources.length ? `<p class="small-t muted">From: ${r.sources.map(esc).join(", ")}</p>` : ""}
+        ${!r.answer && r.passages ? r.passages.map(h => `<div class="section"><h4>${esc(h.path)} &middot; ${esc(h.heading)}</h4>
+          <div class="small-t" style="white-space:pre-line">${esc(h.text)}</div></div>`).join("") : ""}`;
+    } catch (err) { out.innerHTML = `<p class="progress error">${esc(err.message)}</p>`; }
   };
 }
 

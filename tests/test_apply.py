@@ -18,8 +18,11 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import adopt, autofill, browser, cv, cvbuild, cvscore, db, documents, extension, gmail  # noqa: E402
+from jobhunt import adopt, autofill, browser, cv, cvbuild, cvscore, db, documents, extension, gmail, record  # noqa: E402
 from jobhunt.web import server  # noqa: E402
+
+# An employment record that does not exist, so no test reads the real one or calls Ollama.
+record.VAULT = Path(tempfile.mkdtemp()) / "no-record"
 
 SITE = Path(__file__).parent / "site"
 EXTENSION = Path(__file__).resolve().parent.parent / "extension"
@@ -560,6 +563,29 @@ class Scoring(unittest.TestCase):
         self.assertEqual([r["need"] for r in out["requirements"]], ["Python", "Degree"])
         self.assertEqual([r["match"] for r in out["requirements"]], ["direct", "missing"])
         self.assertEqual((out["label"], out["knockouts_unmet"]), ("Long shot", ["Degree"]))
+
+    def test_evidence_found_only_in_the_record_is_listed_but_not_counted(self):
+        """A requirement the record meets and the CV does not is reported as in the record, and lowers coverage."""
+        job = {"title": "Research engineer", "company": "Acme",
+               "description": "You have strong Python. Research ethics training is required."}
+        replies = iter([{"requirements": [
+                            {"need": "Python", "kind": "must", "weight": 3, "quote": "You have strong Python."},
+                            {"need": "Ethics training", "kind": "knockout", "weight": 3,
+                             "quote": "Research ethics training is required"}]},
+                        {"evidence": [{"id": 1, "match": "direct", "quote": "Built a parser in Python"},
+                                      {"id": 2, "match": "direct",
+                                       "quote": "Human-subjects research training, completed 5 March 2026"}]}])
+        saved = cvscore.llm.chat_json, cvscore.gpu.busy, cvscore.record.context
+        cvscore.llm.chat_json, cvscore.gpu.busy = lambda *a, **k: next(replies), lambda: None
+        cvscore.record.context = lambda queries, **k: ("[Certificates/CITI.md > CITI]\n"
+                                                       "Human-subjects research training, completed 5 March 2026.")
+        try:
+            out = cvscore.match(job, "- Built a parser in Python.")
+        finally:
+            cvscore.llm.chat_json, cvscore.gpu.busy, cvscore.record.context = saved
+        self.assertEqual([r["where"] for r in out["requirements"]], ["cv", "record"])
+        self.assertEqual((out["in_record"], out["knockouts_unmet"]), (["Ethics training"], ["Ethics training"]))
+        self.assertEqual(out["coverage"], 50)
 
 
 class Answers(unittest.TestCase):

@@ -12,6 +12,7 @@
     python -m jobhunt inbox [-k KIND] [-n N]   classified recruiting email
     python -m jobhunt digest [--dry-run|--spoken]   email the daily summary, or print it for speech
     python -m jobhunt vault               rewrite the pipeline note in Hal's Employment vault
+    python -m jobhunt record [sync|status|search Q|ask Q]   the employment record vault
     python -m jobhunt pack ID|--shortlisted [--no-web]   draft application packs
     python -m jobhunt serve [--port N] [--open]   run the Hal Employment web interface
     python -m jobhunt queue               the jobs waiting in the queue, best first
@@ -247,6 +248,34 @@ def cmd_vault(args):
     print(vault.write(db.connect()) or f"vault not found: {vault.VAULT}")
 
 
+def cmd_record(args):
+    from . import record
+    query = " ".join(args.text)
+    if args.op in ("search", "ask") and not query:
+        sys.exit(f"record {args.op}: give a question")
+    try:
+        if args.op == "sync":
+            r = record.sync()
+            print(f"{r['notes']} notes, {r['passages']} passages; {r['changed']} re-read, {r['removed']} removed")
+            for path in r["converted"]:
+                print(f"  converted -> {path}")
+        elif args.op == "search":
+            for h in record.search(query, k=6, min_score=0.45):
+                print(f"{h['score']:.2f}  {h['path']} > {h['heading']}")
+                print(textwrap.indent(textwrap.shorten(h["text"], 300), "      "))
+        elif args.op == "ask":
+            r = record.ask(query)
+            print(r["answer"] or f"(no model: {r.get('note')})")
+            if r["sources"]:
+                print("\nFrom: " + ", ".join(r["sources"]))
+        else:
+            st = record.status()
+            print(f"{st['vault']}{'' if st['exists'] else ' (missing)'}: {st['notes']} notes, {st['passages']} passages, "
+                  f"indexed {st['indexed'] or 'never'}")
+    except record.RecordUnavailable as e:
+        sys.exit(f"record: {e}")
+
+
 def cmd_inbox(args):
     con = db.connect()
     where = "kind = ?" if args.kind else "kind NOT IN ('alert', 'admin', 'other')"
@@ -414,6 +443,9 @@ def main():
     s = sub.add_parser("digest"); s.add_argument("--dry-run", action="store_true")
     s.add_argument("--spoken", action="store_true"); s.set_defaults(fn=cmd_digest)
     sub.add_parser("vault").set_defaults(fn=cmd_vault)
+    s = sub.add_parser("record", help="read, search or ask the employment record vault")
+    s.add_argument("op", nargs="?", default="status", choices=["status", "sync", "search", "ask"])
+    s.add_argument("text", nargs="*"); s.set_defaults(fn=cmd_record)
     sub.add_parser("queue").set_defaults(fn=cmd_queue)
     s = sub.add_parser("contacts"); s.add_argument("id"); s.set_defaults(fn=cmd_contacts)
     s = sub.add_parser("todo"); s.add_argument("op", nargs="?", choices=["add", "done"])
