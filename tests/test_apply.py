@@ -13,6 +13,7 @@ import http.server
 import os
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -66,6 +67,13 @@ def fake_model(job, fields, docs, con=None, problems=None):
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: D102 - keep the test output to the results
         pass
+
+    def do_GET(self):
+        """/slow is the practice form, six seconds late, as a busy employer's site can be."""
+        if self.path.startswith("/slow"):
+            time.sleep(6)
+            self.path = "/form.html"
+        super().do_GET()
 
 
 class Practice(unittest.TestCase):
@@ -286,16 +294,29 @@ class InYourBrowser(Practice):
         self.ctx.pages[0].wait_for_timeout(300)
         return next(t for t in reversed(self.ctx.pages) if address in t.url)
 
+    def test_a_slow_page_in_one_tab_does_not_hold_up_another(self):
+        """2026-10-15 10:25: with six applications open, one timed out queued behind another tab's page load."""
+        quick, slow = self.job("ext-quick", "form.html"), self.job("ext-slow", "form.html")
+        extension._ask("open", timeout=60, job=quick, url=f"{self.base}/form.html")
+        opening = threading.Thread(target=extension._ask, args=("open",),
+                                   kwargs={"timeout": 60, "job": slow, "url": f"{self.base}/slow"})
+        opening.start()
+        time.sleep(0.5)
+        started = time.time()
+        extension._ask("read", timeout=4, job=quick, patterns={**extension.PATTERNS, "banners": None, "options": False})
+        self.assertLess(time.time() - started, 4)
+        opening.join()
+
     def test_applications_open_together_in_a_window_of_their_own(self):
         """apply_window = "separate": job tabs share one window, apart from the one the applicant works in."""
-        first = self.worker.evaluate("() => chrome.windows.getLastFocused().then(w => w.id)")
         for name in ("ext-window-1", "ext-window-2"):
-            server.act_auto(self.con, self.job(name, "form.html"))
+            server.act_auto(self.con, self.job(name, f"form.html?{name}"))
         self.ctx.pages[0].wait_for_timeout(300)
         tabs = self.worker.evaluate("() => chrome.tabs.query({}).then(ts => ts.map(t => [t.url, t.windowId]))")
-        windows = {w for url, w in tabs if "form.html" in url}
-        self.assertEqual(len(windows), 1)
-        self.assertNotIn(first, windows)
+        own = self.worker.evaluate("() => chrome.storage.session.get('halWindow').then(s => s.halWindow)")
+        # Earlier tests may have opened the window already; either way both jobs are in it, and it is not the only one.
+        self.assertEqual({w for url, w in tabs if "ext-window" in url}, {own})
+        self.assertGreater(len({w for _, w in tabs}), 1)
 
     def test_fills_the_first_page_and_leaves_what_it_cannot_answer(self):
         job_id = self.job("ext-fill", "form.html")

@@ -243,12 +243,33 @@ async function handTab(tab) {
 }
 chrome.action.onClicked.addListener(handTab);
 
+// Commands are carried out side by side, each in its own job's tab: one at a time, a slow page in
+// one application held up every other, and a quick "show the form" timed out queued behind it
+// (2026-10-15). The helper never sends two actions for one job at once.
+const MOST = 4;
+let running = 0;
+
+async function carryOut(command) {
+  running++;
+  let result;
+  try {
+    result = { id: command.id, ok: true, value: await COMMANDS[command.cmd](command.args) };
+  } catch (e) {
+    result = { id: command.id, ok: false, error: String(e.message || e) };
+  } finally {
+    running--;
+  }
+  await fetch(`${await hal()}/api/ext/result`, { method: "POST", headers: HEADERS, body: JSON.stringify(result) })
+    .catch(() => {});
+}
+
 let looping = false;
 async function loop() {
   if (looping) return;
   looping = true;
   try {
     for (;;) {
+      while (running >= MOST) await sleep(100);
       let command;
       try {
         const reply = await fetch(`${await hal()}/api/ext/poll`, {
@@ -259,15 +280,7 @@ async function loop() {
         continue;
       }
       chrome.runtime.getPlatformInfo(() => {});  // counts as activity, so the worker is kept running
-      if (!command.id) continue;
-      let result;
-      try {
-        result = { id: command.id, ok: true, value: await COMMANDS[command.cmd](command.args) };
-      } catch (e) {
-        result = { id: command.id, ok: false, error: String(e.message || e) };
-      }
-      await fetch(`${await hal()}/api/ext/result`, { method: "POST", headers: HEADERS, body: JSON.stringify(result) })
-        .catch(() => {});
+      if (command.id) carryOut(command);
     }
   } finally {
     looping = false;
