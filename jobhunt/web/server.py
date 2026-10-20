@@ -66,6 +66,7 @@ def _app(con, job_id: str) -> dict:
 
 
 def _set_app(con, job_id: str, **cols) -> None:
+    _checkpoint(job_id)
     con.execute("INSERT OR IGNORE INTO applications (job_id, stage, updated) VALUES (?, 'documents', ?)",
                 (job_id, db.now()))
     for k, v in cols.items():
@@ -106,11 +107,50 @@ def _card(con, r) -> dict:
 
 # Background actions ------------------------------------------------------------
 
-def run_action(job_id: str, name: str, fn, *args) -> dict:
-    """Starts fn(con, *args) in the background unless an action is already running for the job."""
+class Stopped(BaseException):
+    """The action's application was discarded, marked applied or started again while the action ran.
+
+    A BaseException, so the many `except Exception` blocks on the way (a failed
+    search, a tab that moved on) let it through to `_carry_out`.
+    """
+
+
+# The action, by job, that this thread is carrying out. An action whose entry in ACTIONS has
+# been replaced or removed is stopped at its next checkpoint.
+_RUN = threading.local()
+
+
+def _checkpoint(job_id: str) -> None:
+    """Raises `Stopped` in an action whose application no longer wants it; a no-op in any other thread."""
+    mine = getattr(_RUN, "actions", {}).get(job_id)
+    if mine is not None and ACTIONS.get(job_id) is not mine:
+        raise Stopped()
+
+
+def stop_action(job_id: str) -> bool:
+    """Lets go of the action running for a job at once; it stops itself at its next checkpoint.
+
+    The browser or model call in hand runs to its end in the background, but
+    nothing it returns is written. Returns True when an action was running.
+    """
+    current = ACTIONS.get(job_id)
+    if not current or current["state"] != "running":
+        return False
+    ACTIONS.pop(job_id, None)
+    return True
+
+
+def run_action(job_id: str, name: str, fn, *args, replace: bool = False) -> dict:
+    """Starts fn(con, *args) in the background.
+
+    Args:
+        replace: Stop an action already running for the job in favour of this one, rather than refuse.
+    """
     current = ACTIONS.get(job_id)
     if current and current["state"] == "running":
-        raise RuntimeError(f"Hal is still busy with '{current['name']}' for this job")
+        if not replace:
+            raise RuntimeError(f"Hal is still busy with '{current['name']}' for this job")
+        stop_action(job_id)
     ACTIONS[job_id] = {"name": name, "state": "running", "message": "", "at": db.now()}
 
     def wrapper():
@@ -125,19 +165,36 @@ def run_action(job_id: str, name: str, fn, *args) -> dict:
 
 
 def _carry_out(con, job_id: str, fn, *args) -> None:
-    """Runs an action already recorded as running, and records how it ended."""
+    """Runs an action already recorded as running, and records how it ended.
+
+    An action stopped part way leaves no trace: whatever stopped it has already
+    said where the application stands.
+    """
+    mine = ACTIONS[job_id]
+    if not hasattr(_RUN, "actions"):
+        _RUN.actions = {}
+    _RUN.actions[job_id] = mine
     try:
         msg = fn(con, *args) or "done"
-        ACTIONS[job_id].update(state="done", message=msg, at=db.now())
+        _checkpoint(job_id)
+        mine.update(state="done", message=msg, at=db.now())
+    except Stopped:
+        mine.update(state="stopped", message="stopped", at=db.now())
     except Exception as e:  # noqa: BLE001 - shown to the user, who can retry
+        if ACTIONS.get(job_id) is not mine:
+            mine.update(state="stopped", message="stopped", at=db.now())
+            return
         if not isinstance(e, RuntimeError):
             traceback.print_exc()
-        ACTIONS[job_id].update(state="error", message=f"{e}", at=db.now())
+        mine.update(state="error", message=f"{e}", at=db.now())
         _note(con, job_id, "stuck", f"{e}")
+    finally:
+        _RUN.actions.pop(job_id, None)
 
 
 def _say(job_id: str, text: str) -> None:
     """Shows what Hal is doing for a job, on its page and in the queue."""
+    _checkpoint(job_id)
     if job_id in ACTIONS:
         ACTIONS[job_id]["message"] = text
 
@@ -171,8 +228,9 @@ def _past_walls(con, job, found: dict) -> dict:
         con.commit()
         while True:
             if time.time() > deadline:
-                raise RuntimeError(f"gave up waiting for you to {ask}; do that in {browser.where()}, then press \"Carry on from this page\"")
+                raise RuntimeError(f"gave up waiting for you to {ask}; do that in {browser.where()}, then press \"Fill in the page I am on\"")
             time.sleep(3)
+            _checkpoint(job_id)
             now = browser.peek(job_id)
             if now.get("gone"):
                 raise browser.TabGone()
@@ -221,6 +279,7 @@ def _reach(con, job, found: dict) -> dict:
             searched = True
             _say(job_id, f"{found['site']} wants a human check; looking for the employer's own page instead")
             url = _find_posting(job, found["site"])
+            _checkpoint(job_id)
             if url:
                 found = browser.open_form(job_id, url)
                 continue
@@ -231,6 +290,7 @@ def _reach(con, job, found: dict) -> dict:
             searched = True
             _say(job_id, f"{found['site']} would not show the advert; looking for the employer's own page")
             url = _find_posting(job, found["site"])
+            _checkpoint(job_id)
             if url:
                 found = browser.open_form(job_id, url)
                 continue
@@ -298,6 +358,7 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
             _say(job_id, f"answering {len(fresh)} more questions the form has just shown")
             fields.extend(autofill.propose(job, fresh, docs, documents.files(job), con))
         autofill.ask_model(job, fields, docs, con, problems=retry)
+        _checkpoint(job_id)
         out = browser.fill(job_id, fields, _shot(job_id))
     for f in fields:
         f["error"] = out["errors"].get(f["hid"], "")
@@ -494,6 +555,7 @@ def act_adopt(con, job_id: str, url: str) -> str:
 def _terminal(con, job, found: dict) -> str | None:
     """Deals with a page that ends the way to the form; returns what to tell the applicant, or None."""
     job_id = job["id"]
+    _checkpoint(job_id)
     if found["closed"]:
         db.set_status(con, job_id, "closed", f"the advert has gone from {found['site']}")
         db.alert(con, "info", f"No longer open: {job['company']}", job["title"], job_id)
@@ -521,7 +583,7 @@ def _terminal(con, job, found: dict) -> str | None:
         why = (f"{found['site']} refuses Hal's browser" if found["blocked"]
                else f"no application form found on {found['site']}")
         form.update(state="stuck", message=f"{why}. Open the form in {browser.where()}, then press "
-                                           "\"Carry on from this page\".")
+                                           "\"Fill in the page I am on\".")
         _set_app(con, job_id, stage="form", form=form)
         db.alert(con, "urgent", f"Hal needs you: {job['company']}", form["message"], job_id)
         con.commit()
@@ -705,6 +767,7 @@ def _security_code(con, job, out: dict) -> dict:
     _say(job_id, "the site emailed a security code; reading it from the job inbox")
     since = time.time()
     for _ in range(12):
+        _checkpoint(job_id)
         code = gmail.security_code(since - 60)
         if code:
             _say(job_id, "entering the security code")
@@ -726,6 +789,7 @@ def _await_confirmation(con, job, form: dict, ask: str) -> str:
     deadline = time.time() + WAIT_FOR_YOU
     while time.time() < deadline:
         time.sleep(4)
+        _checkpoint(job_id)
         now = browser.peek(job_id)
         if now.get("gone"):
             raise RuntimeError("the form's tab was closed before the site confirmed the application; "
@@ -926,7 +990,16 @@ def act_mail(con, _job_id: str) -> str:
     return f"mail synced; {len(attention)} need you, {len(made)} new to-dos"
 
 
+def _close_quietly(job_id: str) -> None:
+    """Closes a job's tab once the browser is free; a browser that has gone has nothing to close."""
+    try:
+        browser.close(job_id)
+    except Exception:  # noqa: BLE001 - the tab is closed with the window anyway
+        traceback.print_exc()
+
+
 def mark_applied(con, job, how: str) -> None:
+    _checkpoint(job["id"])
     db.set_status(con, job["id"], "applied", how)
     _set_app(con, job["id"], stage="submitted")
     db.alert(con, "good", f"Applied: {job['company']}", job["title"], job["id"])
@@ -1233,10 +1306,13 @@ class Handler(BaseHTTPRequestHandler):
         job = _job(con, job_id)
         if action == "discard":
             reason = (body.get("reason") or "").strip()
-            if ACTIONS.get(job_id, {}).get("state") == "running":
-                raise RuntimeError("Hal is still working on this application; discard it when it has finished")
+            # Discarding never waits on Hal: its work for the job stops, and the tab goes once the browser is free.
+            stopped = stop_action(job_id)
+            started = job["status"] == "applying"
+            if started or stopped:
+                POOL.submit(_close_quietly, job_id)
             # Started applications are often found closed only at the form: "closed" keeps that apart from a choice.
-            where = "mid-application" if job["status"] == "applying" else "from the queue"
+            where = "mid-application" if started else "from the queue"
             db.set_status(con, job_id, "closed" if body.get("closed") else "skipped",
                           f"discarded {where}{': ' + reason if reason else ''}")
             # The same advert listed twice must not come straight back into the queue.
@@ -1250,6 +1326,8 @@ class Handler(BaseHTTPRequestHandler):
             # Hal goes straight to the form and fills it in; nothing is sent until it is approved.
             return run_action(job_id, "applying", act_auto, job_id, False)
         if action == "restore":
+            if stop_action(job_id):
+                POOL.submit(_close_quietly, job_id)
             db.set_status(con, job_id, "ready", "returned to the queue")
             con.commit()
             return {"ok": True}
@@ -1267,7 +1345,14 @@ class Handler(BaseHTTPRequestHandler):
             con.commit()
             return {"docs": documents.drafts(job)}
         if action in ("auto", "form-open"):
-            return run_action(job_id, "applying", act_auto, job_id, bool(body.get("here")))
+            # Starting again is how a stuck or wandering run is put right, so it never waits for one.
+            here = bool(body.get("here"))
+            return run_action(job_id, "reading the page" if here else "applying", act_auto, job_id, here,
+                              replace=True)
+        if action == "stop":
+            if stop_action(job_id):
+                _note(con, job_id, "stuck", "You stopped Hal. Press \"Fill in the form\" to start again.")
+            return {"ok": True}
         if action == "adopt":
             return run_action(job_id, "filling your tab", act_adopt, job_id, body.get("url", ""))
         if action == "match":
@@ -1288,7 +1373,7 @@ class Handler(BaseHTTPRequestHandler):
             return browser.look(job_id, _shot(job_id, "look.png"))
         if action == "form-show":
             if not browser.show(job_id):
-                raise RuntimeError("the form's tab is closed; press \"Start again\" to open it")
+                raise RuntimeError("the form's tab is closed; press \"Fill in the form\" to open it again")
             return {"ok": True}
         if action in ("approve", "submit"):
             # The one way an application is sent: its owner's approval of the filled form.
@@ -1299,6 +1384,7 @@ class Handler(BaseHTTPRequestHandler):
             return run_action(job_id, "submitting" if last else "moving on", act_approve, job_id,
                               body.get("fields", []))
         if action == "applied":
+            stop_action(job_id)
             mark_applied(con, job, body.get("how") or "submitted by hand")
             return {"ok": True}
         if action == "status":

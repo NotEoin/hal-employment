@@ -150,7 +150,9 @@ label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted)
 .pages img { width: 100%; height: auto; background: #fff; border-radius: 3px; box-shadow: 0 1px 6px rgba(0, 0, 0, .25); }
 .viewer .pages { width: min(1000px, 96vw); max-height: 96vh; }
 .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
-.bar .grow { flex: 1; }
+.bar .grow { flex: 1; min-width: 0; }
+/* Application links run to hundreds of characters with no spaces. */
+.url { overflow-wrap: anywhere; }
 .muted { color: var(--muted); }
 .small-t { font-size: 12px; }
 
@@ -172,6 +174,13 @@ label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted)
 .progress { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--info-soft); color: var(--info); margin-bottom: 14px; }
 .progress.error { background: var(--bad-soft); color: var(--bad); }
 .progress.done { background: var(--good-soft); color: var(--good); }
+.progress .grow { flex: 1; }
+.progress button { flex: none; }
+/* The choices on an application's form step: each button beside a line saying what it does. */
+.choices { display: grid; grid-template-columns: max-content 1fr; gap: 10px 14px; align-items: center; }
+.choice { display: contents; }
+.choice button { justify-content: center; }
+@media (max-width: 640px) { .choices { grid-template-columns: 1fr; } .choice span { margin-bottom: 6px; } }
 .spinner { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

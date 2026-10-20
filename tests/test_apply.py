@@ -425,8 +425,17 @@ class Discarding(unittest.TestCase):
     """An application already started can be dropped, for a job that turns out to have closed."""
 
     def setUp(self):
-        self.con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        path = Path(tempfile.mkdtemp()) / "jobs.db"
+        self.con = db.connect(path)
         self.addCleanup(self.con.close)
+        # Hal's background actions open the database themselves.
+        connect = db.connect
+        db.connect = lambda p=path: connect(p)
+        self.addCleanup(setattr, db, "connect", connect)
+        self.closed = []
+        saved = browser.close
+        browser.close = self.closed.append
+        self.addCleanup(setattr, browser, "close", saved)
         for n, status in (("1", "applying"), ("2", "ready")):
             db.upsert(self.con, {"id": f"greenhouse:{n}", "source": "greenhouse", "company": "Monzo",
                                  "title": f"Graduate Engineer {n}", "location": "London", "url": f"https://example.org/{n}",
@@ -463,12 +472,63 @@ class Discarding(unittest.TestCase):
         self.discard("greenhouse:1", reason="Too senior")
         self.assertNotIn("greenhouse:1", [j["id"] for j in server.applications(self.con)])
 
-    def test_an_application_hal_is_working_on_is_not_discarded(self):
-        server.ACTIONS["greenhouse:1"] = {"name": "applying", "state": "running", "message": "", "at": db.now()}
-        self.addCleanup(server.ACTIONS.pop, "greenhouse:1")
-        with self.assertRaisesRegex(RuntimeError, "still working"):
-            self.discard("greenhouse:1", closed=True)
-        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "applying")
+    def slow_action(self, job_id: str, name: str = "applying", replace: bool = False):
+        """Starts an action that stands in for a slow page load; returns its entry and the event that ends the load."""
+        reached, release = threading.Event(), threading.Event()
+
+        def act(con, job_id):
+            reached.set()
+            release.wait(10)
+            server._say(job_id, "filling in the form")
+            server._set_app(con, job_id, stage="filled", form={"state": "ready", "message": "", "fields": []})
+            return "filled"
+
+        server.run_action(job_id, name, act, job_id, replace=replace)
+        self.addCleanup(release.set)
+        self.addCleanup(server.ACTIONS.pop, job_id, None)
+        self.assertTrue(reached.wait(5))
+        return server.ACTIONS[job_id], release
+
+    def finished(self, entry: dict) -> str:
+        deadline = time.monotonic() + 5
+        while entry["state"] == "running" and time.monotonic() < deadline:
+            time.sleep(0.02)
+        return entry["state"]
+
+    def test_an_application_hal_is_working_on_is_discarded_at_once_and_hal_stops(self):
+        # Discarding used to be refused until Hal finished, which on an expired advert could take minutes.
+        entry, release = self.slow_action("greenhouse:1")
+        began = time.monotonic()
+        self.discard("greenhouse:1", closed=True, reason="The job has closed")
+        self.assertLess(time.monotonic() - began, 1)
+        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "closed")
+        self.assertNotIn("greenhouse:1", server.ACTIONS)
+        release.set()
+        self.assertEqual(self.finished(entry), "stopped")
+        self.assertIsNone(server._app(self.con, "greenhouse:1")["stage"])
+        server.POOL.submit(lambda: None).result(5)
+        self.assertEqual(self.closed, ["greenhouse:1"])
+
+    def test_starting_again_takes_over_from_hal_and_the_first_run_writes_nothing(self):
+        first, release = self.slow_action("greenhouse:1")
+        server.run_action("greenhouse:1", "applying", lambda con, job_id: "fresh start", "greenhouse:1", replace=True)
+        second = server.ACTIONS["greenhouse:1"]
+        self.assertEqual(self.finished(second), "done")
+        release.set()
+        self.assertEqual(self.finished(first), "stopped")
+        self.assertIs(server.ACTIONS["greenhouse:1"], second)
+        self.assertIsNone(server._app(self.con, "greenhouse:1")["stage"])
+
+    def test_marking_applied_while_hal_works_stops_hal(self):
+        entry, release = self.slow_action("greenhouse:1")
+        saved = server.tasks.after_submit
+        server.tasks.after_submit = lambda con, job: None
+        self.addCleanup(setattr, server.tasks, "after_submit", saved)
+        server.Handler.job_action(None, self.con, "greenhouse:1", "applied", {"how": "submitted by hand"})
+        release.set()
+        self.assertEqual(self.finished(entry), "stopped")
+        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "applied")
+        self.assertEqual(server._app(self.con, "greenhouse:1")["stage"], "submitted")
 
 
 class BaseCv(unittest.TestCase):

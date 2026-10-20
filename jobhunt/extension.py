@@ -68,7 +68,7 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
         return result["value"]
     # A tab closed between finding it and acting in it is reported by the browser in its own words.
     if result["error"] == "gone" or result["error"].startswith("No tab with id"):
-        raise RuntimeError("the form's tab was closed; ask Hal to open the form again")
+        raise RuntimeError("the form's tab was closed; press \"Fill in the form\" to open it again")
     raise RuntimeError(result["error"])
 
 

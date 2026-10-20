@@ -77,6 +77,8 @@ function confirmBox(title, text, okLabel, cls = "primary") {
 }
 function flagClass(f) { return /^(ELIGIBILITY|REAPPLICATION)/.test(f) ? "bad" : ""; }
 function scoreRing(s) { const v = Math.max(0, Math.min(100, Math.round(s || 0))); return `<div class="score" style="--s:${v}"><span>${s == null ? "-" : v}</span></div>`; }
+// Statuses in the words shown to the applicant.
+const STATUS_WORDS = { applying: "in progress", skipped: "discarded", closed: "job closed", ready: "in the queue" };
 const STATUS_CHIP = { applying: "info", applied: "", assessment: "warn", interview: "warn", offer: "good", rejected: "bad", withdrawn: "", ready: "info", skipped: "", closed: "" };
 
 // Router -----------------------------------------------------------------------
@@ -122,12 +124,13 @@ async function viewQueue() {
 function jobCard(j) {
   const strong = j.fit.filter(f => f.strength === "strong").length;
   const serious = j.flags.filter(f => flagClass(f));
+  const check = j.flags.length - serious.length;
   const chips = [
     j.location && `<span class="chip">${esc(j.location.slice(0, 40))}</span>`,
     j.salary && `<span class="chip good">${esc(j.salary)}</span>`,
     j.fit.length && `<span class="chip info">${strong}/${j.fit.length} strong matches</span>`,
     serious.length && `<span class="chip bad" title="${esc(serious.join("\n"))}">${esc(serious[0].split(":")[0].toLowerCase())}</span>`,
-    j.flags.length - serious.length > 0 && `<span class="chip warn">${j.flags.length - serious.length} to check</span>`,
+    check > 0 && `<span class="chip warn">${check} to check</span>`,
   ].filter(Boolean).join("");
   return `<article class="card job" tabindex="0">
     <div class="job-top">${scoreRing(j.score)}<div><div class="company">${esc(j.company)}</div><h3>${esc(j.title)}</h3></div></div>
@@ -145,10 +148,14 @@ async function applyJob(j) {
   await guard(() => api(`job/${enc(j.id)}/apply`, {}));
   location.hash = "#/job/" + enc(j.id);
 }
+// Reasons offered when discarding.
+function reasonButtons(reasons) {
+  return `<div class="reasons">${reasons.map(r => `<button class="small" data-r="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
+}
 function discardJob(j) {
   const reasons = ["Not interested", "Too senior", "Wrong location", "Not my field", "Company", "Duplicate"];
-  modal(`<h3>Discard ${esc(j.company)}?</h3><p class="muted">${esc(j.title)}</p>
-    <div class="reasons">${reasons.map(r => `<button class="small" data-r="${esc(r)}">${esc(r)}</button>`).join("")}</div>
+  modal(`<h3>Discard ${esc(j.company)}?</h3><p class="muted">${esc(j.title)}. Pick a reason, or type your own.</p>
+    ${reasonButtons(reasons)}
     <input type="text" id="reason" placeholder="Or type a reason (optional)">
     <div class="bar"><span class="grow"></span><button data-x>Cancel</button><button class="primary" data-ok>Discard</button></div>`,
     (m, close) => {
@@ -205,24 +212,28 @@ document.addEventListener("keydown", e => {
 });
 
 // An application already started, dropped: most often the advert closed before the form could be sent.
+// It takes effect at once, even while Hal is still working on the form.
+const CLOSED_REASON = "The job has closed or the page is missing";
 function discardApplication(j) {
-  const reasons = [["The job has closed", true], ["Not eligible", false], ["No longer interested", false], ["Duplicate", false]];
-  modal(`<h3>Discard this application?</h3><p class="muted">${esc(j.company)}: ${esc(j.title)}. Hal stops filling its form and
-      moves it to Closed on the Applications board. Nothing is sent to the employer.</p>
-    <div class="reasons">${reasons.map(([r, c]) => `<button class="small ${c ? "primary" : ""}" data-r="${esc(r)}" data-c="${c}">${esc(r)}</button>`).join("")}</div>
+  const reasons = [CLOSED_REASON, "Not eligible", "No longer interested", "Duplicate"];
+  modal(`<h3>Discard this application?</h3><p class="muted">${esc(j.company)}: ${esc(j.title)}. Hal stops at once, closes the
+      form and moves it to Closed on the Applications board. Nothing is sent to the employer.</p>
+    ${reasonButtons(reasons)}
     <input type="text" id="reason" placeholder="Or type a reason (optional)">
     <div class="bar"><span class="grow"></span><button data-x>Cancel</button><button data-ok>Discard</button></div>`,
     (m, close) => {
-      const go = async (reason, closed) => {
+      const go = async reason => {
         close();
-        await guard(() => api(`job/${enc(j.id)}/discard`, { reason, closed }), `Discarded ${j.company}`);
+        await guard(() => api(`job/${enc(j.id)}/discard`, { reason, closed: reason === CLOSED_REASON }),
+          `Discarded ${j.company}`);
+        if (state.last) delete state.last.actions[j.id];
         state.stepView = null;
         location.hash = "#/applications";
       };
-      $$("[data-r]", m).forEach(b => b.onclick = () => go(b.dataset.r, b.dataset.c === "true"));
+      $$("[data-r]", m).forEach(b => b.onclick = () => go(b.dataset.r));
       $("[data-x]", m).onclick = close;
-      $("[data-ok]", m).onclick = () => go($("#reason", m).value, false);
-      $("#reason", m).onkeydown = e => { if (e.key === "Enter") go(e.target.value, false); };
+      $("[data-ok]", m).onclick = () => go($("#reason", m).value);
+      $("#reason", m).onkeydown = e => { if (e.key === "Enter") go(e.target.value); };
     });
 }
 
@@ -231,7 +242,8 @@ async function viewApplications() {
   const { jobs } = await api("applications");
   const cols = [["applying", "In progress"], ["applied", "Applied"], ["assessment", "Assessment"], ["interview", "Interview"], ["offer", "Offer"]];
   const closed = jobs.filter(j => ["rejected", "withdrawn", "closed", "skipped"].includes(j.status));
-  main.innerHTML = `<div class="head"><div><h1>Applications</h1><p>Everything you have chosen from the queue, by stage.</p></div></div>
+  main.innerHTML = `<div class="head"><div><h1>Applications</h1><p>Everything you have chosen from the queue, by stage.
+      Click one to see where it stands and what to do next.</p></div></div>
     <div class="board">${cols.map(([k, name]) => {
       const list = jobs.filter(j => j.status === k);
       return `<div class="col"><h4>${name}<span>${list.length}</span></h4>${list.map(j => `
@@ -247,8 +259,9 @@ async function viewApplications() {
 function standing(j) {
   const a = state.last?.actions?.[j.id];
   if (a && a.state === "running") return `<span class="chip info">Hal: ${esc(a.message || a.name)}</span>`;
-  const chip = { ready: ["good", "Ready for you to approve"], needs: ["warn", "Needs you"], stuck: ["bad", "Stuck"], working: ["", "Not finished"] }[j.state];
-  return chip ? `<span class="chip ${chip[0]}" title="${esc(j.message || "")}">${chip[1]}</span>` : "Not started";
+  const chip = { ready: ["good", "Ready for you to approve"], needs: ["warn", "Needs you"], stuck: ["bad", "Stuck: open it"],
+                 working: ["", "Paused: open it to carry on"] }[j.state];
+  return chip ? `<span class="chip ${chip[0]}" title="${esc(j.message || "")}">${chip[1]}</span>` : "Not started: open it to begin";
 }
 
 // One application --------------------------------------------------------------
@@ -270,9 +283,10 @@ async function viewJob(id) {
       <a href="#/applications" class="muted small-t" style="text-decoration:none">&larr; Applications</a>
       <h1>${esc(j.title)}</h1>
       <p>${esc(j.company)} &middot; ${esc(j.location || "")} ${j.salary ? "&middot; " + esc(j.salary) : ""}
-      <span class="chip ${STATUS_CHIP[j.status] || ""}">${esc(j.status)}</span></p></div>
-      <div class="bar" style="margin:0"><a href="${esc(j.url)}" target="_blank" rel="noopener"><button class="ghost">Advert</button></a>
-      ${j.status === "applying" ? `<button class="ghost" data-back>Back to queue</button><button class="ghost" data-drop>Discard</button>` : ""}</div></div>
+      <span class="chip ${STATUS_CHIP[j.status] || ""}">${esc(STATUS_WORDS[j.status] || j.status)}</span></p></div>
+      <div class="bar" style="margin:0"><a href="${esc(j.url)}" target="_blank" rel="noopener"><button class="ghost">Open the advert</button></a>
+      ${j.status === "applying" ? `<button class="ghost" data-back title="Stops Hal and puts the job back in your queue for later">Back to the queue</button>
+        <button data-drop title="Stops Hal at once and closes the application. Nothing is sent.">Discard</button>` : ""}</div></div>
     ${["closed", "skipped"].includes(j.status) ? `<div class="progress" style="margin-bottom:16px"><span class="grow">${j.status === "closed"
       ? "The job has closed, so this application was dropped." : "You discarded this application."}</span>
       <button class="small" data-reopen>Reopen</button></div>` : ""}
@@ -283,8 +297,6 @@ async function viewJob(id) {
   $$("[data-step]", main).forEach(el => el.onclick = () => { state.stepView = el.dataset.step; viewJob(id); });
   const back = $("[data-back]", main);
   back && (back.onclick = async () => { await guard(() => api(`job/${enc(id)}/restore`, {}), "Returned to the queue"); location.hash = "#/queue"; });
-  const drop = $("[data-drop]", main);
-  drop && (drop.onclick = () => discardApplication(j));
   const reopen = $("[data-reopen]", main);
   reopen && (reopen.onclick = async () => {
     await guard(() => api(`job/${enc(id)}/status`, { status: "applying", note: "reopened after discarding" }), "Reopened");
@@ -292,14 +304,25 @@ async function viewJob(id) {
   });
   paintAction(d.action);
   ({ documents: paneDocs, form: paneForm, submitted: paneAfter, next: paneAfter })[step](d);
+  $$("[data-drop]", main).forEach(b => b.onclick = () => discardApplication(j));
 }
+// What Hal is doing for the open application. While it works, everything else on the page stays usable,
+// and Stop lets go of it at once. How an action ended is told by a toast and by the step itself.
 function paintAction(a) {
   const el = $("#action");
   if (!el) return;
-  if (!a) { el.innerHTML = ""; return; }
-  const cls = a.state === "running" ? "" : a.state;
-  el.innerHTML = `<div class="progress ${cls}">${a.state === "running" ? '<span class="spinner"></span>' : ""}
-    <span><b>${esc(a.name)}</b>${a.message ? ": " + esc(a.message) : a.state === "running" ? "..." : ""}</span></div>`;
+  if (!a || a.state !== "running") { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="progress"><span class="spinner"></span>
+    <span class="grow"><b>Hal is working: ${esc(a.name)}</b>${a.message ? ", " + esc(a.message) : "..."}
+    <span class="small-t muted"><br>You can leave this page or use any button below; Hal carries on by itself.</span></span>
+    <button class="small" data-stop title="Hal stops what it is doing. Nothing is sent.">Stop</button></div>`;
+  const stop = $("[data-stop]", el);
+  stop && (stop.onclick = async () => {
+    const id = state.job.job.id;
+    await guard(() => api(`job/${enc(id)}/stop`, {}), "Hal has stopped");
+    if (state.last) delete state.last.actions[id];
+    viewJob(id);
+  });
 }
 
 function paneDocs(d) {
@@ -317,7 +340,7 @@ function paneDocs(d) {
         <div id="editor"></div>
         <div class="bar"><button data-reset class="ghost">Reset to Hal's draft</button><span class="grow"></span>
           <button class="primary" data-save>Save and re-render</button></div>
-        <p class="small-t muted">Hal uploads these PDFs and pastes this text into the form. If you change them after the form is filled, press "Start again" on the form so it takes the new ones.</p>
+        <p class="small-t muted">Hal uploads these PDFs and pastes this text into the form. If you change them after the form is filled, press "Fill in the form" on the Form step so it takes the new ones.</p>
       </div>
       <div class="card pad preview-card"><div class="tabs"><button class="tab on" id="prev-label">Preview</button><span class="grow"></span>
         <button class="small ghost" data-expand>Expand</button><a class="button small ghost" data-full target="_blank" rel="noopener">Open full size</a></div>
@@ -420,23 +443,40 @@ function paneForm(d) {
   const st = state.last || {}, own = st.browser === "extension", where = st.where || "Hal's window";
   const offline = own && !st.extension ? `<div class="progress error">The Hal extension is not connected. Open Brave with the
     Hal Employment extension switched on; it links up within half a minute.</div>` : "";
-  const controls = `<div class="bar"><button data-restart class="ghost" ${running ? "disabled" : ""}>Start again</button>
-      <button data-here class="ghost" ${running ? "disabled" : ""} title="Use this after moving the form on yourself in ${esc(where)}">Carry on from this page</button>
-      <button data-show>Show the form</button><span class="grow"></span><button class="ghost" data-manual>I applied myself</button></div>`;
+  const started = !!(form && (form.fields.length || form.filled));
+  // Every choice works while Hal is busy: each one takes over from whatever Hal was doing.
+  const choice = (attr, label, text, cls = "ghost") => `<div class="choice"><button ${attr} class="${cls}">${label}</button>
+    <span class="small-t muted">${text}</span></div>`;
+  const controls = `<div class="choices">
+      ${choice("data-restart", "Fill in the form", `Hal opens the application from the advert and fills it in${started ? " again, from the start" : ""}.`,
+        started || running ? "ghost" : "primary")}
+      ${choice("data-here", "Fill in the page I am on", `For when you have opened the form yourself in ${esc(where)}, for example after signing in. Hal reads that page and fills it in.`)}
+      ${choice("data-show", "Show me the form", `Brings ${esc(where)} to the front.`)}
+      ${choice("data-manual", "I applied myself", "You sent the application yourself. Hal stops and marks it as applied.")}
+      ${choice("data-drop", "Discard", "The job has gone, the page is missing, or it is not worth it. Nothing is sent.")}
+    </div>`;
+  // Starting again while Hal is part way through sending would risk sending twice.
+  const restart = async here => {
+    if (running && /submitting/.test(d.action.name) && !await confirmBox("Hal is sending this application",
+      "Starting again now could send it twice. Only carry on if the site shows it was not sent.", "Start again anyway", "")) return;
+    startAction(id, "auto", { here });
+  };
   const bind = () => {
-    $$("[data-restart]", pane).forEach(b => b.onclick = () => startAction(id, "auto", { here: false }));
-    $$("[data-here]", pane).forEach(b => b.onclick = () => startAction(id, "auto", { here: true }));
+    $$("[data-restart]", pane).forEach(b => b.onclick = () => restart(false));
+    $$("[data-here]", pane).forEach(b => b.onclick = () => restart(true));
     $$("[data-show]", pane).forEach(b => b.onclick = () => guard(() => api(`job/${enc(id)}/form-show`, {}), "Brought the form to the front"));
     $$("[data-manual]", pane).forEach(b => b.onclick = () => markApplied(id));
   };
-  if (!form || (!form.fields.length && !form.filled)) {
+  if (!started) {
     const stuck = form && form.state === "stuck";
     pane.innerHTML = `${offline}<div class="card pad">
-      <h3 style="margin-top:0">${running ? "Hal is working on this application" : stuck ? "Hal could not reach the form" : "Let Hal fill in the application"}</h3>
-      <p class="muted">Hal opens the form at <a href="${esc(d.apply_url)}" target="_blank" rel="noopener">${esc(d.apply_url.slice(0, 90))}</a>
-      ${own ? "in a tab of your browser" : "in its own browser window"}, answers every question from your profile, your documents and the local model,
-      and fills the form in. It then stops, with the filled form on screen, until you approve it. Nothing is submitted before that.</p>
+      <h3 style="margin-top:0">${running ? "Hal is opening the application" : stuck ? "Hal could not get to the form" : "Hal has not filled in the form yet"}</h3>
+      <p class="muted">Hal opens the application at <a href="${esc(d.apply_url)}" target="_blank" rel="noopener">${esc(d.apply_url.slice(0, 90))}</a>
+      ${own ? "in a tab of your browser" : "in its own browser window"}, answers every question from your profile and documents,
+      and fills the form in. Then it stops and waits for you to check it. Nothing is sent until you approve it.</p>
       ${form && form.message && !running ? `<div class="progress ${stuck ? "error" : ""}">${esc(form.message)}</div>` : ""}
+      ${running ? `<p class="small-t muted">If the advert has expired or the page is missing, you do not have to wait: press "Discard" below.</p>` : ""}
+      <h4 class="muted small-t" style="margin:18px 0 8px">WHAT YOU CAN DO</h4>
       ${controls}</div>`;
     bind();
     return;
@@ -455,14 +495,14 @@ function paneForm(d) {
   pane.innerHTML = `${offline}
     <div class="card pad" style="margin-bottom:16px">
       <div class="bar" style="margin:0">
-        <div class="grow"><b>${form.step > 1 ? `Step ${form.step}: ` : ""}${esc(form.title || "Application form")}</b><div class="small-t muted">${esc(form.url)}</div></div>
+        <div class="grow"><b>${form.step > 1 ? `Step ${form.step}: ` : ""}${esc(form.title || "Application form")}</b><div class="small-t muted url">${esc(form.url)}</div></div>
         <span class="chip ${needReq.length ? "bad" : "good"}">${needReq.length ? needReq.length + " required left" : "All required answered"}</span>
         ${refused.length ? `<span class="chip bad">${refused.length} not accepted</span>` : ""}
         ${toRead.length ? `<span class="chip warn">${toRead.length} written by Hal to read</span>` : ""}
         ${form.captcha ? `<span class="chip warn" title="The site may ask you to pass a human check when the form is submitted">human check on page</span>` : ""}
       </div>
       ${form.message && !running ? `<div class="progress ${tone}" style="margin:12px 0 0">${esc(form.message)}</div>` : ""}
-      ${form.stale ? `<div class="progress error" style="margin:12px 0 0">You changed the documents after this form was filled. Press "Start again" so the form takes the new ones.</div>` : ""}
+      ${form.stale ? `<div class="progress error" style="margin:12px 0 0">You changed the documents after this form was filled. Press "Fill in the form" below so the form takes the new ones.</div>` : ""}
       ${form.model ? `<p class="small-t muted" style="margin:10px 0 0">Hal's model could not run: ${esc(form.model)}.</p>` : ""}
     </div>
     <div class="split" style="grid-template-columns: minmax(0, 3fr) minmax(0, 2fr)">
@@ -475,9 +515,10 @@ function paneForm(d) {
       }).join("")}</div>
       ${(form.done || []).map(s => `<details class="section"><summary class="small-t muted">Step ${s.step}, already entered: ${esc(s.title)}</summary>
         <table>${s.fields.map(f => `<tr><td>${esc(f.label)}</td><td>${esc(f.kind === "file" ? String(f.value || "").split("/").pop() : Array.isArray(f.value) ? f.value.join(", ") : f.value === true ? "Ticked" : f.value ?? "")}</td></tr>`).join("")}</table></details>`).join("")}
-      <div class="bar">${need.length ? `<button data-draft class="ghost" ${running ? "disabled" : ""}>Ask Hal to answer the rest</button>` : ""}
-        <span class="grow"></span><button data-save>Save</button>
-        <button data-fill ${running ? "disabled" : ""} title="Types your changes into the form without sending anything">Put my changes in the form</button></div></div>
+      <div class="bar">${need.length ? `<button data-draft class="ghost" ${running ? "disabled" : ""} title="${running ? WAIT : "Hal drafts answers to the empty questions"}">Ask Hal to answer the rest</button>` : ""}
+        <span class="grow"></span><button data-save title="Keeps your changes here without touching the form">Save</button>
+        <button data-fill ${running ? "disabled" : ""} title="${running ? WAIT : "Types your changes into the form without sending anything"}">Put my changes in the form</button></div>
+      ${running ? `<p class="small-t muted">${WAIT}.</p>` : ""}</div>
       <div class="card pad">
         ${filled ? `<h4 class="muted small-t" style="margin:0 0 8px">THE FORM AS HAL FILLED IT, ${esc(ago(form.filled.at)).toUpperCase()}</h4>
           ${form.filled.screenshot ? `<div class="shot-wrap"><img class="shot" src="${fileUrl(form.filled.screenshot)}" alt="The filled form"></div>`
@@ -488,17 +529,17 @@ function paneForm(d) {
               ${form.final ? "Submit" : "Next"} on the form yourself. Hal fills each new page as it appears and marks the job applied
               when the site confirms it. Changes you make in the form are remembered for the next one.</p>`
           : `<div class="bar"><button class="primary" data-show>Show the form</button><span class="grow"></span>
-            <button class="good" data-approve ${running ? "disabled" : ""}>Approve and ${does}</button></div>
+            <button class="good" data-approve ${running ? `disabled title="${WAIT}"` : ""}>Approve and ${does}</button></div>
           <p class="small-t muted">${form.press === "apply" ? `Approving presses Apply on the advert, which sends the CV stored in your account there.`
             : form.final ? `Look over the form in ${esc(where)}: it is filled in and nothing has been sent. Approving enters any changes you made here, then presses the form's own submit button. That cannot be undone.`
             : `This form has more pages. Approving moves it on; Hal stops again at the last page before anything is sent.`}</p>`}`
         : `<h4 class="muted small-t" style="margin:0 0 8px">${running ? "HAL IS FILLING THE FORM IN" : "NOT FILLED IN YET"}</h4>
-          <p class="muted">${running ? "The answers on the left are going into the form now." : `Press "Start again" to have Hal fill the form in.`}</p>`}
+          <p class="muted">${running ? "The answers on the left are going into the form now." : `Press "Fill in the form" below to have Hal fill it in.`}</p>`}
         ${form.submit ? `<div class="section"><h4>After submitting</h4>
           <div class="progress ${form.submit.submitted ? "done" : "error"}">${form.submit.submitted ? "The site confirmed the application" : "No confirmation seen"}</div>
           ${form.submit.screenshot ? `<div class="shot-wrap"><img class="shot" src="${fileUrl(form.submit.screenshot)}" alt="The page after submitting"></div>` : ""}</div>` : ""}
-        ${controls}
-      </div></div>`;
+      </div></div>
+    <div class="card pad" style="margin-top:16px"><h4 class="muted small-t" style="margin:0 0 8px">SOMETHING NOT RIGHT?</h4>${controls}</div>`;
   const collect = () => form.fields.map(f => {
     const row = $(`[data-hid="${CSS.escape(f.hid)}"]`, pane);
     let value = f.value, edited = false;
@@ -526,14 +567,15 @@ function paneForm(d) {
   });
   bind();
 }
+// Why a button that sends Hal's answers to the form waits: the form is being changed under it.
+const WAIT = "Hal is still filling the form in; wait for it to finish, or press Stop at the top";
 async function startAction(id, action, body) {
   const a = await guard(() => api(`job/${enc(id)}/${action}`, body));
   if (state.last) state.last.actions[id] = a;
-  paintAction(a);
-  $$("#pane button").forEach(b => b.disabled = true);
+  if (state.route === "job" && state.job && state.job.job.id === id) viewJob(id);
 }
 async function markApplied(id) {
-  if (!await confirmBox("Mark as applied?", "Use this when you sent the application yourself.", "Mark applied")) return;
+  if (!await confirmBox("Mark as applied?", "Use this when you sent the application yourself. Hal stops working on it.", "Mark applied")) return;
   await guard(() => api(`job/${enc(id)}/applied`, { how: "submitted by hand" }), "Marked as applied");
   state.stepView = null; viewJob(id);
 }
