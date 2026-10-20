@@ -291,3 +291,9 @@ label.check { display: flex; gap: 8px; align-items: baseline; margin: 8px 0; }
 table.fit { width: 100%; border-collapse: collapse; margin-top: 12px; }
 table.fit th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 table.fit td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+
+/* Moving between applications in progress. */
+.navbar { display: flex; align-items: center; gap: 8px; margin: -8px 0 14px; padding: 8px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel); }
+/* The documents' approval, the first thing on an application. */
+.approve-card { margin-bottom: 16px; border-color: var(--good); }

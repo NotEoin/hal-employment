@@ -104,15 +104,17 @@ async function viewQueue() {
       <p>${data.jobs.length} of ${data.target} ready${data.reserve ? `, ${data.reserve} more in reserve` : ""}.
       Hal tops it up as you go. <span class="kbd">J</span> <span class="kbd">K</span> move,
       <span class="kbd">A</span> apply, <span class="kbd">D</span> discard, <span class="kbd">Enter</span> details.
-      Apply sends Hal to fill the form in; nothing is submitted until you approve it.</p></div>
+      Apply moves a job to In progress, where you check its CV and cover letter first. Hal fills the form in once you
+      approve them, and nothing is sent until you approve the form too.</p></div>
       ${data.jobs.length ? `<div class="bar" style="margin:0"><button class="primary" data-all>Apply to all ${data.jobs.length}</button></div>` : ""}</div>
     ${data.jobs.length ? `<div class="grid">${data.jobs.map(jobCard).join("")}</div>` :
       `<div class="card empty"><h2>The queue is empty</h2><p>${esc(w?.detail || "Hal is looking for more jobs.")}</p></div>`}`;
   const all = $("[data-all]", main);
   all && (all.onclick = async () => {
-    if (!await confirmBox(`Apply to all ${data.jobs.length}?`, "Hal opens each application, answers its questions and fills the form in. Each one then waits for you to check the filled form and approve it; nothing is submitted before that.", "Start")) return;
-    await guard(() => api("queue/apply", { count: data.jobs.length }), "Hal has started on them");
-    location.hash = "#/applications";
+    if (!await confirmBox(`Apply to all ${data.jobs.length}?`, "They all move to In progress. You then go through them one at a time, best first: check the CV and cover letter, approve them, and Hal fills that job's form in. Use Next at the top of each application to move on. Nothing is sent until you approve each form.", "Start with the first")) return;
+    const r = await guard(() => api("queue/apply", { count: data.jobs.length }));
+    state.stepView = null;
+    location.hash = r.started.length ? "#/job/" + enc(r.started[0]) : "#/applications";
   });
   $$(".job", main).forEach((el, i) => {
     el.onclick = e => { if (!e.target.closest("button")) { state.focus = i; openDrawer(state.queue[i].id); } };
@@ -148,6 +150,7 @@ function paintFocus() {
 }
 async function applyJob(j) {
   await guard(() => api(`job/${enc(j.id)}/apply`, {}));
+  state.stepView = null;
   location.hash = "#/job/" + enc(j.id);
 }
 // Reasons offered when discarding. "Too much effort" is remembered, and later jobs with the same
@@ -232,7 +235,8 @@ function discardApplication(j) {
           `Discarded ${j.company}`);
         if (state.last) delete state.last.actions[j.id];
         state.stepView = null;
-        location.hash = "#/applications";
+        const next = state.job && state.job.job.id === j.id && state.job.nav.next;
+        location.hash = next ? "#/job/" + enc(next) : "#/applications";
       };
       $$("[data-r]", m).forEach(b => b.onclick = () => go(b.dataset.r));
       $("[data-x]", m).onclick = close;
@@ -269,12 +273,23 @@ function standing(j) {
 }
 
 // One application --------------------------------------------------------------
-const STEPS = [["documents", "Documents"], ["form", "Form and approval"], ["submitted", "Submitted"], ["next", "Interview and tests"]];
+const STEPS = [["documents", "CV and cover letter"], ["form", "Form and approval"], ["submitted", "Submitted"], ["next", "Interview and tests"]];
+// Every application starts with its documents: the form is filled only once they are approved.
 function currentStep(d) {
   const st = d.job.status, stage = d.application.stage;
   if (["assessment", "interview", "offer"].includes(st)) return "next";
   if (["applied", "rejected", "withdrawn"].includes(st) || stage === "submitted") return "submitted";
-  return "form";
+  return d.docs_approved ? "form" : "documents";
+}
+// Previous and next among the applications in progress, so they can be worked through one at a time.
+function navBar(d) {
+  const n = d.nav, here = d.job.status === "applying";
+  if (!n.count || (!here && !n.next)) return "";
+  const go = (id, label) => id ? `<a class="button small ghost" href="#/job/${enc(id)}">${label}</a>`
+    : `<button class="small ghost" disabled>${label}</button>`;
+  return `<div class="navbar"><span class="grow small-t muted">${here ? `Application ${n.place} of ${n.count} in progress`
+      : `${n.count} application${n.count > 1 ? "s" : ""} still in progress`}</span>
+    ${here ? go(n.prev, "&larr; Previous") : ""}${go(n.next, here ? "Next &rarr;" : "Go to the next one &rarr;")}</div>`;
 }
 async function viewJob(id) {
   const d = await api("job/" + enc(id));
@@ -282,7 +297,7 @@ async function viewJob(id) {
   const step = state.stepView || currentStep(d);
   const reached = STEPS.findIndex(s => s[0] === currentStep(d));
   const j = d.job;
-  main.innerHTML = `
+  main.innerHTML = `${navBar(d)}
     <div class="head"><div>
       <a href="#/applications" class="muted small-t" style="text-decoration:none">&larr; Applications</a>
       <h1>${esc(j.title)}</h1>
@@ -333,7 +348,14 @@ function paneDocs(d) {
   const docs = d.docs, s = d.summary, id = d.job.id;
   const tabs = [["letter", "Cover letter"], ["cv", "CV"], ["message", "Message"], ["answers", "Answers"]];
   const pane = $("#pane");
+  const applying = d.job.status === "applying";
   pane.innerHTML = `
+    ${applying && !d.docs_approved ? `<div class="card pad approve-card"><div class="bar" style="margin:0">
+        <div class="grow"><b>First, check the CV and cover letter</b><div class="small-t muted">Read the cover letter, then the CV.
+          Edit anything you like. When you are happy, approve them and Hal opens the application and fills the form in.</div></div>
+        <button class="good" data-approve-docs>Approve and fill in the form</button></div></div>`
+      : applying ? `<div class="progress done"><span class="grow">You approved these documents ${esc(ago(d.docs_approved))}.</span>
+        <button class="small" data-to-form>Go to the form</button></div>` : ""}
     ${s.flags.length ? `<div class="card pad" style="margin-bottom:16px"><h4 style="margin:0 0 8px" class="muted small-t">CHECK BEFORE SENDING</h4>
       <ul class="flags">${s.flags.map(f => `<li class="${flagClass(f)}">${esc(f)}</li>`).join("")}</ul></div>` : ""}
     ${!s.has_pack ? `<div class="progress error">No pack was drafted for this job; the documents are empty.</div>` : ""}
@@ -389,6 +411,18 @@ function paneDocs(d) {
     $("[data-expand]", pane).onclick = () => viewPdf(file);
   };
   $$("[data-tab]", pane).forEach(b => b.onclick = () => { state.tab = b.dataset.tab; draw(); });
+  const approve = $("[data-approve-docs]", pane);
+  approve && (approve.onclick = async () => {
+    approve.disabled = true;
+    try {
+      const a = await guard(() => api(`job/${enc(id)}/docs-approve`, { docs }), "Approved. Hal is opening the application.");
+      if (state.last) state.last.actions[id] = a;
+    } finally { approve.disabled = false; }
+    state.stepView = null;
+    viewJob(id);
+  });
+  const toForm = $("[data-to-form]", pane);
+  toForm && (toForm.onclick = () => { state.stepView = "form"; viewJob(id); });
   $("[data-match]", pane).onclick = () => startAction(id, "match", {});
   const save = async () => {
     const r = await guard(() => api(`job/${enc(id)}/docs`, { docs }), "Saved and re-rendered");

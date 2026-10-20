@@ -1028,6 +1028,23 @@ def _site_of(con, job) -> str:
     return _site(form.get("url") or browser.application_url(job))
 
 
+def in_progress_around(con, job_id: str) -> dict:
+    """Where an application stands among those in progress, in the order they were chosen, best first.
+
+    Returns its place, how many there are, and the applications before and after it.
+    """
+    # The event that made each one 'applying': its id orders them, and jobs chosen together keep their score order.
+    ids = [r["id"] for r in con.execute("""
+        SELECT j.id FROM jobs j WHERE j.status = 'applying'
+        ORDER BY (SELECT MAX(e.id) FROM events e WHERE e.job_id = j.id AND e.kind = 'status'
+                  AND e.detail LIKE 'applying%'), j.score DESC""")]
+    if job_id not in ids:
+        return {"place": 0, "count": len(ids), "prev": None, "next": ids[0] if ids else None}
+    i = ids.index(job_id)
+    return {"place": i + 1, "count": len(ids), "prev": ids[i - 1] if i else None,
+            "next": ids[i + 1] if i + 1 < len(ids) else None}
+
+
 def effort_notes(con, job) -> list[str]:
     """Reminders that its owner found an earlier application with this company or on this site too much effort.
 
@@ -1258,13 +1275,18 @@ class Handler(BaseHTTPRequestHandler):
         docs = documents.load(con, r)
         summary = documents.summary(r)
         summary["flags"] = [*effort_notes(con, r), *summary["flags"]]
+        app = _app(con, job_id)
+        current = documents.current_cv(r, docs)
         return {"job": {**_card(con, r), "description": r["description"]},
                 "summary": summary, "docs": docs, "files": documents.files(r),
-                "cv": documents.current_cv(r, docs), "cv_edited": bool(docs.get("cv")),
+                "cv": current, "cv_edited": bool(docs.get("cv")),
+                # An application Hal had started on before documents were approved counts as approved.
+                "docs_approved": docs.get("approved") or (app["updated"] if app["form"] else None),
+                "nav": in_progress_around(con, job_id),
                 "match": json.loads(_match_path(r).read_text()) if _match_path(r).exists() else None,
                 "cv_score": cvscore.score(documents.current_cv(r, docs), documents.pack_dir(r) / "Firstname-Lastname-CV.pdf")
                             if (documents.pack_dir(r) / "Firstname-Lastname-CV.pdf").exists() else None,
-                "application": _app(con, job_id), "events": [dict(e) for e in events],
+                "application": app, "events": [dict(e) for e in events],
                 "todos": [dict(t) for t in todos],
                 "emails": [{**dict(e), "url": tasks.thread_url(e["thrid"])} for e in emails],
                 "action": ACTIONS.get(job_id), "apply_url": browser.application_url(r)}
@@ -1345,12 +1367,14 @@ class Handler(BaseHTTPRequestHandler):
             if route == "mail":
                 return run_action("_mail", "checking email", act_mail, "_mail")
             if route == "queue/apply":
-                # Starts the best jobs in the queue; each stops at its filled form, for approval.
+                # Moves the best jobs in the queue to In progress, best first. None is opened yet: each waits
+                # for its documents to be approved, and its owner goes through them one at a time.
                 rows = con.execute("""SELECT id FROM jobs WHERE status = 'ready' AND active = 1
                                       ORDER BY score DESC, first_seen DESC LIMIT ?""",
                                    (max(1, min(int(body.get("count", 10)), replenish.TARGET)),)).fetchall()
                 for r in rows:
-                    run_action(r["id"], "applying", act_auto, r["id"], False)
+                    db.set_status(con, r["id"], "applying", "chosen from the queue")
+                con.commit()
                 return {"started": [r["id"] for r in rows]}
             raise LookupError(f"no route {route}")
         finally:
@@ -1379,8 +1403,17 @@ class Handler(BaseHTTPRequestHandler):
             con.commit()
             return {"ok": True}
         if action == "apply":
-            # Hal goes straight to the form and fills it in; nothing is sent until it is approved.
-            return run_action(job_id, "applying", act_auto, job_id, False)
+            # The application starts with its documents; Hal opens the form once they are approved.
+            if job["status"] in ("new", "shortlisted", "ready"):
+                db.set_status(con, job_id, "applying", "chosen from the queue")
+                con.commit()
+            return {"ok": True}
+        if action == "docs-approve":
+            docs = {**documents.load(con, job), **body.get("docs", {}), "approved": db.now()}
+            documents.save(con, job, docs)
+            db.log(con, job_id, "note", "documents approved")
+            con.commit()
+            return run_action(job_id, "applying", act_auto, job_id, False, replace=True)
         if action == "restore":
             if stop_action(job_id):
                 POOL.submit(_close_quietly, job_id)

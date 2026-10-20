@@ -87,9 +87,13 @@ async function newTab(url, separate) {
   return made.tabs[0];
 }
 
+// The job's tab, loaded, and the one shown in Hal's window: a tab behind others there is not drawn,
+// so its dropdowns never open and its clicks never settle. Tabs in the applicant's own windows stay put.
 async function jobTab(job) {
   const tab = await tabFor(job);
   if (!tab) throw new Error("gone");
+  const own = await halWindow();
+  if (own && tab.windowId === own.id && !tab.active) await chrome.tabs.update(tab.id, { active: true });
   return loaded(tab.id);
 }
 

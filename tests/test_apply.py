@@ -555,6 +555,59 @@ class Discarding(unittest.TestCase):
         self.assertEqual(server._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
 
 
+class Choosing(unittest.TestCase):
+    """Applications start with their documents, and are worked through one at a time."""
+
+    def setUp(self):
+        path = Path(tempfile.mkdtemp()) / "jobs.db"
+        self.con = db.connect(path)
+        self.addCleanup(self.con.close)
+        for n, score in (("1", 90), ("2", 80), ("3", 70)):
+            db.upsert(self.con, {"id": f"greenhouse:{n}", "source": "greenhouse", "company": f"Firm {n}",
+                                 "title": "Graduate Engineer", "location": "London", "url": f"https://example.org/{n}",
+                                 "description": "", "salary": "", "posted_at": None, "board_size": None})
+            self.con.execute("UPDATE jobs SET score = ? WHERE id = ?", (score, f"greenhouse:{n}"))
+            db.set_status(self.con, f"greenhouse:{n}", "ready")
+        self.con.commit()
+        saved = server.db.connect, server.act_auto, server.run_action
+        def restore():
+            server.db.connect, server.act_auto, server.run_action = saved
+        self.addCleanup(restore)
+        connect = saved[0]
+        server.db.connect = lambda p=path: connect(p)
+        self.started = []
+        server.run_action = lambda job_id, name, fn, *args, replace=False: self.started.append((job_id, fn)) or {}
+
+    def post(self, route: str, body: dict):
+        handler = server.Handler.__new__(server.Handler)
+        return handler.api_post(route, body)
+
+    def test_applying_to_all_opens_no_form_and_orders_them_best_first(self):
+        # Every form was opened at once, so tabs behind others were never filled.
+        started = self.post("queue/apply", {"count": 3})["started"]
+        self.assertEqual(started, ["greenhouse:1", "greenhouse:2", "greenhouse:3"])
+        self.assertEqual(self.started, [])
+        self.assertEqual(server.in_progress_around(self.con, "greenhouse:2"),
+                         {"place": 2, "count": 3, "prev": "greenhouse:1", "next": "greenhouse:3"})
+        self.assertEqual(server.in_progress_around(self.con, "greenhouse:1")["prev"], None)
+
+    def test_hal_fills_the_form_only_once_the_documents_are_approved(self):
+        saved = server.documents.save, server.documents.load
+        def restore():
+            server.documents.save, server.documents.load = saved
+        self.addCleanup(restore)
+        stored = {}
+        server.documents.load = lambda con, job: dict(stored)
+        server.documents.save = lambda con, job, docs: stored.update(docs)
+        self.post("job/greenhouse:1/apply", {})
+        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "applying")
+        self.assertEqual(self.started, [])
+        self.post("job/greenhouse:1/docs-approve", {"docs": {"letter": "Dear Firm 1"}})
+        self.assertEqual(self.started, [("greenhouse:1", server.act_auto)])
+        self.assertEqual(stored["letter"], "Dear Firm 1")
+        self.assertTrue(stored["approved"])
+
+
 class OpenForms(unittest.TestCase):
     """A form already open in the job's tab is never closed by Hal looking for one."""
 
