@@ -452,22 +452,23 @@ function paneForm(d) {
   const choice = (attr, label, text, cls = "ghost") => `<div class="choice"><button ${attr} class="${cls}">${label}</button>
     <span class="small-t muted">${text}</span></div>`;
   const controls = `<div class="choices">
-      ${choice("data-restart", "Fill in the form", `Hal opens the application from the advert and fills it in${started ? " again, from the start" : ""}.`,
-        started || running ? "ghost" : "primary")}
-      ${choice("data-here", "Fill in the page I am on", `For when you have opened the form yourself in ${esc(where)}, for example after signing in. Hal reads that page and fills it in.`)}
+      ${choice("data-restart", "Fill in the form", `Hal fills in the form open in ${esc(where)}, as far as you have got with it.
+        If no form is open there, Hal opens it from the advert.`, started || running ? "ghost" : "primary")}
+      ${choice("data-fresh", "Start over from the advert", `Hal opens the advert again in ${esc(where)} and fills the form in from the start.
+        Anything typed in the open form is lost.`)}
       ${choice("data-show", "Show me the form", `Brings ${esc(where)} to the front.`)}
       ${choice("data-manual", "I applied myself", "You sent the application yourself. Hal stops and marks it as applied.")}
       ${choice("data-drop", "Discard", "The job has gone, the page is missing, or it is not worth it. Nothing is sent.")}
     </div>`;
   // Starting again while Hal is part way through sending would risk sending twice.
-  const restart = async here => {
+  const restart = async fresh => {
     if (running && /submitting/.test(d.action.name) && !await confirmBox("Hal is sending this application",
       "Starting again now could send it twice. Only carry on if the site shows it was not sent.", "Start again anyway", "")) return;
-    startAction(id, "auto", { here });
+    startAction(id, "auto", { fresh });
   };
   const bind = () => {
     $$("[data-restart]", pane).forEach(b => b.onclick = () => restart(false));
-    $$("[data-here]", pane).forEach(b => b.onclick = () => restart(true));
+    $$("[data-fresh]", pane).forEach(b => b.onclick = () => restart(true));
     $$("[data-show]", pane).forEach(b => b.onclick = () => guard(() => api(`job/${enc(id)}/form-show`, {}), "Brought the form to the front"));
     $$("[data-manual]", pane).forEach(b => b.onclick = () => markApplied(id));
   };

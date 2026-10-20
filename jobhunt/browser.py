@@ -311,11 +311,25 @@ def _survey(frame) -> dict:
                 "password": False, "invalid": 0, "captcha": False, "challenge": False, "stayed": False}
 
 
+# Presses the form or dialog around a control, outside its open list; returns false when there is none.
+PRESS_AROUND_JS = """e => {
+  const around = e.closest("[role=dialog], [aria-modal=true], dialog, form");
+  if (!around) return false;
+  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"])
+    around.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, view: window}));
+  return true;
+}"""
+
+
 def _close_list(page, box) -> None:
-    """Closes an open dropdown without disturbing the form around it."""
+    """Closes an open dropdown without disturbing the form around it.
+
+    Escape also closes the dialog a form may sit in (Workable's did, 2026-10-20), so it is
+    only the last resort, for a list in neither a form nor a dialog.
+    """
     try:
         box.evaluate("e => e.blur()")
-        if page.locator("[data-hal-opt]:visible").count():
+        if page.locator("[data-hal-opt]:visible").count() and not box.evaluate(PRESS_AROUND_JS):
             box.press("Escape")
     except Exception:  # noqa: BLE001 - nothing was open
         pass

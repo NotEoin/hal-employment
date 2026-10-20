@@ -17,6 +17,7 @@
   // Widgets such as react-select open on mouse-down, which a bare click() never sends.
   const tap = el => ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type =>
     el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })));
+  const halAround = "[role=dialog], [aria-modal=true], dialog, form";
   const tagged = hid => document.querySelector(`[data-hal-id="${CSS.escape(hid)}"]`);
 
   // Cookie banners block clicks underneath them; refusing optional cookies is preferred.
@@ -34,10 +35,14 @@
     if (!halOptions(el.getAttribute('data-hal-id')).length)
       el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
   }
+  // Escape also closes the dialog a form may sit in (Workable's did, 2026-10-20), so a list inside a form or
+  // dialog is closed by a press on that, which is outside the list but still inside the form.
   function closeList(el) {
     el.blur();
-    if (document.querySelector('[data-hal-opt]'))
-      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    if (!document.querySelector('[data-hal-opt]')) return;
+    const around = el.closest(halAround);
+    if (around) tap(around);
+    else el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
   }
   // A list fetched from the site as it opens is given time to arrive.
   async function listed(hid, waits = 3) {

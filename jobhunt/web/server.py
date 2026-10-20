@@ -230,7 +230,7 @@ def _past_walls(con, job, found: dict) -> dict:
         con.commit()
         while True:
             if time.time() > deadline:
-                raise RuntimeError(f"gave up waiting for you to {ask}; do that in {browser.where()}, then press \"Fill in the page I am on\"")
+                raise RuntimeError(f"gave up waiting for you to {ask}; do that in {browser.where()}, then press \"Fill in the form\"")
             time.sleep(3)
             _checkpoint(job_id)
             now = browser.peek(job_id)
@@ -585,7 +585,7 @@ def _terminal(con, job, found: dict) -> str | None:
         why = (f"{found['site']} refuses Hal's browser" if found["blocked"]
                else f"no application form found on {found['site']}")
         form.update(state="stuck", message=f"{why}. Open the form in {browser.where()}, then press "
-                                           "\"Fill in the page I am on\".")
+                                           "\"Fill in the form\".")
         _set_app(con, job_id, stage="form", form=form)
         db.alert(con, "urgent", f"Hal needs you: {job['company']}", form["message"], job_id)
         con.commit()
@@ -648,9 +648,20 @@ def _move_on(con, job, form: dict) -> tuple[dict, int, list]:
     raise AssertionError("unreachable")
 
 
-def act_auto(con, job_id: str, here: bool = False) -> str:
-    """Takes an application as far as it can go without its owner: to the filled form, ready to approve."""
+def act_auto(con, job_id: str, here: bool = False, fresh: bool = False) -> str:
+    """Takes an application as far as it can go without its owner: to the filled form, ready to approve.
+
+    Args:
+        here: Fill the page the job's tab shows, and never press anything to get to a form.
+        fresh: Open the application from the advert even when the job's tab already shows a form.
+    """
     job = _job(con, job_id)
+    if not here and not fresh:
+        # A form already open in the job's tab is the one meant: opening the advert again would close it.
+        try:
+            here = bool(browser.peek(job_id).get("form"))
+        except RuntimeError:
+            here = False
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "chosen from the queue")
         con.commit()
@@ -668,6 +679,9 @@ def act_auto(con, job_id: str, here: bool = False) -> str:
         try:
             _say(job_id, "reading the page" if here else "opening the application")
             found = browser.read_here(job_id) if here else browser.open_form(job_id, browser.application_url(job))
+            if here and not found["fields"]:
+                raise RuntimeError(f"Hal cannot see a form in {browser.where()}. Open the form there (press the "
+                                   "site's Apply button if it has one), then ask Hal again.")
             return _drive(con, job, found, step, done)
         except browser.TabGone:
             # The window was closed under Hal; the application starts again in a new tab.
@@ -1390,7 +1404,7 @@ class Handler(BaseHTTPRequestHandler):
             # Starting again is how a stuck or wandering run is put right, so it never waits for one.
             here = bool(body.get("here"))
             return run_action(job_id, "reading the page" if here else "applying", act_auto, job_id, here,
-                              replace=True)
+                              bool(body.get("fresh")), replace=True)
         if action == "stop":
             if stop_action(job_id):
                 _note(con, job_id, "stuck", "You stopped Hal. Press \"Fill in the form\" to start again.")

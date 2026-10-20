@@ -74,8 +74,12 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
 
 def _read(job_id: str, banners: bool = True, options: bool = False) -> dict:
     """Returns what the job's tab shows: its fields and the facts the steps below decide on."""
-    return _ask("read", job=job_id, patterns={
+    facts = _ask("read", job=job_id, patterns={
         **PATTERNS, "banners": [p.pattern for p in COOKIE_BUTTONS] if banners else None, "options": options})
+    if not facts:
+        # The page was swapped out while it was read, or is one the browser will not let a script into.
+        raise RuntimeError("the job's tab could not be read; it may still be loading or be a browser error page")
+    return facts
 
 
 def _needs(facts: dict) -> str:

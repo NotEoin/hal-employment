@@ -555,6 +555,57 @@ class Discarding(unittest.TestCase):
         self.assertEqual(server._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
 
 
+class OpenForms(unittest.TestCase):
+    """A form already open in the job's tab is never closed by Hal looking for one."""
+
+    def setUp(self):
+        self.con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        self.addCleanup(self.con.close)
+        db.upsert(self.con, {"id": "workable:1", "source": "workable", "company": "Acme", "title": "Engineer",
+                             "location": "London", "url": "https://jobs.workable.com/view/1", "description": "",
+                             "salary": "", "posted_at": None, "board_size": None})
+        db.set_status(self.con, "workable:1", "applying")
+        self.con.commit()
+        names = ("peek", "read_here", "open_form", "press_control")
+        saved = {n: getattr(browser, n) for n in names} | {"render": documents.render, "load": documents.load}
+        def restore():
+            for n in names:
+                setattr(browser, n, saved[n])
+            documents.render, documents.load = saved["render"], saved["load"]
+        self.addCleanup(restore)
+        documents.render = lambda job, docs: {}
+        documents.load = lambda con, job: {"letter": "", "answers": []}
+        self.calls = []
+        empty = {"fields": [], "needs": "", "url": "https://jobs.workable.com/view/1", "title": "", "site": "workable.com",
+                 "controls": [{"name": "Apply now", "inNav": False}], "sent": False, "closed": False, "applied": False,
+                 "blocked": False, "captcha": False, "next": False}
+        browser.read_here = lambda job_id: self.calls.append("read") or dict(empty)
+        browser.open_form = lambda job_id, url: self.calls.append("open") or dict(empty)
+        browser.press_control = lambda job_id, name: self.fail(f"Hal pressed {name!r} on the applicant's page")
+
+    def test_filling_the_page_you_are_on_never_presses_anything_to_find_a_form(self):
+        # A Workable form whose fields Hal missed was closed by Hal pressing "Apply now" to look for it.
+        browser.peek = lambda job_id: {"form": False}
+        with self.assertRaisesRegex(RuntimeError, "cannot see a form"):
+            server.act_auto(self.con, "workable:1", here=True)
+        self.assertEqual(self.calls, ["read"])
+
+    def test_fill_in_the_form_uses_the_form_open_in_the_jobs_tab_rather_than_reopening_the_advert(self):
+        browser.peek = lambda job_id: {"form": True}
+        with self.assertRaisesRegex(RuntimeError, "cannot see a form"):
+            server.act_auto(self.con, "workable:1")
+        self.assertEqual(self.calls, ["read"])
+
+    def test_starting_over_opens_the_advert_even_with_a_form_open(self):
+        browser.peek = lambda job_id: self.fail("starting over looked for an open form")
+        saved = server.autofill.choose_control
+        server.autofill.choose_control = lambda job, found: ""
+        self.addCleanup(setattr, server.autofill, "choose_control", saved)
+        with self.assertRaises(RuntimeError):
+            server.act_auto(self.con, "workable:1", fresh=True)
+        self.assertEqual(self.calls[0], "open")
+
+
 class BaseCv(unittest.TestCase):
     """Hal's base CV: the website's, with the applicant's changes laid over it."""
 
@@ -609,6 +660,7 @@ class BaseCv(unittest.TestCase):
         self.assertEqual(documents.current_cv(job, {})["education"][0]["detail"], "New dissertation wording.")
         mine = {"cv": {**cv.load(), "summary": "For Acme."}}
         self.assertEqual(documents.current_cv(job, mine)["summary"], "For Acme.")
+
 
 
 class BuildingCv(unittest.TestCase):
