@@ -124,12 +124,14 @@ async function viewQueue() {
 function jobCard(j) {
   const strong = j.fit.filter(f => f.strength === "strong").length;
   const serious = j.flags.filter(f => flagClass(f));
-  const check = j.flags.length - serious.length;
+  const effort = j.flags.filter(f => f.startsWith("EFFORT"));
+  const check = j.flags.length - serious.length - effort.length;
   const chips = [
     j.location && `<span class="chip">${esc(j.location.slice(0, 40))}</span>`,
     j.salary && `<span class="chip good">${esc(j.salary)}</span>`,
     j.fit.length && `<span class="chip info">${strong}/${j.fit.length} strong matches</span>`,
     serious.length && `<span class="chip bad" title="${esc(serious.join("\n"))}">${esc(serious[0].split(":")[0].toLowerCase())}</span>`,
+    effort.length && `<span class="chip warn" title="${esc(effort.join("\n"))}">too much effort before</span>`,
     check > 0 && `<span class="chip warn">${check} to check</span>`,
   ].filter(Boolean).join("");
   return `<article class="card job" tabindex="0">
@@ -148,12 +150,14 @@ async function applyJob(j) {
   await guard(() => api(`job/${enc(j.id)}/apply`, {}));
   location.hash = "#/job/" + enc(j.id);
 }
-// Reasons offered when discarding.
+// Reasons offered when discarding. "Too much effort" is remembered, and later jobs with the same
+// company or application site carry a reminder of it.
+const EFFORT = "Too much effort";
 function reasonButtons(reasons) {
   return `<div class="reasons">${reasons.map(r => `<button class="small" data-r="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
 }
 function discardJob(j) {
-  const reasons = ["Not interested", "Too senior", "Wrong location", "Not my field", "Company", "Duplicate"];
+  const reasons = ["Not interested", "Too senior", "Wrong location", "Not my field", EFFORT, "Company", "Duplicate"];
   modal(`<h3>Discard ${esc(j.company)}?</h3><p class="muted">${esc(j.title)}. Pick a reason, or type your own.</p>
     ${reasonButtons(reasons)}
     <input type="text" id="reason" placeholder="Or type a reason (optional)">
@@ -163,7 +167,7 @@ function discardJob(j) {
         close();
         const card = $$(".job", main)[state.queue.indexOf(j)];
         card && card.classList.add("leaving");
-        await guard(() => api(`job/${enc(j.id)}/discard`, { reason }), `Discarded ${j.company}`);
+        await guard(() => api(`job/${enc(j.id)}/discard`, { reason, effort: reason === EFFORT }), `Discarded ${j.company}`);
         setTimeout(viewQueue, 180);
       };
       $$("[data-r]", m).forEach(b => b.onclick = () => go(b.dataset.r));
@@ -215,7 +219,7 @@ document.addEventListener("keydown", e => {
 // It takes effect at once, even while Hal is still working on the form.
 const CLOSED_REASON = "The job has closed or the page is missing";
 function discardApplication(j) {
-  const reasons = [CLOSED_REASON, "Not eligible", "No longer interested", "Duplicate"];
+  const reasons = [CLOSED_REASON, EFFORT, "Not eligible", "No longer interested", "Duplicate"];
   modal(`<h3>Discard this application?</h3><p class="muted">${esc(j.company)}: ${esc(j.title)}. Hal stops at once, closes the
       form and moves it to Closed on the Applications board. Nothing is sent to the employer.</p>
     ${reasonButtons(reasons)}
@@ -224,7 +228,7 @@ function discardApplication(j) {
     (m, close) => {
       const go = async reason => {
         close();
-        await guard(() => api(`job/${enc(j.id)}/discard`, { reason, closed: reason === CLOSED_REASON }),
+        await guard(() => api(`job/${enc(j.id)}/discard`, { reason, closed: reason === CLOSED_REASON, effort: reason === EFFORT }),
           `Discarded ${j.company}`);
         if (state.last) delete state.last.actions[j.id];
         state.stepView = null;
@@ -252,7 +256,7 @@ async function viewApplications() {
     }).join("")}</div>
     ${closed.length ? `<div class="section"><h4>Closed</h4><div class="card">${closed.map(j => `<div class="todo" data-id="${esc(j.id)}" style="cursor:pointer">
       <div class="body"><div class="t">${esc(j.company)}: ${esc(j.title)}</div></div>
-      <span class="chip ${STATUS_CHIP[j.status]}">${esc({ closed: "job closed", skipped: "discarded" }[j.status] || j.status)}</span></div>`).join("")}</div></div>` : ""}`;
+      <span class="chip ${STATUS_CHIP[j.status]}">${esc(j.effort ? "too much effort" : { closed: "job closed", skipped: "discarded" }[j.status] || j.status)}</span></div>`).join("")}</div></div>` : ""}`;
   $$("[data-id]", main).forEach(el => el.onclick = () => location.hash = "#/job/" + enc(el.dataset.id));
 }
 // Where an application in progress stands: what Hal is doing, or what it is waiting on.

@@ -530,6 +530,30 @@ class Discarding(unittest.TestCase):
         self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "applied")
         self.assertEqual(server._app(self.con, "greenhouse:1")["stage"], "submitted")
 
+    def test_too_much_effort_is_remembered_for_the_company_and_the_site(self):
+        for n, company in (("3", "Monzo"), ("4", "Starling")):
+            db.upsert(self.con, {"id": f"greenhouse:{n}", "source": "greenhouse", "company": company,
+                                 "title": "Platform Engineer", "location": "London", "url": f"https://jobs.example.org/{n}",
+                                 "description": "", "salary": "", "posted_at": None, "board_size": None})
+            db.set_status(self.con, f"greenhouse:{n}", "ready")
+        self.discard("greenhouse:1", reason="Too much effort", effort=True)
+        notes = server.effort_notes(self.con, server._job(self.con, "greenhouse:3"))
+        self.assertEqual(len(notes), 1)
+        self.assertIn("to Monzo as too much effort", notes[0])
+        self.assertIn("on example.org as too much effort", server.effort_notes(self.con, server._job(self.con, "greenhouse:4"))[0])
+        self.assertTrue(next(j for j in server.applications(self.con) if j["id"] == "greenhouse:1")["effort"])
+        # A job board found tiresome once says nothing about the forms of the other jobs it lists.
+        self.con.execute("UPDATE events SET detail = 'adzuna.co.uk' WHERE kind = 'effort'")
+        self.con.execute("UPDATE jobs SET url = 'https://www.adzuna.co.uk/jobs/land/ad/4' WHERE id = 'greenhouse:4'")
+        self.assertEqual(server.effort_notes(self.con, server._job(self.con, "greenhouse:4")), [])
+        # Reopened, it is no longer held against the company.
+        db.set_status(self.con, "greenhouse:1", "applying", "reopened after discarding")
+        self.assertEqual(server.effort_notes(self.con, server._job(self.con, "greenhouse:3")), [])
+
+    def test_a_site_is_named_without_the_employer_part(self):
+        self.assertEqual(server._site("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"), "myworkdayjobs.com")
+        self.assertEqual(server._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
+
 
 class BaseCv(unittest.TestCase):
     """Hal's base CV: the website's, with the applicant's changes laid over it."""

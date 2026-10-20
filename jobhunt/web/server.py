@@ -81,7 +81,8 @@ def applications(con) -> list[dict]:
     # A job closed or skipped straight from 'applying' is an application dropped part way; one sent back to
     # the queue first and discarded there is not.
     rows = con.execute(f"""SELECT j.*, a.stage, a.updated,
-            (SELECT MAX(at) FROM events e WHERE e.job_id = j.id AND e.kind = 'status') changed
+            (SELECT MAX(at) FROM events e WHERE e.job_id = j.id AND e.kind = 'status') changed,
+            EXISTS (SELECT 1 FROM events e WHERE e.job_id = j.id AND e.kind = 'effort') effort
             FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
             WHERE j.status IN ({','.join('?' * len(IN_FLIGHT))}) OR
                   (j.status IN ('rejected','withdrawn') AND a.job_id IS NOT NULL) OR
@@ -91,13 +92,14 @@ def applications(con) -> list[dict]:
               WHEN 'assessment' THEN 2 WHEN 'applying' THEN 3 WHEN 'applied' THEN 4 ELSE 5 END,
               changed DESC""", IN_FLIGHT).fetchall()
     return [{"id": r["id"], "company": r["company"], "title": r["title"], "status": r["status"], "stage": r["stage"],
-             "changed": r["changed"], "location": r["location"], "url": r["url"],
+             "changed": r["changed"], "location": r["location"], "url": r["url"], "effort": bool(r["effort"]),
              "state": (_app(con, r["id"])["form"] or {}).get("state"),
              "message": (_app(con, r["id"])["form"] or {}).get("message", "")} for r in rows]
 
 
 def _card(con, r) -> dict:
     s = documents.summary(r)
+    s["flags"] = [*effort_notes(con, r), *s["flags"]]
     return {"id": r["id"], "company": r["company"], "title": r["title"], "location": r["location"],
             "salary": r["salary"], "score": r["score"], "score_notes": r["score_notes"], "url": r["url"],
             "source": r["source"], "posted_at": r["posted_at"], "first_seen": r["first_seen"],
@@ -998,6 +1000,42 @@ def _close_quietly(job_id: str) -> None:
         traceback.print_exc()
 
 
+def _site(url: str) -> str:
+    """The site a page belongs to, without the employer's own part: acme.wd3.myworkdayjobs.com is myworkdayjobs.com."""
+    parts = urlparse(url).netloc.lower().split(":")[0].split(".")
+    # Second-level names such as .co.uk take a third label.
+    keep = 3 if len(parts) > 2 and parts[-2] in ("co", "ac", "org", "gov", "com") and len(parts[-1]) == 2 else 2
+    return ".".join(parts[-keep:])
+
+
+def _site_of(con, job) -> str:
+    """The site that holds a job's application form: the form's own, once Hal has reached it."""
+    form = _app(con, job["id"])["form"] or {}
+    return _site(form.get("url") or browser.application_url(job))
+
+
+def effort_notes(con, job) -> list[str]:
+    """Reminders that its owner found an earlier application with this company or on this site too much effort.
+
+    A discarded application its owner has since reopened no longer counts.
+    """
+    rows = con.execute("""SELECT j.id, j.company, e.detail FROM events e JOIN jobs j ON j.id = e.job_id
+                          WHERE e.kind = 'effort' AND j.status = 'skipped' AND j.id != ?""",
+                       (job["id"],)).fetchall()
+    notes = []
+    same = [r for r in rows if r["company"].lower() == job["company"].lower()]
+    if same:
+        notes.append(f"EFFORT: you discarded {len(same)} earlier application{'s' if len(same) > 1 else ''} "
+                     f"to {job['company']} as too much effort")
+    site = _site(browser.application_url(job))
+    other = [r for r in rows if r["detail"] == site and r not in same]
+    # A job board stands in front of most jobs, whatever their own forms are like.
+    if site and other and not any(a in site for a in AGGREGATORS):
+        notes.append(f"EFFORT: you discarded {len(other)} earlier application{'s' if len(other) > 1 else ''} "
+                     f"on {site} as too much effort")
+    return notes
+
+
 def mark_applied(con, job, how: str) -> None:
     _checkpoint(job["id"])
     db.set_status(con, job["id"], "applied", how)
@@ -1204,8 +1242,10 @@ class Handler(BaseHTTPRequestHandler):
         emails = con.execute("SELECT date, kind, subject, thrid FROM emails WHERE job_id = ? ORDER BY date DESC",
                              (job_id,))
         docs = documents.load(con, r)
+        summary = documents.summary(r)
+        summary["flags"] = [*effort_notes(con, r), *summary["flags"]]
         return {"job": {**_card(con, r), "description": r["description"]},
-                "summary": documents.summary(r), "docs": docs, "files": documents.files(r),
+                "summary": summary, "docs": docs, "files": documents.files(r),
                 "cv": documents.current_cv(r, docs), "cv_edited": bool(docs.get("cv")),
                 "match": json.loads(_match_path(r).read_text()) if _match_path(r).exists() else None,
                 "cv_score": cvscore.score(documents.current_cv(r, docs), documents.pack_dir(r) / "Firstname-Lastname-CV.pdf")
@@ -1315,6 +1355,8 @@ class Handler(BaseHTTPRequestHandler):
             where = "mid-application" if started else "from the queue"
             db.set_status(con, job_id, "closed" if body.get("closed") else "skipped",
                           f"discarded {where}{': ' + reason if reason else ''}")
+            if body.get("effort"):
+                db.log(con, job_id, "effort", _site_of(con, job))
             # The same advert listed twice must not come straight back into the queue.
             for d in con.execute("""SELECT id FROM jobs WHERE id != ? AND status IN ('new','shortlisted','ready')
                                     AND lower(company) = lower(?) AND lower(title) = lower(?)""",
