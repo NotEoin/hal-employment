@@ -118,6 +118,65 @@ def for_editing() -> dict:
     return _apply(origin(), overrides(), keep_hidden=True)
 
 
+def _name(section: str, item) -> str:
+    """What names an entry across versions of a CV: its original name where the editor kept one."""
+    if section in PAIRS:
+        return item[0]
+    return item.get("_key") or item.get(NAMED_BY[section]) or ""
+
+
+def _shown(items: list) -> list:
+    return [x for x in items or [] if not (isinstance(x, dict) and x.get("hidden"))]
+
+
+def changes(base: dict, variant: dict) -> list[dict]:
+    """Lists where an application's CV differs from the base CV, for skimming before approving it.
+
+    Each change names the field by its path in `variant` ("projects.0.body", or a section for
+    an order change), says what kind of change it is ("text", "order", "added", "left out"),
+    and carries a short label and the base's wording.
+    """
+    out = []
+    for f in ("title", "summary", "moreProjects", "closing"):
+        if (variant.get(f) or "") != (base.get(f) or ""):
+            out.append({"path": f, "kind": "text", "label": {"moreProjects": "Further projects"}.get(f, f.capitalize()),
+                        "before": base.get(f) or ""})
+    for section in (*NAMED_BY, *PAIRS):
+        mine = variant.get(section) or []
+        theirs = _shown(base.get(section))
+        before = [_name(section, x) for x in theirs]
+        shown = [_name(section, x) for x in _shown(mine)]
+        common = [n for n in shown if n in before]
+        if common != [n for n in before if n in shown]:
+            moved = [f"{n} (was {before.index(n) + 1}, now {shown.index(n) + 1})" for n in common
+                     if before.index(n) != shown.index(n)]
+            out.append({"path": section, "kind": "order", "label": f"Order of {section}",
+                        "before": ", ".join(moved[:6])})
+        for name in before:
+            if name not in shown:
+                out.append({"path": section, "kind": "left out", "label": f"{name} ({section})", "before": ""})
+        for i, item in enumerate(mine):
+            name = _name(section, item)
+            if isinstance(item, dict) and item.get("hidden"):
+                continue
+            was = _find(base, section, name) if section in PAIRS else next(
+                (x for x in theirs if _name(section, x) == name), None)
+            if was is None:
+                out.append({"path": f"{section}.{i}", "kind": "added", "label": f"{name} ({section})", "before": ""})
+                continue
+            if section in PAIRS:
+                if item[1] != was[1]:
+                    out.append({"path": f"{section}.{i}.1", "kind": "text", "label": name,
+                                "before": ", ".join(was[1]) if isinstance(was[1], list) else was[1]})
+                continue
+            for field, value in item.items():
+                if field in ("_key", "hidden", "modules") or value == was.get(field):
+                    continue
+                out.append({"path": f"{section}.{i}.{field}", "kind": "text", "label": f"{name}: {field}",
+                            "before": was.get(field) or ""})
+    return out
+
+
 def save_base(edited: dict) -> list[dict]:
     """Stores where an edited base CV differs from the one it starts from, and returns those changes."""
     original = origin()

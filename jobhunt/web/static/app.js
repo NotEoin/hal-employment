@@ -346,12 +346,15 @@ function paintAction(a) {
 
 function paneDocs(d) {
   const docs = d.docs, s = d.summary, id = d.job.id;
-  const tabs = [["letter", "Cover letter"], ["cv", "CV"], ["message", "Message"], ["answers", "Answers"]];
+  const changed = d.cv_changes.length;
+  const tabs = [["letter", "Cover letter"], ["cv", changed ? `CV (${changed} change${changed > 1 ? "s" : ""})` : "CV"],
+                ["message", "Message"], ["answers", "Answers"]];
   const pane = $("#pane");
   const applying = d.job.status === "applying";
   pane.innerHTML = `
     ${applying && !d.docs_approved ? `<div class="card pad approve-card"><div class="bar" style="margin:0">
-        <div class="grow"><b>First, check the CV and cover letter</b><div class="small-t muted">Read the cover letter, then the CV.
+        <div class="grow"><b>First, check the CV and cover letter</b><div class="small-t muted">Read the cover letter, then skim
+          ${changed ? `the ${changed} change${changed > 1 ? "s" : ""} Hal made to your CV, highlighted on the CV tab` : "the CV"}.
           Edit anything you like. When you are happy, approve them and Hal opens the application and fills the form in.</div></div>
         <button class="good" data-approve-docs>Approve and fill in the form</button></div></div>`
       : applying ? `<div class="progress done"><span class="grow">You approved these documents ${esc(ago(d.docs_approved))}.</span>
@@ -381,10 +384,19 @@ function paneDocs(d) {
       editor.innerHTML = `<p class="small-t muted" style="margin-top:0">${d.cv_edited || docs.cv
         ? `You have edited this application's CV, so changes to <a href="#/cv">your CV</a> no longer reach it.`
         : `Made by Hal from <a href="#/cv">your CV</a>: the most relevant projects and skills first, and a title line for this kind of role.
-           Editing it here changes this application only.`}</p><div id="cv-builder"></div>
+           Editing it here changes this application only.`}</p>${cvChanges(d.cv_changes)}<div id="cv-builder"></div>
         ${docs.cv ? `<div class="bar"><button class="small ghost" data-cv-reset>Go back to Hal's version</button></div>` : ""}`;
       const draft = docs.cv || structuredClone(d.cv);
-      cvEditor($("#cv-builder"), draft, { reorder: true, onChange: () => { docs.cv = draft; } });
+      cvEditor($("#cv-builder"), draft, { site: d.cv_base, original: "your CV's", reorder: true, onChange: () => { docs.cv = draft; } });
+      $$("[data-goto]", editor).forEach(el => el.onclick = () => {
+        const [section, i] = el.dataset.goto.split(".");
+        const target = $(`[data-p="${CSS.escape(el.dataset.goto)}"]`, editor)
+          || (section === "skills" && i !== undefined && $(`[data-skills="${i}"]`, editor))
+          || $(`[data-section="${section}"]`, editor);
+        if (!target) return;
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.focus({ preventScroll: true });
+      });
       const reset = $("[data-cv-reset]", editor);
       reset && (reset.onclick = async () => {
         docs.cv = null; d.cv_edited = false;
@@ -440,6 +452,16 @@ function paneDocs(d) {
 
 // A document's pages drawn as images at the full width of their box, so they read at a usable size.
 // Pages past the last fail to load and are dropped.
+// What Hal changed from the base CV, so a CV can be approved by reading only those parts.
+function cvChanges(list) {
+  if (!list.length) return `<div class="progress done">The same as your CV: Hal has changed nothing.</div>`;
+  return `<div class="changes"><b class="small-t">What Hal changed from your CV</b>
+    <p class="small-t muted" style="margin:2px 0 8px">Changed text is highlighted below; click a change to jump to it.</p>
+    <ul>${list.map(c => `<li><button class="link small-t" data-goto="${esc(c.path)}">${esc(c.label)}</button>
+      <span class="chip ${c.kind === "text" ? "warn" : "info"}">${esc(c.kind === "text" ? "reworded" : c.kind)}</span>
+      ${c.before ? `<div class="small-t muted">${c.kind === "order" ? "" : "Was: "}${esc(String(c.before).slice(0, 220))}</div>` : ""}</li>`).join("")}</ul></div>`;
+}
+
 function pdfPages(file) {
   const t = Date.now();
   return `<div class="pages">${[1, 2, 3, 4].map(n => `<img src="/pages?path=${enc(file)}&page=${n}&t=${t}" alt="Page ${n}"
@@ -720,8 +742,9 @@ function cvEditor(box, cv, { site = null, original = "the website's", reorder = 
     const [section, index, field] = path.split(".");
     if (index === undefined) return site[section];
     const item = cv[section][+index];
+    const nameOf = x => x._key || x.name || x.qualification || x.role;
     const match = Array.isArray(item) ? site[section].find(x => x[0] === item[0])
-      : site[section].find(x => x._key === (item._key || item.name || item.qualification || item.role));
+      : site[section].find(x => nameOf(x) === nameOf(item));
     return match ? match[field] : undefined;
   };
   const changed = path => {
@@ -729,22 +752,34 @@ function cvEditor(box, cv, { site = null, original = "the website's", reorder = 
     return was !== undefined && JSON.stringify(was) !== JSON.stringify(at(path))
       ? `<button class="link small-t" data-revert="${path}">Changed · use ${original}</button>` : "";
   };
-  const field = (path, label, long) => `<label class="f">${esc(label)} ${changed(path)}</label>` + (long
-    ? `<textarea data-p="${path}" class="fit" rows="${Math.min(14, Math.max(2, Math.ceil(String(at(path) || "").length / 70)))}">${esc(at(path) || "")}</textarea>`
-    : `<input type="text" data-p="${path}" value="${esc(at(path) || "")}">`);
+  const field = (path, label, long) => {
+    const mark = changed(path), cls = mark ? "changed" : "";
+    return `<label class="f">${esc(label)} ${mark}</label>` + (long
+      ? `<textarea data-p="${path}" class="fit ${cls}" rows="${Math.min(14, Math.max(2, Math.ceil(String(at(path) || "").length / 70)))}">${esc(at(path) || "")}</textarea>`
+      : `<input type="text" data-p="${path}" class="${cls}" value="${esc(at(path) || "")}">`);
+  };
+  // Where an entry sat in the other version, when it has moved: "was 3rd".
+  const moved = (section, i) => {
+    if (!site || !site[section]) return "";
+    const nameOf = x => Array.isArray(x) ? x[0] : x._key || x.name || x.qualification || x.role;
+    const shown = cv[section].filter(x => !x.hidden), was = site[section].filter(x => !x.hidden).map(nameOf);
+    const now = shown.indexOf(cv[section][i]), before = was.indexOf(nameOf(cv[section][i]));
+    if (now < 0 || before < 0 || now === before) return "";
+    return `<span class="chip info" title="Where it was before">moved, was ${before + 1}${["st", "nd", "rd"][before] || "th"}</span>`;
+  };
   const mover = (section, i, n) => reorder ? `<button class="small ghost" data-move="${section}.${i}.-1" ${i ? "" : "disabled"} title="Move up">↑</button>
     <button class="small ghost" data-move="${section}.${i}.1" ${i < n - 1 ? "" : "disabled"} title="Move down">↓</button>` : "";
   const draw = () => {
     box.innerHTML = `<p class="small-t muted" style="margin:0">Words between ** and ** are printed in bold; lines that start with "- " are printed as bullets.</p>
       ${field("title", "Title line")}${field("summary", "Summary", true)}
-      ${CV_LISTS.map(([section, name, fields]) => `<h4 class="cv-h">${name}</h4>${(cv[section] || []).map((item, i, all) => `
-        <div class="cv-entry ${item.hidden ? "out" : ""}"><div class="cv-top"><b class="grow">${esc(item[fields[0]])}</b>${mover(section, i, all.length)}
+      ${CV_LISTS.map(([section, name, fields]) => `<h4 class="cv-h" data-section="${section}">${name}</h4>${(cv[section] || []).map((item, i, all) => `
+        <div class="cv-entry ${item.hidden ? "out" : ""}"><div class="cv-top"><b class="grow">${esc(item[fields[0]])}</b>${moved(section, i)}${mover(section, i, all.length)}
           <label class="small-t"><input type="checkbox" data-hide="${section}.${i}" ${item.hidden ? "" : "checked"}> On the CV</label></div>
           ${item.hidden ? "" : fields.filter(f => f in item).map(f => field(`${section}.${i}.${f}`, f === "meta" ? "Place and dates" : f[0].toUpperCase() + f.slice(1), CV_LONG.has(f))).join("")}
         </div>`).join("")}`).join("")}
       ${field("moreProjects", "Further projects", true)}
-      <h4 class="cv-h">Skills</h4>${(cv.skills || []).map((g, i, all) => `<div class="cv-skill"><div class="cv-top"><b class="grow">${esc(g[0])}</b>${mover("skills", i, all.length)}</div>
-        <input type="text" data-skills="${i}" value="${esc(g[1].join(", "))}">${changed(`skills.${i}.1`)}</div>`).join("")}
+      <h4 class="cv-h" data-section="skills">Skills</h4>${(cv.skills || []).map((g, i, all) => `<div class="cv-skill"><div class="cv-top"><b class="grow">${esc(g[0])}</b>${moved("skills", i)}${mover("skills", i, all.length)}</div>
+        <input type="text" data-skills="${i}" class="${changed(`skills.${i}.1`) ? "changed" : ""}" value="${esc(g[1].join(", "))}">${changed(`skills.${i}.1`)}</div>`).join("")}
       <h4 class="cv-h">Additional</h4>${(cv.additional || []).map((a, i) => field(`additional.${i}.1`, a[0], true)).join("")}
       ${field("closing", "Closing line")}`;
     $$("[data-p]", box).forEach(el => el.oninput = () => put(el.dataset.p, el.value));

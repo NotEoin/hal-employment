@@ -297,3 +297,7 @@ table.fit td { padding: 8px; border-bottom: 1px solid var(--line); vertical-alig
   border-radius: 10px; background: var(--panel); }
 /* The documents' approval, the first thing on an application. */
 .approve-card { margin-bottom: 16px; border-color: var(--good); }
+/* Hal's changes to an application's CV: listed, then highlighted where they are. */
+.changes { padding: 10px 12px; margin: 0 0 12px; border-radius: 10px; background: var(--warn-soft); }
+.changes ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+input.changed, textarea.changed { border-color: var(--warn); background: var(--warn-soft); }

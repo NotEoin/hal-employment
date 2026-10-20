@@ -1279,7 +1279,8 @@ class Handler(BaseHTTPRequestHandler):
         current = documents.current_cv(r, docs)
         return {"job": {**_card(con, r), "description": r["description"]},
                 "summary": summary, "docs": docs, "files": documents.files(r),
-                "cv": current, "cv_edited": bool(docs.get("cv")),
+                "cv": current, "cv_edited": bool(docs.get("cv")), "cv_base": cv.load(),
+                "cv_changes": cv.changes(cv.load(), current),
                 # An application Hal had started on before documents were approved counts as approved.
                 "docs_approved": docs.get("approved") or (app["updated"] if app["form"] else None),
                 "nav": in_progress_around(con, job_id),

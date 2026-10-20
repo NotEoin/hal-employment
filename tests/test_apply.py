@@ -714,6 +714,18 @@ class BaseCv(unittest.TestCase):
         mine = {"cv": {**cv.load(), "summary": "For Acme."}}
         self.assertEqual(documents.current_cv(job, mine)["summary"], "For Acme.")
 
+    def test_hals_changes_to_an_applications_cv_are_listed_against_the_base(self):
+        base = cv.load()
+        variant = json.loads(json.dumps(base))
+        variant["title"] = "Graduate - security"
+        variant["projects"].reverse()
+        variant["projects"][0]["body"] = "A careful assistant."
+        variant["skills"] = []
+        found = {(c["path"], c["kind"]) for c in cv.changes(base, variant)}
+        self.assertEqual(found, {("title", "text"), ("projects", "order"), ("projects.0.body", "text"),
+                                 ("skills", "left out")})
+        self.assertEqual(next(c for c in cv.changes(base, variant) if c["path"] == "title")["before"], "Graduate")
+        self.assertEqual(cv.changes(base, base), [])
 
 
 class BuildingCv(unittest.TestCase):
