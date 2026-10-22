@@ -1,1 +1,10 @@
-/* Rules for the docs pages only; the page's owner adds them here, never in app.css. */
+/* Rules for the Documents, Messages, Home and Activity pages only; everything else is in app.css. */
+.msg-open { background: none; border: 0; padding: 0; margin: 0; text-align: left; font: inherit; color: inherit;
+  cursor: pointer; min-width: 0; }
+.msg-open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.docs-row { width: 100%; background: none; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer;
+  border-radius: 8px; }
+.docs-row.on { background: var(--primary-soft); }
+.docs-path { margin: 12px 0 0; overflow-wrap: anywhere; }
+.docs-search { width: 260px; max-width: 100%; }
+.home-need .grow, .docs-row .grow { min-width: 0; }
