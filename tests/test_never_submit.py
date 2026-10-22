@@ -28,6 +28,7 @@ from support.world import World, job_id
 
 from jobhunt import autofill, browser, digest, extension
 from jobhunt.apply import driver, guard
+from jobhunt.core import settings
 from jobhunt.web import server
 
 # unittest runs these for this module: no salary research, and no private answers.
@@ -124,8 +125,8 @@ class Email(unittest.TestCase):
             inbox = digest.gmail.ADDRESS
             own = {inbox, "rowan.made-up@example.org"}
             digest.send(w.con)
-            with mock.patch.dict(digest.CONFIG, {"digest_to": "rowan.made-up@example.org"}):
-                digest.send(w.con)
+            settings.set("notify.daily_to", "rowan.made-up@example.org", by="you")
+            digest.send(w.con)
         self.assertEqual(len(sent), 2)
         for msg in sent:
             self.assertIn(msg["To"], own)

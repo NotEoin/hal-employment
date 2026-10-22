@@ -10,7 +10,6 @@ from email.message import EmailMessage
 from email.utils import getaddresses
 
 from . import gmail
-from .config import CONFIG  # noqa: F401 - tests/test_never_submit.py still patches it; the recipient is a setting
 from .core import settings
 from .vault import actions
 
