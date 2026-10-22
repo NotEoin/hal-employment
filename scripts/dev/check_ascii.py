@@ -27,9 +27,9 @@ EXEMPT_SUFFIXES = (".woff2", ".woff", ".ttf", ".otf", ".png", ".jpg", ".pdf", ".
 EXEMPT_FILES = {"uv.lock"}
 # Non-ASCII already present at ef53088; each line is fixed by the change that next edits it.
 LEGACY = {
-    "config.toml", "extension/background.js", "extension/content.js", "jobhunt/adopt.py", "jobhunt/autofill.py",
+    "extension/background.js", "extension/content.js", "jobhunt/adopt.py", "jobhunt/autofill.py",
     "jobhunt/browser.py", "jobhunt/cvscore.py", "jobhunt/salary.py", "jobhunt/web/static/app.js",
-    "jobhunt/web/static/classic/app.js", "tests/test_apply.py", "tests/test_salary.py", "tests/test_autofill.py",
+    "jobhunt/web/static/classic/app.js", "tests/test_salary.py", "tests/test_autofill.py",
     "tests/test_cvbuild.py",
 }
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
