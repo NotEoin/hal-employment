@@ -1,0 +1,6 @@
+$ jobhunt backup --help
+usage: jobhunt backup [-h] [--reason REASON]
+
+options:
+  -h, --help       show this help message and exit
+  --reason REASON  a few words kept in the file name

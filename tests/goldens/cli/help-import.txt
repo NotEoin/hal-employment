@@ -1,0 +1,13 @@
+$ jobhunt import --help
+usage: jobhunt import [-h] [--from-repo PATH | --from-usb-install PATH] [--dry-run]
+                      [--retire-timers] [--undo] [--force]
+
+options:
+  -h, --help            show this help message and exit
+  --from-repo PATH      the old checkout (default: this one)
+  --from-usb-install PATH
+                        an old Hal installed from the USB stick
+  --dry-run             show what would happen and change nothing
+  --retire-timers       hand the old jobhunt-* timers to Hal's schedule
+  --undo                put the old data back where it was
+  --force               go ahead although Hal answers, or undo after changes

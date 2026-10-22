@@ -1,0 +1,6 @@
+$ jobhunt migrate --help
+usage: jobhunt migrate [-h] [--dry-run]
+
+options:
+  -h, --help  show this help message and exit
+  --dry-run   list the pending updates and change nothing
