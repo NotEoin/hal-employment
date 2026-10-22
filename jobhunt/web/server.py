@@ -195,7 +195,7 @@ __all__ = [
 ]
 
 
-STATIC = Path(__file__).resolve().parent / "static"
+STATIC = Path(__file__).resolve().parent / "static" / "classic"
 # Files the interface may show: packs (CVs, letters) and form screenshots.
 SERVABLE = (pack.PACKS.resolve(), browser.SHOTS.resolve())
 CSRF_HEADER = "X-Hal"
