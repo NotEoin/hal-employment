@@ -210,5 +210,49 @@ class Routes(unittest.TestCase):
         self.assertNotIn("made-up-cv", r.headers["Content-Disposition"])
 
 
+class Providers(unittest.TestCase):
+    """What the Applications area adds to Home and to Ctrl K."""
+
+    def setUp(self):
+        self.world = World().__enter__()
+        self.addCleanup(self.world.__exit__, None, None, None)
+        self.con = self.world.con
+
+    def test_home_lists_the_applications_that_need_you_most_urgent_first(self):
+        from jobhunt.apply import home
+
+        for key in ("sorrel-ready", "wexford-ready"):
+            db.set_status(self.con, job_id(key), "applying", "chosen from the queue")
+        form = {"fields": [{"hid": "a", "label": "Why us?", "kind": "textarea", "value": "", "required": True}],
+                "final": False, "filled": {"at": "x"}, "state": "needs"}
+        self.con.execute("INSERT OR IGNORE INTO applications (job_id, stage, updated) VALUES (?, 'filled', ?)",
+                         (job_id("wexford-ready"), db.now()))
+        self.con.execute("UPDATE applications SET stage = 'filled', form = ? WHERE job_id = ?",
+                         (json.dumps(form), job_id("wexford-ready")))
+        self.con.execute("INSERT OR IGNORE INTO applications (job_id, stage, updated) VALUES (?, 'submitted', ?)",
+                         (job_id("ambleside-applied"), db.now()))
+        self.con.execute("UPDATE applications SET follow_up_at = '2000-01-01T00:00:00Z' WHERE job_id = ?",
+                         (job_id("ambleside-applied"),))
+        self.con.commit()
+        items = home.needs(self.con)
+        by_job = {i["act"]["route"]: i for i in items}
+        check = by_job["app-" + quote(job_id("wexford-ready"), safe="")]
+        self.assertEqual(check["title"].split(":")[0], "1 answer needs you")
+        self.assertIn("Approve documents", by_job["app-" + quote(job_id("sorrel-ready"), safe="")]["title"])
+        self.assertIn("Follow up", by_job["app-" + quote(job_id("ambleside-applied"), safe="")]["title"])
+        self.assertEqual([i["urgency"] for i in items], sorted((i["urgency"] for i in items), reverse=True))
+        self.assertEqual(items[0], check)
+
+    def test_search_finds_an_application_by_employer_and_leaves_out_other_jobs(self):
+        from jobhunt.apply import search
+
+        db.set_status(self.con, job_id("sorrel-ready"), "applying", "chosen from the queue")
+        self.con.commit()
+        found = search.search(self.con, "sorrel")
+        self.assertEqual([r["route"] for r in found], ["app-" + quote(job_id("sorrel-ready"), safe="")])
+        self.assertEqual(found[0]["kind"], "Application")
+        self.assertEqual(search.search(self.con, "wexford"), [])
+
+
 if __name__ == "__main__":
     unittest.main()
