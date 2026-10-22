@@ -14,6 +14,8 @@ import unittest
 import zlib
 from pathlib import Path
 
+import support  # noqa: F401 - sets the temporary home before jobhunt loads
+
 from jobhunt import record
 from jobhunt.llm import HAL_ROOT
 

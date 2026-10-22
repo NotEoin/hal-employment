@@ -20,8 +20,6 @@ stubs.install()
 REPO = Path(__file__).resolve().parent.parent
 PACKAGE = REPO / "jobhunt"
 RUN_TIMEOUT_S = 60
-# Test modules from before the guard that import jobhunt first; each still needs `import support`.
-WAITING_FOR_SUPPORT_IMPORT = {"test_record.py", "test_salary.py"}
 # Only these modules may name the old in-checkout folders: they find or move the owner's old data.
 MAY_NAME_OLD_FOLDERS = {"core/paths.py", "core/importer.py", "core/importer_usb.py"}
 DATA_FUNCTIONS = ("config_dir", "data_dir", "cache_dir", "documents_dir", "helper_dir", "record_default", "db_path",
@@ -109,11 +107,17 @@ class Guard(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.strip(), paths.APP_DIR)
 
+    def test_importing_support_gives_a_run_with_no_variables_a_temporary_home(self):
+        # Regression: a suite run by hand with no variables failed at import instead of using a temp home
+        script = ("import os, sys; sys.path.insert(0, 'tests'); import support; from jobhunt.core import paths; "
+                  "print(os.environ['HAL_TEST_MODE'], paths.data_dir().parent == paths.home_override())")
+        done = self.run_python(["-c", script], REPO)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.split(), ["1", "True"])
+
     def test_every_test_module_imports_support_before_jobhunt(self):
         late = []
         for file in sorted((REPO / "tests").rglob("test_*.py")):
-            if file.name in WAITING_FOR_SUPPORT_IMPORT:
-                continue
             tree = ast.parse(file.read_text(encoding="utf-8"))
             seen_support = False
             for node in tree.body:

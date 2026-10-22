@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import support  # noqa: F401 - sets the temporary home before jobhunt loads
+
 from jobhunt import db, salary
 
 PAGE = """<table><tr><td>Number of salaries quoted</td><td>{quotes}</td><td>9</td></tr>
