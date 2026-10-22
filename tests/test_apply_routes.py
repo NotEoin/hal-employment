@@ -293,5 +293,18 @@ class Providers(unittest.TestCase):
         self.assertEqual(search.search(self.con, "wexford"), [])
 
 
+class LegacyPaths(unittest.TestCase):
+    """Regression: `web/server.py` imported `BASE_CV` once, so the base CV preview kept the first home's folder."""
+
+    def test_the_base_cv_folder_follows_the_home(self):
+        from pathlib import Path
+
+        from jobhunt.core import paths
+        from jobhunt.web import server
+
+        with mock.patch.object(paths, "cache_dir", lambda: Path("/made-up/cache")):
+            self.assertEqual(server.BASE_CV, Path("/made-up/cache/base-cv"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,6 @@ import base64
 import json
 import mimetypes
 import re
-import subprocess
 import threading
 import time
 import traceback
@@ -92,9 +91,8 @@ from ..config import CONFIG
 from ..core import naming
 from ..core.runner import _RUN, ACTIONS, POOL, Stopped, _carry_out, _checkpoint, _note, _say, run_action, stop_action
 from ..core.worker import RECORD_EVERY, RECORD_SYNC, WORKER, WORKER_PAUSE, worker
+from ..cvstudio import legacy_actions, pdfread
 from ..cvstudio.legacy_actions import (
-    BASE_CV,
-    REVIEW,
     _match_path,
     act_build_cv,
     act_match,
@@ -108,7 +106,7 @@ __all__ = [
     "ACTIONS",
     "AGGREGATORS",
     "ASKS",
-    "BASE_CV",
+    "BASE_CV",  # noqa: F822 - resolved by the module __getattr__ below (PEP 562)
     "CSRF_HEADER",
     "FIX_ROUNDS",
     "IN_FLIGHT",
@@ -118,7 +116,7 @@ __all__ = [
     "POOL",
     "RECORD_EVERY",
     "RECORD_SYNC",
-    "REVIEW",
+    "REVIEW",  # noqa: F822 - resolved by the module __getattr__ below (PEP 562)
     "SERVABLE",  # noqa: F822 - resolved by the module __getattr__ below (PEP 562)
     "STATIC",
     "WAIT_FOR_YOU",
@@ -207,9 +205,11 @@ def _servable() -> tuple[Path, ...]:
                                         paths.cache_dir()))
 
 
-def __getattr__(name):  # SERVABLE is resolved when used; tests assign their own (PEP 562)
+def __getattr__(name):  # resolved when used, so they follow the home; tests assign their own (PEP 562)
     if name == "SERVABLE":
         return _servable()
+    if name in ("BASE_CV", "REVIEW"):
+        return getattr(legacy_actions, name)
     raise AttributeError(name)
 
 
@@ -225,18 +225,9 @@ PAGES_KEPT = 64              # drawn pages kept in memory before the cache start
 def _page_png(path: Path, page: int) -> bytes:
     """One page of a PDF as PNG bytes, through Hal's PDF reader (`cvstudio.pdfread.page_png`)."""
     try:
-        from ..cvstudio import pdfread
-    except ImportError:
-        pdfread = None
-    if pdfread is not None:
-        try:
-            return pdfread.page_png(path, page, PAGE_SCALE)
-        except getattr(pdfread, "Unreadable", ValueError) as e:  # the reader's own error, not an OSError
-            raise ValueError(f"cannot read {path.name}: {e}") from e
-    # Without Hal's PDF reader, poppler draws it as before.
-    out = subprocess.run(["pdftoppm", "-png", "-r", "160", "-f", str(page), "-l", str(page), str(path)],
-                         capture_output=True, timeout=30, check=False)
-    return b"" if out.returncode else out.stdout
+        return pdfread.page_png(path, page, PAGE_SCALE)
+    except pdfread.Unreadable as e:  # the reader's own error, not an OSError
+        raise ValueError(f"cannot read {path.name}: {e}") from e
 
 
 def _synced(result) -> dict:
@@ -359,7 +350,7 @@ class Handler(BaseHTTPRequestHandler):
         if key not in PAGES:
             try:
                 png = _page_png(path, page)
-            except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+            except (OSError, ValueError, IndexError):
                 return self._send(404, b"no such page", "text/plain")
             if not png:
                 return self._send(404, b"no such page", "text/plain")
@@ -498,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
                 return {"ok": True}
             if route == "cv":
                 changes = cv.save_base(body["cv"])
-                cv.render(cv.load(), BASE_CV)
+                cv.render(cv.load(), legacy_actions.base_cv_dir())
                 run_action("_cv", "updating application CVs", act_rerender_cvs, "_cv")
                 return {**base_cv(), "saved": len(changes)}
             if route == "cv/source":
@@ -524,7 +515,7 @@ class Handler(BaseHTTPRequestHandler):
                 return run_action("_cvreview", "reading your CV as a recruiter", act_review_cv, "_cvreview")
             if route == "cv/origin":
                 cv.set_origin(body["origin"])
-                cv.render(cv.load(), BASE_CV)
+                cv.render(cv.load(), legacy_actions.base_cv_dir())
                 run_action("_cv", "updating application CVs", act_rerender_cvs, "_cv")
                 return base_cv()
             if route == "worker":
