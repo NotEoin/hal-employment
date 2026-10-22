@@ -20,6 +20,7 @@ def _rescore(ctx) -> dict:
         ctx.checkpoint()
         ctx.step(f"Checked {done:,} of {total:,} jobs", total=total)
 
+    ctx.step("Checking every job against your goal")
     total = rules.rescore_all(ctx.con, step, every=PROGRESS_EVERY)
     shown = ctx.con.execute("SELECT COUNT(*) FROM jobs WHERE active = 1 AND hidden_rule IS NULL").fetchone()[0]
     ctx.changed(f"Re-checked {total:,} jobs; {shown:,} open jobs are shown.")
@@ -69,6 +70,7 @@ def prepare(ctx, n: int = 1, target: int | None = None) -> dict:
     """One unit of preparing ahead: the next screen or pack (L replenish.py)."""
     from jobhunt import replenish
 
+    ctx.step("Looking for the next best match to prepare")
     worked, message = replenish.step(ctx.con, report=ctx.step)
     return {"worked": worked, "message": message}
 

@@ -201,6 +201,10 @@ ANALYSIS = {"summary": "Builds internal tools for a made-up company.", "must_hav
             "employer": None, "eligibility": []}
 
 
+# The first line of the screen prompt (`ai/prompts/screen.txt`), the part the goal does not fill in.
+SCREEN_OPENING = "Decide whether this person could realistically be hired for this job."
+
+
 def fake_chat_json(system: str, user: str, **kw) -> dict:
     """Canned answers for the pack's prompts; any other prompt finds the model away."""
     canned = {pack.ANALYSE: ANALYSIS,
@@ -210,6 +214,8 @@ def fake_chat_json(system: str, user: str, **kw) -> dict:
               pack.VERIFY: {"unsupported": []}}
     if system in canned:
         return json.loads(json.dumps(canned[system]))
+    if system.startswith(SCREEN_OPENING):
+        return {"eligible": True, "reason": "A made-up reason: the role fits the goal."}
     raise llm.LLMUnavailable("the made-up world has no model for this prompt")
 
 

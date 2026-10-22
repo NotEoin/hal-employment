@@ -19,6 +19,10 @@ class DataTasks(unittest.TestCase):
     def setUp(self):
         self.con = self.enterContext(fresh_home())
         self.runs = []
+        # Only this test's made-up tasks are due: the real ones (find.rescore_all) are loaded first, so a later
+        # `load()` finds their modules imported already, then set aside until the test ends.
+        tasks.load()
+        self.enterContext(mock.patch.dict(tasks.TASKS, clear=True))
 
     def task(self, name: str, *, after: int = 4, fail_first: bool = False):
         def fn(ctx):

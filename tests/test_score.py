@@ -12,14 +12,12 @@ import unittest
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 from support import jobs as fixtures
-from support.stubs import runner as runner_stub
 from support.world import World, jobs
 
-runner_stub.install()
-
-from jobhunt import score  # noqa: E402 - the runner stand-in goes in first
-from jobhunt.core.db import tasks  # noqa: E402
-from jobhunt.find import actions, rules  # noqa: E402 - actions registers the find kinds
+from jobhunt import score
+from jobhunt.core import runner
+from jobhunt.core.db import tasks
+from jobhunt.find import actions, rules  # actions registers the find kinds
 
 RESCORE_LIMIT_S = 60
 MANY_JOBS = 10_000
@@ -87,20 +85,19 @@ class Actions(unittest.TestCase):
         task = tasks.TASKS["find.rescore_all"]
         self.assertEqual(task.after, actions.FIND_MIGRATION)
         with World() as w:
-            ctx = runner_stub.Ctx(w.con)
-            task.fn(ctx)
+            done = tasks.run_now("find.rescore_all")
+            self.assertEqual(done["state"], "done", done["error"])
             unscored = w.con.execute("SELECT COUNT(*) FROM jobs WHERE scored_at IS NULL AND source != 'email'")
             self.assertEqual(unscored.fetchone()[0], 0)
-            self.assertTrue(ctx.changes[0].startswith("Re-checked 17 jobs"))
+            changed = w.con.execute("SELECT changed FROM activity WHERE action_id = ?", (done["id"],)).fetchone()
+            self.assertTrue(changed["changed"].startswith("Re-checked 17 jobs"))
 
     def test_every_find_kind_has_a_why_and_an_example(self):
-        from jobhunt.core import runner
-
         for kind in ("find.rescore", "find.screen", "find.prepare"):
             with self.subTest(kind):
                 meta = runner.KINDS[kind]
-                self.assertTrue(meta["why"].strip())
-                self.assertTrue(callable(meta["example"]))
+                self.assertTrue(meta.why.strip())
+                self.assertTrue(callable(meta.example))
 
 
 if __name__ == "__main__":
