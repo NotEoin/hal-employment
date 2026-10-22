@@ -1,21 +1,22 @@
 """Builds a CV from the applicant's own material: notes, transcripts, dossiers, old CVs.
 
-Sources are kept as plain text in data/cv-sources/. The local model reads each
-in turn and lists the facts it states; a second pass writes the CV from those
-facts alone, in the shape the website's PDF builder takes, following the
-options chosen. Module marks are copied from the facts as they stand, never
-rewritten. Numbers no source states, and claims the facts do not support, are
-listed for the applicant to check before the CV is used.
+Sources are kept as plain text in the CV folder's `sources/`. The AI reads each in turn and lists the
+facts it states (prompt `cv_extract`); a second pass writes the CV from those facts alone (`cv_compose`),
+in the shape cvpdf.py draws, following the options chosen. Module marks are copied from the facts as they
+stand, never rewritten, and are optional: a CV without a transcript still builds. Numbers no source
+states, and claims the facts do not support, are listed for the applicant to check before the CV is used.
+Notes in the record's private folders are never read here, so they never reach the AI.
 """
 import json
 import re
-import subprocess
 import zipfile
 from io import BytesIO
 from pathlib import Path
 
-from . import cv, db, documents, gpu, llm, record
+from . import ai, cv, db, record
 from .core import paths
+from .cvpdf import _drawable
+from .cvstudio import pdfread
 from .pack import VERIFY, slug, unsupported_numbers
 
 
@@ -42,6 +43,9 @@ def _live(name: str):
 
 CHUNK = 12000     # characters of a source read at once
 MAX_SOURCE = 400_000
+READ_TIMEOUT_S, WRITE_TIMEOUT_S = 600, 900
+READ_CTX, WRITE_CTX = 16384, 32768   # one piece of material, then every fact at once
+FIRST_NOTE = "Marks are out of 100. 70 and above is a First."   # UK degree classes
 
 OPTIONS = {
     "website": True,    # read the website's CV as one more source
@@ -51,39 +55,8 @@ OPTIONS = {
     "interests": True,  # fill the Additional section with community work and interests
     "projects": 4,      # projects on the CV; the rest go in the further-projects line
     "modules_min": 79,  # module marks shown on the PDF from this mark up; 0 shows all
-    "focus": "general",  # general | backend | ml | security
+    "focus": "",        # the kind of work to point the CV at, in the applicant's words; "" for none
 }
-FOCUS = {"general": "software engineering in general", "backend": "backend and distributed systems",
-         "ml": "machine learning and applied AI", "security": "security engineering"}
-
-EXTRACT = """You read one piece of a job applicant's own material (notes, a transcript, a dossier,
-an old CV, a project write-up) and list every fact it states that could go on a CV.
-Reply with JSON only:
-{"education": [{"qualification", "institution", "dates", "grade", "points": [...],
-   "modules": [{"year": e.g. "Final year", "mark": overall mark or null, "rows": [[module name, mark]]}]}],
- "experience": [{"role", "org", "dates", "points": [...]}],
- "projects": [{"name", "stack", "points": [...]}],
- "skills": [...], "achievements": [...], "community": [...], "interests": [...]}
-Copy names, dates, numbers and marks exactly. Leave out anything the text does not state;
-use "" or [] where it is silent. Marks are numbers out of 100."""
-
-COMPOSE = """You write a UK graduate CV for Firstname Lastname from the facts given, and nothing else.
-Reply with JSON only:
-{"title": one line naming the kind of graduate and the work sought,
- "summary": 3 or 4 sentences,
- "education": [{"qualification", "grade" or "", "meta": "Institution | dates | anything else short",
-   "detail": one paragraph}],
- "experience": [{"role", "org", "dates", "body": one paragraph}],
- "projects": [{"name": "Name - what it is in a few words", "stack": the main tools, comma separated,
-   "body": one paragraph}],
- "skills": [[group name, [items]]], "moreProjects": one sentence naming further projects,
- "additional": [[label, text]], "closing": "References available on request."}
-Rules: use only the facts; never invent an employer, date, grade, number or technology.
-British English. Plain, specific sentences; no cliches such as "passionate" or "results-driven".
-Open each education, project and experience paragraph with a short bold lead phrase in
-**double asterisks** followed by a colon, as in "**Dissertation, Title:** ...". Order
-entries most recent first and projects strongest first."""
-
 
 def sources() -> list[dict]:
     """The material the CV is built from, newest first."""
@@ -95,13 +68,13 @@ def sources() -> list[dict]:
 
 
 def _text_of(name: str, data: bytes) -> str:
-    """Plain text from an uploaded file: text as it is, PDFs through pdftotext, Word documents by their XML."""
+    """Plain text from an uploaded file: text as it is, PDFs by their text layer, Word documents by their XML."""
     suffix = Path(name).suffix.lower()
     if suffix == ".pdf":
-        out = subprocess.run(["pdftotext", "-layout", "-", "-"], input=data, capture_output=True, timeout=60)
-        if out.returncode:
-            raise ValueError(f"could not read {name}: {out.stderr.decode(errors='replace')[:200]}")
-        return out.stdout.decode(errors="replace")
+        text = pdfread.text(data, layout=True)
+        if not text.strip():
+            raise ValueError(f"could not read {name}: it has no text Hal can read")
+        return text
     if suffix == ".docx":
         with zipfile.ZipFile(BytesIO(data)) as z:
             xml = z.read("word/document.xml").decode(errors="replace")
@@ -138,15 +111,9 @@ def _material(options: dict) -> list[tuple[str, str]]:
     sources = _live("SOURCES")
     found = [(p.stem, p.read_text(errors="replace")) for p in sorted(sources.glob("*.txt"))] if sources.exists() else []
     if options.get("website"):
-        found.append(("website CV", json.dumps(cv.printable(cv.site()), indent=1)))
-    if options.get("record") and record.VAULT.exists():
-        try:
-            record.convert()
-            notes = [n for n in record._walk((".md",)) if n.name != "Start Here.md"]
-        except record.RecordUnavailable:
-            notes = []
-        found += [(f"record: {n.relative_to(record.VAULT)}", n.read_text(encoding="utf-8", errors="replace"))
-                  for n in notes]
+        found.append(("starting CV", json.dumps(cv.printable(cv.site()), indent=1)))
+    if options.get("record"):
+        found += [(f"record: {rel}", text) for rel, text in record.notes_for_ai()]
     return found
 
 
@@ -157,7 +124,8 @@ def _facts(material: list[tuple[str, str]], report) -> dict:
     pieces = [(name, text[i:i + CHUNK]) for name, text in material for i in range(0, len(text), CHUNK)]
     for n, (name, piece) in enumerate(pieces, 1):
         report(f"reading your material ({n} of {len(pieces)}: {name})")
-        got = llm.chat_json(EXTRACT, f"Source: {name}\n\n{piece}", role="main", timeout=600, ctx=16384)
+        got = ai.chat_json(_prompt("cv_extract"), f"Source: {name}\n\n{piece}", role="checker",
+                           timeout=READ_TIMEOUT_S, ctx=READ_CTX, purpose="cv_extract")
         for key in facts:
             value = got.get(key) or []
             facts[key].extend(value if isinstance(value, list) else [value])
@@ -187,10 +155,10 @@ def _modules(facts: dict) -> list[dict]:
 def _shape(draft: dict, facts: dict, options: dict) -> dict:
     """Puts the model's draft into the exact shape the PDF builder checks, filling what it must have."""
     site = cv.site()
-    out = {"title": str(draft.get("title") or site["title"]), "contact": site["contact"],
-           "summary": str(draft.get("summary") or site["summary"]),
+    out = {"title": str(draft.get("title") or site.get("title") or ""), "contact": site.get("contact") or cv.contact(),
+           "summary": str(draft.get("summary") or site.get("summary") or ""),
            "education": [], "skills": [], "projects": [], "experience": [], "additional": [],
-           "moreProjects": str(draft.get("moreProjects") or "").strip() or site["moreProjects"],
+           "moreProjects": str(draft.get("moreProjects") or "").strip() or site.get("moreProjects", ""),
            "closing": str(draft.get("closing") or "").strip() or "References available on request."}
     for e in draft.get("education") or []:
         if isinstance(e, dict) and e.get("qualification") and e.get("detail"):
@@ -199,15 +167,16 @@ def _shape(draft: dict, facts: dict, options: dict) -> dict:
         e.setdefault("meta", e["qualification"])
     if not out["education"]:
         raise RuntimeError("the material gave no education to put on the CV")
-    # The transcript is copied from the material, or failing that from the website, never written by the model.
+    # The transcript is copied from the material, or failing that from the starting CV, never written by the
+    # AI. Many people have none to give, so a CV without module marks is built all the same.
     modules = _modules(facts)
-    site_degree = next((e for e in site["education"] if e.get("modules")), None)
-    out["education"][0]["modules"] = modules or (site_degree or {}).get("modules", [])
-    if not out["education"][0]["modules"]:
-        raise RuntimeError("no module marks were found; add your transcript as a source")
-    out["education"][0]["modulesNote"] = "Marks are out of 100. 70 and above is a First."
-    if options.get("modules_min"):
-        out["education"][0]["pdfModulesMin"] = max(0, min(100, int(options["modules_min"])))
+    site_degree = next((e for e in site.get("education") or [] if e.get("modules")), None)
+    modules = modules or (site_degree or {}).get("modules", [])
+    if modules:
+        out["education"][0]["modules"] = modules
+        out["education"][0]["modulesNote"] = FIRST_NOTE
+        if options.get("modules_min"):
+            out["education"][0]["pdfModulesMin"] = max(0, min(100, int(options["modules_min"])))
     for g in draft.get("skills") or []:
         if isinstance(g, list) and len(g) == 2 and isinstance(g[1], list):
             items = [str(x) for x in g[1] if str(x).strip()]
@@ -227,14 +196,14 @@ def _shape(draft: dict, facts: dict, options: dict) -> dict:
 
 
 def _plain(value):
-    """Every string in the CV in the plain ASCII the PDF fonts draw, without long dashes."""
-    if isinstance(value, str):
-        return documents._ascii(llm.undash(value))
-    if isinstance(value, list):
-        return [_plain(v) for v in value]
-    if isinstance(value, dict):
-        return {k: _plain(v) for k, v in value.items()}
-    return value
+    """Every string in the CV in what the PDF fonts draw (accented letters kept), without long dashes."""
+    return _drawable(value)
+
+
+def _prompt(prompt_id: str) -> str:
+    from .ai import prompts
+
+    return prompts.text(prompt_id)
 
 
 def _checks(built: dict, material: list[tuple[str, str]], facts: dict) -> list[str]:
@@ -243,18 +212,18 @@ def _checks(built: dict, material: list[tuple[str, str]], facts: dict) -> list[s
     every = "\n".join(t for _, t in material)
     flags = [f"a number no source states: {n}" for n in unsupported_numbers(text, every)]
     try:
-        reply = llm.chat_json(VERIFY, f"Facts:\n{json.dumps(facts)[:30000]}\n\nDrafts:\n{text}",
-                              role="main", timeout=600, ctx=16384)
+        reply = ai.chat_json(VERIFY, f"Facts:\n{json.dumps(facts)[:30000]}\n\nDrafts:\n{text}",
+                             role="checker", timeout=READ_TIMEOUT_S, ctx=READ_CTX, purpose="verify")
         flags += [f"not backed by your material: {c}" for c in reply.get("unsupported", [])]
-    except llm.LLMUnavailable:
-        flags.append("the claims could not be checked: the model stopped")
+    except ai.LLMUnavailable:
+        flags.append("the claims could not be checked: the AI stopped")
     return flags
 
 
 def build(options: dict, report=lambda message: None) -> dict:
     """Builds a CV from the material and keeps it as the draft; returns it with what to check."""
     options = {**OPTIONS, **options}
-    reason = gpu.busy()
+    reason = ai.ready(priority=0, purpose="cv_compose")
     if reason:
         raise RuntimeError(reason)
     material = _material(options)
@@ -262,8 +231,10 @@ def build(options: dict, report=lambda message: None) -> dict:
         raise RuntimeError("add some material first: paste notes or upload a transcript or an old CV")
     facts = _facts(material, report)
     report("writing the CV")
-    style = [f"Point the title and summary at {FOCUS.get(options['focus'], FOCUS['general'])}, "
-             "and put the projects that show it first."]
+    focus = str(options.get("focus") or "").strip()
+    # Classic's menu sends "general" for no particular kind of work.
+    style = [f"Point the title and summary at {focus}, and put the entries that show it first."
+             ] if focus and focus != "general" else []
     if options.get("results"):
         style.append("Open each paragraph with what was achieved, with the measure where the facts give one.")
     if options.get("two_pages"):
@@ -271,11 +242,13 @@ def build(options: dict, report=lambda message: None) -> dict:
     style.append(f"Write {int(options.get('projects') or 4)} projects; name any others in moreProjects.")
     if not options.get("interests"):
         style.append("Leave additional empty.")
-    draft = llm.chat_json(COMPOSE, "\n".join(style) + f"\n\nFacts:\n{json.dumps(facts, ensure_ascii=False)[:60000]}",
-                          role="writer", timeout=900, ctx=32768)
+    draft = ai.chat_json(_prompt("cv_compose"), "\n".join(style)
+                         + f"\n\nFacts:\n{json.dumps(facts, ensure_ascii=False)[:60000]}",
+                         role="writer", timeout=WRITE_TIMEOUT_S, ctx=WRITE_CTX, purpose="cv_compose")
     built = _shape(draft, facts, options)
     report("checking the CV against your material")
     flags = _checks(built, material, facts)
+    cv.BUILT.parent.mkdir(parents=True, exist_ok=True)
     cv.BUILT.write_text(json.dumps({"cv": built, "flags": flags, "options": options, "built": db.now()}, indent=1) + "\n")
     cv.render(built, _live("PREVIEW"))
     return {"cv": built, "flags": flags}

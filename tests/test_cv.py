@@ -1,15 +1,17 @@
 """Hal's base CV: edits, rearranged skills and each application's own copy.
 
-Moved by class from tests/test_apply.py; the test bodies are unchanged.
+Moved by class from tests/test_apply.py; the people and places are made up.
 """
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from support import legacy
 
 from jobhunt import cv, documents
+from jobhunt.core import paths, settings
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
@@ -19,7 +21,7 @@ class BaseCv(unittest.TestCase):
     """Hal's base CV: the website's, with the applicant's changes laid over it."""
 
     SITE = {"title": "Graduate", "summary": "Builds things.", "moreProjects": "", "closing": "",
-            "education": [{"qualification": "BSc", "meta": "City", "detail": "New dissertation wording.",
+            "education": [{"qualification": "BSc", "meta": "Made-up University", "detail": "New dissertation wording.",
                            "modules": [{"year": "Final", "rows": [["Security", 80]]}]}],
             "projects": [{"name": "Hal", "stack": "Python", "body": "An assistant."},
                          {"name": "Hatch", "stack": "C#", "body": "A mood tracker."}],
@@ -82,6 +84,34 @@ class BaseCv(unittest.TestCase):
                                  ("skills", "left out")})
         self.assertEqual(next(c for c in cv.changes(base, variant) if c["path"] == "title")["before"], "Graduate")
         self.assertEqual(cv.changes(base, base), [])
+
+
+class StartingCv(unittest.TestCase):
+    """Where Hal's main CV starts: the importer's copy, else a starter made from the settings."""
+
+    def setUp(self):
+        self.copy = paths.data_dir().joinpath(*cv.SITE_COPY)
+        self.addCleanup(self.copy.unlink, missing_ok=True)
+
+    def test_the_imported_copy_of_the_website_cv_is_where_it_starts(self):
+        self.copy.parent.mkdir(parents=True, exist_ok=True)
+        self.copy.write_text(json.dumps(BaseCv.SITE), encoding="utf-8")
+        self.assertEqual(cv.site(), BaseCv.SITE)
+
+    def test_without_one_the_starter_comes_from_your_settings(self):
+        values = {"you.education.degree": "BA (Hons) History", "you.education.university": "Made-up University",
+                  "you.city": "York", "you.links.linkedin": "https://www.linkedin.com/in/zoe-example/",
+                  "goal.study_end": "2025"}
+        with mock.patch.object(settings, "get", lambda key: values.get(key, "")):
+            first = cv.site()
+        self.assertEqual(first["education"][0]["meta"], "Made-up University | 2025")
+        self.assertEqual(first["contact"], {"location": "York", "linkedin": "linkedin.com/in/zoe-example"})
+        self.assertNotIn("github", first["contact"])
+
+    def test_the_cv_facts_say_nothing_the_settings_do_not(self):
+        text = cv.facts_text_of(cv.printable(BaseCv.SITE))
+        self.assertNotIn("Graduated", text)
+        self.assertNotIn("citizen", text)
 
 
 if __name__ == "__main__":

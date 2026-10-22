@@ -1,36 +1,27 @@
-"""Tailored CV variants built from the portfolio site's cv.json.
+"""The person's main CV as Hal keeps it: where it starts, the person's edits to it, and its variants per job.
 
-Hal's base CV is the site's cv.json with the applicant's own changes laid over
-it (data/cv-overrides.json, edited in the web interface's CV builder), so the
-website keeps its wording while applications use theirs. A variant reorders
-projects and skill groups by relevance to the job and may swap the title for a
-track title; the applicant can then edit any application's variant by hand.
-The PDF is rendered by the site's own tools/build-cv-pdf.py, so layout matches
-the canonical CV.
+Hal's main CV starts from one of three places, in this order: the copy of the website CV the importer made
+once (`data/import/cv/site-cv.json`); in the old developer layout, before that import, the
+website CV that config.toml's `cv_site` names; else a short starter CV made from the `you.*` settings, so
+everything still runs for someone who has not added a CV yet. Hal never writes to a website folder. The
+CV built from the person's own material (cvbuild.py) replaces it once chosen. The person's edits in the CV
+builder are kept apart from the CV they edit, so a rebuild or a new import does not lose them. A variant for
+one job reorders projects and skill groups by relevance to the advert. The PDF is drawn by cvpdf.py.
 """
 import copy
-import importlib.util
 import json
 import re
-import sys
 from pathlib import Path
 
 from .config import CONFIG
 from .core import paths
 
-SITE = Path(CONFIG.get("cv_site", "~/sites/cv-site")).expanduser()
-CV_JSON = SITE / "src" / "data" / "cv.json"
-
-TRACKS = {
-    "ml": ("Graduate - machine learning and applied AI",
-           r"machine learning|\bml\b|\bai\b|deep learning|pytorch|llm|computer vision|data scien"),
-    "security": ("Graduate - security engineering",
-                 r"security|cyber|crypto|threat|vulnerab|penetration|soc\b"),
-    "backend": ("Graduate - backend and distributed systems",
-                r"backend|back-end|distributed|platform|infrastructure|api|microservice|devops|sre"),
-}
-
-
+# Title lines per kind of role, chosen by the advert's words. None are built in, so the CV's own title
+# stands.
+TRACKS: dict[str, tuple[str, str]] = {}
+SITE_COPY = ("import", "cv", "site-cv.json")   # the importer's one copy of the website CV
+WEBSITE_CV = ("src", "data", "cv.json")         # where a website keeps it, read only in the old layout
+LINKS = (("linkedin", "you.links.linkedin"), ("site", "you.links.website"), ("github", "you.links.github"))
 
 
 def _data() -> Path:
@@ -38,10 +29,17 @@ def _data() -> Path:
     return paths.data_dir() if paths.is_legacy_layout() else paths.cv_dir()
 
 
-# Resolved when used until the CV store replaces them: DATA, and in it OVERRIDES (changes to the
-# website's CV), BUILT (the CV built from the applicant's material by cvbuild.py, with what to check),
-# BUILT_OVERRIDES (changes to the built CV) and ORIGIN ("built" when Hal's CV starts from the built one).
-_LIVE = {"DATA": _data, "OVERRIDES": lambda: _live("DATA") / "cv-overrides.json",
+def _site_folder() -> Path | None:
+    # Only the old layout, before the import, still reads the website folder its config.toml names.
+    named = CONFIG.get("cv_site") if paths.is_legacy_layout() else None
+    return Path(named).expanduser() if named else None
+
+
+# Resolved when used: SITE, the old layout's website folder; and, until the CV store replaces them,
+# DATA, and in it OVERRIDES (changes to the starting CV), BUILT (the CV built from the person's material by
+# cvbuild.py, with what to check), BUILT_OVERRIDES (changes to the built CV) and ORIGIN ("built" when Hal's
+# CV starts from the built one).
+_LIVE = {"SITE": _site_folder, "DATA": _data, "OVERRIDES": lambda: _live("DATA") / "cv-overrides.json",
          "BUILT": lambda: _live("DATA") / "cv-built.json",
          "BUILT_OVERRIDES": lambda: _live("DATA") / "cv-built-overrides.json",
          "ORIGIN": lambda: _live("DATA") / "cv-origin"}
@@ -66,8 +64,40 @@ TEXT = ("title", "summary", "moreProjects", "closing", "pdfProjects")
 
 
 def site() -> dict:
-    """The CV as the portfolio site has it."""
-    return json.loads(CV_JSON.read_text())
+    """The CV Hal's main CV starts from: the imported website CV, else the starter CV from the settings."""
+    copied = paths.data_dir().joinpath(*SITE_COPY)
+    if copied.exists():
+        return json.loads(copied.read_text(encoding="utf-8"))
+    folder = _live("SITE")
+    if folder is not None and folder.joinpath(*WEBSITE_CV).exists():
+        return json.loads(folder.joinpath(*WEBSITE_CV).read_text(encoding="utf-8"))
+    return starter()
+
+
+def _you(key: str) -> str:
+    from .core import settings
+
+    return str(settings.get(key) or "").strip()
+
+
+def contact() -> dict:
+    """The contact block a CV prints under the name: location, and only the profile links the person gave."""
+    out = {"location": _you("you.location_line") or _you("you.city")}
+    for key, setting in LINKS:
+        value = re.sub(r"^https?://(www\.)?", "", _you(setting)).rstrip("/")
+        if value:
+            out[key] = value
+    return out
+
+
+def starter() -> dict:
+    """A short CV made from the settings, for someone who has not added or built a CV yet."""
+    degree = _you("you.education.degree")
+    meta = " | ".join(x for x in (_you("you.education.university"), _you("goal.study_end")) if x)
+    education = [{"qualification": degree, "grade": _you("you.education.grade"), "meta": meta or degree,
+                  "detail": ""}] if degree else []
+    return {"title": degree or "Graduate", "contact": contact(), "summary": "", "education": education,
+            "skills": [], "projects": [], "experience": [], "additional": [], "moreProjects": "", "closing": ""}
 
 
 def origin_name() -> str:
@@ -239,6 +269,8 @@ def _words(text: str) -> set[str]:
 def track_for(job_text: str) -> str | None:
     """Returns the track whose keywords appear most often in the job text."""
     counts = {name: len(re.findall(pattern, job_text, re.I)) for name, (_, pattern) in TRACKS.items()}
+    if not counts:
+        return None
     best = max(counts, key=counts.get)
     return best if counts[best] >= 2 else None
 
@@ -251,23 +283,12 @@ def tailor(job_text: str) -> tuple[dict, str | None]:
     def relevance(text: str) -> int:
         return len(_words(text) & wanted)
 
-    data["projects"].sort(key=lambda p: -relevance(f"{p['name']} {p['stack']} {p['body']}"))
-    data["skills"].sort(key=lambda group: -relevance(" ".join([group[0], *group[1]])))
+    data.setdefault("projects", []).sort(key=lambda p: -relevance(f"{p['name']} {p['stack']} {p['body']}"))
+    data.setdefault("skills", []).sort(key=lambda group: -relevance(" ".join([group[0], *group[1]])))
     track = track_for(job_text)
     if track:
         data["title"] = TRACKS[track][0]
     return data, track
-
-
-def _pdf_builder():
-    """Loads the site's PDF builder as a module, with its tools directory importable."""
-    tools = SITE / "tools"
-    if str(tools) not in sys.path:
-        sys.path.insert(0, str(tools))
-    spec = importlib.util.spec_from_file_location("build_cv_pdf", tools / "build-cv-pdf.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def render(variant: dict, out_dir: Path) -> Path:
@@ -283,20 +304,33 @@ def facts_text() -> str:
     return facts_text_of(load())
 
 
+def status_line() -> str:
+    """When the course ends or ended, and the right to work, as the settings say them; "" when unsaid."""
+    from .core import settings
+
+    parts = []
+    if _you("goal.study_end"):
+        parts.append(f"Course ends or ended: {_you('goal.study_end')}.")
+    labels = dict(settings.setting("you.right_to_work").choices or ())
+    work = _you("you.work_status") or labels.get(_you("you.right_to_work"), "")
+    if work:
+        parts.append(f"Right to work: {work}.")
+    return " ".join(parts)
+
+
 def facts_text_of(d: dict) -> str:
-    """Returns a CV as plain text."""
-    parts = [d["title"], d["summary"]]
-    for e in d["education"]:
+    """Returns a CV as plain text, with the status line from the settings."""
+    parts = [d.get("title", ""), d.get("summary", "")]
+    for e in d.get("education") or []:
         parts += [e.get("qualification", ""), e.get("grade", ""), e.get("meta", ""), e.get("detail", "")]
         for year in e.get("modules") or []:
             marks = ", ".join(f"{name} {mark}" for name, mark in year.get("rows", []))
             parts.append(f"{year.get('year')} modules (overall {year.get('mark')}): {marks}")
-    parts += [f"{g[0]}: {', '.join(g[1])}" for g in d["skills"]]
-    parts += [f"Personal project, {p['name']} ({p['stack']}): {p['body']}" for p in d["projects"]]
+    parts += [f"{g[0]}: {', '.join(g[1])}" for g in d.get("skills") or []]
+    parts += [f"Project, {p['name']} ({p.get('stack', '')}): {p['body']}" for p in d.get("projects") or []]
     parts.append(d.get("moreProjects", ""))
-    parts += [f"{x['role']}, {x['org']} ({x['dates']}): {x['body']}" for x in d["experience"]]
-    parts += [f"{a[0]}: {a[1]}" for a in d.get("additional", [])]
-    parts.append("Recently graduated; available to start immediately; UK and Irish citizen, "
-                 "no sponsorship needed.")
+    parts += [f"{x['role']}, {x['org']} ({x['dates']}): {x['body']}" for x in d.get("experience") or []]
+    parts += [f"{a[0]}: {a[1]}" for a in d.get("additional") or []]
+    parts.append(status_line())
     text = "\n".join(p for p in parts if p)
     return re.sub(r"\*\*", "", text)
