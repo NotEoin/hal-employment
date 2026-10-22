@@ -43,6 +43,14 @@ class Shim(unittest.TestCase):
         self.addCleanup(patch.stop)
         self.addCleanup(setattr, config, "_file_cache", None)
 
+    def test_the_board_list_comes_from_the_imported_copy(self):
+        # the checkout's boards.toml is gone; the import left a copy in the data folder
+        imported = paths.data_dir() / "import" / "boards.toml"
+        imported.parent.mkdir(parents=True, exist_ok=True)
+        imported.write_text('[[board]]\nname = "Made-up Board"\nats = "greenhouse"\nslug = "madeup"\n')
+        self.assertEqual(config.boards_path(), imported)
+        self.assertEqual([b["name"] for b in config.boards()], ["Made-up Board"])
+
     def test_old_config_keys_still_answer_through_the_shim(self):
         settings.set("notify.alert_score", 80)
         settings.set("advanced.port", 8800)
