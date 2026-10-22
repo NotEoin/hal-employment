@@ -1,0 +1,11 @@
+$ jobhunt pack --help
+usage: jobhunt pack [-h] [--shortlisted] [--no-web] [--cv-only] [id]
+
+positional arguments:
+  id
+
+options:
+  -h, --help     show this help message and exit
+  --shortlisted
+  --no-web
+  --cv-only      re-render tailored CVs for drafted packs

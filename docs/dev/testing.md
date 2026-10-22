@@ -47,3 +47,30 @@ repo) and prints file and line only. It is skipped when the list is absent and r
 - No test touches the network, a real model or the owner's data. Fakes stand in for each.
 - Shared helpers live in `tests/support/`; import them as `from support import ...`, because
   `unittest discover tests` puts `tests/` on the import path.
+
+## The made-up world
+
+`tests/support/world.py` builds a temporary home with an invented applicant, 17 jobs across every status,
+history, emails, to-dos and one application. While a `World` is open, every legacy module points inside it:
+the database, `config.CONFIG`, the inbox (a fake IMAP server), the vaults, the packs folder, the private
+answers (always empty) and the local models (canned answers for the pack prompts, "unavailable" for the
+rest). `HAL_EMPLOYMENT_HOME` points at its folder, so the new path functions resolve there too.
+
+```python
+from support.world import World
+
+with World() as w:      # w.root, w.con, w.now
+    ...
+```
+
+## Command-line goldens
+
+`tests/goldens/cli/*.txt` hold what each command of gate G4 printed at ef53088, run in-process in a fresh
+world (`tests/support/cli.py` lists the cases). `tests/goldens/score.json` holds today's `score()` and score
+notes for every made-up job, for the scoring rewrite's compatibility test. Timestamps, the world's folder and
+the greeting's part of the day are normalised.
+
+```sh
+.venv/bin/python scripts/dev/golden_cli.py --check            # what changed, as diffs
+.venv/bin/python scripts/dev/golden_cli.py --record list-all  # only in a commit meant to change that output
+```

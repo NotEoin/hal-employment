@@ -1,0 +1,8 @@
+$ jobhunt contacts --help
+usage: jobhunt contacts [-h] id
+
+positional arguments:
+  id
+
+options:
+  -h, --help  show this help message and exit

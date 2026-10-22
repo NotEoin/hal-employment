@@ -1,0 +1,9 @@
+$ jobhunt todo --help
+usage: jobhunt todo [-h] [{add,done}] [rest ...]
+
+positional arguments:
+  {add,done}
+  rest
+
+options:
+  -h, --help  show this help message and exit

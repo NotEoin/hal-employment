@@ -1,0 +1,3 @@
+$ jobhunt pack sorrel-ready --no-web
+lever:sorrel-ready: drafting...
+  <home>/packs/sorrel-payments-software-engineer-graduate/pack.md

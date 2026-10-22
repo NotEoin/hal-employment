@@ -1,0 +1,3 @@
+$ jobhunt mail -q
+emails: rejected 2, interview 2, alert 2, human 1, assessment 1
+  NEEDS YOU  interview  Wexford Maps | Interview invitation - Graduate Backend Engineer

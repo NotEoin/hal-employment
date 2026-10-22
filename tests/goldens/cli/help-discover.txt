@@ -1,0 +1,6 @@
+$ jobhunt discover --help
+usage: jobhunt discover [-h] [-q]
+
+options:
+  -h, --help   show this help message and exit
+  -q, --quiet

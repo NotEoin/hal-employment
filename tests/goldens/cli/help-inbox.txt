@@ -1,0 +1,7 @@
+$ jobhunt inbox --help
+usage: jobhunt inbox [-h] [-k KIND] [-n N]
+
+options:
+  -h, --help       show this help message and exit
+  -k, --kind KIND
+  -n N

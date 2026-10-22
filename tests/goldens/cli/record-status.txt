@@ -1,0 +1,2 @@
+$ jobhunt record status
+<home>/no-record (missing): 0 notes, 0 passages, indexed never

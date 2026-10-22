@@ -1,0 +1,13 @@
+$ jobhunt set --help
+usage: jobhunt set [-h]
+                   id
+                   {new,shortlisted,ready,applying,applied,assessment,interview,offer,rejected,withdrawn,skipped,closed}
+                   [note ...]
+
+positional arguments:
+  id
+  {new,shortlisted,ready,applying,applied,assessment,interview,offer,rejected,withdrawn,skipped,closed}
+  note
+
+options:
+  -h, --help            show this help message and exit

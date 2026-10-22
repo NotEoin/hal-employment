@@ -1,0 +1,13 @@
+$ jobhunt add --help
+usage: jobhunt add [-h] --company COMPANY --title TITLE [--location LOCATION] [--salary SALARY]
+                   url
+
+positional arguments:
+  url
+
+options:
+  -h, --help           show this help message and exit
+  --company COMPANY
+  --title TITLE
+  --location LOCATION
+  --salary SALARY

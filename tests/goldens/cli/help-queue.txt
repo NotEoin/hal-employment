@@ -1,0 +1,5 @@
+$ jobhunt queue --help
+usage: jobhunt queue [-h]
+
+options:
+  -h, --help  show this help message and exit

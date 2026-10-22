@@ -1,0 +1,13 @@
+$ jobhunt stats
+new          2
+ready        2
+applied      1
+assessment   1
+closed       1
+interview    1
+rejected     1
+shortlisted  1
+  greenhouse           6 open, 3 relevant
+  hn                   1 open, 0 relevant
+  lever                6 open, 2 relevant
+  workable             3 open, 1 relevant

@@ -1,0 +1,5 @@
+$ jobhunt vault --help
+usage: jobhunt vault [-h]
+
+options:
+  -h, --help  show this help message and exit

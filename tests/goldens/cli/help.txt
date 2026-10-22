@@ -1,0 +1,37 @@
+$ jobhunt --help
+usage: jobhunt [-h]
+               {discover,rescore,mail,digest,vault,record,queue,contacts,todo,serve,add,screen,letter,check,pack,inbox,stats,list,show,set,note,probe} ...
+
+jobhunt - discover, rank and track job applications.
+
+    python -m jobhunt discover            fetch every source, score, alert on strong new matches
+    python -m jobhunt list [-s STATUS] [-m MIN] [-n N] [--new-today]
+    python -m jobhunt show ID
+    python -m jobhunt set ID STATUS [NOTE]
+    python -m jobhunt note ID TEXT
+    python -m jobhunt stats
+    python -m jobhunt rescore
+    python -m jobhunt probe NAME [NAME ...] [--save]   find a company's ATS board
+    python -m jobhunt mail [--days N]     sync the job inbox, update statuses, alert on what needs you
+    python -m jobhunt inbox [-k KIND] [-n N]   classified recruiting email
+    python -m jobhunt digest [--dry-run|--spoken]   email the daily summary, or print it for speech
+    python -m jobhunt vault               rewrite the pipeline note in Hal's Employment vault
+    python -m jobhunt record [sync|status|search Q|ask Q]   the employment record vault
+    python -m jobhunt pack ID|--shortlisted [--no-web]   draft application packs
+    python -m jobhunt serve [--port N] [--open]   run the Hal Employment web interface
+    python -m jobhunt queue               the jobs waiting in the queue, best first
+    python -m jobhunt todo [add TEXT|done ID]   the to-do list
+    python -m jobhunt contacts ID         find who to message about an application
+
+IDs can be given as any unique prefix or substring.
+
+positional arguments:
+  {discover,rescore,mail,digest,vault,record,queue,contacts,todo,serve,add,screen,letter,check,pack,inbox,stats,list,show,set,note,probe}
+    record              read, search or ask the employment record vault
+    serve               run the Hal Employment web interface
+    add                 track an advert found by hand, skipping the filters
+    screen              ask the local model which jobs a new graduate could get
+    letter              render a pack's cover letter as a PDF in the CV's style
+
+options:
+  -h, --help            show this help message and exit

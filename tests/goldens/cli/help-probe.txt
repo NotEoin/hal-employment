@@ -1,0 +1,10 @@
+$ jobhunt probe --help
+usage: jobhunt probe [-h] [--save] [--keep-empty] names [names ...]
+
+positional arguments:
+  names
+
+options:
+  -h, --help    show this help message and exit
+  --save
+  --keep-empty

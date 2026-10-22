@@ -1,0 +1,8 @@
+$ jobhunt inbox -n 15
+<time>  human      Ambleside Robotics                                        Quick question about your application
+<time>  interview  Cobalt Ledger          Graduate Engineer                  Interview invitation: Graduate Engineer
+            -> greenhouse:cobalt-interview
+<time>  assessment Heron Freight          Junior Python Developer            Your online assessment
+            -> workable:heron-assessment
+<time>  rejected   Dunmore Books          Graduate Developer                 Update on your application
+            -> lever:dunmore-rejected

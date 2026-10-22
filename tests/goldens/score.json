@@ -1,0 +1,70 @@
+{
+ "greenhouse:cobalt-interview": [
+  80,
+  "London, hybrid, entry-level title, skills +5, small (12 roles open)"
+ ],
+ "greenhouse:fernhill-grad": [
+  80,
+  "London, hybrid, entry-level title, skills +5, small (12 roles open)"
+ ],
+ "greenhouse:gilt-closed": [
+  80,
+  "London, hybrid, entry-level title, skills +5, small (12 roles open)"
+ ],
+ "greenhouse:larchmont-grad": [
+  0,
+  "location: Edinburgh"
+ ],
+ "greenhouse:ostrava-senior": [
+  0,
+  "too senior"
+ ],
+ "greenhouse:quillon-intern": [
+  71,
+  "London, graduate internship, entry-level title, skills +3, small (12 roles open)"
+ ],
+ "greenhouse:wexford-ready": [
+  0,
+  "location: Cambridge"
+ ],
+ "hn:brackenridge-data": [
+  0,
+  "location: Remote (UK)"
+ ],
+ "lever:ambleside-applied": [
+  80,
+  "London, hybrid, entry-level title, skills +5, small (12 roles open)"
+ ],
+ "lever:dunmore-rejected": [
+  0,
+  "location: Manchester"
+ ],
+ "lever:halberd-defence": [
+  0,
+  "needs existing security clearance"
+ ],
+ "lever:marrowby-placement": [
+  0,
+  "internship/placement/apprenticeship/PhD"
+ ],
+ "lever:sorrel-ready": [
+  80,
+  "London, hybrid, entry-level title, skills +5, small (12 roles open)"
+ ],
+ "lever:tidewater-grad": [
+  0,
+  "location: Leeds"
+ ],
+ "workable:heron-assessment": [
+  80,
+  "London, hybrid, entry-level title, skills +5, small (12 roles open)"
+ ],
+ "workable:kestrel-bond": [
+  0,
+  "train-and-place outside City"
+ ],
+ "workable:pennant-sales": [
+  0,
+  "not an engineering role: Graduate Sales Executive"
+ ]
+}

@@ -1,0 +1,10 @@
+$ jobhunt letter --help
+usage: jobhunt letter [-h] [--to TO] [--subject SUBJECT] id
+
+positional arguments:
+  id
+
+options:
+  -h, --help         show this help message and exit
+  --to TO            recipient lines separated by |
+  --subject SUBJECT

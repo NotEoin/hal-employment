@@ -1,0 +1,9 @@
+$ jobhunt record --help
+usage: jobhunt record [-h] [{status,sync,search,ask}] [text ...]
+
+positional arguments:
+  {status,sync,search,ask}
+  text
+
+options:
+  -h, --help            show this help message and exit

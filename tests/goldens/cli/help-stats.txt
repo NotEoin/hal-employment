@@ -1,0 +1,5 @@
+$ jobhunt stats --help
+usage: jobhunt stats [-h]
+
+options:
+  -h, --help  show this help message and exit

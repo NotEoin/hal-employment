@@ -1,0 +1,9 @@
+$ jobhunt note --help
+usage: jobhunt note [-h] id text [text ...]
+
+positional arguments:
+  id
+  text
+
+options:
+  -h, --help  show this help message and exit

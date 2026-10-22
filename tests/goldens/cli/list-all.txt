@@ -1,0 +1,34 @@
+$ jobhunt list -s all -n 40
+  80  new         Fernhill Analytics    Graduate Software Engineer                               London
+      greenhouse:fernhill-grad  | London, hybrid, entry-level title, skills +5, small (12 roles open)
+  80  ready       Sorrel Payments       Software Engineer, Graduate                              London
+      lever:sorrel-ready  | London, hybrid, entry-level title, skills +5, small (12 roles open)
+  80  assessment  Heron Freight         Junior Python Developer                                  London
+      workable:heron-assessment  | London, hybrid, entry-level title, skills +5, small (12 roles open)
+  80  interview   Cobalt Ledger         Graduate Engineer                                        London
+      greenhouse:cobalt-interview  | London, hybrid, entry-level title, skills +5, small (12 roles open)
+  80  applied     Ambleside Robotics    Graduate Robotics Software Engineer                      London
+      lever:ambleside-applied  | London, hybrid, entry-level title, skills +5, small (12 roles open)
+  80  closed      Gilt Studios          Junior Developer                                         London
+      greenhouse:gilt-closed  | London, hybrid, entry-level title, skills +5, small (12 roles open)
+   0  new         Tidewater Systems     Junior Software Developer                                Leeds
+      lever:tidewater-grad  | location: Leeds
+   0  new         Marrowby Retail       Software Placement Year 2027                             London
+      lever:marrowby-placement  | internship/placement/apprenticeship/PhD
+   0  new         Ostrava Cloud         Senior Staff Engineer                                    London
+      greenhouse:ostrava-senior  | too senior
+   0  new         Halberd Dynamics      Graduate Software Engineer                               London
+      lever:halberd-defence  | needs existing security clearance
+   0  new         Kestrel Academy       Graduate Developer Programme                             London
+      workable:kestrel-bond  | train-and-place outside City
+   0  new         Pennant Media         Graduate Sales Executive                                 London
+      workable:pennant-sales  | not an engineering role: Graduate Sales Executive
+   0  new         Brackenridge Labs     Junior Data Analyst                                      Remote (UK)
+      hn:brackenridge-data  | location: Remote (UK)
+   0  shortlisted Larchmont Energy      Graduate Software Engineer                               Edinburgh
+      greenhouse:larchmont-grad  | location: Edinburgh
+   0  ready       Wexford Maps          Graduate Backend Engineer                                Cambridge
+      greenhouse:wexford-ready  | location: Cambridge
+   0  rejected    Dunmore Books         Graduate Developer                                       Manchester
+      lever:dunmore-rejected  | location: Manchester
+(16 shown)

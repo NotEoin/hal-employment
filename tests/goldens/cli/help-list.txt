@@ -1,0 +1,11 @@
+$ jobhunt list --help
+usage: jobhunt list [-h] [-s STATUS] [-m MIN] [-n N] [--new-today] [--internships]
+
+options:
+  -h, --help           show this help message and exit
+  -s, --status STATUS  one of new, shortlisted, ready, applying, applied, assessment, interview,
+                       offer, rejected, withdrawn, skipped, closed, or 'all'
+  -m, --min MIN
+  -n N
+  --new-today
+  --internships        list graduate internships instead of jobs

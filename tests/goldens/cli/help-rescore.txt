@@ -1,0 +1,5 @@
+$ jobhunt rescore --help
+usage: jobhunt rescore [-h]
+
+options:
+  -h, --help  show this help message and exit

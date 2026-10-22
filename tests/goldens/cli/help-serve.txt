@@ -1,0 +1,7 @@
+$ jobhunt serve --help
+usage: jobhunt serve [-h] [--port PORT] [--open]
+
+options:
+  -h, --help   show this help message and exit
+  --port PORT
+  --open

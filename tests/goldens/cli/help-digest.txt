@@ -1,0 +1,7 @@
+$ jobhunt digest --help
+usage: jobhunt digest [-h] [--dry-run] [--spoken]
+
+options:
+  -h, --help  show this help message and exit
+  --dry-run
+  --spoken

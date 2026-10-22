@@ -1,0 +1,4 @@
+$ jobhunt list -m 60 -n 8
+  80  new         Fernhill Analytics    Graduate Software Engineer                               London
+      greenhouse:fernhill-grad  | London, hybrid, entry-level title, skills +5, small (12 roles open)
+(1 shown)

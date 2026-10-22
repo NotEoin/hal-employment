@@ -1,0 +1,7 @@
+$ jobhunt mail --help
+usage: jobhunt mail [-h] [--days DAYS] [-q]
+
+options:
+  -h, --help   show this help message and exit
+  --days DAYS
+  -q, --quiet

@@ -1,0 +1,7 @@
+$ jobhunt screen --help
+usage: jobhunt screen [-h] [-m MIN] [-n N]
+
+options:
+  -h, --help     show this help message and exit
+  -m, --min MIN
+  -n N
