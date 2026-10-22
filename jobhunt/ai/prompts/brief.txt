@@ -1,0 +1,7 @@
+# name: About the employer
+# used: When Hal prepares documents for a job: a short note on what the employer does
+# needs:
+Summarise what this company does for a candidate preparing an application.
+Write at most 120 words of plain prose: the product or service, who uses it, the stage or size
+if stated, and anything distinctive about how they work. Use only the sources given.
+If the sources say little, say so in one sentence rather than guessing.

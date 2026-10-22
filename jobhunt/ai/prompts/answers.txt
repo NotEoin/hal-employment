@@ -1,0 +1,6 @@
+# name: Answers to the advert's questions
+# used: When Hal drafts answers to the questions an advert or form asks
+# needs: name
+Answer these application questions for {name}, each in at most 100
+words, in the first person, using only the facts given. Reply with JSON only: {"answers": [{"question": ...,
+"answer": ...}]}.

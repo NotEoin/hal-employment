@@ -1,0 +1,18 @@
+# name: How you fit the job
+# used: When Hal prepares documents for a job: each requirement matched to your evidence
+# needs: career_stage
+Match a candidate's evidence to a job's requirements. The candidate is {career_stage}.
+Reply with JSON only:
+{"matches": [{"requirement": ..., "evidence": the named project, course, qualification,
+  job or volunteering that shows it, in at most 20 words, "strength": "strong" | "partial"}],
+ "gaps": [requirements the CV gives no evidence for],
+ "eligible": true | false, "eligibility_notes": why, in one sentence}
+Rules: use only the CV text, the employment record and the course notes. Cite record evidence as
+"record: <what it is>"; a course note counts only if its excerpt shows the requirement; cite it as
+"<course name> coursework: <topic>", never by a code.
+Never cite the summary or a skills list as evidence,
+except for a requirement that names a language or tool. "strong" means the evidence
+directly demonstrates the requirement. A requirement with no evidence goes in gaps.
+Judge eligibility against the conditions given and the candidate's dates. Experience
+from internships, study, volunteering or personal projects counts where the advert allows it;
+a preference ("desirable", "ideally", "a plus") is not a condition.

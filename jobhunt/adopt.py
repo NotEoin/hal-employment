@@ -9,6 +9,7 @@ import re
 from urllib.parse import parse_qsl, urlparse
 
 from . import db, gpu, llm, score
+from .ai import prompts
 from .browser import application_url
 
 # Applicant tracking systems that name the employer in the address: (host pattern, where the name is).
@@ -22,11 +23,6 @@ GENERIC_HOST = {"www", "careers", "career", "jobs", "job", "apply", "join", "wor
 # Query parameters that pick out one job on a site that keeps every job at one address.
 JOB_PARAM = re.compile(r"id$|^jid$|job|^token$|^for$|vacanc|posting|requisition", re.I)
 OPEN = ("new", "shortlisted", "ready", "applying")
-
-NAME = """From a web page holding a job application or advert, name the employer and the job.
-Reply with JSON only: {"company": the employer's name as it calls itself, "title": the job title}.
-For a recruitment agency's page, the company is the agency unless the page names the employer."""
-
 
 def address(url: str) -> str:
     """Reduces a page address to what identifies the job: host, path and any job-naming parameters."""
@@ -92,9 +88,10 @@ def describe(page: dict) -> tuple[str, str]:
     if gpu.busy():
         return company, title
     try:
-        reply = llm.chat_json(NAME, f"Address: {page['url']}\nPage title: {page.get('title', '')}\n"
-                                    f"Heading: {page.get('heading', '')}\nSite name: {page.get('site', '')}\n\n"
-                                    f"{page.get('text', '')[:2000]}", role="main", timeout=60)
+        reply = llm.chat_json(prompts.text("adopt_name"),
+                              f"Address: {page['url']}\nPage title: {page.get('title', '')}\n"
+                              f"Heading: {page.get('heading', '')}\nSite name: {page.get('site', '')}\n\n"
+                              f"{page.get('text', '')[:2000]}", role="main", timeout=60)
     except llm.LLMUnavailable:
         return company, title
     named = str(reply.get("company") or "").strip()

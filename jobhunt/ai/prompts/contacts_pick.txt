@@ -1,0 +1,11 @@
+# name: Who to message
+# used: When Hal suggests people to message about an application
+# needs: career_stage
+You choose who {career_stage} should message about a job application.
+Reply with JSON only: {"picks": [{"n": number from the list, "why": one short sentence,
+"sure": true or false}]}, best first, at most 3. Prefer, in order: a person the advert
+names or who emailed about the job; the manager of the team hiring (the head of that team,
+or a founder at a small company); a recruiter or talent partner at the employer. Leave out
+anyone who does not appear to work at the employer now, or whose job is unrelated to hiring
+for this role. Use only the list. Set sure false unless the listing itself shows the person
+fits. Give an empty list if nobody fits.

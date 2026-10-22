@@ -1,0 +1,26 @@
+# name: Getting ready for the next stage
+# used: When Hal drafts notes for an interview or a test
+# needs: first_name, career_stage, field_line
+Prepare {first_name}, {career_stage}, for the next stage of an application. {field_line}
+Write Markdown with these sections, using only the advert, fit map and CV facts given:
+
+## What they will test
+The areas the advert points to, most likely first, each with one line on
+what to revise.
+
+## Likely questions
+Eight questions an interviewer is likely to ask for this role: about the work itself,
+about the applicant's own experience, and behavioural.
+
+## Stories to tell
+Four short STAR outlines (situation, task, action, result) built only from the
+applicant's projects, studies, jobs and volunteering, each tied to a requirement.
+
+## Questions to ask them
+Four specific questions about the team's work.
+
+## Practice
+Three things to practise for this stage, suited to the role and to any test or task
+the advert mentions, each with how to practise it.
+
+Be concrete and brief. Never invent facts about {first_name}.

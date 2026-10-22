@@ -12,7 +12,7 @@ import json
 import re
 import time
 
-from . import browser, db, documents, gpu, llm
+from . import browser, db, documents, gpu, llm, pack
 
 SEARCH_PAUSE = 8  # seconds between queries, so the search engine does not refuse them
 _last_query = 0.0
@@ -26,16 +26,6 @@ LEAD = re.compile(r"engineering manager|head of (engineering|software|technology
                   r"(team|tech|technical|engineering) lead|founder", re.I)
 TALENT = re.compile(r"talent|recruit|early careers|people (partner|team)|human resources|resourcing", re.I)
 SUFFIX = re.compile(r"[\s,]+(ltd|limited|plc|llp|inc)\.?$", re.I)
-
-PICK = """You choose who a new graduate should message about a job application.
-Reply with JSON only: {"picks": [{"n": number from the list, "why": one short sentence,
-"sure": true or false}]}, best first, at most 3. Prefer, in order: a person the advert
-names or who emailed about the job; the manager of the team hiring (engineering manager,
-team lead, head of engineering, or the CTO or a founder at a small company); a recruiter
-or talent partner at the employer. Leave out anyone who does not appear to work at the
-employer now, or whose job is unrelated to hiring for this role. Use only the list. Set
-sure false unless the listing itself shows the person fits. Give an empty list if nobody fits."""
-
 
 def _employer(company: str) -> str:
     """Returns the company name without its legal suffix, as people write it on a profile."""
@@ -113,8 +103,9 @@ def _by_rules(people: list[dict]) -> list[dict]:
 def _by_model(job, people: list[dict]) -> list[dict]:
     listing = "\n".join(f"{n}. {p['name']} | {p['role']} | from: {p['source']} | {p.get('evidence', '')}"
                         for n, p in enumerate(people, 1))
-    reply = llm.chat_json(PICK, f"Job: {job['title']} at {job['company']} ({job['location'] or 'UK'})\n\n"
-                                f"People:\n{listing}", role="main", timeout=180)
+    reply = llm.chat_json(pack.prompt("contacts_pick"),
+                          f"Job: {job['title']} at {job['company']} ({job['location'] or 'UK'})\n\n"
+                          f"People:\n{listing}", role="main", timeout=180)
     picked = {}
     for pick in reply.get("picks") or []:
         n = pick.get("n")

@@ -1,11 +1,13 @@
 """Commands for application documents: pack, letter, check, contacts.
 
 The bodies moved unchanged from `jobhunt/__main__.py`; the parser, its arguments and help stay there,
-because the voice bridge and the /jobs command parse what these commands print.
+because the voice bridge and the /jobs command parse what these commands print. File names that carry
+the person's name come from `core.naming`.
 """
 import sys
 
 from .. import db
+from ..core import naming
 from .find import _find
 
 
@@ -45,7 +47,8 @@ def cmd_letter(args):
         sys.exit("no cover letter in this pack")
     recipient = args.to.split("|") if args.to else [f"{r['company']} recruitment team"]
     subject = args.subject or f"Application: {r['title']}"
-    print(letter.render(section.group(1), out_dir / "Firstname-Lastname-Cover-Letter.pdf", recipient, subject))
+    # the person's name in the file comes from the `cvdocs.letter_file_name` template, never from code
+    print(letter.render(section.group(1), out_dir / naming.file_name('letter'), recipient, subject))
 
 
 def cmd_check(args):

@@ -1,9 +1,16 @@
 """Application packs: everything needed to apply for one job, drafted locally.
 
 A pack holds a company brief, a requirements-to-evidence map with honest gaps,
-a tailored CV, a cover letter, a short message for the hiring manager, and
-answers to common form questions. It is written to packs/<slug>/ and mirrored
-into the vault's Applications folder. Nothing is sent or submitted.
+a tailored CV, a cover letter, a short message for the person hiring, and
+answers to common form questions. It is written to the job's folder (`documents.pack_dir`), and a
+`docs.prepared` event tells anything that mirrors packs (the Hal add-on) that one is ready. Nothing is
+sent or submitted.
+
+Design notes:
+- The prompts live in `ai/prompts/*.txt` and name no one: `person()` fills them from the `you.*` and
+  `goal.*` settings. The old constants (`pack.LETTER` and the rest) are rendered when read, so
+  callers that pass them to the model, and tests that match on them, see the text the person's edits and
+  settings give.
 """
 import re
 import textwrap
@@ -11,77 +18,64 @@ from datetime import date
 from pathlib import Path
 
 from . import coursework, cv, db, llm, record, reputation, research
-from .core import paths
-from .vault import VAULT
+from .ai import prompts
+from .core import events, paths
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
+# Old constant name -> prompt id; each is the prompt's text filled in for the person (see `prompt`).
+PROMPTS = {"ANALYSE": "analyse", "BRIEF": "brief", "FIT": "fit", "LETTER": "letter", "MESSAGE": "message",
+           "ANSWERS": "answers", "VERIFY": "verify"}
+# The vault mirror moved to the Hal add-on; these answer None only so the made-up world's patches
+# (tests/support/world.py) still apply until its owner drops them.
+RETIRED = ("VAULT", "APPLICATIONS")
+SOMEONE = "the applicant"     # what a prompt calls the person before they have given a name
+PREPARED = "docs.prepared"    # the event the Hal add-on's Applications mirror listens for
 
 
-def __getattr__(name):  # old path constants, read live (PEP 562)
+def __getattr__(name):  # old path constants and prompts, read live (PEP 562)
     if name in _LIVE:
         return _LIVE[name]()
+    if name in PROMPTS:
+        return prompt(PROMPTS[name])
+    if name in RETIRED:
+        return None
     raise AttributeError(name)
 
 
-def _live(name: str):
-    """An old path constant: the value a test assigned to the module, else the live path."""
-    return globals()[name] if name in globals() else _LIVE[name]()
+def person() -> dict:
+    """The placeholders every document prompt may use, from the person's settings (never a private answer)."""
+    from . import screen
+    from .core import settings
+    from .find import goal as goal_mod
+
+    goal = goal_mod.current()
+    name = (settings.get("you.name") or "").strip()
+    first = (settings.get("you.preferred_name") or "").strip() or (name.split()[0] if name else "")
+    subject = (settings.get("you.education.subject") or "").strip()
+    degree = (settings.get("you.education.degree") or "").strip()
+    studied = " in ".join(p for p in (degree, subject) if p)
+    end = goal.finished_year()
+    if goal.is_student():
+        status = f"They are studying now; the course ends in {end}" if end else "They are studying now"
+    elif goal.study_status == "none":
+        status = "They did not go to university"
+    else:
+        status = f"They finished their course in {end}" if end else "They have finished studying"
+    return {
+        "name": name or SOMEONE, "first_name": first or SOMEONE,
+        "career_stage": screen.STAGE_LINES.get(goal.stage, goal.stage),
+        "status_line": status,
+        "target_roles": ", ".join(goal.roles) or "roles that suit them",
+        "kinds": goal_mod.kinds_words(goal),
+        "field_line": f"They studied {studied}." if studied else "",
+    }
 
 
-APPLICATIONS = VAULT / "Areas" / "Job Search" / "Applications"
+def prompt(prompt_id: str, values: dict | None = None) -> str:
+    """A document prompt filled in for the person; `values` saves reading the settings again."""
+    return prompts.text(prompt_id, **(values or person()))
 
-ANALYSE = """You analyse a job advert for a UK graduate software engineer. Reply with JSON only:
-{"summary": one sentence on what the role does,
- "must_have": [up to 8 short requirements stated as essential],
- "nice_to_have": [up to 6 short requirements stated as desirable],
- "contacts": [named people or email addresses in the advert, with their role if given],
- "questions": [application questions the advert asks candidates to answer],
- "employer": the company the successful candidate will work for,
- "eligibility": [hard conditions on who may apply: current enrolment, graduation
-   year, start date, right to work, location, minimum experience]}
-Use only what the advert says."""
-
-BRIEF = """Summarise what this company does for a candidate preparing an application.
-Write at most 120 words of plain prose: the product, who uses it, the stage or size
-if stated, and anything distinctive about how they work. Use only the sources given.
-If the sources say little, say so in one sentence rather than guessing."""
-
-FIT = """Match a candidate's evidence to a job's requirements. Reply with JSON only:
-{"matches": [{"requirement": ..., "evidence": the named project, module, degree or
-  job that shows it, in at most 20 words, "strength": "strong" | "partial"}],
- "gaps": [requirements the CV gives no evidence for],
- "eligible": true | false, "eligibility_notes": why, in one sentence}
-Rules: use only the CV text, the employment record and the course notes. Cite record evidence as
-"record: <what it is>"; a course note counts only if its excerpt shows the requirement; cite it as
-"<module name> coursework: <topic>", never by code.
-Never cite the summary or a skills list as evidence,
-except for a requirement that names a language or tool. "strong" means the evidence
-directly demonstrates the requirement. A requirement with no evidence goes in gaps.
-Judge eligibility against the conditions given and the candidate's dates. Experience
-from internships, academic work or personal projects counts where the advert allows it;
-a preference ("desirable", "ideally", "a plus") is not a condition."""
-
-LETTER = """Write a cover letter from Firstname Lastname for this job. At most 220 words, in
-three short paragraphs: why this company and role specifically; the two or three
-strongest pieces of evidence, each tied to a requirement; a one-line close. Name
-university modules by title, never by code. No
-greeting line or sign-off; those are added separately. Use only the facts given."""
-
-MESSAGE = """Write a short message from Firstname Lastname to the hiring manager or engineering
-lead for this role, to send by email or LinkedIn alongside the application. At most
-90 words. Name the role, give one concrete reason he fits, and ask one specific
-question about the team's work. No flattery and no request for a referral."""
-
-ANSWERS = """Answer these application questions for Firstname Lastname, each in at most 100
-words, using only the facts given. Reply with JSON only: {"answers": [{"question": ...,
-"answer": ...}]}."""
-
-VERIFY = """Check drafts written for a job applicant against the facts about him. Reply
-with JSON only: {"unsupported": [each claim about the applicant that the facts do not
-support, quoted briefly]}. A claim is unsupported if it states a skill, language,
-project detail, number, status or experience that the facts do not contain.
-Claims about the company are out of scope."""
 
 COMMON_QUESTIONS = ["Why do you want to work here?", "Why are you a good fit for this role?"]
 
@@ -119,20 +113,24 @@ def _research(company: str) -> tuple[str, list[str]]:
 def build(con, job_id: str, use_web: bool = True) -> Path:
     """Drafts the pack for one job and returns the pack's Markdown path."""
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    from . import documents
+
     job_text = _job_text(job)
     facts = cv.facts_text()
-    out_dir = _live("PACKS") / slug(f"{job['company']}-{job['title']}")
+    out_dir = documents.pack_dir(job)
+    who = person()
 
-    analysis = llm.chat_json(ANALYSE, job_text[:12000], role="main")
+    analysis = llm.chat_json(prompt("analyse", who), job_text[:12000], role="main")
     web, urls = _research(job["company"]) if use_web else ("", [])
-    about = llm.chat(BRIEF, f"Company: {job['company']}\n\nJob advert:\n{job_text[:4000]}\n\nWeb sources:\n{web[:8000]}",
+    about = llm.chat(prompt("brief", who),
+                     f"Company: {job['company']}\n\nJob advert:\n{job_text[:4000]}\n\nWeb sources:\n{web[:8000]}",
                      role="main")
     requirements = analysis.get("must_have", []) + analysis.get("nice_to_have", [])
     conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
     course_notes = coursework.as_text(coursework.evidence(requirements))
     # What the CV leaves out (certificates, the detail of each job) is looked up in the employment record.
     kept = record.context(requirements + (analysis.get("questions") or [])) or "none"
-    fit = llm.chat_json(FIT, "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
+    fit = llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
                         + f"\n\nConditions:\n{conditions}\n\nToday: {date.today().isoformat()}\n\nCV:\n{facts}"
                         + f"\n\nEmployment record:\n{kept}\n\nCourse notes:\n{course_notes or 'none'}",
                         role="main")
@@ -141,14 +139,15 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     context = (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
                + (f"Earlier applications to this employer: {history}. Do not mention them unless asked.\n"
                   if history else "") +
-               f"Firstname graduated recently. Mention availability only if the advert's start date is "
+               f"{who['status_line']}. Mention availability only if the advert's start date is "
                f"flexible; for a fixed intake, refer to that intake instead.\n"
                f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
                f"\n\nEmployment record (true; use it where the CV is silent):\n{kept}")
-    letter = llm.undash(llm.chat(LETTER, context, role="writer").strip())
-    message = llm.undash(llm.chat(MESSAGE, context, role="writer").strip())
+    letter = llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip())
+    message = llm.undash(llm.chat(prompt("message", who), context, role="writer").strip())
     questions = analysis.get("questions") or []
-    answers = llm.chat_json(ANSWERS, "Questions:\n" + "\n".join(f"- {q}" for q in [*questions, *COMMON_QUESTIONS])
+    answers = llm.chat_json(prompt("answers", who),
+                            "Questions:\n" + "\n".join(f"- {q}" for q in [*questions, *COMMON_QUESTIONS])
                             + f"\n\n{context}", role="writer").get("answers", [])
     for a in answers:
         a["answer"] = llm.undash(a.get("answer", ""))
@@ -158,7 +157,8 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     drafts = "\n\n".join([letter, message, *(a.get("answer", "") for a in answers)])
     flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, job_text, about, kept)]
     flagged += [f"unsupported claim: {c}" for c in
-                llm.chat_json(VERIFY, f"Facts:\n{facts}\n\nEmployment record:\n{kept}\n\nCourse notes:\n{course_notes}"
+                llm.chat_json(prompt("verify", who),
+                              f"Facts:\n{facts}\n\nEmployment record:\n{kept}\n\nCourse notes:\n{course_notes}"
                               f"\n\nEvidence map:\n{fit.get('matches', [])}\n\nDrafts:\n{drafts}",
                               role="main").get("unsupported", [])]
     flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
@@ -173,13 +173,11 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     elif "current students" in (job["score_notes"] or ""):
         flagged.insert(0, "ELIGIBILITY: the advert appears to be for current students; confirm graduates can apply")
 
-    md = _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged)
+    md = _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged, who["name"])
     md = md.replace("## Role\n", company_md + "\n## Role\n", 1)
     pack_md = out_dir / "pack.md"
     pack_md.write_text(md)
-    if VAULT.exists():
-        APPLICATIONS.mkdir(parents=True, exist_ok=True)
-        (APPLICATIONS / f"{slug(job['company'])} - {slug(job['title'])}.md").write_text(md)
+    events.publish(PREPARED, job_id=job_id, company=job["company"], title=job["title"], pack=str(pack_md))
     if job["status"] in ("new", "shortlisted"):
         db.set_status(con, job_id, "ready", f"pack drafted in {out_dir.name}")
     con.commit()
@@ -202,7 +200,7 @@ def previous_applications(con, job) -> str:
 
 
 def add_company_check(pack_md: Path, company: str) -> None:
-    """Adds or refreshes the company check in an existing pack and its vault copy."""
+    """Adds or refreshes the company check in an existing pack, and says the pack changed."""
     flags, section = reputation.check(company)
     text = re.sub(r"## Company check\n.*?(?=\n## )", "", pack_md.read_text(), flags=re.S)
     if flags:
@@ -215,12 +213,10 @@ def add_company_check(pack_md: Path, company: str) -> None:
     pack_md.write_text(text)
     title = text.splitlines()[0].removeprefix("# ")
     company_name, _, role = title.partition(": ")
-    vault_copy = APPLICATIONS / f"{slug(company_name)} - {slug(role)}.md"
-    if vault_copy.exists():
-        vault_copy.write_text(text)
+    events.publish(PREPARED, company=company_name, title=role, pack=str(pack_md))
 
 
-def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged) -> str:
+def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged, name) -> str:
     lines = [f"# {job['company']}: {job['title']}", "",
              f"- Apply: {job['url']}",
              f"- Location: {job['location'] or 'not stated'} | Salary: {job['salary'] or 'not stated'}",
@@ -237,10 +233,10 @@ def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, tr
     lines += ["", "Gaps to address or accept: " + ("; ".join(gaps) if gaps else "none found"), ""]
     contacts = [", ".join(str(v) for v in c.values() if v) if isinstance(c, dict) else str(c)
                 for c in analysis.get("contacts") or []]
-    lines += ["## Cover letter", "", "Dear Hiring Team,", "", letter, "", "Kind regards,", "Firstname Lastname", ""]
+    lines += ["## Cover letter", "", "Dear Hiring Team,", "", letter, "", "Kind regards,", name, ""]
     lines += ["## Message to the hiring manager", "",
               "To: " + ("; ".join(contacts) if contacts else
-                        f"find the engineering lead on LinkedIn (search \"{job['company']} engineering manager\")"),
+                        f"find the person hiring on LinkedIn (search \"{job['company']} hiring manager\")"),
               "", message, ""]
     lines += ["## Form answers", ""]
     for a in answers:

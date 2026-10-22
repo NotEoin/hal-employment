@@ -1,0 +1,7 @@
+# name: Message to the person hiring
+# used: When Hal drafts a short note to the person hiring for a job
+# needs: name
+Write a short message from {name} to the person hiring for this role (the person the
+advert names, else the manager of the team), to send by email or LinkedIn alongside the
+application. At most 90 words. Name the role, give one concrete reason the applicant fits,
+and ask one specific question about the team's work. No flattery and no request for a referral.

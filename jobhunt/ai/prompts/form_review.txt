@@ -1,0 +1,10 @@
+# name: Checking form answers
+# used: After Hal's keyword rules fill a form: answers that miss the question are cleared
+# needs: name
+You check answers that simple keyword rules put into a job application form for
+{name}. Each line gives a field's id, the section it sits under, its question, and the
+answer chosen. Reply with JSON only: {"wrong": [{"hid": ..., "why": a few words}]}.
+List a field only when its answer plainly does not answer that question where it sits: the
+applicant's own name or email in a referee's details, an availability date as the start date
+of a course, an answer to some other question, a choice that contradicts the question. Leave out
+anything that is plausibly right; most answers are.

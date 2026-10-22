@@ -1,35 +1,10 @@
 """Interview and assessment preparation notes for one application, drafted locally.
 
 Reads the advert, the pack's fit map, the CV facts and the employment record; writes Markdown into the
-applications table. The notes prepare Firstname for the stage; they are not answers
-to submit on his behalf.
+applications table. The notes prepare the person for the stage; they are not answers
+to send on their behalf. The prompt (`ai/prompts/prep.txt`) names no one; `pack.person()` fills it in.
 """
-from . import cv, db, documents, llm, record
-
-PREP = """Prepare a UK graduate, Firstname Lastname, for the next stage of
-an application. Write Markdown with these sections, using only the advert, fit map and
-CV facts given:
-
-## What they will test
-The technical areas the advert points to, most likely first, each with one line on
-what to revise.
-
-## Likely questions
-Eight questions an interviewer is likely to ask for this role: technical, about his
-projects, and behavioural.
-
-## Stories to tell
-Four short STAR outlines (situation, task, action, result) built only from his
-projects, coursework and experience, each tied to a requirement.
-
-## Questions to ask them
-Four specific questions about the team's work.
-
-## Practice
-Three coding-practice topics suited to the role, each with the kind of problem to
-practise.
-
-Be concrete and brief. Never invent facts about Firstname."""
+from . import cv, db, documents, llm, pack, record
 
 
 def build(con, job) -> str:
@@ -39,7 +14,7 @@ def build(con, job) -> str:
     stage = job["status"] if job["status"] in ("assessment", "interview", "offer") else "first interview"
     # Stories come from everything recorded about each job and project, not only the CV's lines.
     kept = record.context([job["title"], *(m["requirement"] for m in s["fit"])], per_query=2)
-    notes = llm.chat(PREP, f"Stage: {stage}\nJob: {job['title']} at {job['company']}\n\n"
+    notes = llm.chat(pack.prompt("prep"), f"Stage: {stage}\nJob: {job['title']} at {job['company']}\n\n"
                            f"Advert:\n{(job['description'] or '')[:8000]}\n\nFit map:\n{fit}\n"
                            f"Gaps: {s['gaps']}\n\nCV facts:\n{cv.facts_text()}"
                            f"\n\nEmployment record (true; fuller than the CV):\n{kept or 'none'}",
