@@ -73,6 +73,23 @@ MADE_UP_SEARCH = [{"label": "Museum Assistant, Riverside Trust", "kind": "Job", 
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
 MADE_UP_PAGES = {
+    # Documents, Messages and Activity
+    "/documents": {"apps": [{"id": 1, "number": 1, "job_id": "demo:1", "title": "Museum Assistant",
+                             "org": "Riverside Trust", "column": "ready", "column_title": "Getting ready",
+                             "kinds": ["CV", "Letter"]}]},
+    "/documents/1": {"id": 1, "number": 1, "job_id": "demo:1", "title": "Museum Assistant", "org": "Riverside Trust",
+                     "column": "ready", "column_title": "Getting ready",
+                     "cv": {"version_n": None, "type": None, "look": None, "sent_as": None},
+                     "approved_at": "2026-10-22T10:44:00Z", "folder_words": "0001 Riverside Trust - Museum Assistant",
+                     "files": [{"kind": "cv_pdf", "name": "CV (PDF)", "sub": "Robin Example CV.pdf", "file_id": "f1",
+                                "file_name": "Robin Example CV.pdf", "has_text": False, "text_kind": None,
+                                "acts": ["open", "download"]}],
+                     "answers_text": "", "message_text": "", "sent_myself_ok": True},
+    "/documents/details": {"rows": [{"label": "Full name", "value": "Robin Example"}]},
+    "/messages": {"items": [{"id": "a:1", "kind": "alert", "unread": True, "title": "A made-up alert", "from": "Hal",
+                             "at": "2026-10-22T09:00:00Z", "when": "09:00", "text": "Nothing was sent.",
+                             "action": None, "tone": "warn", "employer": False}]},
+    "/activity": {"days": [{"day": "Today", "items": []}], "more": None},
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
