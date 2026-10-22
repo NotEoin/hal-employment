@@ -100,6 +100,19 @@ class AddOn(unittest.TestCase):
         copies.mkdir()
         self.assertEqual(mirror.copy(note, "Riverside Trust - Museum Assistant.md").read_text(), "# Museum Assistant")
 
+    def test_a_drafted_pack_is_copied_into_the_applications_folder_under_its_old_name(self):
+        from jobhunt import pack
+
+        note = self.folder / "pack.md"
+        note.write_text("# Riverside Trust: Museum Assistant")
+        copies = self.folder / "Applications"
+        copies.mkdir()
+        settings.set("addon.applications_mirror", str(copies))
+        job = {"company": "Riverside Trust", "title": "Museum Assistant"}
+        self.assertIsNone(pack.mirror_note(job, note), "nothing is copied while the add-on is off")
+        self.switch_on()
+        self.assertEqual(pack.mirror_note(job, note), copies / "riverside-trust - museum-assistant.md")
+
     def test_hal_conf_models_are_offered_as_choices(self):
         root = self.folder / "Hal"
         root.mkdir()

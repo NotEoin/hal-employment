@@ -3,8 +3,8 @@
 A pack holds a company brief, a requirements-to-evidence map with honest gaps,
 a tailored CV, a cover letter, a short message for the person hiring, and
 answers to common form questions. It is written to the job's folder (`documents.pack_dir`), and a
-`docs.prepared` event tells anything that mirrors packs (the Hal add-on) that one is ready. Nothing is
-sent or submitted.
+`docs.prepared` event says one is ready. With the Hal add-on on, a copy also goes into its Applications
+folder (`addon.applications_mirror`). Nothing is sent or submitted.
 
 Design notes:
 - The prompts live in `ai/prompts/*.txt` and name no one: `person()` fills them from the `you.*` and
@@ -178,10 +178,18 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     pack_md = out_dir / "pack.md"
     pack_md.write_text(md)
     events.publish(PREPARED, job_id=job_id, company=job["company"], title=job["title"], pack=str(pack_md))
+    mirror_note(job, pack_md)
     if job["status"] in ("new", "shortlisted"):
         db.set_status(con, job_id, "ready", f"pack drafted in {out_dir.name}")
     con.commit()
     return pack_md
+
+
+def mirror_note(job, pack_md: Path) -> Path | None:
+    """Copies the pack into the Hal add-on's Applications folder under the old note name; None when it is off."""
+    from .addons.hal import mirror
+
+    return mirror.copy(pack_md, f"{slug(job['company'])} - {slug(job['title'])}.md")
 
 
 def previous_applications(con, job) -> str:
