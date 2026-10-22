@@ -1,0 +1,5 @@
+# Starter search terms for policy and research: one press in the goal step fills these in.
+label = "Policy and research"
+roles = ["policy officer", "research assistant", "researcher", "parliamentary assistant", "analyst"]
+interests = ["public policy", "local government", "think tank", "social research", "evaluation"]
+avoid_roles = ["sales", "telemarketing"]

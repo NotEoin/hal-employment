@@ -1,0 +1,60 @@
+# Technical graduate: today's scoring (L score.py:161-321), so the owner's scores carry over unchanged.
+# The role and avoid lists are today's FIELD and NOT_FIELD words; "re:" lines are regular expressions.
+label = "Technical graduate"
+kinds = ["graduate_job", "graduate_scheme", "internship", "fixed_term"]
+role_filter = true                   # a job title without one of the roles is hidden, not marked down
+role_miss_note = "not an engineering role"
+experience = "hide"                  # asking for more years than the person has hides the job
+pay_far_under_hide = false
+skill_cap = 20
+interest_cap = 0
+roles = [
+  "re:software|developer|programmer|engineer(ing)?|backend|back[- ]end|full[- ]?stack",
+  "re:platform|infrastructure|devops|site reliability|sre|systems|machine learning|ml|ai",
+  "re:artificial intelligence|data|research software|rse|security|cyber|computer vision",
+  "re:deep learning|llm|ktp associate|quant|python|java|golang|go|c\\+\\+|rust",
+]
+avoid_roles = [
+  "re:sales|account (executive|manager)|business development|recruit(er|ment)|talent|marketing",
+  "re:designer|legal|counsel|finance|accountant|payroll|hr|people partner|customer (success|support)",
+  "re:mechanical|electrical|civil|chemi(st|cal)|structural|hvac|field (service|engineer)",
+  "re:technician|nurse|clinical|content|copywriter|writer|operations manager|executive assistant",
+  "re:office|facilities|procurement|buyer|warehouse|driver|rigger|animator|artist|producer",
+  "re:menswear|womenswear|fashion|garment|apparel|textile|footwear|product developer|geotechnical",
+  "re:geological|surveyor|quantity surveyor|estimator",
+]
+interests = []
+skills = [
+  "python = 3", "sql = 1", "java = 2", "typescript = 2", "javascript = 1", "linux = 2", "git = 1",
+  "re:c\\+\\+ = 2", "machine learning = 2", "testing = 1", "rest api = 1", "cloud = 1",
+]
+
+[weights]
+base = 40
+first_place = 10
+other_place = 6
+first_place_text = 6
+other_place_text = 3
+remote_uk = 0
+role_title = 0
+role_text_only = 0
+entry_level = 25
+entry_level_text = 12
+kind_wanted = 0
+kind_also = -3
+fresh = 6
+old = -8
+stale = -15
+pay_under = -12
+years_required = -15
+seems_senior = -15
+interest = 0
+no_interest = 0
+pattern_match = 5
+pattern_other = -3
+small_employer = 7
+small_employer_mid = 3
+niche_source = 6
+alert_only = -10
+training_scheme = -8
+agency_lower = -5

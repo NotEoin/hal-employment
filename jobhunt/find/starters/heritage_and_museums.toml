@@ -1,0 +1,5 @@
+# Starter search terms for heritage and museums: one press in the goal step fills these in.
+label = "Heritage and museums"
+roles = ["museum assistant", "collections assistant", "archivist", "curatorial assistant", "learning officer", "heritage officer"]
+interests = ["museums", "archives", "local history", "conservation", "galleries"]
+avoid_roles = ["sales", "retail manager"]

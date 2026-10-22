@@ -1,0 +1,43 @@
+# Experienced: the points of this preset. Roles and interests come from the person's goal.
+label = "Experienced"
+kinds = ["experienced", "fixed_term"]
+role_filter = false
+role_miss_note = "not one of your roles"
+experience = "points"
+pay_far_under_hide = true
+skill_cap = 0
+interest_cap = 0
+roles = []
+avoid_roles = []
+interests = []
+skills = []
+
+[weights]
+base = 40
+first_place = 10
+other_place = 7
+first_place_text = 6
+other_place_text = 3
+remote_uk = 5
+role_title = 12
+role_text_only = -6
+entry_level = 0
+entry_level_text = 0
+kind_wanted = 0
+kind_also = -3
+fresh = 6
+old = -8
+stale = -15
+pay_under = -12
+years_required = 0
+seems_senior = -15
+interest = 0
+no_interest = 0
+pattern_match = 5
+pattern_other = -3
+small_employer = 0
+small_employer_mid = 0
+niche_source = 0
+alert_only = -10
+training_scheme = -10
+agency_lower = -5

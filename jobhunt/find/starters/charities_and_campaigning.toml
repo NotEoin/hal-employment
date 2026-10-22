@@ -1,0 +1,5 @@
+# Starter search terms for charities and campaigning: one press in the goal step fills these in.
+label = "Charities and campaigning"
+roles = ["campaigns officer", "fundraising assistant", "volunteer coordinator", "communications officer", "project officer"]
+interests = ["charity", "campaigning", "community", "housing", "environment"]
+avoid_roles = ["door to door", "commission only"]

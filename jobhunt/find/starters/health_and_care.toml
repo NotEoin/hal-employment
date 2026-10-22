@@ -1,0 +1,5 @@
+# Starter search terms for health and care: one press in the goal step fills these in.
+label = "Health and care"
+roles = ["healthcare assistant", "support worker", "care coordinator", "health researcher", "NHS graduate"]
+interests = ["NHS", "mental health", "public health", "social care", "wellbeing"]
+avoid_roles = ["sales"]

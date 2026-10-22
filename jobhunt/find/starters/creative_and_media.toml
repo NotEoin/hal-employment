@@ -1,0 +1,5 @@
+# Starter search terms for creative and media: one press in the goal step fills these in.
+label = "Creative and media"
+roles = ["editorial assistant", "content writer", "production assistant", "marketing assistant", "researcher"]
+interests = ["publishing", "journalism", "film", "television", "design"]
+avoid_roles = ["commission only"]

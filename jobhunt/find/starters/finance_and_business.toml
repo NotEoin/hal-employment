@@ -1,0 +1,5 @@
+# Starter search terms for finance and business: one press in the goal step fills these in.
+label = "Finance and business"
+roles = ["graduate analyst", "audit associate", "accounts assistant", "business analyst", "operations assistant"]
+interests = ["finance", "accounting", "consulting", "operations", "economics"]
+avoid_roles = ["commission only", "door to door"]

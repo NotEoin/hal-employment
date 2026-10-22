@@ -1,0 +1,5 @@
+# Starter search terms for technology: one press in the goal step fills these in.
+label = "Technology"
+roles = ["software developer", "data analyst", "IT support", "cyber security", "web developer", "test engineer"]
+interests = ["software", "data", "cloud", "security", "open source"]
+avoid_roles = ["sales", "recruitment"]

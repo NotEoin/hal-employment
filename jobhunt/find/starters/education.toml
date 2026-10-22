@@ -1,0 +1,5 @@
+# Starter search terms for education: one press in the goal step fills these in.
+label = "Education"
+roles = ["teaching assistant", "tutor", "learning support assistant", "education officer", "graduate teacher"]
+interests = ["schools", "widening participation", "outreach", "special educational needs", "youth work"]
+avoid_roles = ["sales"]
