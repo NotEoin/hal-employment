@@ -28,8 +28,11 @@ new browser tests skip unless it is `1`.
 | Gate | Command | What it proves |
 | --- | --- | --- |
 | G1 | `python -m unittest discover tests` | Every unit and integration test passes |
+| G2 | `tests/ui/test_shell.py` (browser) | Every route of the new app draws at both sizes with no errors, axe clean |
+| G3 | `tests/test_classic.py` | Classic works through the new server |
 | G4 | `python scripts/dev/golden_cli.py --check` | The command line prints what it printed at ef53088 |
 | G8 | `check_ascii.py`, `check_ruff.py`, `check_personal.py` | Added lines are ASCII and ruff-clean; no personal string |
+| G10 | `tests/test_migrate.py`, `tests/test_backup.py` | Old databases migrate with counts kept and a backup made |
 
 
 `check_ascii.py` and `check_ruff.py` look only at lines added since the base (the staged diff with
