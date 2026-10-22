@@ -3,8 +3,8 @@
 `serve` runs the new server (`web.app`), which also serves the classic screens at /classic/. `open` is what
 shortcuts and launchers run: it makes sure the server answers, mints a one-time link and opens it in one app
 window through the platform layer (Edge on Windows, the first Chromium-family browser on Linux), because the
-app only opens through such a link. While `advanced.classic` is on, `open` shows Classic until the
-new daily screens are in. The parser for the legacy commands stays in
+app only opens through such a link. It opens the new app; `--next /classic/` opens Classic, which
+stays for My CV until its new page lands. The parser for the legacy commands stays in
 `jobhunt/__main__.py`, whose help text is held by goldens; `register` adds `open`, a name gate G4 allows the
 top-level help to gain.
 """
@@ -16,7 +16,6 @@ from .. import db
 START_WAIT_S = 30        # a cold start migrates the database first; it never takes this long
 START_POLL_S = 0.25
 SERVE_UNIT = "hal-employment-serve"   # the transient unit a server started by `open` runs in (Linux)
-CLASSIC = "/classic/"
 
 
 def cmd_serve(args):
@@ -40,15 +39,6 @@ def _start_server(port: int) -> None:
     platform.current().spawn_detached(argv, unit=SERVE_UNIT)
 
 
-def _next_page(asked: str | None) -> str | None:
-    """The page to open: the one asked for, else Classic while `advanced.classic` is on."""
-    if asked:
-        return asked
-    from ..core import settings
-
-    return CLASSIC if settings.get("advanced.classic") else None
-
-
 def cmd_open(args):
     """Opens Hal Employment in one signed-in window, starting the server first when it is not running."""
     from ..core import platform
@@ -62,7 +52,7 @@ def cmd_open(args):
             if time.monotonic() > deadline:
                 sys.exit("Hal Employment did not start. See logs/server.log in Hal's data folder.")
             time.sleep(START_POLL_S)
-    url = auth.mint_open_url(port=port, next=_next_page(args.next))
+    url = auth.mint_open_url(port=port, next=args.next)
     if args.print:
         print(url)
     else:

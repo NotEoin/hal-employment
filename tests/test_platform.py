@@ -234,14 +234,14 @@ class Open(unittest.TestCase):
         self.plat.open_app_window.assert_called_once()
         self.assertIn("http://127.0.0.1:24321/open?t=", self.plat.open_app_window.call_args.args[0])
 
-    def test_open_leaves_a_running_hal_alone_and_shows_classic_while_it_is_on(self):
+    def test_open_leaves_a_running_hal_alone_and_opens_the_new_app_even_with_classic_on(self):
         settings.set("advanced.developer_mode", True)
         settings.set("advanced.classic", True)
         with mock.patch("jobhunt.web.app.answering", return_value=True), \
                 mock.patch("jobhunt.web.auth.mint_open_url", return_value="http://127.0.0.1:24321/open?t=x") as mint:
             system.cmd_open(self.args)
         self.plat.spawn_detached.assert_not_called()
-        self.assertEqual(mint.call_args.kwargs["next"], "/classic/")
+        self.assertIsNone(mint.call_args.kwargs["next"])
         self.plat.open_app_window.assert_called_once_with("http://127.0.0.1:24321/open?t=x")
 
 
