@@ -70,6 +70,43 @@ MADE_UP_HOME = {"date_words": "Thursday 22 October", "greeting": "Good morning, 
 MADE_UP_SEARCH = [{"label": "Museum Assistant, Riverside Trust", "kind": "Job", "route": "job-demo%3A1"},
                   {"label": "Search for jobs now", "kind": "Action", "action": "/jobs/search"}]
 
+# The Applications board and one application.
+MADE_UP_STEPS = [{"name": "Documents", "note": "Approved", "state": "done"},
+                 {"name": "Form", "note": "1 answer needs you", "state": "now"},
+                 {"name": "Sent", "note": "", "state": "later"}, {"name": "Interview", "note": "", "state": "later"}]
+MADE_UP_APP = {
+    "id": "demo:1", "number": 1, "step": 2, "steps": MADE_UP_STEPS, "first_time": True, "column": "form",
+    "job": {"id": "demo:1", "title": "Museum Assistant", "org": "Riverside Trust", "place": "Leeds", "pay": "",
+            "url": "https://jobs.example.org/riverside/1", "status": "applying", "score": 80, "source": "greenhouse"},
+    "nav": {"index": 1, "total": 2, "prev": None, "next": "demo:2"},
+    "docs": {"state": "approved", "writing": None, "approved_at": "2026-10-22T09:00:00Z",
+             "cv": {"changes": [], "preview_url": None, "version_n": None, "look": None, "sent_as": "hal_copy"},
+             "letter": {"text": "A made-up letter.", "words": 3, "tone": None, "evidence": None, "checked": None,
+                        "preview_url": None},
+             "answers": [], "message": {"text": "", "to": "", "to_why": ""}},
+    "form": {"state": "needs", "message": "", "filled": 1, "total": 2, "to_check": 1, "site": "jobs.example.org",
+             "platform": "", "mode": "helper", "last_page": True, "handed_over": False, "notes_used": [],
+             "words": "Hal filled 1 of 2 answers. 1 needs you. Check them here or in the form.",
+             "fields": [{"hid": "n", "q": "Full name", "a": "Robin Testwell", "ok": True, "src": "profile",
+                         "src_label": "Your profile", "why": "From your profile.", "notes_used": [], "problem": ""},
+                        {"hid": "w", "q": "Why this job?", "a": "A made-up answer.", "ok": False, "src": "hal",
+                         "src_label": "Written by Hal", "why": "Written for this job by Hal.", "notes_used": [],
+                         "problem": ""}]},
+    "sent": None, "interview": None}
+MADE_UP_BOARD = {"columns": [
+    {"key": "ready", "title": "Getting ready", "help": "Waiting for you to approve them.", "items": [
+        {"id": "demo:2", "number": 2, "org": "Hillside Library", "title": "Library Assistant",
+         "next": "Check and approve documents", "tone": "info", "note": "", "hal_busy": False}]},
+    {"key": "form", "title": "Form filled", "help": "Check it and press Submit on the site yourself.", "items": [
+        {"id": "demo:1", "number": 1, "org": "Riverside Trust", "title": "Museum Assistant",
+         "next": "1 answer needs you", "tone": "warn", "note": "1 of 2 filled", "hal_busy": False}]},
+    {"key": "sent", "title": "Sent", "help": "You sent it.", "items": []},
+    {"key": "interview", "title": "Interview", "help": "An interview or test is booked.", "items": []},
+    {"key": "offer", "title": "Offer", "help": "Offers you have received.", "items": []}],
+    "closed": [{"id": "demo:3", "number": 3, "title": "Archive Intern", "org": "Old Mill Museum",
+                "why": "You discarded it: too much effort"}]}
+
+
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
 MADE_UP_PAGES = {
@@ -90,6 +127,9 @@ MADE_UP_PAGES = {
                              "at": "2026-10-22T09:00:00Z", "when": "09:00", "text": "Nothing was sent.",
                              "action": None, "tone": "warn", "employer": False}]},
     "/activity": {"days": [{"day": "Today", "items": []}], "more": None},
+    # Applications
+    "/applications": MADE_UP_BOARD,
+    "/applications/1": MADE_UP_APP,
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
