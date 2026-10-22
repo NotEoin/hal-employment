@@ -8,7 +8,9 @@ Run with: HAL_TEST_BROWSER=1 .venv/bin/python -m unittest discover tests
 from __future__ import annotations
 
 import contextlib
+import time
 import unittest
+from pathlib import Path
 
 from support.fake_api import FakeServer, FakeState, made_up_session, made_up_status
 from support.ui import ROUTES, AppPage, chromium, skip_unless_browser
@@ -23,6 +25,34 @@ NAV_TEXTS = """() => [...document.querySelectorAll('nav.rail .nav')].map(b => {
   const words = b.textContent.replace(c ? c.textContent : '', '').trim();
   return [words, c ? c.textContent : null, !!(c && c.classList.contains('hot'))];
 })"""
+# The rail's words for each page module. A page whose file still starts with the stub comment is left out of
+# a person's own rail, so the expected rail follows whichever pages have landed.
+PAGE_FILES = {"Home": "home", "Jobs": "jobs", "Applications": "apps", "Messages": "messages", "My CV": "cv",
+              "Documents": "docs", "Your record": "record", "Activity": "activity", "What Hal remembers": "memory",
+              "Settings": "settings"}
+PAGES_DIR = Path(__file__).resolve().parents[2] / "jobhunt" / "web" / "static" / "app" / "pages"
+SETTLE_S = 10.0   # the status reply and stubPages() can land well after the heading on a loaded machine
+POLL_S = 0.1
+
+
+def built(label: str) -> bool:
+    """True when the page behind a rail label is no longer a stub."""
+    return not (PAGES_DIR / f"{PAGE_FILES[label]}.js").read_text(encoding="utf-8").startswith("/* STUB:")
+
+
+def settled(read, want, seconds: float = SETTLE_S):
+    """`read()` once it equals `want`, or its last value after `seconds`.
+
+    Polled from Python, because `wait_for_function` evaluates strings, which the app's CSP refuses.
+    """
+    end = time.monotonic() + seconds
+    got = read()
+    while got != want and time.monotonic() < end:
+        time.sleep(POLL_S)
+        got = read()
+    return got
+
+
 TAB_PRESSES = 12  # more than the focusable elements in the shortcuts dialog, so the focus has to wrap
 
 
@@ -57,7 +87,8 @@ class ShellTest(unittest.TestCase):
                 with self.subTest(size=size, route=route):
                     p.open(route)
                     page = route.split("-")[0]
-                    self.assertEqual(p.page.title(), "(1) " + TITLES[page] + " - Hal Employment")
+                    title = "(1) " + TITLES[page] + " - Hal Employment"
+                    self.assertEqual(settled(p.page.title, title), title)
                     self.assertEqual(p.sideways(), 0)
                     if page != "setup":
                         p.page.wait_for_selector("#main h1:focus")
@@ -166,8 +197,10 @@ class ShellTest(unittest.TestCase):
     def test_pages_still_being_built_are_left_out_of_a_persons_own_rail(self) -> None:
         srv = self.serve()
         p = self.tab(srv).open("home")
-        self.assertEqual([n[0] for n in p.page.evaluate(NAV_TEXTS)], ["Home", "Help and shortcuts"])
-        self.assertIn("This part is being built.", p.page.inner_text("#main"))
+        rail = ["Home"] + [label for label in FULL_MENU[1:-1] if built(label)] + ["Help and shortcuts"]
+        self.assertEqual(settled(lambda: [n[0] for n in p.page.evaluate(NAV_TEXTS)], rail), rail)
+        if not built("Home"):
+            self.assertIn("This part is being built.", p.page.inner_text("#main"))
         self.assertNotIn("classic", p.page.inner_text("#main"))
 
     def test_on_a_narrow_window_the_menu_slides_in_and_esc_closes_it(self) -> None:

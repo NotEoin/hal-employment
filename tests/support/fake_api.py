@@ -2,7 +2,8 @@
 
 It serves `jobhunt/web/static/app/` exactly as the real server will (the page at `/`, its files under
 `/app/`, the same Content-Security-Policy with the import map's hash) and answers the few API v2 routes
-the shell calls with made-up data. Pages still being built call nothing else. Stdlib only, bound to
+the shell calls with made-up data, plus a made-up reply for each built page's own GET routes
+(`MADE_UP_PAGES`), so the shell's route test draws every page without a 404. Stdlib only, bound to
 127.0.0.1 on a free port; nothing here reads the person's data or Hal's database.
 
 The real server replaces this for the pages' own tests; the shell's tests keep using it.
@@ -20,7 +21,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 APP_DIR = Path(__file__).resolve().parents[2] / "jobhunt" / "web" / "static" / "app"
 IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)
@@ -69,6 +70,14 @@ MADE_UP_HOME = {"date_words": "Thursday 22 October", "greeting": "Good morning, 
 MADE_UP_SEARCH = [{"label": "Museum Assistant, Riverside Trust", "kind": "Job", "route": "job-demo%3A1"},
                   {"label": "Search for jobs now", "kind": "Action", "action": "/jobs/search"}]
 
+# Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
+# the routes it calls when it first draws; a page's own tests run it against the real server instead.
+MADE_UP_PAGES = {
+    # Your record
+    "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
+                "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
+}
+
 
 @dataclass
 class FakeState:
@@ -78,6 +87,7 @@ class FakeState:
     status: dict = field(default_factory=made_up_status)
     home: dict = field(default_factory=lambda: json.loads(json.dumps(MADE_UP_HOME)))
     search: list = field(default_factory=lambda: list(MADE_UP_SEARCH))
+    pages: dict = field(default_factory=lambda: json.loads(json.dumps(MADE_UP_PAGES)))
     posts: list = field(default_factory=list)      # (path, body) of every POST, PUT and DELETE received
     stopping: threading.Event = field(default_factory=threading.Event)
 
@@ -143,6 +153,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(st.status)
         elif path == "/home":
             self._json(st.home)
+        elif unquote(path) in st.pages:
+            self._json(st.pages[unquote(path)])
         elif path == "/search":
             q = (query.get("q") or [""])[0].lower()
             self._json([r for r in st.search if q in r["label"].lower()])
