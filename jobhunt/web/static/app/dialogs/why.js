@@ -1,8 +1,9 @@
-/* STUB: the home part */
-/* The "Why Hal did this" dialog. This part is being built; until then it shows the stub card. */
-import { stubDialog } from "../ui/stub.js";
+/* The "Why Hal did this" drawer, opened with openDialog("why", { item }) or ({ id }); see ui/why.js. */
+import { html } from "../core/html.js";
+import { WhyDrawer } from "../ui/why.js";
 
-export const STUB = "home";
-const Stub = stubDialog("Why Hal did this", "home");
-Stub.drawer = true;
-export default Stub;
+function Why({ d }) {
+  return html`<${WhyDrawer} item=${d.item} id=${d.id} />`;
+}
+Why.drawer = true;
+export default Why;

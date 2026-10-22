@@ -1,6 +1,7 @@
-"""Figures for the statistics page: applications sent over time, replies, and where they stand."""
+"""Figures for the statistics page and Home's "This week": applications sent over time, replies, and where they
+stand."""
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from statistics import median
 
 SENT = ("applied", "assessment", "interview", "offer", "rejected", "withdrawn")
@@ -62,3 +63,37 @@ def summary(con) -> dict:
         "ready": one("SELECT COUNT(*) FROM jobs WHERE status = 'ready' AND active = 1"),
         "applying": one("SELECT COUNT(*) FROM jobs WHERE status = 'applying'"),
     }
+
+
+WEEK_DAYS = 7
+# Home's pipeline bar, in board order, with the statuses each stage counts.
+PIPELINE = (("Getting ready", "ready"), ("Form filled", "form"), ("Sent", "sent"), ("Interview", "interview"),
+            ("Offer", "offer"), ("Closed", "closed"))
+INTERVIEWS = ("assessment", "interview")
+
+
+def week(con, now: datetime | None = None) -> dict:
+    """Home's "This week": new matches, applications sent, replies and interviews in the last 7 days, and
+    where every application stands. Old (+00:00) and new (Z) times compare on their first 19 characters."""
+    from .docs.routes import column
+
+    now = now or datetime.now().astimezone()
+    since_utc = (now - timedelta(days=WEEK_DAYS)).astimezone(UTC).isoformat()[:19]
+
+    def events(statuses) -> int:
+        marks = ",".join("?" * len(statuses))
+        return con.execute(f"""SELECT count(DISTINCT job_id) FROM events WHERE kind = 'status'
+                               AND substr(detail, 1, instr(detail || ':', ':') - 1) IN ({marks})
+                               AND substr(at, 1, 19) >= ?""", (*statuses, since_utc)).fetchone()[0]
+
+    matches = con.execute("""SELECT count(*) FROM jobs WHERE substr(first_seen, 1, 19) >= ? AND active = 1
+                             AND status IN ('new', 'shortlisted', 'ready')""", (since_utc,)).fetchone()[0]
+    # From job statuses, as the board reads them, because applications sent before Hal kept an application
+    # row for every job still count.
+    stages = Counter(column(r["status"], r["stage"]) for r in con.execute(
+        """SELECT j.status, a.stage FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
+            WHERE j.status IN ('applying', 'applied', 'assessment', 'interview', 'offer', 'rejected', 'withdrawn')
+               OR (j.status IN ('closed', 'skipped') AND a.job_id IS NOT NULL)"""))
+    return {"matches": matches, "sent": events(("applied",)), "replies": events(REPLIES),
+            "interviews": events(INTERVIEWS),
+            "pipeline": [{"stage": label, "key": key, "n": stages[key]} for label, key in PIPELINE]}
