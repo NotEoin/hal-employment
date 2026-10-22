@@ -40,5 +40,11 @@ def saved(answers: dict[str, str] | None = None) -> Iterator[dict[str, str]]:
     stub.value_for_form = lambda key: answers.get(key)
     stub.values_for_guard = lambda: _guard_values(answers)
     parent = importlib.import_module("jobhunt.core.settings")
-    with mock.patch.dict(sys.modules, {NAME: stub}), mock.patch.object(parent, "private", stub, create=True):
-        yield answers
+    # Only this one entry is put back afterwards: `mock.patch.dict(sys.modules)` would also drop every module
+    # imported inside the block, and numpy refuses to be imported twice in one process.
+    sys.modules[NAME] = stub
+    try:
+        with mock.patch.object(parent, "private", stub, create=True):
+            yield answers
+    finally:
+        sys.modules.pop(NAME, None)
