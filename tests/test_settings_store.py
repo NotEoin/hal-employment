@@ -203,5 +203,118 @@ class Store(unittest.TestCase):
         self.assertEqual(heard, ["you.city"])
 
 
+class Routes(unittest.TestCase):
+    """The Settings page's API against a real server in its own home."""
+
+    def setUp(self):
+        from support.api import HalServer
+
+        self.hal = HalServer().__enter__()
+        self.addCleanup(self.hal.__exit__, None, None, None)
+        self.client = self.hal.signed_in()
+
+    def test_a_change_through_the_page_answers_with_its_words(self):
+        reply = self.client.request("PUT", "/api/v2/settings/goal.min_pay", {"value": "\u00a324,000"})
+        self.assertEqual(reply.status, 200, reply.text)
+        body = reply.json()
+        self.assertEqual((body["value"], body["display"]), (24000, settings.display("goal.min_pay", 24000)))
+        self.assertIsNotNone(body["goal_version"])
+        values = self.client.get("/api/v2/settings").json()
+        self.assertEqual(values["values"]["goal.min_pay"], 24000)
+        self.assertIn("goal.min_pay", values["changed"])
+        self.assertEqual(values["secrets"]["email.app_password"], "not saved")
+        self.assertNotIn("you.private", values["values"])
+        reset = self.client.request("DELETE", "/api/v2/settings/goal.min_pay").json()
+        self.assertEqual(reset["value"], 0)
+
+    def test_a_bad_value_through_the_page_names_its_field(self):
+        reply = self.client.request("PUT", "/api/v2/settings/goal.min_pay", {"value": "lots"})
+        self.assertEqual(reply.status, 400)
+        self.assertEqual(reply.json()["error"]["field"], "goal.min_pay")
+
+    def test_a_port_change_says_a_restart_is_needed(self):
+        self.assertFalse(self.client.get("/api/v2/settings").json()["restart_needed"])
+        body = self.client.request("PUT", "/api/v2/settings/advanced.port", {"value": 8801}).json()
+        self.assertTrue(body["restart"])
+        self.assertTrue(self.client.get("/api/v2/settings").json()["restart_needed"])
+
+    def test_the_schema_hides_developer_rows_and_disables_local_rows_remotely(self):
+        settings.set("advanced.developer_mode", False)
+        groups = self.client.get("/api/v2/settings/schema").json()["groups"]
+        keys = {i["key"] for g in groups for i in g["items"]}
+        self.assertNotIn("addon", {g["id"] for g in groups})
+        self.assertIn("you.name", keys)
+        remote = self.hal.signed_in(remote=True, remote_host="desktop")
+        rows = {i["key"]: i for g in remote.get("/api/v2/settings/schema").json()["groups"] for i in g["items"]}
+        self.assertTrue(rows["record.folder"]["disabled_why"])
+        reply = remote.request("PUT", "/api/v2/settings/record.folder", {"value": "/made-up/record"})
+        self.assertEqual(reply.status, 409)
+
+    def test_an_unknown_setting_is_not_found(self):
+        self.assertEqual(self.client.request("PUT", "/api/v2/settings/goal.nothing", {"value": 1}).status, 404)
+
+
+class Routes(unittest.TestCase):
+    """The Settings page's API against a real server."""
+
+    def setUp(self):
+        from support.api import HalServer
+
+        self.hal = HalServer().__enter__()
+        self.addCleanup(self.hal.__exit__, None, None, None)
+        self.client = self.hal.signed_in()
+
+    def test_a_bad_value_answers_400_with_the_field_and_words(self):
+        reply = self.client.request("PUT", "/api/v2/settings/goal.min_pay", {"value": "lots"})
+        self.assertEqual(reply.status, 400)
+        error = reply.json()["error"]
+        self.assertEqual(error["field"], "goal.min_pay")
+        self.assertIn("24k", error["message"])
+
+    def test_a_change_answers_its_words_and_a_goal_version(self):
+        reply = self.client.request("PUT", "/api/v2/settings/goal.min_pay", {"value": "24,000"})
+        self.assertEqual(reply.status, 200, reply.text)
+        body = reply.json()
+        self.assertEqual(body["value"], 24000)
+        self.assertIsNotNone(body["goal_version"])
+        values = self.client.get("/api/v2/settings").json()
+        self.assertEqual(values["values"]["goal.min_pay"], 24000)
+        self.assertIn("goal.min_pay", values["changed"])
+        reset = self.client.request("DELETE", "/api/v2/settings/goal.min_pay").json()
+        self.assertEqual(reset["value"], 0)
+
+    def test_a_port_change_says_a_restart_is_needed(self):
+        self.assertFalse(self.client.get("/api/v2/settings").json()["restart_needed"])
+        self.client.request("PUT", "/api/v2/settings/advanced.port", {"value": 8800})
+        self.assertTrue(self.client.get("/api/v2/settings").json()["restart_needed"])
+
+    def test_the_schema_has_the_groups_in_page_order(self):
+        groups = self.client.get("/api/v2/settings/schema").json()["groups"]
+        self.assertEqual(groups[0]["id"], "you")
+        self.assertTrue(all(g["items"] for g in groups))
+
+    def test_secrets_and_private_answers_are_never_sent_back(self):
+        from jobhunt.core.settings import secrets
+
+        with secrets.use_keyring(None):
+            saved = self.client.request("PUT", "/api/v2/secrets/sites.reed_key", {"value": "made-up-reed-9911"})
+            self.assertEqual(saved.json()["status"], "saved")
+            private = self.client.request("PUT", "/api/v2/private", {"answers": {"adjustments": "SYNTH-PRIVATE-7731"}})
+            self.assertEqual(private.status, 200, private.text)
+            pages = [self.client.get(p).text for p in ("/api/v2/settings", "/api/v2/private", "/api/v2/settings/schema")]
+            for text in [saved.text, private.text, *pages]:
+                self.assertNotIn("made-up-reed-9911", text)
+                self.assertNotIn("SYNTH-PRIVATE", text)
+            self.assertEqual(self.client.get("/api/v2/settings").json()["secrets"]["sites.reed_key"], "saved")
+            self.assertEqual(self.client.request("DELETE", "/api/v2/secrets/sites.reed_key").json(),
+                             {"status": "not saved"})
+
+    def test_a_folder_on_this_computer_cannot_be_changed_from_another(self):
+        remote = self.hal.signed_in(remote=True, remote_host="made-up-laptop")
+        reply = remote.request("PUT", "/api/v2/settings/record.folder", {"value": "/made-up/record"})
+        self.assertEqual(reply.status, 409)
+        self.assertEqual(reply.json()["error"]["code"], "remote")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -123,5 +123,38 @@ class Secrets(unittest.TestCase):
             secrets.put("email.app_password", "   ")
 
 
+class Routes(unittest.TestCase):
+    """The secrets routes never answer with a value."""
+
+    def setUp(self):
+        from support.api import HalServer
+
+        ctx = secrets.use_keyring(None)
+        ctx.__enter__()
+        self.addCleanup(ctx.__exit__, None, None, None)
+        self.hal = HalServer().__enter__()
+        self.addCleanup(self.hal.__exit__, None, None, None)
+        self.client = self.hal.signed_in()
+
+    def test_a_saved_secret_is_only_ever_reported_as_saved(self):
+        reply = self.client.request("PUT", "/api/v2/secrets/email.app_password", {"value": APP_PASSWORD})
+        self.assertEqual(reply.json(), {"status": "saved", "store": {"name": "a protected file", "locked": False}})
+        listing = self.client.get("/api/v2/settings")
+        self.assertEqual(listing.json()["secrets"]["email.app_password"], "saved")
+        self.assertNotIn(APP_PASSWORD, listing.text)
+        self.assertEqual(self.client.request("DELETE", "/api/v2/secrets/email.app_password").json(),
+                         {"status": "not saved"})
+
+    def test_an_empty_secret_is_refused_with_its_field(self):
+        reply = self.client.request("PUT", "/api/v2/secrets/sites.reed_key", {"value": " "})
+        self.assertEqual((reply.status, reply.json()["error"]["field"]), (400, "sites.reed_key"))
+        self.assertEqual(self.client.request("PUT", "/api/v2/secrets/nothing", {"value": "x"}).status, 404)
+
+    def test_retry_is_offered_only_on_the_computer_hal_runs_on(self):
+        remote = self.hal.signed_in(remote=True, remote_host="desktop")
+        self.assertEqual(remote.post("/api/v2/secrets/retry").status, 409)
+        self.assertEqual(self.client.post("/api/v2/secrets/retry").json(), {"locked": False})
+
+
 if __name__ == "__main__":
     unittest.main()

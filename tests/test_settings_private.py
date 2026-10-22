@@ -112,5 +112,33 @@ class Private(unittest.TestCase):
                         self.assertIn(rel, READERS[name], f"{rel}:{node.lineno} reads {name}")
 
 
+class Routes(unittest.TestCase):
+    """The private answer routes are write only."""
+
+    def setUp(self):
+        from support.api import HalServer
+
+        self.hal = HalServer().__enter__()
+        self.addCleanup(self.hal.__exit__, None, None, None)
+        self.client = self.hal.signed_in()
+
+    def test_answers_go_in_and_only_saved_or_not_comes_out(self):
+        reply = self.client.request("PUT", "/api/v2/private", {"answers": {"adjustments": CANARY, "carer": "No"}})
+        self.assertEqual(reply.status, 200, reply.text)
+        self.assertTrue(reply.json()["saved"]["adjustments"])
+        listing = self.client.get("/api/v2/private")
+        self.assertNotIn("SYNTH-PRIVATE", listing.text)
+        saved = {q["key"]: q["saved"] for q in listing.json()["questions"]}
+        self.assertEqual(saved["carer"], True)
+        for path in ("/api/v2/settings", "/api/v2/settings/schema"):
+            self.assertNotIn("SYNTH-PRIVATE", self.client.get(path).text)
+        self.assertEqual(self.client.request("DELETE", "/api/v2/private/carer").json(), {"saved": False})
+
+    def test_a_bad_option_names_its_question_and_not_the_answer(self):
+        reply = self.client.request("PUT", "/api/v2/private", {"answers": {"disability": "SYNTH-PRIVATE"}})
+        self.assertEqual((reply.status, reply.json()["error"]["field"]), (400, "disability"))
+        self.assertNotIn("SYNTH-PRIVATE", reply.text)
+
+
 if __name__ == "__main__":
     unittest.main()
