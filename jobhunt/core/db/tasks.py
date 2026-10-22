@@ -5,20 +5,30 @@ job is a data task instead: `@data_task(name, after=N, title=...)` registers a f
 starts as a persisted background action once migration N has applied. State lives in the
 `data_tasks` table, so a task that failed is retried at the next start and shown in "Is Hal working?".
 
-This module holds the decorator, the registry and the state helpers; it never runs a task itself.
+The decorator, the registry and the state helpers came first; the runner below registers each
+task as an action kind of the same name (area system, priority 2) and runs the due ones one after another
+in migration order, on one background thread, because a later task may rely on an earlier one. Tasks are
+found in modules named `tasks.py` or `*_tasks.py`; the old to-do list `jobhunt.tasks` shares the name and is
+skipped.
 """
 
 from __future__ import annotations
 
+import logging
 import sqlite3
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from jobhunt.core.db.migrate import LATEST, iso, user_version
 
+log = logging.getLogger(__name__)
+
 STATES = ("pending", "running", "done", "error")
 DONE = "done"
+WHY = "Hal is updating its records after an update"
+NOT_TASK_MODULES = {"jobhunt.tasks"}    # the to-do list, older than data tasks
 
 
 @dataclass(frozen=True)
@@ -78,3 +88,108 @@ def mark(con: sqlite3.Connection, task: DataTask, new_state: str, detail: str | 
                started = coalesce(excluded.started, data_tasks.started),
                ended = CASE WHEN excluded.state = 'running' THEN NULL ELSE coalesce(excluded.ended, ended) END""",
         (task.name, task.after, new_state, started, ended, detail))
+
+
+# ---------------------------------------------------------------------------------------------- runner
+
+def load() -> list[DataTask]:
+    """Imports every module that may register data tasks and makes each task an action kind."""
+    import importlib
+
+    from jobhunt.core import plugins
+
+    for name in plugins.names("tasks"):
+        if name in NOT_TASK_MODULES or name == __name__:
+            continue
+        try:
+            importlib.import_module(name)
+        except Exception as e:  # kept for the health check, as plugins.modules does
+            plugins.FAILED[name] = f"{type(e).__name__}: {e}"
+            log.exception("could not import %s", name)
+    for task in TASKS.values():
+        _as_kind(task)
+    return list(TASKS.values())
+
+
+def _as_kind(task: DataTask) -> None:
+    from jobhunt.core import runner
+
+    if task.name in runner.KINDS:
+        return
+
+    def run_task(ctx) -> str:
+        ctx.step(task.title)
+        _write_state(task, "running")
+        try:
+            task.fn(ctx)
+        except BaseException as e:
+            _write_state(task, "error", f"{type(e).__name__}: {e}")
+            raise
+        _write_state(task, DONE)
+        return task.title
+
+    runner.action(task.name, area="system", label=task.title, why=WHY, priority=2, exclusive="subject",
+                  example=lambda world: {})(run_task)
+
+
+def _write_state(task: DataTask, new_state: str, detail: str | None = None) -> None:
+    """Writes a task's state on a connection of its own, so it holds even when the task's work rolls back."""
+    from jobhunt import db
+
+    con = db.connect()
+    try:
+        mark(con, task, new_state, detail)
+        con.commit()
+    finally:
+        con.close()
+
+
+def run_due(con: sqlite3.Connection | None = None) -> list[dict]:
+    """Runs every due task now, in this thread, in migration order; returns each run as `runner.get` does.
+
+    A task that fails is left in state error and tried again at the next call; the ones after it still run.
+    """
+    from jobhunt import db
+    from jobhunt.core import runner
+
+    load()
+    own = con is None
+    con = con or db.connect()
+    try:
+        due_now = due(con)
+    finally:
+        if own:
+            con.close()
+    out = []
+    for task in due_now:
+        try:
+            out.append(runner.run(task.name, subject=f"_data:{task.name}"))
+        except RuntimeError as e:
+            log.warning("data task %s did not start: %s", task.name, e)
+    return out
+
+
+def run_now(name: str) -> dict:
+    """Runs one task now in this thread, whether or not it ran before (the importers call it)."""
+    from jobhunt.core import runner
+
+    load()
+    if name not in TASKS:
+        raise LookupError(f"there is no data task {name!r}")
+    return runner.run(name, subject=f"_data:{name}")
+
+
+def start_due() -> threading.Thread:
+    """Runs the due tasks on a background thread (server start); returns the thread."""
+    thread = threading.Thread(target=_run_due_logged, name="data-tasks", daemon=True)
+    thread.start()
+    return thread
+
+
+def _run_due_logged() -> None:
+    try:
+        for done in run_due():
+            if done["state"] != "done":
+                log.warning("data task %s ended %s: %s", done["kind"], done["state"], done["error"] or "")
+    except Exception:  # logged; the tasks are tried again at the next start
+        log.exception("the data tasks could not run")
