@@ -16,6 +16,9 @@ Kinds:
   alert       job-alert digest (Indeed, LinkedIn, Gradcracker, ...)
   admin       security codes, GDPR notices, account mail
   other
+
+The inbox is the `email.address` setting and its app password the `email.app_password` secret; nothing
+about the person is written here.
 """
 import difflib
 import email
@@ -23,15 +26,24 @@ import email.header
 import email.utils
 import html
 import imaplib
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import db, llm
+from .ai import prompts
 from .score import score
 
-ADDRESS = "firstname.lastname@example.com"
+log = logging.getLogger(__name__)
+
+# A fixed inbox for the made-up world of the tests (tests/support/world.py patches it); None means the
+# `email.address` setting, read when used.
+ADDRESS: str | None = None
+# Where the old layout kept the app password, read only when no secret is saved yet (before the import).
 PASSWORD_FILE = Path("~/.config/jobhunt/gmail-app-password").expanduser()
+PASSWORD_SECRET = "email.app_password"
+IMAP_TIMEOUT = 60   # seconds; a stalled IMAP connection must not hold the email check for ever
 FIRST_SYNC_DAYS = 400
 
 # Application status each kind moves a job to, and how far along that is.
@@ -82,12 +94,38 @@ NOREPLY = re.compile(r"no-?reply|donotreply|do-not-reply|notifications?@|mailer|
                      r"smartrecruiters|workable|teamtailor|recruitee|personio|jobs2web)", re.I)
 
 
+def address() -> str:
+    """The job inbox's address, lower case: the `email.address` setting, or "" when none is set."""
+    if ADDRESS is not None:
+        return ADDRESS.lower()
+    from .core import settings
+
+    return (settings.get("email.address") or "").strip().lower()
+
+
+def password() -> str | None:
+    """The inbox's app password: the saved secret, else the old layout's file; None when neither exists."""
+    from .core.settings import secrets
+
+    try:
+        saved = secrets.get(PASSWORD_SECRET, interactive=False)
+    except secrets.SecretsLocked:
+        log.info("the email app password is waiting for the keyring to be unlocked")
+        saved = None
+    if saved:
+        return saved.strip().replace(" ", "")
+    if PASSWORD_FILE.exists():
+        return PASSWORD_FILE.read_text().strip().replace(" ", "")
+    return None
+
+
 def classify(sender: str, rcpt: str, subject: str, body: str) -> str:
     s = f"{subject}\n{body[:4000]}"
-    if ADDRESS in sender.lower():
+    own = address()
+    if own and own in sender.lower():
         if re.search(r"^\[jobhunt\]", subject):
             return "admin"
-        others = [a for a in re.findall(r"[\w.+-]+@[\w.-]+", rcpt) if a.lower() != ADDRESS]
+        others = [a for a in re.findall(r"[\w.+-]+@[\w.-]+", rcpt) if a.lower() != own]
         if others and re.search(r"\bappl(y|ication)\b|\bCV\b|r[e\u00e9]sum[e\u00e9]", s, re.I):
             return "applied"
         return "other"
@@ -143,7 +181,15 @@ ROLE_PATTERNS = [
 SENDER_NOISE = re.compile(r"\b(recruitment|recruiting|hiring team|careers?|talent( acquisition)?|"
                           r"jobs|team|hr|notifications?|no-?reply|via \w+|from)\b", re.I)
 GENERIC = {"group", "department", "office", "service", "services", "indeed", "indeed apply", "greenhouse", "workday", "lever", "ashby", "linkedin", "us",
-           "you", "firstname", "the team", "our team", "your application"}
+           "you", "the team", "our team", "your application"}
+
+
+def _generic() -> set[str]:
+    """Names that are never an employer: GENERIC, plus the person's own first name (their sent mail)."""
+    from .core import settings
+
+    name = (settings.get("you.preferred_name") or settings.get("you.name") or "").split()
+    return GENERIC | ({name[0].lower()} if name else set())
 
 
 def _first(patterns, *texts):
@@ -152,7 +198,7 @@ def _first(patterns, *texts):
             m = re.search(p, t, re.M)
             if m:
                 v = re.sub(r"^(our|the|a|an)\s+", "", m.group(1).strip(" -\u2013:'\u2019\""), flags=re.I)
-                if v and v.lower() not in GENERIC and len(v) <= 80:
+                if v and v.lower() not in _generic() and len(v) <= 80:
                     return v
     return None
 
@@ -167,7 +213,7 @@ def company_of(sender: str, rcpt: str, subject: str, body: str, kind: str) -> st
     display = email.utils.parseaddr(sender)[0]
     if re.search(r"\b(recruitment|recruiting|hiring team|careers|talent)\b", display, re.I):
         org = SENDER_NOISE.sub("", display).strip(" -\u2013|\"")
-        if org and org.lower() not in GENERIC:
+        if org and org.lower() not in _generic():
             return org
     third_party = re.match(r"^([A-Z][\w&.]+) (?:Assessment|Interview|Online Test|Video Interview)\b", subject)
     if third_party:  # assessment vendors name the employer in the subject
@@ -177,7 +223,7 @@ def company_of(sender: str, rcpt: str, subject: str, body: str, kind: str) -> st
         return found
     name = display
     name = SENDER_NOISE.sub("", name).strip(" -\u2013|\"")
-    if name and name.lower() not in GENERIC and "@" not in name:
+    if name and name.lower() not in _generic() and "@" not in name:
         return name
     dom = re.search(r"@([\w-]+)\.", sender)
     if dom and dom.group(1).lower() not in ("myworkday", "greenhouse", "ashbyhq", "gmail", "us", "eu"):
@@ -190,17 +236,10 @@ def role_of(subject: str, body: str) -> str | None:
     return _first(ROLE_PATTERNS, subject, body[:1500])
 
 
-REFINE_PROMPT = """You read emails from a job seeker's inbox. Reply with JSON only:
-{"kind": one of "confirmed","assessment","interview","offer","rejected","human","other",
- "company": the hiring company's name (not the ATS or job board, e.g. not Greenhouse, Workday, Indeed), or null,
- "role": the job title applied for, or null}
-"human" means a real person wrote and probably expects a reply. "other" means not about an application."""
-
-
 def refine(sender, subject, body, kind, company, role):
     """Ask the local model when the rules are unsure. Rules win if it's down."""
     try:
-        out = llm.chat_json(REFINE_PROMPT, f"From: {sender}\nSubject: {subject}\n\n{body[:3000]}",
+        out = llm.chat_json(prompts.text("email_refine"), f"From: {sender}\nSubject: {subject}\n\n{body[:3000]}",
                             role="fast", timeout=90)
     except llm.LLMUnavailable:
         return kind, company, role
@@ -211,16 +250,13 @@ def refine(sender, subject, body, kind, company, role):
 
 
 
-ALIASES = {"jingdong": "jd", "jingdongretail": "jd", "relaytech": "relay", "fdmgroup": "fdm"}
-
-
 def norm(company: str | None) -> str:
     c = (company or "").lower()
     c = re.sub(r"\.(com|io|ai|co\.uk|co)\b", "", c)
     c = re.sub(r"\b(ltd|limited|inc|plc|llc|group|technologies|technology|tech|data|uk|holdings|"
                r"careers|the|labs?)\b", "", c)
     c = re.sub(r"[^a-z0-9]", "", c)
-    return ALIASES.get(c, c)
+    return c
 
 
 def _similar(a: str | None, b: str | None) -> float:
@@ -306,10 +342,13 @@ def body_text(msg) -> str:
 
 
 def connect() -> imaplib.IMAP4_SSL:
-    if not PASSWORD_FILE.exists():
+    """Opens the job inbox read-only; exits with the old message when no app password is saved."""
+    secret = password()
+    if not secret:
+        # The words are the command line's (gate G4); Settings, Email shows where to add the password.
         raise SystemExit(f"No Gmail app password at {PASSWORD_FILE}")
-    M = imaplib.IMAP4_SSL("imap.gmail.com")
-    M.login(ADDRESS, PASSWORD_FILE.read_text().strip().replace(" ", ""))
+    M = imaplib.IMAP4_SSL("imap.gmail.com", timeout=IMAP_TIMEOUT)
+    M.login(address(), secret)
     M.select('"[Gmail]/All Mail"', readonly=True)
     return M
 

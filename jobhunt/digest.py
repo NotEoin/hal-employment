@@ -1,10 +1,15 @@
-"""Daily digest email, sent from the job inbox to itself (or to digest_to)."""
+"""Daily digest email, sent from the job inbox to itself (or to `notify.daily_to`).
+
+The spoken briefing greets the person by the name they chose (`you.preferred_name`), or by no name when
+they have given none. This is the only email Hal sends, and only to the person.
+"""
 import smtplib
 from datetime import date, datetime
 from email.message import EmailMessage
 
 from . import gmail
 from .config import CONFIG
+from .core import settings
 from .vault import actions
 
 
@@ -51,7 +56,8 @@ def spoken(con) -> str:
     """Returns a short briefing written to be read aloud."""
     hour = datetime.now().hour
     greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
-    out = [f"{greeting}, Firstname."]
+    name = (settings.get("you.preferred_name") or "").strip()
+    out = [f"{greeting}, {name}." if name else f"{greeting}."]
     urgent = con.execute("""SELECT company, status FROM jobs WHERE status IN ('assessment','interview','offer')""").fetchall()
     for kind in ("offer", "interview", "assessment"):
         names = [r["company"] for r in urgent if r["status"] == kind]
@@ -77,15 +83,19 @@ def spoken(con) -> str:
 
 
 def send(con, dry_run: bool = False) -> str:
+    """Emails the digest to the person (or returns it with `dry_run`); returns the subject."""
     subject, body = build(con)
     if dry_run:
         return f"{subject}\n\n{body}"
+    inbox, secret = gmail.address(), gmail.password()
+    if not inbox or not secret:
+        raise SystemExit("No email address or app password saved; add them in Settings, Email.")
     msg = EmailMessage()
-    msg["From"] = gmail.ADDRESS
-    msg["To"] = CONFIG.get("digest_to") or gmail.ADDRESS
+    msg["From"] = inbox
+    msg["To"] = CONFIG.get("digest_to") or inbox
     msg["Subject"] = subject
     msg.set_content(body)
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
-        s.login(gmail.ADDRESS, gmail.PASSWORD_FILE.read_text().strip().replace(" ", ""))
+        s.login(inbox, secret)
         s.send_message(msg)
     return subject

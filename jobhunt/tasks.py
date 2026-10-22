@@ -8,8 +8,11 @@ Every assessment invitation also brings the same neutral to-do, to read it befor
 timed tests rarely change once begun. It is the same for everyone, whatever private answers are saved,
 so its presence says nothing about them; it names no private answer or file.
 """
-from . import db
-from .gmail import ADDRESS
+from . import db, gmail
+
+# A fixed inbox for the made-up world of the tests (tests/support/world.py patches it); None means
+# `gmail.address()`.
+ADDRESS: str | None = None
 
 # How far back a first run looks; older invitations have long expired.
 LOOKBACK = "-21 days"
@@ -29,7 +32,7 @@ def thread_url(thrid: str | None) -> str | None:
     """Returns a Gmail link to the thread, in the job inbox's account."""
     if not thrid:
         return None
-    return f"https://mail.google.com/mail/?authuser={ADDRESS}#all/{int(thrid):x}"
+    return f"https://mail.google.com/mail/?authuser={ADDRESS or gmail.address()}#all/{int(thrid):x}"
 
 
 def sync(con) -> list[int]:
@@ -59,9 +62,13 @@ def sync(con) -> list[int]:
     return made
 
 
-def after_submit(con, job) -> None:
-    """Adds the follow-ups an application needs once it is sent."""
+def after_sent(con, job) -> None:
+    """Adds the follow-ups an application needs once the person has sent it."""
     db.add_todo(con, "message", f"Message the hiring manager at {job['company']}",
                 job_id=job["id"], detail="The drafted message is on the application page.",
                 priority=3, source=f"message:{job['id']}")
     con.commit()
+
+
+# The old name, kept until its callers (apply/queries.py, tests/test_driver.py) move to `after_sent`.
+after_submit = after_sent

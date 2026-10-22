@@ -1,18 +1,33 @@
-"""Stdlib HTTP helpers with an identifying user agent, timeouts and retries."""
+"""Stdlib HTTP helpers with an identifying user agent, timeouts and retries.
+
+The user agent names the app and its version only. A contact address is added only when the person sets
+`sites.contact`, because every job site sees it.
+"""
 import json
 import time
 import urllib.error
 import urllib.request
 
-UA = "jobhunt/0.1 (personal job search; contact firstname.lastname@example.com)"
+from . import __version__
+
+PRODUCT = f"HalEmployment/{__version__}"
 
 
 class NotFound(Exception):
-    pass
+    """The page is gone (HTTP 404 or 410)."""
+
+
+def user_agent() -> str:
+    """What job sites see: the app and version, and the `sites.contact` address only if the person set one."""
+    from .core import settings
+
+    contact = (settings.get("sites.contact") or "").strip()
+    return f"{PRODUCT} (job search; contact {contact})" if contact else PRODUCT
 
 
 def get(url: str, timeout: float = 20, retries: int = 1, headers: dict | None = None) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
+    """The page's text, retried once on a server error or a dropped connection; NotFound when it is gone."""
+    req = urllib.request.Request(url, headers={"User-Agent": user_agent(), **(headers or {})})
     for attempt in range(retries + 1):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -33,4 +48,5 @@ def get(url: str, timeout: float = 20, retries: int = 1, headers: dict | None = 
 
 
 def get_json(url: str, **kw):
+    """The page parsed as JSON."""
     return json.loads(get(url, **kw))
