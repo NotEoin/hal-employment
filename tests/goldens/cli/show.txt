@@ -2,7 +2,7 @@ $ jobhunt show cobalt-interview
 Graduate Engineer
 Cobalt Ledger | London | salary n/a
 https://jobs.example.org/cobalt-interview
-status interview | score 80 (London, hybrid, entry-level title, skills +5, small (12 roles open))
+status interview | score 77 (hybrid, entry-level title, skills +5, small (12 roles open))
 posted <time> | first seen <time> | open
 
 We are hiring a graduate software engineer to join our platform team. You will write Python and TypeScript, review code and learn from senior engineers. A degree in computer science or a related subject (2:1 or above) is welcome; no commercial experience is needed. Salary 32,000 to 36,000 GBP. Hybrid, two days a week in the office.

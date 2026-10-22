@@ -1,4 +1,4 @@
 $ jobhunt list --internships
-  71  new         Quillon Health        Graduate Software Engineering Internship                 London
-      greenhouse:quillon-intern  | London, graduate internship, entry-level title, skills +3, small (12 roles open)
+  75  new         Quillon Health        Graduate Software Engineering Internship                 London
+      greenhouse:quillon-intern  | graduate internship, entry-level title, skills +3, small (12 roles open)
 (1 shown)

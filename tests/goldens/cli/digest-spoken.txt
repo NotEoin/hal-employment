@@ -1,2 +1,2 @@
 $ jobhunt digest --spoken
-Good <part of day>, Firstname. You have an interview pending with Cobalt Ledger. You have an assessment pending with Heron Freight. 1 application has gone ten days without a reply. I found 2 strong new matches. The best is Graduate Software Engineer at Fernhill Analytics. 2 application packs are drafted and waiting for you.
+Good <part of day>, Firstname. You have an interview pending with Cobalt Ledger. You have an assessment pending with Heron Freight. 1 application has gone ten days without a reply. I found 3 strong new matches. The best is Graduate Software Engineer at Fernhill Analytics. 2 application packs are drafted and waiting for you.

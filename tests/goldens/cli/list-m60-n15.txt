@@ -1,4 +1,10 @@
 $ jobhunt list -m 60 -n 15
-  80  new         Fernhill Analytics    Graduate Software Engineer                               London
-      greenhouse:fernhill-grad  | London, hybrid, entry-level title, skills +5, small (12 roles open)
-(1 shown)
+  77  new         Fernhill Analytics    Graduate Software Engineer                               London
+      greenhouse:fernhill-grad  | hybrid, entry-level title, skills +5, small (12 roles open)
+  77  new         Tidewater Systems     Junior Software Developer                                Leeds
+      lever:tidewater-grad  | hybrid, entry-level title, skills +5, small (12 roles open)
+  75  new         Brackenridge Labs     Junior Data Analyst                                      Remote (UK)
+      hn:brackenridge-data  | remote, entry-level title, skills +4, niche source
+  64  new         Kestrel Academy       Graduate Developer Programme                             London
+      workable:kestrel-bond  | train-and-place: check bond and repayment terms, entry-level title, skills +0, small (12 roles open)
+(4 shown)

@@ -1,4 +1,4 @@
 $ jobhunt queue
-  80  Sorrel Payments         Software Engineer, Graduate                         lever:sorrel-ready
-   0  Wexford Maps            Graduate Backend Engineer                           greenhouse:wexford-ready
+  77  Sorrel Payments         Software Engineer, Graduate                         lever:sorrel-ready
+  77  Wexford Maps            Graduate Backend Engineer                           greenhouse:wexford-ready
 (2 of 10; open http://127.0.0.1:8737/ to apply)

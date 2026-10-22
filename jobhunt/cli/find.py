@@ -1,6 +1,6 @@
 """Commands for finding and tracking jobs: discover, rescore, add, screen, list, show, set, note, stats, queue, probe.
 
-The bodies moved unchanged from `jobhunt/__main__.py`; the parser, its arguments and help stay there,
+The bodies moved from `jobhunt/__main__.py`; the parser, its arguments and help stay there,
 because the voice bridge and the /jobs command parse what these commands print.
 """
 import re
@@ -10,9 +10,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .. import db
 from ..config import BOARDS_PATH, CONFIG, boards
+from ..find import rules
 from ..http import NotFound
 from ..notify import notify
-from ..score import prefilter, score
+from ..score import prefilter
 from ..sources import academic, aggregators, ats, hn, ktp, startups
 
 STANDALONE = {"hn": hn.fetch, "ktp": ktp.fetch, "yc": startups.yc, "80k": startups.eighty_thousand_hours,
@@ -67,8 +68,7 @@ def cmd_discover(args):
                     except Exception as e:
                         errors.append(f"{j['id']} detail: {e}")
             if db.upsert(con, j):
-                s, why = score(j)
-                con.execute("UPDATE jobs SET score=?, score_notes=? WHERE id=?", (s, why, j["id"]))
+                s = rules.score_and_save(con, j)
                 if s > 0:
                     new_jobs.append((s, j))
         if isinstance(res, tuple):
@@ -125,13 +125,7 @@ def cmd_queue(args):
 
 def cmd_rescore(args):
     con = db.connect()
-    # Applications found in email have no advert to score.
-    rows = con.execute("SELECT * FROM jobs WHERE source != 'email'").fetchall()
-    for r in rows:
-        s, why = score(dict(r))
-        con.execute("UPDATE jobs SET score=?, score_notes=? WHERE id=?", (s, why, r["id"]))
-    con.commit()
-    print(f"rescored {len(rows)}")
+    print(f"rescored {rules.rescore_all(con)}")
 
 
 def _find(con, ref):

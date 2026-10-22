@@ -1,5 +1,5 @@
 $ jobhunt digest --dry-run
-[jobhunt] <time>: 4 need you, 1 new matches
+[jobhunt] <time>: 4 need you, 4 new matches
 
 Job search - <time>
 
@@ -13,12 +13,18 @@ CHANGED IN THE LAST DAY
   - Cobalt Ledger - Graduate Engineer: interview: email: Interview invitation
 
 NEW STRONG MATCHES
-  80  Fernhill Analytics - Graduate Software Engineer | London
+  77  Fernhill Analytics - Graduate Software Engineer | London
       https://jobs.example.org/fernhill-grad
+  77  Tidewater Systems - Junior Software Developer | Leeds
+      https://jobs.example.org/tidewater-grad
+  75  Brackenridge Labs - Junior Data Analyst | Remote (UK)
+      https://jobs.example.org/brackenridge-data
+  64  Kestrel Academy - Graduate Developer Programme | London
+      https://jobs.example.org/kestrel-bond
 
 GRADUATE INTERNSHIPS
-  71  Quillon Health - Graduate Software Engineering Internship | London
+  75  Quillon Health - Graduate Software Engineering Internship | London
       https://jobs.example.org/quillon-intern
 
 PIPELINE  applied 1  assessment 1  interview 1  ready 2  rejected 1  shortlisted 1
-Unreviewed matches scoring 60+: 2   (python -m jobhunt list -m 60)
+Unreviewed matches scoring 60+: 5   (python -m jobhunt list -m 60)
