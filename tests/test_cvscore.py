@@ -1,12 +1,17 @@
 """Scoring a CV: reading it back, judging bullets and finding the evidence a job asks for.
 
-Moved by class from tests/test_apply.py; the test bodies are unchanged.
+Moved by class from tests/test_apply.py. The CV is a made-up person's, drawn by Hal's own PDF writer, and the
+AI is the fake one, answering by purpose.
 """
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from support import legacy
+from support.fake_ai import fake_ai
+from test_pdfread import PEOPLE, Person, made_up_cvs
 
 from jobhunt import cv, cvscore
 
@@ -17,8 +22,11 @@ setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
 class Scoring(unittest.TestCase):
     """Hal's CV layout read back as a parser reads it, and the CV graded by rule."""
 
+    def setUp(self):
+        Person(self, PEOPLE[0])
+
     def cv(self, body: str) -> dict:
-        base = cv.printable(cv.site())
+        base = cv.printable(made_up_cvs()[0])
         base["projects"] = [{**base["projects"][0], "body": body}]
         base["experience"] = []
         return base
@@ -52,7 +60,7 @@ class Scoring(unittest.TestCase):
         """A CV under 250 words still has a text layer; its length is for the length checks to judge."""
         short = self.cv("- Built a parser in Python, with 40 tests.")
         short.update(education=[{"qualification": "Degree", "grade": "Grade",
-                                  "meta": "University | Sep 2023 - Jun 2026", "detail": ""}],
+                                               "meta": "Made-up University | Sep 2023 - Jun 2026", "detail": ""}],
                      skills=[], additional=[], moreProjects="", summary="")
         pdf = self.render(short)
         self.assertLess(len(cvscore.pdf_text(pdf).split()), 250)
@@ -67,18 +75,15 @@ class Scoring(unittest.TestCase):
 
     def test_evidence_the_cv_does_not_hold_counts_as_missing(self):
         job = {"title": "Engineer", "company": "Acme", "description": "You have strong Python. A 2:1 degree is required."}
-        replies = iter([{"requirements": [
-                            {"need": "Python", "kind": "must", "weight": 3, "quote": "You have strong Python."},
-                            {"need": "Degree", "kind": "knockout", "weight": 3, "quote": "A 2:1 degree is required"},
-                            {"need": "Rust", "kind": "must", "weight": 2, "quote": "made up by the model"}]},
-                        {"evidence": [{"id": 1, "match": "direct", "quote": "Built a parser in Python"},
-                                      {"id": 2, "match": "direct", "quote": "a 2:1 in Physics"}]}])
-        saved = cvscore.llm.chat_json, cvscore.gpu.busy
-        cvscore.llm.chat_json, cvscore.gpu.busy = lambda *a, **k: next(replies), lambda: None
-        try:
+        replies = {"cv_needs": json.dumps({"requirements": [
+                       {"need": "Python", "kind": "must", "weight": 3, "quote": "You have strong Python."},
+                       {"need": "Degree", "kind": "knockout", "weight": 3, "quote": "A 2:1 degree is required"},
+                       {"need": "Rust", "kind": "must", "weight": 2, "quote": "made up by the model"}]}),
+                   "cv_evidence": json.dumps({"evidence": [
+                       {"id": 1, "match": "direct", "quote": "Built a parser in Python"},
+                                                           {"id": 2, "match": "direct", "quote": "a 2:1 in Physics"}]})}
+        with fake_ai(replies):
             out = cvscore.match(job, "- Built a parser in Python.\nDegree, Grade")
-        finally:
-            cvscore.llm.chat_json, cvscore.gpu.busy = saved
         # The requirement the advert never stated is dropped; the degree evidence is not in the CV.
         self.assertEqual([r["need"] for r in out["requirements"]], ["Python", "Degree"])
         self.assertEqual([r["match"] for r in out["requirements"]], ["direct", "missing"])
@@ -88,24 +93,48 @@ class Scoring(unittest.TestCase):
         """A requirement the record meets and the CV does not is reported as in the record, and lowers coverage."""
         job = {"title": "Research engineer", "company": "Acme",
                "description": "You have strong Python. Research ethics training is required."}
-        replies = iter([{"requirements": [
-                            {"need": "Python", "kind": "must", "weight": 3, "quote": "You have strong Python."},
-                            {"need": "Ethics training", "kind": "knockout", "weight": 3,
-                             "quote": "Research ethics training is required"}]},
-                        {"evidence": [{"id": 1, "match": "direct", "quote": "Built a parser in Python"},
-                                      {"id": 2, "match": "direct",
-                                       "quote": "Human-subjects research training, completed 5 March 2026"}]}])
-        saved = cvscore.llm.chat_json, cvscore.gpu.busy, cvscore.record.context
-        cvscore.llm.chat_json, cvscore.gpu.busy = lambda *a, **k: next(replies), lambda: None
-        cvscore.record.context = lambda queries, **k: ("[Certificates/CITI.md > CITI]\n"
-                                                       "Human-subjects research training, completed 5 March 2026.")
-        try:
+        replies = {"cv_needs": json.dumps({"requirements": [
+                       {"need": "Python", "kind": "must", "weight": 3, "quote": "You have strong Python."},
+                       {"need": "Ethics training", "kind": "knockout", "weight": 3,
+                        "quote": "Research ethics training is required"}]}),
+                   "cv_evidence": json.dumps({"evidence": [
+                       {"id": 1, "match": "direct", "quote": "Built a parser in Python"},
+                       {"id": 2, "match": "direct",
+                        "quote": "Human-subjects research training, completed 5 March 2026"}]})}
+        found = "[Certificates/Ethics.md > Ethics]\nHuman-subjects research training, completed 5 March 2026."
+        with fake_ai(replies), mock.patch.object(cvscore.record, "context", lambda queries, **k: found):
             out = cvscore.match(job, "- Built a parser in Python.")
-        finally:
-            cvscore.llm.chat_json, cvscore.gpu.busy, cvscore.record.context = saved
         self.assertEqual([r["where"] for r in out["requirements"]], ["cv", "record"])
         self.assertEqual((out["in_record"], out["knockouts_unmet"]), (["Ethics training"], ["Ethics training"]))
         self.assertEqual(out["coverage"], 50)
+
+
+class StickFixes(unittest.TestCase):
+    """What the Windows build fixed in the checks, kept for every CV."""
+
+    def setUp(self):
+        Person(self, PEOPLE[1])
+
+    def test_only_the_profile_links_given_must_be_written_out(self):
+        history = made_up_cvs()[1]            # LinkedIn only, no GitHub
+        pdf = cv.render(history, Path(tempfile.mkdtemp()))
+        contact = next(c for c in cvscore.parsing(history, pdf) if c["name"] == "Contact details in the body")
+        self.assertEqual(contact["score"], 1.0)
+
+    def test_a_cv_without_projects_is_not_marked_down_for_them(self):
+        found = next(c for c in cvscore.content(made_up_cvs()[1]) if c["name"] == "Projects with evidence")
+        self.assertEqual(found["score"], 1.0)
+
+    def test_a_skill_shown_in_another_form_counts_as_backed(self):
+        history = made_up_cvs()[1]
+        history["skills"] = [["Research", ["Collections cataloguing"]]]
+        found = next(c for c in cvscore.content(history) if c["name"].startswith("Skills backed"))
+        self.assertEqual(found["score"], 1.0)
+
+    def test_spelling_is_checked_without_a_system_dictionary(self):
+        with mock.patch.object(cvscore.subprocess, "run", side_effect=FileNotFoundError("no enchant")):
+            wrong = cvscore.misspelt("catalogued the colour archives and recieved visitors", set())
+        self.assertEqual(wrong, ["recieved"])
 
 
 if __name__ == "__main__":

@@ -1,40 +1,37 @@
-"""Cover letters as PDFs in the CV's style, using the portfolio site's PDF builder.
+"""Cover letters as PDFs in the CV's style, drawn with the same PDF writer (`pdfdraw.py`).
 
-The header (name, title, contact line, location) is drawn exactly as on the CV,
-then the date, recipient, subject line and letter body.
+The header (name, title, contact line, location) is drawn exactly as on the CV sent with the letter, then
+the date, recipient, subject line and letter body. The caller passes that CV; without one the header comes
+from the person's main CV, never from a file outside Hal.
 """
-import json
 from datetime import date
 from pathlib import Path
 
-from .cv import CV_JSON, _pdf_builder
+from . import cv, pdfdraw
+from .cvpdf import _drawable
 
 BODY_GAP = 7.0      # space between paragraphs
 BLOCK_GAP = 14.0    # space between the address block, subject and body
+NAME_TRACKING = 0.2  # the CV's name is set with this letter spacing
 
 
-def _header(b, doc, data) -> None:
-    contact = data["contact"]
+def _header(b, doc, data: dict) -> None:
+    contact = data.get("contact") or {}
     doc.y -= b.NAME_SIZE
-    doc.text(b.NAME + " ", b.ML, doc.y, b.F_BOLD, b.NAME_SIZE, b.INK, tracking=0.2)
+    doc.text(_drawable(b.NAME) + " ", b.ML, doc.y, b.F_BOLD, b.NAME_SIZE, b.INK, tracking=NAME_TRACKING)
     doc.y -= 11.5
-    doc.text(data["title"] + " ", b.ML, doc.y, b.F_REG, 9.5, b.META_INK)
+    doc.text(data.get("title", "") + " ", b.ML, doc.y, b.F_REG, 9.5, b.META_INK)
     doc.y -= 11
-    sep = (" | ", None)
-    doc.link_line([
-        (b.EMAIL, f"mailto:{b.EMAIL}"), sep, (b.PHONE, None), sep,
-        (contact["linkedin"], f"https://{contact['linkedin']}"), sep,
-        (contact["github"], f"https://{contact['github']}"), sep,
-        (contact["site"], f"https://{contact['site']}"),
-    ], b.ML, b.CONTACT_SIZE)
+    doc.link_line(b.contact_line(contact), b.ML, b.CONTACT_SIZE)
     doc.y -= 10.5
-    doc.text(contact["location"] + " ", b.ML, doc.y, b.F_REG, b.CONTACT_SIZE, b.META_INK)
+    doc.text((contact.get("location") or "") + " ", b.ML, doc.y, b.F_REG, b.CONTACT_SIZE, b.META_INK)
     doc.y -= 9
     doc.rule(b.ML, doc.y, b.CW, ink=0.55, thickness=0.7)
     doc.y -= 22
 
 
-def render(body: str, out: Path, recipient: list[str], subject: str, when: date | None = None) -> Path:
+def render(body: str, out: Path, recipient: list[str], subject: str, when: date | None = None,
+           cv_sent: dict | None = None) -> Path:
     """Writes a one-page cover letter PDF and returns its path.
 
     Args:
@@ -43,12 +40,15 @@ def render(body: str, out: Path, recipient: list[str], subject: str, when: date 
         recipient: Address lines, top to bottom.
         subject: Subject line, set in bold above the greeting.
         when: Date shown on the letter; today by default.
+        cv_sent: The CV sent with the letter, whose header the letter repeats; the main CV by default.
+
+    Raises:
+        ValueError: the letter runs past one page.
     """
-    b = _pdf_builder()
-    data = json.loads(CV_JSON.read_text())
+    b = pdfdraw
+    data = _drawable(cv.printable(cv_sent) if cv_sent is not None else cv.load())
+    body, recipient, subject = _drawable(body), _drawable(recipient), _drawable(subject)
     paragraphs = [p.strip() for p in body.strip().split("\n\n") if p.strip()]
-    lines = [line for para in paragraphs for line in para.split("\n")]
-    b.check_ascii({"body": lines, "recipient": recipient, "subject": subject}, "letter")
 
     doc = b.Doc()
     _header(b, doc, data)
@@ -71,10 +71,5 @@ def render(body: str, out: Path, recipient: list[str], subject: str, when: date 
         raise ValueError(f"letter runs to {len(pages)} pages; shorten it to one")
     out.parent.mkdir(parents=True, exist_ok=True)
     b.OUT = out
-    try:
-        b.write_pdf(pages, doc.links, title="Cover letter")
-    except ValueError:
-        # write_pdf prints the path relative to the site root, which fails outside it.
-        if not out.exists():
-            raise
+    b.write_pdf(pages, doc.links, title="Cover letter")
     return out

@@ -10,6 +10,7 @@ from pathlib import Path
 from support import legacy
 
 from jobhunt import cv, cvbuild
+from jobhunt.core import naming
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
@@ -70,7 +71,7 @@ class BuildingCv(unittest.TestCase):
         self.assertNotIn("—", built["education"][0]["detail"])
         self.assertIn("a number no source states: 12", out["flags"])
         self.assertIn("not backed by your material: tutoring experience", out["flags"])
-        self.assertTrue((cvbuild.PREVIEW / "Firstname-Lastname-CV.pdf").exists())
+        self.assertTrue((cvbuild.PREVIEW / naming.file_name("cv")).exists())
         self.assertEqual(json.loads(cv.BUILT.read_text())["cv"], built)
 
     def test_nothing_is_built_without_material(self):

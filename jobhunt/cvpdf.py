@@ -1,16 +1,20 @@
 """Hal's own CV layout, for applications: one column, bullets, and marks that read in order.
 
-It draws with the website's PDF builder (tools/build-cv-pdf.py), so type and the
-plain-text guarantees match the website's CV, and changes what applicant tracking
-systems and recruiters read badly: body text is 10pt, the strongest module marks
-sit on one line as "Module mark" rather than in a grid of bars, an entry written
-as "- " lines is drawn as bullets with a hanging indent, and there is no
-"References available on request". The website's own PDF is untouched.
+It draws with `pdfdraw.py`, Hal's own PDF writer, and changes what applicant tracking systems and
+recruiters read badly: body text is 10pt, the strongest module marks (when the CV has any) sit on one line
+as "Module mark" rather than in a grid of bars, an entry written as "- " lines is drawn as bullets with a
+hanging indent, and there is no "References available on request". Text the fonts cannot draw is mapped
+to its plain form first (`_drawable`), so a curly quote never stops a CV being made. The file is named from
+the `cvdocs.file_name` setting (`core.naming`), never from code.
 """
-import json
 from pathlib import Path
 
-from . import cv
+from . import cv, pdfdraw
+from .core import naming
+
+# Section headings; a CV may rename any of them in its "titles" (a history CV might say "Research and projects").
+TITLES = {"education": "Education", "projects": "Projects", "experience": "Experience", "skills": "Skills",
+          "additional": "Additional"}
 
 BULLET_INDENT = 10.0
 BODY, LEAD = 10.0, 12.6  # careers services advise no smaller than 10pt; the website's CV uses 9.2
@@ -71,32 +75,44 @@ def _marks(b, doc, entry: dict) -> None:
                       size=BODY, lead=LEAD, gap=1.0)
 
 
+# Typographic characters the PDF fonts lack, as their plain forms; other text outside Latin-1 is dropped.
+PLAIN = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": ", ",
+         "\u2026": "...", "\u2022": "-", "\u00a0": " ", "\u2212": "-", "\u20ac": "EUR "}
+
+
+def _drawable(value):
+    """`value` with every string reduced to what the PDF fonts draw: ASCII and the Latin-1 letters."""
+    if isinstance(value, str):
+        from .llm import undash
+        text = "".join(PLAIN.get(c, c) for c in undash(value))
+        return "".join(c for c in text if c in "\n" or " " <= c <= "~" or "\u00a0" <= c <= "\u00ff")
+    if isinstance(value, list):
+        return [_drawable(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _drawable(v) for k, v in value.items()}
+    return value
+
+
 ORDER = ("education", "projects", "experience", "skills", "additional")
 
 
 def render(variant: dict, out_dir: Path) -> Path:
     """Writes a CV variant as Hal's layout to out_dir and returns the PDF's path."""
-    b = cv._pdf_builder()
-    data = cv.printable(variant)
-    # Bullets are lines of text; the line breaks between them are this layout's, not characters drawn.
-    b.check_ascii(json.loads(json.dumps(data).replace("\\n", " ")))
+    b = pdfdraw
+    data = _drawable(cv.printable(variant))
     out_dir.mkdir(parents=True, exist_ok=True)
-    pdf = out_dir / "Firstname-Lastname-CV.pdf"
+    pdf = out_dir / naming.file_name("cv")
     doc = b.Doc()
-    contact = data["contact"]
+    contact = data.get("contact") or {}
 
     doc.y -= b.NAME_SIZE
-    doc.text(b.NAME + " ", b.ML, doc.y, b.F_BOLD, b.NAME_SIZE, b.INK)
+    doc.text(_drawable(b.NAME) + " ", b.ML, doc.y, b.F_BOLD, b.NAME_SIZE, b.INK)
     doc.y -= 11.5
     doc.text(data["title"] + " ", b.ML, doc.y, b.F_REG, 9.5, b.META_INK)
     doc.y -= 11
-    sep = (" | ", None)
-    doc.link_line([(b.EMAIL, f"mailto:{b.EMAIL}"), sep, (b.PHONE, None), sep,
-                   (contact["linkedin"], f"https://{contact['linkedin']}"), sep,
-                   (contact["github"], f"https://{contact['github']}"), sep,
-                   (contact["site"], f"https://{contact['site']}")], b.ML, b.CONTACT_SIZE)
+    doc.link_line(b.contact_line(contact), b.ML, b.CONTACT_SIZE)
     doc.y -= 10.5
-    doc.text(contact["location"] + " ", b.ML, doc.y, b.F_REG, b.CONTACT_SIZE, b.META_INK)
+    doc.text((contact.get("location") or "") + " ", b.ML, doc.y, b.F_REG, b.CONTACT_SIZE, b.META_INK)
     doc.y -= 9
     doc.rule(b.ML, doc.y, b.CW, ink=0.55, thickness=0.7)
     doc.y -= 13
@@ -110,47 +126,42 @@ def render(variant: dict, out_dir: Path) -> Path:
 
     for section in data.get("order") or ORDER:
         if section == "education" and data.get("education"):
-            heading("Education")
+            heading({**TITLES, **(data.get("titles") or {})}["education"])
             for i, e in enumerate(data["education"]):
                 if i:
                     doc.y -= 5
                 _entry(b, doc, e["qualification"], e["meta"], e["detail"], grade=e.get("grade"))
                 _marks(b, doc, e)
         elif section == "projects" and data.get("projects"):
-            heading("Projects")
+            heading({**TITLES, **(data.get("titles") or {})}["projects"])
             # The most relevant projects in full; the rest by name, so the page stays one page.
             shown = data["projects"][:int(data.get("pdfProjects") or len(data["projects"]))]
             for i, p in enumerate(shown):
                 if i:
                     doc.y -= 7
-                _entry(b, doc, p["name"], p["stack"], p["body"], size=10.4)
+                _entry(b, doc, p["name"], p.get("stack", ""), p["body"], size=10.4)
             rest = [p["name"] for p in data["projects"][len(shown):]]
             more = " ".join(x for x in ((f"**Also:** {'; '.join(rest)}." if rest else ""), data.get("moreProjects", "")) if x)
             if more:
                 doc.y -= 4
                 doc.paragraph(more, size=BODY, lead=LEAD)
         elif section == "experience" and data.get("experience"):
-            heading("Experience")
+            heading({**TITLES, **(data.get("titles") or {})}["experience"])
             for i, x in enumerate(data["experience"]):
                 if i:
                     doc.y -= 6
                 _entry(b, doc, f"{x['role']}, {x['org']}", x["dates"], x["body"], size=10.4)
         elif section == "skills" and data.get("skills"):
-            heading("Skills")
+            heading({**TITLES, **(data.get("titles") or {})}["skills"])
             for group, items in data["skills"]:
                 doc.paragraph(f"**{group}:** " + ", ".join(items), size=BODY, lead=LEAD, gap=1.5)
         elif section == "additional" and data.get("additional"):
-            heading("Additional")
+            heading({**TITLES, **(data.get("titles") or {})}["additional"])
             for label, text in data["additional"]:
                 doc.paragraph(f"**{label}:** {text}", size=BODY, lead=LEAD, gap=1.5)
 
     pages = doc.finish()
     b.add_footers(pages)
     b.OUT = pdf
-    try:
-        b.write_pdf(pages, doc.links)
-    except ValueError:
-        # The builder prints the path relative to the website's folder, which this one is not in.
-        if not pdf.exists():
-            raise
+    b.write_pdf(pages, doc.links)
     return pdf
