@@ -150,6 +150,22 @@ MADE_UP_PAGES = {
                                                        "of place", "points": 10, "quote": ""}], "total": 50},
                      "hidden": None, "reqs": None, "flags": [], "company": [], "eligibility": None,
                      "application_id": None},
+    # Settings and its panels
+    "/settings/schema": {"groups": [
+        {"id": "you", "name": "You", "icon": "user", "items": [
+            {"key": "you.name", "kind": "text", "label": "Your name", "help": "", "choices": [], "min": None,
+             "max": None, "unit": "", "restart": False, "rescore": False, "advanced": False, "visible_if": "",
+             "to": "", "action": "", "disabled_why": ""}]},
+        {"id": "goal", "name": "What you're looking for", "icon": "target", "items": []}]},
+    "/settings": {"values": {"you.name": "Robin"}, "changed": [], "display": {}, "secrets": {},
+                  "store": {"name": "a protected file", "locked": False}, "restart_needed": False},
+    "/private": {"questions": []},
+    "/prompts": [],
+    "/health": {"checks": [], "worst": "ok"},
+    "/health/browsers": {"browsers": []},
+    "/privacy": {"where": {"data": "", "config": "", "documents": "", "record": ""}, "can_open": True,
+                 "leaves": [], "stored": []},
+    "/goal/versions": [],
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
