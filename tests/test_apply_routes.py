@@ -5,6 +5,7 @@ driver are replaced by stand-ins; the routes, the rules of `apply/actions.py` an
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 import unittest
@@ -12,15 +13,32 @@ from unittest import mock
 from urllib.parse import quote
 
 from support.api import HalServer
-from support.stubs import record_actions
 from support.world import World, job_id
 
-from jobhunt import browser, db, documents
+from jobhunt import browser, db, documents, record
 from jobhunt.apply import driver
 from jobhunt.core import naming, runner
 
 WAIT_S = 10.0
 POLL_S = 0.05
+SLOW_RECORD_S = 3.0      # longer than Classic's 2 s wait, so the route answers "started"
+SYNCED = {"converted": [], "added": 1, "changed": 0, "removed": 0}
+
+
+def made_up_record(delay: float = 0.0):
+    """The record's `sync` and `ask`, made up and as slow as asked, under the record's real action kinds."""
+    def sync() -> dict:
+        time.sleep(delay)
+        return dict(SYNCED)
+
+    def ask(q: str) -> dict:
+        time.sleep(delay)
+        return {"answer": "A made-up answer.", "sources": ["notes.md"], "note": "", "passages": []}
+
+    stack = contextlib.ExitStack()
+    stack.enter_context(mock.patch.object(record, "sync", sync))
+    stack.enter_context(mock.patch.object(record, "ask", ask))
+    return stack
 
 
 class Routes(unittest.TestCase):
@@ -178,13 +196,13 @@ class Routes(unittest.TestCase):
 
     def test_classics_slow_legacy_routes_start_actions(self):
         self.start_applying("sorrel-ready")
-        with record_actions.installed():
+        with made_up_record():
             synced = self.c.post("/api/record/sync")
             self.assertEqual(synced.status, 200, synced.text)
-            self.assertEqual(synced.json()["last_sync"], record_actions.SYNCED)
+            self.assertEqual(synced.json()["last_sync"], SYNCED)
             asked = self.c.post("/api/record/ask", {"question": "Where did I volunteer?"}).json()
             self.assertEqual(asked["answer"], "A made-up answer.")
-        with record_actions.installed(delay=3.0):
+        with made_up_record(delay=SLOW_RECORD_S):
             self.assertEqual(self.c.post("/api/record/sync").json()["started"], True)
         with mock.patch.object(browser, "look", lambda job_id, shot: {"url": "https://jobs.example.org/apply"}):
             look = self.c.post(f"/api/job/{quote(job_id('sorrel-ready'), safe='')}/form-look")
