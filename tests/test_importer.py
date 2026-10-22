@@ -2,9 +2,8 @@
 
 Every old install here is made up by `support.old_repo`, in a temporary folder, with a made-up private
 answers file and carer answer as canaries. The computer (port, timers, disk) is faked through
-`importer.System`, and the stores and the timer call are stand-ins from `support.stubs`, except in
-`RealStores`, which runs on the real secrets and private answers stores (their file fallback in the
-temporary home).
+`importer.System`, including the platform's timer calls (`FakeTimers`). Secrets and private answers go to
+the real stores, on their file fallback in the temporary home.
 """
 import ast
 import contextlib
@@ -22,7 +21,6 @@ from pathlib import Path
 from unittest import mock
 
 from support import old_db, old_repo
-from support.stubs import importer_contracts
 
 from jobhunt import db
 from jobhunt.cli import data as cli_data
@@ -69,11 +67,32 @@ class Opened:
             yield self
 
 
+class FakeTimers:
+    """The platform's `retire_legacy_timers` and `restore_legacy_timers`, counting calls instead of touching systemd."""
+
+    NAMES = ("jobhunt-discover.timer", "jobhunt-mail.timer", "jobhunt-digest.timer")
+
+    def __init__(self):
+        self.retired = 0
+        self.restored = 0
+
+    def retire(self) -> list[str]:
+        self.retired += 1
+        return list(self.NAMES)
+
+    def restore(self) -> list[str]:
+        self.restored += 1
+        return list(self.NAMES)
+
+    def call(self, name: str):
+        """`importer.System.platform_call`: the fake for a timer call, None for anything else."""
+        return {"retire_legacy_timers": self.retire, "restore_legacy_timers": self.restore}.get(name)
+
+
 class ImportCase(unittest.TestCase):
     """A made-up old checkout, an empty temporary home and the faked computer."""
 
     carer = True
-    real_stores = False     # True: the real secrets and private stores instead of the stand-ins
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -91,15 +110,18 @@ class ImportCase(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             argv = ["--repo", str(self.old.root), "--ref", "HEAD", "--out", str(self.prefs)]
             self.assertEqual(load_export().main(argv), 0)
-        if not self.real_stores:
-            stubs = importer_contracts.installed()
-            self.secrets, self.private, self.platform = stubs.__enter__()
-            self.addCleanup(stubs.__exit__, None, None, None)
+        self.platform = FakeTimers()
         self.lines: list[str] = []
         self.system = importer.System(port_answers=lambda port: False, new_app_answers=lambda port: False,
                                       timer_active=lambda name: False, free_bytes=lambda path: 10 ** 12,
-                                      say=self.lines.append)
+                                      platform_call=self.platform.call, say=self.lines.append)
         self.target = self.home / "data"
+
+    def saved_secrets(self) -> dict[str, str]:
+        """Every secret the real store holds now, by name."""
+        from jobhunt.core.settings import secrets
+
+        return {name: secrets.get(name) for name, state in secrets.statuses().items() if state == "saved"}
 
     def run_import(self, **kw) -> importer.Report:
         opts = importer.Options(repo=self.old.root, legacy_secrets=self.old.secrets, **kw)
@@ -179,7 +201,7 @@ class Copying(ImportCase):
         self.run_import(dry_run=True)
         self.assertEqual(old_repo.tree_state(*roots), before)
         self.assertFalse(self.target.exists())
-        self.assertEqual(self.secrets.puts, [])
+        self.assertEqual(self.saved_secrets(), {})
         self.assertEqual(self.platform.retired, 0)
         self.assertIn("Dry run", self.lines[-1])
         self.assertTrue(any("Moved" in line and "settings" in line for line in self.lines))
@@ -195,7 +217,7 @@ class Copying(ImportCase):
             self.run_import()
         self.assertFalse(self.target.exists())
         self.assertEqual(old_repo.tree_state(self.old.root), before)
-        self.assertEqual(self.secrets.puts, [])
+        self.assertEqual(self.saved_secrets(), {})
 
     def test_a_failure_before_the_seal_leaves_the_old_data_in_use(self):
         before = old_repo.tree_state(self.old.root)
@@ -292,11 +314,14 @@ class Settings(ImportCase):
         self.assertIn("python = 3", self.setting("scoring.skills"))
         self.assertEqual(self.setting("email.address"), "sam.example@example.org")
 
-        self.assertEqual(self.private.saved, {"carer": old_repo.CARER_CANARY})
-        topic = self.secrets.values["notify.ntfy_topic"]
+        from jobhunt.core.settings import private
+
+        self.assertNotIn("carer", private.read_table())    # the canary is not one of the store's choices
+        saved = self.saved_secrets()
+        topic = saved["notify.ntfy_topic"]
         self.assertRegex(topic, r"^hal-[a-z0-9]{24}$")
-        self.assertEqual(self.secrets.values["email.app_password"], old_repo.SECRETS["gmail-app-password"])
-        self.assertEqual(self.secrets.values["sites.reed_key"], old_repo.SECRETS["reed"])
+        self.assertEqual(saved["email.app_password"], old_repo.SECRETS["gmail-app-password"])
+        self.assertEqual(saved["sites.reed_key"], old_repo.SECRETS["reed"])
         for path in [*self.target.rglob("*"), *(self.home / "config").rglob("*")]:
             if path.is_file():
                 self.assertNotIn(old_repo.OLD_TOPIC.encode(), path.read_bytes(), path)
@@ -383,7 +408,9 @@ class Private(ImportCase):
         for table in ("activity", "imports", "settings", "settings_history", "answers2"):
             text = json.dumps([list(r) for r in con.execute(f"SELECT * FROM {table}")])
             self.assertNotIn(canary, text, table)
-        self.assertEqual(self.private.saved, {})
+        from jobhunt.core.settings import private
+
+        self.assertNotIn("carer", private.read_table())    # only the copied file's answers, nothing saved on top
 
 
 class Export(ImportCase):
@@ -447,15 +474,13 @@ class Commands(ImportCase):
 
 
 class RealStores(ImportCase):
-    """The import on the real stores.
+    """The import on the real stores, checked end to end.
 
     Regression for two breaks found on the real stores: the private store refuses an old carer answer that is not
     one of its choices, which stopped the whole import; and saving a secret writes a history row through
     `db.connect()`, which before the seal opened and migrated the old database in place, then left the new
     folder non-empty so the seal failed.
     """
-
-    real_stores = True
 
     def test_the_import_runs_on_the_real_stores_and_never_opens_the_old_database(self):
         old_db_file = self.old.data / "jobs.db"

@@ -13,7 +13,6 @@ from pathlib import Path
 from unittest import mock
 
 from support import old_db, old_repo
-from support.stubs import importer_contracts
 from test_importer import FAKE_NOW, load_export, writable
 
 from jobhunt.core import answers_rescope, importer
@@ -95,9 +94,8 @@ class Task(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             load_export().main(["--repo", str(old.root), "--ref", "HEAD", "--out", str(prefs)])
         system = importer.System(port_answers=lambda port: False, timer_active=lambda name: False,
-                                 free_bytes=lambda path: 10 ** 12)
-        with importer_contracts.installed():
-            importer.run(importer.Options(repo=old.root, legacy_secrets=old.secrets), system)
+                                 free_bytes=lambda path: 10 ** 12, platform_call=lambda name: None)
+        importer.run(importer.Options(repo=old.root, legacy_secrets=old.secrets), system)
         con = sqlite3.connect(self.home / "data" / "jobs.db")
         self.addCleanup(con.close)
         found = scopes(con)
