@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from .config import CONFIG
+from .core import paths
 
 SITE = Path(CONFIG.get("cv_site", "~/sites/cv-site")).expanduser()
 CV_JSON = SITE / "src" / "data" / "cv.json"
@@ -30,11 +31,33 @@ TRACKS = {
 }
 
 
-DATA = Path(__file__).resolve().parent.parent / "data"
-OVERRIDES = DATA / "cv-overrides.json"  # changes to the website's CV
-BUILT = DATA / "cv-built.json"  # the CV built from the applicant's material (cvbuild.py), with what to check
-BUILT_OVERRIDES = DATA / "cv-built-overrides.json"  # changes to the built CV
-ORIGIN = DATA / "cv-origin"  # "built" when Hal's CV starts from the built one rather than the website's
+
+
+def _data() -> Path:
+    # The old layout kept these files loose in data/; a moved data folder keeps them in data/cv/.
+    return paths.data_dir() if paths.is_legacy_layout() else paths.cv_dir()
+
+
+# Resolved when used until the CV store replaces them: DATA, and in it OVERRIDES (changes to the
+# website's CV), BUILT (the CV built from the applicant's material by cvbuild.py, with what to check),
+# BUILT_OVERRIDES (changes to the built CV) and ORIGIN ("built" when Hal's CV starts from the built one).
+_LIVE = {"DATA": _data, "OVERRIDES": lambda: _live("DATA") / "cv-overrides.json",
+         "BUILT": lambda: _live("DATA") / "cv-built.json",
+         "BUILT_OVERRIDES": lambda: _live("DATA") / "cv-built-overrides.json",
+         "ORIGIN": lambda: _live("DATA") / "cv-origin"}
+
+
+def __getattr__(name):  # old path constants, read live (PEP 562)
+    if name in _LIVE:
+        return _LIVE[name]()
+    raise AttributeError(name)
+
+
+def _live(name: str):
+    """An old path constant: the value a test assigned to the module, else the live path."""
+    return globals()[name] if name in globals() else _LIVE[name]()
+
+
 # Entries are matched across versions by what names them, not by position, so the site can add or reorder them.
 NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}
 PAIRS = ("skills", "additional")  # entries written as [name, value]; only the value is edited
@@ -49,22 +72,23 @@ def site() -> dict:
 
 def origin_name() -> str:
     """Which CV Hal's starts from: "site", the website's, or "built", the one built from the applicant's material."""
-    built = ORIGIN.exists() and ORIGIN.read_text().strip() == "built" and BUILT.exists()
+    origin, built_cv = _live("ORIGIN"), _live("BUILT")
+    built = origin.exists() and origin.read_text().strip() == "built" and built_cv.exists()
     return "built" if built else "site"
 
 
 def set_origin(name: str) -> None:
-    ORIGIN.parent.mkdir(parents=True, exist_ok=True)
-    ORIGIN.write_text(("built" if name == "built" else "site") + "\n")
+    _live("ORIGIN").parent.mkdir(parents=True, exist_ok=True)
+    _live("ORIGIN").write_text(("built" if name == "built" else "site") + "\n")
 
 
 def origin() -> dict:
     """The CV Hal's starts from, before the applicant's changes."""
-    return json.loads(BUILT.read_text())["cv"] if origin_name() == "built" else site()
+    return json.loads(_live("BUILT").read_text())["cv"] if origin_name() == "built" else site()
 
 
 def _overrides_path() -> Path:
-    return BUILT_OVERRIDES if origin_name() == "built" else OVERRIDES
+    return _live("BUILT_OVERRIDES") if origin_name() == "built" else _live("OVERRIDES")
 
 
 def overrides() -> list[dict]:

@@ -18,6 +18,7 @@ import zlib
 from pathlib import Path
 
 from . import gpu, llm, record
+from .core import paths
 
 # Section names parsers know; a heading outside these may not be recognised as a section at all.
 STANDARD_HEADINGS = {"education", "experience", "work experience", "employment", "projects", "skills",
@@ -151,17 +152,39 @@ TECH_WORDS = {"backend", "backends", "frontend", "frontends", "config", "configs
               "screenshot", "screenshots", "uptime", "latencies", "pipelined", "versioned", "timestamped", "dedupe",
               "deduplicated", "deduplication", "autonomously", "autopilot", "rangefinders", "rangefinder", "flashcard",
               "flashcards", "cashing", "fellwalking", "skateboarding"}
-WORDS = Path(__file__).resolve().parent.parent / "data" / "cv-words.txt"
+
+
+def _words() -> Path:
+    # The old layout kept the list as data/cv-words.txt; a moved data folder keeps it as data/cv/words.txt.
+    return paths.data_dir() / "cv-words.txt" if paths.is_legacy_layout() else paths.cv_dir() / "words.txt"
+
+
+# WORDS, the words the applicant accepted, is resolved when used.
+_LIVE = {"WORDS": _words}
+
+
+def __getattr__(name):  # old path constants, read live (PEP 562)
+    if name in _LIVE:
+        return _LIVE[name]()
+    raise AttributeError(name)
+
+
+def _live(name: str):
+    """An old path constant: the value a test assigned to the module, else the live path."""
+    return globals()[name] if name in globals() else _LIVE[name]()
 
 
 def own_words() -> set[str]:
-    return {w.strip().lower() for w in WORDS.read_text().split()} if WORDS.exists() else set()
+    words = _live("WORDS")
+    return {w.strip().lower() for w in words.read_text().split()} if words.exists() else set()
 
 
 def add_words(words: list[str]) -> None:
     """Accepts words the dictionary did not know, so they are not flagged again."""
-    WORDS.parent.mkdir(parents=True, exist_ok=True)
-    WORDS.write_text("\n".join(sorted(own_words() | {w.lower() for w in words if re.fullmatch(r"[a-z']+", w.lower())})) + "\n")
+    words_file = _live("WORDS")
+    words_file.parent.mkdir(parents=True, exist_ok=True)
+    known = own_words() | {w.lower() for w in words if re.fullmatch(r"[a-z']+", w.lower())}
+    words_file.write_text("\n".join(sorted(known)) + "\n")
 
 
 def misspelt(text: str, known: set[str]) -> list[str] | None:

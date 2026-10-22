@@ -19,20 +19,35 @@ import threading
 from pathlib import Path
 from urllib.parse import quote_plus, urljoin, urlparse
 
-from .config import CONFIG, ROOT
+from .config import CONFIG
+from .core import paths
 
-PROFILE = ROOT / "data" / "browser-profile"
-SHOTS = ROOT / "data" / "apply"
-# Sites the applicant has signed in to in Hal's browser, where Apply may send a stored CV at once.
-SIGNED_IN = ROOT / "data" / "signed-in.json"
+# PROFILE, SHOTS and SIGNED_IN (sites the applicant has signed in to in Hal's browser, where Apply may send a
+# stored CV at once) are resolved when used, so tests and the data move point them elsewhere.
+_LIVE = {"PROFILE": paths.browser_profile, "SHOTS": paths.shots_dir,
+         "SIGNED_IN": lambda: paths.data_dir() / "signed-in.json"}
+
+
+def __getattr__(name):  # old path constants, read live (PEP 562)
+    if name in _LIVE:
+        return _LIVE[name]()
+    raise AttributeError(name)
+
+
+def _live(name: str):
+    """An old path constant: the value a test assigned to the module, else the live folder."""
+    return globals()[name] if name in globals() else _LIVE[name]()
+
+
 NAV_TIMEOUT = 45_000  # ms
 
 # The page readers are shared with the extension, which runs them in the applicant's own browser.
-PAGE_JS = (ROOT / "extension" / "page.js").read_text()
+PAGE_JS = (paths.code_dir() / "extension" / "page.js").read_text()
 EXTRACT_JS = "() => {\n" + PAGE_JS + "\nreturn halExtract();\n}"
 SURVEY_JS = "() => {\n" + PAGE_JS + "\nreturn halSurvey();\n}"
 OPTIONS_JS = "(hid) => {\n" + PAGE_JS + "\nreturn halOptions(hid);\n}"
 STALE_JS = "() => {\n" + PAGE_JS + "\nreturn halStale();\n}"
+
 RESULTS_JS = "() => {\n" + PAGE_JS + "\nreturn halResults();\n}"
 # Apply controls on an advert. Ones that hand the application to another account are left alone.
 APPLY_BUTTON = re.compile(
@@ -140,13 +155,13 @@ class Browser:
                 return self._ctx
             except Exception:  # noqa: BLE001
                 self._ctx = None
-        PROFILE.mkdir(parents=True, exist_ok=True)
+        _live("PROFILE").mkdir(parents=True, exist_ok=True)
         headless = mode() == "headless"
         # Wayland refuses a window's request to raise itself, so "Show browser
         # window" only works when the window runs through XWayland.
         args = ["--ozone-platform=x11"] if not headless and os.environ.get("DISPLAY") else []
         self._ctx = self._pw.chromium.launch_persistent_context(
-            str(PROFILE), headless=headless, viewport={"width": 1280, "height": 900},
+            str(_live("PROFILE")), headless=headless, viewport={"width": 1280, "height": 900},
             locale="en-GB", timezone_id="Europe/London", args=args)
         self._ctx.on("close", lambda _: setattr(self, "_ctx", None))
         self.pages = {}
@@ -244,7 +259,7 @@ def _site(url: str) -> str:
 
 def _signed_in_sites() -> set[str]:
     try:
-        return set(json.loads(SIGNED_IN.read_text()))
+        return set(json.loads(_live("SIGNED_IN").read_text()))
     except (OSError, ValueError):
         return set()
 
@@ -517,7 +532,7 @@ def _open_form(b: Browser, job_id: str, url: str) -> dict:
 def _resume(b: Browser, job_id: str, passed: str, wall: str) -> dict:
     """Carries on towards the form once the applicant has done what the page at `wall` needed."""
     if passed == "sign-in":
-        SIGNED_IN.write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
+        _live("SIGNED_IN").write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
     return _advance(b, job_id, pressed=passed == "apply", may_send=passed == "apply")
 
 

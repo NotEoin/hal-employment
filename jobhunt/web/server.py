@@ -196,8 +196,22 @@ __all__ = [
 
 
 STATIC = Path(__file__).resolve().parent / "static" / "classic"
-# Files the interface may show: packs (CVs, letters) and form screenshots.
-SERVABLE = (pack.PACKS.resolve(), browser.SHOTS.resolve())
+
+
+def _servable() -> tuple[Path, ...]:
+    """Folders the interface may show: application folders, old packs, form screenshots and the cache."""
+    from ..core import paths
+
+    return tuple(p.resolve() for p in (paths.applications_dir(), paths.legacy_packs_dir(), paths.shots_dir(),
+                                        paths.cache_dir()))
+
+
+def __getattr__(name):  # SERVABLE is resolved when used; tests assign their own (PEP 562)
+    if name == "SERVABLE":
+        return _servable()
+    raise AttributeError(name)
+
+
 CSRF_HEADER = "X-Hal"
 PAGES: dict[tuple, bytes] = {}  # document pages drawn as images, by file, its change time and page number
 
@@ -273,14 +287,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def serve_file(self, raw: str) -> None:
         path = Path(unquote(raw)).resolve()
-        if not any(root in path.parents for root in SERVABLE) or not path.is_file():
+        if not any(root in path.parents for root in globals().get("SERVABLE") or _servable()) or not path.is_file():
             return self._send(404, b"not found", "text/plain")
         self._send(200, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream")
 
     def serve_page(self, raw: str, page: int) -> None:
         """Draws one page of a PDF as an image, so a document reads at the full width of the pane showing it."""
         path = Path(unquote(raw)).resolve()
-        if not any(root in path.parents for root in SERVABLE) or path.suffix != ".pdf" or not path.is_file():
+        servable = globals().get("SERVABLE") or _servable()
+        if not any(root in path.parents for root in servable) or path.suffix != ".pdf" or not path.is_file():
             return self._send(404, b"not found", "text/plain")
         key = (str(path), path.stat().st_mtime, page)
         if key not in PAGES:

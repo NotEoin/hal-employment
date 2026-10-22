@@ -11,10 +11,24 @@ from datetime import date
 from pathlib import Path
 
 from . import coursework, cv, db, llm, record, reputation, research
-from .config import ROOT
+from .core import paths
 from .vault import VAULT
 
-PACKS = ROOT / "packs"
+# PACKS, the old application packs, is resolved when used until application folders replace it.
+_LIVE = {"PACKS": paths.legacy_packs_dir}
+
+
+def __getattr__(name):  # old path constants, read live (PEP 562)
+    if name in _LIVE:
+        return _LIVE[name]()
+    raise AttributeError(name)
+
+
+def _live(name: str):
+    """An old path constant: the value a test assigned to the module, else the live path."""
+    return globals()[name] if name in globals() else _LIVE[name]()
+
+
 APPLICATIONS = VAULT / "Areas" / "Job Search" / "Applications"
 
 ANALYSE = """You analyse a job advert for a UK graduate software engineer. Reply with JSON only:
@@ -107,7 +121,7 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     job_text = _job_text(job)
     facts = cv.facts_text()
-    out_dir = PACKS / slug(f"{job['company']}-{job['title']}")
+    out_dir = _live("PACKS") / slug(f"{job['company']}-{job['title']}")
 
     analysis = llm.chat_json(ANALYSE, job_text[:12000], role="main")
     web, urls = _research(job["company"]) if use_web else ("", [])

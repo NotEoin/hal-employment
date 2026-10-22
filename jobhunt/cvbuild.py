@@ -15,10 +15,31 @@ from io import BytesIO
 from pathlib import Path
 
 from . import cv, db, documents, gpu, llm, record
-from .pack import PACKS, VERIFY, slug, unsupported_numbers
+from .core import paths
+from .pack import VERIFY, slug, unsupported_numbers
 
-SOURCES = cv.DATA / "cv-sources"
-PREVIEW = PACKS / "_built-cv"  # the built CV's PDF, where the web interface may show it
+
+def _sources() -> Path:
+    # The old layout kept them in data/cv-sources; a moved data folder keeps them in data/cv/sources.
+    return paths.data_dir() / "cv-sources" if paths.is_legacy_layout() else paths.cv_dir() / "sources"
+
+
+# Resolved when used: SOURCES, the applicant's material, and PREVIEW, the built CV's PDF, which the
+# web interface may show because the cache folder is servable.
+_LIVE = {"SOURCES": _sources, "PREVIEW": lambda: paths.cache_dir() / "built-cv"}
+
+
+def __getattr__(name):  # old path constants, read live (PEP 562)
+    if name in _LIVE:
+        return _LIVE[name]()
+    raise AttributeError(name)
+
+
+def _live(name: str):
+    """An old path constant: the value a test assigned to the module, else the live path."""
+    return globals()[name] if name in globals() else _LIVE[name]()
+
+
 CHUNK = 12000     # characters of a source read at once
 MAX_SOURCE = 400_000
 
@@ -66,9 +87,9 @@ entries most recent first and projects strongest first."""
 
 def sources() -> list[dict]:
     """The material the CV is built from, newest first."""
-    if not SOURCES.exists():
+    if not _live("SOURCES").exists():
         return []
-    files = sorted(SOURCES.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(_live("SOURCES").glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
     return [{"name": p.stem, "chars": len(p.read_text(errors="replace")),
              "preview": p.read_text(errors="replace")[:200]} for p in files]
 
@@ -99,22 +120,23 @@ def add(name: str, text: str = "", data: bytes | None = None) -> str:
     if len(text) > MAX_SOURCE:
         raise ValueError(f"that is {len(text):,} characters; split it into pieces under {MAX_SOURCE:,}")
     stem = slug(Path(name).stem if data is not None else name) or "notes"
-    SOURCES.mkdir(parents=True, exist_ok=True)
-    path, n = SOURCES / f"{stem}.txt", 2
+    _live("SOURCES").mkdir(parents=True, exist_ok=True)
+    path, n = _live("SOURCES") / f"{stem}.txt", 2
     while path.exists():
-        path, n = SOURCES / f"{stem}-{n}.txt", n + 1
+        path, n = _live("SOURCES") / f"{stem}-{n}.txt", n + 1
     path.write_text(text + "\n")
     return path.stem
 
 
 def remove(name: str) -> None:
-    path = (SOURCES / f"{name}.txt").resolve()
-    if path.parent == SOURCES.resolve() and path.exists():
+    path = (_live("SOURCES") / f"{name}.txt").resolve()
+    if path.parent == _live("SOURCES").resolve() and path.exists():
         path.unlink()
 
 
 def _material(options: dict) -> list[tuple[str, str]]:
-    found = [(p.stem, p.read_text(errors="replace")) for p in sorted(SOURCES.glob("*.txt"))] if SOURCES.exists() else []
+    sources = _live("SOURCES")
+    found = [(p.stem, p.read_text(errors="replace")) for p in sorted(sources.glob("*.txt"))] if sources.exists() else []
     if options.get("website"):
         found.append(("website CV", json.dumps(cv.printable(cv.site()), indent=1)))
     if options.get("record") and record.VAULT.exists():
@@ -255,5 +277,5 @@ def build(options: dict, report=lambda message: None) -> dict:
     report("checking the CV against your material")
     flags = _checks(built, material, facts)
     cv.BUILT.write_text(json.dumps({"cv": built, "flags": flags, "options": options, "built": db.now()}, indent=1) + "\n")
-    cv.render(built, PREVIEW)
+    cv.render(built, _live("PREVIEW"))
     return {"cv": built, "flags": flags}

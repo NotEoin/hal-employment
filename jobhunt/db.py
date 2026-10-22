@@ -1,10 +1,25 @@
-"""SQLite tracker: every job ever seen, its score, and its application history."""
+"""SQLite tracker: every job ever seen, its score, and its application history.
+
+`connect()` finds the database through `core.paths` when it is called, never at import, so tests, the
+importer and worktrees each open their own file. The schema is made and upgraded by the migration runner
+(`core.db.migrate`); until that module is present, the baseline `SCHEMA` below is applied as it
+always was. `DB_PATH` is kept as a live alias of `paths.db_path()` for code and tests that read it.
+"""
+import importlib.util
 import json
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "jobs.db"
+from .core import clock, paths
+
+MIGRATE = "jobhunt.core.db.migrate"
+BUSY_TIMEOUT_S = 30  # the web server, its worker and the CLI share the file; each waits out the others' writes
+
+
+def __getattr__(name):  # old constant, read live (PEP 562)
+    if name == "DB_PATH":
+        return paths.db_path()
+    raise AttributeError(name)
 
 # Pipeline order. Anything from 'applied' on is an application in flight.
 STATUSES = [
@@ -116,7 +131,8 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    """Now in UTC as `2026-10-22T09:00:00Z` (older rows end in `+00:00`; both compare on 19 characters)."""
+    return clock.iso()
 
 
 def json_text(value) -> str:
@@ -127,19 +143,40 @@ def json_value(text: str):
     return json.loads(text)
 
 
-def connect(path: Path = DB_PATH) -> sqlite3.Connection:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # The web server and its worker share the file; wait out each other's writes.
-    con = sqlite3.connect(path, timeout=30, check_same_thread=False)
-    con.execute("PRAGMA journal_mode = WAL")
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA foreign_keys = ON")
+def _baseline(con: sqlite3.Connection) -> None:
+    """The schema as it was before migrations, for as long as the migration runner is not installed."""
     con.executescript(SCHEMA)
     if "contacts" not in {r["name"] for r in con.execute("PRAGMA table_info(applications)")}:
         try:
             con.execute("ALTER TABLE applications ADD COLUMN contacts TEXT")
         except sqlite3.OperationalError:  # another process added it first
             pass
+
+
+def _upgrade(con: sqlite3.Connection, path: Path) -> None:
+    """Runs pending migrations; a database saved by a newer Hal raises `DataTooNew`."""
+    if importlib.util.find_spec(MIGRATE) is None:
+        _baseline(con)
+        return
+    migrate = importlib.import_module(MIGRATE)
+    version = con.execute("PRAGMA user_version").fetchone()[0]
+    if version > migrate.LATEST:
+        raise migrate.DataTooNew(
+            "This data was saved by a newer Hal. Update Hal, or go back with Settings, Updates.")
+    if version < migrate.LATEST:
+        # data/backups for the real database (paths.backups_dir()); beside the file for one opened by path
+        migrate.migrate(con, db_path=path, backup_dir=path.parent / "backups")
+
+
+def connect(path: Path | None = None) -> sqlite3.Connection:
+    """Opens the database (default `paths.db_path()`) with WAL and foreign keys, migrated to this code."""
+    path = Path(path) if path is not None else paths.db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(path, timeout=BUSY_TIMEOUT_S, check_same_thread=False)
+    con.execute("PRAGMA journal_mode = WAL")
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA foreign_keys = ON")
+    _upgrade(con, path)
     return con
 
 

@@ -33,11 +33,36 @@ from datetime import date
 from pathlib import Path
 
 from .config import CONFIG
+from .core import paths
 from .llm import HAL_ROOT
 
-VAULT = Path(CONFIG.get("record_vault", "~/vaults/Employment-Record")).expanduser()
-OLLAMA = (CONFIG.get("ollama_url") or "http://localhost:11434").rstrip("/")
-MODEL = CONFIG.get("record_embed_model", "nomic-embed-text")
+OLLAMA_DEFAULT = "http://localhost:11434"
+MODEL_DEFAULT = "nomic-embed-text"
+
+
+def _setting(key: str, legacy_key: str, default):
+    # The stored setting wins; config.toml answers until the importer has copied it into settings.
+    from .core.settings import store
+
+    return store.stored(key) or CONFIG.get(legacy_key) or default
+
+
+# Resolved when used: VAULT (the record folder, setting record.folder), OLLAMA (ai.ollama_url) and MODEL
+# (ai.model.embed).
+_LIVE = {"VAULT": lambda: Path(_setting("record.folder", "record_vault", None) or paths.record_default()).expanduser(),
+         "OLLAMA": lambda: str(_setting("ai.ollama_url", "ollama_url", OLLAMA_DEFAULT)).rstrip("/"),
+         "MODEL": lambda: _setting("ai.model.embed", "record_embed_model", MODEL_DEFAULT)}
+
+
+def __getattr__(name):  # old constants, read live (PEP 562)
+    if name in _LIVE:
+        return _LIVE[name]()
+    raise AttributeError(name)
+
+
+def _live(name: str):
+    """An old constant: the value a test assigned to the module, else the live value."""
+    return globals()[name] if name in globals() else _LIVE[name]()
 # What MarkItDown reads; Markdown notes themselves are indexed as they are.
 DOCUMENTS = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".epub", ".msg", ".txt")
 # Photos and scans of certificates, read by OCR.
@@ -131,7 +156,7 @@ def convert() -> list[Path]:
 def _walk(suffixes: tuple) -> list[Path]:
     rag = _hal_rag()
     found = []
-    for folder, dirs, files in os.walk(VAULT):
+    for folder, dirs, files in os.walk(_live("VAULT")):
         dirs[:] = [d for d in dirs if d not in rag.SKIP_DIRS and not d.startswith(".")]
         found += [Path(folder) / f for f in files if f.lower().endswith(suffixes)]
     return sorted(found)
@@ -142,9 +167,10 @@ def _embed(texts: list[str], kind: str) -> list[list[float]]:
     prefix = "search_query: " if kind == "query" else "search_document: "
     out = []
     for i in range(0, len(texts), 32):
-        body = json.dumps({"model": MODEL, "input": [prefix + t for t in texts[i:i + 32]],
+        body = json.dumps({"model": _live("MODEL"), "input": [prefix + t for t in texts[i:i + 32]],
                            "options": {"num_gpu": 0}, "keep_alive": "10m"}).encode()
-        req = urllib.request.Request(f"{OLLAMA}/api/embed", data=body, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(f"{_live('OLLAMA')}/api/embed", data=body,
+                                     headers={"Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 out += json.loads(r.read())["embeddings"]
@@ -155,18 +181,18 @@ def _embed(texts: list[str], kind: str) -> list[list[float]]:
 
 def _store():
     rag = _hal_rag()
-    return rag.VectorStore(rag.index_dir_for(VAULT)).load()
+    return rag.VectorStore(rag.index_dir_for(_live("VAULT"))).load()
 
 
 def sync() -> dict:
     """Converts new documents and re-indexes changed notes; returns what changed."""
-    if not VAULT.exists():
-        raise RecordUnavailable(f"no employment record at {VAULT}")
+    if not _live("VAULT").exists():
+        raise RecordUnavailable(f"no employment record at {_live('VAULT')}")
     rag = _hal_rag()
     converted = convert()
     store = _store()
     # Index, topic and dashboard notes are navigation, as in Hal's own vault-index.py.
-    notes = {rel: path for rel, path in rag.iter_vault_notes(VAULT)
+    notes = {rel: path for rel, path in rag.iter_vault_notes(_live("VAULT"))
              if rag.should_index(path.read_text(encoding="utf-8", errors="replace"))}
     hashes = {rel: rag.file_hash(p) for rel, p in notes.items()}
     changed = [rel for rel, h in hashes.items() if store.manifest.get(rel) != h]
@@ -183,7 +209,7 @@ def sync() -> dict:
         store.save()
         _CACHE.clear()
     return {"notes": len(notes), "passages": len(store.chunks), "changed": len(changed), "removed": len(gone),
-            "converted": [str(p.relative_to(VAULT)) for p in converted]}
+            "converted": [str(p.relative_to(_live("VAULT"))) for p in converted]}
 
 
 _CACHE: dict = {}
@@ -253,10 +279,11 @@ def ask(question: str) -> dict:
 def status() -> dict:
     """How the record stands: where it is, how much it holds, and when it was last indexed."""
     try:
-        store = _store() if VAULT.exists() else None
+        store = _store() if _live("VAULT").exists() else None
     except RecordUnavailable:
         store = None
-    manifest = _hal_rag().index_dir_for(VAULT) / "manifest.json" if store is not None else None
-    return {"vault": str(VAULT), "exists": VAULT.exists(), "notes": len(store.manifest) if store else 0,
+    manifest = _hal_rag().index_dir_for(_live("VAULT")) / "manifest.json" if store is not None else None
+    vault = _live("VAULT")
+    return {"vault": str(vault), "exists": vault.exists(), "notes": len(store.manifest) if store else 0,
             "passages": len(store.chunks) if store else 0,
             "indexed": date.fromtimestamp(manifest.stat().st_mtime).isoformat() if manifest and manifest.exists() else None}
