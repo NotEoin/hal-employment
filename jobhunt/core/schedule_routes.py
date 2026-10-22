@@ -12,21 +12,39 @@ import logging
 import threading
 
 from ..web.router import BadRequest, Request, route
-from . import activity, home, plugins, runner, scheduler
+from . import activity, health, home, plugins, runner, scheduler
 
 log = logging.getLogger(__name__)
 
 RESTART_AFTER_S = 0.5     # long enough for the reply to leave before the server goes
 LOGIN_KEY = "schedule.start_at_login"
+ADDON_PREFIX = "addon."
 
 
 @plugins.on_start
 def start_schedule() -> None:
-    """Starts the in-app schedule with the server, and applies start at login whenever it changes."""
+    """Starts the in-app schedule with the server; applies start at login and the /jobs command as they change."""
     from . import settings
 
     scheduler.start()
     settings.on_change(LOGIN_KEY, apply_start_at_login)
+    settings.on_change(ADDON_PREFIX, install_jobs_command)
+    install_jobs_command()
+
+
+def install_jobs_command(*_changed) -> None:
+    """Renders the owner's `/jobs` command again whenever an add-on setting changes; never for a test home."""
+    from ..addons import hal
+
+    if health.in_own_home():
+        return
+    try:
+        written = hal.install_jobs_command()
+    except OSError as e:
+        log.warning("could not write the /jobs command: %s", e)
+        return
+    if written is not None:
+        log.info("wrote the /jobs command to %s", written)
 
 
 def apply_start_at_login(key: str, old, new) -> str | None:

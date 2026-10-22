@@ -1,18 +1,40 @@
-"""Mirror the pipeline into Hal's Obsidian vault.
+"""The Pipeline note: a Markdown dashboard of what needs the person, their applications and the best matches.
 
-Writes Areas/Job Search/Pipeline.md in the Employment vault. Its dated
-'- [ ]' tasks appear in Hal's morning brief, and `hal ask` can answer
-questions about applications. Tasks ticked in Obsidian stay ticked.
+`actions(con)` lists what needs the person, with due dates; the daily summary uses it too. The note itself
+is written only through the Hal add-on (`addons/hal/pipeline.py`), into `addon.vault`, so its dated
+`- [ ]` tasks reach Hal's morning brief; tasks ticked in Obsidian stay ticked. `write(con)` keeps the old
+entry point that `jobhunt mail` and `jobhunt vault` call.
 """
+import os
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from .config import CONFIG
+NOTE_PATH = Path("Areas") / "Job Search" / "Pipeline.md"
+# What VAULT reads as while the add-on is off or has no vault: a path that never exists, so old callers that
+# test `VAULT.exists()` before writing (pack.py) write nothing.
+NO_VAULT = Path(os.devnull) / "no-hal-vault"
 
-VAULT = Path(CONFIG.get("hal_vault", "~/vaults/Employment")).expanduser()
-NOTE = VAULT / "Areas" / "Job Search" / "Pipeline.md"
-FOLLOW_UP_DAYS = 10
+
+def _vault() -> Path:
+    from .addons import hal
+
+    return hal.vault() or NO_VAULT
+
+
+_LIVE = {"VAULT": _vault, "NOTE": lambda: _vault() / NOTE_PATH}
+
+
+def __getattr__(name):  # old path constants, read live (PEP 562)
+    if name in _LIVE:
+        return _LIVE[name]()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _follow_up_days() -> int:
+    from .core import settings
+
+    return int(settings.get("notify.follow_up_days"))
 
 
 def _ticked(path: Path) -> set[str]:
@@ -22,7 +44,7 @@ def _ticked(path: Path) -> set[str]:
 
 
 def actions(con) -> list[tuple[str, str]]:
-    """(text, due date) for everything that needs Firstname."""
+    """(text, due date) for everything that needs the person."""
     today = date.today().isoformat()
     out = []
     for r in con.execute("""SELECT j.id, j.company, j.title, j.status, e.subject, e.date
@@ -36,20 +58,30 @@ def actions(con) -> list[tuple[str, str]]:
     for r in con.execute("""SELECT company, subject, date FROM emails
                             WHERE kind='human' AND date >= datetime('now','-14 days') ORDER BY date"""):
         out.append((f"Read and reply: {r['company'] or 'unknown sender'} - \"{r['subject']}\"", r["date"][:10]))
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=FOLLOW_UP_DAYS)).isoformat()
+    follow_up_days = _follow_up_days()
+    cutoff = (datetime.now(UTC) - timedelta(days=follow_up_days)).isoformat()
     for r in con.execute("""SELECT j.id, j.company, j.title, MAX(ev.at) last FROM jobs j
                             JOIN events ev ON ev.job_id = j.id
                             WHERE j.status = 'applied' GROUP BY j.id HAVING last < ?""", (cutoff,)):
-        due = (datetime.fromisoformat(r["last"]) + timedelta(days=FOLLOW_UP_DAYS)).date().isoformat()
-        out.append((f"Follow up (no reply in {FOLLOW_UP_DAYS}+ days): {r['company']} - {r['title']}", due))
+        due = (datetime.fromisoformat(r["last"]) + timedelta(days=follow_up_days)).date().isoformat()
+        out.append((f"Follow up (no reply in {follow_up_days}+ days): {r['company']} - {r['title']}", due))
     return out
 
 
 def write(con) -> Path | None:
-    if not VAULT.exists():
+    """Writes the Pipeline note when the Hal add-on says to; returns its path, or None."""
+    from .addons.hal import pipeline
+
+    return pipeline.write(con)
+
+
+def write_note(con, folder: Path) -> Path | None:
+    """Writes the Pipeline note under `folder`; None when that folder does not exist."""
+    if not folder.is_dir():
         return None
-    NOTE.parent.mkdir(parents=True, exist_ok=True)
-    done = _ticked(NOTE)
+    note = folder / NOTE_PATH
+    note.parent.mkdir(parents=True, exist_ok=True)
+    done = _ticked(note)
     lines = ["---", "type: dashboard", "tags: [job-search, generated]",
              f"updated: {datetime.now().isoformat(timespec='minutes')}", "---", "",
              "# Job search pipeline", "",
@@ -75,5 +107,5 @@ def write(con) -> Path | None:
                             WHERE status IN ('new','shortlisted','ready') AND active=1 AND score >= 60
                             ORDER BY score DESC LIMIT 15"""):
         lines.append(f"- **{r['score']:.0f}** [{r['company']} - {r['title']}]({r['url']}) | {r['location']}")
-    NOTE.write_text("\n".join(lines) + "\n")
-    return NOTE
+    note.write_text("\n".join(lines) + "\n")
+    return note

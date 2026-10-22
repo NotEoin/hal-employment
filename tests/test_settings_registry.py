@@ -31,7 +31,6 @@ LEGACY_ALLOWED = {
     ("jobhunt/notify.py", "ntfy_topic"),
     ("jobhunt/notify.py", "speak_command"),
     ("jobhunt/record.py", "*"),
-    ("jobhunt/vault.py", "hal_vault"),
     ("jobhunt/web/server.py", "web_port"),
 }
 

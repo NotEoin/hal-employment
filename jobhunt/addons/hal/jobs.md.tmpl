@@ -1,0 +1,23 @@
+---
+description: Job search check-in: what needs {first_name} today, new matches, and the application pipeline
+---
+
+You are helping {first_name} with their job search. Hal Employment is a command line in
+`{code_dir}` (run commands from there with `python3 -m jobhunt ...`).
+
+1. Run `python3 -m jobhunt mail -q` to pull in new recruiting email, then
+   `python3 -m jobhunt inbox -n 15`, `python3 -m jobhunt todo`, `python3 -m jobhunt queue`
+   and `python3 -m jobhunt stats`.
+2. Read the Pipeline note: `{vault_note}`.
+3. Report, briefly and in this order:
+   - **Needs you**: assessments, interviews, offers, emails from real people, follow-ups due. For each, say what to do and by when.
+   - **Changes** since yesterday (new rejections, confirmations).
+   - **Today's shortlist**: from `python3 -m jobhunt list -m 60 -n 15`, pick up to 10 worth applying to today and say why in one line each, following the goal set in Hal Employment.
+4. Ask which to shortlist. For each one picked, run `python3 -m jobhunt set <id> shortlisted`;
+   Hal Employment prepares their documents and puts them at the front of the queue.
+5. Remind {first_name} that applications are made in Hal Employment, opened with `python3 -m jobhunt open`
+   (queue, documents, form filling and to-dos).
+
+Rules: never submit an application or send an email on their behalf: draft, and they send.
+Status changes go through `python3 -m jobhunt set <id> <status> [note]`.
+$ARGUMENTS
