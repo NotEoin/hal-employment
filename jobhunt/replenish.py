@@ -1,21 +1,21 @@
-"""Keeps the application queue full: screens the best unreviewed jobs and drafts their packs.
+"""Keeps documents ready for the best matches: screens the next job and drafts its pack (`find.prepare`).
 
-The queue is the open jobs with status 'ready'. While it holds fewer than
-`queue_size` (config.toml, default 10), the next candidate by score is screened
-by the local model and, if eligible, gets a pack. Model work waits for the GPU.
+The queue is the open jobs with status 'ready'. While it holds fewer than `scoring.prepare_ahead`, the best
+shown job among the kinds the person chose (`hidden_rule IS NULL`, at or above `scoring.min_show`) is
+screened by the AI when `scoring.screen` is on and, if it fits, gets a pack. Paid internships, placements
+and the other kinds are prepared like any job when the goal includes them; today's code never queued a
+graduate internship (L replenish.py:18). Model work waits for the GPU.
 """
 from . import db, gpu, pack, screen
-from .config import CONFIG
+from .core import settings
 
-TARGET = int(CONFIG.get("queue_size", 10))
-MIN_SCORE = float(CONFIG.get("queue_min_score", 45))
 # A pack that failed is retried after this long, in case the cause was transient.
 RETRY_AFTER = "-1 day"
 
 CANDIDATES = """
 SELECT j.* FROM jobs j
 WHERE j.status IN ('new', 'shortlisted') AND j.active = 1 AND COALESCE(j.score, 0) >= ?
-  AND COALESCE(j.score_notes, '') NOT LIKE '%graduate internship%'
+  AND j.hidden_rule IS NULL AND COALESCE(j.screen_state, '') != 'out'
   AND NOT EXISTS (SELECT 1 FROM events e WHERE e.job_id = j.id AND e.kind = 'pack-error'
                   AND e.at >= datetime('now', ?))
   AND NOT EXISTS (SELECT 1 FROM jobs d WHERE d.id != j.id AND d.status NOT IN ('new', 'closed')
@@ -25,8 +25,30 @@ LIMIT 1
 """
 
 
+def __getattr__(name):
+    # old constants, read live
+    if name == "TARGET":
+        return int(settings.get("scoring.prepare_ahead"))
+    if name == "MIN_SCORE":
+        return float(settings.get("scoring.min_show"))
+    raise AttributeError(name)
+
+
+def _live(name: str):
+    """An old constant: a value a test assigned to the module, else the live setting."""
+    return globals()[name] if name in globals() else __getattr__(name)
+
+
 def queued(con) -> int:
+    """How many open jobs have their documents ready."""
     return con.execute("SELECT COUNT(*) FROM jobs WHERE status = 'ready' AND active = 1").fetchone()[0]
+
+
+def _screened(job) -> bool:
+    keys = job.keys() if hasattr(job, "keys") else ()
+    if "screen_state" in keys and job["screen_state"] == "eligible":
+        return True
+    return "screened eligible" in (job["score_notes"] or "")
 
 
 def step(con, report=lambda msg: None) -> tuple[bool, str]:
@@ -39,17 +61,18 @@ def step(con, report=lambda msg: None) -> tuple[bool, str]:
     Returns:
         (worked, message): whether anything was done, and the queue's state.
     """
+    target, min_score = _live("TARGET"), _live("MIN_SCORE")
     have = queued(con)
-    if have >= TARGET:
-        return False, f"queue full, {have - TARGET} more in reserve" if have > TARGET else "queue full"
-    job = con.execute(CANDIDATES, (MIN_SCORE, RETRY_AFTER)).fetchone()
+    if have >= target:
+        return False, f"queue full, {have - target} more in reserve" if have > target else "queue full"
+    job = con.execute(CANDIDATES, (min_score, RETRY_AFTER)).fetchone()
     if job is None:
-        return False, f"{have} of {TARGET} queued; no more jobs score {MIN_SCORE:.0f} or above"
+        return False, f"{have} of {target} queued; no more jobs score {min_score:.0f} or above"
     reason = gpu.busy()
     if reason:
-        return False, f"{have} of {TARGET} queued; {reason}"
+        return False, f"{have} of {target} queued; {reason}"
 
-    if "screened eligible" not in (job["score_notes"] or "") and job["status"] == "new":
+    if settings.get("scoring.screen") and not _screened(job) and job["status"] == "new":
         report(f"screening {job['company']}: {job['title']}")
         eligible, why = screen.screen_one(con, job)
         if not eligible:

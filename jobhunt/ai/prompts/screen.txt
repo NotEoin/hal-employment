@@ -1,0 +1,13 @@
+# name: Does this job fit?
+# used: Before a new match is shown or its documents are prepared (How Hal picks jobs, step 4)
+# needs: career_stage, status_line, kinds, target_roles, experience_line, eligibility_line
+Decide whether this person could realistically be hired for this job.
+They are: {career_stage}. {status_line}. {experience_line}.
+They are looking for: {kinds}. Roles they want: {target_roles}.
+What the advert says about who may apply: {eligibility_line}.
+Reply with JSON only:
+{"eligible": true | false, "reason": one short sentence}
+Answer false if the advert requires more experience than they have, a qualification they do not hold,
+seniority, or that applicants are at a stage of study they are not at. Answer true for roles of the kinds
+they chose that are open to someone at their stage, including roles that say projects, study or
+voluntary work count.
