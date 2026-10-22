@@ -30,7 +30,7 @@ LEGACY = {
     "config.toml", "extension/background.js", "extension/content.js", "jobhunt/adopt.py", "jobhunt/autofill.py",
     "jobhunt/browser.py", "jobhunt/cvscore.py", "jobhunt/salary.py", "jobhunt/web/static/app.js",
     "jobhunt/web/static/classic/app.js", "tests/test_apply.py", "tests/test_salary.py", "tests/test_autofill.py",
-    "tests/test_cvscore.py", "tests/test_driver.py", "tests/test_extension.py", "tests/support/legacy.py",
+    "tests/test_cvbuild.py",
 }
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
@@ -52,7 +52,7 @@ def added_lines(base: str | None = None) -> dict[str, list[tuple[int, str]]]:
     A line identical to one the same diff removes counts as moved, not added, so moving legacy code into a
     new module does not make its old lines new.
     """
-    args = ["diff", "-U0", "--no-color", "--no-ext-diff", "--diff-filter=AMR"]
+    args = ["diff", "-U0", "--no-color", "--no-ext-diff", "--diff-filter=AMRD"]
     args += [base] if base else ["--cached"]
     added: dict[str, list[tuple[int, str]]] = {}
     removed: set[str] = set()
