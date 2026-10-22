@@ -1,1 +1,25 @@
 /* Rules for the settings pages only; the page's owner adds them here, never in app.css. */
+.sc-text { min-width: 0; }
+.sc-wide { width: 260px; max-width: 100%; }
+.sc-short { width: 120px; max-width: 100%; }
+.sc-select { width: auto; max-width: 100%; }
+.sc-search { width: 280px; max-width: 100%; }
+.sc-num { min-width: 74px; }
+.sc-info { overflow-wrap: anywhere; }
+.sc-list { margin: 0; padding-left: 18px; }
+.sc-err { color: var(--bad); font-weight: 700; margin-top: 4px; }
+.sc-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; max-width: 100%; }
+.sc-add { width: 120px; }
+.sc-n { font-family: var(--mono, monospace); color: var(--muted); margin-right: 2px; }
+.sc-multi { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sc-more { padding: 12px 0 0; }
+.sc-note { justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 8px; }
+.sc-banner { margin-bottom: 16px; }
+.sc-pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; background: var(--sunk);
+  padding: 12px; border-radius: 10px; font-size: 13px; margin: 8px 0; }
+.sc-prompt-text { min-height: 220px; width: 100%; }
+.sc-q { display: grid; gap: 6px; margin: 12px 0; }
+.sc-q .input { width: 100%; }
+.sc-version { align-items: center; }
+.card > .note { margin-bottom: 8px; }
+.sc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
