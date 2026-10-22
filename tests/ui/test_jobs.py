@@ -96,9 +96,13 @@ class JobsPages(unittest.TestCase):
 
     def test_keys_j_k_a_s_n_act_on_the_chosen_job(self) -> None:
         started = []
+        # The real kind writes documents; a stand-in replaces it for this test and the real one comes back.
+        runner.load_kinds()
+        self.enterContext(mock.patch.dict(runner.KINDS))
+        self.enterContext(mock.patch.dict(runner._FNS))
+        runner.forget("docs.prepare")
         runner.action("docs.prepare", area="documents", label="Making documents", why="You pressed Apply",
                       example=lambda w: {})(lambda ctx, job_id: (started.append(job_id), ctx.step("started")))
-        self.addCleanup(runner.forget, "docs.prepare")
         p = self.tab("jobs")
         p.page.wait_for_selector(".joblist .job")
         for key, n in (("j", 0), ("j", 1), ("k", 0)):
