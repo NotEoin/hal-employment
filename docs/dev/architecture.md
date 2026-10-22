@@ -27,6 +27,10 @@ module code reads them through `_live(name)`, which honours a value a test assig
 raises `RealDataInTests`. Test modules import `support` before `jobhunt` (checked by
 `test_every_test_module_imports_support_before_jobhunt`).
 
+**Worktree guard.** In a linked git worktree (a second working copy, whose `.git` is a file), every data path with no
+override raises `RealDataFromWorktree` when it would land in the account's real home, in test mode or not.
+Set `HAL_EMPLOYMENT_HOME` to a folder inside the worktree before running any Hal command there.
+
 ## Time (`core/clock.py`)
 
 `now_utc()`, `iso()` (`2026-10-22T09:00:00Z`) and `local_day()`. `HAL_EMPLOYMENT_FAKE_NOW` fixes the time in

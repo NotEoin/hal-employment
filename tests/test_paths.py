@@ -105,6 +105,29 @@ class Guard(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.strip(), paths.APP_DIR)
 
+    def test_a_build_worktree_never_reaches_the_real_folders(self):
+        # a server started in a worktree without a temporary home created the real data folder (2026-10-22)
+        account = temp_dir(self)
+        code = account / "worktrees" / "feature"
+        code.mkdir(parents=True)
+        (code / ".git").write_text("gitdir: elsewhere\n", encoding="utf-8")
+        env = {k: v for k, v in os.environ.items()
+               if k not in (paths.ENV_HOME, paths.ENV_TEST, "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME")}
+        with mock.patch.object(paths, "_account_home", return_value=account), \
+             mock.patch.object(paths, "code_dir", return_value=code), \
+             mock.patch.object(paths, "_under_test_runner", return_value=False), \
+             mock.patch.object(paths, "_linux_documents", return_value=account / "Documents"):
+            with mock.patch.dict(os.environ, env | {"HOME": str(account)}, clear=True):
+                for name in DATA_FUNCTIONS:
+                    with self.subTest(name), self.assertRaises(paths.RealDataFromWorktree):
+                        getattr(paths, name)()
+            with mock.patch.dict(os.environ, env | {"HOME": str(code / ".tmp-home")}, clear=True):
+                self.assertTrue(paths.data_dir().is_relative_to(code))
+            (code / ".git").unlink()
+            (code / ".git").mkdir()
+            with mock.patch.dict(os.environ, env | {"HOME": str(account)}, clear=True):
+                self.assertTrue(paths.data_dir().is_relative_to(account))
+
     def test_importing_support_gives_a_run_with_no_variables_a_temporary_home(self):
         # Regression: a suite run by hand with no variables failed at import instead of using a temp home
         script = ("import os, sys; sys.path.insert(0, 'tests'); import support; from jobhunt.core import paths; "

@@ -8,6 +8,10 @@ Python 3.11 or newer before the venv trampoline has run.
 The test guard: with `HAL_TEST_MODE=1`, or under the unittest runner, and no override, every data path
 raises `RealDataInTests`, so a test that forgets its temporary home fails instead of reading real data.
 `code_dir()` is exempt, because it is the code, never data.
+
+The worktree guard: a linked git worktree (`.git` is a file) is a second working copy of the code, so with no
+override it refuses folders under the account's real home and raises `RealDataFromWorktree`, test mode or
+not. A server started in a worktree once created the real data folder that way (2026-10-22).
 """
 from __future__ import annotations
 
@@ -42,6 +46,10 @@ class RealDataInTests(RuntimeError):
     """A test asked for a data folder without a temporary home, so it would have reached real data."""
 
 
+class RealDataFromWorktree(RealDataInTests):
+    """A build worktree asked for a data folder without a temporary home, so it would have reached real data."""
+
+
 def _is_windows() -> bool:
     return os.name == "nt"
 
@@ -73,12 +81,44 @@ def home_override() -> Path | None:
 
 
 def _guarded() -> Path | None:
-    """The override; raises when there is none and this is a test run."""
+    """The override; raises when there is none and this is a test run or a build worktree."""
     home = home_override()
     if home is None and (os.environ.get(ENV_TEST) == "1" or _under_test_runner()):
         raise RealDataInTests(
             f"A test asked for Hal's folders without a temporary home. Set {ENV_HOME} or use paths.set_override().")
+    if home is None and _in_linked_worktree() and _reaches_account_home():
+        raise RealDataFromWorktree(
+            f"This copy of the code is a git worktree, which never uses your real folders. Set {ENV_HOME} to a "
+            f"folder inside {code_dir()}.")
     return home
+
+
+def _in_linked_worktree() -> bool:
+    """True when the code is a linked git worktree, whose `.git` is a file pointing at the main repo."""
+    return (code_dir() / ".git").is_file()
+
+
+def _account_home() -> Path | None:
+    """The account's own home from the password database, which `HOME` cannot redirect; None on Windows."""
+    if _is_windows():
+        return None
+    import pwd
+
+    try:
+        return Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
+    except KeyError:
+        return None
+
+
+def _reaches_account_home() -> bool:
+    """True when the platform folders would land in the account's real home, outside the code folder."""
+    real = _account_home()
+    if real is None:
+        return False
+    code = code_dir()
+    bases = [Path.home()] + [Path(raw) for name in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME")
+                             if (raw := os.environ.get(name, "").strip())]
+    return any(b.resolve().is_relative_to(real) and not b.resolve().is_relative_to(code) for b in bases)
 
 
 @contextmanager
