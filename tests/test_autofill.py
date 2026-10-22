@@ -245,6 +245,18 @@ class Answers(unittest.TestCase):
         self.assertEqual(con.execute("SELECT scope FROM answers2").fetchone()["scope"], "never")
         self.assertIn("Made-up short reason.", autofill._facts(nxt, {}, con))   # only as an example of their voice
 
+    def test_a_box_for_an_emailed_code_is_left_for_the_code_step(self):
+        """A code box is never filled from a saved answer, a profile fact or the AI."""
+        con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        self.addCleanup(con.close)
+        label = "Enter the security code we emailed you"
+        autofill.remember(con, [{"hid": "h0", "kind": "text", "label": label, "value": "MADEUP12", "source": "you"}],
+                          "Practice Ltd", job=self.job)
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM answers2").fetchone()[0], 0)
+        f = {"hid": "h0", "kind": "text", "type": "text", "label": label, "required": True}
+        filled = autofill.propose(self.job, [f], {}, {}, con)[0]
+        self.assertEqual((filled["value"], filled["skip"], filled["note"]), (None, True, autofill.CODE_NOTE))
+
     def test_a_number_ending_a_sentence_in_the_source_is_supported(self):
         """A source's "2023-2024." holds 2024, so a draft giving 2024 is not flagged."""
         from jobhunt import pack

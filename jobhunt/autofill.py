@@ -64,6 +64,11 @@ HEALTH = ("disability", "disability_type", "guaranteed_interview", "adjustments"
 PRIVATE_KEYS = (*HEALTH, "carer")
 CARED_FOR = re.compile(r"care leaver|been in care|cared for", re.I)
 YOURSELF = "Answer this yourself"
+# A box for the code a site emails: only the code step types it (`apply.driver._type_code`), so a form fill
+# never guesses, recalls or remembers one. Same wording as the code wall `browser.CODE_WALL` looks for.
+CODE_BOX = re.compile(r"(verification|security|confirmation|one[- ]time|access) code|passcode|enter the code|"
+                      r"code (we|was|that was) (sent|emailed)", re.I)
+CODE_NOTE = "the code the site emails you; Hal never guesses it"
 # Labels longer than this are paragraphs with a question in them; a keyword match there proves little.
 RULE_LABEL = 170
 # A box asking for a fact about the person has a short label; a longer one is a question for the model.
@@ -457,7 +462,7 @@ def remember(con, fields: list[dict], company: str = "", job=None) -> int:
         value = f.get("value")
         if f.get("source") != "you" or value in (None, "", []) or f["kind"] == "file" or f.get("type") == "password":
             continue
-        if private_question(f) is not None:
+        if private_question(f) is not None or CODE_BOX.search(f.get("label") or ""):
             continue
         question = _key(f, company)
         if len(question) < 3:
@@ -571,6 +576,9 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
         if f.get("type") == "password":
             # Passwords never pass through Hal or its database.
             f.update(skip=True, source="skipped", note="type this into the form yourself")
+            continue
+        if CODE_BOX.search(label):
+            f.update(skip=True, source="skipped", note=CODE_NOTE)
             continue
         if f["kind"] == "file":
             if re.search(r"autofill|photo|picture|avatar", text, re.I):
