@@ -1,7 +1,8 @@
 """Applying in Hal's own browser, against the practice site in tests/site: reaching the form, filling it,
 waiting for approval, discarding, choosing what to apply for, and forms already open.
 
-Moved by class from tests/test_apply.py; the test bodies are unchanged.
+Moved by class from tests/test_apply.py. Hal never presses Submit, so the two tests that had Hal
+send the form now end with the form handed over, and the applicant presses Submit in the page.
 """
 import tempfile
 import threading
@@ -13,6 +14,7 @@ from support import legacy
 from support.legacy import PROSE, Practice
 
 from jobhunt import autofill, browser, db, documents
+from jobhunt.apply import driver
 from jobhunt.web import server
 
 # unittest runs these for this module: no salary research, and no private answers.
@@ -33,6 +35,10 @@ class Applying(Practice):
     def page_text(self, job_id: str) -> str:
         return browser.BROWSER.call(lambda b: b.tab(job_id).locator("body").inner_text())
 
+    def press_yourself(self, job_id: str, selector: str) -> None:
+        """The applicant presses a button in the job's tab."""
+        browser.BROWSER.call(lambda b: b.tab(job_id).click(selector))
+
     def test_reads_each_question_with_its_own_label_and_options(self):
         job_id = self.job("read", "form.html")
         found = browser.open_form(job_id, f"{self.base}/form.html")
@@ -46,7 +52,7 @@ class Applying(Practice):
         self.assertEqual(by_label["Date of birth"]["section"], "2. Questions")
         self.assertTrue(found["next"] and not found["submit"])
 
-    def test_fills_the_form_waits_for_approval_then_submits(self):
+    def test_fills_the_form_waits_for_approval_and_never_submits(self):
         job_id = self.job("full", "advert.html")
         said = server.act_auto(self.con, job_id)
         # Page one cannot be passed: nothing Hal knows answers the date of birth.
@@ -69,13 +75,21 @@ class Applying(Practice):
 
         sent = browser.BROWSER.call(lambda b: b.tab(job_id).evaluate("() => window.halSent || null"))
         self.assertIsNone(sent)
-        self.assertEqual(server.act_approve(self.con, job_id, []), "application submitted")
+        # Approving the last page hands it over; nothing is pressed and nothing is sent.
+        self.assertEqual(server.act_approve(self.con, job_id, []), driver.HANDED_OVER)
+        self.assertIsNone(browser.BROWSER.call(lambda b: b.tab(job_id).evaluate("() => window.halSent || null")))
+        self.assertEqual(self.status(job_id), "applying")
+        app = self.con.execute("SELECT handed_over_at FROM applications WHERE job_id = ?", (job_id,)).fetchone()
+        self.assertTrue(app["handed_over_at"].endswith("Z"))
+        # The applicant presses Submit; the site's thanks marks the job applied.
+        self.press_yourself(job_id, "#send")
+        self.assertFalse(server._watch_step(self.con, job_id, {}))
         self.assertEqual(self.status(job_id), "applied")
         # What he typed himself is kept for the next form that asks it.
         kept = self.con.execute("SELECT answer FROM answers WHERE question = 'date of birth'").fetchone()
         self.assertEqual(db.json_value(kept["answer"]), "01/02/2003")
 
-    def test_enters_the_emailed_code_and_reuses_an_earlier_answer(self):
+    def test_types_the_emailed_code_and_leaves_the_button_to_you(self):
         job_id = self.job("code", "form.html?code=1")
         self.con.execute("INSERT INTO answers VALUES ('date of birth', 'Date of birth', '\"01/02/2003\"', ?)", (db.now(),))
         self.con.commit()
@@ -83,7 +97,18 @@ class Applying(Practice):
         form = self.form(job_id)
         self.assertEqual((form["state"], form["step"]), ("ready", 2))
         self.assertEqual(form["done"][0]["fields"][-1]["source"], "your earlier answer")
-        self.assertEqual(server.act_approve(self.con, job_id, []), "application submitted")
+        self.assertEqual(server.act_approve(self.con, job_id, []), driver.HANDED_OVER)
+        # The applicant presses Submit; the site asks for the code it emailed.
+        self.press_yourself(job_id, "#send")
+        seen = {}
+        self.assertTrue(server._watch_step(self.con, job_id, seen))
+        tab = lambda b: b.tab(job_id)  # noqa: E731 - read on the browser thread
+        self.assertEqual(browser.BROWSER.call(lambda b: tab(b).input_value("#code")), "A1b2C3d4")
+        self.assertIsNone(browser.BROWSER.call(lambda b: tab(b).evaluate("() => window.halSent || null")))
+        self.assertEqual(self.status(job_id), "applying")
+        # Hal never presses the button beside the code; once the applicant does, the site's thanks counts.
+        self.press_yourself(job_id, "#send")
+        self.assertFalse(server._watch_step(self.con, job_id, seen))
         self.assertEqual(self.status(job_id), "applied")
 
     def test_what_the_form_received(self):
@@ -91,12 +116,9 @@ class Applying(Practice):
         self.con.execute("INSERT INTO answers VALUES ('date of birth', 'Date of birth', '\"01/02/2003\"', ?)", (db.now(),))
         self.con.commit()
         server.act_auto(self.con, job_id)
-        # Keeps the tab open after sending, to read back what the form was given.
-        closing, browser.close = browser.close, lambda job_id: None
-        try:
-            server.act_approve(self.con, job_id, [])
-        finally:
-            browser.close = closing
+        server.act_approve(self.con, job_id, [])
+        # The applicant presses Submit, and the form's own record of what it received is read back.
+        self.press_yourself(job_id, "#send")
         sent = browser.BROWSER.call(lambda b: b.tab(job_id).evaluate("() => window.halSent"))
         self.assertEqual(sent, {"first": "Ada", "uni": "University", "rtw": "y", "sponsor": False,
                                 "news": False, "why": PROSE, "cv": "Ada-Lovelace-CV.pdf", "heard": "Company website",

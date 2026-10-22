@@ -548,7 +548,7 @@ function paneForm(d) {
   const refused = form.fields.filter(f => f.error);
   const toRead = form.fields.filter(f => f.written || /unsure/.test(f.note || ""));
   const filled = app.stage === "filled" && form.filled;
-  const does = form.press === "apply" ? "press Apply" : form.final ? "submit" : "continue";
+  const does = form.final ? "fill in" : "continue";
   const tone = { ready: "done", needs: "", stuck: "error", working: "" }[form.state] ?? "";
   // What needs reading comes first: gaps, refusals, then anything Hal wrote in sentences.
   const rank = f => f.error ? 0 : blank(f) && f.required ? 1 : /unsure/.test(f.note || "") ? 2 : f.written ? 3 : 4;
@@ -591,8 +591,7 @@ function paneForm(d) {
               when the site confirms it. Changes you make in the form are remembered for the next one.</p>`
           : `<div class="bar"><button class="primary" data-show>Show the form</button><span class="grow"></span>
             <button class="good" data-approve ${running ? `disabled title="${WAIT}"` : ""}>Approve and ${does}</button></div>
-          <p class="small-t muted">${form.press === "apply" ? `Approving presses Apply on the advert, which sends the CV stored in your account there.`
-            : form.final ? `Look over the form in ${esc(where)}: it is filled in and nothing has been sent. Approving enters any changes you made here, then presses the form's own submit button. That cannot be undone.`
+          <p class="small-t muted">${form.final ? `Look over the form in ${esc(where)}: it is filled in and nothing has been sent. Approving puts any changes you made here in the form. Then press Submit on the site yourself.`
             : `This form has more pages. Approving moves it on; Hal stops again at the last page before anything is sent.`}</p>`}`
         : `<h4 class="muted small-t" style="margin:0 0 8px">${running ? "HAL IS FILLING THE FORM IN" : "NOT FILLED IN YET"}</h4>
           <p class="muted">${running ? "The answers on the left are going into the form now." : `Press "Fill in the form" below to have Hal fill it in.`}</p>`}
@@ -620,8 +619,8 @@ function paneForm(d) {
     const fields = collect();
     const left = fields.filter((f, i) => form.fields[i].required && !form.fields[i].skip && form.fields[i].type !== "password" && (f.value === "" || f.value === null || f.value === false || (Array.isArray(f.value) && !f.value.length)));
     const warn = left.length ? ` ${left.length} required question(s) have no answer here; unless you answered them in the form itself, the site will refuse it.` : "";
-    const ask = form.final || form.press === "apply"
-      ? [`Submit your application to ${d.job.company}?`, `Hal ${form.press === "apply" ? "presses Apply on the advert" : "presses the form's submit button"}. This sends the application and cannot be undone.${warn}`, "Submit application"]
+    const ask = form.final
+      ? [`Put your changes in the form for ${d.job.company}?`, `Hal puts your changes in the form and stops. Hal never presses Submit: then press Submit on the site yourself.${warn}`, "Approve and fill in"]
       : ["Move on to the next page?", `Hal presses Next. Nothing is sent yet; it stops again before the application is submitted.${warn}`, "Continue"];
     if (!await confirmBox(ask[0], ask[1], ask[2], "good")) return;
     startAction(id, "approve", { fields });

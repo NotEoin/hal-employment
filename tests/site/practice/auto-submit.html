@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Events Assistant</title></head><body>
+<!-- A page that sends its own form as boxes change: by a script call, and by asking for a submit. -->
+<h1>Apply: Events Assistant</h1>
+<form id="app" method="post" action="/sent/auto-submit">
+ <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+ <div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+ <div><label for="heard">How did you hear about us? *</label>
+  <select id="heard" name="heard" required><option value="">Select...</option><option>Company website</option><option>Job board</option></select></div>
+ <button type="submit">Submit application</button>
+</form>
+<script>
+const form = document.querySelector('#app');
+document.querySelector('#ln').addEventListener('change', () => form.submit());
+document.querySelector('#heard').addEventListener('change', () => form.requestSubmit());
+</script></body></html>

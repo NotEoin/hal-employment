@@ -48,6 +48,7 @@ from ..apply.driver import (
     _drive,
     _enter,
     _find_posting,
+    _hand_over,
     _hold,
     _hold_in_tab,
     _learn,
@@ -57,12 +58,12 @@ from ..apply.driver import (
     _open_points,
     _past_walls,
     _reach,
+    _refused,
     _same_answer,
-    _security_code,
-    _send,
     _shot,
     _summary,
     _terminal,
+    _type_code,
     _watch_step,
     act_adopt,
     act_approve,
@@ -140,6 +141,7 @@ __all__ = [
     "_drive",
     "_enter",
     "_find_posting",
+    "_hand_over",
     "_hold",
     "_hold_in_tab",
     "_job",
@@ -152,16 +154,16 @@ __all__ = [
     "_open_points",
     "_past_walls",
     "_reach",
+    "_refused",
     "_same_answer",
     "_say",
-    "_security_code",
-    "_send",
     "_set_app",
     "_shot",
     "_site",
     "_site_of",
     "_summary",
     "_terminal",
+    "_type_code",
     "_watch_step",
     "act_adopt",
     "act_approve",
@@ -212,6 +214,11 @@ def __getattr__(name):  # SERVABLE is resolved when used; tests assign their own
 
 
 CSRF_HEADER = "X-Hal"
+NEVER_SUBMIT = "Hal never presses Submit. Press it on the employer's site."
+
+
+class Gone(LookupError):
+    """A route that no longer does what it did: answered 410 with its words."""
 PAGES: dict[tuple, bytes] = {}  # document pages drawn as images, by file, its change time and page number
 
 
@@ -276,6 +283,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
             return self._json(self.api_post(urlparse(self.path).path[5:], body))
+        except Gone as e:
+            self._json({"error": str(e)}, 410)
         except LookupError as e:
             self._json({"error": str(e)}, 404)
         except (RuntimeError, ValueError) as e:
@@ -570,13 +579,16 @@ class Handler(BaseHTTPRequestHandler):
             if not browser.show(job_id):
                 raise RuntimeError("the form's tab is closed; press \"Fill in the form\" to open it again")
             return {"ok": True}
-        if action in ("approve", "submit"):
-            # The one way an application is sent: its owner's approval of the filled form.
+        if action == "submit":
+            raise Gone(NEVER_SUBMIT)
+        if action == "approve":
+            # Puts the owner's changes in, moves on from a middle page, and on the last page hands the form
+            # over: the owner presses Submit on the employer's site.
             app = _app(con, job_id)
             if app["stage"] != "filled":
                 raise RuntimeError("Hal has not finished filling the form in yet")
             last = app["form"]["final"]
-            return run_action(job_id, "submitting" if last else "moving on", act_approve, job_id,
+            return run_action(job_id, "putting your changes in" if last else "moving on", act_approve, job_id,
                               body.get("fields", []))
         if action == "applied":
             stop_action(job_id)

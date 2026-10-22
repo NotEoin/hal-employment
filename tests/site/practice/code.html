@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Data Assistant</title>
+<style>.hide{display:none}</style></head><body>
+<!-- A code wall: the first press shows a box for the code the site emailed; only a press with the code posts. -->
+<h1>Apply: Data Assistant</h1>
+<form id="app" method="post" action="/sent/code">
+ <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+ <div id="code-row" class="hide"><p>Enter the verification code we emailed you</p><input id="code" name="verification_code" maxlength="8"></div>
+ <button type="submit" id="send">Submit application</button>
+</form>
+<script>
+document.querySelector('#app').addEventListener('submit', e => {
+  if (document.querySelector('#code-row').classList.contains('hide')) {
+    e.preventDefault();
+    document.querySelector('#code-row').classList.remove('hide');
+  }
+});
+</script></body></html>

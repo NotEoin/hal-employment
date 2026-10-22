@@ -3,13 +3,18 @@
 One thread owns the browser; other threads queue work with `BROWSER.call`.
 A form's controls are tagged with data-hal-id attributes when read, so the
 values approved in the web interface land in the controls they were proposed
-for, and every value entered is read back from the page. Nothing is sent
-except by `submit`, which the web interface calls only for an application
-whose written content has been approved. Requires the playwright package
-(see .venv).
+for, and every value entered is read back from the page. Requires the
+playwright package (see .venv).
+
+Hal never presses Submit: every press goes through `apply.guard`,
+only Next is ever pressed on a form, nothing here presses Enter, and for the
+whole of each command that acts on a page a block in the page's own world
+cancels any submit the page or a press would make. The person presses Submit
+on the employer's site.
 """
 import collections
 import concurrent.futures
+import contextlib
 import difflib
 import json
 import os
@@ -19,6 +24,7 @@ import threading
 from pathlib import Path
 from urllib.parse import quote_plus, urljoin, urlparse
 
+from .apply import guard
 from .config import CONFIG
 from .core import paths
 
@@ -53,12 +59,9 @@ RESULTS_JS = "() => {\n" + PAGE_JS + "\nreturn halResults();\n}"
 APPLY_BUTTON = re.compile(
     r"^\s*((easy|quick|1[- ]click) )?apply\b(?!.{0,40}\b(linkedin|indeed|seek|xing|filters?|later|coupon|code)\b).{0,40}$|"
     r"^\s*(start|begin|continue|complete|resume) (your |my |the )?application\s*$|^\s*i'?m interested\s*$", re.I)
-NEXT_BUTTON = re.compile(r"^\s*(next|next step|next page|continue|proceed|save (and|&) (continue|next|proceed)|"
-                         r"continue to .{0,30}|next: .{0,30}|review( (your |my )?application)?|go to next step)"
-                         r"[\s»›>→]*$", re.I)
-SUBMIT_BUTTON = re.compile(r"^\s*(submit|submit (your |my |the )?application|send( (your |my )?application)?|"
-                           r"apply( now)?|complete( application)?|finish( application)?|"
-                           r"(confirm|review) (and|&) submit|submit (and|&) (finish|apply))\s*$", re.I)
+# The words live in the guard, which both engines share.
+NEXT_BUTTON = guard.NEXT_WORDS
+SUBMIT_BUTTON = guard.FINAL_WORDS
 SUCCESS = re.compile(r"thank(s| you)[^.]{0,60}(appl|submi|interest)|"
                      r"application (has been |was |is )?(successfully )?(received|submitted|sent|complete)|"
                      r"we('ve| have) (received|got) your application|successfully (submitted|applied)|"
@@ -89,6 +92,40 @@ CAPTCHA = ("iframe[src*='recaptcha'], iframe[src*='hcaptcha'], iframe[src*='chal
            "input[name='cf-turnstile-response'], .cf-turnstile")
 SEARCH = "https://duckduckgo.com/?q="
 GONE = "the form's tab was closed"
+BLOCK_RETRY_MS = 500  # a page between two addresses takes the block once it has settled
+
+# Installed in the page's own world for the whole of each command that acts on a page: a submit
+# the page or a press would make is cancelled and noted, as are the form's own send methods, unless
+# the submitter is the vetted Next control marked `data-hal-allow`. Many multi-page forms move on with a
+# real submit, which is why that one control is let through. `UNBLOCK_JS` takes the block away, so the
+# person's own Submit always works, and returns what it cancelled.
+BLOCK_JS = """() => {
+  if (window.__halUnblock) return true;
+  const proto = HTMLFormElement.prototype, submit = proto.submit, request = proto.requestSubmit;
+  const cancelled = [];
+  const allowed = el => Boolean(el && el.hasAttribute && el.hasAttribute('data-hal-allow'));
+  const onSubmit = e => {
+    if (allowed(e.submitter)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    cancelled.push('the page tried to send the form');
+  };
+  window.addEventListener('submit', onSubmit, true);
+  proto.submit = function () { cancelled.push('a script on the page tried to send the form'); };
+  proto.requestSubmit = function (by) {
+    if (allowed(by)) return request.call(this, by);
+    cancelled.push('a script on the page asked to send the form');
+  };
+  window.__halUnblock = () => {
+    window.removeEventListener('submit', onSubmit, true);
+    proto.submit = submit;
+    proto.requestSubmit = request;
+    delete window.__halUnblock;
+    return cancelled;
+  };
+  return true;
+}"""
+UNBLOCK_JS = "() => window.__halUnblock ? window.__halUnblock() : []"
 
 
 class TabGone(RuntimeError):
@@ -96,6 +133,37 @@ class TabGone(RuntimeError):
 
     def __init__(self) -> None:
         super().__init__(GONE)
+
+
+@contextlib.contextmanager
+def _guarded(page, job_id: str):
+    """Holds the page-world submit block on every frame of the page while Hal acts on it."""
+    for frame in _frames(page):
+        try:
+            frame.evaluate(BLOCK_JS)
+        except Exception:  # a frame that went away; the main frame is retried below
+            if frame is not page.main_frame:
+                continue
+            page.wait_for_timeout(BLOCK_RETRY_MS)
+            page.main_frame.evaluate(BLOCK_JS)
+    try:
+        yield
+    finally:
+        if not page.is_closed():
+            for frame in _frames(page):
+                try:
+                    cancelled = frame.evaluate(UNBLOCK_JS)
+                except Exception:  # a page that moved on took its block with it
+                    continue
+                for what in dict.fromkeys(cancelled or []):
+                    guard.record(job_id, frame.url, what)
+
+
+def _facts(survey: dict, fields: list[dict]) -> dict:
+    """What the guard needs to know about a page: whether it holds a form, is final, and is signed in."""
+    form = _is_form(fields)
+    nxt = _step_control(survey, NEXT_BUTTON) if form else None
+    return {"form": form, "final": form and nxt is None, "signed_in": _signed_in(survey)}
 
 
 def application_url(job) -> str:
@@ -470,8 +538,10 @@ def _report(page, frame, fields: list[dict], survey: dict, needs: str, pressed: 
 
 # Navigation --------------------------------------------------------------------
 
-def _press(page, frame, control: dict) -> None:
-    """Presses a control the survey found; a link that will not take the click is followed by address."""
+def _press(page, frame, control: dict, facts: dict, kind: str, job_id: str | None = None) -> None:
+    """Presses a control the survey found, once the guard allows it; a link that will not take the click is
+    followed by address. Raises `guard.WouldSubmit` for a control that could send the application."""
+    guard.check(job_id, page.url, control, facts, kind)
     target = frame.locator(f"[data-hal-nav='{control['id']}']").first
     try:
         target.click(timeout=5_000)
@@ -482,41 +552,39 @@ def _press(page, frame, control: dict) -> None:
             target.click(timeout=5_000, force=True)
 
 
-def _advance(b: Browser, job_id: str, pressed: bool = False, may_send: bool = False,
-             status: int | None = None) -> dict:
+def _advance(b: Browser, job_id: str, pressed: bool = False, status: int | None = None) -> dict:
     """Presses through advert pages towards the application form and reports where it stopped.
 
     Stops at the form, at a page only the applicant can pass (`needs`), or when
-    no Apply control is left. `pressed` says Apply was just pressed on a site
-    the applicant is signed in to, where a confirmation on the page means the
-    application went out. `may_send` allows that press, once the application's
-    written content is approved.
+    no Apply control is left. On a site the applicant is signed in to, Apply
+    may send the saved CV at once, so Hal never presses it there: it stops with
+    `needs = "apply"` for the person to press it. `pressed` says the person has
+    just pressed it, where a confirmation on the page means the application went out.
     """
     page = b.tab(job_id)
     needs = ""
     for presses in range(MAX_PRESSES + 1):
-        _settle(page)
-        _dismiss_banners(page)
-        frame, fields = _read(page, options=False)
-        survey = _survey(page.main_frame)
-        needs = _needs(survey, fields)
-        if needs or _is_form(fields) or presses == MAX_PRESSES or _closed(survey, status):
-            break
-        control = _apply_control(survey)
-        if control is None:
-            break
-        if _signed_in(survey):
-            # Signed in, Apply may send the stored CV at once, which is a submission like any other.
-            if not may_send and _site(page.url) not in CONFIG.get("signed_in_apply", []):
+        with _guarded(page, job_id):
+            _settle(page)
+            _dismiss_banners(page)
+            frame, fields = _read(page, options=False)
+            survey = _survey(page.main_frame)
+            needs = _needs(survey, fields)
+            if needs or _is_form(fields) or presses == MAX_PRESSES or _closed(survey, status):
+                break
+            control = _apply_control(survey)
+            if control is None:
+                break
+            if _signed_in(survey):
                 needs = "apply"
                 break
-            pressed = True
-        _press(page, page.main_frame, control)
-        page.wait_for_timeout(1_500)
+            _press(page, page.main_frame, control, _facts(survey, fields), "apply", job_id)
+            page.wait_for_timeout(1_500)
         page = b.page(job_id) or page  # the press may have opened the form in a new tab
         status = None
     if _is_form(fields) and not needs:
-        frame, fields = _read(page)
+        with _guarded(page, job_id):
+            frame, fields = _read(page)
     return _report(page, frame, fields, survey, needs, pressed, status)
 
 
@@ -530,21 +598,29 @@ def _open_form(b: Browser, job_id: str, url: str) -> dict:
 
 
 def _resume(b: Browser, job_id: str, passed: str, wall: str) -> dict:
-    """Carries on towards the form once the applicant has done what the page at `wall` needed."""
+    """Carries on towards the form once the applicant has done what the page at `wall` needed.
+
+    After "apply" the person pressed the site's Apply button; Hal follows without pressing it again.
+    """
     if passed == "sign-in":
         _live("SIGNED_IN").write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
-    return _advance(b, job_id, pressed=passed == "apply", may_send=passed == "apply")
+    return _advance(b, job_id, pressed=passed == "apply")
 
 
 def _press_control(b: Browser, job_id: str, name: str) -> dict:
-    """Presses the control with this name, chosen from a page where no Apply control was recognised."""
+    """Presses the control with this name, chosen from a page where no Apply control was recognised.
+
+    Raises `guard.WouldSubmit` when the control could send the application.
+    """
     page = b.tab(job_id)
-    survey = _survey(page.main_frame)
-    control = next((c for c in survey["controls"] if c["name"] == name), None)
-    if control is None:
-        raise RuntimeError(f"no control named {name!r} on the page")
-    _press(page, page.main_frame, control)
-    page.wait_for_timeout(1_500)
+    with _guarded(page, job_id):
+        frame, fields = _extract(page)
+        survey = _survey(page.main_frame)
+        control = next((c for c in survey["controls"] if c["name"] == name), None)
+        if control is None:
+            raise RuntimeError(f"no control named {name!r} on the page")
+        _press(page, page.main_frame, control, _facts(survey, fields), "named", job_id)
+        page.wait_for_timeout(1_500)
     return _advance(b, job_id)
 
 
@@ -559,7 +635,9 @@ def _peek(b: Browser, job_id: str) -> dict:
         text = survey["text"]
         return {"needs": _needs(survey, fields), "form": _is_form(fields), "url": page.url,
                 "sent": SUCCESS.search(text) is not None, "applied": APPLIED.search(text) is not None,
-                "challenge": survey["challenge"],
+                "challenge": survey["challenge"], "values": {f["sig"]: f.get("current") for f in fields},
+                "code": code_boxes(fields, text),
+                "code_sigs": [f["sig"] for f in fields if f["hid"] in code_boxes(fields, text)],
                 # A password box still empty, on a form Hal has filled in around it.
                 "password": frame.evaluate("() => [...document.querySelectorAll('input[type=password]')]"
                                            ".some(e => e.offsetWidth > 0 && !e.value)")}
@@ -599,7 +677,7 @@ def _pick(page, frame, box, hid: str, value: str, typeable: bool) -> None:
         parts = [part.strip() for part in str(value).split(",") if part.strip()]
         for query in dict.fromkeys([str(value), *parts, str(value).split()[0].strip(",")]):
             box.fill("")
-            box.press_sequentially(query, delay=25)
+            box.press_sequentially(one_line(query), delay=25)
             for _ in range(8):
                 page.wait_for_timeout(400)
                 options = frame.evaluate(OPTIONS_JS, hid)
@@ -619,8 +697,15 @@ def _pick(page, frame, box, hid: str, value: str, typeable: bool) -> None:
 
 
 def _set_choice(frame, el, want: bool, native: bool) -> None:
-    """Ticks or clears one radio or checkbox, by its label when the control itself is hidden."""
+    """Ticks or clears one radio or checkbox, by its label when the control itself is hidden.
+
+    A styled choice is often a button; one whose words could send the form is never pressed.
+    """
     if not native:
+        said = el.evaluate("e => (e.getAttribute('aria-label') || e.innerText || e.value || '').trim()")
+        reason = guard.never_press({"name": said, "submit": False}, {"form": True, "final": False}, "named")
+        if reason:
+            raise guard.WouldSubmit(reason)
         on = el.evaluate("e => e.getAttribute('aria-checked') === 'true' || e.getAttribute('aria-pressed') === 'true'"
                          " || /(^|[\\s_-])(active|selected|checked)/i.test(e.className)")
         if on != want:
@@ -688,6 +773,8 @@ def _fill_one(page, frame, f: dict, now: dict, value) -> None:
         _pick(page, frame, el, hid, str(value), bool(now.get("typeable")))
     else:
         text = _date(str(value)) if now.get("type") == "date" else str(value)
+        if kind != "textarea" and not now.get("custom"):
+            text = one_line(text)
         if now.get("maxlength"):
             text = text[:now["maxlength"]]
         if now.get("custom"):
@@ -754,6 +841,11 @@ def _fill(b: Browser, job_id: str, fields: list[dict], shot: str) -> dict:
     buttons, and `new`: questions that appeared only once others were answered.
     """
     page = b.tab(job_id)
+    with _guarded(page, job_id):
+        return _fill_page(page, job_id, fields, shot)
+
+
+def _fill_page(page, job_id: str, fields: list[dict], shot: str) -> dict:
     frame, fresh = _read(page, options=False)
     errors, filled = {}, []
     for f in fields:
@@ -772,6 +864,8 @@ def _fill(b: Browser, job_id: str, fields: list[dict], shot: str) -> dict:
         except Exception as e:  # noqa: BLE001 - report the field and carry on with the rest
             if "has been closed" in str(e):
                 raise
+            if isinstance(e, guard.WouldSubmit):
+                guard.record(job_id, page.url, e.reason)
             errors[f["hid"]] = str(e).splitlines()[0][:200]
     page.wait_for_timeout(500)
     frame, after = _read(page)
@@ -814,17 +908,9 @@ CODE_BOXES_JS = """() => [...document.querySelectorAll('input[data-hal-id]:not([
     .map(e => e.getAttribute('data-hal-id'))"""
 
 
-def _after_press(b: Browser, job_id: str, page, final: bool) -> dict:
-    """Reads what a form shows once its Next or Submit button was pressed."""
-    if final:
-        try:
-            page.wait_for_function(
-                "() => /thank|received|submitted|success|verification code|security code/i.test(document.body.innerText)"
-                " || document.querySelectorAll('[aria-invalid=true]').length > 0", timeout=20_000)
-        except Exception:  # noqa: BLE001 - judged from the page below
-            pass
-    else:
-        page.wait_for_timeout(1_200)
+def _after_press(b: Browser, job_id: str, page) -> dict:
+    """Reads what a form shows once its Next button was pressed."""
+    page.wait_for_timeout(1_200)
     _settle(page)
     page = b.page(job_id) or page
     frame, fields = _read(page, options=False)
@@ -834,81 +920,105 @@ def _after_press(b: Browser, job_id: str, page, final: bool) -> dict:
     needs = _needs(whole, fields)
     boxes = frame.evaluate(CODE_BOXES_JS) if stayed and CODE_WALL.search(survey["text"]) else []
     if boxes or needs == "code":
-        # The site wants the code it has just emailed before it takes the application.
+        # The site wants the code it has just emailed before it goes on.
         return {"stayed": stayed, "sent": False, "problems": [], "challenge": False, "url": page.url,
-                "needs": "code", "code": True, "fields": []}
+                "needs": "code", "code": True, "fields": [], "site": _site(page.url)}
     if stayed and not needs:
         return {"stayed": True, "sent": False, "problems": _problems(fields, survey),
                 "challenge": whole["challenge"] or survey["challenge"], "url": page.url, "needs": ""}
     if _is_form(fields) and not needs:
         frame, fields = _read(page)
     report = _report(page, frame, fields, whole, needs, pressed=True)
-    # A form that has gone, leaving the site's thanks, is an application sent.
+    # A form that has gone, leaving the site's thanks, means the site took Next as the last step.
     report["sent"] = not _is_form(fields) and not needs and (
         SUCCESS.search(whole["text"]) is not None
         or re.search(r"thank|confirm|success|submitted|complete", urlparse(page.url).path, re.I) is not None)
     return {"stayed": False, "problems": [], "challenge": whole["challenge"], **report}
 
 
-def _press_step(b: Browser, job_id: str, final: bool, shot: str | None = None) -> dict:
-    """Presses the form's Next button, or its Submit button when `final`, and reads what follows."""
+def _press_step(b: Browser, job_id: str, shot: str | None = None) -> dict:
+    """Presses the form's Next button, once the guard allows it, and reads what follows.
+
+    Only Next is ever pressed. The block stays on during the press and lets through only a submit made
+    by this control, marked `data-hal-allow`, since many multi-page forms move on with a real submit.
+    """
     page = b.tab(job_id)
-    frame, _fields = _extract(page)
-    nxt, sub, where = _buttons(page, frame)
-    control = sub if final else nxt
-    if control is None:
-        kind = "submit" if final else "Next"
-        raise RuntimeError(f"no {kind} button found; press it in the browser window, then read the page there")
-    # Marks this step's controls so a form that refuses to move on can be told from a new step.
-    frame.evaluate("() => document.querySelectorAll('[data-hal-id]').forEach(e => e.setAttribute('data-hal-step', ''))")
-    where.locator(f"[data-hal-nav='{control['id']}']").first.click(timeout=10_000)
-    out = _after_press(b, job_id, page, final)
+    with _guarded(page, job_id):
+        frame, _fields = _extract(page)
+        nxt, sub, where = _buttons(page, frame)
+        if nxt is None:
+            raise RuntimeError("no Next button found; press it in the browser window, then read the page there")
+        # A page that also shows a Submit-like button is judged final; Hal stops there.
+        guard.check(job_id, page.url, nxt, {"form": True, "final": sub is not None}, "next")
+        # Marks this step's controls so a form that refuses to move on can be told from a new step.
+        frame.evaluate("() => document.querySelectorAll('[data-hal-id]').forEach(e => e.setAttribute('data-hal-step', ''))")
+        target = where.locator(f"[data-hal-nav='{nxt['id']}']").first
+        target.evaluate("e => e.setAttribute('data-hal-allow', '')")
+        try:
+            target.click(timeout=10_000)
+        finally:
+            with contextlib.suppress(Exception):  # the page may already have moved on
+                target.evaluate("e => e.removeAttribute('data-hal-allow')", timeout=1_000)
+    out = _after_press(b, job_id, page)
     if shot:
         Path(shot).parent.mkdir(parents=True, exist_ok=True)
         _shoot_form(b.page(job_id) or page, shot)
         out["screenshot"] = shot
-    out["pressed"] = control["name"]
+    out["pressed"] = nxt["name"]
     return out
 
 
 def _next_step(b: Browser, job_id: str) -> dict:
-    return _press_step(b, job_id, False)
+    return _press_step(b, job_id)
 
 
-def _submit(b: Browser, job_id: str, shot: str) -> dict:
-    """Presses the form's submit button and reports what the page says afterwards."""
-    out = _press_step(b, job_id, True, shot)
-    confirmed = SUCCESS.search(_survey(b.tab(job_id).main_frame)["text"]) if out.get("sent") else None
-    return {**out, "submitted": bool(out.get("sent")), "invalid": len(out["problems"]),
-            "excerpt": confirmed.group(0) if confirmed else ""}
+# A box for the code a site emails: a visible, empty one-line box labelled as a code.
+CODE_FIELD = re.compile(r"\bcode\b|\botp\b|one[- ]time|passcode|verification", re.I)
+NOT_CODE_TYPES = ("email", "date", "url", "search")
 
 
-def _enter_code(b: Browser, job_id: str, code: str, shot: str) -> dict:
-    """Types an emailed security code into the boxes the form opened for it, and submits again."""
+def code_boxes(fields: list[dict], text: str) -> list[str]:
+    """The tags of the empty boxes a page asks the emailed code in, or [] when it asks for none."""
+    if not CODE_WALL.search(text or ""):
+        return []
+    return [f["hid"] for f in fields if f["kind"] == "text" and not f.get("current")
+            and f.get("type") not in NOT_CODE_TYPES and CODE_FIELD.search(f.get("label") or "")]
+
+
+def one_line(text: str) -> str:
+    """The text with its line breaks as spaces: a line break typed into a one-line box is Enter."""
+    return " ".join(str(text).splitlines())
+
+
+def _type_code(b: Browser, job_id: str, code: str, boxes: list[str]) -> dict:
+    """Types an emailed code into the boxes the page asks it in, and presses nothing.
+
+    The person presses the site's button next to it. Raises when no box is found.
+    """
     page = b.tab(job_id)
-    frame, fields = _extract(page)
-    boxes = frame.evaluate(CODE_BOXES_JS) or [f["hid"] for f in fields if f["kind"] == "text" and not f.get("current")]
-    if not boxes:
-        raise RuntimeError("no box found for the security code; type it in the browser window")
-    first = frame.locator(f"[data-hal-id='{boxes[0]}']")
-    if len(boxes) == 1:
-        first.fill(code)
-    else:
-        # One box a character: typing into the first moves along the row.
-        first.click()
-        page.keyboard.type(code, delay=40)
-        if frame.evaluate(CODE_BOXES_JS):
+    with _guarded(page, job_id):
+        frame, fields = _extract(page)
+        known = {f["hid"] for f in fields}
+        boxes = [h for h in boxes if h in known] or code_boxes(fields, _survey(frame)["text"])
+        if not boxes:
+            raise RuntimeError("no box found for the code; type it in the browser window")
+        code = one_line(code).strip()
+        if len(boxes) == 1:
+            frame.locator(f"[data-hal-id='{boxes[0]}']").fill(code)
+        else:
+            # One box a character, as some sites lay the code out.
             for hid, char in zip(boxes, code):
                 frame.locator(f"[data-hal-id='{hid}']").fill(char)
-    return _submit(b, job_id, shot)
+    return {"typed": len(boxes)}
 
 
 def _read_here(b: Browser, job_id: str) -> dict:
     """Reads the form on whatever page the job's tab shows now."""
     page = b.tab(job_id)
-    _dismiss_banners(page)
-    frame, fields = _read(page)
-    return _report(page, frame, fields, _survey(page.main_frame), "", False)
+    with _guarded(page, job_id):
+        _dismiss_banners(page)
+        frame, fields = _read(page)
+        return _report(page, frame, fields, _survey(page.main_frame), "", False)
 
 
 # Searching and showing ---------------------------------------------------------
@@ -994,10 +1104,6 @@ def fill(job_id: str, fields: list[dict], shot: Path) -> dict:
     return _via(_fill, job_id, fields, str(shot))
 
 
-def submit(job_id: str, shot: Path) -> dict:
-    return _via(_submit, job_id, str(shot))
-
-
 def read_here(job_id: str) -> dict:
     return _via(_read_here, job_id)
 
@@ -1006,8 +1112,9 @@ def resume(job_id: str, passed: str, wall: str) -> dict:
     return _via(_resume, job_id, passed, wall)
 
 
-def enter_code(job_id: str, code: str, shot: Path) -> dict:
-    return _via(_enter_code, job_id, code, str(shot))
+def type_code(job_id: str, code: str, boxes: list[str]) -> dict:
+    """Types an emailed code into its boxes; the person presses the site's button."""
+    return _via(_type_code, job_id, code, boxes)
 
 
 def press_control(job_id: str, name: str) -> dict:

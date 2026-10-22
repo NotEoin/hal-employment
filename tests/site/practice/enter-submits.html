@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Graduate Trainee</title>
+<style>.hide{display:none} .menu{border:1px solid #999} .menu div{padding:4px 10px;cursor:pointer}</style></head><body>
+<!-- A searchable list in a form whose page does not cancel Enter: Enter in any box here sends the form.
+     window.halEnters counts every Enter pressed in the page. -->
+<h1>Apply: Graduate Trainee</h1>
+<form method="post" action="/sent/enter-submits">
+ <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+ <div><label for="note">Anything else?</label><input id="note" name="note"></div>
+ <div id="base"><div class="question">Which city are you based in? *</div>
+  <div id="city-shown"></div>
+  <input id="city" role="combobox" aria-autocomplete="list" aria-label="Which city are you based in?" name="city_search">
+  <div class="menu hide" id="city-menu" role="listbox"></div></div>
+ <button type="submit">Submit application</button>
+</form>
+<script>
+window.halEnters = 0;
+document.addEventListener('keydown', e => { if (e.key === 'Enter') window.halEnters++; }, true);
+const CITIES = ['Leeds', 'London', 'Manchester', 'City'];
+const box = document.querySelector('#city'), menu = document.querySelector('#city-menu');
+function draw() {
+  menu.innerHTML = '';
+  CITIES.filter(c => c.toLowerCase().includes(box.value.toLowerCase())).forEach(c => {
+    const o = document.createElement('div'); o.setAttribute('role', 'option'); o.textContent = c;
+    o.onmousedown = e => { e.preventDefault(); document.querySelector('#city-shown').textContent = c; box.value = c; menu.classList.add('hide'); };
+    menu.append(o);
+  });
+  menu.classList.remove('hide');
+}
+box.addEventListener('focus', draw); box.addEventListener('input', draw);
+box.addEventListener('blur', () => setTimeout(() => menu.classList.add('hide'), 50));
+</script></body></html>

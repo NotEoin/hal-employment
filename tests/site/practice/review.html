@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Assistant Editor</title>
+<style>.hide{display:none}</style></head><body>
+<!-- A review page with no questions on it, whose only way on sends the application. -->
+<h1>Apply: Assistant Editor</h1>
+<form method="post" action="/sent/review">
+ <section id="one">
+  <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+  <div><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+  <div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+  <button type="button" id="next">Next</button>
+ </section>
+ <section id="two" class="hide">
+  <h2>Check your answers</h2><p>Make sure everything is right before you send it.</p>
+  <button type="button" id="back">Back</button>
+  <button type="submit">Confirm and submit</button>
+ </section>
+</form>
+<script>
+document.querySelector('#next').onclick = () => {
+  document.querySelector('#one').classList.add('hide');
+  document.querySelector('#two').classList.remove('hide');
+};
+document.querySelector('#back').onclick = () => {
+  document.querySelector('#two').classList.add('hide');
+  document.querySelector('#one').classList.remove('hide');
+};
+</script></body></html>

@@ -1,7 +1,8 @@
 // Runs inside a job tab Hal opened: reports what the page shows, presses Apply
 // and Next controls, and types approved answers into the form. It never
-// presses a submit button. Patterns arrive from jobhunt/extension.py so the
-// rules live in one place.
+// presses a submit button and never presses Enter: every press asks
+// `neverPress`, the guard of jobhunt/apply/guard.py, whose patterns arrive with
+// each command from jobhunt/extension.py so the rules live in one place.
 
 (() => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -90,22 +91,57 @@
     };
   }
 
+  // The reason a control must not be pressed, or null: the rules of `never_press` in jobhunt/apply/guard.py.
+  // A <button> with no type inside a form sends it under HTML, so it counts as submit-like unless its words
+  // are the site's Next words; when in doubt the page is final.
+  function neverPress(el, p) {
+    const g = p.guard, page = p.page || {};
+    const texts = [el.getAttribute('aria-label') || '', el.innerText || '', el.value || '']
+      .map(t => String(t).replace(/\s+/g, ' ').trim());
+    const name = texts.find(Boolean) || '';
+    const said = name ? `"${name.slice(0, 60)}"` : 'an unlabelled button';
+    const nexty = texts.some(t => t && rx(g.nextWords).test(t));
+    const final = page.final !== false;
+    if (texts.some(t => t && rx(g.always).test(t))) return `${said} would send the application`;
+    if (texts.some(t => t && rx(g.final).test(t)) && (p.kind !== 'apply' || page.form || page.signed_in))
+      return `${said} would send the application`;
+    const submitter = /^(BUTTON|INPUT)$/.test(el.tagName) && /^(submit|image)$/.test(el.type);
+    if (submitter && el.closest('form') && !(nexty && !final)) return `${said} sends the form it is in`;
+    if (p.kind === 'next' && !nexty) return `${said} is not this form's Next button`;
+    if (p.kind === 'named' && page.form && final && !nexty) return `${said} is on the form's last page`;
+    return null;
+  }
+
   function press(p) {
+    let control;
     if (p.kind === 'named') {
       // A control the helper chose by name, on a page with no Apply button it recognised.
-      const named = [...document.querySelectorAll("a[href], [role=link], " + BUTTONS)].find(el => visible(el) && nameOf(el) === p.name);
-      if (named) named.click();
-      return { pressed: Boolean(named) };
+      control = [...document.querySelectorAll("a[href], [role=link], " + BUTTONS)].find(el => visible(el) && nameOf(el) === p.name);
+    } else {
+      const found = p.kind === 'apply' ? controls("a[href], [role=link], " + BUTTONS, p.pattern) : controls(BUTTONS, p.pattern);
+      control = p.kind === 'apply' ? found[0] : found[found.length - 1];
     }
-    const found = p.kind === 'apply' ? controls("a[href], [role=link], " + BUTTONS, p.pattern) : controls(BUTTONS, p.pattern);
-    const control = p.kind === 'apply' ? found[0] : found[found.length - 1];
     if (!control) return { pressed: false };
+    const refused = neverPress(control, p);
+    if (refused) return { pressed: false, refused };
     if (p.kind === 'next') {
       // Marks this step's controls so a form that refuses to move on can be told from a new step.
       document.querySelectorAll('[data-hal-id]').forEach(e => e.setAttribute('data-hal-step', ''));
     }
-    control.click();
+    // The page-world block lets through a submit only from the control marked here.
+    control.setAttribute('data-hal-allow', '');
+    try { control.click(); } finally { control.removeAttribute('data-hal-allow'); }
     return { pressed: true };
+  }
+
+  // Types an emailed code into the boxes the helper named, and presses nothing: the person presses the button.
+  function typeCode(p) {
+    halExtract();
+    const boxes = (p.boxes || []).map(tagged).filter(Boolean);
+    const code = String(p.code).replace(/\s+/g, '');
+    if (boxes.length === 1) typeText(boxes[0], code, false);
+    else boxes.forEach((el, i) => { if (code[i] !== undefined) typeText(el, code[i], false); });
+    return { typed: boxes.length };
   }
 
   // Frameworks keep their own copy of a value; the native setter and an input event update both.
@@ -120,6 +156,8 @@
   // Text goes in through the browser's own editing command, as typing or pasting would: the
   // page sees ordinary input events, rich-text editors update their model, and Ctrl+Z works.
   function typeText(el, text, custom) {
+    // A line break typed into a one-line box is Enter, which sends the form.
+    if (!custom && !(el instanceof HTMLTextAreaElement)) text = String(text).replace(/[\r\n]+/g, ' ');
     el.focus();
     if (custom) document.getSelection().selectAllChildren(el);
     else try { el.select(); } catch { /* a box that cannot be selected is replaced below */ }
@@ -152,8 +190,11 @@
   const isOn = el => el.checked === true || el.getAttribute('aria-checked') === 'true'
     || el.getAttribute('aria-pressed') === 'true' || /(^|[\s_-])(active|selected|checked)/i.test(el.className);
   // Styled radios and tick boxes hide the control; its label takes the click instead.
-  function setChecked(el, want) {
+  function setChecked(el, want, p) {
     if (isOn(el) === want) return;
+    // A styled choice is often a button; one whose words could send the form is never pressed.
+    if (!/^(radio|checkbox)$/.test(el.type) && rx(p.guard.always).test(nameOf(el)))
+      throw new Error(`Hal stopped before pressing Submit: "${nameOf(el).slice(0, 60)}" would send the application`);
     el.click();
     if (isOn(el) !== want && el.labels && el.labels[0]) el.labels[0].click();
   }
@@ -189,7 +230,7 @@
     await sleep(250);
   }
 
-  async function fillOne(f, files) {
+  async function fillOne(f, files, p) {
     const value = f.value;
     if (f.kind === 'radio' || f.kind === 'checkgroup') {
       const wanted = (Array.isArray(value) ? value : [value]).map(norm);
@@ -200,7 +241,7 @@
       f.options.forEach((option, i) => {
         const el = tagged(`${f.hid}:${i}`);
         const chosen = wanted.includes(norm(option));
-        if (el && (chosen || f.kind === 'checkgroup')) setChecked(el, chosen);
+        if (el && (chosen || f.kind === 'checkgroup')) setChecked(el, chosen, p);
       });
       return;
     }
@@ -219,7 +260,7 @@
       return;
     }
     el.scrollIntoView({ block: 'center' });
-    if (f.kind === 'checkbox') setChecked(el, Boolean(value));
+    if (f.kind === 'checkbox') setChecked(el, Boolean(value), p);
     else if (f.kind === 'select') {
       const options = [...el.options];
       const index = bestOption(options.map(o => o.text), value);
@@ -241,7 +282,7 @@
   async function fill(p) {
     const errors = {};
     for (const f of p.fields) {
-      try { await fillOne(f, p.files); } catch (e) { errors[f.hid] = String(e.message || e).slice(0, 200); }
+      try { await fillOne(f, p.files, p); } catch (e) { errors[f.hid] = String(e.message || e).slice(0, 200); }
       // One answer at a time, at about the pace of a quick paste, so each is taken before the next.
       await sleep(120 + Math.random() * 200);
     }
@@ -407,5 +448,5 @@
     document.addEventListener('change', edited, true);
   }
 
-  window.halPage = { read, press, fill, mark, results: () => halResults() };
+  window.halPage = { read, press, fill, typeCode, mark, results: () => halResults() };
 })();

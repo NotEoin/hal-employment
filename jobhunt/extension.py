@@ -5,6 +5,12 @@ tabs it opened for a job. This module holds the queue it reads from, and the
 steps of browser.py expressed as commands to it. A browser that nobody is
 remote-controlling keeps the applicant's sign-ins and passes sites' human
 checks, which Hal's own browser cannot; the applicant presses Submit.
+
+Hal never presses Submit. Every command carries the guard's
+patterns, so content.js refuses the same controls `apply.guard` refuses, and
+the helper keeps a block in the page's own world for the whole of each command
+that cancels any submit the page or a press would make. There is no submit
+command, and no command presses Enter.
 """
 import concurrent.futures
 import json
@@ -13,14 +19,34 @@ import time
 import uuid
 from urllib.parse import urlparse
 
-from .browser import (APPLIED, APPLY_BUTTON, ATS_FRAME, BLOCKED, BOT_CHECK, CAPTCHA, CLOSED, COOKIE_BUTTONS,
-                      MAX_PRESSES, NEXT_BUTTON, SIGN_IN, SIGN_OUT, SIGNED_IN, SUBMIT_BUTTON, SUCCESS, _is_form,
-                      _signed_in_sites, _site)
+from . import browser
+from .apply import guard
+from .browser import (
+    APPLIED,
+    APPLY_BUTTON,
+    ATS_FRAME,
+    BLOCKED,
+    BOT_CHECK,
+    CAPTCHA,
+    CLOSED,
+    COOKIE_BUTTONS,
+    MAX_PRESSES,
+    NEXT_BUTTON,
+    SIGN_IN,
+    SIGN_OUT,
+    SUBMIT_BUTTON,
+    SUCCESS,
+    _is_form,
+    _signed_in_sites,
+    _site,
+    code_boxes,
+)
 from .config import CONFIG
 
 POLL_WAIT = 20  # seconds a poll is held open; the browser stops a worker whose request takes 30
 PATTERNS = {"apply": APPLY_BUTTON.pattern, "next": NEXT_BUTTON.pattern, "submit": SUBMIT_BUTTON.pattern,
             "signOut": SIGN_OUT.pattern, "frames": list(ATS_FRAME), "captcha": CAPTCHA}
+FILL_WAIT = 180  # seconds a fill may take: uploads and searched lists are slow
 
 _commands: queue.Queue = queue.Queue()
 _waiting: dict[str, concurrent.futures.Future] = {}
@@ -58,14 +84,19 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
         raise RuntimeError("the Hal extension is not connected; open Brave with the extension switched on")
     ident = uuid.uuid4().hex
     _waiting[ident] = concurrent.futures.Future()
-    _commands.put({"id": ident, "cmd": cmd, "args": args})
+    # Every command carries the guard's words, so content.js refuses what the guard refuses.
+    _commands.put({"id": ident, "cmd": cmd, "args": {**args, "guard": guard.PATTERNS}})
     try:
         result = _waiting[ident].result(timeout)
     except concurrent.futures.TimeoutError:
         _waiting.pop(ident, None)
         raise RuntimeError("the Hal extension did not answer; check Brave is still open") from None
     if result["ok"]:
-        return result["value"]
+        value = result["value"]
+        # Submits the page tried while the helper acted on it, cancelled by the helper's block.
+        for what in dict.fromkeys((value or {}).get("blocked", []) if isinstance(value, dict) else []):
+            guard.record(args.get("job"), (value or {}).get("url") or "", what)
+        return value
     # A tab closed between finding it and acting in it is reported by the browser in its own words.
     if result["error"] == "gone" or result["error"].startswith("No tab with id"):
         raise RuntimeError("the form's tab was closed; press \"Fill in the form\" to open it again")
@@ -112,8 +143,27 @@ def _report(facts: dict, needs: str, pressed: bool) -> dict:
             "controls": [] if form or needs else [c for c in facts.get("controls", []) if not c["inNav"]][:60]}
 
 
+def _press(job_id: str, facts: dict, kind: str, **how) -> bool:
+    """Asks the helper to press a control; True when it did. Raises `guard.WouldSubmit` when it refused one."""
+    page = {"form": _is_form(facts["fields"]), "final": facts.get("final", True), "signed_in": facts.get("signOut")}
+    out = _ask("press", job=job_id, kind=kind, page=page, **how)
+    if out.get("refused"):
+        raise guard.refuse(job_id, facts["url"], out["refused"])
+    return bool(out["pressed"])
+
+
+def _final(facts: dict) -> bool:
+    """True when the page is judged the form's last: no Next, or a Submit-like button beside it."""
+    return not facts["next"] or bool(facts["submit"])
+
+
 def _advance(job_id: str, pressed: bool = False) -> dict:
-    """Presses through advert pages towards the application form and reports where it stopped."""
+    """Presses through advert pages towards the application form and reports where it stopped.
+
+    On a site the applicant is signed in to, Apply may send the saved CV at once, so the helper never
+    presses it there: it stops with `needs = "apply"` for the person to press it. `pressed` says the
+    person has just pressed it.
+    """
     for presses in range(MAX_PRESSES + 1):
         facts = _read(job_id)
         needs = _needs(facts)
@@ -126,12 +176,9 @@ def _advance(job_id: str, pressed: bool = False) -> dict:
         if not facts["apply"]:
             break
         if facts["signOut"] or _site(facts["url"]) in _signed_in_sites():
-            # Signed in, Apply may send the stored CV at once; only a site known to ask first is pressed.
-            if _site(facts["url"]) not in CONFIG.get("signed_in_apply", []):
-                needs = "apply"
-                break
-            pressed = True
-        if not _ask("press", job=job_id, kind="apply", pattern=APPLY_BUTTON.pattern)["pressed"]:
+            needs = "apply"
+            break
+        if not _press(job_id, {**facts, "final": False}, "apply", pattern=APPLY_BUTTON.pattern):
             break
     if not needs and any(f["kind"] == "combobox" for f in facts["fields"]):
         facts = _read(job_id, banners=False, options=True)
@@ -144,18 +191,30 @@ def open_form(job_id: str, url: str) -> dict:
 
 
 def press_control(job_id: str, name: str) -> dict:
-    if not _ask("press", job=job_id, kind="named", name=name)["pressed"]:
+    """Presses the control with this name; raises `guard.WouldSubmit` when it could send the application."""
+    facts = _read(job_id, banners=False)
+    control = next((c for c in facts.get("controls", []) if c["name"] == name), {"name": name})
+    form = _is_form(facts["fields"])
+    guard.check(job_id, facts["url"], control, {"form": form, "final": form and _final(facts),
+                                                "signed_in": facts["signOut"]}, "named")
+    if not _press(job_id, {**facts, "final": form and _final(facts)}, "named", name=name):
         raise RuntimeError(f"no control named {name!r} on the page")
     return _advance(job_id)
 
 
-def enter_code(job_id: str, code: str, shot) -> dict:
-    raise RuntimeError("type the security code in the job's tab, then press Submit there")
+def type_code(job_id: str, code: str, boxes: list[str]) -> dict:
+    """Types an emailed code into its boxes in the job's tab; the person presses the site's button."""
+    out = _ask("type_code", job=job_id, code=code, boxes=boxes)
+    if not out.get("typed"):
+        raise RuntimeError("no box found for the code; type it in the job's tab")
+    return out
 
 
 def resume(job_id: str, passed: str, wall: str) -> dict:
     if passed == "sign-in":
-        SIGNED_IN.write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
+        # Read when used, so a test or the data move points it elsewhere.
+        signed_in = browser._live("SIGNED_IN")
+        signed_in.write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
     return _advance(job_id, pressed=passed == "apply")
 
 
@@ -167,7 +226,9 @@ def peek(job_id: str) -> dict:
     return {"needs": _needs(facts), "form": _is_form(facts["fields"]), "url": facts["url"],
             "sent": SUCCESS.search(facts["text"]) is not None, "applied": APPLIED.search(facts["text"]) is not None,
             "challenge": facts["unchecked"], "password": False,
-            "values": {f["sig"]: f.get("current") for f in facts["fields"]}}
+            "values": {f["sig"]: f.get("current") for f in facts["fields"]},
+            "code": code_boxes(facts["fields"], facts["text"]),
+            "code_sigs": [f["sig"] for f in facts["fields"] if f["hid"] in code_boxes(facts["fields"], facts["text"])]}
 
 
 def read_here(job_id: str) -> dict:
@@ -179,7 +240,7 @@ def fill(job_id: str, fields: list[dict], shot) -> dict:
     wanted = [{k: f.get(k) for k in ("hid", "kind", "value", "options")} for f in fields
               if f.get("value") not in (None, "", []) and not f.get("skip")]
     paths = [f["value"] for f in wanted if f["kind"] == "file"]
-    errors = _ask("fill", timeout=180, job=job_id, fields=wanted, paths=paths)["errors"]
+    errors = _ask("fill", timeout=FILL_WAIT, job=job_id, fields=wanted, paths=paths)["errors"]
     facts = _read(job_id, banners=False, options=True)
     known = {f.get("sig") for f in fields}
     return {"errors": errors, "screenshot": None, "next": facts["next"] and not facts["submit"],
@@ -188,7 +249,9 @@ def fill(job_id: str, fields: list[dict], shot) -> dict:
 
 
 def next_step(job_id: str) -> dict:
-    if not _ask("press", job=job_id, kind="next", pattern=NEXT_BUTTON.pattern)["pressed"]:
+    """Presses the form's Next button, never any other; raises `guard.WouldSubmit` on a final page."""
+    facts = _read(job_id, banners=False)
+    if not _press(job_id, {**facts, "final": _final(facts)}, "next", pattern=NEXT_BUTTON.pattern):
         raise RuntimeError("no Next button found; move on in the job's tab, then read the page there")
     facts = _read(job_id, options=True)
     if facts["stayed"]:
@@ -197,10 +260,6 @@ def next_step(job_id: str) -> dict:
         return {"stayed": True, "sent": False, "problems": problems, "challenge": facts["unchecked"],
                 "url": facts["url"], "needs": ""}
     return {"stayed": False, "problems": [], "challenge": False, **_report(facts, _needs(facts), False)}
-
-
-def submit(job_id: str, shot) -> dict:
-    raise RuntimeError("press Submit yourself in the job's tab; Hal marks it applied when the site confirms it")
 
 
 def mark(job_id: str, fields: list[dict], panel: dict) -> None:

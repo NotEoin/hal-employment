@@ -1,7 +1,8 @@
 // Hal Employment's link to the local web helper. It asks the helper for work,
 // carries each command out in a job's tab, and reports the result. Only tabs
 // Hal opened for a job, tabs those open, and tabs the applicant hands to Hal
-// with the toolbar button are ever touched.
+// with the toolbar button are ever touched. There is no submit command: Hal
+// never presses Submit, and the person presses it on the site.
 
 const HAL = "http://127.0.0.1:8737";
 // The helper's address: the default, unless storage names another (the tests run their own helper).
@@ -67,6 +68,56 @@ async function inTab(tabId, method, arg) {
   return out.result;
 }
 
+// The page-world block, the same as BLOCK_JS in jobhunt/browser.py. For the whole of each command
+// that acts on a page, a submit the page or a press would make is cancelled and noted, as are the form's own
+// send methods, unless the submitter is the vetted Next control marked `data-hal-allow`: many multi-page
+// forms move on with a real submit. Taken away when the command ends, so the person's own Submit works.
+function halBlock() {
+  if (window.__halUnblock) return true;
+  const proto = HTMLFormElement.prototype, submit = proto.submit, request = proto.requestSubmit;
+  const cancelled = [];
+  const allowed = el => Boolean(el && el.hasAttribute && el.hasAttribute('data-hal-allow'));
+  const onSubmit = e => {
+    if (allowed(e.submitter)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    cancelled.push('the page tried to send the form');
+  };
+  window.addEventListener('submit', onSubmit, true);
+  proto.submit = function () { cancelled.push('a script on the page tried to send the form'); };
+  proto.requestSubmit = function (by) {
+    if (allowed(by)) return request.call(this, by);
+    cancelled.push('a script on the page asked to send the form');
+  };
+  window.__halUnblock = () => {
+    window.removeEventListener('submit', onSubmit, true);
+    proto.submit = submit;
+    proto.requestSubmit = request;
+    delete window.__halUnblock;
+    return cancelled;
+  };
+  return true;
+}
+function halUnblock() { return window.__halUnblock ? window.__halUnblock() : []; }
+
+// Runs `work` with the block on in the tab's page world, and adds what it cancelled to the result.
+async function blocked(tabId, work) {
+  await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: halBlock });
+  let result;
+  try {
+    result = await work();
+  } finally {
+    const [left] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: halUnblock })
+      .catch(() => [null]);  // the tab moved on, taking its block with it
+    const cancelled = (left && left.result) || [];
+    if (cancelled.length && result && typeof result === "object") {
+      result.blocked = cancelled;
+      result.url = (await chrome.tabs.get(tabId).catch(() => ({}))).url || "";
+    }
+  }
+  return result;
+}
+
 // Hal's own window, holding every application tab when the helper asks for one ("separate"),
 // so they never crowd the window the applicant is working in. Made again if it was closed.
 async function halWindow() {
@@ -122,15 +173,24 @@ const COMMANDS = {
     return {};
   },
   async read({ job, patterns }) {
-    return inTab((await jobTab(job)).id, "read", patterns);
+    const tab = await jobTab(job);
+    return blocked(tab.id, () => inTab(tab.id, "read", patterns));
   },
-  async press({ job, kind, pattern }) {
-    const out = await inTab((await jobTab(job)).id, "press", { kind, pattern });
-    await sleep(1500);
+  async press({ job, kind, pattern, name, page, guard }) {
+    const tab = await jobTab(job);
+    const out = await blocked(tab.id, async () => {
+      const pressed = await inTab(tab.id, "press", { kind, pattern, name, page, guard });
+      await sleep(1500);
+      return pressed;
+    });
     await jobTab(job);
     return out;
   },
-  async fill({ job, fields, paths }) {
+  async type_code({ job, code, boxes, guard }) {
+    const tab = await jobTab(job);
+    return blocked(tab.id, () => inTab(tab.id, "typeCode", { code, boxes, guard }));
+  },
+  async fill({ job, fields, paths, guard }) {
     // Files come through the worker: a page may not fetch from the helper itself.
     const files = {};
     for (const path of paths) {
@@ -139,7 +199,8 @@ const COMMANDS = {
       files[path] = { name: path.split("/").pop(), type: reply.headers.get("Content-Type") || "application/pdf",
                       data: base64(await reply.arrayBuffer()) };
     }
-    return inTab((await jobTab(job)).id, "fill", { fields, files });
+    const tab = await jobTab(job);
+    return blocked(tab.id, () => inTab(tab.id, "fill", { fields, files, guard }));
   },
   async mark({ job, fields, panel }) {
     const tab = await jobTab(job);

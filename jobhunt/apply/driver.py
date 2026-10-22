@@ -1,7 +1,12 @@
 """Hal's form driver: reaching an application form, filling it page by page, and watching the applicant's tab.
 
-Moved unchanged from `jobhunt/web/server.py`, which re-exports every name here for the legacy interface
-and the tests.
+Moved from `jobhunt/web/server.py`, which re-exports every name here for the legacy interface and the tests.
+
+Hal never presses Submit, in any mode. On the last page Hal hands the form over: it says
+what to check, brings the form forward and watches for the site's thanks, while the person presses
+Submit on the site. On a signed-in job board Hal never presses Apply either, since it may send the
+saved CV at once; it waits for the person to press it and follows. A code the site emails is typed
+into its box, and the person presses the button next to it.
 """
 import re
 import threading
@@ -11,13 +16,25 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .. import adopt, autofill, browser, db, documents, pack
+from ..apply import guard
 from ..apply.queries import AGGREGATORS, _app, _job, _set_app, mark_applied
+from ..core import settings
 from ..core.runner import ACTIONS, _carry_out, _checkpoint, _note, _say
 
 WAIT_FOR_YOU = 15 * 60  # seconds Hal waits on a page only the applicant can pass
 # What Hal asks for when a page on the way to the form needs the applicant.
 ASKS = {"sign-in": "sign in to {site}", "check": "pass the check on {site}",
-        "code": "type the code {site} emailed you"}
+        "code": "type the code {site} emailed you",
+        "apply": ("press Apply on {site} yourself; here it may send your saved CV straight away. "
+                  "Hal fills the form after"),
+        # Once Hal has typed an emailed code, the button beside it is the person's to press.
+        "code-typed": "press the button next to the code Hal typed in from {site}'s email"}
+CODE_TRIES = 12      # looks at the job inbox for an emailed code
+CODE_PAUSE = 5       # seconds between those looks
+CODE_LOOKBACK = 60   # seconds before the wall a code may have been sent
+HANDED_OVER = "Check the marked answers, then press Submit on the employer's site yourself."
+APPLY_YOURSELF = ("Press Apply on the site yourself; here it may send your saved CV straight away. "
+                  "Hal fills the form after: press \"Fill in the form\" once the form is on screen.")
 MAX_STEPS = 12   # pages of one form Hal works through before stopping to ask
 FIX_ROUNDS = 2   # times a step is filled again for answers the form refused or questions it added
 KEPT: dict[str, dict] = {}  # by job, the answers its owner typed, by field, kept when a form is filled again
@@ -27,14 +44,16 @@ WATCHING: set[str] = set()  # jobs whose tab Hal is watching for new pages and t
 def _past_walls(con, job, found: dict) -> dict:
     """Waits while the page needs the applicant, then lets Hal carry on to the form.
 
-    A page whose Apply button would send a stored CV at once is not waited on:
-    that press is a submission, made when the application is approved.
+    A signed-in page whose Apply button may send the saved CV at once ("apply")
+    is waited on like a sign-in: the person presses Apply, and Hal follows.
+    An emailed code is typed in for the person when `email.codes` is on.
     """
     job_id = job["id"]
     deadline = time.time() + WAIT_FOR_YOU
-    while found["needs"] and found["needs"] != "apply" and not found["sent"]:
+    while found["needs"] and not found["sent"]:
         need, wall = found["needs"], found["url"]
-        ask = ASKS[need].format(site=found["site"])
+        typed = need == "code" and _type_code(con, job, found.get("boxes") or [])
+        ask = ASKS["code-typed" if typed else need].format(site=found["site"])
         _say(job_id, f"waiting for you to {ask} in {browser.where()}; Hal carries on by itself")
         _note(con, job_id, "needs", f"Hal needs you to {ask} in {browser.where()}. It carries on by itself afterwards.")
         browser.show(job_id)
@@ -49,6 +68,11 @@ def _past_walls(con, job, found: dict) -> dict:
             if now.get("gone"):
                 raise browser.TabGone()
             if now.get("busy"):
+                continue
+            if need == "apply":
+                # The advert stays until the person presses Apply; then the form, or the site's thanks, shows.
+                if now["form"] or now["sent"] or now["applied"] or now.get("url", wall) != wall:
+                    break
                 continue
             if now["form"] or now["sent"] or now["needs"] != need:
                 break
@@ -111,10 +135,14 @@ def _reach(con, job, found: dict) -> dict:
         if len(tried) >= 3:
             return found
         _say(job_id, "no Apply button recognised; working out the way to the form")
-        left = {**found, "controls": [c for c in found["controls"] if c["name"] not in tried]}
-        name = autofill.choose_control(job, left)
+        # Submit-like controls are never offered to the model, and never pressed if it names one anyway.
+        page = {"form": bool(found["fields"]), "final": bool(found["fields"])}
+        safe = [c for c in found["controls"] if c["name"] not in tried and not guard.never_press(c, page)]
+        name = autofill.choose_control(job, {**found, "controls": safe})
         if not name:
             return found
+        picked = next((c for c in found["controls"] if c["name"] == name), {"name": name})
+        guard.check(job_id, found["url"], picked, page)
         tried.append(name)
         _say(job_id, f"pressing \"{name}\"")
         found = browser.press_control(job_id, name)
@@ -204,7 +232,7 @@ def _hold(con, job, form: dict) -> str:
     if form["filled"].get("password"):
         parts.append("a password to type in the form yourself")
     last = form["final"]
-    does = "submit" if last else "move to the next step"
+    does = "put your changes in, then press Submit on the site yourself" if last else "move to the next step"
     if browser.mode() == "extension":
         return _hold_in_tab(con, job, form, parts)
     if parts:
@@ -384,15 +412,6 @@ def _terminal(con, job, found: dict) -> str | None:
         return "application sent"
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": [], "model": "",
             "filled": None, "submit": None, "step": 1, "done": [], "final": True, "press": ""}
-    if found["needs"] == "apply":
-        # Signed in, this site's Apply button sends the stored CV with no form in between.
-        form.update(state="ready", press="apply", filled={"at": db.now(), "screenshot": None, "errors": 0, "next": False},
-                    message=f"You are signed in to {found['site']}, where Apply sends your stored CV at once. "
-                            f"Check the advert in {browser.where()}, then approve to press Apply.")
-        _set_app(con, job_id, stage="filled", form=form)
-        db.alert(con, "info", f"Ready to approve: {job['company']}", form["message"], job_id)
-        con.commit()
-        return form["message"]
     if not found["fields"]:
         why = (f"{found['site']} refuses Hal's browser" if found["blocked"]
                else f"no application form found on {found['site']}")
@@ -410,10 +429,17 @@ def _drive(con, job, found: dict, step: int, done: list) -> str:
     """Works through the application from the page in `found` until it is sent or needs a person.
 
     Each step is answered and filled in. A step is passed without asking only
-    when it is not the last and holds nothing a person should read; the last
-    step always stops, with the filled form on screen, for approval.
+    when it is not the last, holds nothing a person should read and
+    `applying.press_next` is on; the last step always stops, with the filled
+    form on screen, for approval. A press the guard refuses stops it too.
     """
-    job_id = job["id"]
+    try:
+        return _drive_steps(con, job, found, step, done)
+    except guard.WouldSubmit as e:
+        return _refused(con, job, e)
+
+
+def _drive_steps(con, job, found: dict, step: int, done: list) -> str:
     while True:
         found = _reach(con, job, found)
         ended = _terminal(con, job, found)
@@ -423,9 +449,23 @@ def _drive(con, job, found: dict, step: int, done: list) -> str:
         _enter(con, job, form)
         empty, refused, prose = _open_points(form)
         if browser.mode() == "extension" or form["final"] or empty or refused or prose \
-                or form["filled"].get("password") or step >= MAX_STEPS:
+                or form["filled"].get("password") or step >= MAX_STEPS or not settings.get("applying.press_next"):
             return _hold(con, job, form)
         found, step, done = _move_on(con, job, form)
+
+
+def _refused(con, job, e: guard.WouldSubmit) -> str:
+    """Stops where the guard refused a press, and leaves the page to the person."""
+    job_id = job["id"]
+    form = _app(con, job_id)["form"] or {}
+    message = (f"{guard.STOPPED}: {e.reason}. Check the page in {browser.where()}, then press Submit on the "
+               "site yourself, or press Next there and Hal fills the next page.")
+    form.update(state="needs", message=message)
+    _set_app(con, job_id, stage="filled" if form.get("fields") else "form", form=form)
+    db.alert(con, "urgent", f"Hal needs you: {job['company']}", message, job_id)
+    con.commit()
+    watch_tab(job_id)
+    return message
 
 
 def _summary(form: dict) -> dict:
@@ -504,7 +544,8 @@ def act_auto(con, job_id: str, here: bool = False, fresh: bool = False) -> str:
 
 
 def act_approve(con, job_id: str, edits: list[dict]) -> str:
-    """Carries out an approval: enters the owner's changes, then submits, or moves on from a middle step."""
+    """Carries out an approval: enters the owner's changes, then hands the form over on the last page, or
+    moves on from a middle step. Never sends anything."""
     try:
         return _approve(con, job_id, edits)
     except browser.TabGone:
@@ -513,6 +554,8 @@ def act_approve(con, job_id: str, edits: list[dict]) -> str:
         act_auto(con, job_id)
         raise RuntimeError("the form's window had been closed, so Hal has filled it in again and sent nothing; "
                            "check the form, then approve once more") from None
+    except guard.WouldSubmit as e:
+        return _refused(con, _job(con, job_id), e)
 
 
 def _approve(con, job_id: str, edits: list[dict]) -> str:
@@ -522,8 +565,8 @@ def _approve(con, job_id: str, edits: list[dict]) -> str:
     _set_app(con, job_id, form=form)
     autofill.remember(con, form["fields"], job["company"])
     if form.get("press") == "apply":
-        _say(job_id, "pressing Apply")
-        return _drive(con, job, browser.resume(job_id, "apply", form["url"]), 1, [])
+        # A form stored before Hal stopped pressing Apply on signed-in sites.
+        raise RuntimeError(APPLY_YOURSELF)
     if changed:
         _enter(con, job, form, only=changed)
         refused = [f for f in changed if f.get("error")]
@@ -533,7 +576,7 @@ def _approve(con, job_id: str, edits: list[dict]) -> str:
     if not form["final"]:
         found, step, done = _move_on(con, job, form)
         return _drive(con, job, found, step, done)
-    return _send(con, job, form)
+    return _hand_over(con, job, form)
 
 
 def _apply_edits(form: dict, edits: list[dict]) -> list[dict]:
@@ -552,62 +595,61 @@ def _apply_edits(form: dict, edits: list[dict]) -> list[dict]:
     return changed
 
 
-def _send(con, job, form: dict) -> str:
-    """Presses the form's submit button, on the owner's approval, and sees the application through."""
+def _hand_over(con, job, form: dict) -> str:
+    """Hands the filled last page to the person, who presses Submit on the site; Hal watches for the thanks.
+
+    Brings the form forward, marks its answers in the helper's tab, records `handed_over_at` and starts
+    the watch, in both modes. Nothing is pressed.
+    """
     job_id = job["id"]
+    now = db.now()
+    form.update(state="ready", message=HANDED_OVER, handed_over=now)
+    _set_app(con, job_id, stage="filled", form=form, handed_over_at=now)
+    db.log(con, job_id, "note", "handed over to you to press Submit on the employer's site")
+    _say(job_id, "ready for you to send")
     if browser.mode() == "extension":
-        watch_tab(job_id)
-        return "approved; press Submit in the job's tab, and Hal marks it applied when the site confirms"
-    _say(job_id, "submitting")
-    db.log(con, job_id, "note", "approved for sending in the web interface")
-    out = browser.submit(job_id, _shot(job_id, "submitted.png"))
-    if out.get("code"):
-        out = _security_code(con, job, out)
-    form["submit"] = {k: out.get(k) for k in ("submitted", "screenshot", "url", "excerpt", "pressed")} | {"at": db.now()}
-    _set_app(con, job_id, form=form)
-    if out["submitted"]:
-        mark_applied(con, job, "submitted by Hal on your approval")
-        browser.close(job_id)
-        return "application submitted"
-    if out["challenge"] or out.get("needs") == "check":
-        return _await_confirmation(con, job, form, "pass the site's human check")
-    if out.get("needs") == "code":
-        return _await_confirmation(con, job, form, "type the code the site emailed you, and submit")
-    if out["stayed"]:
-        problems = {p["hid"]: p["message"] for p in out["problems"] if p["hid"]}
-        for f in form["fields"]:
-            f["error"] = problems.get(f["hid"], "")
-        said = "; ".join(dict.fromkeys(p["message"] for p in out["problems"]))[:300]
-        form.update(state="needs", message=f"The form was not accepted{': ' + said if said else ''}. "
-                                           f"Put it right here or in {browser.where()}, then approve again.")
-        _set_app(con, job_id, stage="filled", form=form)
-        raise RuntimeError(form["message"])
-    if out.get("fields"):
-        # The button led to another page of questions rather than sending the application.
-        return _drive(con, job, out, form["step"] + 1, [*form["done"], _summary(form)])
-    return _await_confirmation(con, job, form, "check whether the application went through")
+        _mark(job, form)
+    browser.show(job_id)
+    db.alert(con, "info", f"Ready for you to send: {job['company']}", HANDED_OVER, job_id)
+    con.commit()
+    watch_tab(job_id)
+    return HANDED_OVER
 
 
-def _security_code(con, job, out: dict) -> dict:
-    """Enters the code a site emails to prove the address, read from the job inbox."""
+def _type_code(con, job, boxes: list[str]) -> bool:
+    """Reads the code a site emailed from the job inbox and types it into its box; True when it did.
+
+    Only with `email.codes` on. The person presses the button next to the code; Hal never does.
+    """
     from .. import gmail
+    if not settings.get("email.codes"):
+        return False
     job_id = job["id"]
-    _say(job_id, "the site emailed a security code; reading it from the job inbox")
+    boxes = boxes or browser.peek(job_id).get("code") or []
+    if not boxes:
+        return False
+    _say(job_id, "the site emailed a code; reading it from the job inbox")
     since = time.time()
-    for _ in range(12):
+    for _ in range(CODE_TRIES):
         _checkpoint(job_id)
-        code = gmail.security_code(since - 60)
+        code = gmail.security_code(since - CODE_LOOKBACK)
         if code:
-            _say(job_id, "entering the security code")
-            return browser.enter_code(job_id, code, _shot(job_id, "submitted.png"))
-        time.sleep(5)
-    return {**out, "needs": "code", "submitted": False}
+            try:
+                browser.type_code(job_id, code, boxes)
+            except RuntimeError as e:
+                _say(job_id, f"could not type the code: {e}")
+                return False
+            db.log(con, job_id, "note", "typed the code the site emailed; you press the button next to it")
+            con.commit()
+            return True
+        time.sleep(CODE_PAUSE)
+    return False
 
 
 def _await_confirmation(con, job, form: dict, ask: str) -> str:
-    """Waits for the site to confirm an approved application that needs its owner for a last step."""
+    """Waits for the site's thanks while the person does a last step on the site; it never presses anything."""
     job_id = job["id"]
-    form.update(state="needs", message=f"Approved, but the site needs you to {ask} in {browser.where()}. "
+    form.update(state="needs", message=f"The site needs you to {ask} in {browser.where()}. "
                                        "Hal marks it applied when the site confirms it.")
     _set_app(con, job_id, stage="filled", form=form)
     _say(job_id, f"waiting for you to {ask} in {browser.where()}")
@@ -710,9 +752,17 @@ def _watch_step(con, job_id: str, seen: dict) -> bool:
             return False
         return True
     values = now.get("values", {})
+    if now.get("code") and not seen.get("code"):
+        # The site asks for the code it emailed once the person pressed Submit; Hal types it, they press.
+        seen["code"] = now.get("code_sigs") or []
+        if _type_code(con, _job(con, job_id), now["code"]):
+            site = browser._site(now.get("url") or "")
+            said = ASKS["code-typed"].format(site=site)
+            form.update(state="ready", message=f"{said[0].upper()}{said[1:]}.")
+            _set_app(con, job_id, form=form)
     known = {f.get("sig") for f in form.get("fields", [])}
     moved = len(known & set(values)) * 2 < len(known)
-    added = [sig for sig in values if sig not in known]
+    added = [sig for sig in values if sig not in known and sig not in (seen.get("code") or [])]
     if moved or added:
         ACTIONS[job_id] = {"name": "filling the next page" if moved else "answering new questions",
                            "state": "running", "message": "", "at": db.now()}
