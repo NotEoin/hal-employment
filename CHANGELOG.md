@@ -17,8 +17,80 @@ Each version has two parts. "What's new" is in plain words and is shown on the U
 - The classic screens are still there, at `/classic/`.
 - Hal's records now carry a version number. Before Hal changes them, it makes a checked copy in the
   `backups` folder.
+- Hal never presses Submit, Send or a final Apply, in any mode. On the last page Hal says "Check the marked
+  answers, then press Submit on the employer's site yourself.", brings the form forward and watches for the
+  site's thanks; the job moves to Applied when the site confirms it. In Classic the last page's button is
+  "Approve and fill in".
+- On a job board you are signed in to, Hal waits for you to press Apply, then fills the form that follows.
+  When a site emails a code, Hal types it into the box (with "Read sign-in codes" on); you press the button.
+- Private questions on application forms (disability, adjustments, guaranteed interview, caring) are never
+  sent to the AI, never guessed and never remembered. With a saved private answer Hal types it in; without
+  one it leaves the question to you with "Answer this yourself". Private answers show only "Saved" or "Not
+  saved", and Hal stops any AI request that would include one.
+- Every test invitation now brings the same to-do: "Check the test invitation for anything you want to ask
+  before you start".
+- Every change to a setting is kept in its history, with Undo in Activity. Changing what you are looking for
+  keeps a goal version as well. `python -m jobhunt settings get`, `set` and `list`.
+- Passwords and keys are kept in your desktop keyring or Windows Credential Manager, else in a file only you
+  can read. Hal never asks for your keyring password from the background.
+- Everything Hal does is kept in Activity with why it did it, and survives a restart. Work cut short by a
+  restart is marked "Hal closed before this finished" and can carry on. The line at the top shows the most
+  urgent thing Hal is doing, with its step, Why? and Stop.
+- Hal can use the AI on this computer (Ollama), another local server that speaks the OpenAI format, or your
+  own Claude subscription through Claude Code. Which AI Hal uses never changes by itself. "Never use online
+  AI" refuses Claude and any server outside your home network. Claude use follows your daily limit and the
+  hours you keep it free.
+- Your edits to Hal's instructions are kept, can be reset, and say when Hal's original has changed.
+- Hal scores jobs against your own goal: your places, roles, the kinds of role you chose, your working
+  pattern and your lowest pay. Nothing about any one person is built in any more. Every job keeps its
+  reasons.
+- Internships count as real jobs: a paid internship you chose no longer loses 10 points. Unpaid roles stay
+  hidden unless you switch on "Show unpaid roles". Schemes for current students only are hidden once you
+  have finished your course, and Hal says why. Pay by the hour, day, week or month is compared per year. A
+  part-time or fixed-term job you did not choose costs a few points instead of being hidden.
+- `python -m jobhunt import` moves your data from the old checkout into Hal Employment's own folder, with a
+  dry run first and `--undo` to go back; `migrate` and `backup` update and save the database by hand.
 
 ### Developer notes
+
+Settings, actions, AI, job finding, applying and the import (2026-10-22). How the pieces work is in
+[docs/dev/architecture.md](docs/dev/architecture.md).
+
+- Gates: `checkpoint.sh` now also names G5 (privacy: the guard, the store and the form-fill exclusions),
+  G6 (never Submit, browser), G7 (settings) and G9 (action kinds). All of G1 to G10 run; G8 without the
+  personal scan.
+- Settings: one transaction per change with history, Undo and goal versions; `core/settings/secrets.py`
+  (keyring, else `config/secrets.json` 0600; never the system keyring with a home override or in tests);
+  `core/settings/private.py` (saved or not saved only; `value_for_form` and `values_for_guard` allowed only
+  in `autofill.py` and `ai/guard.py`); `config.CONFIG` is a read-only view over live settings and reads the
+  checkout's `config.toml` only in the legacy layout; `/api/v2/settings`, `/secrets`, `/private` routes;
+  `cli/settings.py`. Undo from Activity goes through `core/settings/settings_undo.py`.
+- Actions: `core/runner.py` (`@action`, `start`, `run`, `stop`, `recover`, `carry_on`; one writer
+  thread; a lock file per live action), `core/activity.py`, `core/status.py`, the Activity, actions and
+  status routes, and the data-task runner (`tasks.run_due`, `start_due`, `run_now`). Classic's runner API
+  is kept; classic actions are persisted as `classic.<name>`.
+- AI: `jobhunt.ai.chat` and `chat_json` over `ai/ollama.py`, `ai/openai_compat.py` and
+  `ai/claude_cli.py`, with `ai/budget.py`, `ai/gpu.py`, `ai/guard.py` and `ai/provider.py`; `llm.py` and
+  `gpu.py` are shims. `autofill.private_question(field)` is the one private-question classifier. The
+  prompts store and `/api/v2/prompts` routes. `tests/support/fake_claude/` is the fake command line;
+  `tests/support/private_answers.py` saves made-up answers in the real store.
+- Find: `jobhunt/find/` (`goal`, `kinds`, `pay`, `rules`, `closed_check`, `actions`, `presets/`,
+  `starters/`); `score.py`, `replenish.py` and `screen.py` read the goal live. The data task
+  `find.rescore_all` runs once after migration 6. The CLI goldens were re-recorded with the default goal;
+  the output format is unchanged, and `tests/test_score.py` proves the technical preset reproduces the
+  ef53088 scores with an owner-like goal, apart from the internship change.
+- Applying: `apply/guard.py`, the guarded presses and the page-world submit block in both engines,
+  `_hand_over` in the driver, the legacy `submit` route answering 410, and the practice site that counts
+  posts (`tests/support/practice_site.py`, `tests/site/practice/`).
+- Import: `core/importer.py`, `core/answers_rescope.py` (data task `answers.rescope`), `cli/data.py`
+  (`import`, `migrate`, `backup`), `scripts/dev/export_owner_prefs.py` and `tests/support/old_repo.py`. The
+  import saves secrets just after the seal, so the store's history rows go into the new database and the
+  old one is never opened; an old private answer that is not one of the store's choices is left for the
+  person instead of stopping the import.
+- Fixes joining the parts: the find action kinds take a step and run on the real runner (the runner stub is
+  gone); the data-task tests set the real tasks aside; the made-up world answers the screen prompt; the
+  `CONFIG` allow-list lost the entries the AI, find and applying code converted; the never-Submit check allows the
+  shim's `signed_in_apply` line; the AI layer's fallbacks to `config.private()` are gone.
 
 The foundations (2026-10-22): the uv project and dev checks, the core server, the app shell, and the
 database schema and settings registry.
