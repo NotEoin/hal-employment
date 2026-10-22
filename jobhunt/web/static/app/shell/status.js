@@ -1,17 +1,49 @@
 /* The status line over every page: what Hal is doing now, with Why? and Stop, or when it works next.
    This file draws the line from /status and the `status` event; the runner
-   owns what /status says. */
+   owns what /status says.
+
+   Actions run by the command line or a scheduled search live in another process, so their changes reach
+   this page only as `step` and `activity` rows that the server's poller publishes, never as `status`
+   events. Those events reload /status (at most once per RELOAD_GAP_MS), and while Hal is busy the line
+   reloads every BUSY_RELOAD_MS in case such an action ended without a new row. */
 import { html, cx } from "../core/html.js";
 import { useStore, openDialog, toast, store } from "../core/store.js";
 import { post, get } from "../core/api.js";
 import { go } from "../core/router.js";
-import { retryNow } from "../core/events.js";
+import { retryNow, on } from "../core/events.js";
 import { clock, plural } from "../core/format.js";
 import { Icon } from "../ui/icons.js";
 
-/** Fetches /status into the store; a server without it yet leaves the line idle. */
+const RELOAD_GAP_MS = 1000;
+const BUSY_RELOAD_MS = 30000;
+let following = false;
+let lastLoad = 0;
+let queued = null;
+
+/** Fetches /status into the store; a server without it yet leaves the line idle. The first call also
+    starts following the events that can change it. */
 export async function loadStatus() {
+  if (!following) follow();
+  lastLoad = Date.now();
   try { store.set({ status: await get("/status") }); } catch (err) { /* idle line until the runner reports */ }
+}
+
+function reloadSoon() {
+  if (queued) return;
+  const wait = Math.max(0, RELOAD_GAP_MS - (Date.now() - lastLoad));
+  queued = setTimeout(() => { queued = null; loadStatus(); }, wait);
+}
+
+function follow() {
+  following = true;
+  on(ev => {
+    if (ev.type === "action") reloadSoon();
+    else if (ev.type === "step" || ev.type === "activity") {
+      const st = store.s.status || {};
+      if (!st.busy || (ev.action_id && ev.action_id !== st.action_id) || ev.type === "activity") reloadSoon();
+    }
+  });
+  setInterval(() => { if (store.s.status && store.s.status.busy) loadStatus(); }, BUSY_RELOAD_MS);
 }
 
 function nextWords(next) {
