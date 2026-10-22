@@ -70,7 +70,7 @@ def run(con: sqlite3.Connection, report: Callable[[str], None] = lambda text: No
     """Moves every old pack folder that a job owns; returns counts. Safe to run again: moved ones are skipped."""
     from .. import pack
 
-    source = pack._live("PACKS")
+    source = pack.PACKS
     counts = {"moved": 0, "redraft": 0, "skipped": 0}
     if not source.is_dir():
         report("No old document folders to move")

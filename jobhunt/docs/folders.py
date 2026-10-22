@@ -86,7 +86,7 @@ def legacy_folder(job) -> Path | None:
     from .. import pack
 
     # pack.PACKS is the legacy packs folder, or the folder a test pointed it at.
-    folder = pack._live("PACKS") / pack.slug(f"{job['company']}-{job['title']}")
+    folder = pack.PACKS / pack.slug(f"{job['company']}-{job['title']}")
     owner = job_id_in_pack(folder / PACK_MD)
     return folder if owner == job["id"] else None
 
