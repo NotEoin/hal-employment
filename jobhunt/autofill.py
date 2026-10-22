@@ -13,9 +13,8 @@ Design notes:
   until the person chooses). An answer about the job applied for (salary, start date, notice, office,
   relocation, how they heard) is kept for that job only, and a "why us" answer or an essay is never
   reused, so nothing typed for one employer is offered to another.
-- Classic (and the legacy tests) still read and write the old `answers` table, so an
-  answer kept for everywhere is copied there too, and an old row is recalled only when it is the kind
-  `answers.rescope` would place everywhere (never a job, "why us", essay or private answer).
+- Only `answers2` is read and written. The old `answers` table stays untouched while Classic uses it;
+  migration 0007 copied its rows, and `answers.rescope` placed them.
 - Salary comes from the per-job research unless the person set one answer for every form
   (`you.salary_answer`).
 - No prompt names the person: `ai/prompts/form_fill.txt` and the others are filled from the settings.
@@ -473,24 +472,9 @@ def remember(con, fields: list[dict], company: str = "", job=None) -> int:
                        ON CONFLICT(question, scope, scope_key) DO UPDATE SET answer = excluded.answer,
                          label = excluded.label, updated = excluded.updated""",
                     (question, _asked(f), db.json_text(value), scope, scope_key, db.now()))
-        if scope == "everywhere":
-            con.execute("""INSERT INTO answers (question, label, answer, updated) VALUES (?, ?, ?, ?)
-                           ON CONFLICT(question) DO UPDATE SET answer = excluded.answer, updated = excluded.updated""",
-                        (question, _asked(f), db.json_text(value), db.now()))
         kept += 1
     con.commit()
     return kept
-
-
-def _old_rows(con) -> list:
-    """Rows of the old `answers` table that would be kept for everywhere (see the design notes)."""
-    out = []
-    for r in con.execute("SELECT question, label, answer, updated FROM answers"):
-        value = db.json_value(r["answer"])
-        f = {"label": r["label"]}
-        if private_question(f) is None and _scope(f, r["label"], value, None)[0] == "everywhere":
-            out.append({"question": r["question"], "label": r["label"], "answer": r["answer"], "scope": "old"})
-    return out
 
 
 def _usable(con, job) -> list:
@@ -507,10 +491,10 @@ def _recall(con, f: dict, job=None):
     if con is None:
         return None
     question = _key(f, job["company"] if job is not None else "")
-    rows = [r for r in _usable(con, job) if private_question({"label": r["label"]}) is None] + _old_rows(con)
+    rows = [r for r in _usable(con, job) if private_question({"label": r["label"]}) is None]
     by_question = {}
-    for r in rows:   # the narrowest scope wins: this job, then this site, then everywhere, then the old table
-        rank = {"job": 0, "site": 1, "everywhere": 2}.get(r["scope"], 3)
+    for r in rows:   # the narrowest scope wins: this job, then this site, then everywhere
+        rank = {"job": 0, "site": 1, "everywhere": 2}[r["scope"]]
         if r["question"] not in by_question or rank < by_question[r["question"]][0]:
             by_question[r["question"]] = (rank, r)
     found = by_question.get(question)

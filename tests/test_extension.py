@@ -126,7 +126,8 @@ class InYourBrowser(Practice):
         page.click("#send")
         self.assertFalse(server._watch_step(self.con, job_id, seen))
         self.assertEqual(self.status(job_id), "applied")
-        kept = {r["question"]: db.json_value(r["answer"]) for r in self.con.execute("SELECT * FROM answers")}
+        rows = self.con.execute("SELECT * FROM answers2 WHERE scope = 'everywhere'")
+        kept = {r["question"]: db.json_value(r["answer"]) for r in rows}
         self.assertEqual((kept["date of birth"], kept["last name"]), ("01/02/2003", "Byron"))
 
 

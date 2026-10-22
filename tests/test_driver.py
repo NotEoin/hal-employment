@@ -86,12 +86,14 @@ class Applying(Practice):
         self.assertFalse(server._watch_step(self.con, job_id, {}))
         self.assertEqual(self.status(job_id), "applied")
         # What he typed himself is kept for the next form that asks it.
-        kept = self.con.execute("SELECT answer FROM answers WHERE question = 'date of birth'").fetchone()
+        kept = self.con.execute("SELECT answer FROM answers2 WHERE question = 'date of birth' "
+                                "AND scope = 'everywhere'").fetchone()
         self.assertEqual(db.json_value(kept["answer"]), "01/02/2003")
 
     def test_types_the_emailed_code_and_leaves_the_button_to_you(self):
         job_id = self.job("code", "form.html?code=1")
-        self.con.execute("INSERT INTO answers VALUES ('date of birth', 'Date of birth', '\"01/02/2003\"', ?)", (db.now(),))
+        self.con.execute("INSERT INTO answers2 (question, label, answer, scope, updated) "
+                         "VALUES ('date of birth', 'Date of birth', '\"01/02/2003\"', 'everywhere', ?)", (db.now(),))
         self.con.commit()
         server.act_auto(self.con, job_id)
         form = self.form(job_id)
@@ -113,7 +115,8 @@ class Applying(Practice):
 
     def test_what_the_form_received(self):
         job_id = self.job("sent", "form.html")
-        self.con.execute("INSERT INTO answers VALUES ('date of birth', 'Date of birth', '\"01/02/2003\"', ?)", (db.now(),))
+        self.con.execute("INSERT INTO answers2 (question, label, answer, scope, updated) "
+                         "VALUES ('date of birth', 'Date of birth', '\"01/02/2003\"', 'everywhere', ?)", (db.now(),))
         self.con.commit()
         server.act_auto(self.con, job_id)
         server.act_approve(self.con, job_id, [])
