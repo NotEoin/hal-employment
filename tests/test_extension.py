@@ -88,7 +88,7 @@ class InYourBrowser(Practice):
         self.assertIn("1 required question", said)
         page = self.tab("form.html")
         self.assertEqual(page.input_value("#fn"), "Ada")
-        self.assertEqual(page.inner_text("#uni-shown"), "University")
+        self.assertEqual(page.inner_text("#uni-shown"), "Fernvale University")
         self.assertTrue(page.is_checked("#rtw-y"))
         self.assertEqual(page.input_value("#heard"), "Company website")
         self.assertEqual(page.input_value("#notice"), "0")

@@ -45,7 +45,7 @@ class Applying(Practice):
         by_label = {f["label"]: f for f in found["fields"]}
         self.assertEqual(by_label["Do you have the right to work in the UK?"]["options"], ["Yes", "No"])
         self.assertEqual(by_label["Will you need visa sponsorship?"]["kind"], "radio")
-        self.assertEqual(by_label["Which university did you attend?"]["options"][1], "University")
+        self.assertEqual(by_label["Which university did you attend?"]["options"][1], "Fernvale University")
         self.assertEqual(by_label["Resume/CV"]["kind"], "file")
         self.assertTrue(by_label["First name"]["required"])
         self.assertNotIn("Search", by_label)
@@ -59,7 +59,7 @@ class Applying(Practice):
         form = self.form(job_id)
         self.assertEqual((form["state"], form["step"], form["final"]), ("needs", 1, False))
         self.assertIn("1 required question", said)
-        self.assertEqual(self.field(job_id, "Which university")["value"], "University")
+        self.assertEqual(self.field(job_id, "Which university")["value"], "Fernvale University")
         self.assertEqual(self.field(job_id, "Notice period")["value"], "0")
         self.assertEqual([f["label"] for f in form["fields"] if f.get("error")], [])
 
@@ -120,7 +120,7 @@ class Applying(Practice):
         # The applicant presses Submit, and the form's own record of what it received is read back.
         self.press_yourself(job_id, "#send")
         sent = browser.BROWSER.call(lambda b: b.tab(job_id).evaluate("() => window.halSent"))
-        self.assertEqual(sent, {"first": "Ada", "uni": "University", "rtw": "y", "sponsor": False,
+        self.assertEqual(sent, {"first": "Ada", "uni": "Fernvale University", "rtw": "y", "sponsor": False,
                                 "news": False, "why": PROSE, "cv": "Ada-Lovelace-CV.pdf", "heard": "Company website",
                                 "dob": "01/02/2003", "referee": ""})
 

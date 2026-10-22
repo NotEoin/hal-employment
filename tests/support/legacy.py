@@ -42,7 +42,7 @@ PROFILE = {
     "email": "ada@example.org", "phone": "07700 900460", "city": "London", "country": "United Kingdom",
     "location": "London, United Kingdom", "right_to_work": "Yes", "sponsorship": "No",
     "notice": "None, available immediately", "start": "Immediately", "salary": "Open",
-    "university": "University", "degree": "BA (Hons) Made-up Studies",
+    "university": "Fernvale University", "degree": "BA (Hons) Made-up Studies",
     "grade": "2:1", "grad_year": "2026", "office": "Yes", "relocate": "Yes",
     "diversity": "Prefer not to say", "nationality": "British",
 }
