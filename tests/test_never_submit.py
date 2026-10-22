@@ -85,7 +85,7 @@ class StaticChecks(unittest.TestCase):
         caught = ["page.locator('#send').submit()", "form.requestSubmit()", "box.press('Enter')",
                   "el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))", "browser.submit(job_id)"]
         let_through = ["POOL.submit(wrapper)", "pool.submit(fn)", "proto.requestSubmit = function (by) {",
-                       "box.press('ArrowDown')", "tasks.after_submit(con, job)"]
+                       "box.press('ArrowDown')"]
         hit = lambda line: any(re.search(p, line) for p in self.FORBIDDEN)  # noqa: E731
         self.assertEqual([line for line in caught if not hit(line)], [])
         self.assertEqual([line for line in let_through if hit(line)], [])

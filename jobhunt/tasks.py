@@ -68,7 +68,3 @@ def after_sent(con, job) -> None:
                 job_id=job["id"], detail="The drafted message is on the application page.",
                 priority=3, source=f"message:{job['id']}")
     con.commit()
-
-
-# The old name, kept until its callers (apply/queries.py, tests/test_driver.py) move to `after_sent`.
-after_submit = after_sent

@@ -264,9 +264,9 @@ class Discarding(unittest.TestCase):
 
     def test_marking_applied_while_hal_works_stops_hal(self):
         entry, release = self.slow_action("greenhouse:1")
-        saved = server.tasks.after_submit
-        server.tasks.after_submit = lambda con, job: None
-        self.addCleanup(setattr, server.tasks, "after_submit", saved)
+        saved = server.tasks.after_sent
+        server.tasks.after_sent = lambda con, job: None
+        self.addCleanup(setattr, server.tasks, "after_sent", saved)
         server.Handler.job_action(None, self.con, "greenhouse:1", "applied", {"how": "submitted by hand"})
         release.set()
         self.assertEqual(self.finished(entry), "stopped")

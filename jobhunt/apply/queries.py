@@ -157,7 +157,7 @@ def mark_applied(con, job, how: str, sent_how: str = "site_confirmed") -> None:
     _set_app(con, job["id"], stage="submitted", sent_at=clock.iso(now), sent_how=sent_how,
              follow_up_at=clock.iso(now + timedelta(days=settings.get("notify.follow_up_days"))))
     db.alert(con, "good", f"Applied: {job['company']}", f"{job['title']}. {MESSAGE_OFFER}", job["id"])
-    tasks.after_submit(con, job)
+    tasks.after_sent(con, job)
     con.commit()
 
 
