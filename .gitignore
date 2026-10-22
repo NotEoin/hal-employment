@@ -1,6 +1,19 @@
-uni documents/
+/user-files/
 data/
+packs/
 __pycache__/
 *.pyc
-packs/
 .venv/
+.tmp-home/
+build/
+dist/
+*.egg-info/
+.ruff_cache/
+.env
+*.log
+.vscode/
+Thumbs.db
+.DS_Store
+data.imported-*/
+packs.imported-*/
+config.imported-*.toml

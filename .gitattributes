@@ -1,0 +1,5 @@
+*.cmd eol=crlf
+*.ps1 eol=crlf
+*.sh eol=lf
+*.woff2 binary
+*.png binary
