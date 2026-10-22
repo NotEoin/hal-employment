@@ -31,6 +31,7 @@ new browser tests skip unless it is `1`.
 | G2 | `tests/ui/test_shell.py` (browser) | Every route of the new app draws at both sizes with no errors, axe clean |
 | G3 | `tests/test_classic.py` | Classic works through the new server |
 | G4 | `python scripts/dev/golden_cli.py --check` | The command line prints what it printed at ef53088 |
+| G7 | `tests/test_settings_registry.py` | Every setting read is registered; `CONFIG` is read only where `LEGACY_ALLOWED` lists it; Hal never sets goal, scoring or CV keys |
 | G8 | `check_ascii.py`, `check_ruff.py`, `check_personal.py` | Added lines are ASCII and ruff-clean; no personal string |
 | G10 | `tests/test_migrate.py`, `tests/test_backup.py` | Old databases migrate with counts kept and a backup made |
 

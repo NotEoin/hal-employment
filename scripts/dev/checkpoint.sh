@@ -52,10 +52,11 @@ else
   gate "G8 ruff (since $BASE)" "$PY" scripts/dev/check_ruff.py --base "$BASE"
   [ "$PERSONAL" = 1 ] && gate "G8 personal strings" "$PY" scripts/dev/check_personal.py
   gate "G1 tests, browser on" env HAL_TEST_BROWSER=1 "$PY" -m unittest discover tests
-  # G2, G3 and G10 also run inside G1; named here so a failure says which promise broke.
+  # G2, G3, G7 and G10 also run inside G1; named here so a failure says which promise broke.
   gate "G2 UI smoke" env HAL_TEST_BROWSER=1 PYTHONPATH=tests "$PY" -m unittest ui.test_shell
   gate "G3 Classic on the new server" env PYTHONPATH=tests "$PY" -m unittest test_classic
   [ -f scripts/dev/golden_cli.py ] && gate "G4 CLI goldens" "$PY" scripts/dev/golden_cli.py --check
+  gate "G7 settings" env PYTHONPATH=tests "$PY" -m unittest test_settings_registry
   gate "G10 migrations" env PYTHONPATH=tests "$PY" -m unittest test_migrate test_backup
 fi
 
