@@ -3,6 +3,8 @@
 The command line is a contract: the voice bridge and the /jobs command parse its output.
 `CASES` lists the commands gate G4 holds to the output recorded at ef53088, before any change. Each case
 runs in a fresh world, so a command that writes (`set`, `note`, `todo add`) cannot change another's output.
+Commands the rebuild adds (`NEW_COMMANDS`) have help goldens recorded when they were added. `comparable()`
+takes out only what G4 lets the old help gain: those command names, and the options in `NEW_OPTIONS`.
 
 Output is normalised before it is stored or compared: the world's folder becomes `<home>`, timestamps and
 dates become `<time>`, and the greeting's part of the day is dropped, because those change with every run.
@@ -34,6 +36,10 @@ OLD_OPTION = re.compile(r"(?<![\w-])(-\w) ([A-Z][A-Z_]*), (--[\w-]+) \2\b")
 
 SUBCOMMANDS = ["discover", "rescore", "mail", "digest", "vault", "record", "queue", "contacts", "todo", "serve",
                "add", "screen", "letter", "check", "pack", "inbox", "stats", "list", "show", "set", "note", "probe"]
+NEW_COMMANDS = ["open"]                       # added by the rebuild; the top-level help may gain their names
+NEW_OPTIONS = {"serve": ["--background"]}     # options added by name to old commands (gate G4)
+BRACES = re.compile(r"\{([a-z0-9,-]+)\}")
+OPTION_PADDING = re.compile(r"^(  \S.*?\S) {2,}(?=\S)", re.M)  # argparse widens it when a longer option comes
 
 
 @dataclass
@@ -67,7 +73,7 @@ CASES = [
     Case("pack", ["pack", "sorrel-ready", "--no-web"]),
     Case("discover", ["discover", "-q"], fake_sources=True),
     Case("help", ["--help"]),
-    *(Case(f"help-{cmd}", [cmd, "--help"]) for cmd in SUBCOMMANDS),
+    *(Case(f"help-{cmd}", [cmd, "--help"]) for cmd in SUBCOMMANDS + NEW_COMMANDS),
 ]
 
 
@@ -78,6 +84,21 @@ def normalise(text: str, root: Path | None = None) -> str:
     text = TIME.sub("<time>", text)
     text = GREETING.sub("Good <part of day>", text)
     return OLD_OPTION.sub(r"\1, \3 \2", text)
+
+
+def comparable(case: Case, text: str) -> str:
+    """`text` without the additions gate G4 allows in `case`'s help; the rest must match its golden exactly."""
+    if case.name == "help":
+        text = BRACES.sub(lambda m: "{" + ",".join(n for n in m.group(1).split(",") if n not in NEW_COMMANDS) + "}",
+                          text)
+        for cmd in NEW_COMMANDS:
+            text = re.sub(rf"^    {re.escape(cmd)} .*\n", "", text, flags=re.M)
+    elif case.name.startswith("help-") and case.argv[0] in NEW_OPTIONS:
+        for opt in NEW_OPTIONS[case.argv[0]]:
+            text = text.replace(f" [{opt}]", "")
+            text = re.sub(rf"^  {re.escape(opt)}\b.*\n(?: {{4,}}\S.*\n)*", "", text, flags=re.M)
+        text = OPTION_PADDING.sub(r"\1  ", text)
+    return text
 
 
 def _command_module(attr: str):

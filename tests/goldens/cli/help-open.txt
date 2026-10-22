@@ -1,0 +1,8 @@
+$ jobhunt open --help
+usage: jobhunt open [-h] [--port PORT] [--next NEXT] [--print]
+
+options:
+  -h, --help   show this help message and exit
+  --port PORT  the port Hal listens on (default: its setting)
+  --next NEXT  the page to show, a path on Hal's server such as /classic/
+  --print      print the one-time link instead of opening it

@@ -3,8 +3,8 @@
 `serve` runs the new server (`web.app`), which also serves the classic screens at /classic/. `open` is what
 shortcuts and launchers run: it makes sure the server answers, mints a one-time link and opens it, because
 the app only opens through such a link. The parser for the legacy commands stays in
-`jobhunt/__main__.py`, whose help text is held by goldens; `add_open_command` is wired in when the help
-goldens learn the new name.
+`jobhunt/__main__.py`, whose help text is held by goldens; `register` adds `open`, a name gate G4 allows the
+top-level help to gain.
 """
 import os
 import subprocess
@@ -61,7 +61,7 @@ def cmd_open(args):
         webbrowser.open(url)
 
 
-def add_open_command(sub) -> None:
+def register(sub) -> None:
     """Adds `open [--port N] [--next PATH] [--print]` to the command line's subcommands."""
     s = sub.add_parser("open", help="open Hal Employment in a signed-in window")
     s.add_argument("--port", type=int, help="the port Hal listens on (default: its setting)")

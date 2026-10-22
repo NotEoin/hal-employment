@@ -70,6 +70,11 @@ world (`tests/support/cli.py` lists the cases). `tests/goldens/score.json` holds
 notes for every made-up job, for the scoring rewrite's compatibility test. Timestamps, the world's folder and
 the greeting's part of the day are normalised.
 
+Help follows gate G4's rule. An old command's help stays byte for byte, apart from options added by
+name (`NEW_OPTIONS`, today `serve --background`). The top-level help keeps every old line and may only gain
+the names of new commands (`NEW_COMMANDS`, today `open`), whose own help goldens are recorded when they are
+added. `cli.comparable()` takes out exactly those additions before comparing.
+
 ```sh
 .venv/bin/python scripts/dev/golden_cli.py --check            # what changed, as diffs
 .venv/bin/python scripts/dev/golden_cli.py --record list-all  # only in a commit meant to change that output

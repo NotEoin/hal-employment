@@ -89,7 +89,11 @@ def main():
     s = sub.add_parser("todo"); s.add_argument("op", nargs="?", choices=["add", "done"])
     s.add_argument("rest", nargs="*"); s.set_defaults(fn=cmd_todo)
     s = sub.add_parser("serve", help="run the Hal Employment web interface")
-    s.add_argument("--port", type=int); s.add_argument("--open", action="store_true"); s.set_defaults(fn=cmd_serve)
+    s.add_argument("--port", type=int)
+    s.add_argument("--open", action="store_true")
+    s.add_argument("--background", action="store_true",
+                   help="no console: log only to logs/server.log in the data folder")
+    s.set_defaults(fn=cmd_serve)
     s = sub.add_parser("add", help="track an advert found by hand, skipping the filters")
     s.add_argument("url"); s.add_argument("--company", required=True); s.add_argument("--title", required=True)
     s.add_argument("--location", default=""); s.add_argument("--salary"); s.set_defaults(fn=cmd_add)

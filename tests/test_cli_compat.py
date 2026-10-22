@@ -2,6 +2,8 @@
 
 The goldens in tests/goldens/cli were recorded from the untouched code on a made-up database
 (`scripts/dev/golden_cli.py --record`). A commit that means to change an output re-records only that golden.
+Help follows G4's rule: old commands keep their help apart from options added by name, and the
+top-level help keeps every old line and only gains new command names (`cli.comparable`).
 """
 
 import json
@@ -25,14 +27,25 @@ class CommandLine(unittest.TestCase):
     def compare(self, cases):
         for case in cases:
             with self.subTest(case.name):
-                want = cli.golden_path(case).read_text(encoding="utf-8")
-                self.assertEqual(cli.output(case), want, f"`jobhunt {' '.join(case.argv)}` changed")
+                want = cli.comparable(case, cli.golden_path(case).read_text(encoding="utf-8"))
+                self.assertEqual(cli.comparable(case, cli.output(case)), want,
+                                 f"`jobhunt {' '.join(case.argv)}` changed")
 
     def test_cli_output_matches_the_goldens_recorded_before_any_change(self):
         self.compare([c for c in cli.CASES if not c.name.startswith("help")])
 
-    def test_help_text_is_unchanged(self):
+    def test_help_of_every_existing_command_is_unchanged(self):
         self.compare([c for c in cli.CASES if c.name.startswith("help")])
+
+    def test_the_help_rule_allows_only_the_named_additions(self):
+        top = next(c for c in cli.CASES if c.name == "help")
+        serve = next(c for c in cli.CASES if c.name == "help-serve")
+        old_top, old_serve = (cli.golden_path(c).read_text(encoding="utf-8") for c in (top, serve))
+        self.assertNotEqual(cli.comparable(top, old_top.replace("probe}", "probe,purge}")), old_top)
+        self.assertNotEqual(cli.comparable(top, old_top.replace("    record ", "    records ")), old_top)
+        self.assertNotEqual(cli.comparable(serve, old_serve.replace(" [--open]", "")),
+                            cli.comparable(serve, old_serve))
+        self.assertNotEqual(cli.comparable(serve, old_serve + "  --quiet\n"), cli.comparable(serve, old_serve))
 
     def test_every_command_has_a_help_golden(self):
         listed = re.search(r"\{([a-z0-9,-]+)\}", cli.output(cli.Case("help", ["--help"]))).group(1).split(",")

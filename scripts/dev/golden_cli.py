@@ -38,8 +38,8 @@ def check() -> int:
     changed = 0
     for case in cli.CASES:
         path = cli.golden_path(case)
-        want = path.read_text(encoding="utf-8") if path.exists() else ""
-        got = cli.output(case)
+        want = cli.comparable(case, path.read_text(encoding="utf-8")) if path.exists() else ""
+        got = cli.comparable(case, cli.output(case))
         if got != want:
             changed += 1
             sys.stdout.writelines(difflib.unified_diff(want.splitlines(True), got.splitlines(True),
