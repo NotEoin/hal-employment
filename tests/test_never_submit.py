@@ -60,8 +60,10 @@ class StaticChecks(unittest.TestCase):
         r"\bmay_send\b": "nothing may send",
         r"\bsigned_in_apply\b": "Apply is never pressed on a signed-in site",
     }
-    # The settings shim records the old key as removed, so an old config.toml line is reported, not used.
-    ALLOWED: ClassVar[set[tuple[str, str]]] = {(r"\bsigned_in_apply\b", "jobhunt/core/settings/legacy_map.py")}
+    # The settings shim records the old key as removed, so an old config.toml line is reported, not used, and
+    # `config.CONFIG` answers it with [] whatever the file says.
+    ALLOWED: ClassVar[set[tuple[str, str]]] = {(r"\bsigned_in_apply\b", "jobhunt/core/settings/legacy_map.py"),
+                                               (r"\bsigned_in_apply\b", "jobhunt/config.py")}
 
     def test_the_code_holds_no_way_to_press_submit_or_enter(self):
         found = []
