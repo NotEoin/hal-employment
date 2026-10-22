@@ -36,7 +36,7 @@ tests. `db.now()` returns `iso()`; older rows end in `+00:00` and compare the sa
 
 `db.connect(path=None)` opens `paths.db_path()` with WAL, foreign keys and a 30 s busy timeout, then runs
 `core.db.migrate.migrate` when `PRAGMA user_version` is below `LATEST`, and raises `DataTooNew` when above.
-Until the migration runner is installed, the old baseline schema is applied as before.
+Only migrations make the schema: 0001 is the old baseline, so `db.py` holds no `CREATE` statement.
 
 ## Settings (`core/settings/`)
 

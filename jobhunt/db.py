@@ -1,18 +1,17 @@
 """SQLite tracker: every job ever seen, its score, and its application history.
 
 `connect()` finds the database through `core.paths` when it is called, never at import, so tests, the
-importer and worktrees each open their own file. The schema is made and upgraded by the migration runner
-(`core.db.migrate`); until that module is present, the baseline `SCHEMA` below is applied as it
-always was. `DB_PATH` is kept as a live alias of `paths.db_path()` for code and tests that read it.
+importer and worktrees each open their own file. The schema is made and upgraded only by the migration runner
+(`core.db.migrate`); migration 0001 holds the tables this module used to create itself.
+`DB_PATH` is kept as a live alias of `paths.db_path()` for code and tests that read it.
 """
-import importlib.util
 import json
 import sqlite3
 from pathlib import Path
 
 from .core import clock, paths
+from .core.db import migrate
 
-MIGRATE = "jobhunt.core.db.migrate"
 BUSY_TIMEOUT_S = 30  # the web server, its worker and the CLI share the file; each waits out the others' writes
 
 
@@ -37,98 +36,6 @@ STATUSES = [
     "closed",       # posting removed before an application was made
 ]
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS jobs (
-    id           TEXT PRIMARY KEY,          -- '<source>:<external id>'
-    source       TEXT NOT NULL,
-    company      TEXT NOT NULL,
-    title        TEXT NOT NULL,
-    location     TEXT,
-    url          TEXT,
-    description  TEXT,
-    salary       TEXT,
-    posted_at    TEXT,
-    first_seen   TEXT NOT NULL,
-    last_seen    TEXT NOT NULL,
-    active       INTEGER NOT NULL DEFAULT 1,
-    board_size   INTEGER,                   -- open roles on that company's board (size proxy)
-    score        REAL,
-    score_notes  TEXT,
-    status       TEXT NOT NULL DEFAULT 'new',
-    notes        TEXT
-);
-CREATE INDEX IF NOT EXISTS jobs_status ON jobs(status, score);
-
-CREATE TABLE IF NOT EXISTS events (
-    id      INTEGER PRIMARY KEY,
-    job_id  TEXT NOT NULL REFERENCES jobs(id),
-    at      TEXT NOT NULL,
-    kind    TEXT NOT NULL,                  -- status | note | email | ...
-    detail  TEXT
-);
-CREATE INDEX IF NOT EXISTS events_job ON events(job_id, at);
-
-CREATE TABLE IF NOT EXISTS emails (
-    msgid    TEXT PRIMARY KEY,              -- Gmail X-GM-MSGID
-    thrid    TEXT,
-    date     TEXT NOT NULL,                 -- UTC ISO
-    sender   TEXT,
-    rcpt     TEXT,
-    subject  TEXT,
-    kind     TEXT NOT NULL,                 -- see gmail.KINDS
-    company  TEXT,
-    role     TEXT,
-    job_id   TEXT REFERENCES jobs(id),
-    snippet  TEXT
-);
-CREATE INDEX IF NOT EXISTS emails_job ON emails(job_id, date);
-
-CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
-
-CREATE TABLE IF NOT EXISTS applications (
-    job_id   TEXT PRIMARY KEY REFERENCES jobs(id),
-    stage    TEXT NOT NULL,                 -- documents | form | filled | submitted
-    docs     TEXT,                          -- JSON: letter, message, answers, cv title and summary
-    form     TEXT,                          -- JSON: the form fields and the values to enter
-    prep     TEXT,                          -- interview preparation notes, Markdown
-    contacts TEXT,                          -- JSON: who to message about the application (contacts.find)
-    updated  TEXT NOT NULL
-);
-
--- Answers the applicant typed into a form himself, reused when another form asks the same.
-CREATE TABLE IF NOT EXISTS answers (
-    question TEXT PRIMARY KEY,              -- the form's label, lower-cased without punctuation
-    label    TEXT NOT NULL,                 -- the label as the form worded it
-    answer   TEXT NOT NULL,                 -- JSON: a string, a list of options, or true/false
-    updated  TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS todos (
-    id        INTEGER PRIMARY KEY,
-    job_id    TEXT REFERENCES jobs(id),
-    kind      TEXT NOT NULL,                -- offer | interview | assessment | reply | apply | message | task
-    title     TEXT NOT NULL,
-    detail    TEXT,
-    url       TEXT,
-    priority  INTEGER NOT NULL DEFAULT 5,   -- 0 is most urgent
-    due       TEXT,
-    source    TEXT UNIQUE,                  -- what created it, e.g. 'email:<msgid>'
-    created   TEXT NOT NULL,
-    done      TEXT
-);
-CREATE INDEX IF NOT EXISTS todos_open ON todos(done, priority);
-
-CREATE TABLE IF NOT EXISTS alerts (
-    id      INTEGER PRIMARY KEY,
-    at      TEXT NOT NULL,
-    level   TEXT NOT NULL,                  -- info | good | urgent | error
-    title   TEXT NOT NULL,
-    body    TEXT,
-    job_id  TEXT REFERENCES jobs(id),
-    read    INTEGER NOT NULL DEFAULT 0
-);
-"""
-
 
 def now() -> str:
     """Now in UTC as `2026-10-22T09:00:00Z` (older rows end in `+00:00`; both compare on 19 characters)."""
@@ -143,22 +50,8 @@ def json_value(text: str):
     return json.loads(text)
 
 
-def _baseline(con: sqlite3.Connection) -> None:
-    """The schema as it was before migrations, for as long as the migration runner is not installed."""
-    con.executescript(SCHEMA)
-    if "contacts" not in {r["name"] for r in con.execute("PRAGMA table_info(applications)")}:
-        try:
-            con.execute("ALTER TABLE applications ADD COLUMN contacts TEXT")
-        except sqlite3.OperationalError:  # another process added it first
-            pass
-
-
 def _upgrade(con: sqlite3.Connection, path: Path) -> None:
     """Runs pending migrations; a database saved by a newer Hal raises `DataTooNew`."""
-    if importlib.util.find_spec(MIGRATE) is None:
-        _baseline(con)
-        return
-    migrate = importlib.import_module(MIGRATE)
     version = con.execute("PRAGMA user_version").fetchone()[0]
     if version > migrate.LATEST:
         raise migrate.DataTooNew(
