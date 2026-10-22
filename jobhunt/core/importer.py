@@ -17,7 +17,9 @@ Design notes:
   step 5's `migrate()` takes that lock itself and an flock is not re-entrant within one process.
 - `private.toml` is copied byte for byte, compared by SHA-256, and never parsed, printed or logged.
 - Secrets are written outside the staging home, straight to the person's store, because the keyring is
-  per user, not per folder; a dry run counts them and writes none.
+  per user, not per folder; a dry run counts them and writes none. They are saved just after the seal:
+  the store also writes a history and Activity row through `db.connect()`, which before the seal would
+  open (and migrate) the old database in place.
 - The computer is reached only through `System` (port, timers, disk, retiring timers), so tests pass
   fakes and never touch systemd or a real server.
 
@@ -598,14 +600,35 @@ class _Run:
 
     def settings_step(self) -> None:
         n = self.write_settings("settings")
-        if self.plan.private:
-            _store("private").save(dict(self.plan.private))
+        saved, unsaved = self.save_private()
         removed = ", ".join(self.plan.removed)
         self.step("settings", f"Moved {n} settings from config.toml"
-                  + (f"; {len(self.plan.private)} answer went to your private answers" if self.plan.private else "")
+                  + (f"; {saved} answer went to your private answers" if saved else "")
+                  + (f"; {unsaved} old private answer is not one of the choices, so answer it again in Settings, "
+                     "Private answers" if unsaved else "")
                   + (f"; not moved: {removed} (the phone alert topic is replaced, signed-in Apply is gone, "
                      "the website is read once below)" if removed else "") + ".",
-                  settings=n, private=len(self.plan.private), not_moved=self.plan.removed)
+                  settings=n, private=saved, private_left=unsaved, not_moved=self.plan.removed)
+
+    def save_private(self) -> tuple[int, int]:
+        """Saves the private answers config.toml held, one by one; (saved, left for the person).
+
+        The private store takes only one of its choices for a choice question, and the old file
+        took any words, so an answer it refuses is left out rather than stopping the import. The store's
+        error never holds the answer, and nothing here prints or logs it.
+        """
+        if not self.plan.private:
+            return 0, 0
+        store = _store("private")
+        saved = unsaved = 0
+        for key, value in self.plan.private.items():
+            try:
+                store.save({key: value})
+            except ValueError:      # PrivateAnswerError, whose words name no part of the answer
+                unsaved += 1
+            else:
+                saved += 1
+        return saved, unsaved
 
     def identity_step(self) -> None:
         contact = self.plan.site.joinpath(*CONTACT_MODULE)
@@ -675,11 +698,16 @@ class _Run:
                       secrets=len(found))
             return
         store = _store("secrets")
+        moved = "Your data was moved, but "
+        undo_words = " Add it in Settings, or go back with `python -m jobhunt import --undo`."
         for name, path in found.items():
             value = path.read_text(encoding="utf-8").strip()
-            store.put(name, value)
+            try:
+                store.put(name, value)
+            except Exception as e:      # the store's words name the key, never the value
+                raise ImportStopped(f"{moved}Hal could not save {name}: {e}.{undo_words}") from e
             if store.get(name) != value:
-                raise ImportStopped(f"Hal saved {name} but could not read it back, so it stopped.")
+                raise ImportStopped(f"{moved}Hal saved {name} but could not read it back.{undo_words}")
         store.put("notify.ntfy_topic", new_topic())
         self.step("secrets", f"Saved {len(found)} passwords and keys, and a new phone alert topic (subscribe your "
                   "phone again from Setup, Phone alerts).", secrets=len(found))
@@ -816,7 +844,8 @@ def run(opts: Options, system: System | None = None) -> Report:
                 job.lists_step()
                 job.hal_step()
                 job.rescore_step(data)
-            job.secrets_step()
+            if opts.dry_run:
+                job.secrets_step()
             job.write_records(data)
             job.marker(data)
             (data / INCOMPLETE).unlink()
@@ -832,6 +861,7 @@ def run(opts: Options, system: System | None = None) -> Report:
         sealed = f"Your data now lives in {job.target}."
         job.report.add("seal", sealed)
         system.after_step("seal")
+        job.secrets_step()
         extra = [("seal", sealed), *job.retire(), *job.lock_old()]
         job.write_records(job.target, extra)
         job.marker(job.target)

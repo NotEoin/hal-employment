@@ -2,10 +2,13 @@
 
 Every old install here is made up by `support.old_repo`, in a temporary folder, with a made-up private
 answers file and carer answer as canaries. The computer (port, timers, disk) is faked through
-`importer.System`, and the stores and the timer call are stand-ins from `support.stubs`.
+`importer.System`, and the stores and the timer call are stand-ins from `support.stubs`, except in
+`RealStores`, which runs on the real secrets and private answers stores (their file fallback in the
+temporary home).
 """
 import ast
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -70,6 +73,7 @@ class ImportCase(unittest.TestCase):
     """A made-up old checkout, an empty temporary home and the faked computer."""
 
     carer = True
+    real_stores = False     # True: the real secrets and private stores instead of the stand-ins
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -87,9 +91,10 @@ class ImportCase(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             argv = ["--repo", str(self.old.root), "--ref", "HEAD", "--out", str(self.prefs)]
             self.assertEqual(load_export().main(argv), 0)
-        stubs = importer_contracts.installed()
-        self.secrets, self.private, self.platform = stubs.__enter__()
-        self.addCleanup(stubs.__exit__, None, None, None)
+        if not self.real_stores:
+            stubs = importer_contracts.installed()
+            self.secrets, self.private, self.platform = stubs.__enter__()
+            self.addCleanup(stubs.__exit__, None, None, None)
         self.lines: list[str] = []
         self.system = importer.System(port_answers=lambda port: False, new_app_answers=lambda port: False,
                                       timer_active=lambda name: False, free_bytes=lambda path: 10 ** 12,
@@ -439,6 +444,34 @@ class Commands(ImportCase):
         with mock.patch.object(importer, "System", lambda say: self.system), \
                 self.assertRaisesRegex(SystemExit, "Stopped: Hal is running"):
             cli_data.cmd_import(args)
+
+
+class RealStores(ImportCase):
+    """The import on the real stores.
+
+    Regression for two breaks found on the real stores: the private store refuses an old carer answer that is not
+    one of its choices, which stopped the whole import; and saving a secret writes a history row through
+    `db.connect()`, which before the seal opened and migrated the old database in place, then left the new
+    folder non-empty so the seal failed.
+    """
+
+    real_stores = True
+
+    def test_the_import_runs_on_the_real_stores_and_never_opens_the_old_database(self):
+        old_db_file = self.old.data / "jobs.db"
+        before = hashlib.sha256(old_db_file.read_bytes()).hexdigest()
+        self.run_import()
+        self.assertTrue((self.target / paths.MARKER).is_file())
+        moved = self.old.root / f"data.imported-{DAY}" / "jobs.db"
+        self.assertEqual(hashlib.sha256(moved.read_bytes()).hexdigest(), before)
+        from jobhunt.core.settings import private, secrets
+
+        self.assertEqual(secrets.get("email.app_password"), old_repo.SECRETS["gmail-app-password"])
+        self.assertRegex(secrets.get("notify.ntfy_topic"), r"^hal-[a-z0-9]{24}$")
+        self.assertNotIn("carer", private.read_table())
+        self.assertTrue(any("answer it again in Settings" in line for line in self.lines))
+        self.assertFalse(any(old_repo.CARER_CANARY in line for line in self.lines))
+        importer.undo(system=self.system)    # the sealed hash covers the secrets' rows, so no --force
 
 
 if __name__ == "__main__":
