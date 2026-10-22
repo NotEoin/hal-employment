@@ -52,7 +52,8 @@ subscribes. The registry and catalogue are `core/settings/registry.py` and `cata
 `plugins.modules(kind)` imports every module under `jobhunt/` named `<kind>.py` or `*_<kind>.py`, in dotted
 order, for the kinds `routes`, `settings`, `actions`, `health`, `home`, `search`, `schedule`, `undo` and
 `tasks`. A module that fails to import is logged and kept in `plugins.FAILED` for the health page.
-`@plugins.on_start` registers work the server runs once at start.
+`@plugins.on_start` registers work the server runs once at start. Migrations (`core/db/migrations/`) and
+command modules (`cli/`) are never loaded this way: the migration runner and `cli.register_all` find them.
 
 ## Server (`web/app.py`, `web/router.py`)
 
@@ -110,3 +111,30 @@ placeholders, so JSON examples keep their braces.
 
 `file_name("cv" | "letter")` fills the `cvdocs.*file_name` template with `you.name`; `folder_name(n, company,
 title)` makes `0042 Company - Title`. Both fold to ASCII and drop characters Windows refuses.
+
+## App shell (`web/static/app/`) [6]
+
+Conventions for page and dialog owners:
+
+- A page module exports its component under the name in `core/router.js` ROUTES (`Home`, `Jobs`,
+  `JobPage`, `Apps`, `AppPage`, `Messages`, `CvStudio`, `Docs`, `Record`, `Activity`, `Memory`,
+  `Settings`); it gets the route's arg as `arg` (already decoded). Its first heading is `Head` (or an
+  `h1`), which gets focus on each route change.
+- When a stub is replaced, delete both the `/* STUB: ... */` line and `export const STUB`; the rail
+  then shows the page in a person's own install.
+- A dialog is `dialogs/<kind>.js` with a default export; set `.wide`, `.drawer` or `.label` on the
+  component as needed and start it with `DlgHead`. Open it with `openDialog(kind, props)`; props arrive as
+  `d`. `ask({title, text, yes, no, danger})` returns a promise of true or false.
+- Page keys (J, K, A, S, N, [ and ]) are claimed with `useKeys({ j: fn, ... })`; nothing fires while
+  typing or while a dialog is open.
+- Server data: `useApi(path, { on: [ev => ...] })`; events in `core/events.js` `stalePaths` already
+  reload the paths each event changes.
+- Words: text for Advanced and Details panels goes in a literal preceded by `/* details */`, which the
+  words test skips.
+- Setup steps default-export `Step`; `setup/setup.js` exports `Setup` (drawn over any page).
+- Settings, Advanced calls `setTheme("light"|"dark"|"system")` and `setSimpleNav(bool)` from
+  `core/store.js`.
+
+In browser tests, wait on selectors, never on Playwright's `wait_for_function` with a string: its polling
+evaluates the string, which the app's Content-Security-Policy refuses. `tests/support/ui.py` has the route
+list, the sizes, the axe check and the sideways check.
