@@ -41,18 +41,37 @@ Only migrations make the schema: 0001 is the old baseline, so `db.py` holds no `
 ## Settings (`core/settings/`)
 
 `settings.get(key)` answers the stored value or the registered default; an unregistered key is a
-`KeyError`. `set`, `set_many`, `reset` parse, check and store, write `settings_history`, bump
-`meta.settings_rev`, add an Activity row with Undo and publish a `setting` event. Only values that differ
-from the default are stored. Each process caches the table and re-reads it when the revision moves (checked
-at most every 2 s). `@settings.cached(prefix)` memoises until a setting changes; `on_change(prefix, fn)`
-subscribes. The registry and catalogue are `core/settings/registry.py` and `catalog/*.py`.
+`KeyError`. `set`, `set_many` (all or nothing) and `reset` parse, check and store. One change is one
+`BEGIN IMMEDIATE` transaction in `store.py`: the value row, a `settings_history` row, the bump of
+`meta.settings_rev`, an Activity row with Undo (`{"type": "setting", "key", "value"}`) and, for `goal=True`
+keys, a `goal_versions` row holding every `goal.*` and `scoring.*` value. A `setting` event follows. Only
+values that differ from the default are stored. Each process caches the table per database file and re-reads
+it when the revision moves (checked at most every 2 s). `@settings.cached(prefix)` memoises until a setting
+changes; `on_change(prefix, fn)` subscribes and returns an unsubscribe function. `set(..., by="hal")` on
+`goal.*`, `scoring.*` or `cvdocs.*` raises `PermissionError`. Undo from Activity goes through
+`core/settings/settings_undo.py`, which calls `settings.undo(payload)`. The registry and catalogue are
+`core/settings/registry.py` and `catalog/*.py`.
+
+- **Secrets** (`secrets.py`): the keyring ("Hal Employment") first, every call with a timeout; without
+  one, `config/secrets.json` with mode 0600 (DPAPI on Windows). A background read raises `SecretsLocked`
+  instead of prompting. With a home override or in tests the system keyring is never used.
+- **Private answers** (`private.py`): the `[applicant]` table of `private.toml`, rewritten atomically
+  with mode 0600. Every reply says only saved or not saved. `value_for_form` (only in `autofill.py`) and
+  `values_for_guard` (only in `ai/guard.py`) return values; an AST test holds them there.
+- **Config shim** (`jobhunt/config.py`): `CONFIG` is a read-only mapping over live settings. The
+  checkout's `config.toml` is read only in the legacy layout. Renamed values read back in the old words
+  (`helper` reads as `extension`); `signed_in_apply` is always `[]`; `ntfy_topic` comes from the secrets.
+- **Gate G7** (`tests/test_settings_registry.py`): every key read is registered, and `CONFIG` is read only
+  where `LEGACY_ALLOWED` lists it. An owner who converts a module removes its entries; a stale entry fails.
 
 ## Discovery (`core/plugins.py`)
 
 `plugins.modules(kind)` imports every module under `jobhunt/` named `<kind>.py` or `*_<kind>.py`, in dotted
 order, for the kinds `routes`, `settings`, `actions`, `health`, `home`, `search`, `schedule`, `undo` and
 `tasks`. A module that fails to import is logged and kept in `plugins.FAILED` for the health page.
-`@plugins.on_start` registers work the server runs once at start. Migrations (`core/db/migrations/`) and
+`@plugins.on_start` registers work the server runs once at start. Data tasks are also found in `actions`
+modules and in `jobhunt.core.answers_rescope`; the old to-do list `jobhunt.tasks` is never loaded as one.
+Migrations (`core/db/migrations/`) and
 command modules (`cli/`) are never loaded this way: the migration runner and `cli.register_all` find them.
 
 ## Server (`web/app.py`, `web/router.py`)
@@ -99,6 +118,51 @@ subscriber's bounded queue (a reader that falls behind gets `resync`). `/api/v2/
 oldest `bye`). `sse.DbPoller` publishes `activity`, `action_steps` and `alerts` rows written by other
 processes, once a second. Payloads carry ids, never private data.
 
+## Actions and Activity (`core/runner.py`, `core/activity.py`)
+
+- An area registers a kind with `@runner.action(kind, area=, label=, why=, priority=, resumable=,
+  exclusive=, example=)`. `start()` runs it in the background and returns its id; `run()` runs it in the
+  calling thread (the command line, scheduled children, data tasks). `Ctx` gives `step`, `used`, `changed`,
+  `undo_with`, `waiting_for_you`, `checkpoint` and `resumed_from`.
+- Two pools: user (4 threads, priorities 0 and 1) and background (2, priority 2). One running action per
+  subject unless `replace=True`.
+- Bookkeeping writes go through one writer thread with its own connection, so a caller holding a write
+  transaction never waits on itself; reads in the same process call `runner.flush()` first.
+- Each live action holds `state/actions/<id>.lock`. At server start `recover()` marks only rows whose lock
+  is free as interrupted ("Hal closed before this finished"), so a command-line run beside the server is
+  left alone. A stop from another process is read at the next checkpoint.
+- Classic's API stays (`run_action`, `stop_action`, `_checkpoint`, `_say`, `ACTIONS`, `POOL`); classic
+  actions are kept as kind `classic.<name>`.
+- `activity.record()` refuses an empty why; every text field passes `ai.guard.contains_private` and is
+  replaced by "(left out: it held one of your private answers)" on a match. `@activity.undo_handler(type)`
+  lives in `undo.py` or `*_undo.py` modules.
+- `GET /api/v2/status` shows the most urgent action: one waiting for the person, then the lowest priority
+  number, then the newest. `/activity`, `/actions` and their stop, undo and carry-on routes are in
+  `core/activity_routes.py`.
+- Data tasks (`core/db/tasks.py`): each is an action kind of the same name at priority 2, run once in
+  migration order at server start; a failed task is tried again at the next start. `run_now(name)` is for
+  the importers.
+- Gate G9 (`tests/test_action_kinds.py`) runs every kind from its `example` in the made-up world: it must
+  end done, take a step and leave an Activity row with a why.
+
+## Applying: Hal never presses Submit (`apply/guard.py`)
+
+- `guard.never_press(control, page, kind)` refuses Submit, Send, Finish and Confirm-and-submit words, Apply
+  on a form or signed-in page, and any submit-type control (a `<button>` with no type in a form included)
+  unless it carries Next words on a page that is not final. When in doubt the page counts as final. A
+  refusal raises `WouldSubmit` and writes a `site_events` row `would_submit`. `content.js` `neverPress`
+  mirrors it for the helper.
+- Both engines guard every press, press only Next on a form, never press Enter, and type a line break bound
+  for a one-line box as a space. For each command that acts on a page, a block in the page's own world
+  cancels submits and the form's own send methods, letting through only the vetted Next control
+  (`data-hal-allow`).
+- On the last page the driver hands over instead of sending (`_hand_over`): state ready with "Check the
+  marked answers, then press Submit on the employer's site yourself.", `handed_over_at` set, the form
+  brought forward, and a watch for the site's thanks. Emailed codes are typed (`type_code`); the person
+  presses the button. The legacy `submit` route answers 410.
+- Gate G6 (`tests/test_never_submit.py`, `tests/test_guard.py`): practice forms count posts on the server,
+  in Hal's window and with the helper, and the count stays 0.
+
 ## AI contract (`ai/base.py`, `ai/fake.py`, `ai/prompts.py`)
 
 `ChatRequest`, `ChatResult`, `Status`, `Backend`, `LLMUnavailable` (with `kind`), `Limited` and
@@ -106,6 +170,17 @@ processes, once a second. Payloads carry ids, never private data.
 logs every request. `prompts.text(id, **values)` reads `ai/prompts/<id>.txt` (header lines `# name:`,
 `# used:`, `# needs:`), prefers the person's edit in `prompt_overrides`, and fills only `{word}`
 placeholders, so JSON examples keep their braces.
+
+`jobhunt.ai.chat(...)` runs, in order: the private-answer guard (`ai/guard.py`, free-text
+answers of 8 or more characters, option words never searched for), the allowance (`ai/budget.py`: the
+never-online switch, the pause after a Claude limit, and for Claude only the keep-free hours and daily cap),
+the GPU gate (`ai/gpu.py`, local models only), the backend under `ai.parallel` turns served lowest priority
+first, then one `ai_usage` row of sizes only. Backends: `ai/ollama.py`, `ai/openai_compat.py` and
+`ai/claude_cli.py` (prompt on stdin, system prompt in a file deleted after the call, tools off).
+`ai.provider` is stored once, at the first server start or first AI call, and never changes because Ollama
+stopped. In a test run the backend is a made-up AI that is never ready. `llm.py` and `gpu.py` are thin
+shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. One classifier,
+`autofill.private_question(field)`, keeps private questions out of every AI request.
 
 ## Names (`core/naming.py`)
 
