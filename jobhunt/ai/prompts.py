@@ -18,6 +18,8 @@ from pathlib import Path
 FOLDER = Path(__file__).resolve().parent / "prompts"
 HEADER = re.compile(r"#\s*(name|used|needs)\s*:\s*(.*)")
 PLACEHOLDER = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+# The six prompts a person is most likely to edit, shown first on the Advanced page in this order.
+NAMED_FIRST = ("letter", "screen", "cv_suggest", "form_fill", "email_refine", "site_note")
 
 
 class PromptError(ValueError):
@@ -108,3 +110,50 @@ def text(prompt_id: str, *, con: sqlite3.Connection | None = None, folder: Path 
     """The prompt's text, the person's edit first, with its placeholders filled in."""
     prompt = get(prompt_id, folder)
     return fill(override(prompt_id, con) or prompt.text, prompt.needs, values)
+
+
+def _rows(con: sqlite3.Connection) -> dict[str, tuple[str, str]]:
+    return {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, text, default_sha FROM prompt_overrides")}
+
+
+def listing(con: sqlite3.Connection, folder: Path | None = None) -> list[dict]:
+    """Every prompt for the Advanced page: the named ones first, then the rest by name."""
+    edits = _rows(con)
+    out = []
+    for pid, prompt in all_prompts(folder).items():
+        edit = edits.get(pid)
+        out.append({"id": pid, "name": prompt.name, "used_for": prompt.used, "changed": edit is not None,
+                    "default_changed": edit is not None and edit[1] != prompt.sha})
+    first = {pid: n for n, pid in enumerate(NAMED_FIRST)}
+    return sorted(out, key=lambda p: (first.get(p["id"], len(first)), p["name"].lower()))
+
+
+def detail(prompt_id: str, con: sqlite3.Connection, folder: Path | None = None) -> dict:
+    """One prompt with the person's text, Hal's original and the placeholders it needs."""
+    prompt = get(prompt_id, folder)
+    edit = _rows(con).get(prompt_id)
+    return {"id": prompt.id, "name": prompt.name, "used_for": prompt.used,
+            "text": edit[0] if edit else prompt.text, "default_text": prompt.text, "placeholders": list(prompt.needs),
+            "changed": edit is not None, "default_changed": edit is not None and edit[1] != prompt.sha}
+
+
+def save(prompt_id: str, new_text: str, con: sqlite3.Connection, folder: Path | None = None) -> None:
+    """Stores the person's edit; refused in plain words when it drops a placeholder the prompt needs."""
+    from ..core import clock
+
+    prompt = get(prompt_id, folder)
+    if not new_text.strip():
+        raise PromptError("Write the instruction, or use Reset to put back Hal's original.")
+    check_edit(prompt, new_text)
+    with con:
+        con.execute("""INSERT INTO prompt_overrides (id, text, default_sha, updated) VALUES (?, ?, ?, ?)
+                       ON CONFLICT(id) DO UPDATE SET text = excluded.text, default_sha = excluded.default_sha,
+                                                     updated = excluded.updated""",
+                    (prompt_id, new_text, prompt.sha, clock.iso()))
+
+
+def reset(prompt_id: str, con: sqlite3.Connection, folder: Path | None = None) -> None:
+    """Forgets the person's edit, so Hal's original is used again."""
+    get(prompt_id, folder)
+    with con:
+        con.execute("DELETE FROM prompt_overrides WHERE id = ?", (prompt_id,))
