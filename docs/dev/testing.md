@@ -33,6 +33,7 @@ new browser tests skip unless it is `1`.
 | G4 | `python scripts/dev/golden_cli.py --check` | The command line prints what it printed at ef53088 |
 | G7 | `tests/test_settings_registry.py` | Every setting read is registered; `CONFIG` is read only where `LEGACY_ALLOWED` lists it; Hal never sets goal, scoring or CV keys |
 | G8 | `check_ascii.py`, `check_ruff.py`, `check_personal.py` | Added lines are ASCII and ruff-clean; no personal string |
+| G9 | `tests/test_action_kinds.py`, `tests/test_runner.py` | Every action kind, run from its example, ends done with a step and an Activity row with a why; actions survive a restart |
 | G10 | `tests/test_migrate.py`, `tests/test_backup.py` | Old databases migrate with counts kept and a backup made |
 
 
