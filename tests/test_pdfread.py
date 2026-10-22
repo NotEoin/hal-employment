@@ -36,7 +36,7 @@ def made_up_cvs() -> list[dict]:
         "title": "Graduate", "summary": "Builds small tools and tests them well.",
         "contact": {"location": "Leeds", "github": "github.com/robin-example",
                     "linkedin": "linkedin.com/in/robin-example"},
-        "education": [{"qualification": "Degree", "grade": "Grade",
+        "education": [{"qualification": "BSc (Hons) Made-up Computing", "grade": "First-Class Honours",
                        "meta": "Made-up University | Sep 2022 - Jun 2025",
                        "detail": "- Wrote a dissertation on parsing timetables, marked 78.",
                        "modules": [{"year": "Final year",

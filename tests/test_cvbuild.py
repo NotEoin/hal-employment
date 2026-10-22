@@ -31,7 +31,7 @@ class BuildingCv(unittest.TestCase):
                                          "rows": [["Cryptography", 80], ["Compilers", "n/a"], ["Security", 79]]}]}],
              "projects": [{"name": "Timetable reader", "stack": "Python", "points": ["Reads bus timetables"]}]}
     DRAFT: ClassVar[dict] = {"title": "Graduate", "summary": "A recent graduate.",
-             "education": [{"qualification": "Degree", "grade": "Grade",
+             "education": [{"qualification": "BSc (Hons) Made-up Computing", "grade": "First-Class Honours",
                             "meta": "Made-up University | 2023 - 2026",
                             "detail": "**Dissertation:** timetables \u2014 12 layouts."}],
              "projects": [{"name": "Timetable reader - bus times", "stack": "Python",

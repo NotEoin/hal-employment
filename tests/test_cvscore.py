@@ -59,7 +59,7 @@ class Scoring(unittest.TestCase):
     def test_a_short_readable_cv_is_not_capped_as_unreadable(self):
         """A CV under 250 words still has a text layer; its length is for the length checks to judge."""
         short = self.cv("- Built a parser in Python, with 40 tests.")
-        short.update(education=[{"qualification": "Degree", "grade": "Grade",
+        short.update(education=[{"qualification": "BSc (Hons) Made-up Computing", "grade": "First-Class Honours",
                                                "meta": "Made-up University | Sep 2023 - Jun 2026", "detail": ""}],
                      skills=[], additional=[], moreProjects="", summary="")
         pdf = self.render(short)
