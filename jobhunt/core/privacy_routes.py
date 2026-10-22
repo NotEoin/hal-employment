@@ -26,7 +26,7 @@ import zipfile
 from pathlib import Path
 
 from ..web.router import BadRequest, Conflict, NotHere, Request, route
-from . import clock, paths, runner
+from . import clock, paths, privacy_actions, runner
 
 log = logging.getLogger(__name__)
 
@@ -168,27 +168,11 @@ def export(target: Path, step=lambda words: None) -> list[str]:
     return left
 
 
-@runner.action("privacy.export", area="settings", label="Making a zip of everything", priority=0,
-               why="You pressed Export everything", exclusive="kind", example=lambda world: {})
-def _export_action(ctx: runner.Ctx) -> dict:
-    from . import helpfile
-
-    folder = helpfile.exports_dir()
-    folder.mkdir(parents=True, exist_ok=True)
-    stamp = clock.iso().replace(":", "").replace("-", "")
-    target = folder / f"Hal export {stamp}.zip"
-    export(target, ctx.step)
-    ctx.step("Saving the zip")
-    file_id = helpfile.register_file(ctx.con, target, "export", "Everything Hal keeps")
-    ctx.changed("Made a zip of everything Hal keeps.")
-    return {"file_id": file_id}
-
-
 @route("POST", "/api/v2/privacy/export")
 def start_export(req: Request) -> dict:
     """Starts making the zip; the action's result names the file."""
     try:
-        aid = runner.start("privacy.export", subject="_export", session_id=getattr(req.session, "id_hash", None),
+        aid = runner.start(privacy_actions.KIND, subject="_export", session_id=getattr(req.session, "id_hash", None),
                            remote=req.remote)
     except RuntimeError as e:
         raise Conflict("Hal is already making a zip.") from e
