@@ -21,12 +21,37 @@
 
 IDs can be given as any unique prefix or substring.
 """
-import argparse
+# The venv trampoline, standard library only and before any other jobhunt import: the Hal tools
+# run `/usr/bin/python3 -m jobhunt <cmd>` from the checkout, and this re-runs that inside its `.venv`, with
+# UTF-8 mode on so Windows consoles print the same text.
+import os
+import subprocess
+import sys
+from pathlib import Path
 
-from . import db
-from .cli import register_all
-from .cli.docs import cmd_check, cmd_contacts, cmd_letter, cmd_pack
-from .cli.find import (
+
+def _venv_python() -> Path | None:
+    root = Path(__file__).resolve().parent.parent
+    p = root / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
+    return p if p.exists() else None
+
+
+if os.environ.get("HAL_EMPLOYMENT_NO_TRAMPOLINE") != "1" and sys.prefix == sys.base_prefix:
+    _py = _venv_python()
+    if _py is not None:
+        os.environ["HAL_EMPLOYMENT_NO_TRAMPOLINE"] = "1"
+        _args = [str(_py), "-X", "utf8", "-m", "jobhunt", *sys.argv[1:]]
+        if os.name == "nt":
+            # Windows has no exec that keeps the console; the child's exit code is passed on.
+            sys.exit(subprocess.call(_args))
+        os.execv(str(_py), _args)
+
+import argparse  # noqa: E402 - after the venv trampoline
+
+from . import db  # noqa: E402 - after the venv trampoline
+from .cli import register_all  # noqa: E402 - after the venv trampoline
+from .cli.docs import cmd_check, cmd_contacts, cmd_letter, cmd_pack  # noqa: E402 - after the venv trampoline
+from .cli.find import (  # noqa: E402 - after the venv trampoline
     cmd_add,
     cmd_discover,
     cmd_list,
@@ -39,9 +64,9 @@ from .cli.find import (
     cmd_show,
     cmd_stats,
 )
-from .cli.mail import cmd_digest, cmd_inbox, cmd_mail, cmd_todo
-from .cli.record import cmd_record
-from .cli.system import cmd_serve, cmd_vault
+from .cli.mail import cmd_digest, cmd_inbox, cmd_mail, cmd_todo  # noqa: E402 - after the venv trampoline
+from .cli.record import cmd_record  # noqa: E402 - after the venv trampoline
+from .cli.system import cmd_serve, cmd_vault  # noqa: E402 - after the venv trampoline
 
 
 def main():
