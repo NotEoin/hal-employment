@@ -4,8 +4,9 @@ Each item is one application and the one thing it needs next: documents to appro
 last page to send, or a follow-up that is due. A page that waits for a sign-in or a human check reaches
 Home as the driver's own alert, so it is not repeated here.
 
-`urgency` runs from 0 to 100, higher first. A form already filled outranks documents, because the site may
-sign the person out; anything closing within `SOON_DAYS` gains `SOON_BONUS`, so a closing job comes first.
+`urgency` is on Home's scale (`core/home_routes.py` `URGENCY`), lower first. A form already filled outranks
+documents, because the site may sign the person out; anything closing within `SOON_DAYS` moves up by
+`SOON_BONUS`, so a closing job comes first.
 """
 from __future__ import annotations
 
@@ -19,8 +20,9 @@ from .queries import _app, _busy, _form_counts, column_of
 log = logging.getLogger(__name__)
 
 SOON_DAYS = 2           # the reminder window Jobs uses for saved jobs closing soon
-SOON_BONUS = 20
-URGENCY = {"last_page": 70, "to_check": 60, "approve": 40, "follow_up": 30}
+SOON_BONUS = 10
+# Between Home's own needs: a filled form next to "waiting for you" (10), documents after the emails (20)
+URGENCY = {"last_page": 11, "to_check": 12, "approve": 25, "follow_up": 45}
 
 
 def _route(job_id: str) -> str:
@@ -40,7 +42,7 @@ def _closes_soon(closes_at: str | None, now) -> bool:
 def _item(r, kind: str, icon: str, tone: str, title: str, detail: str, label: str, now) -> dict:
     keys = r.keys()
     closes = r["closes_at"] if "closes_at" in keys else None
-    urgency = URGENCY[kind] + (SOON_BONUS if kind != "follow_up" and _closes_soon(closes, now) else 0)
+    urgency = URGENCY[kind] - (SOON_BONUS if kind != "follow_up" and _closes_soon(closes, now) else 0)
     return {"id": f"apply:{kind}:{r['id']}", "icon": icon, "tone": tone, "title": title, "detail": detail,
             "due": closes if kind != "follow_up" else r["follow_up_at"],
             "act": {"label": label, "route": _route(r["id"])}, "urgency": urgency}
@@ -80,4 +82,4 @@ def needs(con) -> list[dict]:
                 out.append(_item(r, "follow_up", "mail", "why", f"Follow up on {title}",
                                  f"{org} has not replied. Hal can draft a short, polite note for you to send.",
                                  "Open", now))
-    return sorted(out, key=lambda i: -i["urgency"])
+    return sorted(out, key=lambda i: i["urgency"])

@@ -279,7 +279,7 @@ class Providers(unittest.TestCase):
         self.assertEqual(check["title"].split(":")[0], "1 answer needs you")
         self.assertIn("Approve documents", by_job["app-" + quote(job_id("sorrel-ready"), safe="")]["title"])
         self.assertIn("Follow up", by_job["app-" + quote(job_id("ambleside-applied"), safe="")]["title"])
-        self.assertEqual([i["urgency"] for i in items], sorted((i["urgency"] for i in items), reverse=True))
+        self.assertEqual([i["urgency"] for i in items], sorted(i["urgency"] for i in items))
         self.assertEqual(items[0], check)
 
     def test_search_finds_an_application_by_employer_and_leaves_out_other_jobs(self):
