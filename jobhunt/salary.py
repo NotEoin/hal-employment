@@ -6,7 +6,8 @@ applicant to check in the form review:
 
 - the advert's own range, when it states one: the answer stays inside it;
 - ITJobsWatch's median for the nearest junior or graduate job title, in London or in the
-  UK outside London, over the last six months (public pages, no key);
+  UK outside London, over the last six months (public pages, no key). ITJobsWatch covers technical jobs
+  only, so it is read only for the technical preset (`scoring.preset` = technical_grad);
 - the comparable junior adverts already in Hal's database, in the same region.
 
 The market figure is the mean of the medians that rest on at least ten salaries; when the
@@ -14,7 +15,8 @@ role's own family has too few, junior software roles in the region stand in, and
 those are thin too is a small sample used, flagged. Adzuna's own
 salary estimates are not adverts and are left out: Adzuna gives them as one odd figure
 ("GBP 53,622-53,622"), never a round range. Day rates, hourly rates and foreign currencies
-are ignored. When nothing is known the answer is the applicant's own floor, flagged.
+are ignored. When nothing is known the answer is the applicant's own floor (`goal.min_pay`, read when
+used), flagged.
 """
 import html
 import re
@@ -25,7 +27,8 @@ from datetime import datetime, timedelta, timezone
 from . import db
 from .http import get
 from .research import BROWSER_UA
-from .score import SALARY_FLOOR
+
+TECHNICAL_PRESET = "technical_grad"   # the only preset whose jobs ITJobsWatch describes
 
 ITJW = "https://www.itjobswatch.co.uk/jobs/{place}/{phrase}.do"
 ENOUGH = 10  # salaries behind a median before it is trusted; four "junior" adverts at £60k+ once set one
@@ -149,7 +152,7 @@ def _round(n: float, to: int = 1000) -> int:
 def _sources(con, job, name: str, phrases: list[str], london: bool, where: str) -> list[tuple[int, int, str]]:
     """(median, salaries behind it, description) from ITJobsWatch and from Hal's adverts, for one role family."""
     out, best = [], None
-    for phrase in phrases:
+    for phrase in phrases if _technical() else []:
         found = itjobswatch(phrase, london)
         if found and (best is None or found[1] > best[1][1]):
             best = (phrase, found)
@@ -165,6 +168,20 @@ def _sources(con, job, name: str, phrases: list[str], london: bool, where: str) 
         out.append((median, len(mids), f"{len(mids)} similar junior {name} adverts Hal has seen in {where}: "
                                        f"median £{median:,}"))
     return out
+
+
+def _technical() -> bool:
+    """True when the person's jobs are technical ones, which ITJobsWatch's figures describe."""
+    from .core import settings
+
+    return settings.get("scoring.preset") == TECHNICAL_PRESET
+
+
+def _floor() -> int:
+    """The lowest pay the person will consider (`goal.min_pay`), 0 when they set none."""
+    from .core import settings
+
+    return int(settings.get("goal.min_pay") or 0)
 
 
 def expect(job, con=None) -> dict:
@@ -191,6 +208,7 @@ def expect(job, con=None) -> dict:
         basis += [f[2] for f in solid]
         market = statistics.mean(f[0] for f in solid) if solid else None
         span = advertised(job)
+        floor = _floor()
         if span:
             low, high = span
             basis.insert(0, f"the advert states £{low:,}" + (f" to £{high:,}" if high != low else ""))
@@ -200,11 +218,12 @@ def expect(job, con=None) -> dict:
             figure = _round(market)
             bottom, top = _round(figure * 0.95), _round(figure * 1.05)
         else:
-            figure = bottom = SALARY_FLOOR
-            top = _round(SALARY_FLOOR * 1.1)
-            basis.append(f"no salary data found, so your own floor of £{SALARY_FLOOR:,}; check this")
-        if figure < SALARY_FLOOR and not span:
-            basis.append(f"below your £{SALARY_FLOOR:,} floor")
+            figure = bottom = floor
+            top = _round(floor * 1.1)
+            basis.append(f"no salary data found, so your own floor of \u00a3{floor:,}; check this" if floor
+                         else "no salary data found and no lowest pay set; check this")
+        if figure < floor and not span:
+            basis.append(f"below your \u00a3{floor:,} floor")
         text = f"£{figure:,}" if top <= bottom else f"£{bottom:,} to £{top:,}"
         return {"figure": figure, "text": text, "basis": "; ".join(basis)}
     finally:

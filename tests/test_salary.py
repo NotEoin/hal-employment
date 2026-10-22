@@ -8,10 +8,12 @@ Run with: .venv/bin/python -m unittest discover tests
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt import db, salary
+from jobhunt import db, http, salary
+from jobhunt.core import settings
 
 PAGE = """<table><tr><td>Number of salaries quoted</td><td>{quotes}</td><td>9</td></tr>
 <tr><td>Median annual salary (50<sup>th</sup> Percentile)</td><td>&pound;{median}</td><td>&pound;42,750</td></tr>
@@ -83,9 +85,45 @@ class Salary(unittest.TestCase):
         self.assertIn("10 similar junior data engineer adverts", out["basis"])
 
     def test_with_no_data_the_floor_is_given_and_flagged(self):
-        out = salary.expect(job(title="Graduate Developer", location="City"), self.con)
-        self.assertEqual(out["figure"], salary.SALARY_FLOOR)
+        settings.set("goal.min_pay", 23000, by="setup")
+        self.addCleanup(settings.reset, "goal.min_pay", by="setup")
+        out = salary.expect(job(title="Graduate Developer", location="Lowmere"), self.con)
+        self.assertEqual(out["figure"], 23000)
         self.assertIn("check this", out["basis"])
+
+    def test_itjobswatch_is_read_only_for_the_technical_preset(self):
+        self.market["junior data engineer"] = (40000, 50)
+        self.assertIn("ITJobsWatch", salary.expect(job(), self.con)["basis"])
+        settings.set("scoring.preset", "humanities_grad", by="setup")
+        self.addCleanup(settings.reset, "scoring.preset", by="setup")
+        self.assertNotIn("ITJobsWatch", salary.expect(job(), self.con)["basis"])
+
+    def test_the_user_agent_sends_no_email_address(self):
+        """Every job site saw the owner's address in the old user agent; now only a chosen contact."""
+        self.assertNotIn("@", http.user_agent())
+        self.assertTrue(http.user_agent().startswith("HalEmployment/"))
+        sent = {}
+
+        class Reply:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return b"ok"
+
+        def urlopen(req, timeout):
+            sent.update(req.header_items())
+            return Reply()
+
+        with mock.patch.object(http.urllib.request, "urlopen", urlopen):
+            http.get("https://jobs.example/advert")
+        self.assertNotIn("@", sent["User-agent"])
+        settings.set("sites.contact", "made-up.contact@example.org", by="setup")
+        self.addCleanup(settings.reset, "sites.contact", by="setup")
+        self.assertIn("made-up.contact@example.org", http.user_agent())
 
     def test_a_salary_list_gets_the_band_that_holds_the_figure(self):
         options = ["Up to £25,000", "£25,000 - £34,999", "£35,000 - £44,999", "£45,000+"]
