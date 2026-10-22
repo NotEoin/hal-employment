@@ -1,0 +1,15 @@
+# Hal Employment for a Linux user install: starts the server when you sign in.
+# Written by Hal from Settings, "Start Hal when the computer starts"; switching that off disables it.
+[Unit]
+Description=Hal Employment
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory={code_dir}
+ExecStart={python} -m jobhunt serve --background
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

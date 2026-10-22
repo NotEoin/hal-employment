@@ -1,21 +1,22 @@
 """Commands for running Hal itself: serve, vault and open.
 
 `serve` runs the new server (`web.app`), which also serves the classic screens at /classic/. `open` is what
-shortcuts and launchers run: it makes sure the server answers, mints a one-time link and opens it, because
-the app only opens through such a link. The parser for the legacy commands stays in
+shortcuts and launchers run: it makes sure the server answers, mints a one-time link and opens it in one app
+window through the platform layer (Edge on Windows, the first Chromium-family browser on Linux), because the
+app only opens through such a link. While `advanced.classic` is on, `open` shows Classic until the
+new daily screens are in. The parser for the legacy commands stays in
 `jobhunt/__main__.py`, whose help text is held by goldens; `register` adds `open`, a name gate G4 allows the
 top-level help to gain.
 """
-import os
-import subprocess
 import sys
 import time
-import webbrowser
 
 from .. import db
 
 START_WAIT_S = 30        # a cold start migrates the database first; it never takes this long
 START_POLL_S = 0.25
+SERVE_UNIT = "hal-employment-serve"   # the transient unit a server started by `open` runs in (Linux)
+CLASSIC = "/classic/"
 
 
 def cmd_serve(args):
@@ -32,18 +33,25 @@ def cmd_vault(args):
 
 
 def _start_server(port: int) -> None:
-    """Starts `jobhunt serve --port N` in the background, detached from this console."""
-    argv = [sys.executable, "-m", "jobhunt", "serve", "--port", str(port)]
-    flags = {}
-    if os.name == "nt":
-        flags["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-    else:
-        flags["start_new_session"] = True
-    subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **flags)
+    """Starts `jobhunt serve --port N` detached, so it outlives this command (and, on Linux, its terminal)."""
+    from ..core import platform
+
+    argv = [sys.executable, "-m", "jobhunt", "serve", "--background", "--port", str(port)]
+    platform.current().spawn_detached(argv, unit=SERVE_UNIT)
+
+
+def _next_page(asked: str | None) -> str | None:
+    """The page to open: the one asked for, else Classic while `advanced.classic` is on."""
+    if asked:
+        return asked
+    from ..core import settings
+
+    return CLASSIC if settings.get("advanced.classic") else None
 
 
 def cmd_open(args):
-    """Opens Hal Employment in a signed-in window, starting the server first when it is not running."""
+    """Opens Hal Employment in one signed-in window, starting the server first when it is not running."""
+    from ..core import platform
     from ..web import app, auth
 
     port = args.port or auth.server_port()
@@ -54,11 +62,11 @@ def cmd_open(args):
             if time.monotonic() > deadline:
                 sys.exit("Hal Employment did not start. See logs/server.log in Hal's data folder.")
             time.sleep(START_POLL_S)
-    url = auth.mint_open_url(port=port, next=args.next)
+    url = auth.mint_open_url(port=port, next=_next_page(args.next))
     if args.print:
         print(url)
     else:
-        webbrowser.open(url)
+        platform.current().open_app_window(url)
 
 
 def register(sub) -> None:

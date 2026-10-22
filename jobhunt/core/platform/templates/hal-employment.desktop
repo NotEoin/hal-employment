@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Hal Employment
+Comment=Find jobs and get applications ready; you press Submit yourself
+Exec={python} -m jobhunt open
+Path={code_dir}
+Terminal=false
+Categories=Office;
