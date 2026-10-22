@@ -149,8 +149,10 @@ def files(job, con=None) -> dict:
 def tailored(job, docs: dict) -> dict:
     """The CV Hal makes for this job from the base CV, with any title or summary given for it."""
     variant = cv.tailor(pack._job_text(job))[0]
-    variant["title"] = docs.get("cv_title") or variant["title"]
-    variant["summary"] = docs.get("cv_summary") or variant["summary"]
+    for key in ("title", "summary"):    # a CV may have neither
+        given = docs.get(f"cv_{key}") or variant.get(key)
+        if given is not None:
+            variant[key] = given
     return variant
 
 

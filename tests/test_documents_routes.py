@@ -106,5 +106,16 @@ class Documents(unittest.TestCase):
         self.assertNotIn("value_for_form", source)
 
 
+class Tailored(unittest.TestCase):
+    """Regression: a base CV with no title (the made-up world's) raised KeyError, so no CV changes showed."""
+
+    def test_a_cv_without_a_title_or_summary_is_tailored(self):
+        from jobhunt import cv, documents
+
+        with mock.patch.object(cv, "tailor", lambda text: ({"skills": ["Cataloguing"]}, None)):
+            self.assertEqual(documents.tailored(JOB, {}), {"skills": ["Cataloguing"]})
+            self.assertEqual(documents.tailored(JOB, {"cv_title": "Archivist"})["title"], "Archivist")
+
+
 if __name__ == "__main__":
     unittest.main()
