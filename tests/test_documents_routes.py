@@ -117,5 +117,22 @@ class Tailored(unittest.TestCase):
             self.assertEqual(documents.tailored(JOB, {"cv_title": "Archivist"})["title"], "Archivist")
 
 
+class Letter(unittest.TestCase):
+    """Regression: documents.render drew every letter with the main CV's header, not the CV sent with it."""
+
+    def test_the_letter_is_drawn_with_the_cv_sent_with_it(self):
+        import tempfile
+
+        from jobhunt import cv, documents, letter
+
+        sent = {"title": "Archivist", "contact": {"location": "Leeds"}}
+        drawn = {}
+        with tempfile.TemporaryDirectory() as out, \
+                mock.patch.object(cv, "render", lambda variant, folder: None), \
+                mock.patch.object(letter, "render", lambda *a, **kw: drawn.update(kw)):
+            documents.render(JOB, {"cv": sent, "letter": "Dear team,\n\nA made-up letter."}, Path(out))
+        self.assertEqual(drawn["cv_sent"], sent)
+
+
 if __name__ == "__main__":
     unittest.main()

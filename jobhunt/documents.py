@@ -171,7 +171,8 @@ def render(job, docs: dict, out: Path | None = None) -> dict:
     d = out or _OUT.get() or pack_dir(job)
     d.mkdir(parents=True, exist_ok=True)
     made = {}
-    pdf = cv.render(current_cv(job, docs), d)
+    sent = current_cv(job, docs)
+    pdf = cv.render(sent, d)
     want = d / naming.file_name("cv")
     if pdf and Path(pdf).exists():
         if Path(pdf) != want:
@@ -180,7 +181,8 @@ def render(job, docs: dict, out: Path | None = None) -> dict:
     body = _ascii(docs.get("letter", ""))
     if body.strip():
         target = d / naming.file_name("letter")
-        letter.render(body, target, [f"{job['company']} recruitment team"], f"Application: {_ascii(job['title'])}")
+        letter.render(body, target, [f"{job['company']} recruitment team"], f"Application: {_ascii(job['title'])}",
+                      cv_sent=sent)   # the letter's header repeats the CV sent with it
         made["letter"] = str(target)
     return made
 
