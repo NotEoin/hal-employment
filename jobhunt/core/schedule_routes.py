@@ -1,8 +1,7 @@
-"""Routes for the schedule, pause, restart and Home, and the start of the schedule with the server.
+"""Routes for the schedule, pause and restart, and the start of the schedule with the server.
 
 `POST /status/pause` without `paused` turns pause over, so a "Carry on" button can post `{}`. Restart
-answers first and restarts a moment later, so the window gets its reply. `GET /home` lives here until
-a Home route of its own is needed; the reply itself is `core.home.compose`. A change to
+answers first and restarts a moment later, so the window gets its reply. A change to
 `schedule.start_at_login` is applied at once through the platform layer, except in a home override (tests
 and worktrees), which must never write the person's real login items.
 """
@@ -12,7 +11,7 @@ import logging
 import threading
 
 from ..web.router import BadRequest, Request, route
-from . import activity, health, home, plugins, runner, scheduler
+from . import activity, health, plugins, runner, scheduler
 
 log = logging.getLogger(__name__)
 
@@ -107,10 +106,3 @@ def retire_timers(req: Request) -> dict:
         activity.record("system", "schedule.timers", f"Retired your old timers ({len(retired)})",
                         "You pressed Let Hal run them instead")
     return {"retired": retired}
-
-
-@route("GET", "/api/v2/home")
-def get_home(req: Request) -> dict:
-    """Home: what needs you, new matches and the rest."""
-    runner.flush()
-    return home.compose(req.con)
