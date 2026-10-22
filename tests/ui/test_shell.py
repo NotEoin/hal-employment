@@ -1,0 +1,212 @@
+"""Tests of the new app's shell: routes, the rail, search or jump, shortcuts, dialogs and the no-session screen.
+
+Each test runs the real files of `jobhunt/web/static/app/` in headless Chromium against the fake server of
+`tests/support/fake_api.py`, with a made-up person. They need `HAL_TEST_BROWSER=1` and Playwright.
+
+Run with: HAL_TEST_BROWSER=1 .venv/bin/python -m unittest discover tests
+"""
+from __future__ import annotations
+
+import contextlib
+import unittest
+
+from support.fake_api import FakeServer, FakeState, made_up_session, made_up_status
+from support.ui import ROUTES, AppPage, chromium, skip_unless_browser
+
+TITLES = {"home": "Home", "jobs": "Jobs", "job": "Job", "apps": "Applications", "app": "Application",
+          "inbox": "Messages", "cv": "My CV", "docs": "Documents", "record": "Your record", "activity": "Activity",
+          "memory": "What Hal remembers", "settings": "Settings", "setup": "Setup guide"}
+FULL_MENU = ["Home", "Jobs", "Applications", "Messages", "My CV", "Documents", "Your record", "Activity",
+             "What Hal remembers", "Settings", "Help and shortcuts"]
+NAV_TEXTS = """() => [...document.querySelectorAll('nav.rail .nav')].map(b => {
+  const c = b.querySelector('.count');
+  const words = b.textContent.replace(c ? c.textContent : '', '').trim();
+  return [words, c ? c.textContent : null, !!(c && c.classList.contains('hot'))];
+})"""
+TAB_PRESSES = 12  # more than the focusable elements in the shortcuts dialog, so the focus has to wrap
+
+
+@skip_unless_browser
+class ShellTest(unittest.TestCase):
+    """The shell in a real browser."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._stack = contextlib.ExitStack()
+        cls.browser = cls._stack.enter_context(chromium())
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._stack.close()
+
+    def serve(self, **state: object) -> FakeServer:
+        srv = FakeServer(FakeState(**state))
+        self.addCleanup(srv.__exit__, None, None, None)
+        return srv.__enter__()
+
+    def tab(self, srv: FakeServer, size: str = "wide", scheme: str = "light") -> AppPage:
+        p = AppPage(self.browser, srv.url, size, scheme)
+        self.addCleanup(p.close)
+        return p
+
+    def test_the_shell_draws_every_route_without_errors_at_both_sizes(self) -> None:
+        srv = self.serve()
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            p = self.tab(srv, size, scheme)
+            for route in ROUTES:
+                with self.subTest(size=size, route=route):
+                    p.open(route)
+                    page = route.split("-")[0]
+                    self.assertEqual(p.page.title(), "(1) " + TITLES[page] + " - Hal Employment")
+                    self.assertEqual(p.sideways(), 0)
+                    if page != "setup":
+                        p.page.wait_for_selector("#main h1:focus")
+            self.assertEqual(p.errors, [], f"console or CSP errors at {size}")
+
+    def test_the_shell_has_no_serious_accessibility_findings(self) -> None:
+        srv = self.serve(session=made_up_session(developer=True), status=made_up_status(
+            busy=True, text="Hal is writing a cover letter", step_n=2, step_total=4, action_id="a1", why_activity_id=7))
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            p = self.tab(srv, size, scheme)
+            for route in ("home", "jobs-hidden", "settings-goal", "setup"):
+                with self.subTest(size=size, route=route):
+                    p.open(route)
+                    self.assertEqual(p.serious_axe(), [])
+            p.open("home")
+            for keys, name in (("Control+k", "Search or jump"), ("?", "Help and shortcuts")):
+                with self.subTest(size=size, dialog=name):
+                    p.page.keyboard.press(keys)
+                    p.page.wait_for_selector('[role="dialog"]')
+                    self.assertEqual(p.serious_axe(), [])
+                    p.page.keyboard.press("Escape")
+            self.assertEqual(p.errors, [])
+
+    def test_ctrl_k_and_question_mark_open_the_palette_and_shortcuts(self) -> None:
+        srv = self.serve(session=made_up_session(developer=True))
+        p = self.tab(srv).open("home")
+        pg = p.page
+        pg.keyboard.press("Control+k")
+        box = pg.get_by_role("dialog", name="Search or jump")
+        box.wait_for()
+        pg.wait_for_selector('[role="dialog"] input:focus')
+        self.assertEqual(pg.evaluate("document.activeElement.getAttribute('aria-label')"), "Search or jump")
+        pg.keyboard.type("?")  # typed into the box, so it must not open the shortcuts
+        self.assertEqual(pg.get_by_role("dialog").count(), 1)
+        pg.keyboard.press("Backspace")
+        pg.keyboard.type("museum")
+        pg.get_by_role("button", name="Museum Assistant, Riverside Trust Job").wait_for()
+        pg.keyboard.press("Enter")
+        pg.wait_for_url("**/#job-demo%3A1")
+        pg.wait_for_selector("#main h1:focus")
+        self.assertEqual(pg.get_by_role("dialog").count(), 0)
+        self.assertEqual(pg.title(), "(1) Job - Hal Employment")
+
+        pg.keyboard.press("?")
+        pg.get_by_role("dialog", name="Help and shortcuts").wait_for()
+        self.assertIn("Search or jump anywhere", pg.get_by_role("dialog").inner_text())
+        pg.keyboard.press("Escape")
+        self.assertEqual(pg.get_by_role("dialog").count(), 0)
+
+        pg.keyboard.press("Control+k")
+        pg.wait_for_selector('[role="dialog"] input:focus')
+        pg.keyboard.type("search for jobs")
+        pg.get_by_role("button", name="Search for jobs now Action").wait_for()
+        pg.keyboard.press("Enter")
+        pg.wait_for_selector(".toast")
+        self.assertIn(("/api/v2/jobs/search", {}), srv.state.posts, "an action is posted with the X-Hal header")
+        self.assertEqual(p.errors, [])
+
+    def test_a_dialog_traps_focus_and_esc_returns_it(self) -> None:
+        srv = self.serve()
+        p = self.tab(srv).open("home")
+        pg = p.page
+        opener = pg.get_by_role("button", name="Help and shortcuts")
+        opener.focus()
+        pg.keyboard.press("Enter")
+        dialog = pg.get_by_role("dialog", name="Help and shortcuts")
+        dialog.wait_for()
+        pg.wait_for_selector('[role="dialog"] :focus')
+        inside = "() => !!document.activeElement.closest('[role=dialog]')"
+        for key in ("Tab", "Shift+Tab"):
+            for _ in range(TAB_PRESSES):
+                pg.keyboard.press(key)
+                self.assertTrue(pg.evaluate(inside), f"{key} left the dialog at {p.focused()}")
+        self.assertEqual(dialog.get_attribute("aria-modal"), "true")
+        pg.keyboard.press("Escape")
+        self.assertEqual(pg.get_by_role("dialog").count(), 0)
+        self.assertEqual(p.focused(), "button:Help and shortcuts")
+        self.assertEqual(p.errors, [])
+
+    def test_the_rail_matches_the_mock_groups_and_the_simple_menu(self) -> None:
+        srv = self.serve(session=made_up_session(developer=True))
+        p = self.tab(srv).open("home")
+        nav = p.page.evaluate(NAV_TEXTS)
+        self.assertEqual([n[0] for n in nav], FULL_MENU)
+        counts = {n[0]: (n[1], n[2]) for n in nav if n[1]}
+        self.assertEqual(counts, {"Jobs": ("3", False), "Applications": ("1", True), "Messages": ("2", True),
+                                  "My CV": ("4", False), "What Hal remembers": ("1", False)})
+        groups = p.page.eval_on_selector_all("nav.rail .navgroup", "els => els.map(e => e.textContent)")
+        self.assertEqual(groups, ["Your materials", "Hal"])
+        p.page.get_by_role("button", name="Jobs").click()
+        p.page.wait_for_url("**/#jobs")
+        self.assertEqual(p.page.get_attribute("nav.rail .nav.on", "aria-current"), "page")
+
+        srv.state.session = made_up_session(developer=True, simple_menu=True)
+        p.open("home")
+        nav = p.page.evaluate(NAV_TEXTS)
+        self.assertEqual([n[0] for n in nav], ["Home", "Jobs", "Applications", "My CV", "Documents", "More",
+                                               "Help and shortcuts"])
+        self.assertEqual(nav[5][1:], ["3", True], "More carries the count of what it hides")
+        p.page.get_by_role("button", name="More").click()
+        nav = p.page.evaluate(NAV_TEXTS)
+        self.assertEqual([n[0] for n in nav][6:11], ["Messages", "Your record", "Activity", "What Hal remembers",
+                                                     "Settings"])
+        self.assertEqual(p.errors, [])
+
+    def test_pages_still_being_built_are_left_out_of_a_persons_own_rail(self) -> None:
+        srv = self.serve()
+        p = self.tab(srv).open("home")
+        self.assertEqual([n[0] for n in p.page.evaluate(NAV_TEXTS)], ["Home", "Help and shortcuts"])
+        self.assertIn("This part is being built.", p.page.inner_text("#main"))
+        self.assertNotIn("classic", p.page.inner_text("#main"))
+
+    def test_on_a_narrow_window_the_menu_slides_in_and_esc_closes_it(self) -> None:
+        srv = self.serve(session=made_up_session(developer=True))
+        p = self.tab(srv, "narrow", "dark").open("home")
+        self.assertEqual(p.page.get_attribute("nav.rail", "inert"), "", "the closed menu cannot be tabbed into")
+        p.page.get_by_role("button", name="Menu").click()
+        p.page.wait_for_selector("nav.rail .nav:focus")
+        p.page.keyboard.press("Escape")
+        p.page.wait_for_selector("nav.rail[inert]", state="attached")
+        self.assertEqual(p.sideways(), 0)
+        self.assertEqual(p.errors, [])
+
+    def test_without_a_session_the_app_says_to_use_the_shortcut(self) -> None:
+        srv = self.serve(session=None)
+        p = self.tab(srv).open("jobs")
+        self.assertEqual(p.page.inner_text("#main h1"), "For your safety, Hal opens from its shortcut.")
+        self.assertEqual(p.page.locator("nav.rail").count(), 0)
+        self.assertEqual(p.serious_axe(), [])
+        self.assertEqual([e for e in p.errors if "401" not in e], [])
+
+    def test_unknown_routes_go_home(self) -> None:
+        srv = self.serve()
+        p = self.tab(srv).open("nowhere-at-all")
+        self.assertEqual(p.page.title(), "(1) Home - Hal Employment")
+        self.assertEqual(p.errors, [])
+
+    def test_the_status_line_shows_what_hal_is_doing_with_why_and_stop(self) -> None:
+        srv = self.serve(status=made_up_status(busy=True, text="Hal is writing a cover letter", step_n=2,
+                                               step_total=4, action_id="a1", why_activity_id=7, problems=0))
+        p = self.tab(srv).open("home")
+        line = p.page.get_by_role("status").first
+        self.assertIn("Hal is writing a cover letter", line.inner_text())
+        self.assertIn("Step 2 of 4", line.inner_text())
+        p.page.get_by_role("button", name="Stop").click()
+        p.page.wait_for_selector(".toast")
+        self.assertIn(("/api/v2/actions/a1/stop", {}), srv.state.posts)
+        self.assertEqual(p.errors, [])
+
+
+if __name__ == "__main__":
+    unittest.main()

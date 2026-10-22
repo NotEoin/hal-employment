@@ -1,0 +1,63 @@
+/* The app's line icons: ICONS holds each icon's SVG paths on a 24-unit grid, Icon draws one.
+   Icons are decoration (aria-hidden); the words next to them carry the meaning. */
+import { html, cx } from "../core/html.js";
+
+export const ICONS = {
+  home: ["M4 10.5 12 4l8 6.5V20h-6v-5h-4v5H4z"],
+  briefcase: ["M4 8h16v11H4z", "M9 8V5h6v3", "M4 13h16"],
+  columns: ["M4 5h4v14H4z", "M10 5h4v9h-4z", "M16 5h4v6h-4z"],
+  inbox: ["M4 13l2-8h12l2 8v6H4z", "M4 13h5l1 2h4l1-2h5"],
+  file: ["M7 3h7l4 4v14H7z", "M14 3v4h4", "M10 12h5", "M10 16h5"],
+  folder: ["M3 7h6l2 2h10v10H3z"],
+  book: ["M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z", "M5 18a2 2 0 0 1 2-2h11"],
+  pulse: ["M3 12h4l2-6 4 12 2-6h6"],
+  bulb: ["M9 18h6", "M10 21h4", "M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"],
+  sliders: ["M4 6h9", "M17 6h3", "M4 12h3", "M11 12h9", "M4 18h11", "M19 18h1", "M13 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M7 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M15 18a2 2 0 1 0 4 0a2 2 0 1 0-4 0"],
+  help: ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14", "M12 17.5v.01"],
+  search: ["M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M20 20l-4-4"],
+  check: ["M5 12.5l4.5 4.5L19 7"],
+  x: ["M6 6l12 12", "M18 6L6 18"],
+  info: ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M12 11v6", "M12 7.5v.01"],
+  warn: ["M12 4l9 16H3z", "M12 10v4", "M12 17v.01"],
+  stop: ["M7 7h10v10H7z"],
+  play: ["M8 5v14l11-7z"],
+  chevL: ["M15 6l-6 6 6 6"], chevR: ["M9 6l6 6-6 6"], chevD: ["M6 9l6 6 6-6"], chevU: ["M6 15l6-6 6 6"],
+  upload: ["M12 16V4", "M7 9l5-5 5 5", "M4 20h16"],
+  copy: ["M8 8h11v11H8z", "M5 16V5h11"],
+  download: ["M12 4v12", "M7 11l5 5 5-5", "M4 20h16"],
+  external: ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
+  lock: ["M6 11h12v9H6z", "M8 11V8a4 4 0 0 1 8 0v3"],
+  plus: ["M12 5v14", "M5 12h14"],
+  star: ["M12 4l2.5 5.2 5.5.8-4 3.9.9 5.6-4.9-2.6-4.9 2.6.9-5.6-4-3.9 5.5-.8z"],
+  mail: ["M3 6h18v12H3z", "M3 7l9 6 9-6"],
+  bell: ["M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z", "M10 20h4"],
+  clock: ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M12 7v5l3 2"],
+  pin: ["M12 21s-6-5.5-6-10a6 6 0 0 1 12 0c0 4.5-6 10-6 10z", "M10 11a2 2 0 1 0 4 0a2 2 0 1 0-4 0"],
+  undo: ["M9 8l-4 4 4 4", "M5 12h9a5 5 0 0 1 0 10h-2"],
+  edit: ["M4 20h4L19 9l-4-4L4 16z", "M14 6l4 4"],
+  trash: ["M5 7h14", "M9 7V4h6v3", "M7 7l1 13h8l1-13"],
+  refresh: ["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"],
+  menu: ["M4 7h16", "M4 12h16", "M4 17h16"],
+  flag: ["M5 21V4", "M5 4h11l-2 4 2 4H5"],
+  globe: ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M3 12h18", "M12 3c2.5 2.5 3.5 6 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-6-3.5-9s1-6.5 3.5-9z"],
+  cpu: ["M7 7h10v10H7z", "M10 10h4v4h-4z", "M9 3v4", "M15 3v4", "M9 17v4", "M15 17v4", "M3 9h4", "M3 15h4", "M17 9h4", "M17 15h4"],
+  shield: ["M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6z"],
+  calendar: ["M4 6h16v14H4z", "M4 10h16", "M8 3v5", "M16 3v5"],
+  spark: ["M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z", "M18 16l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"],
+  user: ["M8 8a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M4 21c1-4 4.5-6 8-6s7 2 8 6"],
+  target: ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0", "M11 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0"],
+  chat: ["M4 5h16v11H9l-5 4z"],
+  bookmark: ["M7 4h10v17l-5-4-5 4z"],
+  code: ["M8 8l-4 4 4 4", "M16 8l4 4-4 4", "M13.5 5l-3 14"],
+  heart: ["M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"],
+  move: ["M8 7l4-4 4 4", "M12 3v18", "M8 17l4 4 4-4"],
+  link: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"],
+  eye: ["M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z", "M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0"],
+  phone: ["M8 3h8v18H8z", "M11 18h2"],
+  sun: ["M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M12 2v2", "M12 20v2", "M2 12h2", "M20 12h2", "M4.9 4.9l1.4 1.4", "M17.7 17.7l1.4 1.4", "M4.9 19.1l1.4-1.4", "M17.7 6.3l1.4-1.4"],
+};
+
+/** One icon by name `n`; `c` adds a size class ("s" small, "l" large). Unknown names draw the info icon. */
+export function Icon({ n, c }) {
+  return html`<svg class=${cx("i", c)} viewBox="0 0 24 24" aria-hidden="true">${(ICONS[n] || ICONS.info).map(d => html`<path d=${d} />`)}</svg>`;
+}
