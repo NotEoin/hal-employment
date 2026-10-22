@@ -12,6 +12,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 from ..http import get
+from . import places
 from .ats import strip_html
 
 BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
@@ -87,14 +88,13 @@ WORKABLE_QUERIES = ["software engineer", "software developer", "graduate develop
                     "machine learning", "AI engineer", "data engineer", "python developer",
                     "backend engineer", "security engineer", "research engineer",
                     "graduate internship", "software engineering intern", "AI intern"]
-WORKABLE_PLACES = ["London, UK", "City, UK", "Town, UK"]
 
 
 def workable_search(max_pages: int = 3):
     """Searches every Workable employer's adverts, which skews towards small companies."""
     jobs = {}
     for query in WORKABLE_QUERIES:
-        for place in WORKABLE_PLACES:
+        for place in (f"{p}, UK" for p in places()):
             token = None
             for _ in range(max_pages):
                 params = {"query": query, "location": place, **({"pageToken": token} if token else {})}

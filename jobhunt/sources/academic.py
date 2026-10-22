@@ -9,13 +9,13 @@ import re
 import urllib.parse
 
 from ..http import get
+from . import places
 from .ats import strip_html
 
 BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 SEARCHES = ["research software engineer", "software developer", "software engineer",
             "machine learning", "artificial intelligence", "data scientist", "KTP associate",
             "research assistant computer science", "cyber security", "internship"]
-PLACES = ["London", "City"]
 BASE = "https://www.jobs.ac.uk"
 
 
@@ -26,7 +26,7 @@ def _text(fragment: str) -> str:
 def fetch():
     jobs = {}
     for keywords in SEARCHES:
-        for place in PLACES:
+        for place in places():
             url = f"{BASE}/search/?" + urllib.parse.urlencode({"keywords": keywords, "location": place})
             page = get(url, headers=BROWSER, timeout=30)
             for block in page.split('class="j-search-result__result')[1:]:

@@ -11,12 +11,12 @@ import urllib.parse
 from pathlib import Path
 
 from ..http import get
+from . import places
 from .ats import strip_html
 
 KEYS = Path.home() / ".config" / "jobhunt"
 QUERIES = ["graduate software", "junior developer", "software engineer graduate",
            "machine learning graduate", "junior data engineer", "graduate cyber security"]
-PLACES = ["London", "City", "Town"]
 
 
 def _key(name: str) -> str | None:
@@ -31,7 +31,7 @@ def adzuna():
     app_id, app_key = creds.split(":", 1)
     jobs = {}
     for query in QUERIES:
-        for place in PLACES:
+        for place in places():
             params = {"app_id": app_id, "app_key": app_key, "results_per_page": 50, "what": query,
                       "where": place, "distance": 10, "max_days_old": 21}
             data = json.loads(get("https://api.adzuna.com/v1/api/jobs/gb/search/1?" + urllib.parse.urlencode(params),
@@ -61,7 +61,7 @@ def reed():
         return []
     jobs = {}
     for query in QUERIES:
-        for place in PLACES:
+        for place in places():
             params = {"keywords": query, "locationName": place, "distanceFromLocation": 10, "resultsToTake": 100}
             for j in _reed("search?" + urllib.parse.urlencode(params), key).get("results", []):
                 low, high = j.get("minimumSalary"), j.get("maximumSalary")
