@@ -241,5 +241,18 @@ class Record(unittest.TestCase):
         self.assertEqual(json.loads(Path(record.INDEX).read_text())["read"], "2026-10-22T09:00:00Z")
 
 
+class Health(unittest.TestCase):
+    """Regression: the record check was a plain dict, so "Is Hal working?" showed it as a broken check."""
+
+    def test_the_record_folder_check_runs_on_is_hal_working(self):
+        from jobhunt.core import health
+
+        missing = Path(tempfile.mkdtemp()) / "no record here"
+        with mock.patch.object(record, "VAULT", missing, create=True):
+            rows = {row["id"]: row for row in health.run_all()}
+        self.assertEqual(rows["record"]["text"], "Your record folder is not there yet.")
+        self.assertEqual(rows["record"]["fix"], {"label": "Make the folder", "action": None, "route": "record"})
+
+
 if __name__ == "__main__":
     unittest.main()
