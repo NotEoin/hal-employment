@@ -19,7 +19,7 @@ def cmd_record(args):
             for path in r["converted"]:
                 print(f"  converted -> {path}")
         elif args.op == "search":
-            for h in record.search(query, k=6, min_score=0.45):
+            for h in record.search(query, k=6, min_score=0.45, include_private=True):
                 print(f"{h['score']:.2f}  {h['path']} > {h['heading']}")
                 print(textwrap.indent(textwrap.shorten(h["text"], 300), "      "))
         elif args.op == "ask":

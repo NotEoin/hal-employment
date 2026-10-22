@@ -1,36 +1,40 @@
 """Tests of the employment record: documents turned into notes, notes indexed and searched.
 
-Each test builds its own vault in a temporary folder, and the embedding model is
-replaced by a bag-of-words stand-in, so nothing here needs Ollama or reads the
-real record. Hal's retrieval library must be at config.toml's `hal_root`.
-
-Run with: .venv/bin/python -m unittest discover tests
+Each test builds its own record in a temporary folder, with its own index file, so nothing here reads the
+person's real record. The people, places and certificates are made up. No test needs poppler or the AI:
+search by words is pure Python, and search by meaning uses a stand-in AI with a bag-of-words embedding.
 """
+import json
 import re
-import shutil
-import subprocess
 import tempfile
 import unittest
+import zipfile
 import zlib
 from pathlib import Path
+from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
+from support.fake_ai import FakeBackend, fake_ai
 
-from jobhunt import record
-from jobhunt.llm import HAL_ROOT
+from jobhunt import ai, record
+from jobhunt.cvstudio import pdfread
 
 DIM = 512  # wide enough that the few words in a test rarely share a slot
+CANARY = "CANARY-7f3a private note"
 
 
-def fake_embed(texts: list[str], kind: str) -> list[list[float]]:
-    """One slot per word, so passages sharing a query's words score highest."""
-    out = []
-    for text in texts:
-        vec = [0.0] * DIM
-        for word in re.findall(r"[a-z0-9]+", text.lower()):
-            vec[zlib.crc32(word.encode()) % DIM] += 1.0
-        out.append(vec)
-    return out
+class WordVectors(FakeBackend):
+    """The AI on this computer, embedding by words: one slot per word, so passages sharing words score highest."""
+
+    def embed(self, texts: list[str], model: str) -> list[list[float]]:
+        self.embedded = getattr(self, "embedded", []) + list(texts)
+        out = []
+        for text in texts:
+            vec = [0.0] * DIM
+            for word in re.findall(r"[a-z0-9]+", text.lower()):
+                vec[zlib.crc32(word.encode()) % DIM] += 1.0
+            out.append(vec)
+        return out
 
 
 def tiny_pdf(lines: list[str]) -> bytes:
@@ -50,18 +54,22 @@ def tiny_pdf(lines: list[str]) -> bytes:
     return out + b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
 
 
-@unittest.skipUnless((HAL_ROOT / "hal_rag.py").exists(), "Hal's retrieval library is not installed")
 class Record(unittest.TestCase):
     def setUp(self):
-        saved = record.VAULT, record._embed
-        def restore():
-            record.VAULT, record._embed = saved
-            record._CACHE.clear()
-        self.addCleanup(restore)
-        self.vault = Path(tempfile.mkdtemp()) / "Employment-Record"
+        self.vault = Path(tempfile.mkdtemp()) / "Employment Record"
         self.vault.mkdir()
-        record.VAULT, record._embed = self.vault, fake_embed
+        self.settings = {"record.search": "words", "record.private_folders": ["Private"], "record.ocr": True}
+        for p in (mock.patch.object(record, "VAULT", self.vault, create=True),
+                  mock.patch.object(record, "INDEX", self.vault.parent / "record-index.json", create=True),
+                  mock.patch.object(record, "_MARKITDOWN", record._MARKITDOWN),
+                  mock.patch.object(record, "_setting", self.setting)):
+            p.start()
+            self.addCleanup(p.stop)
+        self.addCleanup(record._CACHE.clear)
         record._CACHE.clear()
+
+    def setting(self, key, legacy_key=None, default=None):
+        return self.settings.get(key, default)
 
     def note(self, rel: str, text: str) -> Path:
         path = self.vault / rel
@@ -71,10 +79,10 @@ class Record(unittest.TestCase):
 
     def test_a_dropped_document_becomes_a_note_that_keeps_its_headings(self):
         self.note("Awards/prize.html", "<html><body><h1>Prizes</h1><h2>Dean's list</h2>"
-                                       "<p>Named on the School of Computing dean's list for 2025.</p></body></html>")
+                                       "<p>Named on the School of History dean's list for 2025.</p></body></html>")
         out = record.sync()
         self.assertEqual(out["converted"], ["Awards/prize (HTML).md"])
-        text = (self.vault / "Awards/prize (HTML).md").read_text()
+        text = (self.vault / "Awards/prize (HTML).md").read_text(encoding="utf-8")
         self.assertIn('source: "[[prize.html]]"', text)
         self.assertIn("## Dean's list", text)
         hit = record.search("dean's list 2025", min_score=0)[0]
@@ -83,73 +91,154 @@ class Record(unittest.TestCase):
         self.assertEqual(record.sync()["converted"], [])
 
     def test_a_pdf_table_is_read_in_columns_not_as_a_guessed_markdown_table(self):
-        """A transcript's credits and mark stay apart: MarkItDown's guessed table ran them into one cell ("10 76")."""
+        """A transcript's credits and mark stay apart: MarkItDown's guessed table ran them into one cell ("20 68")."""
         (self.vault / "transcript.pdf").write_bytes(tiny_pdf(["Code     Module Title          Credits  Mark",
-                                                              "CSC3121  Distributed Systems   10       76"]))
-        saved = record._MARKITDOWN
-        self.addCleanup(setattr, record, "_MARKITDOWN", saved)
-        guessed = "| CSC3121 Distributed Systems | 10 76 |\n| --- | --- |\n"
+                                                              "HIS3021  Cold War Diplomacy    20       68"]))
+        guessed = "| HIS3021 Cold War Diplomacy | 20 68 |\n| --- | --- |\n"
         record._MARKITDOWN = type("Guess", (), {"convert_local": lambda self, p: type("R", (), {"markdown": guessed})()})()
         record.convert()
-        text = (self.vault / "transcript (PDF).md").read_text()
-        self.assertNotIn("| 10 76 |", text)
-        self.assertRegex(text, r"Distributed Systems +10 +76")
+        text = (self.vault / "transcript (PDF).md").read_text(encoding="utf-8")
+        self.assertNotIn("| 20 68 |", text)
+        self.assertRegex(text, r"Cold War Diplomacy +20 +68")
 
-    @unittest.skipUnless(shutil.which("tesseract"), "tesseract is not installed")
+    def test_a_word_document_is_read_without_markitdown(self):
+        """Without MarkItDown (no C++ runtime on the laptop) a Word file is read from its XML, headings kept."""
+        w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+        xml = (f'<w:document {w}><w:body><w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>'
+               '<w:r><w:t>First Aid</w:t></w:r>'
+               '</w:p><w:p><w:r><w:t>Emergency First Aid at Work, St John Ambulance, March 2025.</w:t></w:r></w:p>'
+               '</w:body></w:document>')
+        with zipfile.ZipFile(self.vault / "certs.docx", "w") as z:
+            z.writestr("word/document.xml", xml)
+        record._MARKITDOWN = type("Broken", (), {"convert_local": lambda self, p: 1 / 0})()
+        record.sync()
+        self.assertIn("## First Aid", (self.vault / "certs (DOCX).md").read_text(encoding="utf-8"))
+        self.assertEqual(record.search("first aid certificate", min_score=0.3)[0]["heading"], "First Aid")
+
+    @unittest.skipUnless(record._tesseract(), "tesseract is not installed")
     def test_a_scanned_certificate_is_read_by_ocr(self):
         """A photo of a certificate has no text layer, so its words come from OCR."""
         image = self.vault / "Certificates" / "licence.png"
         image.parent.mkdir()
-        subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", "-", str(image.with_suffix(""))],
-                       input=tiny_pdf(["Award for Personal Licence Holders", "Completed 2023"]), check=True)
+        image.write_bytes(pdfread.page_png(tiny_pdf(["Award for Personal Licence Holders", "Completed 2023"]), 1, 3.0))
         record.convert()
-        self.assertIn("Personal Licence Holders", (self.vault / "Certificates" / "licence (PNG).md").read_text())
+        self.assertIn("Personal Licence Holders",
+                      (self.vault / "Certificates" / "licence (PNG).md").read_text(encoding="utf-8"))
 
     def test_each_heading_keeps_only_its_own_text(self):
         """One year's module marks never appear in a passage filed under another year's heading."""
-        self.note("Education/BSc.md", "# BSc\n\n## Second year\n\n" + "Databases 70, Networks 68. " * 20
-                  + "\n\n## Final year\n\nCryptography 80, Compilers 75, Distributed systems 72.\n")
+        self.note("Education/BA.md", "# BA\n\n## Second year\n\n" + "Tudor England 70, Medieval Europe 68. " * 20
+                  + "\n\n## Final year\n\nCold War diplomacy 80, Dissertation 75, Empire and memory 72.\n")
         record.sync()
-        hits = record.search("cryptography mark", k=5, min_score=0)
+        hits = record.search("cold war diplomacy mark", k=5, min_score=0)
         self.assertEqual(hits[0]["heading"], "Final year")
-        self.assertNotIn("Databases", hits[0]["text"])
-        self.assertFalse([h for h in hits if h["heading"] == "Second year" and "Cryptography" in h["text"]])
+        self.assertNotIn("Tudor", hits[0]["text"])
+        self.assertFalse([h for h in hits if h["heading"] == "Second year" and "Cold War" in h["text"]])
 
     def test_a_changed_note_is_read_again_and_a_deleted_one_dropped(self):
-        self.note("Notes/a.md", "# A\n\nWorked the late bar shift at the Old George Inn on weekends.\n")
+        self.note("Notes/a.md", "# A\n\nWorked the late bar shift at the Made-up Arms on weekends.\n")
         gone = self.note("Notes/b.md", "# B\n\nCaptained the university chess team for two seasons.\n")
         self.assertEqual(record.sync()["changed"], 2)
-        self.note("Notes/a.md", "# A\n\nTrained three new bar staff at the Old George Inn.\n")
+        self.note("Notes/a.md", "# A\n\nTrained three new bar staff at the Made-up Arms.\n")
         gone.unlink()
         out = record.sync()
         self.assertEqual((out["changed"], out["removed"], out["notes"]), (1, 1, 1))
         self.assertIn("Trained three", record.search("bar staff", min_score=0)[0]["text"])
-        self.assertFalse(record.search("chess team", min_score=0.5))
+        self.assertFalse(record.search("chess team"))
+
+    def test_word_forms_match_and_off_subject_passages_are_left_out(self):
+        """"Archival cataloguing" finds a note on cataloguing archives; a passage sharing only "experience" does not."""
+        self.note("Jobs/Museum.md", "# Museum volunteer\n\n## Archives\n\nCatalogued the parish archives, 400 items, "
+                                    "for the county record office in 2024.\n\n## Visitors\n\nGave tours to school "
+                                    "groups and gained experience of public speaking.\n")
+        record.sync()
+        hits = record.search("experience of archival cataloguing")
+        self.assertEqual([h["heading"] for h in hits], ["Archives"])
+        self.assertEqual(record.search("forklift licence"), [])
 
     def test_an_index_note_is_not_searched(self):
-        # Long enough to make a passage: a shorter note would be dropped by the chunker anyway.
         self.note("Start Here.md", "---\ntype: index\n---\n# Start here\n\nDrop certificates into Certificates, transcripts "
                                    "into Education and anything else into the Inbox; certificates are read too.\n")
-        self.note("Certificates/CITI.md", "# CITI\n\nHuman-subjects research training, completed 5 March 2026.\n")
+        self.note("Certificates/First Aid.md", "# First Aid\n\nEmergency first aid at work certificates, March 2025.\n")
         record.sync()
-        self.assertEqual({h["path"] for h in record.search("certificates", k=5, min_score=0)}, {"Certificates/CITI.md"})
+        self.assertEqual({h["path"] for h in record.search("certificates", k=5, min_score=0)},
+                         {"Certificates/First Aid.md"})
 
     def test_context_names_each_passage_and_is_empty_when_the_record_cannot_be_read(self):
-        self.note("Certificates/CITI.md", "# CITI\n\nHuman-subjects research training, completed 5 March 2026.\n")
+        self.note("Certificates/First Aid.md", "# First Aid\n\nEmergency first aid at work, completed 5 March 2025.\n")
         record.sync()
-        found = record.context(["human-subjects research training completed"])
-        self.assertTrue(found.startswith("[Certificates/CITI.md > CITI]\nHuman-subjects"))
-        def down(texts, kind):
-            raise record.RecordUnavailable("the embedding model did not answer")
-        record._embed = down
-        self.assertEqual(record.context(["research training"]), "")
+        found = record.context(["emergency first aid at work completed"])
+        self.assertTrue(found.startswith("[Certificates/First Aid.md > First Aid]\nEmergency first aid"))
+        Path(record.INDEX).write_text("not json", encoding="utf-8")
+        record._CACHE.clear()
+        self.assertEqual(record.context(["first aid"]), "")
 
-    def test_a_missing_vault_is_reported_not_created(self):
+    def test_a_missing_record_is_reported_not_created(self):
         record.VAULT = self.vault.parent / "nowhere"
         with self.assertRaisesRegex(record.RecordUnavailable, "no employment record"):
             record.sync()
         self.assertEqual((record.status()["exists"], record.status()["notes"]), (False, 0))
         self.assertFalse(record.VAULT.exists())
+
+    def test_record_search_works_without_ollama(self):
+        """Search by words needs no AI at all: with the AI switched off it still finds the passage."""
+        self.note("Certificates/First Aid.md", "# First Aid\n\nEmergency first aid at work, completed 5 March 2025.\n")
+        off = FakeBackend()
+        off.ready = False
+        with fake_ai() as be, ai.use(off):
+            record.sync()
+            hits = record.search("first aid at work")
+        self.assertEqual(hits[0]["path"], "Certificates/First Aid.md")
+        self.assertEqual(hits[0]["by"], "words")
+        self.assertEqual(be.log, [])
+
+    def test_search_by_meaning_is_used_when_ollama_answers(self):
+        self.settings["record.search"] = "meaning"
+        self.note("Jobs/Museum.md", "# Museum volunteer\n\n## Archives\n\nCatalogued the parish archives, 400 items, "
+                                    "for the county record office in 2024.\n")
+        with ai.use(WordVectors()):
+            self.assertEqual(record.sync()["passages"], 1)
+            hits = record.search("parish archives catalogued county record office")
+        self.assertEqual((hits[0]["heading"], hits[0]["by"]), ("Archives", "meaning"))
+        # When the AI stops answering, the same search falls back to words.
+        off = WordVectors()
+        off.embed = lambda texts, model: (_ for _ in ()).throw(ai.LLMUnavailable("stopped"))
+        with ai.use(off):
+            record._CACHE.clear()
+            self.assertEqual(record.search("parish archives")[0]["by"], "words")
+
+    def test_private_record_folders_never_reach_the_ai(self):
+        self.settings["record.search"] = "meaning"
+        self.note("Private/Health.md", f"# Health\n\nAdjustments at interview: {CANARY}, first aid at work.\n")
+        self.note("Certificates/First Aid.md", "# First Aid\n\nEmergency first aid at work, completed 5 March 2025.\n")
+        replies = {"record_ask": "You completed first aid at work on 5 March 2025 [Certificates/First Aid.md]."}
+        with ai.use(WordVectors(replies)) as be:
+            record.sync()
+            answer = record.ask("When did I do first aid at work?")
+            context = record.context(["first aid at work adjustments"])
+        sent = "\n".join([r.system + r.user for r in be.log] + getattr(be, "embedded", []))
+        self.assertNotIn(CANARY, sent)
+        self.assertNotIn(CANARY, context)
+        self.assertEqual(answer["sources"], ["Certificates/First Aid.md"])
+        self.assertNotIn("Private/Health.md", [rel for rel, _ in record.notes_for_ai()])
+        # Your own search on this computer still finds it, and the page marks it private.
+        self.assertTrue(record.search(CANARY, include_private=True))
+        self.assertEqual({f["path"]: f["private"] for f in record.files()},
+                         {"Private/Health.md": True, "Certificates/First Aid.md": False})
+
+    def test_a_file_outside_the_record_is_never_handed_out(self):
+        self.note("Notes/a.md", "# A\n\nA note.\n")
+        self.assertEqual(record.file_path("Notes/a.md"), (self.vault / "Notes/a.md").resolve())
+        for bad in ("../record-index.json", "Notes/missing.md", "/etc/hostname"):
+            with self.assertRaises(LookupError):
+                record.file_path(bad)
+
+    def test_the_index_says_when_the_record_was_last_read(self):
+        self.note("Notes/a.md", "# A\n\nWorked the late bar shift at a made-up inn on weekends.\n")
+        with mock.patch.dict("os.environ", {"HAL_EMPLOYMENT_FAKE_NOW": "2026-10-22T09:00:00Z"}):
+            record.sync()
+        self.assertEqual(record.status()["read"], "2026-10-22T09:00:00Z")
+        self.assertEqual(json.loads(Path(record.INDEX).read_text())["read"], "2026-10-22T09:00:00Z")
 
 
 if __name__ == "__main__":
