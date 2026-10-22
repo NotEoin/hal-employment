@@ -1,14 +1,25 @@
 """Live settings: read where a value is used, never at import.
 
-`get` answers the stored value or the registered default; `set` parses, validates, stores and records the
-change. The registry (`core.settings.registry`) declares every key; an unregistered key is a
-`KeyError`, so a typo fails loudly. This is the minimal version over `store`; goal versions,
-rescore counts, secrets and private answers come later on the same signatures.
+`get` answers the stored value or the registered default; `set` parses, checks and stores one change with
+its history, Activity row (with Undo) and, for a goal setting, a goal version, all in one transaction. The
+registry (`core.settings.registry`) declares every key; an unregistered key is a `KeyError`, so a typo
+fails loudly. Secrets (`secrets.py`) and private answers (`private.py`) are kept elsewhere and never pass
+through `set`.
+
+Design notes:
+- Nothing about the goal, the scoring or the CV changes without the person's yes: `set(..., by="hal")` on
+  a `goal.*`, `scoring.*` or `cvdocs.*` key raises `PermissionError` (gate G7 checks the code statically too).
+- Subscribers (`on_change`) run after the change is committed. One that fails is logged and the others
+  still run, because the change has already happened and the person was told so.
+- `cached` memoises on the stored values under its prefixes, so an unrelated change does not throw away
+  work such as compiled goal patterns.
 """
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
+import logging
 import sqlite3
 import threading
 from collections.abc import Callable
@@ -17,10 +28,25 @@ from typing import Any
 
 from . import store
 
+log = logging.getLogger(__name__)
+
 _loaded = False
 _load_lock = threading.Lock()
 _subscribers: list[tuple[str, Callable[[str, Any, Any], None]]] = []
-SETTINGS_AREA = "settings"
+SETTINGS_AREA = store.AREA
+BY = ("you", "setup", "import", "learned", "hal")
+# Only the person decides these; Hal may suggest, never write.
+PERSON_ONLY = ("goal.", "scoring.", "cvdocs.")
+GOAL_PREFIXES = ("goal.", "scoring.")       # what a goal version holds (migration 0006)
+OPEN_STATUSES = ("new", "shortlisted", "ready")   # the jobs a re-check covers
+REMOTE_DISABLED = "Change this on the computer Hal runs on."
+WHY = {
+    "you": "You changed this setting.",
+    "setup": "You chose this in the setup guide.",
+    "import": "Copied from your old settings when your data moved.",
+    "learned": "You said yes to one of Hal's suggestions.",
+    "hal": "Hal changed this itself.",
+}
 
 
 @dataclass
@@ -34,6 +60,12 @@ class SetResult:
     rescore_count: int | None
     goal_version: int | None
     activity_id: int | None
+
+    def as_dict(self) -> dict:
+        """The shape the settings API answers."""
+        return {"key": self.key, "value": self.value, "display": self.display, "restart": self.restart,
+                "rescore_count": self.rescore_count, "goal_version": self.goal_version,
+                "activity_id": self.activity_id}
 
 
 def _registry():
@@ -56,10 +88,8 @@ def setting(key: str):
     return reg.REGISTRY[key]
 
 
-def _default(item) -> Any:
-    if item.default_fn is not None:
-        return item.default_fn(get)
-    return item.default
+def _default(item, get_fn: Callable[[str], Any] | None = None) -> Any:
+    return _registry().default_of(item, get_fn or get)
 
 
 def get(key: str) -> Any:
@@ -78,7 +108,7 @@ def get_many(prefix: str) -> dict[str, Any]:
 def changed() -> dict[str, Any]:
     """The keys whose stored value differs from the default."""
     reg = _registry()
-    return {k: v for k, v in store.values().items() if k in reg.REGISTRY}
+    return {k: v for k, v in store.values().items() if k in reg.REGISTRY and v != _default(reg.REGISTRY[k])}
 
 
 def revision() -> int:
@@ -86,64 +116,104 @@ def revision() -> int:
     return store.revision()
 
 
-def _display(item, value: Any) -> str:
-    if item.show is not None:
-        return item.show(value)
-    return "" if value is None else str(value)
+def display(key: str, value: Any = ...) -> str:
+    """The words for `key`'s value (its live value when none is given)."""
+    from . import parse
+
+    item = setting(key)
+    return parse.describe(item, get(key) if value is ... else value)
 
 
-def _check(item, value: Any) -> Any:
+def check(key: str, value: Any) -> Any:
+    """What `set` would store for `value`; raises `SettingError` with words, and writes nothing."""
+    from . import parse
+
+    item = setting(key)
     reg = _registry()
-    if item.parse is not None:
-        value = item.parse(value)
-    if item.validate is not None:
-        problem = item.validate(value)
-        if problem:
-            raise reg.SettingError(item.key, problem)
-    if item.choices and item.kind in ("choice", "seg") and value not in {c[0] for c in item.choices}:
-        raise reg.SettingError(item.key, "Choose one of the options shown.")
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        if item.min is not None and value < item.min:
-            raise reg.SettingError(item.key, f"Use {item.min:g} or more.")
-        if item.max is not None and value > item.max:
-            raise reg.SettingError(item.key, f"Use {item.max:g} or less.")
-    return value
+    if not item.stored:
+        raise reg.SettingError(key, "This row has no value to change here.")
+    return parse.check(item, value)
 
 
-def _activity(con: sqlite3.Connection, key: str, old: Any, label: str, at: str, session_id: str | None) -> int | None:
-    """An Activity row with Undo, once the activity table exists (migration 0004)."""
+def _local_get(con: sqlite3.Connection) -> Callable[[str], Any]:
+    """A `get` over `con`'s own view, so a default inside a transaction sees the value just written."""
+    stored = store.read_all(con)
+    reg = _registry()
+
+    def local(key: str) -> Any:
+        if key in stored:
+            return stored[key]
+        return reg.default_of(setting(key), local)
+    return local
+
+
+def _goal_data(con: sqlite3.Connection) -> dict:
+    """Every goal and scoring value as it now is, for a goal version."""
+    reg = _registry()
+    local = _local_get(con)
+    return {k: local(k) for k in sorted(reg.REGISTRY)
+            if k.startswith(GOAL_PREFIXES) and reg.REGISTRY[k].stored}
+
+
+def _rescore_count(con: sqlite3.Connection) -> int | None:
+    marks = ", ".join("?" * len(OPEN_STATUSES))
     try:
-        cur = con.execute(
-            """INSERT INTO activity (at, area, kind, icon, tone, text, why, undo, session_id)
-               VALUES (?, ?, 'setting.changed', 'settings', 'info', ?, ?, ?, ?)""",
-            (at, SETTINGS_AREA, f"Changed {label}", "You changed this setting.",
-             json.dumps({"type": "setting", "key": key, "value": old}), session_id))
+        row = con.execute(f"SELECT COUNT(*) FROM jobs WHERE active = 1 AND status IN ({marks})",
+                          OPEN_STATUSES).fetchone()
     except sqlite3.OperationalError as e:
-        if "no such table" in str(e):
-            return None
-        raise
-    con.commit()
-    return cur.lastrowid
+        log.warning("could not count the jobs a re-check would cover: %s", e)
+        return None
+    return int(row[0])
 
 
 def _notify(key: str, old: Any, new: Any) -> None:
     for prefix, fn in list(_subscribers):
-        if key.startswith(prefix):
+        if not key.startswith(prefix):
+            continue
+        try:
             fn(key, old, new)
+        except Exception:  # the change is committed; one subscriber must not stop the rest
+            log.exception("a subscriber to %s failed after %s changed", prefix, key)
 
 
-def _write(key: str, value: Any, *, by: str, session_id: str | None, con: sqlite3.Connection) -> SetResult:
-    from .. import clock, events
+def _guard_by(key: str, by: str) -> None:
+    if by not in BY:
+        raise ValueError(f"by must be one of {BY}, not {by!r}")
+    if by == "hal" and key.startswith(PERSON_ONLY):
+        raise PermissionError(f"Hal may suggest a change to {key}, never make it: the person decides.")
+
+
+def _write(con: sqlite3.Connection, key: str, value: Any, *, by: str, session_id: str | None) -> tuple:
+    """Stores one checked value inside the caller's transaction; returns what `SetResult` needs."""
+    from .. import clock
 
     item = setting(key)
-    value = _check(item, value)
+    default = _default(item)
+    words = display(key, value)
     at = clock.iso()
-    old = store.write(con, key, value, default=_default(item), by=by, kind=item.kind, session_id=session_id, at=at)
-    activity_id = _activity(con, key, old, item.label, at, session_id)
-    events.publish("setting", keys=[key])
-    _notify(key, old, value)
-    return SetResult(key=key, value=value, display=_display(item, value), restart=item.restart, rescore_count=None,
-                     goal_version=None, activity_id=activity_id)
+
+    def activity(old: Any) -> store.Activity:
+        return store.Activity(text=f"{item.label}: {words}" if words else f"{item.label}: cleared", why=WHY[by],
+                              undo={"type": "setting", "key": key, "value": old}, changed={"setting": key})
+
+    goal = (f"{item.label} changed to {words or 'nothing'}", _goal_data) if item.goal else None
+    written = store.change_in(con, key, value, default=default, by=by, kind=item.kind, session_id=session_id,
+                              at=at, activity=activity, goal=goal)
+    return item, written, words
+
+
+def _result(con: sqlite3.Connection, key: str, value: Any, item, written: store.Written, words: str) -> SetResult:
+    return SetResult(key=key, value=value, display=words, restart=item.restart,
+                     rescore_count=_rescore_count(con) if item.rescore else None,
+                     goal_version=written.goal_version, activity_id=written.activity_id)
+
+
+def _published(results: list[tuple[str, Any, Any]]) -> None:
+    from .. import events
+
+    events.publish("setting", keys=[k for k, _, _ in results])
+    for key, old, new in results:
+        _notify(key, old, new)
 
 
 def _con() -> sqlite3.Connection:
@@ -154,43 +224,83 @@ def _con() -> sqlite3.Connection:
 
 def set(key: str, value: Any, *, by: str = "you", session_id: str | None = None) -> SetResult:
     """Parses, checks and stores one value; raises `SettingError` with words for the person."""
+    _guard_by(key, by)
+    value = check(key, value)
     con = _con()
     try:
-        return _write(key, value, by=by, session_id=session_id, con=con)
+        with store.transaction(con):
+            item, written, words = _write(con, key, value, by=by, session_id=session_id)
+        result = _result(con, key, value, item, written, words)
     finally:
         con.close()
+    _published([(key, written.old, value)])
+    return result
 
 
-def set_many(values: dict[str, Any], *, by: str = "you") -> list[SetResult]:
-    """Stores several values, all or nothing: every value is checked before any is written."""
-    for key, value in values.items():
-        _check(setting(key), value)
+def set_many(values: dict[str, Any], *, by: str = "you", session_id: str | None = None) -> list[SetResult]:
+    """Stores several values in one transaction, all or nothing: every value is checked before any is written."""
+    for key in values:
+        _guard_by(key, by)
+    checked = {key: check(key, value) for key, value in values.items()}
     con = _con()
     try:
-        return [_write(k, v, by=by, session_id=None, con=con) for k, v in values.items()]
+        done = []
+        with store.transaction(con):
+            for key, value in checked.items():
+                done.append((key, value, *_write(con, key, value, by=by, session_id=session_id)))
+        results = [_result(con, key, value, item, written, words) for key, value, item, written, words in done]
     finally:
         con.close()
+    _published([(key, written.old, value) for key, value, _, written, _ in done])
+    return results
 
 
-def reset(key: str, *, by: str = "you") -> SetResult:
+def reset(key: str, *, by: str = "you", session_id: str | None = None) -> SetResult:
     """Puts `key` back to its default."""
-    return set(key, _default(setting(key)), by=by)
+    return set(key, _default(setting(key)), by=by, session_id=session_id)
+
+
+def undo(payload: dict, *, session_id: str | None = None) -> SetResult:
+    """Applies an Activity row's Undo (`{"type": "setting", "key", "value"}`): the old value, as a new change."""
+    if payload.get("type") != "setting" or "key" not in payload:
+        raise ValueError("not a setting's undo")
+    return set(payload["key"], payload.get("value"), by="you", session_id=session_id)
+
+
+def history(key: str | None = None, limit: int = 50) -> list[dict]:
+    """The newest changes first, for one key or all."""
+    con = _con()
+    try:
+        return store.history(con, key, limit)
+    finally:
+        con.close()
 
 
 def cached(*prefixes: str):
     """Memoises a function until a setting under one of `prefixes` changes in any process."""
     def wrap(fn):
         memo: dict = {}
+        lock = threading.Lock()
+
+        def snapshot() -> str:
+            vals = store.values()
+            under = {k: v for k, v in vals.items() if not prefixes or k.startswith(prefixes)}
+            return json.dumps(under, sort_keys=True, default=str)
 
         @functools.wraps(fn)
         def inner(*args):
-            rev = store.revision()
-            if memo.get("rev") != rev:
-                memo.clear()
-                memo["rev"], memo["values"] = rev, {}
-            if args not in memo["values"]:
-                memo["values"][args] = fn(*args)
-            return memo["values"][args]
+            snap = snapshot()
+            with lock:
+                if memo.get("snap") != snap:
+                    memo.clear()
+                    memo["snap"], memo["values"] = snap, {}
+                if args in memo["values"]:
+                    return memo["values"][args]
+            value = fn(*args)
+            with lock:
+                if memo.get("snap") == snap:
+                    memo["values"][args] = value
+            return value
 
         inner.cache_prefixes = prefixes
         return inner
@@ -198,7 +308,7 @@ def cached(*prefixes: str):
 
 
 def schema(*, developer: bool, remote: bool, platform: str | None = None) -> list[dict]:
-    """The Settings page's groups and rows for this session, in page order."""
+    """The Settings page's groups and rows for this session, in page order; empty groups are left out."""
     from .. import paths
 
     reg = _registry()
@@ -206,24 +316,27 @@ def schema(*, developer: bool, remote: bool, platform: str | None = None) -> lis
     out = []
     for gid, name, icon in reg.GROUPS:
         items = []
-        for item in sorted((s for s in reg.REGISTRY.values() if (s.group or s.key.split(".")[0]) == gid),
-                           key=lambda s: (s.order, s.key)):
-            if item.dev_only and not developer:
+        for item in reg.in_group(gid):
+            # visible_if is sent with the row and evaluated by the page, so a row appears as its condition changes
+            if not reg.visible(dataclasses.replace(item, visible_if=""), get, developer=developer, platform=platform):
                 continue
-            if item.platforms and platform not in item.platforms:
-                continue
-            if not reg.visible(item, get, developer=developer, platform=platform):
-                continue
-            disabled = "Change this on the computer Hal runs on." if remote and item.remote == "local_only" else ""
+            disabled = REMOTE_DISABLED if remote and item.remote == "local_only" else ""
             items.append({"key": item.key, "kind": item.kind, "label": item.label, "help": item.help,
                           "choices": [list(c) for c in item.choices], "min": item.min, "max": item.max,
                           "unit": item.unit, "restart": item.restart, "rescore": item.rescore,
                           "advanced": item.advanced, "visible_if": item.visible_if, "to": item.to,
                           "action": item.action, "disabled_why": disabled})
-        out.append({"id": gid, "name": name, "icon": icon, "items": items})
+        if items:
+            out.append({"id": gid, "name": name, "icon": icon, "items": items})
     return out
 
 
-def on_change(prefix: str, fn: Callable[[str, Any, Any], None]) -> None:
-    """Calls `fn(key, old, new)` after any change in this process to a key under `prefix`."""
-    _subscribers.append((prefix, fn))
+def on_change(prefix: str, fn: Callable[[str, Any, Any], None]) -> Callable[[], None]:
+    """Calls `fn(key, old, new)` after any change in this process to a key under `prefix`; returns an unsubscribe."""
+    entry = (prefix, fn)
+    _subscribers.append(entry)
+
+    def unsubscribe() -> None:
+        if entry in _subscribers:
+            _subscribers.remove(entry)
+    return unsubscribe
