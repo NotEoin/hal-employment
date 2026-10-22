@@ -32,6 +32,7 @@ new browser tests skip unless it is `1`.
 | G3 | `tests/test_classic.py` | Classic works through the new server |
 | G4 | `python scripts/dev/golden_cli.py --check` | The command line prints what it printed at ef53088 |
 | G5 | `tests/test_ai_guard.py`, `tests/test_settings_private.py`, `tests/test_autofill.py` `PrivatePaths` | Private answers never reach the AI and show only as saved; the guard blocks a canary; end to end |
+| G6 | `tests/test_never_submit.py`, `tests/test_guard.py` (browser) | Hal never presses Submit: practice forms count posts on the server, in both modes; static checks; the only email is your own summary |
 | G7 | `tests/test_settings_registry.py` | Every setting read is registered; `CONFIG` is read only where `LEGACY_ALLOWED` lists it; Hal never sets goal, scoring or CV keys |
 | G8 | `check_ascii.py`, `check_ruff.py`, `check_personal.py` | Added lines are ASCII and ruff-clean; no personal string |
 | G9 | `tests/test_action_kinds.py`, `tests/test_runner.py` | Every action kind, run from its example, ends done with a step and an Activity row with a why; actions survive a restart |
