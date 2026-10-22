@@ -1,0 +1,154 @@
+"""The Applications routes of API v2: the board, the application page and its buttons.
+
+Anything that drives the browser or the AI starts an action and returns its id at once; the page follows
+it on the event stream. An application is named by its job id or by its number ("12"). Asking for changes
+and rewriting the letter are `docs/write_routes.py`'s.
+"""
+from __future__ import annotations
+
+from ..web.router import BadRequest, NotHere, Request, route
+from . import actions, queries
+
+PREFIX = "/api/v2/applications"
+
+
+def _who(req: Request) -> dict:
+    """Who asked, so an application keeps the browser of the computer it was started from."""
+    return {"session_id": req.session.id if req.session else None,
+            "helper_id": req.helper.id if getattr(req, "helper", None) else None, "remote": req.remote}
+
+
+def _body(req: Request) -> dict:
+    if req.body is None:
+        return {}
+    if not isinstance(req.body, dict):
+        raise BadRequest("The request should be a JSON object.")
+    return req.body
+
+
+def _id(req: Request) -> str:
+    return queries.resolve(req.con, req.params["app_id"])
+
+
+@route("GET", PREFIX)
+def board(req: Request) -> dict:
+    """The board's columns and the Closed list."""
+    return queries.board(req.con)
+
+
+@route("GET", PREFIX + "/{app_id}")
+def application(req: Request) -> dict:
+    """One application and its four steps."""
+    return queries.application(req.con, req.params["app_id"])
+
+
+@route("POST", PREFIX + "/{app_id}/documents/approve")
+def approve(req: Request) -> dict:
+    """Approve and fill in the form."""
+    who = _who(req)
+    return {"action_id": actions.approve_documents(req.con, _id(req), _body(req), **who)}
+
+
+@route("PUT", PREFIX + "/{app_id}/documents")
+def save_documents(req: Request) -> dict:
+    """Keeps edits to the letter, the answers or the message."""
+    return actions.save_documents(req.con, _id(req), _body(req))
+
+
+@route("POST", PREFIX + "/{app_id}/documents/changes/{change_id}")
+def change(req: Request) -> dict:
+    """Undo or Redo one change Hal made to the CV for this job."""
+    on = _body(req).get("on")
+    if not isinstance(on, bool):
+        raise BadRequest("Say whether the change is on (true) or undone (false).", field="on")
+    job_id = _id(req)
+    actions.set_change(req.con, job_id, req.params["change_id"], on)
+    return {"cv": queries.application(req.con, job_id)["docs"]["cv"]}
+
+
+@route("POST", PREFIX + "/{app_id}/documents/redo")
+def redo(req: Request) -> dict:
+    """Make the documents again."""
+    return {"action_id": actions.start("docs.prepare", _id(req), **_who(req))}
+
+
+@route("POST", PREFIX + "/{app_id}/form/fill")
+def fill(req: Request) -> dict:
+    """Fill it in again."""
+    fresh = bool(_body(req).get("fresh"))
+    return {"action_id": actions.start("apply.fill", _id(req), params={"fresh": fresh}, **_who(req))}
+
+
+@route("POST", PREFIX + "/{app_id}/form/edits")
+def edits(req: Request) -> dict:
+    """Put my changes in the form."""
+    raw = _body(req).get("edits")
+    if not isinstance(raw, list):
+        raise BadRequest("Send the changed answers as a list.", field="edits")
+    changed = [{"hid": str(e.get("hid")), "value": e.get("value"), "skip": bool(e.get("skip")), "edited": True}
+               for e in raw if isinstance(e, dict) and e.get("hid") is not None]
+    return {"action_id": actions.start("apply.apply_edits", _id(req), params={"edits": changed}, **_who(req))}
+
+
+@route("POST", PREFIX + "/{app_id}/form/next")
+def next_page(req: Request) -> dict:
+    """Carry on to the next page (on the last page, hand the form over)."""
+    return {"action_id": actions.start("apply.next_page", _id(req), **_who(req))}
+
+
+@route("POST", PREFIX + "/{app_id}/form/draft-rest")
+def draft_rest(req: Request) -> dict:
+    """Ask Hal to answer the rest."""
+    return {"action_id": actions.start("apply.draft_rest", _id(req), **_who(req))}
+
+
+@route("POST", PREFIX + "/{app_id}/form/show")
+def show(req: Request) -> dict:
+    """Show me the form: brings its tab or window to the front on the computer Hal runs on."""
+    from .. import browser
+
+    job_id = _id(req)
+    if req.remote:
+        raise NotHere("The form is open on the computer Hal runs on.")
+    if not browser.show(job_id):
+        raise RuntimeError("The form's tab is closed. Press \"Fill it in again\" to open it.")
+    return {"ok": True}
+
+
+@route("POST", PREFIX + "/{app_id}/sent")
+def sent(req: Request) -> dict:
+    """I sent it myself."""
+    return {"column": actions.sent_myself(req.con, _id(req))}
+
+
+@route("POST", PREFIX + "/{app_id}/discard")
+def discard(req: Request) -> dict:
+    """Discard, with one of the reasons the dialog offers."""
+    body = _body(req)
+    reason = body.get("reason") or "skipped_for_now"
+    if reason not in actions.DISCARD_REASONS:
+        raise BadRequest("Choose one of the reasons offered.", field="reason")
+    actions.discard(req.con, _id(req), reason, str(body.get("words") or ""))
+    return {"ok": True}
+
+
+@route("POST", PREFIX + "/{app_id}/restore")
+def restore(req: Request) -> dict:
+    """Back to Matches."""
+    actions.restore(req.con, _id(req))
+    return {"ok": True}
+
+
+@route("POST", PREFIX + "/{app_id}/status")
+def status(req: Request) -> dict:
+    """Change status by hand."""
+    body = _body(req)
+    return {"column": actions.change_status(req.con, _id(req), str(body.get("status") or ""),
+                                            str(body.get("words") or ""))}
+
+
+@route("POST", PREFIX + "/{app_id}/note")
+def note(req: Request) -> dict:
+    """Add a note."""
+    actions.add_note(req.con, _id(req), str(_body(req).get("text") or ""))
+    return {"ok": True}

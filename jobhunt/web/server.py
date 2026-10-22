@@ -32,6 +32,7 @@ from .. import (
     stats,
     tasks,
 )
+from ..apply import actions as apply_actions
 from ..apply.driver import (
     ASKS,
     FIX_ROUNDS,
@@ -44,7 +45,6 @@ from ..apply.driver import (
     _answer,
     _apply_edits,
     _approve,
-    _await_confirmation,
     _drive,
     _enter,
     _find_posting,
@@ -89,6 +89,7 @@ from ..apply.queries import (
     mark_applied,
 )
 from ..config import CONFIG
+from ..core import naming
 from ..core.runner import _RUN, ACTIONS, POOL, Stopped, _carry_out, _checkpoint, _note, _say, run_action, stop_action
 from ..core.worker import RECORD_EVERY, RECORD_SYNC, WORKER, WORKER_PAUSE, worker
 from ..cvstudio.legacy_actions import (
@@ -133,7 +134,6 @@ __all__ = [
     "_app",
     "_apply_edits",
     "_approve",
-    "_await_confirmation",
     "_card",
     "_carry_out",
     "_checkpoint",
@@ -217,6 +217,51 @@ CSRF_HEADER = "X-Hal"
 NEVER_SUBMIT = "Hal never presses Submit. Press it on the employer's site."
 
 
+LEGACY_WAIT_S = 2.0          # a converted Classic route answers in today's shape within this
+PAGE_SCALE = 160 / 72        # the 160 dpi Classic's document panes were drawn at, as a PDF scale
+PAGES_KEPT = 64              # drawn pages kept in memory before the cache starts again
+
+
+def _page_png(path: Path, page: int) -> bytes:
+    """One page of a PDF as PNG bytes, through Hal's PDF reader (`cvstudio.pdfread.page_png`)."""
+    try:
+        from ..cvstudio import pdfread
+    except ImportError:
+        pdfread = None
+    if pdfread is not None:
+        return pdfread.page_png(path, page, PAGE_SCALE)
+    # Without Hal's PDF reader, poppler draws it as before.
+    out = subprocess.run(["pdftoppm", "-png", "-r", "160", "-f", str(page), "-l", str(page), str(path)],
+                         capture_output=True, timeout=30, check=False)
+    return b"" if out.returncode else out.stdout
+
+
+def _synced(result) -> dict:
+    """Classic's reply to "Read it now": the record's status and what the last read found."""
+    RECORD_SYNC["at"], RECORD_SYNC["last"] = time.time(), result
+    return {**record.status(), "last_sync": RECORD_SYNC["last"]}
+
+
+def _as_action(kind: str, params: dict, shape, fallback, *, subject: str | None = None) -> dict:
+    """Runs a slow Classic route as a persisted action.
+
+    Answers in today's shape (`shape(result)`) when the action ends within `LEGACY_WAIT_S`, else
+    `{"started": true}`; Classic shows the result on its next poll. A kind not yet registered (one a
+    same-wave package adds) runs as before, through `fallback()`.
+    """
+    from ..core import runner
+
+    if kind not in (runner.KINDS or runner.load_kinds()):
+        return fallback()
+    action_id = runner.start(kind, subject=subject, job_id=params.get("job_id"), params=params)
+    done = runner.wait(action_id, LEGACY_WAIT_S)
+    if done["state"] == "done":
+        return shape(done["result"])
+    if done["state"] in ("error", "stopped", "interrupted"):
+        raise RuntimeError(done["error"] or done["message"] or "Hal could not finish that")
+    return {"started": True, "action_id": action_id}
+
+
 class Gone(LookupError):
     """A route that no longer does what it did: answered 410 with its words."""
 PAGES: dict[tuple, bytes] = {}  # document pages drawn as images, by file, its change time and page number
@@ -228,12 +273,14 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: D102 - keep the journal to errors only
         pass
 
-    def _send(self, code: int, body: bytes, ctype: str) -> None:
+    def _send(self, code: int, body: bytes, ctype: str, extra: dict[str, str] | None = None) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        for key, value in (extra or {}).items():
+            self.send_header(key, value)
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -308,15 +355,14 @@ class Handler(BaseHTTPRequestHandler):
         key = (str(path), path.stat().st_mtime, page)
         if key not in PAGES:
             try:
-                out = subprocess.run(["pdftoppm", "-png", "-r", "160", "-f", str(page), "-l", str(page), str(path)],
-                                     capture_output=True, timeout=30, check=False)
-            except (OSError, subprocess.TimeoutExpired):
-                return self._send(404, b"no renderer", "text/plain")
-            if out.returncode or not out.stdout:
+                png = _page_png(path, page)
+            except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
                 return self._send(404, b"no such page", "text/plain")
-            if len(PAGES) > 64:
+            if not png:
+                return self._send(404, b"no such page", "text/plain")
+            if len(PAGES) > PAGES_KEPT:
                 PAGES.clear()
-            PAGES[key] = out.stdout
+            PAGES[key] = png
         self._send(200, PAGES[key], "image/png")
 
     def serve_doc(self, job_id: str, which: str) -> None:
@@ -328,7 +374,10 @@ class Handler(BaseHTTPRequestHandler):
             con.close()
         if not path:
             return self._send(404, f"no {which} for this job yet".encode(), "text/plain")
-        self._send(200, Path(path).read_bytes(), "application/pdf")
+        # A saved copy carries the name employers see, never the name the file has in its folder.
+        name = naming.file_name(which)
+        self._send(200, Path(path).read_bytes(), "application/pdf",
+                   extra={"Content-Disposition": f'inline; filename="{name}"'})
 
     # GET routes
 
@@ -391,16 +440,16 @@ class Handler(BaseHTTPRequestHandler):
         summary["flags"] = [*effort_notes(con, r), *summary["flags"]]
         app = _app(con, job_id)
         current = documents.current_cv(r, docs)
+        files = documents.files(r)
         return {"job": {**_card(con, r), "description": r["description"]},
-                "summary": summary, "docs": docs, "files": documents.files(r),
+                "summary": summary, "docs": docs, "files": files,
                 "cv": current, "cv_edited": bool(docs.get("cv")), "cv_base": cv.load(),
                 "cv_changes": cv.changes(cv.load(), current),
                 # An application Hal had started on before documents were approved counts as approved.
                 "docs_approved": docs.get("approved") or (app["updated"] if app["form"] else None),
                 "nav": in_progress_around(con, job_id),
                 "match": json.loads(_match_path(r).read_text()) if _match_path(r).exists() else None,
-                "cv_score": cvscore.score(documents.current_cv(r, docs), documents.pack_dir(r) / "Firstname-Lastname-CV.pdf")
-                            if (documents.pack_dir(r) / "Firstname-Lastname-CV.pdf").exists() else None,
+                "cv_score": cvscore.score(current, Path(files["cv"])) if files.get("cv") else None,
                 "application": app, "events": [dict(e) for e in events],
                 "todos": [dict(t) for t in todos],
                 "emails": [{**dict(e), "url": tasks.thread_url(e["thrid"])} for e in emails],
@@ -418,8 +467,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if route == "ext/adopt":
                 # A tab the applicant opened: the extension registers it under this job, then starts the fill.
-                job, made = adopt.adopt(con, body)
-                return {"job": job["id"], "made": made, "company": job["company"], "title": job["title"]}
+                return _as_action("apply.match_tab", {"page": body}, lambda done: done,
+                                  lambda: apply_actions.matched_tab(con, body))
             if route.startswith("job/"):
                 quoted, _, action = route[4:].rpartition("/")
                 if not quoted or "/" in quoted:
@@ -459,13 +508,12 @@ class Handler(BaseHTTPRequestHandler):
             if route == "cv/build":
                 return run_action("_cvbuild", "building your CV", act_build_cv, "_cvbuild", body.get("options") or {})
             if route == "record/sync":
-                RECORD_SYNC["at"], RECORD_SYNC["last"] = time.time(), record.sync()
-                return {**record.status(), "last_sync": RECORD_SYNC["last"]}
+                return _as_action("record.sync", {}, _synced, lambda: _synced(record.sync()), subject="_record")
             if route == "record/ask":
                 question = (body.get("question") or "").strip()
                 if not question:
                     raise ValueError("ask a question")
-                return record.ask(question)
+                return _as_action("record.ask", {"q": question}, lambda done: done, lambda: record.ask(question))
             if route == "cv/words":
                 cvscore.add_words(body.get("words") or [])
                 return {"ok": True}
@@ -498,24 +546,10 @@ class Handler(BaseHTTPRequestHandler):
     def job_action(self, con, job_id: str, action: str, body: dict):
         job = _job(con, job_id)
         if action == "discard":
-            reason = (body.get("reason") or "").strip()
-            # Discarding never waits on Hal: its work for the job stops, and the tab goes once the browser is free.
-            stopped = stop_action(job_id)
-            started = job["status"] == "applying"
-            if started or stopped:
-                POOL.submit(_close_quietly, job_id)
-            # Started applications are often found closed only at the form: "closed" keeps that apart from a choice.
-            where = "mid-application" if started else "from the queue"
-            db.set_status(con, job_id, "closed" if body.get("closed") else "skipped",
-                          f"discarded {where}{': ' + reason if reason else ''}")
-            if body.get("effort"):
-                db.log(con, job_id, "effort", _site_of(con, job))
-            # The same advert listed twice must not come straight back into the queue.
-            for d in con.execute("""SELECT id FROM jobs WHERE id != ? AND status IN ('new','shortlisted','ready')
-                                    AND lower(company) = lower(?) AND lower(title) = lower(?)""",
-                                 (job_id, job["company"], job["title"])).fetchall():
-                db.set_status(con, d["id"], "skipped", "duplicate of a discarded job")
-            con.commit()
+            # Classic's words and choices map onto the reasons the new screens keep apart.
+            reason = ("advert_closed" if body.get("closed") else "too_much_effort" if body.get("effort")
+                      else "skipped_for_now")
+            apply_actions.discard(con, job_id, reason, (body.get("reason") or "").strip())
             return {"ok": True}
         if action == "apply":
             # The application starts with its documents; Hal opens the form once they are approved.
@@ -574,7 +608,8 @@ class Handler(BaseHTTPRequestHandler):
         if action == "form-fill":
             return run_action(job_id, "filling the form", act_refill, job_id, body.get("fields", []))
         if action == "form-look":
-            return browser.look(job_id, _shot(job_id, "look.png"))
+            return _as_action("apply.look", {"job_id": job_id}, lambda done: done,
+                              lambda: browser.look(job_id, _shot(job_id, "look.png")), subject=f"{job_id}:look")
         if action == "form-show":
             if not browser.show(job_id):
                 raise RuntimeError("the form's tab is closed; press \"Fill in the form\" to open it again")
@@ -592,7 +627,7 @@ class Handler(BaseHTTPRequestHandler):
                               body.get("fields", []))
         if action == "applied":
             stop_action(job_id)
-            mark_applied(con, job, body.get("how") or "submitted by hand")
+            mark_applied(con, job, body.get("how") or "submitted by hand", sent_how="you_said")
             return {"ok": True}
         if action == "status":
             db.set_status(con, job_id, body["status"], body.get("note", ""))

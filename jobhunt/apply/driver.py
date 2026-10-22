@@ -33,6 +33,8 @@ CODE_TRIES = 12      # looks at the job inbox for an emailed code
 CODE_PAUSE = 5       # seconds between those looks
 CODE_LOOKBACK = 60   # seconds before the wall a code may have been sent
 HANDED_OVER = "Check the marked answers, then press Submit on the employer's site yourself."
+LAST_PAGE = "This is the last page. Check it, then press Submit on the site yourself."
+MIDDLE_PAGE = "Then press \"Carry on to the next page\" here, or press Next on the site."
 APPLY_YOURSELF = ("Press Apply on the site yourself; here it may send your saved CV straight away. "
                   "Hal fills the form after: press \"Fill in the form\" once the form is on screen.")
 MAX_STEPS = 12   # pages of one form Hal works through before stopping to ask
@@ -220,53 +222,58 @@ def _open_points(form: dict) -> tuple[list, list, list]:
     return empty, refused, prose
 
 
+def form_words(form: dict) -> str:
+    """What the Form step says about a filled page, the same words in every mode.
+
+    "Hal filled 23 of 25 answers. 2 need you: ... Check them here or in the form." and, on the last page,
+    "This is the last page. Check it, then press Submit on the site yourself."
+    """
+    if not form.get("fields"):
+        return form.get("message") or ""
+    marks = _marks(form)
+    shown = [f for f in form["fields"] if not f.get("skip") and f.get("type") != "password"]
+    filled = [f for f in shown if f.get("value") not in (None, "", [], False)]
+    words = [f"Hal filled {len(filled)} of {len(shown)} answers."]
+    to_check = sum(1 for m in marks if m["state"] != "ok")
+    if to_check:
+        empty, refused, _ = _open_points(form)
+        parts = []
+        if empty:
+            parts.append(f"{len(empty)} required question{'s' if len(empty) > 1 else ''} Hal could not answer")
+        if refused:
+            parts.append(f"{len(refused)} answer{'s' if len(refused) > 1 else ''} the form would not take")
+        if (form.get("filled") or {}).get("password"):
+            parts.append("a password to type in the form yourself")
+        detail = f": {', and '.join(parts)}" if parts else ""
+        words.append(f"{to_check} need{'s' if to_check == 1 else ''} you{detail}. Check them here or in the form.")
+    words.append(LAST_PAGE if form.get("final") else MIDDLE_PAGE if to_check else "")
+    return " ".join(w for w in words if w)
+
+
 def _hold(con, job, form: dict) -> str:
-    """Stops with the filled form on screen and says what it is waiting for."""
+    """Stops with the filled form on screen and says what it is waiting for, in the same words in every mode."""
     job_id = job["id"]
-    empty, refused, prose = _open_points(form)
-    parts = []
-    if empty:
-        parts.append(f"{len(empty)} required question{'s' if len(empty) > 1 else ''} Hal could not answer")
-    if refused:
-        parts.append(f"{len(refused)} answer{'s' if len(refused) > 1 else ''} the form would not take")
-    if form["filled"].get("password"):
-        parts.append("a password to type in the form yourself")
-    last = form["final"]
-    does = "put your changes in, then press Submit on the site yourself" if last else "move to the next step"
-    if browser.mode() == "extension":
-        return _hold_in_tab(con, job, form, parts)
-    if parts:
-        state, message = "needs", f"Filled in, apart from {', and '.join(parts)}. Finish those, then approve to {does}."
-    else:
-        state = "ready"
-        message = (f"Filled in and ready. Check the form in {browser.where()}, then approve to {does}."
-                   if last or prose else "")
+    empty, refused, _ = _open_points(form)
+    needs = bool(empty or refused or form["filled"].get("password"))
+    state, message = ("needs" if needs else "ready"), form_words(form)
     form.update(state=state, message=message)
     _set_app(con, job_id, stage="filled", form=form)
-    if last or parts:
-        db.alert(con, "urgent" if parts else "info",
-                 f"{'Needs you' if parts else 'Ready to approve'}: {job['company']}", message, job_id)
+    if browser.mode() == "extension":
+        _mark(job, form)
+    if form["final"] or needs:
+        db.alert(con, "urgent" if needs else "info",
+                 f"{'Needs you' if needs else 'Ready for you'}: {job['company']}", message, job_id)
         con.commit()
+    if browser.mode() == "extension":
+        # The person may carry on in their own tab; the watch fills each new page and sees the site's thanks.
+        # In Hal's window the watch starts at the hand-over (`_hand_over`).
+        watch_tab(job_id)
     return message
 
 
 def _hold_in_tab(con, job, form: dict, parts: list[str]) -> str:
-    """Leaves the filled page in the applicant's tab, marked up for checking, and watches for what they do next."""
-    job_id = job["id"]
-    press = "Submit" if form["final"] else "Next"
-    if parts:
-        state, message = "needs", f"Filled in, apart from {', and '.join(parts)}. Finish those in the job's tab, then press {press} there."
-    else:
-        state, message = "ready", f"Filled in. Check the highlighted answers in the job's tab, then press {press} there."
-    form.update(state=state, message=message)
-    _set_app(con, job_id, stage="filled", form=form)
-    _mark(job, form)
-    if form["final"] or parts:
-        db.alert(con, "urgent" if parts else "info", f"{'Needs you' if parts else 'Ready for you'}: {job['company']}",
-                 message, job_id)
-        con.commit()
-    watch_tab(job_id)
-    return message
+    """Kept for callers of the old name: the helper's tab is held as Hal's window is (`_hold`)."""
+    return _hold(con, job, form)
 
 
 def _marks(form: dict) -> list[dict]:
@@ -448,7 +455,8 @@ def _drive_steps(con, job, found: dict, step: int, done: list) -> str:
         form = _answer(con, job, found, step, done)
         _enter(con, job, form)
         empty, refused, prose = _open_points(form)
-        if browser.mode() == "extension" or form["final"] or empty or refused or prose \
+        # Both modes press Next on a middle page with nothing to check.
+        if form["final"] or empty or refused or prose \
                 or form["filled"].get("password") or step >= MAX_STEPS or not settings.get("applying.press_next"):
             return _hold(con, job, form)
         found, step, done = _move_on(con, job, form)
@@ -644,32 +652,6 @@ def _type_code(con, job, boxes: list[str]) -> bool:
             return True
         time.sleep(CODE_PAUSE)
     return False
-
-
-def _await_confirmation(con, job, form: dict, ask: str) -> str:
-    """Waits for the site's thanks while the person does a last step on the site; it never presses anything."""
-    job_id = job["id"]
-    form.update(state="needs", message=f"The site needs you to {ask} in {browser.where()}. "
-                                       "Hal marks it applied when the site confirms it.")
-    _set_app(con, job_id, stage="filled", form=form)
-    _say(job_id, f"waiting for you to {ask} in {browser.where()}")
-    browser.show(job_id)
-    db.alert(con, "urgent", f"Hal needs you: {job['company']}", f"{ask[0].upper()}{ask[1:]} in {browser.where()}.", job_id)
-    con.commit()
-    deadline = time.time() + WAIT_FOR_YOU
-    while time.time() < deadline:
-        time.sleep(4)
-        _checkpoint(job_id)
-        now = browser.peek(job_id)
-        if now.get("gone"):
-            raise RuntimeError("the form's tab was closed before the site confirmed the application; "
-                               "press \"I applied myself\" if it went through")
-        # A form's own wording can thank the applicant; only the page after it counts.
-        if not now.get("busy") and not now["form"] and (now["sent"] or now["applied"]):
-            mark_applied(con, job, "the site confirmed the application")
-            browser.close(job_id)
-            return "application submitted"
-    raise RuntimeError(f"no confirmation seen; if you did {ask} and it went through, press \"I applied myself\"")
 
 
 def act_draft_rest(con, job_id: str) -> str:
