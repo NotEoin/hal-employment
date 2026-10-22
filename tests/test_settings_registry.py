@@ -28,8 +28,6 @@ LEGACY_ALLOWED = {
     ("jobhunt/digest.py", "digest_to"),
     ("jobhunt/extension.py", "apply_window"),
     ("jobhunt/llm.py", "hal_root"),
-    ("jobhunt/notify.py", "ntfy_topic"),
-    ("jobhunt/notify.py", "speak_command"),
     ("jobhunt/record.py", "*"),
     ("jobhunt/web/server.py", "web_port"),
 }
