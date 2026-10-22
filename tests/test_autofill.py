@@ -1,7 +1,7 @@
 """Answering form questions: facts from the profile, private answers, salaries and codes.
 
 Moved by class from tests/test_apply.py. Private answers come from the private answers store (
-`settings.private`, stood in for by `support.stubs.settings_private`), never from the profile, so the
+`settings.private`, saved by `support.private_answers`), never from the profile, so the
 health tests save them there. `PrivatePaths` holds the rules for private questions: a private question
 never reaches the AI, is never guessed and is never remembered. The applicant is made up.
 """
@@ -11,10 +11,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from support import legacy
+from support import legacy, private_answers
 from support.fake_ai import fake_ai
 from support.legacy import PROFILE
-from support.stubs import settings_private
 
 from jobhunt import autofill, db, gmail, salary, tasks
 from jobhunt.core import paths
@@ -37,7 +36,7 @@ class Answers(unittest.TestCase):
     def private(self, answers: dict) -> None:
         """The applicant's saved private answers for the rest of the test."""
         stack = contextlib.ExitStack()
-        stack.enter_context(settings_private.saved(answers))
+        stack.enter_context(private_answers.saved(answers))
         self.addCleanup(stack.close)
 
     def propose(self, **field):
@@ -247,7 +246,7 @@ class PrivatePaths(unittest.TestCase):
         return "\n".join(f"{r.system}\n{r.user}" for r in fake.log)
 
     def test_a_private_question_never_reaches_the_ai_whatever_its_source(self):
-        self.stack.enter_context(settings_private.saved({"disability": "Yes", "adjustments": CANARY}))
+        self.stack.enter_context(private_answers.saved({"disability": "Yes", "adjustments": CANARY}))
         sources = ("profile: city", "your earlier answer", "documents: drafted answer", "hal", "you")
         fields = [self.field(f"p{i}", label, value="Yes", source=src)
                   for i, (label, src) in enumerate(zip(PRIVATE_LABELS, sources, strict=True))]
@@ -265,7 +264,7 @@ class PrivatePaths(unittest.TestCase):
         self.assertNotIn(CANARY, sent)
 
     def test_a_person_whose_private_answer_is_prefer_not_to_say_still_gets_ai_form_filling(self):
-        self.stack.enter_context(settings_private.saved({"disability": "Prefer not to say",
+        self.stack.enter_context(private_answers.saved({"disability": "Prefer not to say",
                                                          "disability_type": "Prefer not to say", "carer": "No"}))
         f = self.field("n2", "What do you enjoy about engineering? Yes, we ask everyone; prefer not to say is fine.")
         with fake_ai(default='{"answers": [{"hid": "n2", "value": "Careful work.", "sure": true}]}') as fake:
@@ -274,7 +273,7 @@ class PrivatePaths(unittest.TestCase):
         self.assertEqual(len(fake.log), 1)
 
     def test_an_unanswered_private_question_is_left_to_you_not_guessed(self):
-        self.stack.enter_context(settings_private.saved({}))
+        self.stack.enter_context(private_answers.saved({}))
         fields = [self.field(f"p{i}", label) for i, label in enumerate(PRIVATE_LABELS)]
         autofill.propose(self.job, fields, {}, {})
         self.assertEqual({(f["value"], f["source"], f["note"]) for f in fields},
@@ -293,7 +292,7 @@ class PrivatePaths(unittest.TestCase):
         self.assertEqual(kept, [("Which programming language do you use most?", '"Python"')])
 
     def test_the_carer_answer_is_never_in_the_profile_or_the_review(self):
-        self.stack.enter_context(settings_private.saved({"carer": "No"}))
+        self.stack.enter_context(private_answers.saved({"carer": "No"}))
         self.stack.enter_context(mock.patch.dict(autofill.CONFIG, {"applicant": {"carer": "No", "notice": "A month"}}))
         self.stack.enter_context(mock.patch.object(autofill, "contact",
                                                    lambda: ("Robin Example", "robin@example.org", "07000 000001")))
@@ -320,7 +319,7 @@ class PrivatePaths(unittest.TestCase):
         todos = []
         for answers in ({}, {"adjustments": CANARY, "disability": "Yes"}):
             con.execute("DELETE FROM todos")
-            with settings_private.saved(answers):
+            with private_answers.saved(answers):
                 tasks.sync(con)
             rows = con.execute("SELECT title, detail FROM todos ORDER BY priority, id")
             todos.append([(r["title"], r["detail"]) for r in rows])

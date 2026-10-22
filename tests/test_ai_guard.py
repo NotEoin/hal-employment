@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from support import private_answers
 from support.fake_ai import fake_ai
-from support.stubs import settings_private
 
 from jobhunt import ai, db, llm
 from jobhunt.ai import guard
@@ -28,7 +28,7 @@ class InHome(unittest.TestCase):
         self.stack = stack
 
     def saved(self, answers: dict) -> None:
-        self.stack.enter_context(settings_private.saved(answers))
+        self.stack.enter_context(private_answers.saved(answers))
 
     def rows(self, sql: str) -> list[dict]:
         con = db.connect()
