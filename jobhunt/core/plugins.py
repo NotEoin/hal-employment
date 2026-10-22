@@ -17,6 +17,9 @@ from types import ModuleType
 KINDS = ("routes", "settings", "actions", "health", "home", "search", "schedule", "undo", "tasks")
 PACKAGE = "jobhunt"
 SKIP_DIRS = {"static", "__pycache__", "prompts", "templates"}   # data folders, never code to import
+# Code found another way: migrations run in order through `core.db.migrate`, and commands through
+# `cli.register_all`. Without this `0003_settings.py` and `cli/settings.py` would load as settings.
+SKIP_PACKAGES = (("core", "db", "migrations"), ("cli",))
 
 log = logging.getLogger(__name__)
 FAILED: dict[str, str] = {}             # dotted module name -> the error, for the health check
@@ -37,6 +40,8 @@ def names(kind: str) -> list[str]:
     for path in root.rglob("*.py"):
         rel = path.relative_to(root)
         if any(part in SKIP_DIRS for part in rel.parts[:-1]):
+            continue
+        if any(rel.parts[:len(pkg)] == pkg for pkg in SKIP_PACKAGES):
             continue
         if path.stem == kind or path.stem.endswith(f"_{kind}"):
             found.append(".".join((PACKAGE, *rel.with_suffix("").parts)))

@@ -23,6 +23,18 @@ class Discovery(unittest.TestCase):
                 names = plugins.names("routes")
         self.assertEqual(names, ["jobhunt.core.settings.api_routes", "jobhunt.find.goal_routes", "jobhunt.find.routes"])
 
+    def test_migrations_and_commands_are_never_loaded_as_area_modules(self):
+        # Regression: migration 0003_settings.py matched the settings kind and would have been imported
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel in ("core/db/migrations/0003_settings.py", "cli/settings.py", "find/settings.py",
+                        "find/goal_settings.py"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("", encoding="utf-8")
+            with mock.patch.object(plugins, "_root", return_value=root):
+                names = plugins.names("settings")
+        self.assertEqual(names, ["jobhunt.find.goal_settings", "jobhunt.find.settings"])
+
     def test_an_unknown_kind_is_refused(self):
         with self.assertRaises(ValueError):
             plugins.names("widgets")
