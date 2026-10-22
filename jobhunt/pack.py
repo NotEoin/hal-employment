@@ -17,7 +17,7 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from . import coursework, cv, db, llm, record, reputation, research
+from . import cv, db, llm, record, reputation, research
 from .ai import prompts
 from .core import events, paths
 
@@ -127,12 +127,11 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
                      role="main")
     requirements = analysis.get("must_have", []) + analysis.get("nice_to_have", [])
     conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
-    course_notes = coursework.as_text(coursework.evidence(requirements))
     # What the CV leaves out (certificates, the detail of each job) is looked up in the employment record.
     kept = record.context(requirements + (analysis.get("questions") or [])) or "none"
     fit = llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
                         + f"\n\nConditions:\n{conditions}\n\nToday: {date.today().isoformat()}\n\nCV:\n{facts}"
-                        + f"\n\nEmployment record:\n{kept}\n\nCourse notes:\n{course_notes or 'none'}",
+                        + f"\n\nEmployment record:\n{kept}",
                         role="main")
 
     history = previous_applications(con, job)
@@ -158,7 +157,7 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
     flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, job_text, about, kept)]
     flagged += [f"unsupported claim: {c}" for c in
                 llm.chat_json(prompt("verify", who),
-                              f"Facts:\n{facts}\n\nEmployment record:\n{kept}\n\nCourse notes:\n{course_notes}"
+                              f"Facts:\n{facts}\n\nEmployment record:\n{kept}"
                               f"\n\nEvidence map:\n{fit.get('matches', [])}\n\nDrafts:\n{drafts}",
                               role="main").get("unsupported", [])]
     flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]

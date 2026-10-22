@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from jobhunt import config, coursework, cv, db, gmail, llm, pack, record, replenish, reputation, tasks, vault
+from jobhunt import config, cv, db, gmail, llm, pack, record, replenish, reputation, tasks, vault
 
 PERSON = {
     "first_name": "Robin", "last_name": "Testwell", "full_name": "Robin Testwell",
@@ -273,8 +273,6 @@ class World:
             mock.patch.object(cv, "facts_text", lambda: "Robin Testwell. BSc Made-up Studies. Python projects."),
             mock.patch.object(cv, "tailor", lambda text: ({}, None)),
             mock.patch.object(cv, "render", self._render_cv),
-            mock.patch.object(coursework, "evidence", lambda requirements, per_requirement=2: {}),
-            mock.patch.object(coursework, "as_text", lambda found: ""),
             mock.patch.object(record, "context", lambda queries, per_query=3, limit=6000: ""),
             mock.patch.object(reputation, "check", lambda company: ([], "")),
         ]
