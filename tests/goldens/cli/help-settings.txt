@@ -1,0 +1,10 @@
+$ jobhunt settings --help
+usage: jobhunt settings [-h] {get,set,list} [key] [value]
+
+positional arguments:
+  {get,set,list}
+  key             a setting such as goal.min_pay, or for list a prefix such as goal.
+  value           for set: the new value, written as you would type it on the page
+
+options:
+  -h, --help      show this help message and exit

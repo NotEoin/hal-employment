@@ -1,7 +1,9 @@
 """The settings store: defaults are never stored, every change has history, Undo and a
 revision, goal changes write goal versions, and other processes' writes are seen.
 """
+import argparse
 import contextlib
+import io
 import json
 import os
 import subprocess
@@ -252,6 +254,53 @@ class Routes(unittest.TestCase):
 
     def test_an_unknown_setting_is_not_found(self):
         self.assertEqual(self.client.request("PUT", "/api/v2/settings/goal.nothing", {"value": 1}).status, 404)
+
+
+class CommandLine(unittest.TestCase):
+    """`python -m jobhunt settings` in a temporary home."""
+
+    def setUp(self):
+        home = fresh_home()
+        home.__enter__()
+        self.addCleanup(home.__exit__, None, None, None)
+
+    def run_cli(self, *argv: str) -> tuple[str, str | None]:
+        from jobhunt.cli import settings as cli
+
+        parser = argparse.ArgumentParser(prog="jobhunt")
+        cli.register(parser.add_subparsers())
+        args = parser.parse_args(["settings", *argv])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            try:
+                args.fn(args)
+            except SystemExit as e:
+                return out.getvalue(), str(e.code)
+        return out.getvalue(), None
+
+    def test_a_value_is_set_read_and_listed_with_its_words(self):
+        out, error = self.run_cli("set", "goal.min_pay", "24k")
+        self.assertIsNone(error)
+        self.assertIn("goal.min_pay = 24000", out)
+        self.assertEqual(self.run_cli("get", "goal.min_pay"), ("24000\n", None))
+        out, _ = self.run_cli("list", "goal.min")
+        self.assertIn("goal.min_pay = 24000 *", out)
+
+    def test_a_bad_value_is_refused_in_words(self):
+        _, error = self.run_cli("set", "goal.min_pay", "lots")
+        self.assertIn("Try 24000 or 24k", error)
+        self.assertEqual(settings.get("goal.min_pay"), 0)
+
+    def test_secrets_and_private_answers_print_only_whether_they_are_saved(self):
+        from jobhunt.core.settings import secrets
+
+        with secrets.use_keyring(None):
+            secrets.put("sites.reed_key", "made-up-reed-4410")
+            out, _ = self.run_cli("list", "sites.")
+            self.assertIn("sites.reed_key = (saved)", out)
+            self.assertNotIn("made-up-reed-4410", out)
+            _, error = self.run_cli("set", "sites.reed_key", "made-up-other")
+            self.assertIn("Settings page", error)
 
 
 if __name__ == "__main__":
