@@ -10,6 +10,7 @@ from support.private_answers import saved
 
 from jobhunt.core import helpfile, paths, privacy_routes, runner
 from jobhunt.core.settings import secrets
+from jobhunt.web.router import Conflict
 
 CANARY = "SYNTH-PRIVATE-5521 made-up adjustment"
 SECRET = "made-up-app-password-9183"
@@ -94,6 +95,15 @@ class Privacy(unittest.TestCase):
             with self.assertRaises(Exception) as caught:
                 privacy_routes.folders_to_delete()
         self.assertIn("program files", str(caught.exception))
+
+    def test_a_home_inside_the_program_folder_can_still_be_deleted(self):
+        # regression: with HAL_EMPLOYMENT_HOME at <worktree>/.tmp-home every delete was refused
+        home = paths.home_override()
+        with mock.patch.object(paths, "code_dir", return_value=home.parent):
+            self.assertEqual(privacy_routes.folders_to_delete()[0], paths.data_dir())
+        with mock.patch.object(paths, "code_dir", return_value=paths.data_dir() / "jobhunt"), \
+                self.assertRaises(Conflict):
+            privacy_routes.folders_to_delete()
 
     def test_open_data_folder_refuses_in_a_remote_session(self):
         remote = self.hal.signed_in(remote=True, remote_host="desktop")

@@ -204,13 +204,19 @@ def _inside(path: Path, folder: Path) -> bool:
 
 
 def folders_to_delete() -> list[Path]:
-    """Hal's own folders of data; never the program folder, never a folder that holds it."""
+    """Hal's own folders of data; never the program folder, never a folder that holds it.
+
+    A folder inside the program folder is refused too, except inside a home override that does not hold the
+    program, such as a worktree's `.tmp-home`.
+    """
     code = paths.code_dir()
     if paths.is_legacy_layout():
         raise Conflict("Your data is still inside Hal's own folder. Move it first (see Is Hal working?).")
+    home = paths.home_override()
     out = []
     for folder in (paths.data_dir(), paths.config_dir(), paths.cache_dir(), paths.documents_dir()):
-        if _inside(folder, code) or _inside(code, folder):
+        in_own_home = home is not None and _inside(folder, home) and not _inside(code, home)
+        if _inside(code, folder) or (_inside(folder, code) and not in_own_home):
             raise Conflict("Hal will not delete a folder that holds its own program files.")
         out.append(folder)
     return out
