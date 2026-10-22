@@ -1,14 +1,16 @@
 """Daily digest email, sent from the job inbox to itself (or to `notify.daily_to`).
 
 The spoken briefing greets the person by the name they chose (`you.preferred_name`), or by no name when
-they have given none. This is the only email Hal sends, and only to the person.
+they have given none. This is the only email Hal sends, and only to the person: `recipient`
+refuses a list of addresses, and an address the person did not choose themselves.
 """
 import smtplib
 from datetime import date, datetime
 from email.message import EmailMessage
+from email.utils import getaddresses
 
 from . import gmail
-from .config import CONFIG
+from .config import CONFIG  # noqa: F401 - tests/test_never_submit.py still patches it; the recipient is a setting
 from .core import settings
 from .vault import actions
 
@@ -82,6 +84,23 @@ def spoken(con) -> str:
     return " ".join(out)
 
 
+def recipient(inbox: str) -> str:
+    """The one address the summary goes to: `notify.daily_to`, else the job inbox, always the person's own.
+
+    Raises SystemExit when the setting names more than one address, or when Hal rather than the person set it.
+    """
+    chosen = (settings.get("notify.daily_to") or "").strip()
+    if not chosen:
+        return inbox
+    found = [a for _, a in getaddresses([chosen]) if a]
+    if len(found) != 1 or "@" not in found[0]:
+        raise SystemExit("The daily summary goes to one address of your own; check Send the summary to in Settings.")
+    newest = settings.history("notify.daily_to", limit=1)
+    if newest and newest[0].get("by") == "hal":
+        raise SystemExit("Send the summary to was not set by you; choose your own address in Settings.")
+    return found[0]
+
+
 def send(con, dry_run: bool = False) -> str:
     """Emails the digest to the person (or returns it with `dry_run`); returns the subject."""
     subject, body = build(con)
@@ -92,7 +111,7 @@ def send(con, dry_run: bool = False) -> str:
         raise SystemExit("No email address or app password saved; add them in Settings, Email.")
     msg = EmailMessage()
     msg["From"] = inbox
-    msg["To"] = CONFIG.get("digest_to") or inbox
+    msg["To"] = recipient(inbox)
     msg["Subject"] = subject
     msg.set_content(body)
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:

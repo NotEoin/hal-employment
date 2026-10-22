@@ -24,7 +24,6 @@ LEGACY_ALLOWED = {
     ("jobhunt/cli/find.py", "web_port"),
     ("jobhunt/coursework.py", "course_vault"),
     ("jobhunt/cv.py", "cv_site"),
-    ("jobhunt/digest.py", "digest_to"),
     ("jobhunt/extension.py", "apply_window"),
     ("jobhunt/llm.py", "hal_root"),
     ("jobhunt/record.py", "*"),
