@@ -45,7 +45,9 @@ make old lines new. The code at ef53088 still has about 230 ruff findings and so
 fixed when its owner next edits the line. `check_ascii.py --tree` checks every file except that legacy list.
 
 `check_personal.py` reads its patterns from `~/.config/hal-employment/personal-strings.txt` (never in the
-repo) and prints file and line only. It is skipped when the list is absent and runs with `--personal`.
+repo) and prints file and line only. It is skipped when the list is absent. The full gates scan the
+whole tree (`--tree`) and `--quick` the staged lines (`--staged`); `--base REV` scans the lines added since a
+commit.
 
 ## Rules for tests
 

@@ -3,7 +3,9 @@
 #
 #   scripts/dev/checkpoint.sh --quick        before each commit: staged lines, tests without the browser
 #   scripts/dev/checkpoint.sh                before a pull request: lines since the base, every test, the goldens
-#   scripts/dev/checkpoint.sh --personal     also the personal-string scan
+#
+# Both modes also run the personal-string scan (gate G8); it skips itself when the private list is
+# absent, so any clone can run the gates. `--personal` is still accepted and changes nothing.
 #
 # The base is $HAL_CHECK_BASE, else the merge base with the `rebuild` branch, else the root commit.
 # Tests always run in a temporary HAL_EMPLOYMENT_HOME with HAL_TEST_MODE=1, so no gate can reach real data.
@@ -16,11 +18,10 @@ PY="${HAL_PYTHON:-$ROOT/.venv/bin/python}"
 [ -x "$PY" ] || { echo "no .venv here; run: uv sync --frozen --extra browser --extra documents" >&2; exit 2; }
 
 QUICK=0
-PERSONAL=0
 for arg in "$@"; do
   case "$arg" in
     --quick) QUICK=1 ;;
-    --personal) PERSONAL=1 ;;
+    --personal) ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -46,11 +47,12 @@ gate() {
 if [ "$QUICK" = 1 ]; then
   gate "G8 ascii (staged)" "$PY" scripts/dev/check_ascii.py
   gate "G8 ruff (staged)" "$PY" scripts/dev/check_ruff.py
+  gate "G8 personal strings (staged)" "$PY" scripts/dev/check_personal.py --staged
   gate "G1 tests" env -u HAL_TEST_BROWSER "$PY" -m unittest discover tests
 else
   gate "G8 ascii (since $BASE)" "$PY" scripts/dev/check_ascii.py --base "$BASE"
   gate "G8 ruff (since $BASE)" "$PY" scripts/dev/check_ruff.py --base "$BASE"
-  [ "$PERSONAL" = 1 ] && gate "G8 personal strings" "$PY" scripts/dev/check_personal.py
+  gate "G8 personal strings (tree)" "$PY" scripts/dev/check_personal.py --tree
   gate "G1 tests, browser on" env HAL_TEST_BROWSER=1 "$PY" -m unittest discover tests
   # G2, G3, G5, G6, G7, G9 and G10 also run inside G1; named here so a failure says which promise broke.
   gate "G2 UI smoke" env HAL_TEST_BROWSER=1 PYTHONPATH=tests "$PY" -m unittest ui.test_shell
