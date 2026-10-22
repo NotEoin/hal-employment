@@ -1,26 +1,63 @@
 """The editable application documents for one job: CV, cover letter, message, answers.
 
-Drafts come from the job's pack (packs/<slug>/pack.md). Edits are stored in the
-applications table, and the CV and cover letter PDFs in the pack directory are
-re-rendered from the edited text.
+Drafts come from the first draft, `pack.md`, in the application's folder. Edits are stored in the
+applications table; the CV and cover letter PDFs are made again from the edited text, and approving them
+writes the whole folder at once (`docs.folders.publish`), so the folder always matches what was approved.
+
+A job drafted before application folders existed still has its `pack.md` in the old shared folder; it is
+read from there only when that file names this job, because one old folder could belong to two jobs.
 """
+import contextvars
 import json
 import re
+from contextlib import contextmanager
 from pathlib import Path
 
 from . import cv, db, gpu, letter, llm, pack
+from .core import naming
+from .docs import folders
 
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
+# Where `render` writes while an approval builds the new folder. A context variable rather than an argument,
+# so `render(job, docs)` keeps the two-argument form the legacy tests replace it with.
+_OUT: contextvars.ContextVar[Path | None] = contextvars.ContextVar("documents_out", default=None)
 
 
-def pack_dir(job) -> Path:
-    return pack.PACKS / pack.slug(f"{job['company']}-{job['title']}")
+@contextmanager
+def _connection(con):
+    if con is not None:
+        yield con
+        return
+    own = db.connect()
+    try:
+        yield own
+        own.commit()
+    finally:
+        own.close()
+
+
+def pack_dir(job, con=None, *, create: bool = True) -> Path | None:
+    """The job's application folder; with `create` (the default) the application gets its number first.
+
+    Without `create`, a job that has no application yet answers None. The folder itself is made by whoever
+    writes into it.
+    """
+    with _connection(con) as c:
+        return folders.folder_for(c, job, create=create)
+
+
+def _pack_md(job, con=None) -> Path | None:
+    folder = pack_dir(job, con, create=False)
+    if folder is not None and (folder / folders.PACK_MD).exists():
+        return folder / folders.PACK_MD
+    legacy = folders.legacy_folder(job)
+    return legacy / folders.PACK_MD if legacy is not None else None
 
 
 def read_pack(job) -> dict:
     """Returns the pack's sections, keyed by heading, or {} if no pack was drafted."""
-    md = pack_dir(job) / "pack.md"
-    if not md.exists():
+    md = _pack_md(job)
+    if md is None:
         return {}
     return {m.group(1).strip(): m.group(2).strip() for m in SECTION.finditer(md.read_text())}
 
@@ -60,8 +97,9 @@ def drafts(job) -> dict:
     to = re.match(r"To: (.*)\n", msg)
     answers = re.findall(r"\*\*(.+?)\*\*\n\n(.*?)(?=\n\*\*|\Z)", s.get("Form answers", ""), re.S)
     variant = {}
-    if (pack_dir(job) / "cv.json").exists():
-        variant = json.loads((pack_dir(job) / "cv.json").read_text())
+    md = _pack_md(job)
+    if md is not None and (md.parent / "cv.json").exists():
+        variant = json.loads((md.parent / "cv.json").read_text())
     return {
         # Packs drafted before long dashes were removed at the source still hold them.
         "letter": llm.undash(s.get("Cover letter", "")),
@@ -83,19 +121,29 @@ def load(con, job) -> dict:
 
 
 def save(con, job, docs: dict) -> None:
-    """Stores edited documents and re-renders the CV and cover letter PDFs."""
+    """Stores edited documents and makes the PDFs again; approved documents rewrite the whole folder."""
     con.execute("""INSERT INTO applications (job_id, stage, docs, updated) VALUES (?, 'documents', ?, ?)
                    ON CONFLICT(job_id) DO UPDATE SET docs = excluded.docs, updated = excluded.updated""",
                 (job["id"], json.dumps(docs), db.now()))
+    folders.number_for(con, job["id"])
     con.commit()
-    render(job, docs)
+    if docs.get("approved"):
+        folders.publish(con, job, docs, render=lambda out: _render_into(job, docs, out))
+        con.commit()
+    else:
+        pack_dir(job, con)
+        con.commit()
+        render(job, docs)
 
 
-def files(job) -> dict:
+def files(job, con=None) -> dict:
     """Returns the paths of the documents to upload, where they exist."""
-    d = pack_dir(job)
-    return {k: str(p) for k, p in (("cv", d / "Firstname-Lastname-CV.pdf"),
-                                    ("letter", d / "Firstname-Lastname-Cover-Letter.pdf")) if p.exists()}
+    with _connection(con) as c:
+        d = pack_dir(job, c, create=False)
+    if d is None:
+        return {}
+    return {k: str(p) for k, p in (("cv", d / naming.file_name("cv")),
+                                    ("letter", d / naming.file_name("letter"))) if p.exists()}
 
 
 def tailored(job, docs: dict) -> dict:
@@ -111,19 +159,36 @@ def current_cv(job, docs: dict) -> dict:
     return docs.get("cv") or tailored(job, docs)
 
 
-def render(job, docs: dict) -> dict:
-    """Renders the CV and cover letter PDFs from the documents; returns their paths.
+def render(job, docs: dict, out: Path | None = None) -> dict:
+    """Renders the CV and cover letter PDFs from the documents into `out`; returns their paths.
 
-    A CV the applicant has not edited for this job is made again from the base CV,
-    so a change to the base reaches every application still to be sent.
+    `out` defaults to the application's folder. A CV the applicant has not edited for this job is made
+    again from the base CV, so a change to the base reaches every application still to be sent. The CV
+    takes the file name from the `cvdocs.file_name` setting, whatever name the PDF maker gave it.
     """
-    d = pack_dir(job)
-    cv.render(current_cv(job, docs), d)
+    d = out or _OUT.get() or pack_dir(job)
+    d.mkdir(parents=True, exist_ok=True)
+    made = {}
+    pdf = cv.render(current_cv(job, docs), d)
+    want = d / naming.file_name("cv")
+    if pdf and Path(pdf).exists():
+        if Path(pdf) != want:
+            Path(pdf).replace(want)
+        made["cv"] = str(want)
     body = _ascii(docs.get("letter", ""))
     if body.strip():
-        letter.render(body, d / "Firstname-Lastname-Cover-Letter.pdf",
-                      [f"{job['company']} recruitment team"], f"Application: {_ascii(job['title'])}")
-    return files(job)
+        target = d / naming.file_name("letter")
+        letter.render(body, target, [f"{job['company']} recruitment team"], f"Application: {_ascii(job['title'])}")
+        made["letter"] = str(target)
+    return made
+
+
+def _render_into(job, docs: dict, out: Path) -> dict:
+    token = _OUT.set(out)
+    try:
+        return render(job, docs) or {}
+    finally:
+        _OUT.reset(token)
 
 
 def _ascii(text: str) -> str:
