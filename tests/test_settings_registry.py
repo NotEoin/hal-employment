@@ -19,7 +19,6 @@ SHIM = "jobhunt/config.py"
 READS = ("get", "set", "reset")
 PERSON_ONLY = settings.PERSON_ONLY
 LEGACY_ALLOWED = {
-    ("jobhunt/autofill.py", "applicant"),
     ("jobhunt/browser.py", "apply_browser"),
     ("jobhunt/cli/find.py", "alert_score"),
     ("jobhunt/cli/find.py", "web_port"),

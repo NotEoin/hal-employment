@@ -39,12 +39,12 @@ SITE = Path(__file__).resolve().parent.parent / "site"
 EXTENSION = Path(__file__).resolve().parent.parent.parent / "extension"
 PROFILE = {
     "first_name": "Ada", "last_name": "Lovelace", "full_name": "Ada Lovelace", "preferred_name": "Ada",
-    "email": "ada@example.org", "phone": "07000 000000", "city": "London", "country": "United Kingdom",
+    "email": "ada@example.org", "phone": "07700 900460", "city": "London", "country": "United Kingdom",
     "location": "London, United Kingdom", "right_to_work": "Yes", "sponsorship": "No",
     "notice": "None, available immediately", "start": "Immediately", "salary": "Open",
-    "university": "University", "degree": "Degree",
-    "grade": "Grade", "grad_year": "Year", "office": "Yes", "relocate": "Yes",
-    "diversity": "Prefer not to say", "nationality": "British and Irish",
+    "university": "University", "degree": "BA (Hons) Made-up Studies",
+    "grade": "2:1", "grad_year": "2026", "office": "Yes", "relocate": "Yes",
+    "diversity": "Prefer not to say", "nationality": "British",
 }
 PROSE = ("I want to work here because the practice forms are a good test of careful engineering, "
          "and careful engineering is what I enjoy most.")
@@ -118,6 +118,7 @@ class Practice(unittest.TestCase):
                              "salary": "", "posted_at": None, "board_size": None})
         db.set_status(self.con, job_id, "ready")
         self.con.execute("DELETE FROM answers")
+        self.con.execute("DELETE FROM answers2")
         self.con.commit()
         server.ACTIONS[job_id] = {"name": "test", "state": "running", "message": "", "at": db.now()}
         return job_id

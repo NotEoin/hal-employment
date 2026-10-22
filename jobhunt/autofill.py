@@ -1,21 +1,32 @@
 """Proposes a value for every field of an application form.
 
-Sources, in order: answers Firstname has given to the same question before, the
-applicant profile (contact details from the CV site and standard answers from
-config.toml's [applicant] table), the job's documents, then the local model
-for what is left. Each proposal records its source, and a field nothing can
-answer is left for Firstname; what he enters is remembered for the next form that
-asks it. Diversity questions default to 'prefer not to say' unless the
-profile gives an answer.
+Sources, in order: the private answers (only for the questions `private_question` names), answers the
+person has given to the same question before, the profile (the `you.*` settings), the job's documents,
+then the AI for what is left. Each proposal records its source, and a field nothing can answer is left
+for the person; what they type is remembered for the next form that asks it, at the scope it suits.
+Diversity questions get the `you.diversity` answer ("Prefer not to say" unless the person chose to
+answer them themselves).
+
+Design notes:
+- Saved answers live in `answers2` with a scope: `everywhere`, `site` (this site),
+  `job` (this job), `never` (kept only as an example of the person's writing) and `review` (not used
+  until the person chooses). An answer about the job applied for (salary, start date, notice, office,
+  relocation, how they heard) is kept for that job only, and a "why us" answer or an essay is never
+  reused, so nothing typed for one employer is offered to another.
+- Classic (and the legacy tests) still read and write the old `answers` table, so an
+  answer kept for everywhere is copied there too, and an old row is recalled only when it is the kind
+  `answers.rescope` would place everywhere (never a job, "why us", essay or private answer).
+- Salary comes from the per-job research unless the person set one answer for every form
+  (`you.salary_answer`).
+- No prompt names the person: `ai/prompts/form_fill.txt` and the others are filled from the settings.
 """
 import difflib
-import importlib
 import re
-import sys
 from datetime import date
+from urllib.parse import urlparse
 
 from . import cv, db, gpu, llm, record, salary
-from .config import CONFIG
+from .ai import prompts
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
              "workable": "Company careers page", "smartrecruiters": "Company careers page",
@@ -28,8 +39,7 @@ DECLINE = re.compile(r"prefer not|don'?t wish|do not wish|decline|rather not|not
                      r"choose not|not disclose|no answer", re.I)
 YES = re.compile(r"^\s*yes\b", re.I)
 NO = re.compile(r"^\s*no\b", re.I)
-# Health questions, answered from data/private.toml: the applicant chose to disclose a disability on
-# equality forms, take up guaranteed-interview schemes and ask for adjustments, and nothing else.
+# Health questions, answered only from the private answers store, and only those the person saved.
 DISABILITY = re.compile(r"disab|long[- ]term (physical|health|condition)|neurodiver|health condition|impairment", re.I)
 WHICH = re.compile(r"\b(which|what|type|nature|kind|specify|describ\w*|categor\w*|details?|tell us)\b", re.I)
 SCHEME = re.compile(r"disability confident|guaranteed interview|interview guarantee|guaranteed (an )?interview", re.I)
@@ -45,13 +55,10 @@ OWN_CALL = re.compile(r"diagnos|affect|prevent|stop you|limit|ability to|registe
 # About the employer's networks or news, not the applicant.
 NOT_ASKED = re.compile(r"hear (more )?about|information about|network|newsletter", re.I)
 # A disability question about someone the applicant cares for or lives with is a carer question, not theirs:
-# Nomura's "look after someone ... caused by disability" once got "Yes, 1-19 hours a week" (2026-10-15).
+# an employer's "look after someone ... caused by disability" once got "Yes, 1-19 hours a week" (2026-10-15).
 SOMEONE = re.compile(r"look(s|ing)? after|care (for|of)\b|\bcarers?\b|caring|cared for|someone|anyone|another person|"
                      r"other people|family member|relative|household|dependants?|child(ren)?\b|parent|guardian|partner|"
                      r"spouse", re.I)
-# How lists name ADHD, most specific first.
-NEURO = [re.compile(p, re.I) for p in (r"adhd|attention deficit", r"neuro", r"specific learning|learning (difference|difficult)",
-                                       r"cognitive|developmental")]
 HEALTH = ("disability", "disability_type", "guaranteed_interview", "adjustments")
 # Every key `private_question` can return; none of them is ever in the profile, a prompt or a saved answer.
 PRIVATE_KEYS = (*HEALTH, "carer")
@@ -59,46 +66,59 @@ CARED_FOR = re.compile(r"care leaver|been in care|cared for", re.I)
 YOURSELF = "Answer this yourself"
 # Labels longer than this are paragraphs with a question in them; a keyword match there proves little.
 RULE_LABEL = 170
-# A box asking for a fact about Firstname has a short label; a longer one is a question for the model.
+# A box asking for a fact about the person has a short label; a longer one is a question for the model.
 FACT_LABEL = 75
-# Answers at least this long are prose Firstname should read before it is sent.
+# Answers at least this long are prose the person should read before it is sent.
 WRITTEN = 80
 MODEL_BATCH = 10
+SAVED_FACTS = 200     # saved answers read for the AI's facts, newest first
+SHORT_FACTS = 60      # of those, short answers listed
+VOICE_EXAMPLES = 2    # "never" answers shown as examples of the person's writing
 # Answers longer than this are essays: never reused as they stand, only shown to the model as the applicant's writing.
 ESSAY = 400
 
 
-def contact() -> tuple[str, str, str]:
-    """Returns (name, email, phone) from the CV site, which keeps them out of this repository."""
-    tools = str(cv.SITE / "tools")
-    if tools not in sys.path:
-        sys.path.insert(0, tools)
-    mod = importlib.import_module("cv_contact")
-    return mod.NAME, mod.EMAIL, mod.PHONE
+START_WORDS = {"now": "Immediately", "1w": "In 1 week", "1m": "In 1 month"}
+WORK_WORDS = {"uk_no_visa": "I have the right to work in the UK", "uk_visa": "I have a UK visa",
+              "need_sponsorship": "I need a visa sponsored to work in the UK"}
+# What a choice in a form is matched against when the profile's answer is plain yes or no.
+YES_NO_KEYS = ("sponsorship", "right_to_work", "office", "relocate")
+
+
+def _yes(value) -> str:
+    return "Yes" if value else "No"
 
 
 def profile() -> dict:
-    """Returns the applicant's standard answers, merged with config.toml's [applicant]."""
-    name, email, phone = contact()
+    """The person's standard answers, from the `you.*` settings, in the words forms use; never a private answer."""
+    from .core import settings
+
+    you = settings.get_many("you.")
+    name = (you.get("you.name") or "").strip()
     first, _, last = name.partition(" ")
-    data = cv.load()
-    c = data["contact"]
+    work = you.get("you.right_to_work") or "uk_no_visa"
+    start = you.get("you.start") or "now"
+    study_end = str(settings.get("goal.study_end") or "")
+    links = {k: (you.get(f"you.links.{k}") or "").strip() for k in ("linkedin", "github", "website")}
     p = {
-        "first_name": first, "last_name": last, "full_name": name, "preferred_name": first,
-        "email": email.lower(), "phone": phone,
-        "linkedin": f"https://www.{c['linkedin']}", "github": f"https://{c['github']}",
-        "website": f"https://{c['site']}",
-        "city": "London", "country": "United Kingdom", "location": "London, United Kingdom",
-        "right_to_work": "Yes", "work_status": "British or Irish citizen", "sponsorship": "No",
-        "nationality": "British and Irish",
-        "notice": "None, available immediately", "start": "Immediately",
-        "university": "University", "degree": "Degree",
-        "grade": "Grade", "grad_year": "Year",
-        "office": "Yes", "relocate": "Yes",
-        "diversity": "Prefer not to say",
+        "first_name": first, "last_name": last.strip(), "full_name": name,
+        "preferred_name": (you.get("you.preferred_name") or "").strip() or first,
+        "email": (you.get("you.email") or "").strip().lower(), "phone": (you.get("you.phone") or "").strip(),
+        **links,
+        "city": you.get("you.city") or "", "country": you.get("you.country") or "United Kingdom",
+        "location": you.get("you.location_line") or "",
+        "right_to_work": _yes(work != "need_sponsorship"), "sponsorship": _yes(work == "need_sponsorship"),
+        "work_status": (you.get("you.work_status") or "").strip() or WORK_WORDS.get(work, ""),
+        "nationality": you.get("you.nationality") or "",
+        "notice": you.get("you.notice") or "",
+        "start": (you.get("you.start_date") or "") if start == "date" else START_WORDS.get(start, ""),
+        "university": you.get("you.education.university") or "", "degree": you.get("you.education.degree") or "",
+        "grade": you.get("you.education.grade") or "", "grad_year": study_end[:4],
+        "office": _yes(you.get("you.office")), "relocate": _yes(you.get("you.relocate")),
+        "diversity": "Prefer not to say" if you.get("you.diversity") != "leave" else "",
+        "salary": (you.get("you.salary_answer") or "").strip(),
     }
-    p.update({k: v for k, v in CONFIG.get("applicant", {}).items() if k not in PRIVATE_KEYS})
-    return p
+    return {k: v for k, v in p.items() if k not in PRIVATE_KEYS}
 
 
 def private_question(field: dict) -> str | None:
@@ -163,31 +183,30 @@ RULES = [
     (r"linkedin", "linkedin", []),
     (r"github", "github", []),
     (r"website|portfolio|personal (site|url|page)|other links?", "website", []),
-    (r"sponsor", "sponsorship", [NO, re.compile(r"(do not|don'?t|will not|won'?t) (require|need)", re.I)]),
+    (r"sponsor", "sponsorship", []),
     (r"right to work|legally (entitled|authori[sz]ed|eligible|able)|eligib\w+ to work|authori[sz]ed to work|"
-     r"work permit|immigration status|visa status|work status",
-     "right_to_work", [re.compile(r"british or irish|(british|irish|uk) (citizen|passport|national)|citizen", re.I), YES]),
-    (r"notice period", "notice", [re.compile(r"immediate|none|no notice|^0|less than", re.I)]),
-    (r"start date|when (can|could) you start|earliest (start|availability)|available to start", "start",
-     [re.compile(r"immediate|asap|now", re.I)]),
+     r"work permit|immigration status|visa status|work status", "right_to_work", []),
+    (r"notice period", "notice", []),
+    (r"start date|when (can|could) you start|earliest (start|availability)|available to start", "start", []),
     (r"salary|compensation|pay expectation|remuneration", "salary", []),
     (r"how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", "how_heard", []),
-    (r"\boffice\b|on-?site|in person|hybrid|commut", "office", [YES]),
-    (r"relocat", "relocate", [YES]),
+    (r"\boffice\b|on-?site|in person|hybrid|commut", "office", []),
+    (r"relocat", "relocate", []),
     (r"post ?code|\bzip\b", "postcode", []),
     (r"address( line)? ?1|street address|^address:?$", "address1", []),
     (r"^country|country of residence|country/region", "country",
      [re.compile(r"united kingdom|^uk\b|great britain", re.I)]),
-    (r"^(town|city)\b|town ?/ ?city", "city", [re.compile(r"london", re.I)]),
-    (r"\bcity\b|where are you (based|located)|current location|^location", "location",
-     [re.compile(r"london", re.I), re.compile(r"united kingdom|\buk\b", re.I)]),
-    (r"nationality|citizenship", "nationality", [re.compile(r"^british", re.I), re.compile(r"^irish", re.I)]),
+    (r"^(town|city)\b|town ?/ ?city", "city", []),
+    (r"\bcity\b|where are you (based|located)|current location|^location", "location", []),
+    (r"nationality|citizenship", "nationality", []),
     (r"universit|institution|college|\bschool\b", "university", []),
-    (r"degree|discipline|\bmajor\b|field of study|subject", "degree",
-     [re.compile(r"^computer science", re.I), re.compile(r"bachelor of science|\bbsc\b", re.I)]),
-    (r"grade|classification|\bgpa\b|\bresults?\b", "grade", [re.compile(r"first|1st", re.I)]),
-    (r"graduat", "grad_year", [re.compile(r"2026", re.I)]),
+    (r"degree|discipline|\bmajor\b|field of study|subject", "degree", []),
+    (r"grade|classification|\bgpa\b|\bresults?\b", "grade", []),
+    (r"graduat", "grad_year", []),
 ]
+# Options that say "straight away" or "no notice", for a profile answer that says so.
+SOON = re.compile(r"immediate|asap|\bnow\b|none|no notice|^0|less than", re.I)
+NOT_NEEDED = re.compile(r"(do not|don'?t|will not|won'?t) (require|need)", re.I)
 # Sections about someone or something other than the applicant now: their questions are never
 # answered with the applicant's own details, and dates there belong to that course or job.
 OTHER_PERSON = re.compile(r"referee|references?\b|emergency|next of kin|employment history|work history|"
@@ -198,6 +217,8 @@ HISTORY = re.compile(r"education|qualification|academic|employment|experience|tr
 ABOUT_THIS_JOB = {"start", "notice", "salary", "office", "relocate", "how_heard"}
 HEARD_SITE = [re.compile(r"(company|careers?|our) (web)?(site|page)|^website", re.I)]
 HEARD_BOARD = [re.compile(r"job ?board|job (site|website|search)|online (job|search)", re.I)]
+# Shortest option or answer matched inside the other; shorter ones ("UK", "No") match too much by accident.
+MIN_INSIDE = 4
 # Places and institutions are typed into search boxes that list nothing until asked.
 SEARCHED = {"city", "location", "country", "university"}
 
@@ -229,11 +250,17 @@ def _choose(options: list[str], value: str, preferred: list) -> str | None:
         for opt in options:
             if pattern.search(opt):
                 return opt
-    exact = [o for o in options if o.strip().lower() == str(value).strip().lower()]
+    want = str(value).strip().lower()
+    exact = [o for o in options if o.strip().lower() == want]
     if exact:
         return exact[0]
     close = difflib.get_close_matches(str(value), options, n=1, cutoff=0.75)
-    return close[0] if close else None
+    if close:
+        return close[0]
+    # "Made-up Studies" for "BA (Hons) Made-up Studies", "Leeds" for "Leeds, United Kingdom".
+    inside = [o for o in options if len(o.strip()) >= MIN_INSIDE and (o.strip().lower() in want or
+                                                                      (len(want) >= MIN_INSIDE and want in o.lower()))]
+    return max(inside, key=len) if inside else None
 
 
 def _fit(f: dict, value, preferred: list) -> object | None:
@@ -256,6 +283,10 @@ def _fit(f: dict, value, preferred: list) -> object | None:
 
 def _diversity(f: dict, prof: dict) -> bool:
     """Answers a diversity question with the profile's choice; returns whether it settled the field."""
+    if prof.get("diversity") == "":
+        # The person chose to answer equality questions themselves.
+        f.update(value=None, source="you", note=YOURSELF)
+        return True
     value = prof.get("diversity") or "Prefer not to say"
     options = f.get("options") or []
     note = "diversity question; change it if you want to answer"
@@ -302,9 +333,10 @@ def _health(f: dict, prof: dict | None = None) -> bool:
             f.update(value=None, source="you", note="asks about a diagnosis, a formal status or how your disability "
                                                      "affects you; answer this yourself")
             return True
-        neuro = next((o for pattern in NEURO for o in options if pattern.search(o)), None)
-        if WHICH.search(label) and prof.get("disability_type") and (neuro or not listed):
-            key, answer = "disability_type", ([neuro] if kind == "checkgroup" else neuro) if listed else prof["disability_type"]
+        named = _choose(options, prof["disability_type"], []) if listed and prof.get("disability_type") else None
+        if WHICH.search(label) and prof.get("disability_type") and (named or not listed):
+            chosen = [named] if kind == "checkgroup" else named
+            key, answer = "disability_type", chosen if listed else prof["disability_type"]
         else:
             # "Do you have a disability? If yes, please give details" with Yes/No options asks the first part.
             key, answer = "disability", True if kind == "checkbox" else _fit(f, prof["disability"], [YES])
@@ -356,6 +388,15 @@ def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
         if key == "how_heard":
             # The list rarely words the source as the profile does; the nearest kind of source is chosen.
             preferred = HEARD_SITE if re.search(r"careers page|website", str(value), re.I) else HEARD_BOARD
+        elif key in YES_NO_KEYS:
+            no = NO.search(str(value))
+            preferred = [NO, NOT_NEEDED] if no else [YES]
+            if key == "right_to_work" and listed and prof.get("work_status"):
+                worded = _choose(f["options"], prof["work_status"], [])
+                if worded:
+                    return ([worded] if f["kind"] == "checkgroup" else worded, f"profile: {key}")
+        elif key in ("notice", "start") and SOON.search(str(value)):
+            preferred = [SOON]
         if key == "salary" and prof.get("salary_figure"):
             if f.get("type") == "number":
                 value = prof["salary_figure"]
@@ -386,43 +427,96 @@ def _match_answer(label: str, answers: list[dict]) -> str | None:
     return best if score_ >= 0.6 else None
 
 
-# Answers Firstname has given before --------------------------------------------------
+# Answers the person has given before ------------------------------------------
 
-def remember(con, fields: list[dict], company: str = "") -> int:
-    """Stores the answers Firstname entered himself, so the same question is not put to him twice."""
+def site_key(job) -> str:
+    """The site a job's form is on, for answers kept for one site: the host of its address, without "www."."""
+    url = (job.get("url") if isinstance(job, dict) else job["url"]) if job is not None else ""
+    return urlparse(url or "").netloc.lower().removeprefix("www.")
+
+
+def _scope(f: dict, label: str, value, job) -> tuple[str, str]:
+    """Where an answer the person typed may be used again: (scope, scope key)."""
+    if (isinstance(value, str) and len(value) > ESSAY) or WHY.search(label) or FIT.search(label):
+        return "never", ""          # an essay or a "why us" answer is only ever an example of their writing
+    rule = next((key for pattern, key, _ in RULES if re.search(pattern, f.get("label") or "", re.I)), None)
+    if rule in ABOUT_THIS_JOB or "the employer" in _norm(label):
+        # about this job or this employer: for this job only, or for the person to choose when the job is unknown
+        return ("job", str(job["id"])) if job is not None else ("review", "")
+    return "everywhere", ""
+
+
+def remember(con, fields: list[dict], company: str = "", job=None) -> int:
+    """Stores the answers the person typed themselves, each at the scope it suits, so a question is asked once.
+
+    `job` is the job the form is for; without it, answers about a job are kept for the person to place.
+    What the person types into a private question is never kept.
+    """
     kept = 0
     for f in fields:
         value = f.get("value")
         if f.get("source") != "you" or value in (None, "", []) or f["kind"] == "file" or f.get("type") == "password":
             continue
         if private_question(f) is not None:
-            continue   # what the person types into a private question is never kept
+            continue
         question = _key(f, company)
         if len(question) < 3:
             continue
-        con.execute("""INSERT INTO answers (question, label, answer, updated) VALUES (?, ?, ?, ?)
-                       ON CONFLICT(question) DO UPDATE SET answer = excluded.answer, updated = excluded.updated""",
-                    (question, _asked(f), db.json_text(value), db.now()))
+        scope, scope_key = _scope(f, _asked(f), value, job)
+        con.execute("""INSERT INTO answers2 (question, label, answer, scope, scope_key, kind, source, updated)
+                       VALUES (?, ?, ?, ?, ?, 'fixed', 'you', ?)
+                       ON CONFLICT(question, scope, scope_key) DO UPDATE SET answer = excluded.answer,
+                         label = excluded.label, updated = excluded.updated""",
+                    (question, _asked(f), db.json_text(value), scope, scope_key, db.now()))
+        if scope == "everywhere":
+            con.execute("""INSERT INTO answers (question, label, answer, updated) VALUES (?, ?, ?, ?)
+                           ON CONFLICT(question) DO UPDATE SET answer = excluded.answer, updated = excluded.updated""",
+                        (question, _asked(f), db.json_text(value), db.now()))
         kept += 1
     con.commit()
     return kept
 
 
-def _recall(con, f: dict, company: str = ""):
-    """Returns the answer Firstname gave to this question before, shaped to the field, or None."""
+def _old_rows(con) -> list:
+    """Rows of the old `answers` table that would be kept for everywhere (see the design notes)."""
+    out = []
+    for r in con.execute("SELECT question, label, answer, updated FROM answers"):
+        value = db.json_value(r["answer"])
+        f = {"label": r["label"]}
+        if private_question(f) is None and _scope(f, r["label"], value, None)[0] == "everywhere":
+            out.append({"question": r["question"], "label": r["label"], "answer": r["answer"], "scope": "old"})
+    return out
+
+
+def _usable(con, job) -> list:
+    """The saved answers this job's form may use: everywhere, this site's and this job's."""
+    if job is None:
+        return con.execute("SELECT * FROM answers2 WHERE scope = 'everywhere' ORDER BY updated DESC").fetchall()
+    return con.execute("""SELECT * FROM answers2 WHERE scope = 'everywhere'
+                          OR (scope = 'site' AND scope_key = ?) OR (scope = 'job' AND scope_key = ?)
+                          ORDER BY updated DESC""", (site_key(job), str(job["id"]))).fetchall()
+
+
+def _recall(con, f: dict, job=None):
+    """The answer the person gave to this question before, where it may be used for this job, or None."""
     if con is None:
         return None
-    question = _key(f, company)
-    row = con.execute("SELECT answer FROM answers WHERE question = ?", (question,)).fetchone()
-    if row is None:
-        known = [r["question"] for r in con.execute("SELECT question FROM answers")]
-        close = difflib.get_close_matches(question, known, n=1, cutoff=0.93)
+    question = _key(f, job["company"] if job is not None else "")
+    rows = [r for r in _usable(con, job) if private_question({"label": r["label"]}) is None] + _old_rows(con)
+    by_question = {}
+    for r in rows:   # the narrowest scope wins: this job, then this site, then everywhere, then the old table
+        rank = {"job": 0, "site": 1, "everywhere": 2}.get(r["scope"], 3)
+        if r["question"] not in by_question or rank < by_question[r["question"]][0]:
+            by_question[r["question"]] = (rank, r)
+    found = by_question.get(question)
+    if found is None:
+        close = difflib.get_close_matches(question, list(by_question), n=1, cutoff=0.93)
         if not close:
             return None
-        row = con.execute("SELECT answer FROM answers WHERE question = ?", (close[0],)).fetchone()
-    value = db.json_value(row["answer"])
+        found = by_question[close[0]]
+    value = db.json_value(found[1]["answer"])
     if isinstance(value, str) and len(value) > ESSAY:
-        return None  # an essay answers one employer's question; it shows the model the applicant's voice instead
+        return None  # an essay answers one employer's question; it shows the AI the person's voice instead
     return _fit(f, value, [])
 
 
@@ -431,37 +525,15 @@ WHY = re.compile(r"why (do you want|are you (interested|applying)|this (role|com
 FIT = re.compile(r"why (are you|would you be) (a good|the right|suited)|what makes you|tell us about yourself|"
                  r"relevant experience|why should we", re.I)
 
-FILL = """You complete a job application form for Firstname Lastname using only the facts given.
-Reply with JSON only: {"answers": [{"hid": ..., "value": ..., "sure": true | false}]}.
-Give one answer for every field listed.
-For a field with options, the value must be one of the options, copied exactly; for a
-checkgroup, a list of options. A yes/no question about his eligibility, studies, skills
-or history is answered from the facts: if the facts settle it, answer and set sure true.
-For free text, write plainly in the first person, within any limit the label or help
-states, and at most 120 words; short factual questions get short answers. If a field
-asks for something only when another answer applies and it does not apply, give "N/A"
-when the field is required and "" otherwise.
-Fields are listed in page order with the section heading they sit under. A field in a
-section about another person or another job (a referee, an emergency contact, a previous
-employer or manager) asks about that person or job, never about Firstname: answer it only from
-facts about them, else give "". Dates in an education or employment history are the dates
-of that course or job, not Firstname's availability. Salary: if the advert states no pay, never
-mention an advertised range.
-Passages from the applicant's employment record are facts too: use them for anything the CV leaves out.
-Never invent personal details (addresses, dates of birth, reference numbers, names of
-people) or claim experience, skills or circumstances the facts do not state: if the
-facts do not answer a field, give "" and sure false. Set sure false for anything a
-person should check."""
-
-REVIEW = """You check answers that simple keyword rules put into a job application form for
-Firstname Lastname. Each line gives a field's id, the section it sits under, its question, and the
-answer chosen. Reply with JSON only: {"wrong": [{"hid": ..., "why": a few words}]}.
-List a field only when its answer plainly does not answer that question where it sits: Firstname's
-own name or email in a referee's details, an availability date as the start date of a
-course, an answer to some other question, a choice that contradicts the question. Leave out
-anything that is plausibly right; most answers are."""
 # Sources of answers chosen by keyword, which the review pass checks against the question.
 REVIEWED = ("profile", "your earlier answer", "documents: drafted answer")
+
+
+def _prompt(prompt_id: str) -> str:
+    """A form prompt filled in with the person's name from the settings."""
+    from . import pack
+
+    return pack.prompt(prompt_id)
 
 
 def profile_for(job, con=None) -> dict:
@@ -471,7 +543,9 @@ def profile_for(job, con=None) -> dict:
     if not prof.get("salary"):
         # A direct figure: employers who ask want one, and "open to discussion" reads as dodging it.
         expected = salary.expect(job, con)
-        prof.update(salary=expected["text"], salary_figure=str(expected["figure"]), salary_basis=expected["basis"])
+        if expected["figure"] > 0:   # nothing known and no lowest pay set: the person answers it
+            prof.update(salary=expected["text"], salary_figure=str(expected["figure"]),
+                        salary_basis=expected["basis"])
     return prof
 
 
@@ -483,7 +557,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
         fields: Fields read from the form by browser.open_form.
         docs: The approved documents (documents.load).
         files: Paths of the CV and cover letter PDFs (documents.files).
-        con: Database connection, for the answers Firstname has given before.
+        con: Database connection, for the answers the person has given before.
     """
     prof = profile_for(job, con)
     answers = docs.get("answers") or []
@@ -517,7 +591,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
                 note = f.get("note") if f.get("source") == "you" and f.get("note") else YOURSELF
                 f.update(value=None, source="you", note=note)
             continue
-        recalled = _recall(con, f, job["company"])
+        recalled = _recall(con, f, job)
         if recalled not in (None, []):
             f.update(value=recalled, source="your earlier answer")
             continue
@@ -554,7 +628,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
 
 
 def mark_written(fields: list[dict]) -> list[dict]:
-    """Flags the answers that are prose, which Firstname reads before anything is sent."""
+    """Flags the answers that are prose, which the person reads before anything is sent."""
     for f in fields:
         value = f.get("value")
         f["written"] = f["kind"] in ("text", "textarea") and isinstance(value, str) and len(value) >= WRITTEN \
@@ -563,12 +637,14 @@ def mark_written(fields: list[dict]) -> list[dict]:
 
 
 def _facts(job, docs: dict, con) -> str:
-    hidden = ("salary_figure", "salary_basis", "preferred_name", *HEALTH)
-    prof = {k: v for k, v in profile_for(job, con).items() if k not in hidden}
+    """What the AI may know when it fills a form: the profile, the CV, saved answers this job may use."""
+    hidden = ("salary_figure", "salary_basis", "preferred_name", *PRIVATE_KEYS)
+    prof = {k: v for k, v in profile_for(job, con).items() if k not in hidden and v not in ("", None)}
     parts = [f"Today is {date.today():%d %B %Y}.",
              f"Job: {job['title']} at {job['company']} ({job['location'] or 'location not stated'}).",
              f"Applicant profile: {prof}",
-             "He has never worked for, interviewed with or been referred to this employer unless stated below.",
+             "The applicant has never worked for, interviewed with or been referred to this employer "
+             "unless stated below.",
              f"CV facts:\n{cv.facts_text()}"]
     if con is not None:
         before = con.execute("""SELECT title, status FROM jobs WHERE lower(company) = lower(?) AND id != ?
@@ -577,23 +653,26 @@ def _facts(job, docs: dict, con) -> str:
         if before:
             parts.append("Earlier applications to this employer: "
                          + "; ".join(f"{r['title']} ({r['status']})" for r in before))
-        told = [(r["label"], db.json_value(r["answer"]))
-                for r in con.execute("SELECT label, answer FROM answers ORDER BY updated DESC LIMIT 200")
+        told = [(r["label"], db.json_value(r["answer"])) for r in _usable(con, job)[:SAVED_FACTS]
                 if private_question({"label": r["label"]}) is None]
-        short = [(q, a) for q, a in told if not (isinstance(a, str) and len(a) > ESSAY)][:60]
-        essays = [(q, a) for q, a in told if isinstance(a, str) and len(a) > ESSAY][:2]
+        short = [(q, a) for q, a in told if not (isinstance(a, str) and len(a) > ESSAY)]
+        voice = [(r["label"], db.json_value(r["answer"])) for r in con.execute(
+                     "SELECT label, answer FROM answers2 WHERE scope = 'never' ORDER BY length(answer) DESC LIMIT ?",
+                     (VOICE_EXAMPLES,))
+                 if private_question({"label": r["label"]}) is None]
         if short:
-            parts.append("Answers he has given on other forms:\n" + "\n".join(f"- {q}: {a}" for q, a in short))
-        if essays:
-            parts.append("Answers Firstname wrote for other employers, as examples of Firstname's voice and phrasing "
+            parts.append("Answers the applicant has given on other forms:\n"
+                         + "\n".join(f"- {q}: {a}" for q, a in short[:SHORT_FACTS]))
+        if voice:
+            parts.append("Answers the applicant wrote for other employers, as examples of their voice and phrasing "
                          "(write fresh answers for this job; never copy their claims about other employers):\n"
-                         + "\n\n".join(f"Q: {q}\nA: {a[:1500]}" for q, a in essays))
+                         + "\n\n".join(f"Q: {q}\nA: {str(a)[:1500]}" for q, a in voice))
     if docs.get("answers"):
         parts.append("Drafted answers:\n" + "\n".join(f"- {a['question']}: {a['answer']}" for a in docs["answers"]))
     if docs.get("letter"):
         parts.append(f"Cover letter:\n{docs['letter']}")
     if job["description"]:
-        parts.append(f"Advert (for context only, not facts about him):\n{job['description'][:1800]}")
+        parts.append(f"Advert (for context only, not facts about the applicant):\n{job['description'][:1800]}")
     return "\n\n".join(parts)
 
 
@@ -647,7 +726,8 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
             # The employment record holds what the CV leaves out: certificates, the full story of each job.
             found = record.context([f"{f.get('label') or ''} {f.get('help') or ''}" for f in batch])
             kept = f"\n\nFrom the applicant's employment record (as true as the CV):\n{found}" if found else ""
-            reply = llm.chat_json(FILL, f"Fields:\n{listing}\n\n{facts}{kept}", role="main", timeout=300)
+            reply = llm.chat_json(_prompt("form_fill"), f"Fields:\n{listing}\n\n{facts}{kept}", role="main",
+                                  timeout=300)
         except llm.LLMUnavailable as e:
             return answered, str(e)
         by_hid = {f["hid"]: f for f in batch}
@@ -689,7 +769,7 @@ def _review(job, fields: list[dict]) -> None:
     listing = "\n".join(f"- hid={f['hid']} section={f.get('section') or ''!r} question={f.get('label')!r} "
                         f"answer={f['value']!r}" for f in chosen)
     try:
-        reply = llm.chat_json(REVIEW, f"Job: {job['title']} at {job['company']}\n\nAnswers:\n{listing}",
+        reply = llm.chat_json(_prompt("form_review"), f"Job: {job['title']} at {job['company']}\n\nAnswers:\n{listing}",
                               role="main", timeout=180)
     except llm.LLMUnavailable:
         return
@@ -703,13 +783,6 @@ def _review(job, fields: list[dict]) -> None:
             f.update(value=None, source="you", note=f"Hal's first answer looked wrong{': ' + why if why else ''}")
 
 
-NAVIGATE = """You help a job applicant reach an application form. Given a web page's title and
-the names of its buttons and links, choose the one control that leads towards applying for the
-job named. Reply with JSON only: {"press": the control's name copied exactly, or "" if none
-leads to an application form, "why": a few words}. Never choose a control that signs in with
-another service (LinkedIn, Indeed, Google), shares the job, or leaves for an unrelated page."""
-
-
 def choose_control(job, found: dict) -> str:
     """Asks the model which control on a page without a recognised Apply button leads to the form."""
     names = list(dict.fromkeys(c["name"] for c in found.get("controls", [])
@@ -719,7 +792,7 @@ def choose_control(job, found: dict) -> str:
     prompt = (f"Job: {job['title']} at {job['company']}\nPage title: {found['title']}\n"
               f"Page address: {found['url']}\nControls:\n" + "\n".join(f"- {n}" for n in names[:60]))
     try:
-        reply = llm.chat_json(NAVIGATE, prompt, role="main", timeout=120)
+        reply = llm.chat_json(prompts.text("choose_control"), prompt, role="main", timeout=120)
     except llm.LLMUnavailable:
         return ""
     press = str(reply.get("press") or "")

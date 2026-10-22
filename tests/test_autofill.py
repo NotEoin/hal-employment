@@ -11,12 +11,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from support import legacy, private_answers
+from support import legacy, people, private_answers
 from support.fake_ai import fake_ai
 from support.legacy import PROFILE
 
 from jobhunt import autofill, db, gmail, salary, tasks
-from jobhunt.core import paths
+from jobhunt.core import paths, settings
+
+# Obviously synthetic private answers, so no fixture could be read as anyone's real health.
+SYNTH_TYPE = "Synthetic condition B"
+SYNTH_ADJUST = "SYNTHETIC adjustment: a made-up quiet room for tests"
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
@@ -54,10 +58,11 @@ class Answers(unittest.TestCase):
         self.assertIsNone(f["value"])
 
     def test_a_listed_fact_is_chosen_from_its_list_however_long_the_question(self):
-        f = self.propose(kind="combobox", options=["Other University", "University"],
+        autofill.profile = lambda: {**PROFILE, "university": "Southbrook University"}
+        f = self.propose(kind="combobox", options=["Northgate University", "Southbrook University"],
                          label="Which university are you currently attending or did you attend for your "
                                "undergraduate studies? Type the name to search the list provided below.")
-        self.assertEqual(f["value"], "University")
+        self.assertEqual(f["value"], "Southbrook University")
 
     def test_a_number_box_is_not_given_a_sentence(self):
         self.assertIsNone(self.propose(type="number", label="Salary expectations")["value"])
@@ -78,8 +83,8 @@ class Answers(unittest.TestCase):
         self.assertEqual(listed["value"], "£35,000 - £44,999")
 
     def health(self):
-        self.private({"disability": "Yes", "disability_type": "Dyslexia", "guaranteed_interview": "Yes",
-                      "adjustments": "Yes. I would like 25% extra time on timed tests."})
+        self.private({"disability": "Yes", "disability_type": SYNTH_TYPE, "guaranteed_interview": "Yes",
+                      "adjustments": SYNTH_ADJUST})
 
     def test_a_disclosed_disability_is_given_and_other_identity_questions_are_declined(self):
         """The applicant discloses a disability only: gender and the like stay "Prefer not to say"."""
@@ -90,13 +95,21 @@ class Answers(unittest.TestCase):
         self.assertEqual(self.propose(kind="radio", label="What is your gender?",
                                       options=["Man", "Woman", "Prefer not to say"])["value"], "Prefer not to say")
         kinds = self.propose(kind="checkgroup", label="Which of the following best describes your disability?",
-                             options=["Physical impairment", "Neurodivergent condition (e.g. autism, dyslexia)", "Mental health"])
-        self.assertEqual(kinds["value"], ["Neurodivergent condition (e.g. autism, dyslexia)"])
+                             options=["Made-up category A", f"{SYNTH_TYPE} (an invented example)",
+                                      "Made-up category C"])
+        self.assertEqual(kinds["value"], [f"{SYNTH_TYPE} (an invented example)"])
         described = self.propose(kind="textarea", label="Please describe the nature of your disability")
-        self.assertEqual(described["value"], "Dyslexia")
+        self.assertEqual(described["value"], SYNTH_TYPE)
+
+    def test_a_disability_type_no_option_names_is_left_for_the_applicant(self):
+        """The saved type is chosen only when the list names it; no ranking guesses a near option."""
+        self.health()
+        f = self.propose(kind="radio", label="Which category best describes your disability?",
+                         options=["Made-up category A", "Made-up category C"])
+        self.assertEqual((f["value"], f["source"]), (None, "you"))
 
     def test_caring_for_someone_with_a_disability_is_not_the_applicants_disability(self):
-        """Nomura, 2026-10-15: "look after someone ... caused by disability" was answered "Yes, 1-19 hours a week"."""
+        """A form seen 2026-10-15: "look after someone ... caused by disability" got "Yes, 1-19 hours a week"."""
         self.health()
         carer = ["No", "Yes, 1-19 hours a week", "Yes, 20-49 hours a week", "Yes, 50 hours or more a week", "Prefer not to say"]
         for label in ("Do you look after or care for someone with long term physical or mental ill health caused by "
@@ -110,9 +123,9 @@ class Answers(unittest.TestCase):
         """The applicant cares for no one, and says so; whether they were in care themselves is another question."""
         self.private({"carer": "No"})
         hours = ["Yes, 1-19 hours a week", "Yes, 20-49 hours a week", "No, I do not provide care", "Prefer not to say"]
-        nomura = self.propose(kind="combobox", label="Do you look after or care for someone with long term physical or "
+        listed = self.propose(kind="combobox", label="Do you look after or care for someone with long term physical or "
                                                      "mental ill health caused by disability or age?", options=hours)
-        self.assertEqual((nomura["value"], nomura["source"]), ("No, I do not provide care", "private: carer"))
+        self.assertEqual((listed["value"], listed["source"]), ("No, I do not provide care", "private: carer"))
         self.assertEqual(self.propose(kind="radio", label="Do you have any caring responsibilities?",
                                       options=["Yes", "No", "Prefer not to say"])["value"], "No")
         self.assertEqual(self.propose(label="Are you a carer?")["value"], "No")
@@ -122,7 +135,7 @@ class Answers(unittest.TestCase):
     def test_disability_questions_in_their_many_wordings(self):
         """Each wording gets the answer the applicant chose, or is left for them where only they can judge."""
         self.health()
-        yes_no, mine = ["Yes", "No", "Prefer not to say"], "Yes. I would like 25% extra time on timed tests."
+        yes_no, mine = ["Yes", "No", "Prefer not to say"], SYNTH_ADJUST
         cases = [
             ("radio", "Do you have a disability? If yes, please give details below.", yes_no, "", "Yes"),
             ("radio", "Does your disability affect your ability to carry out the role?", yes_no, "", None),
@@ -134,8 +147,7 @@ class Answers(unittest.TestCase):
             ("text", "Preferred pronouns", [], "We are a Disability Confident employer and offer a guaranteed interview",
              "Prefer not to say"),
             ("checkgroup", "Please select the category that best describes your impairment",
-             ["Physical", "Learning disability, difficulty or difference (such as dyslexia, ADHD)", "Prefer not to say"], "",
-             ["Learning disability, difficulty or difference (such as dyslexia, ADHD)"]),
+             ["Made-up category A", f"{SYNTH_TYPE} or similar", "Prefer not to say"], "", [f"{SYNTH_TYPE} or similar"]),
             ("radio", "Would you like to hear about our disability network?", ["Yes", "No"], "", None),
         ]
         for kind, label, options, context, expected in cases:
@@ -157,14 +169,13 @@ class Answers(unittest.TestCase):
                                       options=["Yes", "No"])["value"], "Yes")
         details = self.propose(kind="textarea", label="If yes, please give details",
                                context="Reasonable adjustments for the assessment process")
-        self.assertEqual((details["value"], details["source"]), ("Yes. I would like 25% extra time on timed tests.",
-                                                                 "private: adjustments"))
+        self.assertEqual((details["value"], details["source"]), (SYNTH_ADJUST, "private: adjustments"))
 
     def test_private_answers_never_reach_the_model_that_writes(self):
         """Letters and essays are written from facts that hold no health answer."""
         self.health()
-        self.assertNotIn("Dyslexia", autofill._facts(self.job, {}, None))
-        self.assertNotIn("extra time", autofill._facts(self.job, {}, None))
+        self.assertNotIn(SYNTH_TYPE, autofill._facts(self.job, {}, None))
+        self.assertNotIn(SYNTH_ADJUST, autofill._facts(self.job, {}, None))
 
     def test_an_optional_sign_up_is_left_alone_and_consent_is_given(self):
         self.assertTrue(self.propose(kind="checkbox", label="Send me the newsletter", required=False)["skip"])
@@ -205,6 +216,34 @@ class Answers(unittest.TestCase):
             autofill.llm.chat_json, autofill.gpu.busy = saved
         self.assertIsNone(f["value"])
         self.assertIn("manager's number", f["note"])
+
+    def test_a_salary_typed_for_one_job_is_never_offered_to_another(self):
+        con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        self.addCleanup(con.close)
+        other = {**self.job, "id": "test:2", "url": "https://jobs.example/2"}
+        typed = {"hid": "h0", "kind": "text", "type": "text", "label": "What are your salary expectations?",
+                 "value": "Made-up figure 31,500", "source": "you"}
+        autofill.remember(con, [typed], "Practice Ltd", job=self.job)
+        f = {"hid": "h0", "kind": "text", "type": "text", "label": "What are your salary expectations?",
+             "required": True}
+        self.assertEqual(autofill._recall(con, dict(f), self.job), "Made-up figure 31,500")
+        self.assertIsNone(autofill._recall(con, dict(f), other))
+        autofill.remember(con, [typed], "Practice Ltd")          # a form whose job is not known
+        self.assertIsNone(autofill._recall(con, dict(f), other))
+        self.assertEqual(con.execute("SELECT scope FROM answers2 WHERE scope_key = ''").fetchone()["scope"], "review")
+
+    def test_a_short_why_us_answer_is_never_reused_word_for_word(self):
+        con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
+        self.addCleanup(con.close)
+        why = "Why do you want to work at Practice Ltd?"
+        autofill.remember(con, [{"hid": "h0", "kind": "textarea", "label": why, "value": "Made-up short reason.",
+                                 "source": "you"}], "Practice Ltd", job=self.job)
+        nxt = {**self.job, "id": "test:3", "company": "Other Made-up Co"}
+        f = {"hid": "h0", "kind": "textarea", "type": "text", "label": "Why do you want to work at Other Made-up Co?",
+             "required": True}
+        self.assertEqual(autofill.propose(nxt, [f], {}, {}, con)[0]["value"], None)
+        self.assertEqual(con.execute("SELECT scope FROM answers2").fetchone()["scope"], "never")
+        self.assertIn("Made-up short reason.", autofill._facts(nxt, {}, con))   # only as an example of their voice
 
     def test_a_number_ending_a_sentence_in_the_source_is_supported(self):
         """A source's "2023-2024." holds 2024, so a draft giving 2024 is not flagged."""
@@ -288,16 +327,14 @@ class PrivatePaths(unittest.TestCase):
         typed = [self.field(f"p{i}", label, value=CANARY, source="you") for i, label in enumerate(PRIVATE_LABELS)]
         typed.append(self.field("n1", "Which programming language do you use most?", value="Python", source="you"))
         self.assertEqual(autofill.remember(con, typed, "Practice Ltd"), 1)
-        kept = [tuple(r) for r in con.execute("SELECT label, answer FROM answers")]
+        kept = [tuple(r) for r in con.execute("SELECT label, answer FROM answers2")]
         self.assertEqual(kept, [("Which programming language do you use most?", '"Python"')])
 
     def test_the_carer_answer_is_never_in_the_profile_or_the_review(self):
         self.stack.enter_context(private_answers.saved({"carer": "No"}))
-        self.stack.enter_context(mock.patch.dict(autofill.CONFIG, {"applicant": {"carer": "No", "notice": "A month"}}))
-        self.stack.enter_context(mock.patch.object(autofill, "contact",
-                                                   lambda: ("Robin Example", "robin@example.org", "07000 000001")))
-        self.stack.enter_context(mock.patch.object(autofill.cv, "load", lambda: {"contact": {
-            "linkedin": "linkedin.example/robin", "github": "github.example/robin", "site": "robin.example"}}))
+        self.stack.enter_context(people.as_person(people.CHANGER))
+        settings.set("you.notice", "A month", by="setup")
+        self.addCleanup(settings.reset, "you.notice", by="setup")
         prof = REAL_PROFILE()
         self.assertNotIn("carer", prof)
         self.assertEqual(prof["notice"], "A month")
@@ -309,6 +346,50 @@ class PrivatePaths(unittest.TestCase):
                                {})
         self.assertIn("Town or city", self.sent(fake))
         self.assertNotIn("caring", self.sent(fake))
+
+    def test_contact_details_come_from_your_profile(self):
+        self.stack.enter_context(mock.patch.object(autofill, "profile", REAL_PROFILE))
+        with people.as_person(people.TECHNICAL):
+            prof = REAL_PROFILE()
+            fields = [self.field("a", "Full name"), self.field("b", "Email address"), self.field("c", "Phone"),
+                      self.field("d", "University"), self.field("e", "When could you start?")]
+            autofill.propose(self.job, fields, {}, {})
+        self.assertEqual([f["value"] for f in fields], ["Tobias Wrenfield", "toby.wrenfield@example.org",
+                                                        "07700 900462", "Made-up Institute of Technology",
+                                                        "Immediately"])
+        self.assertEqual(prof["preferred_name"], "Toby")
+        for key in autofill.PRIVATE_KEYS:
+            self.assertNotIn(key, prof)
+
+    def test_a_private_answer_canary_never_reaches_a_prompt(self):
+        """G5 end to end: a form fill, its review, and the facts the AI is given, with every answer a canary."""
+        self.stack.close()
+        self.stack = contextlib.ExitStack()
+        self.addCleanup(self.stack.close)
+        tmp = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix="hal-canary-")))
+        self.stack.enter_context(paths.set_override(tmp))
+        self.stack.enter_context(mock.patch.object(autofill.record, "context", lambda questions: ""))
+        self.stack.enter_context(mock.patch.object(autofill.cv, "facts_text", lambda: "Made-up CV facts."))
+        self.stack.enter_context(mock.patch.object(salary, "expect", lambda job, con=None: {
+            "figure": 30000, "text": "Made-up 30,000", "basis": "made up"}))
+        self.stack.enter_context(people.as_person(people.HUMANITIES))
+        self.stack.enter_context(private_answers.saved({k: CANARY for k in autofill.PRIVATE_KEYS}))
+        con = db.connect()
+        self.addCleanup(con.close)
+        fields = [self.field(f"p{i}", label) for i, label in enumerate(PRIVATE_LABELS)]
+        fields += [self.field("n1", "Full name"), self.field("n2", "What draws you to this team?")]
+        autofill.propose(self.job, fields, {}, {}, con)
+        typed = [dict(f, value=CANARY, source="you") for f in fields if f["hid"].startswith("p")]
+        autofill.remember(con, typed, "Practice Ltd", job=self.job)
+        with fake_ai({"re:You check answers": '{"wrong": []}'}, default='{"answers": []}') as fake:
+            autofill.ask_model(self.job, fields, {}, con)
+            autofill.choose_control(self.job, {"title": "Jobs", "url": "https://jobs.example/1", "controls": [
+                {"name": label} for label in PRIVATE_LABELS] + [{"name": "Apply now"}]})
+        sent = self.sent(fake)
+        self.assertIn("Marnie Quillfeather", sent)
+        self.assertNotIn(CANARY, sent)
+        for label in PRIVATE_LABELS:
+            self.assertNotIn(label, sent)
 
     def test_the_test_invitation_todo_says_nothing_about_private_answers(self):
         con = db.connect()
