@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""A made-up Claude Code command line for tests; it never reaches the network or a model.
+
+Covers `-p --output-format json` (system prompt from `--system-prompt-file` or `--system-prompt`, user prompt
+on stdin), `auth status`, `auth login`, `--version` and `install`. `FAKE_CLAUDE_MODE` picks the behaviour:
+ok | signed_out | limited | limited_at | free_plan | slow | garbage. Every call is appended to
+`FAKE_CLAUDE_LOG` as one JSON line, with the system prompt file's path, whether it existed and its text.
+`FAKE_CLAUDE_STATE` is a file whose presence means "signed in" for `auth status`; `auth login` makes it.
+"""
+import json
+import os
+import sys
+import time
+
+VERSION = "2.1.293 (Claude Code)"
+SLOW_S = float(os.environ.get("FAKE_CLAUDE_SLOW_S", "30"))
+LOGIN_S = float(os.environ.get("FAKE_CLAUDE_LOGIN_S", "0.2"))
+MESSAGES = {
+    "signed_out": "Not logged in - Please run /login",
+    "limited": "Claude AI usage limit reached.",
+    "limited_at": "You've hit your usage limit - resets 3pm (Europe/London)",
+    "free_plan": "Claude Code is not available on your plan. Upgrade to Pro or Max.",
+}
+
+
+def log(entry):
+    path = os.environ.get("FAKE_CLAUDE_LOG")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+
+
+def signed_in():
+    state = os.environ.get("FAKE_CLAUDE_STATE")
+    if state:
+        return os.path.exists(state)
+    return os.environ.get("FAKE_CLAUDE_MODE", "ok") != "signed_out"
+
+
+def value(args, flag):
+    return args[args.index(flag) + 1] if flag in args and args.index(flag) + 1 < len(args) else None
+
+
+def main(args):
+    mode = os.environ.get("FAKE_CLAUDE_MODE", "ok")
+    if args[:1] == ["--version"]:
+        print(VERSION)
+        return 0
+    if args[:2] == ["auth", "status"]:
+        ok = signed_in()
+        print(json.dumps({"loggedIn": ok, "email": "robin.example@example.com" if ok else None,
+                          "subscriptionType": os.environ.get("FAKE_CLAUDE_PLAN", "pro") if ok else None}))
+        return 0 if ok else 1
+    if args[:2] == ["auth", "login"]:
+        time.sleep(LOGIN_S)
+        state = os.environ.get("FAKE_CLAUDE_STATE")
+        if state:
+            open(state, "w").close()
+        print("Signed in.")
+        return 0
+    if args[:1] == ["install"]:
+        for line in ("Checking installation...", "Installing Claude Code native build...", "Claude Code installed."):
+            print(line, flush=True)
+        return 0
+    stdin = sys.stdin.read()
+    system_file = value(args, "--system-prompt-file")
+    system = value(args, "--system-prompt")
+    exists = bool(system_file and os.path.exists(system_file))
+    if exists:
+        with open(system_file, encoding="utf-8") as f:
+            system = f.read()
+    log({"argv": args, "stdin": stdin, "system_file": system_file, "system_file_existed": exists, "system": system,
+         "cwd": os.getcwd(), "mode": mode})
+    if "-p" not in args:
+        print("this fake only answers -p calls", file=sys.stderr)
+        return 2
+    if mode == "slow":
+        time.sleep(SLOW_S)
+    if mode == "garbage":
+        print("<html>not what Hal expects</html>")
+        return 0
+    if mode in MESSAGES and not (mode == "signed_out" and signed_in()):
+        print(json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": MESSAGES[mode]}))
+        return 1
+    reply = os.environ.get("FAKE_CLAUDE_REPLY", "ready")
+    print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": reply}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
