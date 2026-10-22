@@ -50,8 +50,104 @@ Each version has two parts. "What's new" is in plain words and is shown on the U
   part-time or fixed-term job you did not choose costs a few points instead of being hidden.
 - `python -m jobhunt import` moves your data from the old checkout into Hal Employment's own folder, with a
   dry run first and `--undo` to go back; `migrate` and `backup` update and save the database by hand.
+- The daily screens are in the new app: Home, Jobs, Applications, Documents, Messages, Your record, Activity
+  and Settings. `jobhunt open` opens the new app; Classic stays at `/classic/` for My CV.
+- Home lists what needs you today, most urgent first (applications waiting for you, interview and test
+  emails, documents to make again, work Hal could not finish, your to-dos), then new matches, this week's
+  numbers, your goal and what Hal did today, each line with Why?
+- Jobs: Matches and Saved with Sort, place, working pattern and kind filters, and J, K, A, S and N on the
+  keyboard. Hidden lists every reason Hal hid jobs, with a way to change each in one press and "Re-check
+  jobs". The job page lists every point and the total; "This does not matter to me" takes one requirement
+  out of that job's score. "Not for you?" keeps your reason, with Undo. Saving a job with a closing date
+  adds a to-do two days before it closes. "Add one advert" reads an advert from its address. Your goal keeps
+  its versions, and an older one can be restored.
+- Applications: a board (Getting ready, Form filled, Sent, Interview, Offer) and a page for each application
+  with four steps. Documents come first; you check and edit them and press "Approve and fill in the form".
+  The Form step marks every answer "Fine" or "Check this" and says where it came from. Hal says the same
+  words in its own window and through the browser helper, and on the last page you press Submit yourself.
+  "I sent it myself" and the site's thanks move it to Sent with a follow-up date. Discarding keeps your
+  reason.
+- Every application has its own numbered folder, `Documents/Hal Employment/Applications/0412 Company -
+  Title`, holding exactly what you approved. Documents made before this version move into these folders
+  once, by the job id in each old `pack.md`; a job that shared an old folder is marked "Documents need
+  making again" on Home.
+- Documents: each application's files with Open, Download and Copy, Download all, Open the folder (only on
+  the computer Hal runs on) and Copy-paste details for forms Hal cannot fill. New how-to: "Send an
+  application yourself".
+- Messages: the emails Hal sorted and Hal's own alerts in one list; opening one marks it read.
+- Activity: everything Hal did, by day, with "Why and what", Undo where a change can be undone, an area
+  filter and Show earlier.
+- Your record: what is in the folder, Ask your record (with the files each fact came from), drop files in to
+  add them, and a download for every file. The record is searched by words with no AI needed, or by meaning
+  when the AI on this computer answers. Files in your record's Private folder are never sent to the AI.
+- Settings: every setting, with search, "Changed" and Reset, "Restart Hal" and "Re-check N jobs" when a
+  change needs them. Is Hal working? with a Fix button per check and a help file with your details taken
+  out. Privacy and data: where your data is, what leaves this computer, a zip of everything (no passwords,
+  keys or private answers) and Delete everything, which keeps Hal's program files and your record. Hal's
+  instructions to the AI can be read and changed under Advanced.
+- Hal runs its own schedule: searches, email checks, the daily summary, reading your record, a nightly backup
+  and a tidy. Every run shows in Activity with Stop. A missed search runs once when Hal starts. Pause stops
+  searches and the summary; email checks carry on. Your old `jobhunt-*` timers keep running their jobs while
+  they are on, and Hal's schedule skips those, so nothing runs twice.
+- "Start Hal when the computer starts" works on Windows and Linux. Pop-ups and phone alerts follow your
+  settings and quiet hours.
+- Hal's instructions to the AI name no one: your name, studies and the roles you want come from your
+  settings. Forms are filled from your settings. A salary, start date or notice answer is kept for that job
+  only, and a "why us" answer or an essay is never reused. A box for a code a site emails you is never filled
+  from earlier answers or by the AI.
+- The daily summary goes only to one address of your own. Job sites see "HalEmployment/<version>" and never
+  your email address. Job sites are searched in the places of your goal.
+- Hal draws your CV and letter itself and reads PDFs itself, so poppler is no longer needed; accented names
+  stay as you write them, and a CV builds without module marks or a website folder. A cover letter's header
+  matches the CV sent with it.
+- The owner's Hal add-on (only with "Use my Hal setup"): the Pipeline note, spoken urgent alerts, Hal's
+  models as AI choices, a copy of each drafted pack in the Applications folder you choose, and the `/jobs`
+  command written from a template that names no one.
 
 ### Developer notes
+
+The schedule and platform layer, identity from settings, the record and PDFs, documents, Home, Messages,
+Activity, applications, jobs and the Settings page (2026-10-23).
+
+- Schedule and platform: `core/platform/` (`current()`, browsers, app window, start at login, hidden
+  and detached children, `retire_legacy_timers(dry_run)` and `restore_legacy_timers()`), `core/scheduler.py`
+  and `core/builtin_schedule.py` (jobs as persisted actions; a job whose old timer is enabled is skipped),
+  `core/schedule_routes.py` (pause, restart, schedule, retire timers), `core/health.py` (`Check`,
+  `CheckResult`, `Fix`, `run_all`, `problem_count`), `notify.py` and `vault.py` on settings, and the Hal
+  add-on in `jobhunt/addons/hal/`. `hal-commands/` is gone. `import --retire-timers` now runs.
+- Identity: 14 prompt files under `ai/prompts/` filled by `pack.person()` from `you.*` and the goal;
+  `autofill.profile()` from `you.*`; saved answers only in `answers2` with a scope; `tasks.after_sent`;
+  `digest.recipient`; the inbox address and password from settings and secrets; `tests/support/people.py`
+  (three made-up people with LEAKS lists) and `tests/test_prompts_neutral.py`.
+- Record and PDFs: `pdfdraw.py` (Hal's PDF writer), `cvstudio/pdfread.py` on pypdfium2,
+  `scripts/dev/compare_pdf_readers.py`; `record.py` BM25 search with optional search by meaning and private
+  folders kept from the AI; `jobhunt/evidence/` (routes, `record.sync` and `record.ask` kinds, health check);
+  `cv.site()` reads the imported website CV. `coursework.py` is gone.
+- Documents, Home, Messages, Activity: `docs/folders.py`, `docs/files.py`, `docs/relayout.py` (data
+  task `docs.relayout_packs`), `core/home_routes.py` (`GET /home`, merged from every `home.py`; lower
+  `urgency` first), `jobhunt/mail/` (`mail.check`, `notify.digest`), `stats.week`, and the four pages.
+- Applications: `apply/actions.py` (the approval rules and the `docs.prepare` and `apply.*` kinds),
+  `apply/routes.py`, `apply/queries.py` (board, application page), `apply/home.py`, `apply/search.py`;
+  Classic's slow routes start actions. See [docs/dev/architecture.md](docs/dev/architecture.md).
+- Jobs: `find/routes.py`, `find/feedback.py`, `find/job_actions.py`, `find/goal_routes.py`,
+  `find/home.py`, `find/search.py`, and the Jobs and job pages.
+- Settings: `core/health_routes.py`, `core/helpfile.py`, `core/privacy_routes.py` and
+  `core/privacy_actions.py`, the Settings page and its panels.
+- Fixes joining the parts: the importer and Classic record tests run on the real stores and kinds (both stubs
+  are gone); one `GET /home`, with the core's paused and move-data items on Home's urgency scale; the record
+  check is a `health.Check`; a health Fix may name a POST route (`{"post": path}`), and Pause in Settings
+  posts `/status/pause`; `privacy.export` is found by `runner.load_kinds()`; Delete everything works for a
+  home inside a worktree; the base CV folder is read live and `/pages` no longer falls back to poppler; a CV
+  with no title can be tailored; each letter is drawn with the CV sent with it; old pack folders are found
+  through `pack.PACKS`; drafted packs are copied into the add-on's Applications folder; `after_submit` is
+  gone; course notes come only from the record; `jobhunt open` no longer sends Classic; the board list is read
+  from the import's copy; job sites search the goal's places; the fake server answers every built page
+  (`MADE_UP_PAGES`), and the shell tests poll the rail and title from Python. The `pack` golden prints the
+  numbered application folder.
+- Repo clean-up: `config.toml`, `boards.toml`, `companies.txt` and
+  `excluded-companies.txt` are deleted (the import copied them); the test fixtures name made-up universities,
+  cities and degrees. `check_personal.py` gains `--tree` and `--base REV`, and `checkpoint.sh` runs it in both
+  modes; it prints nothing on this tree.
 
 Settings, actions, AI, job finding, applying and the import (2026-10-22). How the pieces work is in
 [docs/dev/architecture.md](docs/dev/architecture.md).
