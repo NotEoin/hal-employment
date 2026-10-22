@@ -1,3 +1,3 @@
 $ jobhunt pack sorrel-ready --no-web
 lever:sorrel-ready: drafting...
-  <home>/packs/sorrel-payments-software-engineer-graduate/pack.md
+  <home>/documents/Applications/0001 Sorrel Payments - Software Engineer, Graduate/pack.md
