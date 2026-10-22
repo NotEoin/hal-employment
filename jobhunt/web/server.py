@@ -27,7 +27,6 @@ from .. import (
     db,
     documents,
     extension,
-    pack,
     record,
     replenish,
     stats,
@@ -118,7 +117,7 @@ __all__ = [
     "RECORD_EVERY",
     "RECORD_SYNC",
     "REVIEW",
-    "SERVABLE",
+    "SERVABLE",  # noqa: F822 - resolved by the module __getattr__ below (PEP 562)
     "STATIC",
     "WAIT_FOR_YOU",
     "WATCHING",
