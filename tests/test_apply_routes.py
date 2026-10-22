@@ -209,6 +209,27 @@ class Routes(unittest.TestCase):
         self.assertEqual(r.headers["Content-Disposition"], f'inline; filename="{naming.file_name("cv")}"')
         self.assertNotIn("made-up-cv", r.headers["Content-Disposition"])
 
+    def test_a_pdf_the_reader_cannot_open_is_not_found_rather_than_an_error(self):
+        import sys
+        import types
+
+        import jobhunt.cvstudio as cvstudio
+
+        class Unreadable(Exception):
+            pass
+
+        def page_png(pdf, number, scale=2.0):
+            raise Unreadable("not a PDF")
+
+        fake = types.SimpleNamespace(Unreadable=Unreadable, page_png=page_png)
+        pdf = self.world.root / "broken.pdf"
+        pdf.write_bytes(b"not a pdf")
+        with mock.patch.dict(sys.modules, {"jobhunt.cvstudio.pdfread": fake}), \
+                mock.patch.object(cvstudio, "pdfread", fake, create=True), \
+                mock.patch("jobhunt.web.server.SERVABLE", [self.world.root.resolve()], create=True):
+            r = self.c.get(f"/pages?path={quote(str(pdf))}&page=1")
+        self.assertEqual(r.status, 404, r.text)
+
 
 class Providers(unittest.TestCase):
     """What the Applications area adds to Home and to Ctrl K."""

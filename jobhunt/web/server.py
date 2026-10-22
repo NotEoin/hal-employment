@@ -229,7 +229,10 @@ def _page_png(path: Path, page: int) -> bytes:
     except ImportError:
         pdfread = None
     if pdfread is not None:
-        return pdfread.page_png(path, page, PAGE_SCALE)
+        try:
+            return pdfread.page_png(path, page, PAGE_SCALE)
+        except getattr(pdfread, "Unreadable", ValueError) as e:  # the reader's own error, not an OSError
+            raise ValueError(f"cannot read {path.name}: {e}") from e
     # Without Hal's PDF reader, poppler draws it as before.
     out = subprocess.run(["pdftoppm", "-png", "-r", "160", "-f", str(page), "-l", str(page), str(path)],
                          capture_output=True, timeout=30, check=False)
