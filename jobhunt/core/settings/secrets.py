@@ -256,6 +256,15 @@ def _file_delete(name: str) -> None:
         _write_file(data)
 
 
+def _record(name: str, verb: str) -> None:
+    """History and Activity naming the key's Settings row, never its value."""
+    from . import _registry, store
+
+    row = next((s for s in _registry().REGISTRY.values() if s.kind == "secret" and s.secret_name == name), None)
+    store.record_saved(row.key if row else name, text=f"{verb}: {row.label if row else name}",
+                       why="You changed a key or password in Settings.")
+
+
 # --- the contract ---------------------------------------------------------------------------------------
 
 def put(name: str, value: str) -> str:
@@ -274,6 +283,7 @@ def put(name: str, value: str) -> str:
             _call(lambda: kr.set_password(SERVICE, name, value))
             if _call(lambda: kr.get_password(SERVICE, name)) == value:
                 _file_delete(name)
+                _record(name, "Saved")
                 return "keyring"
             log.warning("the keyring did not keep %s; saving it in the protected file", name)
         except KeyringUnavailable as e:
@@ -281,6 +291,7 @@ def put(name: str, value: str) -> str:
     _file_put(name, value)
     if _file_get(name) != value:
         raise RuntimeError(f"Hal could not save {name}: the saved copy did not read back.")
+    _record(name, "Saved")
     return "file"
 
 
@@ -314,6 +325,7 @@ def delete(name: str) -> None:
         except KeyringUnavailable as e:
             log.warning("could not remove %s from the keyring (%s)", name, e)
     _file_delete(name)
+    _record(name, "Forgot")
 
 
 def status(name: str) -> str:

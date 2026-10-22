@@ -26,6 +26,7 @@ from .. import paths
 YES_NO = ("Yes", "No")
 YES_NO_PNTS = ("Yes", "No", "Prefer not to say")
 TABLE = "applicant"
+SETTING = "you.private"     # the Settings row these answers belong to
 FILE_MODE = 0o600
 MAX_ANSWER_CHARS = 2000     # far longer than any form's box for these questions
 GUARD_MIN_CHARS = 8         # shorter free text is too common to search prompts for
@@ -212,23 +213,10 @@ def clear(key: str) -> None:
 
 
 def _record(text: str) -> None:
-    """An Activity row with no words of any answer, once the database has the table."""
-    import sqlite3
+    """History and an Activity row with no words of any answer."""
+    from . import store
 
-    from ... import db
-    from .. import clock
-
-    con = db.connect()
-    try:
-        with con:
-            con.execute("""INSERT INTO activity (at, area, kind, icon, tone, text, why)
-                           VALUES (?, 'settings', 'private.saved', 'shield', 'info', ?, ?)""",
-                        (clock.iso(), text, "You changed your private answers in Settings."))
-    except sqlite3.OperationalError as e:
-        if "no such table" not in str(e):
-            raise
-    finally:
-        con.close()
+    store.record_saved(SETTING, text=text, why="You changed your private answers in Settings.")
 
 
 def value_for_form(key: str) -> str | None:

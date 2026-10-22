@@ -236,6 +236,26 @@ def write(con: sqlite3.Connection, key: str, value: Any, *, default: Any, by: st
     return change(con, key, value, default=default, by=by, kind=kind, session_id=session_id, at=at).old
 
 
+def record_saved(key: str, *, text: str, why: str, by: str = "you", session_id: str | None = None) -> None:
+    """History and Activity for a secret or private answer that was saved or cleared, with no value in either."""
+    from .. import clock
+
+    con = _connect()
+    try:
+        with transaction(con):
+            at = clock.iso()
+            activity_id = _insert_activity(con, Activity(text=text, why=why, icon="shield"), at, session_id)
+            con.execute("INSERT INTO settings_history (at, key, old, new, by, session_id, activity_id) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)", (at, key, SAVED, SAVED, by, session_id, activity_id))
+            con.execute("INSERT OR IGNORE INTO meta (k, v) VALUES ('settings_rev', '0')")
+            con.execute("UPDATE meta SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT) WHERE k = 'settings_rev'")
+    except sqlite3.OperationalError as e:
+        if not _missing_table(e):
+            raise
+    finally:
+        con.close()
+
+
 def history(con: sqlite3.Connection, key: str | None = None, limit: int = 50) -> list[dict]:
     """The newest changes first, for one key or all; secret and private values read "(saved)"."""
     sql = f"SELECT {', '.join(HISTORY_COLUMNS)} FROM settings_history"

@@ -106,7 +106,7 @@ class Secrets(unittest.TestCase):
     def test_a_home_override_never_reaches_the_system_keyring(self):
         self.assertIsNone(secrets._keyring())
 
-    def test_secret_values_never_reach_the_database(self):
+    def test_saving_a_secret_is_in_history_without_its_value(self):
         self.keyring(None)
         secrets.put("email.app_password", APP_PASSWORD)
         con = db.connect()
@@ -115,6 +115,13 @@ class Secrets(unittest.TestCase):
         finally:
             con.close()
         self.assertNotIn(APP_PASSWORD, dump)
+        con = db.connect()
+        try:
+            history = store.history(con, "email.app_password")
+        finally:
+            con.close()
+        self.assertEqual([(h["old"], h["new"]) for h in history], [("(saved)", "(saved)")])
+        self.assertIsNotNone(history[0]["activity_id"])
 
     def test_an_unknown_secret_name_is_refused(self):
         with self.assertRaises(KeyError):
