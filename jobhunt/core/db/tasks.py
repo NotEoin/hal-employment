@@ -8,8 +8,8 @@ starts as a persisted background action once migration N has applied. State live
 The decorator, the registry and the state helpers came first; the runner below registers each
 task as an action kind of the same name (area system, priority 2) and runs the due ones one after another
 in migration order, on one background thread, because a later task may rely on an earlier one. Tasks are
-found in modules named `tasks.py` or `*_tasks.py`; the old to-do list `jobhunt.tasks` shares the name and is
-skipped.
+found in modules named `tasks.py`, `*_tasks.py`, `actions.py` or `*_actions.py`, and in the modules
+listed outside that pattern (`TASK_MODULES`); the old to-do list `jobhunt.tasks` shares the name and is skipped.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ STATES = ("pending", "running", "done", "error")
 DONE = "done"
 WHY = "Hal is updating its records after an update"
 NOT_TASK_MODULES = {"jobhunt.tasks"}    # the to-do list, older than data tasks
+TASK_MODULES = ("jobhunt.core.answers_rescope",)   # `answers.rescope` lives beside the import it serves
 
 
 @dataclass(frozen=True)
@@ -95,10 +96,12 @@ def mark(con: sqlite3.Connection, task: DataTask, new_state: str, detail: str | 
 def load() -> list[DataTask]:
     """Imports every module that may register data tasks and makes each task an action kind."""
     import importlib
+    import importlib.util
 
     from jobhunt.core import plugins
 
-    for name in plugins.names("tasks"):
+    extra = [m for m in TASK_MODULES if importlib.util.find_spec(m) is not None]
+    for name in dict.fromkeys([*plugins.names("tasks"), *plugins.names("actions"), *extra]):
         if name in NOT_TASK_MODULES or name == __name__:
             continue
         try:

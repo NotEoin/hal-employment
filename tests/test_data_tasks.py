@@ -1,7 +1,11 @@
 """Data tasks: each runs once as a background action after its migration, a failed one is tried
 again next time, and their state is in the `data_tasks` table.
 """
+import sys
+import tempfile
+import textwrap
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import support  # noqa: F401 - puts the run in a temporary home before jobhunt is imported
@@ -63,6 +67,24 @@ class DataTasks(unittest.TestCase):
         self.assertEqual(self.runs, ["test.again", "test.again"])
         with self.assertRaises(LookupError):
             tasks.run_now("test.not_a_task")
+
+    def test_a_task_registered_in_an_area_actions_module_is_found(self):
+        folder = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (folder / "made_up_area_actions.py").write_text(textwrap.dedent("""
+            from jobhunt.core.db import tasks
+
+            @tasks.data_task("test.from_module", after=4, title="Tidied the made-up area")
+            def tidy(ctx):
+                ctx.changed("Nothing needed tidying.")
+        """), encoding="utf-8")
+        self.enterContext(mock.patch.object(sys, "path", [str(folder), *sys.path]))
+        self.addCleanup(sys.modules.pop, "made_up_area_actions", None)
+        self.addCleanup(tasks.TASKS.pop, "test.from_module", None)
+        self.addCleanup(runner.forget, "test.from_module")
+        names = {"tasks": [], "actions": ["made_up_area_actions"]}
+        with mock.patch.object(plugins, "names", lambda kind: names[kind]):
+            done = tasks.run_due(self.con)
+        self.assertEqual([(d["kind"], d["state"]) for d in done], [("test.from_module", "done")])
 
     def test_the_old_to_do_list_is_not_loaded_as_data_tasks(self):
         self.assertIn("jobhunt.tasks", tasks.NOT_TASK_MODULES)
