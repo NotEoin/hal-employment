@@ -54,7 +54,7 @@ class AddOn(unittest.TestCase):
     def test_the_jobs_command_template_names_no_one(self):
         template = hal.TEMPLATE.read_text()
         self.assertEqual(set(re.findall(r"\{(\w+)\}", template)), {"first_name", "vault_note", "code_dir"})
-        for word in ("City", "London", "8737", "vaults/"):
+        for word in ("Prefer ", "8737", "vaults/", " his "):  # wording of the old, personal command
             self.assertNotIn(word, template)
         settings.set("you.name", "Robin Ashworth")
         self.switch_on()
