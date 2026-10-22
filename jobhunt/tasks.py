@@ -4,16 +4,18 @@ Reads the emails table that `jobhunt mail` fills. Each email needing action
 (assessment, interview, offer, a person writing) becomes one to-do, ranked
 above everything else, and one alert. Idempotent: run it as often as needed.
 
-When the applicant's private answers (data/private.toml) ask for adjustments, an assessment
-invitation also brings a to-do to ask for them before starting: timed tests rarely allow
-extra time once begun.
+Every assessment invitation also brings the same neutral to-do, to read it before starting, because
+timed tests rarely change once begun. It is the same for everyone, whatever private answers are saved,
+so its presence says nothing about them; it names no private answer or file.
 """
 from . import db
-from .config import private
+from .config import private  # noqa: F401 - tests/support/legacy.py and world.py patch this name
 from .gmail import ADDRESS
 
 # How far back a first run looks; older invitations have long expired.
 LOOKBACK = "-21 days"
+CHECK_TITLE = "Check the test invitation for anything you want to ask before you start"
+CHECK_DETAIL = "Read the invitation before you begin: a timed test rarely changes once it has started."
 
 ACTIONS = {
     # kind: (priority, title template, alert level)
@@ -49,12 +51,10 @@ def sync(con) -> list[int]:
             made.append(todo)
             role = e["job_title"] or e["role"] or ""
             db.alert(con, level, title, f"{role}\n{e['subject'] or ''}".strip(), e["job_id"])
-        if e["kind"] == "assessment" and private().get("adjustments"):
-            asked = db.add_todo(con, "assessment", f"Ask {company} for extra time before starting the test",
-                                job_id=e["job_id"], url=thread_url(e["thrid"]), priority=0,
-                                detail="Reply to the invitation, or use its adjustments link, before you begin. "
-                                       "What to ask for is in your private answers (data/private.toml).",
-                                source=f"adjust:{e['msgid']}")
+        if e["kind"] == "assessment":
+            # The source keeps the old prefix, so an invitation that already had its to-do gets no second one.
+            asked = db.add_todo(con, "assessment", CHECK_TITLE, job_id=e["job_id"], url=thread_url(e["thrid"]),
+                                priority=0, detail=CHECK_DETAIL, source=f"adjust:{e['msgid']}")
             made += [asked] if asked else []
     con.commit()
     return made

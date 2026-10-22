@@ -53,6 +53,10 @@ SOMEONE = re.compile(r"look(s|ing)? after|care (for|of)\b|\bcarers?\b|caring|car
 NEURO = [re.compile(p, re.I) for p in (r"adhd|attention deficit", r"neuro", r"specific learning|learning (difference|difficult)",
                                        r"cognitive|developmental")]
 HEALTH = ("disability", "disability_type", "guaranteed_interview", "adjustments")
+# Every key `private_question` can return; none of them is ever in the profile, a prompt or a saved answer.
+PRIVATE_KEYS = (*HEALTH, "carer")
+CARED_FOR = re.compile(r"care leaver|been in care|cared for", re.I)
+YOURSELF = "Answer this yourself"
 # Labels longer than this are paragraphs with a question in them; a keyword match there proves little.
 RULE_LABEL = 170
 # A box asking for a fact about Firstname has a short label; a longer one is a question for the model.
@@ -93,9 +97,51 @@ def profile() -> dict:
         "office": "Yes", "relocate": "Yes",
         "diversity": "Prefer not to say",
     }
-    p.update(CONFIG.get("applicant", {}))
-    p.update({k: v for k, v in private().items() if k in HEALTH})
+    p.update({k: v for k, v in CONFIG.get("applicant", {}).items() if k not in PRIVATE_KEYS})
     return p
+
+
+def private_question(field: dict) -> str | None:
+    """The private key a form question asks about ("disability", "disability_type", "guaranteed_interview",
+    "adjustments", "carer"), or None.
+
+    Built from the DISABILITY, ADJUST, SCHEME, WHICH and CARER patterns applied to the label and, for ADJUST,
+    the context, with the NOT_ASKED exclusion of `_health`; a disability question about someone the person
+    cares for or lives with (SOMEONE) maps to "carer". Decides by the question only, never by whether an
+    answer is saved, so every path (the form, the review, the AI, saved answers) agrees.
+    """
+    label, context = field.get("label") or "", field.get("context") or ""
+    if SCHEME.search(label):
+        return "guaranteed_interview"
+    if ADJUST.search(label) or (DETAILS.search(label) and ADJUST.search(context)):
+        return "adjustments"
+    if DISABILITY.search(label) and not NOT_ASKED.search(label):
+        if SOMEONE.search(label):
+            return "carer"
+        yes_no = any(YES.search(o) for o in field.get("options") or [])
+        return "disability_type" if WHICH.search(label) and not yes_no else "disability"
+    if CARER.search(label) and not CARED_FOR.search(label):
+        return "carer"
+    return None
+
+
+def _private(key: str) -> str | None:
+    """A saved private answer, for typing into the form only; never for a prompt, a log or the profile."""
+    try:
+        from .core.settings.private import value_for_form
+    except ModuleNotFoundError as e:
+        if e.name != "jobhunt.core.settings.private":
+            raise
+        # Without the private answers store the answers are read from the old answers file.
+        value = private().get(key)
+        if value in (None, "") and key == "carer":
+            value = CONFIG.get("applicant", {}).get("carer")
+        return value or None
+    return value_for_form(key) or None
+
+
+def _private_answers() -> dict:
+    return {k: v for k in PRIVATE_KEYS if (v := _private(k))}
 
 
 DIVERSITY = re.compile(
@@ -239,21 +285,25 @@ def _diversity(f: dict, prof: dict) -> bool:
     return False
 
 
-def _health(f: dict, prof: dict) -> bool:
+def _health(f: dict, prof: dict | None = None) -> bool:
     """Answers a disability, guaranteed-interview or adjustments question from the private answers; True if settled.
 
-    Questions on a diagnosis, a registered status or how much a disability limits the applicant
-    are left for them; questions about someone they care for are not theirs at all.
+    Only the answer to the question `private_question` names is used. Questions on a diagnosis, a registered
+    status or how much a disability limits the applicant are left for them; questions about someone they
+    care for are not theirs at all.
     """
+    asked = private_question(f)
+    if asked not in HEALTH:
+        return False
+    prof = _private_answers()
     label, kind, options = f.get("label") or "", f["kind"], f.get("options") or []
-    context = f.get("context") or ""
     listed = kind in ("select", "radio", "combobox", "checkgroup") and bool(options)
-    if SCHEME.search(label) and prof.get("guaranteed_interview"):
+    if asked == "guaranteed_interview" and prof.get("guaranteed_interview"):
         key, answer = "guaranteed_interview", True if kind == "checkbox" else _fit(f, prof["guaranteed_interview"], [YES])
-    elif (ADJUST.search(label) or (DETAILS.search(label) and ADJUST.search(context))) and prof.get("adjustments"):
+    elif asked == "adjustments" and prof.get("adjustments"):
         written = kind in ("text", "textarea") and not listed
         key, answer = "adjustments", prof["adjustments"] if written else True if kind == "checkbox" else _fit(f, "Yes", [YES])
-    elif DISABILITY.search(label) and not SOMEONE.search(label) and not NOT_ASKED.search(label) and prof.get("disability"):
+    elif asked in ("disability", "disability_type") and prof.get("disability"):
         yeses = [o for o in options if YES.search(o)]
         if OWN_CALL.search(label) or len(yeses) > 1:
             # "Yes, limited a lot" or "a little" is a judgement only the applicant can make.
@@ -270,14 +320,15 @@ def _health(f: dict, prof: dict) -> bool:
         return False
     if answer in (None, []):
         return False
-    f.update(value=answer, source=f"private: {key}", note="from your private answers (data/private.toml); check it")
+    f.update(value=answer, source=f"private: {key}", note="from your private answers; check it")
     return True
 
 
-def _carer(f: dict, prof: dict) -> bool:
-    """Answers a question on caring for someone with the applicant's `carer` answer; True if settled."""
+def _carer(f: dict, prof: dict | None = None) -> bool:
+    """Answers a question on caring for someone with the applicant's private `carer` answer; True if settled."""
     label, options = f.get("label") or "", f.get("options") or []
-    if not prof.get("carer") or not CARER.search(label) or re.search(r"care leaver|been in care|cared for", label, re.I):
+    prof = {"carer": _private("carer")}
+    if not prof["carer"] or not CARER.search(label) or CARED_FOR.search(label):
         return False
     no = NO.search(prof["carer"])
     if f["kind"] == "checkbox":
@@ -289,7 +340,7 @@ def _carer(f: dict, prof: dict) -> bool:
         answer = prof["carer"]
     if answer in (None, []):
         return False
-    f.update(value=answer, source="profile: carer")
+    f.update(value=answer, source="private: carer", note="from your private answers; check it")
     return True
 
 
@@ -352,6 +403,8 @@ def remember(con, fields: list[dict], company: str = "") -> int:
         value = f.get("value")
         if f.get("source") != "you" or value in (None, "", []) or f["kind"] == "file" or f.get("type") == "password":
             continue
+        if private_question(f) is not None:
+            continue   # what the person types into a private question is never kept
         question = _key(f, company)
         if len(question) < 3:
             continue
@@ -466,7 +519,11 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
             else:
                 f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
             continue
-        if _health(f, prof) or _carer(f, prof):
+        if private_question(f) is not None:
+            if not (_health(f) or _carer(f)) or f.get("value") is None:
+                # Never guessed, never recalled, never sent to the AI.
+                note = f.get("note") if f.get("source") == "you" and f.get("note") else YOURSELF
+                f.update(value=None, source="you", note=note)
             continue
         recalled = _recall(con, f, job["company"])
         if recalled not in (None, []):
@@ -529,7 +586,8 @@ def _facts(job, docs: dict, con) -> str:
             parts.append("Earlier applications to this employer: "
                          + "; ".join(f"{r['title']} ({r['status']})" for r in before))
         told = [(r["label"], db.json_value(r["answer"]))
-                for r in con.execute("SELECT label, answer FROM answers ORDER BY updated DESC LIMIT 200")]
+                for r in con.execute("SELECT label, answer FROM answers ORDER BY updated DESC LIMIT 200")
+                if private_question({"label": r["label"]}) is None]
         short = [(q, a) for q, a in told if not (isinstance(a, str) and len(a) > ESSAY)][:60]
         essays = [(q, a) for q, a in told if isinstance(a, str) and len(a) > ESSAY][:2]
         if short:
@@ -570,6 +628,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
     if not problems and not gpu.busy():
         _review(job, fields)
     open_fields = [f for f in fields if f["kind"] != "file" and f.get("type") != "password"
+                   and private_question(f) is None
                    and (f["hid"] in problems or (f.get("value") in (None, "", []) and not f.get("skip")))]
     if not open_fields:
         return 0, None
@@ -631,6 +690,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
 def _review(job, fields: list[dict]) -> None:
     """Has the model look over the keyword answers; any it says miss the question are cleared for it to answer."""
     chosen = [f for f in fields if not f.get("reviewed") and not f.get("skip") and f["kind"] != "file"
+              and private_question(f) is None
               and str(f.get("source", "")).startswith(REVIEWED) and f.get("value") not in (None, "", [])]
     if not chosen:
         return
@@ -660,7 +720,8 @@ another service (LinkedIn, Indeed, Google), shares the job, or leaves for an unr
 
 def choose_control(job, found: dict) -> str:
     """Asks the model which control on a page without a recognised Apply button leads to the form."""
-    names = list(dict.fromkeys(c["name"] for c in found.get("controls", [])))
+    names = list(dict.fromkeys(c["name"] for c in found.get("controls", [])
+                               if private_question({"label": c.get("name")}) is None))
     if not names or gpu.busy():
         return ""
     prompt = (f"Job: {job['title']} at {job['company']}\nPage title: {found['title']}\n"
