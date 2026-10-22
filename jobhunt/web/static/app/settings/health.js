@@ -16,7 +16,8 @@ function CheckRow({ c, reload }) {
     setBusy(true);
     try {
       // run() follows a started action to its end; a Fix that names a page answers with its route instead
-      const r = await run("/health/" + encodeURIComponent(c.id) + "/fix", {});
+      let r = await run("/health/" + encodeURIComponent(c.id) + "/fix", {});
+      if (r && r.post) r = await run(r.post, {});   // the core's checks name a route to press instead of a kind
       if (r && r.route) go(r.route);
       else if (r && r.state && r.state !== "done") toast(r.error || "That did not work. Hal kept the details in Activity.");
     } catch (e) { toast(e.message); } finally { setBusy(false); reload(); }

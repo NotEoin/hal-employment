@@ -42,6 +42,8 @@ CHECKS = [
     check("test.sites", "Job sites", lambda: result(False, "warn", "A made-up site has no key.",
                                                     Fix("Add a free key", route="settings-sites"))),
     check("test.ai", "AI", lambda: result(True, "ok", "Signed in.", Fix("Test now", action="test.health_fix"))),
+    check("test.paused", "Schedule", lambda: result(False, "warn", "Hal is paused.",
+                                                    Fix("Carry on", action="/status/pause"))),
     check("test.slow", "Slow", slow),
     check("test.broken", "Broken", broken),
 ]
@@ -63,9 +65,9 @@ class Health(unittest.TestCase):
     def test_every_check_answers_even_when_one_is_slow_or_broken(self):
         with mock.patch.object(health_routes, "CHECK_TIMEOUT_S", 0.2):
             rows = health_routes.run_checks(timeout=0.2)
-        self.assertEqual([r["id"] for r in rows], ["test.sites", "test.ai", "test.slow", "test.broken"])
-        self.assertEqual(rows[2]["text"], health_routes.SLOW_WORDS)
-        self.assertEqual(rows[3]["text"], health_routes.FAILED_WORDS)
+        self.assertEqual([r["id"] for r in rows], ["test.sites", "test.ai", "test.paused", "test.slow", "test.broken"])
+        self.assertEqual(rows[3]["text"], health_routes.SLOW_WORDS)
+        self.assertEqual(rows[4]["text"], health_routes.FAILED_WORDS)
         self.assertEqual(health_routes.worst(rows), "warn")
         self.log.exception.assert_called_once()
 
@@ -83,6 +85,8 @@ class Health(unittest.TestCase):
         reply = self.client.post("/api/v2/health/test.ai/fix").json()
         self.assertEqual(runner.wait(reply["action_id"])["state"], "done")
         self.assertEqual(self.client.post("/api/v2/health/test.none/fix").status, 404)
+        # regression: the core's checks name a POST route, which was started as an action kind and failed
+        self.assertEqual(self.client.post("/api/v2/health/test.paused/fix").json(), {"post": "/status/pause"})
 
 
 class Browsers(unittest.TestCase):

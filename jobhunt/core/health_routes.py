@@ -116,7 +116,11 @@ def health(req: Request) -> dict:
 
 @route("POST", "/api/v2/health/{check_id}/fix")
 def fix(req: Request) -> dict:
-    """Runs a check's Fix: starts its action, or names the page to open."""
+    """Runs a check's Fix: names the page to open, names the POST route to press, or starts its action kind.
+
+    The core's own checks give a POST route under /api/v2 as `action` (for example `/status/pause`); the page
+    posts it and follows the action it starts. Any other `action` is an action kind started here.
+    """
     check = next((c for c in _all_checks() if c.id == req.params["check_id"]), None)
     if check is None:
         raise NotFound("Hal has no check by that name.")
@@ -125,6 +129,8 @@ def fix(req: Request) -> dict:
         raise NotFound("This check has nothing to fix right now.")
     if row["fix"].get("route"):
         return {"route": row["fix"]["route"]}
+    if row["fix"]["action"].startswith("/"):
+        return {"post": row["fix"]["action"]}
     from . import runner
 
     return {"action_id": runner.start(row["fix"]["action"], why=f"You pressed {row['fix']['label']}",

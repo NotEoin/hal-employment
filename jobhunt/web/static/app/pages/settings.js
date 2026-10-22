@@ -25,7 +25,7 @@ const SUB = "Everything Hal does can be changed here. Most changes save straight
 const SHOWN_WORDS = new Set(["money", "times", "hours"]);  // kinds whose typed value the server rewords
 const OTHER_PANELS = { ai: AiPanel, updates: UpdatesPanel, remote: RemotePanel };
 // Buttons whose action has an API path; the rest belong to panels or to areas still being built.
-const BUTTON_PATHS = { "find.rescore": "/jobs/rescore", "ai.test": "/ai/test", "system.pause": "/system/pause",
+const BUTTON_PATHS = { "find.rescore": "/jobs/rescore", "ai.test": "/ai/test", "system.pause": "/status/pause",
   "system.quit": "/system/quit" };
 const BUTTON_WORDS = { "ai.test": "Test now" };
 const CLAUSE = /^([a-z][a-z0-9_.]*)\s*(?:(==|!=)\s*'([^']*)')?$/;
