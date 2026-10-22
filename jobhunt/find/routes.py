@@ -31,10 +31,11 @@ NEW_DAYS = 2                # a job found in the last two days carries "New"
 TOP_POINTS = 3              # point chips on a card
 BAND_STRONG, BAND_GOOD = 80, 65   # ui/controls.js Score uses the same bands
 OPEN = feedback.OPEN_STATUSES
-SORTS = {"best": "j.score DESC, j.first_seen DESC",
-         "closing": "j.closes_at IS NULL, j.closes_at ASC, j.score DESC",
-         "newest": "j.first_seen DESC, j.score DESC",
-         "pay": "COALESCE(j.pay_max, j.pay_min) IS NULL, COALESCE(j.pay_max, j.pay_min) DESC, j.score DESC"}
+# each ends in the id, so jobs with equal scores keep one order from page to page
+SORTS = {"best": "j.score DESC, j.first_seen DESC, j.id",
+         "closing": "j.closes_at IS NULL, j.closes_at ASC, j.score DESC, j.id",
+         "newest": "j.first_seen DESC, j.score DESC, j.id",
+         "pay": "COALESCE(j.pay_max, j.pay_min) IS NULL, COALESCE(j.pay_max, j.pay_min) DESC, j.score DESC, j.id"}
 PATTERN_WORDS = {"hybrid": "Hybrid", "remote": "Remote", "on-site": "On site"}
 PATTERNS = {"Hybrid": "hybrid", "Remote": "remote", "On site": "on-site"}
 SOURCE_WORDS = {"advert": "an advert you added", "email": "your email", "adzuna": "Adzuna", "reed": "Reed",

@@ -107,6 +107,15 @@ MADE_UP_BOARD = {"columns": [
                 "why": "You discarded it: too much effort"}]}
 
 
+# One job, for the Jobs pages.
+MADE_UP_JOB = {"id": "demo:1", "title": "Museum Assistant", "org": "Riverside Trust", "place": "Leeds",
+               "pattern": "Hybrid", "pay": "\u00a324,000", "pay_min": 24000, "pay_max": 24000, "closes": None,
+               "closes_in": "", "posted": "Today", "source": "Adzuna", "platform": None, "kind": "graduate_job",
+               "kind_label": "Graduate and entry-level jobs", "hours": None, "contract": None, "is_new": True,
+               "saved": False, "status": "new", "score": 72, "band": "good",
+               "top_points": [["In Leeds, your first choice of place", 10]], "reqs": None, "eligibility_line": None,
+               "application_id": None, "hidden_rule": None}
+
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
 MADE_UP_PAGES = {
@@ -130,6 +139,17 @@ MADE_UP_PAGES = {
     # Applications
     "/applications": MADE_UP_BOARD,
     "/applications/1": MADE_UP_APP,
+    # Jobs and one job
+    "/jobs": {"jobs": [MADE_UP_JOB], "counts": {"matches": 1, "saved": 0, "hidden": 0, "sources_on": 0},
+              "filters": {"places": ["Leeds"], "patterns": ["Hybrid", "Remote", "On site"], "kinds": []},
+              "cursor": None},
+    "/jobs/hidden": {"groups": [], "yours": []},
+    "/jobs/demo:1": {"job": {**MADE_UP_JOB, "advert": "A made-up advert.", "advert_saved_at": "2026-10-20T09:00:00Z",
+                             "url": None, "apply_url": None, "found_on": "Adzuna"},
+                     "points": {"base": 40, "items": [{"rule": "place_first", "label": "In Leeds, your first choice "
+                                                       "of place", "points": 10, "quote": ""}], "total": 50},
+                     "hidden": None, "reqs": None, "flags": [], "company": [], "eligibility": None,
+                     "application_id": None},
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},

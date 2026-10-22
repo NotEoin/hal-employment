@@ -1,1 +1,9 @@
 /* Rules for the jobs pages only; the page's owner adds them here, never in app.css. */
+.picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.toolbar.kinds { margin-top: -6px; }
+.job.sel { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.job .elig { margin: -4px 0 8px; }
+.hidden-group .stack .job { background: var(--sunk); }
+.bad-text { color: var(--bad); margin: 8px 0 0; }
+.advert:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 720px) { .hidden-group { flex-wrap: wrap; } .hidden-group > .row { width: 100%; } }
