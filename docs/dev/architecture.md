@@ -163,6 +163,23 @@ processes, once a second. Payloads carry ids, never private data.
 - Gate G6 (`tests/test_never_submit.py`, `tests/test_guard.py`): practice forms count posts on the server,
   in Hal's window and with the helper, and the count stays 0.
 
+## Applications: one approval flow (`apply/actions.py`, `apply/routes.py`, `apply/queries.py`)
+
+- `apply/actions.py` holds the rules as plain functions and the action kinds that do the slow work.
+  "Apply with Hal" starts `docs.prepare`. `approve_documents` keeps the person's edits, stamps
+  `docs["approved"]`, saves through `documents.save` (which rewrites the numbered application folder,
+  `docs/folders.publish`), fixes the mode, session and helper the form is filled with, and starts
+  `apply.fill`. Editing documents after a fill marks the form out of date. `discard` keeps each reason
+  apart; `restore`, `sent_myself`, `change_status` and `add_note` are the rest of the board's buttons.
+- The kinds `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`, `apply.adopt`,
+  `apply.match_tab` and `apply.look` wrap the driver, so each run has steps, Stop and an Activity row.
+- `apply/routes.py` serves the Applications routes of API v2 and only calls those rules.
+  `apply/queries.application` builds the application page: the steps, previous and next, the documents,
+  the form's fields with where each answer came from, and the Sent timeline. A private answer leaves the
+  page API only as "Filled in from your private answers".
+- Both modes show the same words for the form (`driver.form_words`), and the last page hands over as in
+  the section above. `apply/home.py` and `apply/search.py` add applications to Home and to Ctrl K.
+
 ## AI contract (`ai/base.py`, `ai/fake.py`, `ai/prompts.py`)
 
 `ChatRequest`, `ChatResult`, `Status`, `Backend`, `LLMUnavailable` (with `kind`), `Limited` and
