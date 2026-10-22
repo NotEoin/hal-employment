@@ -4,11 +4,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from support import stubs
+import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
 from jobhunt.core import plugins
-
-stubs.install()
 
 
 class Discovery(unittest.TestCase):

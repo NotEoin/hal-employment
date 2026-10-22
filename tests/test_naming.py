@@ -3,12 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from support import stubs
+import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
 from jobhunt.core import naming, paths, settings
 from jobhunt.core.settings import store
-
-stubs.install()
 
 
 class Names(unittest.TestCase):

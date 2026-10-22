@@ -4,13 +4,10 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from support import stubs
 from support.fake_ai import fake_ai
 
 from jobhunt.ai import base, prompts
 from jobhunt.ai.fake import FakeBackend
-
-stubs.install()
 
 
 def req(purpose: str = "", user: str = "A made-up advert.") -> base.ChatRequest:

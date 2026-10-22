@@ -8,13 +8,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from support import stubs
+import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
 from jobhunt import db
 from jobhunt.core import events, paths, settings
 from jobhunt.core.settings import store
-
-stubs.install()
 
 
 @contextlib.contextmanager

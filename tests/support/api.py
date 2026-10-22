@@ -18,13 +18,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from support import stubs
-
-stubs.install()
-
-from jobhunt.core import paths  # noqa: E402 - after the stubs, so the server sees them
-from jobhunt.core.settings import store  # noqa: E402
-from jobhunt.web import app, auth  # noqa: E402
+from jobhunt.core import paths
+from jobhunt.core.settings import store
+from jobhunt.web import app, auth
 
 TIMEOUT_S = 10   # every request in these tests answers at once; a hang fails the test instead
 
