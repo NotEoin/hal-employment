@@ -15,7 +15,7 @@ import sys
 from datetime import date
 
 from . import cv, db, gpu, llm, record, salary
-from .config import CONFIG, private
+from .config import CONFIG
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
              "workable": "Company careers page", "smartrecruiters": "Company careers page",
@@ -127,16 +127,8 @@ def private_question(field: dict) -> str | None:
 
 def _private(key: str) -> str | None:
     """A saved private answer, for typing into the form only; never for a prompt, a log or the profile."""
-    try:
-        from .core.settings.private import value_for_form
-    except ModuleNotFoundError as e:
-        if e.name != "jobhunt.core.settings.private":
-            raise
-        # Without the private answers store the answers are read from the old answers file.
-        value = private().get(key)
-        if value in (None, "") and key == "carer":
-            value = CONFIG.get("applicant", {}).get("carer")
-        return value or None
+    from .core.settings.private import value_for_form
+
     return value_for_form(key) or None
 
 

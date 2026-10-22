@@ -9,7 +9,6 @@ timed tests rarely change once begun. It is the same for everyone, whatever priv
 so its presence says nothing about them; it names no private answer or file.
 """
 from . import db
-from .config import private  # noqa: F401 - tests/support/legacy.py and world.py patch this name
 from .gmail import ADDRESS
 
 # How far back a first run looks; older invitations have long expired.

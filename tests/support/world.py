@@ -250,7 +250,6 @@ class World:
             mock.patch.object(config, "BOARDS_PATH", self.root / "boards.toml"),
             mock.patch.object(config, "PRIVATE_PATH", self.root / "data" / "no-private.toml"),
             mock.patch.object(config, "private", dict),
-            mock.patch.object(tasks, "private", dict),
             mock.patch.object(tasks, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "PASSWORD_FILE", self.root / "config" / "no-gmail-password"),

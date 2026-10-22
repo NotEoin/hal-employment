@@ -28,17 +28,9 @@ def _fold(text: str) -> str:
 
 
 def _values() -> list[str]:
-    """The saved free-text private answers, from the private answers store (or the old answers file without it)."""
-    try:
-        from ..core.settings.private import values_for_guard
-    except ModuleNotFoundError as e:
-        if e.name != "jobhunt.core.settings.private":
-            raise
-        # Without the private answers store the old answers file is read, so the guard never goes blind.
-        from ..config import private
+    """The saved free-text private answers, from the private answers store."""
+    from ..core.settings.private import values_for_guard
 
-        answers = private()
-        return [str(answers.get(k) or "") for k in ("disability_type", "adjustments")]
     return list(values_for_guard())
 
 

@@ -23,18 +23,17 @@ from jobhunt.web import server  # noqa: E402
 
 # An employment record that does not exist, so no test reads the real one or calls Ollama.
 record.VAULT = Path(tempfile.mkdtemp()) / "no-record"
-_SAVED = salary.itjobswatch, salary.adverts, autofill.private, tasks.private
+_SAVED = salary.itjobswatch, salary.adverts
 
 
 def setUpModule():
     """No salary research from the web or the real job database, and none of the applicant's private answers."""
     salary.itjobswatch = lambda phrase, london: None
     salary.adverts = lambda con, job, name: []
-    autofill.private = tasks.private = lambda: {}
 
 
 def tearDownModule():
-    salary.itjobswatch, salary.adverts, autofill.private, tasks.private = _SAVED
+    salary.itjobswatch, salary.adverts = _SAVED
 
 SITE = Path(__file__).resolve().parent.parent / "site"
 EXTENSION = Path(__file__).resolve().parent.parent.parent / "extension"

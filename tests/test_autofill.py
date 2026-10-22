@@ -320,7 +320,7 @@ class PrivatePaths(unittest.TestCase):
         todos = []
         for answers in ({}, {"adjustments": CANARY, "disability": "Yes"}):
             con.execute("DELETE FROM todos")
-            with settings_private.saved(answers), mock.patch.object(tasks, "private", lambda a=answers: a):
+            with settings_private.saved(answers):
                 tasks.sync(con)
             rows = con.execute("SELECT title, detail FROM todos ORDER BY priority, id")
             todos.append([(r["title"], r["detail"]) for r in rows])
