@@ -96,6 +96,14 @@ class Versions(unittest.TestCase):
         with self.assertRaises(CVError):
             store.use(job_v)
 
+    def test_the_import_warning_goes_once_the_missing_text_is_back(self):
+        _, doc = store.current()
+        doc.extras["not_found"] = ["Volunteer at a made-up archive", "Fell running"]
+        store.new_version(doc, origin="imported", what="Imported", by="baseline")
+        back = edited(store.current()[1], "Volunteer at a made-up archive, two years.")
+        store.new_version(back, origin="manual", what="You put it back", by="you")
+        self.assertEqual(store.current()[1].extras["not_found"], ["Fell running"])
+
     def test_a_document_with_problems_is_refused_with_its_reason(self):
         _, doc = store.current()
         doc.sections[1].title = ""
@@ -229,6 +237,33 @@ class Layout(unittest.TestCase):
         self.assertIsNone(store.set_layout(out["sections"], out["locked_lines"]))
         with self.assertRaisesRegex(CVError, "every section once"):
             store.set_layout(out["sections"][1:], [])
+
+
+class HomeAndSearch(unittest.TestCase):
+    """What My CV adds to Home and to Ctrl K."""
+
+    def setUp(self):
+        self.enterContext(cv_home())
+        self.con = db.connect()
+        self.addCleanup(self.con.close)
+
+    def test_home_asks_you_to_check_text_the_import_did_not_find(self):
+        from jobhunt.cvstudio import home
+
+        self.assertEqual(home.needs(self.con), [])
+        self.assertEqual(self.con.execute("SELECT count(*) FROM cv_versions").fetchone()[0], 0)
+        _, doc = store.current()
+        doc.extras["not_found"] = ["Volunteer at a made-up archive"]
+        store.new_version(doc, origin="imported", what="Imported", by="baseline")
+        need = home.needs(self.con)
+        self.assertEqual([(n["title"], n["act"]["route"]) for n in need],
+                         [("1 piece of your old CV is not in Hal's copy", "cv-versions")])
+
+    def test_ctrl_k_finds_the_versions_and_the_route_dialog(self):
+        from jobhunt.cvstudio import search
+
+        self.assertEqual([r["label"] for r in search.search(self.con, "version")], ["CV versions"])
+        self.assertEqual(search.search(self.con, "how your cv")[0]["action"], "dialog:route")
 
 
 class Routes(unittest.TestCase):

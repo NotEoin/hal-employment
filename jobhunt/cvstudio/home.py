@@ -31,6 +31,7 @@ def needs(con) -> list[dict]:
     quoted = "; ".join(f'"{m[:60]}"' for m in missing[:SHOWN])
     more = f" and {len(missing) - SHOWN} more" if len(missing) > SHOWN else ""
     return [{"id": "cv:not_found", "icon": "file", "tone": "warn",
-             "title": f"{len(missing)} pieces of your old CV are not in Hal's copy",
+             "title": (f"{len(missing)} pieces of your old CV are not in Hal's copy" if len(missing) != 1
+                       else "1 piece of your old CV is not in Hal's copy"),
              "detail": f"Check them before Hal sends your CV: {quoted}{more}.", "due": None,
              "act": {"label": "Check your CV", "route": "cv-versions"}, "urgency": URGENCY}]

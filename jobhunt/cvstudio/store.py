@@ -158,6 +158,7 @@ def new_version(doc_: CVDoc, *, origin: str, what: str, by: str, parent: str | N
     problems = model.validate(doc_)
     if problems:
         raise CVError(problems[0])
+    doc_ = _recheck_not_found(doc_)
     data = model.to_json(doc_)
     with _conn(con) as c:
         d = doc(c)
@@ -174,6 +175,20 @@ def new_version(doc_: CVDoc, *, origin: str, what: str, by: str, parent: str | N
     events.publish("cv", what="version", id=vid)
     log.info("CV version %s saved (%s, by %s)", n, origin, by)
     return vid
+
+
+def _recheck_not_found(doc_: CVDoc) -> CVDoc:
+    """The document with the import's "not found" list cut to the text it still lacks, so the warning goes
+    once the person has put the text back."""
+    missing = doc_.extras.get("not_found")
+    if not missing:
+        return doc_
+    out = model.from_json(model.to_json(doc_))
+    out.extras.pop("not_found")
+    still = model.not_found({"text": list(missing)}, out)
+    if still:
+        out.extras["not_found"] = still
+    return out
 
 
 def use(version_id: str, con: sqlite3.Connection | None = None) -> None:
