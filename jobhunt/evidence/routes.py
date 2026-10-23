@@ -30,7 +30,7 @@ INBOX = "Inbox"
 OTHER_GROUP = "Other files"                   # files at the top of the folder, in no subfolder
 SAMPLE_NAMES = 3                              # file names shown under each group
 OPEN_TIMEOUT_S = 10
-# The folders setup makes (from the Windows build's setup): Private holds what the AI never sees.
+# The folders setup makes: Private holds what the AI never sees.
 STARTER_FOLDERS = ("Certificates", "Education", "Jobs", "Volunteering", "References", INBOX, "Private")
 START_HERE = """---
 type: index

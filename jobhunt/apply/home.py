@@ -1,4 +1,4 @@
-"""What the Applications area puts on Home (`needs`): the applications waiting for the person.
+"""What the Applications area puts on Home: the applications waiting for the person.
 
 Each item is one application and the one thing it needs next: documents to approve, answers to check, a
 last page to send, or a follow-up that is due. A page that waits for a sign-in or a human check reaches

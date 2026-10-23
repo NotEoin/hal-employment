@@ -145,7 +145,7 @@ def _kept(analysis: dict) -> str:
 
 def _record_part(heading: str, kept: str) -> str:
     """The record section of a request, or nothing when the record holds nothing for this job."""
-    # "Employment record: none" read to Claude as a record that lacked a job on the CV (real-model run, 2026-10-23)
+    # "Employment record: none" read to Claude as a record that lacked a job on the CV (seen 2026-10-23)
     return f"\n\n{heading}:\n{kept}" if kept and kept != "none" else ""
 
 

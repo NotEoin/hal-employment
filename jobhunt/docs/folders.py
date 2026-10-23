@@ -72,7 +72,7 @@ def folder_for(con: sqlite3.Connection, job, *, create: bool = True) -> Path | N
 
 
 def job_id_in_pack(pack_md: Path) -> str | None:
-    """The job id an old `pack.md` names in its header (L pack.py:209-237), or None."""
+    """The job id an old `pack.md` names in its header, or None."""
     try:
         head = pack_md.read_text(encoding="utf-8", errors="replace")[:2000]
     except OSError:

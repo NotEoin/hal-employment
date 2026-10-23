@@ -1,4 +1,4 @@
-"""Ctrl K results from the Applications area (`search`): applications by job title, employer or number.
+"""Ctrl K results from the Applications area: applications by job title, employer or number.
 
 Closed applications are left out, as on the board's columns; the Closed list is one page away.
 """

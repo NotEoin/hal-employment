@@ -14,7 +14,7 @@ Design notes:
   answer was used reaches the page, a log or the form state's words.
 - Site notes come from `sites.notes.for_page`, or the `NoteSet` the engine passes in. A note never
   applies to a private question, because those are settled before notes are read. Each note used is listed
-  on its field (`notes_used`); the engines record the use and its result through `sites.notes.used`,
+  on its field (`notes_used`); the engines record the use and its result through `sites.notes.used`
   so a note is counted once.
 - Saved answers live in `answers2` with a scope: `everywhere`, `site` (this site),
   `job` (this job), `never` (kept only as an example of the person's writing) and `review` (not used
@@ -94,7 +94,7 @@ VOICE_EXAMPLES = 2    # "never" answers shown as examples of the person's writin
 # Answers longer than this are essays: never reused as they stand, only shown to the model as the applicant's writing.
 ESSAY = 400
 
-# "Why this answer?". The private sentence is the whole of what a private
+# The "Why this answer?" words. The private sentence is the whole of what a private
 # answer ever says about itself.
 PRIVATE_WHY = "From your private answers. These are never shown to the AI or saved in logs."
 LEFT_PRIVATE_WHY = ("Hal leaves questions like this for you. It never guesses them and never sends them to "

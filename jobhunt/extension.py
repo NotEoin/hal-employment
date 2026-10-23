@@ -53,8 +53,8 @@ POLL_WAIT = 20  # seconds a poll is held open; the browser stops a worker whose 
 PATTERNS = {"apply": APPLY_BUTTON.pattern, "next": NEXT_BUTTON.pattern, "submit": SUBMIT_BUTTON.pattern,
             "signOut": SIGN_OUT.pattern, "frames": [*ATS_FRAME, *FORM_FRAME], "captcha": CAPTCHA}
 FILL_WAIT = 180  # seconds a fill of a few fields may take: uploads and searched lists are slow
-# A dropdown takes about 15 s to open, search and pick on a slow site (L extension.py:182 hit 180 s on a form
-# of a dozen lists), so the limit grows with the fields of the fill.
+# A dropdown takes about 15 s to open, search and pick on a slow site (a form of a dozen lists once hit
+# 180 s), so the limit grows with the fields of the fill.
 FILL_PER_FIELD_S = 20
 OLD = "old"      # the queue of a 0.4 or 0.5 helper: no key, and polls /api/ext/*
 NOT_CONNECTED = "Open Hal in the browser that has the helper"

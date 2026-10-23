@@ -1,4 +1,4 @@
-"""Moving the old shared pack folders into numbered application folders (data task `docs.relayout_packs`).
+"""Moving the old shared pack folders into numbered application folders.
 
 Old folder names came from company and title only, so one folder could hold the documents of two jobs. The
 job id in each `pack.md` header says which job owns the folder; that job gets a numbered folder with its

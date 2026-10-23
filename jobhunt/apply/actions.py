@@ -224,7 +224,7 @@ def set_change(con, job_id: str, change_id: str, on: bool) -> list[str]:
 
 
 def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") -> None:
-    """Discards an application or a job, keeping why apart from the other reasons (`closed_reason`).
+    """Discards an application or a job, keeping why apart from the other reasons.
 
     Hal stops at once and its tab closes when the browser is free; the documents stay. "Too much effort"
     is remembered against the site, and the same advert listed twice does not come back into the queue.

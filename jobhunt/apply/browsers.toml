@@ -2,7 +2,7 @@
 # Each step has the words on screen and a simple drawing in static/app/setup/img/helper/.
 # "Developer mode" and "Load unpacked" are quoted as each browser's own button names.
 # The wording and positions were written from each browser's extensions page as of 2026-10;
-# Opera and Brave were checked against the real browsers on a Windows 11 install test.
+# Opera and Brave are not yet checked against the real browsers.
 
 [browsers.opera]
 name = "Opera"

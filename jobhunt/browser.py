@@ -14,7 +14,7 @@ whole of each command that acts on a page a block in the page's own world
 cancels any submit the page or a press would make. The person presses Submit
 on the employer's site.
 
-Notes about job sites (`sites.notes`) drive the engine hooks
+Notes about job sites drive the hooks of spec
 in both engines: `open_url`, `press_first`, `cookie_button` and
 `field_transform` here (the helper reads the same notes through
 `extension.py`). With no note of a kind, each hook does what Hal did before
@@ -319,7 +319,7 @@ class Browser:
 
         Playwright's sync API reads its driver only while its thread is inside a call. Left unread, the
         driver stopped reading the browser on Windows, and a page's own form post (the person's Submit in
-        Hal's window) waited until Hal next used the browser (2026-10-23). A tab the page
+        Hal's window) waited until Hal next used the browser (seen 2026-10-23). A tab the page
         opens is followed here too, as soon as it opens.
         """
         ctx = self._ctx

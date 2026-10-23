@@ -274,7 +274,7 @@ def _steps(con, job_id: str, col: str | None, app: dict, row) -> tuple[int, list
 
 
 def _cv_changes(job, docs: dict) -> list[dict]:
-    """The per-job CV changes, each with whether it is on."""
+    """The per-job CV changes, each with whether it is on, compared with the main CV."""
     from .. import cv
 
     try:
@@ -301,7 +301,7 @@ def _fields(form: dict | None) -> list[dict]:
         mark = marks.get(f["hid"])
         value = f.get("value")
         if src == "private":
-            # A private answer never leaves the form in an API reply (gate G5).
+            # A private answer never leaves the form in an API reply.
             answer = PRIVATE_SHOWN
         elif isinstance(value, list):
             answer = ", ".join(map(str, value))
@@ -315,7 +315,7 @@ def _fields(form: dict | None) -> list[dict]:
 
 
 # The engines' field sources ("profile: diversity", "documents: CV", ...) by their first word, as the API's
-# Field.src, and the chip words ("Site rule" in plain words).
+# Field.src, and the chip words, where a site note reads "Site rule".
 SOURCE_OF = {"profile": "profile", "documents": "cv", "cv": "cv", "record": "record", "your": "saved",
              "saved": "saved", "note": "note", "hal": "hal", "private": "private", "you": "you"}
 PRIVATE_SHOWN = "Filled in from your private answers"
@@ -343,7 +343,7 @@ def _letter_notes(job, docs: dict) -> dict:
 
 
 def application(con, ref: str) -> dict:
-    """The application page (GET /applications/{id})."""
+    """The application page."""
     job_id = resolve(con, ref)
     r = _job(con, job_id)
     app = _app(con, job_id)
