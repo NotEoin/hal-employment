@@ -260,7 +260,8 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
 - `checks.scanner` gives the scanner score with fixed weights (30/20/15/15/10/10) and no AI, from the printed
   PDF when given one, else the document's own text. `type_checks` runs the type's checks by id (weight 0
   switches one off). `for_version` caches results in `cv_checks` and writes `cv_versions.scanner_score`.
-  `recruiter_read` is the AI's opinion and part of no score.
+  `recruiter_read` is the AI's opinion and part of no score: a short summary written to "you" (the main
+  strength, then the one change that helps most), as a recruiter for the type's kind of candidate.
 - `cvscore.keywords` takes the type's keywords and aliases; Classic keeps the old list.
 
 ## Looks and printing (`cvstudio/render.py`, `printer.py`, `export.py`)

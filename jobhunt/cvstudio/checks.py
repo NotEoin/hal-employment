@@ -535,7 +535,7 @@ def recruiter_read(cv_text: str, t: cvtypes.CVType) -> dict:
     from jobhunt import ai
     from jobhunt.ai import prompts
 
-    persona = f"Read it as a recruiter for: {t.fits}."
+    persona = f"Read it as a recruiter would for this kind of candidate: {t.name} ({t.fits})."
     be = ai.backend()
     reply = ai.chat_json(prompts.text("cv_judge"), f"{persona}\n\n<<<CV\n{cv_text}\nCV>>>", role="checker",
                          timeout=RECRUITER_TIMEOUT_S, ctx=RECRUITER_CTX, purpose="cv_judge", priority=0)

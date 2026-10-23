@@ -213,6 +213,23 @@ class RecruiterRead(unittest.TestCase):
                 con.close()
             self.assertEqual(json.loads(row["recruiter"])["text"], "The dissertation is the strongest thing.")
 
+    def test_a_recruiters_read_speaks_to_you_in_a_short_summary_for_any_career(self):
+        # Claude's read on 2026-10-23 was seven criticisms run together, with no fix, naming the person "she";
+        # and the prompt cast every reader as a recruiter "for early-career roles", career changers too
+        summary = "Your refit shows you can deliver a project. Lead with it, with its scope and the people involved."
+        reply = json.dumps({"summary": summary, "grades": [
+            {"criterion": "Impact", "grade": 3, "why": "Some outcomes.", "fix": "Add one."},
+            {"criterion": "Relevance", "grade": 3, "why": "The refit sits low.", "fix": "Move it up."}]})
+        changer = cvtypes.load("career_changer")
+        with World(), fake_ai({"cv_judge": reply}) as ai_log:
+            out = checks.recruiter_read("Made-up CV text", changer)
+            system, user = ai_log.log[-1].system, ai_log.log[-1].user
+        self.assertEqual(out["text"], summary)
+        self.assertEqual([g["fix"] for g in out["grades"]], ["Add one.", "Move it up."])
+        self.assertNotIn("early-career", system)
+        self.assertIn('Write to the CV\'s owner as "you"', " ".join(system.split()))
+        self.assertIn(f"{changer.name} ({changer.fits})", user)
+
     def test_without_an_ai_the_read_ends_and_says_why(self):
         with World():
             done = runner.run("cv.recruiter", params=checks_actions._example(None))
