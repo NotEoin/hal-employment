@@ -18,14 +18,14 @@ import { PrivacyPanel } from "../settings/privacy.js";
 import { PromptsPanel } from "../settings/prompts.js";
 import { GoalPanel } from "../settings/goal.js";
 import { AiPanel, PANEL_KEYS as AI_PANEL_KEYS } from "../settings/ai.js";
-import { UpdatesPanel } from "../settings/updates.js";
+import { UpdatesPanel, PANEL_KEYS as UPDATES_PANEL_KEYS } from "../settings/updates.js";
 import { RemotePanel } from "../settings/remote.js";
 
 const SUB = "Everything Hal does can be changed here. Most changes save straight away; the few that need a restart say so and offer a Restart button.";
 const SHOWN_WORDS = new Set(["money", "times", "hours"]);  // kinds whose typed value the server rewords
 const OTHER_PANELS = { ai: AiPanel, updates: UpdatesPanel };
 // Info rows a panel draws with their words, so the group leaves out their empty catalogue rows.
-const DRAWN_BY_PANEL = { ai: AI_PANEL_KEYS };
+const DRAWN_BY_PANEL = { ai: AI_PANEL_KEYS, updates: UPDATES_PANEL_KEYS };
 // The model rows' choices depend on the AI in use, so they come from GET /ai/models, not the catalogue.
 const MODEL_ROLES = { "ai.model.writer": "writer", "ai.model.checker": "checker", "ai.model.quick": "quick" };
 
