@@ -1,0 +1,32 @@
+# Pinned downloads for the install files. Each one is checked against its SHA-256 before
+# it is used. `python scripts/install/pins.py --write` copies these values into install-hal-windows.cmd and
+# install-hal-linux.sh, and `--check` (run by the tests) fails when a copy differs.
+#
+# A sha256 left empty means the hash has not been taken yet: the install file then stops before downloading
+# anything. `python scripts/install/pins.py --fill` downloads each file once, writes its SHA-256 here and
+# copies it into the install files.
+
+[uv.windows]
+version = "0.8.22"
+url = "https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip"
+sha256 = ""
+
+[uv.linux]
+version = "0.8.22"
+url = "https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = ""
+
+[git.windows]
+version = "2.51.0"
+url = "https://github.com/git-for-windows/git/releases/download/v2.51.0.windows.1/PortableGit-2.51.0-64-bit.7z.exe"
+sha256 = ""
+
+[gh.windows]
+version = "2.79.0"
+url = "https://github.com/cli/cli/releases/download/v2.79.0/gh_2.79.0_windows_amd64.zip"
+sha256 = ""
+
+[gh.linux]
+version = "2.79.0"
+url = "https://github.com/cli/cli/releases/download/v2.79.0/gh_2.79.0_linux_amd64.tar.gz"
+sha256 = ""
