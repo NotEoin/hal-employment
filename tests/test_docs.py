@@ -247,10 +247,10 @@ class Notices(unittest.TestCase):
         missing = sorted(n for n in names | {v.lower() for v in vendored} if n not in notices)
         self.assertEqual(missing, [])
 
-    def test_the_licence_says_private_for_named_collaborators(self):
+    def test_the_licence_is_mit(self):
         body = text(ROOT / "LICENSE")
-        self.assertIn("Copyright (C) 2026", body)
-        self.assertIn("Not for redistribution.", body)
+        self.assertTrue(body.startswith("MIT License\n"))
+        self.assertRegex(body, r"(?m)^Copyright \(c\) 2026 \S")
 
     def test_security_covers_the_threat_model_storage_what_leaves_and_reporting(self):
         headings = " ".join(re.findall(r"^## (.+)$", text(ROOT / "SECURITY.md"), re.M)).lower()

@@ -40,4 +40,4 @@ documents explain how Hal works and how to change it.
 | [Changelog](../CHANGELOG.md) | What changed in each version, in plain words |
 | [Security](../SECURITY.md) | What Hal protects against and what it cannot, what is stored where, what leaves the computer, how to report a problem |
 | [Third-party notices](../THIRD_PARTY_NOTICES.md) | The libraries, fonts and tools Hal uses, with their licences |
-| [Licence](../LICENSE) | Private software for named collaborators; not for redistribution |
+| [Licence](../LICENSE) | The MIT licence |

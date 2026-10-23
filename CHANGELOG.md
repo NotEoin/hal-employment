@@ -252,8 +252,7 @@ What changed in each version, in plain words.
 - A new README says what Hal Employment is, how to install it, run it and test it, and where your data
   lives. Two guides for people using Hal: "Getting started" (setup step by step, a normal day, where things
   are, What Hal remembers, what to do when something goes wrong) and "Your privacy". SECURITY.md,
-  THIRD_PARTY_NOTICES.md and LICENSE ("private software, licensed to named collaborators for personal use;
-  not for redistribution") are added.
+  THIRD_PARTY_NOTICES.md and the MIT licence are added.
 - Windows: Hal's searches, phone alerts and email reach their websites on a new laptop. Hal now asks Windows to
   check each website's certificate, as Edge does. The phone alerts QR code shows again.
 - Setting up the browser helper: the first button copies the extensions page's address and opens your
