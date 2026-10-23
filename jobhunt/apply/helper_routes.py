@@ -98,10 +98,14 @@ def browsers(req: Request) -> dict:
 
 @route("POST", PREFIX + "/open-extensions-page", local_only=True)
 def open_extensions_page(req: Request) -> dict:
-    """Opens the chosen browser's extensions page (a web page cannot open those addresses itself)."""
+    """Opens a new window of the chosen browser, for the extensions page's address the step has copied.
+
+    Neither a web page nor the browser's command line can open an address such as `edge://extensions`
+    (the browser drops it and shows a new tab), so the person pastes it; `address` is what to paste.
+    """
     b = _browser(_body(req))
-    platform.current().open_in_browser(b, b.extensions_url)
-    return {"ok": True}
+    platform.current().open_browser_window(b)
+    return {"ok": True, "address": b.extensions_url}
 
 
 @route("POST", PREFIX + "/pairing-code")

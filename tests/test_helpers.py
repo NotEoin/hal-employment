@@ -241,15 +241,19 @@ class Browsers(unittest.TestCase):
     def test_opening_a_browsers_pages_goes_through_the_platform_layer(self):
         opera = platform.found("opera", Path("C:/Users/test/AppData/Local/Programs/Opera/opera.exe"))
         opened = []
-        fake = mock.Mock(browsers=lambda: [opera], open_in_browser=lambda b, url: opened.append((b.id, url)))
+        fake = mock.Mock(browsers=lambda: [opera], open_in_browser=lambda b, url: opened.append((b.id, url)),
+                         open_browser_window=lambda b: opened.append((b.id, "a new window")))
         with HalServer() as hal, mock.patch("jobhunt.core.platform.current", return_value=fake), \
                 mock.patch("jobhunt.web.auth.server_port", return_value=hal.port):   # the port Hal is set to use
             window = hal.signed_in()
-            self.assertEqual(window.post("/api/v2/helpers/open-extensions-page", {"browser": "opera"}).status, 200)
+            # Windows 11 install test: a browser drops opera://extensions given on its command line and shows a new
+            # tab, so Hal opens a window and the page pastes the address it gets back
+            page = window.post("/api/v2/helpers/open-extensions-page", {"browser": "opera"})
+            self.assertEqual((page.status, page.json()["address"]), (200, "opera://extensions"))
             code = window.post("/api/v2/helpers/pairing-code", {"browser": "opera"}).json()["code"]
             self.assertEqual(window.post("/api/v2/helpers/open-pair-page", {"browser": "opera", "code": code}).status,
                              200)
-            self.assertEqual(opened, [("opera", "opera://extensions"),
+            self.assertEqual(opened, [("opera", "a new window"),
                                       ("opera", f"http://127.0.0.1:{hal.port}/pair#code={code}")])
             missing = window.post("/api/v2/helpers/open-extensions-page", {"browser": "vivaldi"})
             self.assertEqual(missing.status, 409)

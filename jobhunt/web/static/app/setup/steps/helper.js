@@ -1,7 +1,9 @@
 /* Setup guide step 7: Browser helper.
 
    Four steps per browser: open its page of add-ons, switch on "Developer mode", press "Load unpacked" and
-   choose Hal's helper folder, then Connect. The steps, their words and their pictures come from
+   choose Hal's helper folder, then Connect. Browsers refuse to open their own pages (`edge://extensions`)
+   from a web page or from their command line, so the first button copies that address and opens a new
+   browser window, whose address bar is ready for the paste (Windows 11 install test). The steps, their words and their pictures come from
    GET /helpers/browsers (apply/browsers.toml), so each browser is explained in its own words.
 
    Connect asks for a one-time pairing code and opens Hal's /pair page in the chosen browser, because the
@@ -10,7 +12,7 @@
    link instead. The step ticks on the `helper` event that the helper's first poll sends. */
 import { html, cx, useState } from "../../core/html.js";
 import { post } from "../../core/api.js";
-import { useApi, toast } from "../../core/store.js";
+import { useApi, useStore, toast } from "../../core/store.js";
 import { isRemote } from "../../core/remote.js";
 import { Icon } from "../../ui/icons.js";
 
@@ -18,10 +20,10 @@ const PICTURE_W = 360;
 const PICTURE_H = 200;
 const TITLE = "Add Hal's helper to your browser";
 
-/** Puts text on the clipboard and says so. */
+/** Puts text on the clipboard and says so; true when it worked. */
 async function copy(text, what) {
-  try { await navigator.clipboard.writeText(text); toast(what); }
-  catch (err) { toast("Hal could not reach the clipboard. Select the words and copy them yourself."); }
+  try { await navigator.clipboard.writeText(text); toast(what); return true; }
+  catch (err) { toast("Hal could not reach the clipboard. Select the words and copy them yourself."); return false; }
 }
 
 function Picture({ step }) {
@@ -47,6 +49,8 @@ export function Step() {
   const [chosen, setChosen] = useState("");
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pasted, setPasted] = useState(null);   // after the first button: true when the address was copied
+  const windows = useStore(s => s.session && s.session.platform === "windows");
   const remote = isRemote();
   const browsers = (info.data && info.data.browsers) || [];
   if (info.error) return html`<h1 class="h1">${TITLE}</h1><p class="sub">${info.error.message}</p>`;
@@ -62,7 +66,9 @@ export function Step() {
   const [open, devMode, load] = b.steps;
 
   const openPage = async () => {
-    try { await post("/helpers/open-extensions-page", { browser: b.id }); }
+    // copy first, while the press still counts as the person's own action for the clipboard
+    const copied = await copy(b.extensions_url, `Copied ${b.extensions_url}`);
+    try { await post("/helpers/open-extensions-page", { browser: b.id }); setPasted(copied); }
     catch (err) { toast(err.message); }
   };
   const connect = async () => {
@@ -86,13 +92,19 @@ export function Step() {
     <ol style="margin:18px 0;padding-left:22px;display:grid;gap:18px">
       <li><b>${open.text}</b>
         ${remote ? html`<div class="small sub" style="margin-top:6px">Type <code>${b.extensions_url}</code> in ${b.name}'s address bar on this computer.</div>`
-          : html`<div style="margin-top:8px"><button type="button" class="btn primary small" disabled=${!b.found} onClick=${openPage}>${open.text.replace(/\.$/, "")}</button>
-            ${!b.found && html`<span class="small sub"> Hal did not find ${b.name} here. Type <code>${b.extensions_url}</code> in its address bar.</span>`}</div>`}
+          : html`<div style="margin-top:8px"><button type="button" class="btn primary small" disabled=${!b.found} onClick=${openPage}>Copy the address and open ${b.name}</button>
+            ${!b.found ? html`<span class="small sub"> Hal did not find ${b.name} here. Type <code>${b.extensions_url}</code> in its address bar.</span>`
+              : html`<div class="small sub helper-paste" style="margin-top:6px">${pasted === false
+                ? html`In the new ${b.name} window, type <code>${b.extensions_url}</code> in the address bar at the top and press Enter.`
+                : html`In the new ${b.name} window, press Ctrl and V together to paste <code>${b.extensions_url}</code> into the address bar at the top, then press Enter.`}</div>`}</div>`}
         <${Picture} step=${open} /></li>
       <li><b>${devMode.text}</b> <span class="small sub">Leave it on: ${b.name} turns the helper off without it.</span><${Picture} step=${devMode} /></li>
       <li><b>${load.text}</b>
         <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap"><code class="small" style="overflow-wrap:anywhere">${remote ? "Hal Employment/Browser helper (in your home folder on this computer)" : folder}</code>
           ${!remote && html`<button type="button" class="btn small" onClick=${() => copy(folder, "Copied the folder's address")}><${Icon} n="copy" c="s" />Copy</button>`}</div>
+        ${!remote && html`<div class="small sub helper-folder" style="margin-top:6px">${windows
+          ? html`Press Copy. In the window that opens, click the <b>Folder</b> box at the bottom, press Ctrl and V together, then press <b>Select Folder</b>.`
+          : html`Press Copy, then paste the address into the window that opens and choose that folder.`}</div>`}
         ${!remote && !info.data.folder_visible && html`<div class="small sub">This folder is hidden. If ${b.name} cannot see it, ask the person who set up Hal to move it.</div>`}
         <div class="small sub" style="margin-top:6px">${b.name} will say the helper can <i>"read and change all your data on all websites"</i>. That sounds alarming: it is needed because job forms are on thousands of different sites. The helper only acts on tabs Hal opened or you handed to it.</div>
         <${Picture} step=${load} /></li>

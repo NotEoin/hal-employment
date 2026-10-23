@@ -16,6 +16,8 @@ from support.ui import AppPage, chromium, skip_unless_browser
 from jobhunt.core import platform
 
 PICTURES = "/app/setup/img/helper/"
+WAIT_TRIES = 50                 # 50 x 100 ms: the press reaches the server well within 5 s
+WAIT_STEP_MS = 100
 
 
 @skip_unless_browser
@@ -48,6 +50,29 @@ class HelperStep(unittest.TestCase):
             self.assertEqual(sorted(asked), ["vivaldi-1.svg", "vivaldi-2.svg", "vivaldi-3.svg"])
             self.assertEqual(p.page.get_attribute(".pick.on", "aria-pressed"), "true")
             self.assertIn("Vivaldi", p.page.inner_text(".pick.on"))
+
+
+    def test_the_first_button_copies_the_address_and_opens_a_window_to_paste_it_in(self) -> None:
+        # Windows 11 install test (2026-10-23): "Open Edge's extensions page" opened Edge on a new tab, because
+        # Chromium browsers drop their own addresses given on the command line
+        edge = platform.found("edge", Path("/opt/edge/msedge"))
+        cls = type(platform.current())
+        with HalServer() as hal, mock.patch("jobhunt.apply.helper_routes._found", return_value={"edge": edge}), \
+                mock.patch.object(cls, "open_browser_window") as window:
+            p = AppPage(self.browser, f"http://127.0.0.1:{hal.port}")
+            self.addCleanup(p.close)
+            p.ctx.grant_permissions(["clipboard-read", "clipboard-write"], origin=f"http://127.0.0.1:{hal.port}")
+            p.page.goto(hal.open_url())
+            p.open("setup-helper")
+            p.page.click("text=Copy the address and open Microsoft Edge")
+            for _ in range(WAIT_TRIES):
+                if window.called:
+                    break
+                p.page.wait_for_timeout(WAIT_STEP_MS)
+            self.assertIn("press Ctrl and V together", p.page.inner_text(".helper-paste"))
+            self.assertEqual(p.page.evaluate("() => navigator.clipboard.readText()"), "edge://extensions")
+            self.assertEqual([c.args[0].id for c in window.call_args_list], ["edge"])
+            self.assertEqual(p.errors, [])
 
 
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ from . import (
     KINDS,
     LEGACY_TIMERS,
     MANAGED_BY_HAL,
+    NEW_WINDOW,
     RETIRED_DIR,
     STOP_GRACE_S,
     TOOL_TIMEOUT_S,
@@ -168,8 +169,17 @@ class LinuxPlatform:
         return out
 
     def open_in_browser(self, browser: Browser, url: str) -> None:
-        """Opens `url` in the person's chosen browser (extensions page, pair page, job tabs)."""
+        """Opens `url` in the person's chosen browser (pair page, job tabs)."""
         self._start(browser.argv(url))
+
+    def open_browser_window(self, browser: Browser) -> None:
+        """Opens a new window of the person's chosen browser, its address bar ready for a paste.
+
+        Browser pages such as `edge://extensions` cannot be opened this way: Chromium browsers drop an
+        internal address given on their command line and show a new tab instead (Edge, Windows 11 test VM,
+        2026-10-23), so the setup step copies that address for the person to paste.
+        """
+        self._start(browser.argv(NEW_WINDOW))
 
     def open_app_window(self, url: str) -> None:
         """The first Chromium-family browser as an app window, else a tab in the default browser."""
