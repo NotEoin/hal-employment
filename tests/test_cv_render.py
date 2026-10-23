@@ -13,13 +13,9 @@ from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import people
-from support.stubs import cv_contracts
 
-cv_contracts.install()
-
-from jobhunt.cvstudio.model import Bullet, CVDoc, Entry, Module, Section  # noqa: E402
-
-from jobhunt.cvstudio import printer, render, types  # noqa: E402 - after the stand-ins are installed
+from jobhunt.cvstudio import printer, render, types
+from jobhunt.cvstudio.model import Bullet, CVDoc, Entry, Module, Section
 
 ACCENTED = "Zo\u00eb \u0141ukasiewicz-M\u00fcller"   # a made-up name with Latin-1 and Latin Extended letters
 
@@ -110,11 +106,8 @@ def profile_of(person: people.Person, name: str | None = None) -> dict:
 
 
 def type_for(key: str):
-    """The person's CV type, or the humanities one where the stand-in has no such type."""
-    try:
-        return types.load(key)
-    except (KeyError, LookupError):
-        return types.load("humanities_grad")
+    """The made-up person's built-in CV type (every key in `support.people` is one)."""
+    return types.load(key)
 
 
 def text_of(page: str) -> str:

@@ -12,16 +12,13 @@ import threading
 import unittest
 
 from support import people
-from support.stubs import cv_contracts
 from support.ui import AppPage, chromium, skip_unless_browser
 from support.world import World
 from test_cv_render import made_up_cv
 
-cv_contracts.install()
-
-from jobhunt.core.settings import store as settings_store  # noqa: E402 - after the stand-ins are installed
-from jobhunt.cvstudio import store  # noqa: E402
-from jobhunt.web import app, auth  # noqa: E402
+from jobhunt.core.settings import store as settings_store
+from jobhunt.cvstudio import store
+from jobhunt.web import app, auth
 
 MOUNT = """async () => {
   const { html, render } = await import('/app/core/html.js');

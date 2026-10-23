@@ -17,14 +17,11 @@ from xml.etree import ElementTree
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import people
 from support.api import HalServer
-from support.stubs import cv_contracts
 from support.ui import browser_tests_on
 from test_cv_printer import NoBrowsersHere
 from test_cv_render import made_up_cv, profile_of, type_for
 
-cv_contracts.install()
-
-from jobhunt.cvstudio import export, pdfread, printer, render, store  # noqa: E402
+from jobhunt.cvstudio import export, pdfread, printer, render, store
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 

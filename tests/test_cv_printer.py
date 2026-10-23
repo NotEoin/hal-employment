@@ -18,16 +18,13 @@ from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import people
-from support.stubs import cv_contracts
 from support.ui import browser_tests_on
 from test_cv_render import ACCENTED, made_up_cv, profile_of, type_for
 
-cv_contracts.install()
-
-from jobhunt import cvpdf, cvscore, db  # noqa: E402 - after the stand-ins are installed
-from jobhunt.core.platform import found  # noqa: E402
-from jobhunt.core.platform.windows import CREATE_NO_WINDOW, WindowsPlatform  # noqa: E402
-from jobhunt.cvstudio import export, model, pdfread, printer, render  # noqa: E402
+from jobhunt import cvpdf, cvscore, db
+from jobhunt.core.platform import found
+from jobhunt.core.platform.windows import CREATE_NO_WINDOW, WindowsPlatform
+from jobhunt.cvstudio import export, model, pdfread, printer, render
 
 GOLDENS = Path(__file__).parent / "goldens" / "scanner"
 SCANNER_TOLERANCE = 0.05    # scores of the fixed CVs are asserted within a tolerance
