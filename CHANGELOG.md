@@ -145,8 +145,120 @@ Each version has two parts. "What's new" is in plain words and is shown on the U
   application page too, and a letter Hal writes while filling a form is checked the same way. Ask for
   changes on an application's documents now works. The pack's checklist no longer tells you to run a command.
   `python -m jobhunt letter` and `check` find the pack in the numbered application folder again.
+- The setup guide: eleven steps from Welcome to All set, saved as you go. "Save and finish later" closes it
+  and the next opening carries on at the same step; a new install opens it by itself, once, and skipped
+  steps stay on Home's "Finish setting up" card until they are done.
+- About you is filled in from your CV ("From your CV"), reads pay leniently ("Hal reads this as 22,000
+  pounds a year") and never resets a value you changed in Settings, including right to work, when you go
+  through the guide again.
+- Your record step makes the record folder with its subfolders and "Start Here.md", or finds the one already
+  there and leaves its files alone; "Add files" copies files in, so File Explorer is never needed.
+- Email step: Hal saves the pasted Gmail app password only when Gmail accepts it. Phone alerts step: a private
+  ntfy code shown as a QR code, kept when you go through the step again, and "Send a test". All set starts
+  the first search once; Home shows "Checked 40 of 300 jobs" while it runs.
+- "What are you looking for?" (setup step 4): career stage, studying, course end, kinds of role, a career-area
+  starter, kinds of work, places, office or home and lowest pay, ending in "Here is what I understood"; "Yes,
+  save this" saves it as one goal change.
+- Where Hal looks (Jobs) lists every site Hal searches with when it was last searched, jobs seen and kept,
+  and the error when a site failed. Hal's own sites follow your career and can be switched off; sites you
+  added can be removed. Hal works without job-board keys and says what is missed ("Reed has no key, so Hal
+  skips it."), with a two-step "Get a free key" guide.
+- Searches are built from your goal: each role with each kind of role you chose, at most 12 per site, in your
+  places. Internship, placement, insight and apprenticeship searches are added only when you chose them.
+- "Add a job site or careers page": paste an address and Hal says what it is, lists its jobs scored against
+  your goal, and Save adds the site and keeps the ticked jobs, with Undo in Activity. Hal knows Greenhouse,
+  Lever, Ashby, Workable, SmartRecruiters, Recruitee and Personio, linked RSS or Atom feeds and schema.org job
+  data; other pages say "Hal cannot read this page by itself yet. Add one advert instead." "Watch a company"
+  looks for the company's board on every system Hal knows.
+- Job alert emails from UK student, graduate, charity, public sector and apprenticeship boards become
+  matches. Your old board list and watched companies move into Where Hal looks once.
+- "How should Hal think?": Hal recommends your Claude subscription or "On this computer" from this computer's
+  memory and graphics card. Claude in three steps: Install (no admin prompt, no console window), Sign in
+  (Claude's own page; Hal never sees your password) and Test. A free Claude plan is explained before any call:
+  "Your Claude plan cannot run Claude Code. It needs Claude Pro or Max."
+- Settings, Hal's brain: "Signed in as <email> (Claude Pro)" with Sign out, and the allowance in counts ("Hal
+  used Claude 23 times today. 12 were background checks"). When the sign-in runs out, Home shows "Sign in to
+  Claude again".
+- Browser helper 1.0: paired once from setup's "Browser helper" step, with steps and pictures for Opera,
+  Google Chrome, Microsoft Edge, Brave and Vivaldi. The one-time code works once, for two minutes, and the
+  helper gets its own key; requests without it are refused. Each application keeps the helper that carries
+  it, so a desktop browser and a laptop browser never take each other's commands.
+- Hal copies the helper into a visible folder every time it starts (`Documents/Hal Employment/Browser helper`
+  on Linux, `%USERPROFILE%\Hal Employment\Browser helper` on Windows). An older helper is asked once to reload
+  itself. The old 0.4 or 0.5 helper is refused unless Advanced, "Accept the old browser helper" is on.
+- Hal installs from one file: `install-hal-windows.cmd` (double-click; no admin prompt, no typing) or
+  `install-hal-linux.sh`. It gets its own tools, signs in to GitHub in the browser, makes the shortcuts,
+  copies an older Hal it finds (a USB stick install is copied in, never moved), starts Hal and opens
+  the setup guide. Running it again repairs the install.
+- Settings, Updates: the version, "Check now", a daily check, What's new, **Update Hal** and **Go back to the
+  previous version**. An update stops Hal, backs up your jobs, gets the new version, sets it up and starts Hal
+  again; if any step fails, Hal goes back, says "Nothing was lost" and does not offer that version again. Hal
+  never updates while it is filling in a form. Only the owner's signed commits install, once the owner has
+  added a signing key; until then Settings, Updates says updates are not yet checked.
+- Use Hal from another computer: Hal and its AI keep running on the desktop, and a laptop on the same home
+  network opens the full app through SSH with the launcher "Hal Employment (desktop)". Hal still listens only
+  on the desktop itself. In a window from another computer, "Show me the form" asks that computer's browser
+  helper, Hal's alerts show in that window, and Settings lists those windows with Sign out.
+- Windows: pages no longer lose files on first load, a page closed mid-reply is not logged as an error, "Is
+  Hal running?" answers in half a second, and Claude's reset times and the daily allowance are read in UK time.
+- Packs: an advert that lists no requirements is matched on its main duties, so the Fit table and the
+  letter's Evidence line are never empty. The letter greets the person the advert names, and the message
+  uses the name the advert gives, never a guessed Ms or Mr. Hal answers only the questions an advert writes
+  out, never adds the AI's notes about its own drafts, and leaves an empty employment record out of what it
+  asks the AI.
+- The company check shows a Wikipedia article or a Companies House entry only when it names the whole
+  employer, not a namesake. Suggestions on My CV and a recruiter's read speak to you; AI wording never says
+  "I" or "my", and a job's CV never gains a result your CV does not have.
 
 ### Developer notes
+
+Remote use, the browser helper, the setup guide, job sources, Claude setup, and install and update
+(2026-10-23), with the fixes from two Windows test passes and from a run of the documents on a real model.
+
+- Remote use: `cli/remote.py` (`open-url [--remote] [--local-port N] [--host-label NAME]`, which prints
+  exactly one line; `helper-files [--tar]`; `remote-launcher --os linux|mac|windows`), `jobhunt/remote/`
+  (`service.ensure_running(port)`: a server that answers, else the platform's unit read back with `systemctl
+  --user is-active`, else the transient unit `hal-employment-remote`), the routes `/remote/instructions`,
+  `/remote/launcher`, `/remote/sessions`; `notify.notify` publishes a `notify` event and holds back the desktop
+  pop-up while a remote window's stream is open (`state/remote-window.json`, 30 s expiry);
+  `core/remote.js` (`onlyThere`, `popUpState`, `askForPopUps`); launchers `scripts/remote/hal-remote.sh` and
+  `hal-remote.cmd`.
+- Browser helper 1.0: `apply/helpers.py`, `helper_routes.py`, `helper_mirror.py`, `helper_health.py`,
+  `apply/browsers.toml`, `extension/pair.js`; helper keys through `auth.register_verifier`; per-helper command
+  queues; a fixed manifest key, so the id is `ljbgefmpodgbnjbnhokpcgcchiicmaja` everywhere.
+- Setup guide: `jobhunt/setup/` (`state`, `routes`, `home`, `record_folder`, `email_test`, `phone`) and
+  the routes `GET /setup`, `PUT /setup/{step_id}`, `POST /setup/later`, `GET /setup/about`, `PUT
+  /setup/about/fields` (`{values, seen}`: a field equal to what the page showed is never written), `POST
+  /setup/record`, `POST /email/test`, `POST /notify/phone/topic`, `POST /notify/phone/test`. `setup.state.done()`
+  is also true for a developer checkout that held jobs before the guide existed, so the owner's install never
+  opens it by itself.
+- Sources: `find/sources_registry.py`, `find/seed/sources.toml`, `find/detect.py`, `find/source_actions.py`
+  (`find.detect_site`, data task `find.import_boards`), `find/source_routes.py`, `find/source_undo.py`,
+  `sources/feeds.py`, the generic alert parser in `gmail.py` with `find/seed/alert_senders.toml`; the goal routes
+  `GET /goal/starters`, `POST /goal/quiz` and `POST /goal/understood`. See
+  [docs/dev/architecture.md](docs/dev/architecture.md).
+- Claude setup: `ai/claude_setup.py` (`executable`, `auth_status`, `install`, `sign_in`, `sign_out`,
+  `recommend`), the kinds `ai.claude_install`, `ai.claude_sign_in` and `ai.test`, the `/ai/*` routes, `ai/health.py`
+  and `ai/ai_home.py`.
+- Install and update: `scripts/updater.py` runs `core/updates.py` under uv's Python outside `.venv` (a
+  transient unit `hal-employment-update` on Linux, a detached breakaway process on Windows);
+  `scripts/install/pins.toml` and `pins.py` (`--check`, `--fill`, `--make DIR`); `scripts/install/allowed_signers`
+  (comments only until the owner adds a key); `core/importer_usb.py`; `cli/install.py` (`--windows`, `--linux`,
+  `--dev`, `--remove`); `core/update_actions.py` and `core/update_home.py`. See
+  [docs/dev/release-and-update.md](docs/dev/release-and-update.md).
+- Windows: the listen backlog is 64; `ConnectionError` ends a reply quietly; local times go through
+  `clock.local()` and `HAL_EMPLOYMENT_TZ` fixes the zone for tests; `runner.idle()`, `AppServer.stop()` and
+  `driver.stop_watching()` wait for files to close. The test helper browser
+  (`support.practice_site.HelperBrowser`) runs on a thread of its own (`on_helper`, `in_tab`); the made-up CV
+  files are kept byte for byte (`.gitattributes`); `letter` and `check` close their database.
+- Real-model fixes: `pack.written_out`, `pack._requirements` (summary fallback), `pack.contact_names`,
+  `pack.salutation`, `pack.untitled`, `pack.drop_notes`; `reputation.names` and a whole-name `reputation._key`;
+  `prep.request` and the pack's fit, letter and verify requests leave the record out when it is empty.
+- Joining the parts: the remote group is drawn by its own panel; the AI panel's info rows show once; the
+  model rows offer the models of the AI in use; Home says "The rest are optional." only when they are;
+  `install` and the remote commands are in `NEW_COMMANDS` with their help goldens; the shell smoke's fake
+  server answers Where Hal looks and the goal step; the helper step draws only the found browser's pictures;
+  `helper-files` tars `helper_mirror.source()`.
 
 The CV studio (2026-10-23): the CV store, CV reading, CV types and checks, looks and printing, CV
 suggestions, and documents shaped by the CV type. They are described in
