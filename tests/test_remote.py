@@ -1,7 +1,7 @@
 """Windows opened from another computer, against a real server in a temporary home.
 
 A "remote" window is one signed in through an `open-url --remote` link, as the laptop launcher does. The
-browser helper on the laptop is played by a thread that polls the helper queue; desktop pop-ups go to a
+browser helper on the laptop is paired from that window and polls over HTTP; desktop pop-ups go to a
 fake platform. Everyone and everything here is made up.
 """
 from __future__ import annotations
@@ -22,6 +22,9 @@ from urllib.parse import quote
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.api import HalServer
 from support.world import World, job_id
+from test_helpers import answer_one, session_id_of
+from test_helpers import poll as helper_poll
+from test_pairing import HelperTest, pair
 
 from jobhunt import browser, db, extension, notify, record
 from jobhunt.core import events, paths, settings
@@ -228,46 +231,44 @@ class DesktopActions(unittest.TestCase):
         self.assertIn(b"Completed 5 March 2025.", got.body)
 
 
-class ShowTheForm(unittest.TestCase):
+class ShowTheForm(HelperTest):
     def setUp(self):
+        super().setUp()
         self.world = self.enterContext(World())
         self.hal = self.enterContext(HalServer())
         self.job = job_id("sorrel-ready")
+        self.enterContext(mock.patch.object(browser, "show", side_effect=AssertionError("the desktop's window")))
+        self.away = self.hal.signed_in(remote=True, remote_host=DESK)
         with contextlib.closing(db.connect()) as con:
             db.set_status(con, self.job, "applying", "chosen from the queue")
+            # started from the laptop's window, so the laptop's helper carries it
             con.execute("INSERT OR IGNORE INTO applications (job_id, stage, updated) VALUES (?, 'form', ?)",
                         (self.job, db.now()))
+            con.execute("UPDATE applications SET session_id = ? WHERE job_id = ?", (session_id_of(self.away), self.job))
             con.commit()
-        self.enterContext(mock.patch.object(browser, "show", side_effect=AssertionError("the desktop's window")))
-        # A command left in the shared queue by an earlier test's timed-out ask would reach the fake helper
-        # first and leave "show" unanswered until the client gave up (seen once in a full run, 2026-10-23).
-        self.enterContext(mock.patch.object(extension, "_commands", queue.Queue()))
-        self.enterContext(mock.patch.object(extension, "_waiting", {}))
-        self.away = self.hal.signed_in(remote=True, remote_host=DESK)
         self.path = f"/api/v2/applications/{quote(self.job, safe='')}/form/show"
 
     def test_show_me_the_form_asks_the_laptops_helper_in_a_remote_session(self):
+        laptop = pair(self.hal, self.away, browser="chrome")
+        self.assertEqual(laptop["status"], 200)
+        helper_poll(self.hal, laptop)   # in touch
         asked = []
 
         def laptop_helper():
-            cmd = extension.poll()
-            asked.append(cmd)
-            if cmd:
-                extension.deliver({"id": cmd["id"], "ok": True, "value": {"shown": True}})
+            deadline = time.monotonic() + WAIT_S
+            while not asked and time.monotonic() < deadline:
+                asked.extend(answer_one(self.hal, laptop, {"shown": True}))
 
-        before = extension._seen
         helper = threading.Thread(target=laptop_helper, daemon=True)
         helper.start()
-        _until(lambda: extension._seen != before, "the helper's poll")
         shown = self.away.post(self.path)
         helper.join(WAIT_S)
         self.assertEqual(shown.status, 200, shown.text)
-        self.assertEqual(asked[0]["cmd"], "show")
+        self.assertEqual([c["cmd"] for c in asked], ["show"])
         self.assertEqual(asked[0]["args"]["job"], self.job)
 
     def test_show_me_the_form_says_what_to_do_when_no_helper_is_connected(self):
-        with mock.patch.object(extension, "_seen", 0.0):
-            refused = self.away.post(self.path)
+        refused = self.away.post(self.path)
         self.assertEqual(refused.status, 409)
         self.assertEqual(refused.json()["error"]["code"], "remote")
         self.assertIn("Open Hal in the browser that has the helper", refused.json()["error"]["message"])
