@@ -26,6 +26,8 @@ The command line is `~/.local/bin/hal-employment-cli`, for example:
 ~/.local/bin/hal-employment-cli list -n 10   # the ten best open jobs
 ```
 
+To run Hal from your own clone instead, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
 | Symptom | Fix |
 | --- | --- |
 | "Hal needs git" or "Hal needs curl" | Install it with your distribution's package manager, then run the file again. This is the one step that needs admin rights. |

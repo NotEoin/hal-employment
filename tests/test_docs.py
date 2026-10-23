@@ -22,7 +22,7 @@ README = ROOT / "README.md"
 CI = ROOT / ".github" / "workflows"
 HELP_TIMEOUT_S = 60      # `python -m jobhunt <cmd> --help` imports the command modules; a second or two is usual
 # Root documents every reader may need; the index links each of them too.
-ROOT_DOCS = ("README.md", "CHANGELOG.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "LICENSE")
+ROOT_DOCS = ("README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "LICENSE")
 
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 FENCE = re.compile(r"^\s*```(\S*)\s*$")
@@ -132,7 +132,7 @@ class TheIndex(unittest.TestCase):
 
     def test_every_relative_link_in_the_docs_points_at_a_file(self):
         broken = []
-        pages = [*doc_files(), INDEX, README, ROOT / "SECURITY.md", ROOT / "THIRD_PARTY_NOTICES.md"]
+        pages = [*doc_files(), INDEX, README, *(ROOT / d for d in ROOT_DOCS if d.endswith(".md"))]
         for page in pages:
             for line in outside_fences(text(page)):
                 for target in LINK.findall(line):

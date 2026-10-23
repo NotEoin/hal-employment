@@ -35,6 +35,7 @@ documents explain how Hal works and how to change it.
 | --- | --- |
 | [README](../README.md) | What Hal Employment is, how to install and use it |
 | [Changelog](../CHANGELOG.md) | What changed in each version, in plain words |
+| [Contributing](../CONTRIBUTING.md) | Set up a clone, run the checks, and what a change needs |
 | [Security](../SECURITY.md) | What Hal protects against and what it cannot, what is stored, what leaves the computer, how to report a problem |
 | [Third-party notices](../THIRD_PARTY_NOTICES.md) | The libraries, fonts and tools Hal uses, with their licences |
 | [Licence](../LICENSE) | The MIT licence |
