@@ -1,10 +1,10 @@
 """One approval flow: the applying action kinds, and the workflow rules the screens rely on.
 
 The kinds (`docs.prepare`, `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`,
-`apply.adopt`, `apply.look`) are persisted actions over the form driver, so each has its steps, its
-Activity row and Stop. The rules that used to hide in request handlers (web-ui.md 7) are plain functions
-here, called by the new routes and by Classic alike: approving the documents starts the form, editing them
-marks a filled form out of date, and a discard keeps its reason apart from the others.
+`apply.adopt`, `apply.match_tab`) are persisted actions over the form driver, so each has its steps, its
+Activity row and Stop. The workflow rules are plain functions here, called by the routes: approving the
+documents starts the form, editing them marks a filled form out of date, and a discard keeps its reason
+apart from the others.
 
 Hal never presses Submit: none of this does more than the driver, which hands the last page over.
 
@@ -128,7 +128,7 @@ def adopt_tab(ctx, job_id: str, url: str = "") -> str:
 
 
 def matched_tab(con, page: dict) -> dict:
-    """The job a tab the person opened belongs to, made when no known job matches (Classic's reply shape)."""
+    """The job a tab the person opened belongs to, made when no known job matches."""
     from .. import adopt
 
     job, made = adopt.adopt(con, page)
@@ -143,26 +143,11 @@ def _match_example(world: Any) -> dict:
 @runner.action("apply.match_tab", area="applying", label="Finding the job your tab shows", why=ADOPT_WHY,
                priority=0, exclusive="none", example=_match_example)
 def match_tab(ctx, page: dict) -> dict:
-    """Matches a tab the person opened to a job, or adds the job (Classic's `ext/adopt`)."""
+    """Matches a tab the person opened to a job, or adds the job."""
     ctx.step("Reading your tab")
     found = matched_tab(ctx.con, page)
     ctx.changed(f"{'Added' if found['made'] else 'Found'} {found['title']} at {found['company']}")
     return found
-
-
-def _look_example(world: Any) -> dict:
-    from unittest import mock
-
-    world._stack.enter_context(mock.patch.object(browser, "look", lambda job_id, shot: {"url": "", "buttons": []}))
-    return _example(None)(world)
-
-
-@runner.action("apply.look", area="applying", label="Looking at the form for {title}",
-               why="You asked what the form's tab shows", priority=0, example=_look_example)
-def look(ctx, job_id: str) -> dict:
-    """Describes what the job's tab shows now, with a picture."""
-    ctx.step("Looking at the form")
-    return browser.look(job_id, driver._shot(job_id, "look.png"))
 
 
 def start(kind: str, job_id: str, *, params: dict | None = None, why: str | None = None,

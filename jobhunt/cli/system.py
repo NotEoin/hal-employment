@@ -1,12 +1,10 @@
 """Commands for running Hal itself: serve, vault and open.
 
-`serve` runs the new server (`web.app`), which also serves the classic screens at /classic/. `open` is what
-shortcuts and launchers run: it makes sure the server answers, mints a one-time link and opens it in one app
-window through the platform layer (Edge on Windows, the first Chromium-family browser on Linux), because the
-app only opens through such a link. It opens the new app; `--next /classic/` opens Classic, which
-stays for My CV until its new page lands. The parser for the legacy commands stays in
-`jobhunt/__main__.py`, whose help text is held by goldens; `register` adds `open`, a name gate G4 allows the
-top-level help to gain.
+`serve` runs the server (`web.app`). `open` is what shortcuts and launchers run: it makes sure the server
+answers, mints a one-time link and opens it in one app window through the platform layer (Edge on Windows,
+the first Chromium-family browser on Linux), because the app only opens through such a link. The parser
+for the legacy commands stays in `jobhunt/__main__.py`, whose help text is held by goldens; `register`
+adds `open`, a name gate G4 allows the top-level help to gain.
 """
 import sys
 import time
@@ -63,6 +61,6 @@ def register(sub) -> None:
     """Adds `open [--port N] [--next PATH] [--print]` to the command line's subcommands."""
     s = sub.add_parser("open", help="open Hal Employment in a signed-in window")
     s.add_argument("--port", type=int, help="the port Hal listens on (default: its setting)")
-    s.add_argument("--next", help="the page to show, a path on Hal's server such as /classic/")
+    s.add_argument("--next", help="the page to show, a path on Hal's server such as /#settings")
     s.add_argument("--print", action="store_true", help="print the one-time link instead of opening it")
     s.set_defaults(fn=cmd_open)

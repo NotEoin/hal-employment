@@ -6,7 +6,6 @@ The practice site has an advert with a cookie banner, a two-page form built from
 application forms use and a confirmation page. Nothing leaves the machine.
 """
 import functools
-import json
 import http.server
 import os
 import tempfile
@@ -17,9 +16,9 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import (adopt, autofill, browser, cv, cvbuild, cvscore, db, documents, extension, gmail,  # noqa: E402
-                     record, salary, tasks)
-from jobhunt.web import server  # noqa: E402
+from jobhunt import autofill, browser, db, documents, gmail, record, salary
+from jobhunt.apply import queries
+from jobhunt.core import runner
 
 # An employment record that does not exist, so no test reads the real one or calls Ollama.
 record.VAULT = Path(tempfile.mkdtemp()) / "no-record"
@@ -88,7 +87,7 @@ class Practice(unittest.TestCase):
         cv.write_bytes(b"%PDF-1.4\n%%EOF\n")
         browser.PROFILE, browser.SHOTS, browser.SIGNED_IN = tmp / "profile", tmp / "shots", tmp / "signed-in.json"
         cls.saved = (autofill.profile, autofill.ask_model, autofill.choose_control, documents.render,
-                     documents.files, documents.load, gmail.security_code, server.browser.search, db.connect)
+                     documents.files, documents.load, gmail.security_code, browser.search, db.connect)
         autofill.profile = lambda: dict(PROFILE)
         autofill.ask_model = fake_model
         autofill.choose_control = lambda job, found: ""
@@ -96,7 +95,7 @@ class Practice(unittest.TestCase):
         documents.files = lambda job: {"cv": str(cv)}
         documents.load = lambda con, job: {"letter": "", "answers": []}
         gmail.security_code = lambda since: "A1b2C3d4"
-        server.browser.search = lambda queries, pause=0: ([[]], False)
+        browser.search = lambda queries, pause=0: ([[]], False)
         # Whatever opens the database itself, such as the web helper, opens the test's copy.
         connect = db.connect
         db.connect = lambda path=tmp / "jobs.db": connect(path)
@@ -105,14 +104,13 @@ class Practice(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         from jobhunt.apply import driver
-        from jobhunt.core import runner
 
-        # tab watches and classic actions hold the database open; Windows cannot remove it until they end
+        # tab watches and the driver's actions hold the database open; Windows cannot remove it until they end
         driver.stop_watching()
         runner.idle()
         cls.con.close()
         (autofill.profile, autofill.ask_model, autofill.choose_control, documents.render, documents.files,
-         documents.load, gmail.security_code, server.browser.search, db.connect) = cls.saved
+         documents.load, gmail.security_code, browser.search, db.connect) = cls.saved
         cls.httpd.shutdown()
         cls.httpd.server_close()
         cls.tmp.cleanup()
@@ -126,11 +124,11 @@ class Practice(unittest.TestCase):
         self.con.execute("DELETE FROM answers")
         self.con.execute("DELETE FROM answers2")
         self.con.commit()
-        server.ACTIONS[job_id] = {"name": "test", "state": "running", "message": "", "at": db.now()}
+        runner.ACTIONS[job_id] = {"name": "test", "state": "running", "message": "", "at": db.now()}
         return job_id
 
     def form(self, job_id: str) -> dict:
-        return server._app(self.con, job_id)["form"]
+        return queries._app(self.con, job_id)["form"]
 
     def status(self, job_id: str) -> str:
         return self.con.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()["status"]

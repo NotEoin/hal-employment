@@ -80,7 +80,7 @@ HAL_CONF_MODELS = {"HAL_MODEL": ("ai.model.checker", "main_model"),
                    "HAL_OLLAMA_URL": ("ai.ollama_url", "ollama_url")}
 OWNER_DEFAULTS: dict[str, Any] = {
     "scoring.preset": "technical_grad", "goal.stage": "new_grad", "goal.kinds": KINDS,
-    "ai.provider": "local", "ai.local_only": True, "advanced.developer_mode": True, "advanced.classic": True,
+    "ai.provider": "local", "ai.local_only": True, "advanced.developer_mode": True,
     "advanced.allow_old_helper": True, "addon.enabled": True, "addon.respect_off": False,
 }
 CV_JSON = ("src", "data", "cv.json")
@@ -675,7 +675,7 @@ class _Run:
                 self.plan.add(setting, conf[conf_key], "hal")
                 models += 1
         n = self.write_settings("hal")
-        self.step("hal", f"Set Hal's tools: {models} local models from hal.conf, local AI only, Classic and "
+        self.step("hal", f"Set Hal's tools: {models} local models from hal.conf, local AI only and "
                   "developer mode on.", settings=n, models=models)
 
     def rescore_step(self, data: Path) -> None:

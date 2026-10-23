@@ -214,7 +214,6 @@ class ShellTest(unittest.TestCase):
         srv = self.serve()
         p = self.tab(srv).open("home")
         self.assertEqual(settled(lambda: [n[0] for n in p.page.evaluate(NAV_TEXTS)], FULL_MENU), FULL_MENU)
-        self.assertNotIn("classic", p.page.inner_text("#main"))
 
     def test_on_a_narrow_window_the_menu_slides_in_and_esc_closes_it(self) -> None:
         srv = self.serve(session=made_up_session(developer=True))

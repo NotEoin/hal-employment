@@ -1268,20 +1268,6 @@ def _search(b: Browser, queries: list[str], pause: float) -> tuple[list[list[dic
     return found, refused
 
 
-def _look(b: Browser, job_id: str, shot: str) -> dict:
-    """Describes what the job's tab shows now: its buttons, any open dialog, and a picture."""
-    page = b.tab(job_id)
-    Path(shot).parent.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=shot)
-
-    def texts(selector: str, limit: int) -> list[str]:
-        return [" ".join(t.split())[:limit] for t in page.locator(selector).all_inner_texts() if t.strip()]
-
-    return {"url": page.url, "title": page.title(), "screenshot": shot,
-            "buttons": texts("button:visible, [role=button]:visible, input[type=submit]:visible", 60)[:40],
-            "dialogs": texts("[role=dialog]:visible, dialog:visible", 1500)[:3]}
-
-
 def _show(b: Browser, job_id: str) -> bool:
     page = b.page(job_id)
     if page is None:
@@ -1354,10 +1340,6 @@ def next_step(job_id: str) -> dict:
 
 def search(queries: list[str], pause: float = 0) -> tuple[list[list[dict]], bool]:
     return _via(_search, queries, pause)
-
-
-def look(job_id: str, shot: Path) -> dict:
-    return _via(_look, job_id, str(shot))
 
 
 def show(job_id: str) -> bool:

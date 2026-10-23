@@ -1,7 +1,7 @@
 """A real Hal server for tests, in its own temporary home, and a client that signs in the way a window does.
 
 `with HalServer() as hal:` starts the new server on 127.0.0.1 and a free port, in a fresh
-`HAL_EMPLOYMENT_HOME`, without the legacy worker. `hal.client()` is signed out; `hal.signed_in()` swaps a
+`HAL_EMPLOYMENT_HOME`, without the queue worker. `hal.client()` is signed out; `hal.signed_in()` swaps a
 one-time open link for a session cookie first. The client sends `X-Hal: 1` on writes unless told not to,
 and lets a test set any header (Host, Origin) to check the server's refusals.
 """

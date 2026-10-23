@@ -10,7 +10,7 @@ from test_cv_store import cv_home
 
 from jobhunt import cv, db
 from jobhunt.core.db import tasks
-from jobhunt.cvstudio import import_v1, legacy_actions, model, store
+from jobhunt.cvstudio import import_v1, model, store
 
 SITE = {"_comment": ["Made-up CV for tests"], "title": "Computing graduate",
         "contact": {"location": "Exampleton", "github": "github.com/made-up", "site": "made-up.example"},
@@ -89,13 +89,6 @@ class OwnerImport(unittest.TestCase):
         kinds = {(c["kind"], c["target"].rsplit("/", 1)[-1]) for c in model.diff(first, now)
                  if c["target"].startswith(f"s:projects/e:{old_id}")}
         self.assertEqual(kinds, {("Reworded", "heading"), ("Reworded", "text")})
-        # Renamed again in the classic screens, it is still the same entry, edits and all.
-        mine = cv.for_editing()
-        mine["projects"][0]["name"] = "Tree index, a B-tree in C"
-        cv.save_base(mine)
-        again = store.current()[1].sections[2].entries[0]
-        self.assertEqual((again.id, again.heading, again.text),
-                         (old_id, "Tree index, a B-tree in C", "A B-tree in 2,000 lines, with tests."))
 
     def test_the_hidden_project_of_a_snapshot_is_kept_hidden_in_that_version(self):
         import_v1.import_into(self.con)
@@ -114,9 +107,9 @@ class OwnerImport(unittest.TestCase):
         self.assertEqual(len(store.versions()), 4)
 
     def test_the_data_task_is_registered_and_runs_once(self):
-        self.assertIn(import_v1.NAME, tasks.TASKS)
+        self.assertIn(import_v1.NAME, {task.name for task in tasks.load()})
         self.assertIs(tasks.TASKS[import_v1.NAME].fn, import_v1.run)
-        self.assertTrue(legacy_actions.add_source)
+        self.assertIn("jobhunt.cvstudio.import_v1", tasks.TASK_MODULES)
         done = tasks.run_now(import_v1.NAME)
         self.assertEqual(done["state"], "done")
         self.assertEqual(len(store.versions()), 4)

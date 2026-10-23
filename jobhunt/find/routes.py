@@ -23,7 +23,7 @@ from datetime import date
 from jobhunt.core import clock, runner, settings
 from jobhunt.find import feedback, job_actions, kinds, rules
 from jobhunt.find import goal as goal_mod
-from jobhunt.web.router import BadRequest, Conflict, NotFound, Request, route
+from jobhunt.web.router import BadRequest, NotFound, Request, route
 
 PAGE = 50                   # jobs per page of a list; the page asks for more as the person scrolls
 EXAMPLES = 2                # example jobs named under each Hidden group
@@ -421,9 +421,6 @@ def _start(req: Request, kind: str, **kw) -> str:
 def apply(req: Request) -> dict:
     """Apply with Hal: documents come first; no form is opened until the person approves them."""
     row = _row(req.con, req.params["job_id"])
-    if "docs.prepare" not in runner.load_kinds():
-        raise Conflict("Applying from this page arrives with the new Applications page. Use the classic "
-                       "screens under Settings, Advanced until then.")
     at = clock.local()
     action_id = _start(req, "docs.prepare", job_id=row["id"], params={"job_id": row["id"]},
                        why=f"You pressed Apply with Hal at {at:%H:%M}. Documents come first.")

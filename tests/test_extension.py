@@ -3,17 +3,14 @@
 The helper is paired the way a person pairs it: a signed-in window, here a plain HTTP client
 standing for the app window in another browser, asks for a code, and the helper's browser opens Hal's
 /pair page, where pair.js hands the code to the helper. Every request after that carries the helper's key.
-The form tests are the InYourBrowser tests moved from tests/test_apply.py, now over a paired helper.
 
 The helper's browser runs on a thread of its own that keeps Playwright serviced between calls
 (`support.practice_site.HelperBrowser`): a test waits in plain Python while Hal works through the helper, and
-on Windows an unserviced browser held up a page's own form post. Every Playwright call goes
-through `on_helper` or `in_tab`.
+on Windows an unserviced browser held up a page's own form post. Every Playwright call goes through
+`on_helper` or `in_tab`.
 """
-import concurrent.futures
 import json
 import os
-import queue
 import shutil
 import threading
 import time
@@ -21,21 +18,19 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 from unittest import mock
-from urllib.parse import urlparse
 
 from support import legacy
-from support.api import Client
 from support.legacy import EXTENSION, PROSE, Practice
-from support.practice_site import LAUNCH_S, HelperBrowser
+from support.practice_site import HelperBrowser
 
 from jobhunt import db, extension
 from jobhunt.apply import driver, helpers
-from jobhunt.web import app, auth, server
+from jobhunt.core import runner
+from jobhunt.web import auth
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
 
-PAIR_WAIT_MS = 20000      # a fresh browser's helper may take a while to start
 CONNECT_WAIT_S = 30
 SHORT_POLL_S = 2          # keeps the reload test quick: a held poll ends this soon
 STEP_S = 0.25
@@ -44,44 +39,6 @@ ADOPT_WAIT_S = 60         # finding a handed-over tab's job and filling it
 
 class PairedHelper(HelperBrowser):
     """Mixin: Hal's real server, and Playwright's Chromium with the helper loaded and paired."""
-
-    @classmethod
-    def start_hal(cls) -> None:
-        cls.hal = app.make_server(0)
-        cls.port = cls.hal.server_address[1]
-        threading.Thread(target=cls.hal.serve_forever, name="hal-for-helper", daemon=True).start()
-
-    @classmethod
-    def stop_hal(cls) -> None:
-        cls.hal.stop()
-
-    @classmethod
-    def window(cls) -> Client:
-        """A signed-in app window: the person's Edge, say, where the helper is not."""
-        c = Client(cls.port)
-        url = urlparse(auth.mint_open_url(port=cls.port))
-        if c.get(f"{url.path}?{url.query}").status != 302:
-            raise AssertionError("the open link did not sign the window in")
-        return c
-
-    @classmethod
-    def launch(cls, folder: Path, profile_home: Path) -> None:
-        """Starts the browser with the helper in `folder` loaded unpacked, on its own thread (`HelperBrowser`).
-
-        The browser's profile is `profile_home / "helper-browser"`; `cls.ctx` and `cls.worker` live on that thread.
-        """
-        cls._calls = queue.Queue()
-        ready: concurrent.futures.Future = concurrent.futures.Future()
-        cls._owner = threading.Thread(target=cls._own_browser, args=(profile_home, folder, ready),
-                                      name="helper-browser", daemon=True)
-        cls._owner.start()
-        ready.result(LAUNCH_S)
-
-    @classmethod
-    def close_browser(cls) -> None:
-        """Closes the browser `launch` started and ends its thread."""
-        cls._calls.put(None)
-        cls._owner.join(LAUNCH_S)
 
     @classmethod
     def developer_mode(cls) -> None:
@@ -98,27 +55,6 @@ class PairedHelper(HelperBrowser):
 
         cls.on_helper(switch)
 
-    @classmethod
-    def pair_in(cls, window: Client, host: str = "127.0.0.1") -> str:
-        """Pairs the helper from `window`, as the setup step's Connect does; returns its id."""
-        code = window.post("/api/v2/helpers/pairing-code", {"browser": "chrome"}).json()["code"]
-
-        def pair():
-            page = cls.ctx.new_page()
-            page.goto(f"http://{host}:{cls.port}/pair#code={code}")
-            page.wait_for_selector('#hal-pair-result[data-ok="yes"]', timeout=PAIR_WAIT_MS)
-            page.close()
-
-        cls.on_helper(pair)
-        with closing(db.connect()) as con:
-            helper_id = con.execute("SELECT id FROM helpers ORDER BY rowid DESC LIMIT 1").fetchone()["id"]
-        deadline = time.monotonic() + CONNECT_WAIT_S
-        while not extension.connected(helper_id) and time.monotonic() < deadline:
-            time.sleep(STEP_S)
-        if not extension.connected(helper_id):
-            raise AssertionError("the paired helper never polled")
-        return helper_id
-
 
 class InYourBrowser(PairedHelper, Practice):
     """Forms filled through the paired helper, in a browser that loads it as the applicant's own does."""
@@ -126,18 +62,11 @@ class InYourBrowser(PairedHelper, Practice):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        extension.reset()
-        cls.start_hal()
-        os.environ["JOBHUNT_APPLY_BROWSER"] = "extension"
-        cls.launch(EXTENSION, Path(cls.tmp.name))
-        cls.helper_id = cls.pair_in(cls.window())
+        cls.start_helper(Path(cls.tmp.name))
 
     @classmethod
     def tearDownClass(cls):
-        cls.close_browser()
-        cls.stop_hal()
-        extension.reset()
-        os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
+        cls.stop_helper()
         super().tearDownClass()
 
     def tearDown(self):
@@ -176,7 +105,7 @@ class InYourBrowser(PairedHelper, Practice):
     def test_applications_open_together_in_a_window_of_their_own(self):
         """apply_window = "separate": job tabs share one window, apart from the one the applicant works in."""
         for name in ("ext-window-1", "ext-window-2"):
-            server.act_auto(self.con, self.job(name, f"form.html?{name}"))
+            driver.act_auto(self.con, self.job(name, f"form.html?{name}"))
         tabs = self.in_worker("() => chrome.tabs.query({}).then(ts => ts.map(t => [t.url, t.windowId]))")
         own = self.in_worker("() => chrome.storage.session.get('halWindow').then(s => s.halWindow)")
         # Earlier tests may have opened the window already; either way both jobs are in it, and it is not the only one.
@@ -185,7 +114,7 @@ class InYourBrowser(PairedHelper, Practice):
 
     def test_fills_the_first_page_and_leaves_what_it_cannot_answer(self):
         job_id = self.job("ext-fill", "form.html")
-        said = server.act_auto(self.con, job_id)
+        said = driver.act_auto(self.con, job_id)
         self.assertIn("1 required question", said)
         shown = self.in_tab("form.html", lambda page: (
             page.input_value("#fn"), page.inner_text("#uni-shown"), page.is_checked("#rtw-y"),
@@ -194,7 +123,7 @@ class InYourBrowser(PairedHelper, Practice):
 
     def test_marks_the_page_then_follows_the_applicant_through_to_submitting(self):
         job_id = self.job("ext-journey", "form.html")
-        server.act_auto(self.con, job_id)
+        driver.act_auto(self.con, job_id)
         driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         mark_of = "s => document.querySelector(s).closest('[data-hal-mark]')?.getAttribute('data-hal-mark') || null"
         marks = self.in_tab("form.html", lambda page: {s: page.evaluate(mark_of, s)
@@ -209,9 +138,9 @@ class InYourBrowser(PairedHelper, Practice):
         seen = {}
         self.in_tab("form.html", lambda page: (page.fill("#dob", "01/02/2003"), page.fill("#ln", "Byron")))
         self.assertEqual(self.in_tab("form.html", lambda page: page.evaluate(mark_of, "#dob")), "edited")
-        self.assertTrue(server._watch_step(self.con, job_id, seen))
+        self.assertTrue(driver._watch_step(self.con, job_id, seen))
         self.in_tab("form.html", lambda page: page.click("#next"))
-        self.assertTrue(server._watch_step(self.con, job_id, seen))
+        self.assertTrue(driver._watch_step(self.con, job_id, seen))
         form = self.form(job_id)
         self.assertEqual((form["step"], form["state"]), (2, "ready"))
         self.assertEqual(self.in_tab("form.html", lambda page: page.input_value("#why")), PROSE)
@@ -223,7 +152,7 @@ class InYourBrowser(PairedHelper, Practice):
         # Hal never submits; once the applicant does, the site's thanks marks the job applied.
         self.assertEqual(self.status(job_id), "applying")
         self.in_tab("form.html", lambda page: page.click("#send"))
-        self.assertFalse(server._watch_step(self.con, job_id, seen))
+        self.assertFalse(driver._watch_step(self.con, job_id, seen))
         self.assertEqual(self.status(job_id), "applied")
         rows = self.con.execute("SELECT * FROM answers2 WHERE scope = 'everywhere'")
         kept = {r["question"]: db.json_value(r["answer"]) for r in rows}
@@ -231,16 +160,16 @@ class InYourBrowser(PairedHelper, Practice):
 
     def test_fills_a_tab_the_applicant_opened_and_handed_over(self):
         job_id = self.job("ext-adopt", "advert.html?jobId=7")
-        server.ACTIONS.pop(job_id)
+        runner.ACTIONS.pop(job_id)
         self.on_helper(lambda: self.ctx.new_page().goto(f"{self.base}/form.html?jobId=7"))
         self.in_worker("""async () => {
             const [tab] = await chrome.tabs.query({ url: '*://127.0.0.1/form.html?jobId=7' });
             await handTab(tab);
         }""")
         deadline = time.monotonic() + ADOPT_WAIT_S
-        while server.ACTIONS.get(job_id, {}).get("state") in (None, "running") and time.monotonic() < deadline:
+        while runner.ACTIONS.get(job_id, {}).get("state") in (None, "running") and time.monotonic() < deadline:
             time.sleep(STEP_S)
-        self.assertEqual(server.ACTIONS[job_id]["state"], "done", server.ACTIONS[job_id]["message"])
+        self.assertEqual(runner.ACTIONS[job_id]["state"], "done", runner.ACTIONS[job_id]["message"])
         mine = "form.html?jobId=7"
         self.assertEqual(self.in_tab(mine, lambda page: page.input_value("#fn")), "Ada")
         self.assertIn("1 to answer", self.in_tab(mine, lambda page: page.inner_text("#hal-panel .counts")))

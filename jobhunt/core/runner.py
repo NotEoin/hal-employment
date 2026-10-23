@@ -9,8 +9,8 @@ turns those rows into `step` events, so the runner itself publishes only `action
 Design decisions, each with its reason:
 
 - Every bookkeeping write goes through one writer thread, in order, on its own connection. The caller of
-  `start`, `stop` or `step` may hold an open write transaction on its own connection (the classic handlers
-  do), and a second connection in the same thread would wait the whole busy timeout on that lock. The
+  `start`, `stop` or `step` may hold an open write transaction on its own connection (the form driver's
+  helpers do), and a second connection in the same thread would wait the whole busy timeout on that lock. The
   writer never commits the action's own work either: that stays the action's to commit. Reads in this
   process call `flush()` first, so they see their own writes.
 - Each queued or running action holds a lock file `state/actions/<id>.lock` until its last row is written.
@@ -18,9 +18,9 @@ Design decisions, each with its reason:
   that ended, so a command-line run beside the server is never marked interrupted.
 - A stop is seen in two ways: in this process at once, and from another process through the row's state,
   read at a checkpoint at most every `STOP_POLL_S`.
-- The classic API (`run_action`, `stop_action`, `_checkpoint`, `_say`, `_note`, `ACTIONS`) stays for the
-  driver and Classic. `ACTIONS` mirrors every action with a subject in today's shape {name, state, message,
-  at}; a classic action is persisted too (kind `classic.<name>`), and `_say` adds a step to it.
+- The form driver keys its work by job (`run_action`, `stop_action`, `_checkpoint`, `_say`, `_note`,
+  `ACTIONS`). `ACTIONS` mirrors every action with a subject as {name, state, message, at}; an action the
+  driver starts is persisted too (kind `form.<name>`), and `_say` adds a step to it.
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ FINAL = ("done", "error", "stopped", "interrupted")
 CARRY_ON_FROM = ("interrupted", "stopped", "error")
 USER_THREADS = 4             # priorities 0 and 1
 BACKGROUND_THREADS = 2       # priority 2
-CLASSIC_THREADS = 6          # as before the rebuild: classic actions mostly wait on the browser or the model
+JOB_THREADS = 6              # the driver's actions mostly wait on the browser or the model
 IDLE_POLL_S = 0.5            # `idle()` looks again this often even unwoken, so a missed wake-up costs little
 STOP_POLL_S = 1.0            # how often a checkpoint asks the database whether another process said stop
 FLUSH_S = 2.0                # how long a read waits for this process's own writes to land
@@ -60,14 +60,13 @@ EXIT_FLUSH_S = 10.0          # what a command-line run waits at exit for its las
 WRITE_TRIES = 3              # a write still failing after the busy timeout this often is logged and dropped
 LIST_LIMIT = 200
 LOCK_DIR = "actions"
-MESSAGE_CHARS = 500          # the classic queue shows one line; the whole error is kept in `error`
+MESSAGE_CHARS = 500          # a message is shown on one line; the whole error is kept in `error`
 AREAS = ("find", "documents", "applying", "email", "learning", "settings", "cv", "system")
 EXCLUSIVE = ("subject", "kind", "none")
 STOPPED_WORDS = "You stopped Hal. The work so far is kept."
 INTERRUPTED_WORDS = "Hal closed before this finished. The work so far is kept."
-CLASSIC_WHY = "You started this from the classic screens."
+ASKED_WHY = "You asked Hal to do this for the job."
 WATCH_WHY = "Hal is watching the form while you fill it in."
-CLASSIC_AREAS = {"_mail": "email", "_cv": "cv", "_cvbuild": "cv", "_cvreview": "cv"}
 
 
 @dataclass(frozen=True)
@@ -88,8 +87,8 @@ class ActionKind:
 KINDS: dict[str, ActionKind] = {}
 _FNS: dict[str, Callable[..., Any]] = {}
 ACTIONS: dict[str, dict] = {}
-# Classic actions and Classic's own background jobs (closing a tab quietly) run here, as before.
-POOL = ThreadPoolExecutor(max_workers=CLASSIC_THREADS, thread_name_prefix="action")
+# The driver's actions and short jobs such as closing a tab quietly run here, beside the two pools of `start`.
+POOL = ThreadPoolExecutor(max_workers=JOB_THREADS, thread_name_prefix="action")
 _USER = ThreadPoolExecutor(max_workers=USER_THREADS, thread_name_prefix="action-user")
 _BACKGROUND = ThreadPoolExecutor(max_workers=BACKGROUND_THREADS, thread_name_prefix="action-bg")
 _PRIORITY: contextvars.ContextVar[int] = contextvars.ContextVar("hal_action_priority", default=0)
@@ -107,7 +106,7 @@ class Stopped(BaseException):
     """
 
 
-# The classic entry and the Ctx, by subject, that this thread is carrying out. An action whose entry in
+# The `ACTIONS` entry and the Ctx, by subject, that this thread is carrying out. An action whose entry in
 # ACTIONS has been replaced or removed is stopped at its next checkpoint.
 _RUN = threading.local()
 
@@ -635,21 +634,21 @@ def _finish(live: _Live, state: str, *, message: str = "", result: Any = None, e
     live.finished.set()
 
 
-def _execute(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *, classic: bool = False) -> None:
+def _execute(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *, on_form: bool = False) -> None:
     """Runs one action in this thread from start to end and records how it ended; never raises."""
     if live.state in FINAL:
         return
     with _lock:
         _executing[0] += 1
     try:
-        _execute_counted(live, fn, resumed_from, classic=classic)
+        _execute_counted(live, fn, resumed_from, on_form=on_form)
     finally:
         with _ended:
             _executing[0] -= 1
             _ended.notify_all()
 
 
-def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *, classic: bool) -> None:
+def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *, on_form: bool) -> None:
     live.state, live.started = "running", time.monotonic()
     at, aid = clock.iso(), live.id
     _WRITER.put(live.connect, lambda con: con.execute(
@@ -686,7 +685,7 @@ def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | 
             live.entry.update(state="error", message=f"{e}", at=db.now())
             _rollback_quietly(con)
             _finish(live, "error", message=f"{e}", error=f"{e}", tone="bad")
-            if classic and live.subject:
+            if on_form and live.subject:
                 _note(con, live.subject, "stuck", f"{e}")
     finally:
         _CURRENT.reset(tokens[0])
@@ -971,11 +970,11 @@ def at_start() -> None:
     tasks.start_due()
 
 
-# ------------------------------------------------------------------------------------------ classic API
+# ------------------------------------------------------------------------------------- the form driver's API
 
-def _classic_kind(subject: str, name: str) -> ActionKind:
+def _job_kind(name: str) -> ActionKind:
     slug = "".join(c if c.isalnum() else "_" for c in name.lower()).strip("_") or "action"
-    return ActionKind(f"classic.{slug}", CLASSIC_AREAS.get(subject, "applying"), "{name}", CLASSIC_WHY)
+    return ActionKind(f"form.{slug}", "applying", "{name}", ASKED_WHY)
 
 
 def _checkpoint(job_id: str) -> None:
@@ -1005,13 +1004,13 @@ def stop_action(job_id: str) -> bool:
     return True
 
 
-def _classic_begin(job_id: str, name: str, *, replace: bool, why: str) -> _Live:
+def _job_begin(job_id: str, name: str, *, replace: bool, why: str) -> _Live:
     entry = ACTIONS.get(job_id)
     if entry and entry["state"] == "running":
         if not replace:
             raise RuntimeError(f"Hal is still busy with '{entry['name']}' for this job")
         stop_action(job_id)
-    return _begin(_classic_kind(job_id, name), subject=job_id, job_id=None if job_id.startswith("_") else job_id,
+    return _begin(_job_kind(name), subject=job_id, job_id=None if job_id.startswith("_") else job_id,
                   params={}, why=why, priority=None, replace=True, session_id=None, helper_id=None, name=name)
 
 
@@ -1021,8 +1020,8 @@ def run_action(job_id: str, name: str, fn, *args, replace: bool = False) -> dict
     Args:
         replace: Stop an action already running for the job in favour of this one, rather than refuse.
     """
-    live = _classic_begin(job_id, name, replace=replace, why=CLASSIC_WHY)
-    POOL.submit(_execute, live, lambda ctx: fn(ctx.con, *args), None, classic=True)
+    live = _job_begin(job_id, name, replace=replace, why=ASKED_WHY)
+    POOL.submit(_execute, live, lambda ctx: fn(ctx.con, *args), None, on_form=True)
     return live.entry
 
 
@@ -1033,10 +1032,10 @@ def _carry_out(con, job_id: str, fn, *args) -> None:
     """
     entry = ACTIONS[job_id]
     ACTIONS.pop(job_id, None)
-    live = _classic_begin(job_id, entry["name"], replace=True, why=WATCH_WHY)
+    live = _job_begin(job_id, entry["name"], replace=True, why=WATCH_WHY)
     live.entry = entry
     ACTIONS[job_id] = entry
-    _execute(live, lambda ctx: fn(con, *args), None, classic=True)
+    _execute(live, lambda ctx: fn(con, *args), None, on_form=True)
 
 
 def _say(job_id: str, text: str) -> None:

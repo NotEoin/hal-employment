@@ -147,7 +147,7 @@ class TypeKeywords(unittest.TestCase):
         self.assertEqual(sorted(found["have"]), ["archival research", "excel"])
         self.assertEqual(found["missing"], [])
 
-    def test_without_a_type_the_classic_list_is_used(self):
+    def test_without_a_type_the_built_in_list_is_used(self):
         found = cvscore.keywords("We use Python and Docker.", "Built it in Python.")
         self.assertEqual(found["have"], ["python"])
         self.assertEqual(found["missing"], ["docker"])

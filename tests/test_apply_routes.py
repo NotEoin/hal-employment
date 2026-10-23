@@ -1,13 +1,11 @@
-"""The Applications routes and Classic's slow routes turned into actions.
+"""The Applications routes, a document under the name employers see, and the old helper's adopt.
 
 Each test serves the made-up world from a real server with a signed-in window. The browser and the form
 driver are replaced by stand-ins; the routes, the rules of `apply/actions.py` and the database are real.
 """
 from __future__ import annotations
 
-import contextlib
 import json
-import time
 import unittest
 from unittest import mock
 from urllib.parse import quote
@@ -15,30 +13,11 @@ from urllib.parse import quote
 from support.api import HalServer
 from support.world import World, job_id
 
-from jobhunt import browser, db, documents, record
+from jobhunt import browser, db, documents
 from jobhunt.apply import driver
-from jobhunt.core import naming, runner
+from jobhunt.core import naming, paths, runner
 
 WAIT_S = 10.0
-POLL_S = 0.05
-SLOW_RECORD_S = 3.0      # longer than Classic's 2 s wait, so the route answers "started"
-SYNCED = {"converted": [], "added": 1, "changed": 0, "removed": 0}
-
-
-def made_up_record(delay: float = 0.0):
-    """The record's `sync` and `ask`, made up and as slow as asked, under the record's real action kinds."""
-    def sync() -> dict:
-        time.sleep(delay)
-        return dict(SYNCED)
-
-    def ask(q: str) -> dict:
-        time.sleep(delay)
-        return {"answer": "A made-up answer.", "sources": ["notes.md"], "note": "", "passages": []}
-
-    stack = contextlib.ExitStack()
-    stack.enter_context(mock.patch.object(record, "sync", sync))
-    stack.enter_context(mock.patch.object(record, "ask", ask))
-    return stack
 
 
 class Routes(unittest.TestCase):
@@ -203,29 +182,15 @@ class Routes(unittest.TestCase):
                 done = self.wait(r.json()["action_id"])
                 self.assertEqual((done["kind"], done["result"]), (kind, result))
 
-    def test_classics_slow_legacy_routes_start_actions(self):
-        self.start_applying("sorrel-ready")
-        with made_up_record():
-            synced = self.c.post("/api/record/sync")
-            self.assertEqual(synced.status, 200, synced.text)
-            self.assertEqual(synced.json()["last_sync"], SYNCED)
-            asked = self.c.post("/api/record/ask", {"question": "Where did I volunteer?"}).json()
-            self.assertEqual(asked["answer"], "A made-up answer.")
-        with made_up_record(delay=SLOW_RECORD_S):
-            self.assertEqual(self.c.post("/api/record/sync").json()["started"], True)
-        with mock.patch.object(browser, "look", lambda job_id, shot: {"url": "https://jobs.example.org/apply"}):
-            look = self.c.post(f"/api/job/{quote(job_id('sorrel-ready'), safe='')}/form-look")
-            self.assertEqual(look.json()["url"], "https://jobs.example.org/apply")
+    def test_the_old_helpers_handed_over_tab_is_matched_as_an_action(self):
         adopted = self.c.post("/api/ext/adopt", {"url": "https://jobs.example.org/sorrel/apply",
                                                  "title": "Software Engineer, Graduate - Sorrel Payments",
                                                  "text": "Sorrel Payments. Software Engineer, Graduate."})
         self.assertEqual(adopted.status, 200, adopted.text)
+        self.assertEqual(adopted.json()["job"], job_id("sorrel-ready"))
         runner.flush()
         kinds = {r["kind"] for r in self.con.execute("SELECT kind FROM actions")}
-        self.assertLessEqual({"record.sync", "record.ask", "apply.look", "apply.match_tab"}, kinds)
-        deadline = time.monotonic() + WAIT_S
-        while runner.listing(self.con) and time.monotonic() < deadline:
-            time.sleep(POLL_S)
+        self.assertIn("apply.match_tab", kinds)
 
     def test_a_document_is_served_under_the_name_employers_see(self):
         pdf = self.world.root / "made-up-cv.pdf"
@@ -236,26 +201,16 @@ class Routes(unittest.TestCase):
         self.assertEqual(r.headers["Content-Disposition"], f'inline; filename="{naming.file_name("cv")}"')
         self.assertNotIn("made-up-cv", r.headers["Content-Disposition"])
 
-    def test_a_pdf_the_reader_cannot_open_is_not_found_rather_than_an_error(self):
-        import sys
-        import types
-
-        import jobhunt.cvstudio as cvstudio
-
-        class Unreadable(Exception):
-            pass
-
-        def page_png(pdf, number, scale=2.0):
-            raise Unreadable("not a PDF")
-
-        fake = types.SimpleNamespace(Unreadable=Unreadable, page_png=page_png)
-        pdf = self.world.root / "broken.pdf"
-        pdf.write_bytes(b"not a pdf")
-        with mock.patch.dict(sys.modules, {"jobhunt.cvstudio.pdfread": fake}), \
-                mock.patch.object(cvstudio, "pdfread", fake, create=True), \
-                mock.patch("jobhunt.web.server.SERVABLE", [self.world.root.resolve()], create=True):
-            r = self.c.get(f"/pages?path={quote(str(pdf))}&page=1")
-        self.assertEqual(r.status, 404, r.text)
+    def test_files_are_served_from_the_application_folders_only(self):
+        inside = paths.applications_dir() / "made-up-application" / "letter.pdf"
+        inside.parent.mkdir(parents=True, exist_ok=True)
+        inside.write_bytes(b"%PDF-1.4 made up")
+        self.addCleanup(inside.unlink)
+        outside = self.world.root / "made-up-notes.txt"
+        outside.write_text("made up", encoding="utf-8")
+        found = self.c.get(f"/files?path={quote(str(inside))}")
+        self.assertEqual((found.status, found.headers["Content-Type"]), (200, "application/pdf"))
+        self.assertEqual(self.c.get(f"/files?path={quote(str(outside))}").status, 404)
 
 
 class Providers(unittest.TestCase):
@@ -309,19 +264,6 @@ class Providers(unittest.TestCase):
         self.assertEqual([r["route"] for r in found], ["app-" + quote(job_id("sorrel-ready"), safe="")])
         self.assertEqual(found[0]["kind"], "Application")
         self.assertEqual(search.search(self.con, "wexford"), [])
-
-
-class LegacyPaths(unittest.TestCase):
-    """Regression: `web/server.py` imported `BASE_CV` once, so the base CV preview kept the first home's folder."""
-
-    def test_the_base_cv_folder_follows_the_home(self):
-        from pathlib import Path
-
-        from jobhunt.core import paths
-        from jobhunt.web import server
-
-        with mock.patch.object(paths, "cache_dir", lambda: Path("/made-up/cache")):
-            self.assertEqual(server.BASE_CV, Path("/made-up/cache/base-cv"))
 
 
 if __name__ == "__main__":

@@ -1,9 +1,8 @@
-"""The new server: one process on 127.0.0.1 serving the new app, API v2, the event stream and Classic.
+"""The server: one process on 127.0.0.1 serving the app, API v2 and the event stream.
 
-`AppHandler` subclasses the legacy `server.Handler`, so every Classic route keeps its exact code. Each
-request goes through, in order: the Host check, `/healthz`, `/open`, `/pair`, the CSRF check for writes,
-the session or local key, `/api/v2/*` through the router (the event stream is a route), `/classic/*`, the
-legacy `/api/*`, `/files`, `/pages` and `/doc/*`, then the new app's files.
+Each request goes through, in order: the Host check, `/healthz`, `/open`, `/pair`, the CSRF check for writes,
+the session or local key, `/api/v2/*` through the router (the event stream is a route), the old helper's
+`/api/ext/*`, a document's `/files` and `/doc/*`, then the app's own files.
 
 The address is never a setting: Hal listens on `BIND` only, and over SSH the tunnel reaches it there.
 """
@@ -25,14 +24,14 @@ import sys
 import threading
 import time
 from http import HTTPStatus
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .. import __version__, db
-from ..core import paths, plugins
-from . import auth, router, server, sse
+from ..core import naming, paths, plugins
+from . import auth, router, sse
 
 BIND = "127.0.0.1"
 HOSTS = ("127.0.0.1", "localhost")
@@ -42,9 +41,11 @@ MIME = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
         ".png": "image/png", ".txt": "text/plain; charset=utf-8"}
 IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)
 UNSAFE_METHODS = ("POST", "PUT", "DELETE", "PATCH")
-HELPER_PATHS = ("/api/v2/helpers/", "/api/ext/")   # where a browser extension's origin may write
-LEGACY_PREFIXES = ("/api/", "/doc/")
-LEGACY_PATHS = ("/files", "/pages")
+CSRF_HEADER = "X-Hal"     # a cross-site page cannot add a custom header without CORS, which is never granted
+OLD_HELPER_PREFIX = "/api/ext/"
+HELPER_PATHS = (router.PREFIX + "/helpers/", OLD_HELPER_PREFIX)   # where a browser extension's origin may write
+DOC_PATH = re.compile(r"/doc/([^/]+)/(cv|letter)")
+OLD_ADOPT_WAIT_S = 2.0    # as the paired helper's adopt; a slower match answers "started"
 HEALTH_TIMEOUT_S = 2
 LISTEN_BACKLOG = 64        # waiting connections; see AppServer
 STOP_WAIT_S = 10           # an event stream ends within its wake-up time; other replies are quicker still
@@ -57,7 +58,6 @@ LOCK_FILE = "server.lock"
 LINK_RAN_OUT = "This link has run out. Open Hal Employment from its shortcut."
 LINK_RAN_OUT_REMOTE = "This link has run out. Run the launcher on this computer again."
 FROM_SHORTCUT = "For your safety, Hal opens from its shortcut."
-CLASSIC_OFF = "The classic screens are switched off. Turn them on in Settings, Advanced."
 
 log = logging.getLogger(__name__)
 _commit: list[str | None] = []
@@ -92,11 +92,6 @@ def setting(key: str, fallback: Any) -> Any:
         return fallback
 
 
-def classic_on() -> bool:
-    """Classic is served when `advanced.classic` is on, or in developer mode (the owner's way back)."""
-    return bool(setting("advanced.classic", False) or setting("advanced.developer_mode", False))
-
-
 def csp(index_html: str) -> str:
     """The app page's Content-Security-Policy, with the hash of its inline import map."""
     m = IMPORT_MAP.search(index_html)
@@ -108,12 +103,20 @@ def csp(index_html: str) -> str:
             "frame-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'")
 
 
-class AppHandler(server.Handler):
-    """The legacy handler with the new server's checks and routes in front of it."""
+def servable() -> tuple[Path, ...]:
+    """The folders `/files` may serve from: the application folders, old and new."""
+    return tuple(p.resolve() for p in (paths.applications_dir(), paths.legacy_packs_dir()))
+
+
+class AppHandler(BaseHTTPRequestHandler):
+    """One request: the checks, then the route that answers it."""
 
     server_version = "HalEmployment/2"
     session: auth.Session | None = None
     local: bool = False
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        """Keeps the log to errors only; `_handle` logs those with their traceback."""
 
     # replies
 
@@ -195,7 +198,7 @@ class AppHandler(server.Handler):
 
     def _write_allowed(self, path: str) -> bool:
         """Writes need `X-Hal: 1` and, when an Origin is sent, this server's own origin (or a helper's)."""
-        if self.headers.get(server.CSRF_HEADER) != "1":
+        if self.headers.get(CSRF_HEADER) != "1":
             return False
         origin = self.headers.get("Origin")
         if not origin:
@@ -245,13 +248,17 @@ class AppHandler(server.Handler):
             if not router.dispatch(self, method):
                 self.send_json({"error": {"code": "not_found", "message": "There is nothing here."}}, 404)
             return None
-        if path == "/classic" or path.startswith("/classic/"):
-            return self._classic(method, path)
-        if path.startswith(LEGACY_PREFIXES) or path in LEGACY_PATHS:
-            return self._legacy(method, path)
-        if method == "GET":
+        if path.startswith(OLD_HELPER_PREFIX):
+            return self._old_helper_api(method, path)
+        if method == "GET" and (path == "/files" or DOC_PATH.fullmatch(path)):
+            return self._document(path, parse_qs(url.query))
+        if method == "GET" and not path.startswith("/api/"):
             return self._static(path)
         return self._reply_bytes(404, b"not found", "text/plain")
+
+    def _host_ok(self) -> bool:
+        """Refuses DNS-rebinding requests, which reach the port under another name."""
+        return (self.headers.get("Host") or "").split(":")[0] in HOSTS
 
     # routes outside the router
 
@@ -280,34 +287,74 @@ class AppHandler(server.Handler):
                              "Hal is connecting the browser helper in this browser. You can close this tab when "
                              "Hal says it is connected.", extra_head=meta))
 
-    def _classic(self, method: str, path: str) -> None:
+    def _signed_in(self) -> bool:
         self._who()
-        if self.session is None and not self.local:
-            return self.send_html(_page("Hal Employment", FROM_SHORTCUT), 401)
-        if not classic_on():
-            return self.send_html(_page("Hal Employment", CLASSIC_OFF), 404)
-        if path == "/classic":
-            return self.reply(router.Redirect("/classic/"))
-        name = path.removeprefix("/classic/") or "index.html"
-        target = (server.STATIC / name).resolve()
-        if server.STATIC.resolve() not in target.parents or not target.is_file():
-            return self._reply_bytes(404, b"not found", "text/plain")
-        ctype = MIME.get(target.suffix) or mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-        self._reply_bytes(200, target.read_bytes(), ctype)
+        return self.session is not None or self.local
 
-    def _old_helper(self, path: str) -> bool:
-        """The 0.5 helper polls /api/ext/* with `X-Hal: 1` and no key, accepted only while the setting allows it."""
-        return path.startswith("/api/ext/") and bool(setting("advanced.allow_old_helper", False))
-
-    def _legacy(self, method: str, path: str) -> None:
-        self._who()
-        if self.session is None and not self.local and not self._old_helper(path):
+    def _old_helper_api(self, method: str, path: str) -> None:
+        """A 0.4 or 0.5 helper polls /api/ext/* with `X-Hal: 1` and no key, only while the setting allows it."""
+        if not (self._signed_in() or setting("advanced.allow_old_helper", False)):
             return self.send_json({"error": FROM_SHORTCUT}, 401)
-        if method == "GET":
-            return super().do_GET()
-        if method == "POST":
-            return super().do_POST()
-        return self._reply_bytes(405, b"method not allowed", "text/plain")
+        if method != "POST":
+            return self._reply_bytes(405, b"method not allowed", "text/plain")
+        from .. import extension
+
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except ValueError:
+            return self.send_json({"error": "That request was not JSON."}, 400)
+        name = path.removeprefix(OLD_HELPER_PREFIX)
+        if name == "poll":
+            return self.send_json(extension.poll())
+        if name == "result":
+            extension.deliver(body)
+            return self.send_json({"ok": True})
+        if name == "adopt":
+            return self._old_adopt(body)
+        return self.send_json({"error": "There is nothing here."}, 404)
+
+    def _old_adopt(self, page: dict) -> None:
+        """A tab the old helper handed over: the job it belongs to, found or added, as the 0.5 helper reads it."""
+        from ..core import runner
+
+        runner.load_kinds()
+        action_id = runner.start("apply.match_tab", params={"page": page})
+        done = runner.wait(action_id, OLD_ADOPT_WAIT_S)
+        if done["state"] == "done":
+            return self.send_json(done["result"])
+        if done["state"] in ("error", "stopped", "interrupted"):
+            return self.send_json({"error": done["error"] or done["message"] or "Hal could not take this tab."}, 409)
+        self.send_json({"started": True, "action_id": action_id})
+
+    def _document(self, path: str, query: dict[str, list[str]]) -> None:
+        """An application's file by its path (`/files`), or its CV or letter under the name employers see."""
+        if not self._signed_in():
+            return self.send_json({"error": FROM_SHORTCUT}, 401)
+        m = DOC_PATH.fullmatch(path)
+        if m is None:
+            target = Path(unquote((query.get("path") or [""])[0])).resolve()
+            if not any(root in target.parents for root in servable()) or not target.is_file():
+                return self._reply_bytes(404, b"not found", "text/plain")
+            ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            return self._reply_bytes(200, target.read_bytes(), ctype)
+        from .. import documents
+        from ..apply.queries import _job
+
+        job_id, which = unquote(m.group(1)), m.group(2)
+        con = db.connect()
+        try:
+            try:
+                found = documents.files(_job(con, job_id)).get(which)
+            except LookupError:
+                found = None
+        finally:
+            con.close()
+        if not found:
+            return self._reply_bytes(404, f"no {which} for this job yet".encode(), "text/plain")
+        # a saved copy carries the name employers see, never the name the file has in its folder
+        self._reply_bytes(200, Path(found).read_bytes(), "application/pdf",
+                          {"Content-Disposition": f'inline; filename="{naming.file_name(which)}"'})
 
     def _static(self, path: str) -> None:
         if path in ("/", "/index.html"):
@@ -454,9 +501,9 @@ def serve(port: int | None = None, open_browser: bool = False, background: bool 
     if failed:
         log.warning("start tasks failed: %s", ", ".join(failed))
     if worker:
-        from ..core.worker import worker as legacy_worker
+        from ..core.worker import worker as queue_worker
 
-        threading.Thread(target=legacy_worker, name="worker", daemon=True).start()
+        threading.Thread(target=queue_worker, name="worker", daemon=True).start()
     stop = threading.Event()
     sse.DbPoller(db.connect, stop).start()
     url = f"http://{BIND}:{port}/"

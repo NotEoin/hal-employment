@@ -511,12 +511,6 @@ def show(job_id: str) -> bool:
     return _ask("show", job=job_id)["shown"]
 
 
-def look(job_id: str, shot) -> dict:
-    facts = _read(job_id, banners=False, front=False)
-    return {"url": facts["url"], "title": facts["title"], "screenshot": None, "text": facts["text"][:1500],
-            "apply": facts["apply"], "next": facts["next"], "submit": facts["submit"], "unchecked": facts["unchecked"]}
-
-
 def search(queries: list[str], pause: float = 0) -> tuple[list[list[dict]], bool]:
     out = _ask("search", timeout=60 + (pause + 20) * len(queries), queries=queries, pause=pause)
     return out["pages"], out["refused"]

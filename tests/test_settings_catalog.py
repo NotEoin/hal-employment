@@ -25,7 +25,7 @@ def setUpModule():
 SPEC_KEYS = (
     "addon.applications_mirror", "addon.enabled", "addon.hal_root", "addon.jobs_command", "addon.pipeline_note",
     "addon.respect_off", "addon.speak_command", "addon.vault",
-    "advanced.allow_old_helper", "advanced.classic", "advanced.developer_mode", "advanced.log_level",
+    "advanced.allow_old_helper", "advanced.developer_mode", "advanced.log_level",
     "advanced.pause", "advanced.port", "advanced.prompts", "advanced.quit", "advanced.simple_menu",
     "advanced.theme",
     "ai.allowance", "ai.claude_account", "ai.daily_cap", "ai.gpu_gate", "ai.gpu_ignore", "ai.keep_free",
@@ -111,7 +111,7 @@ MOCK_GROUPS = (
     ("updates", "Updates", ("Version", "Check for updates every day", "Browser helper")),
     ("health", "Is Hal working?", ()),
     ("advanced", "Advanced", ("Hal's instructions to the AI", "Most form pages Hal moves through",
-                              "Give up on a slow page after", "Show the classic app")),
+                              "Give up on a slow page after")),
 )
 # Groups added to the Settings page's design: after Updates, and last.
 ADDED_GROUPS = {"remote": "updates", "addon": "advanced"}
@@ -273,8 +273,8 @@ class Visibility(unittest.TestCase):
         self.assertFalse(self.visible("ai.openai_url", {"ai.provider": "local"}))
 
     def test_developer_rows_and_the_add_on_group_need_developer_mode(self):
-        self.assertFalse(self.visible("advanced.classic"))
-        self.assertTrue(self.visible("advanced.classic", developer=True))
+        self.assertFalse(self.visible("advanced.allow_old_helper"))
+        self.assertTrue(self.visible("advanced.allow_old_helper", developer=True))
         self.assertFalse(self.visible("addon.enabled"))
         self.assertTrue(self.visible("addon.enabled", developer=True))
 

@@ -1,7 +1,7 @@
 """Rank jobs 0-100 with the reasons kept alongside: the old interface over `jobhunt.find.rules`.
 
 `score(job) -> (score, score_notes)` and `prefilter(job) -> bool` keep their signatures, so discovery,
-rescoring, alert emails and Classic work unchanged. A score of 0 means hidden; the note says which rule hid
+rescoring and alert emails work unchanged. A score of 0 means hidden; the note says which rule hid
 it. Every preference now comes from the person's goal and scoring settings instead of constants here.
 """
 

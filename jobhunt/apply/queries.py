@@ -51,37 +51,6 @@ def _set_app(con, job_id: str, **cols) -> None:
     con.commit()
 
 
-def applications(con) -> list[dict]:
-    """Every application, furthest along first: those in progress and sent, and those that ended after starting."""
-    # A job closed or skipped straight from 'applying' is an application dropped part way; one sent back to
-    # the queue first and discarded there is not.
-    rows = con.execute(f"""SELECT j.*, a.stage, a.updated,
-            (SELECT MAX(at) FROM events e WHERE e.job_id = j.id AND e.kind = 'status') changed,
-            EXISTS (SELECT 1 FROM events e WHERE e.job_id = j.id AND e.kind = 'effort') effort
-            FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
-            WHERE j.status IN ({','.join('?' * len(IN_FLIGHT))}) OR
-                  (j.status IN ('rejected','withdrawn') AND a.job_id IS NOT NULL) OR
-                  (j.status IN ('closed','skipped') AND (SELECT detail FROM events e WHERE e.job_id = j.id
-                   AND e.kind = 'status' ORDER BY e.at DESC, e.id DESC LIMIT 1 OFFSET 1) LIKE 'applying%')
-            ORDER BY CASE j.status WHEN 'offer' THEN 0 WHEN 'interview' THEN 1
-              WHEN 'assessment' THEN 2 WHEN 'applying' THEN 3 WHEN 'applied' THEN 4 ELSE 5 END,
-              changed DESC""", IN_FLIGHT).fetchall()
-    return [{"id": r["id"], "company": r["company"], "title": r["title"], "status": r["status"], "stage": r["stage"],
-             "changed": r["changed"], "location": r["location"], "url": r["url"], "effort": bool(r["effort"]),
-             "state": (_app(con, r["id"])["form"] or {}).get("state"),
-             "message": (_app(con, r["id"])["form"] or {}).get("message", "")} for r in rows]
-
-
-def _card(con, r) -> dict:
-    s = documents.summary(r)
-    s["flags"] = [*effort_notes(con, r), *s["flags"]]
-    return {"id": r["id"], "company": r["company"], "title": r["title"], "location": r["location"],
-            "salary": r["salary"], "score": r["score"], "score_notes": r["score_notes"], "url": r["url"],
-            "source": r["source"], "posted_at": r["posted_at"], "first_seen": r["first_seen"],
-            "status": r["status"], "active": r["active"], "role": s["role"], "flags": s["flags"],
-            "fit": s["fit"], "gaps": s["gaps"], "company_brief": s["company"]}
-
-
 def _close_quietly(job_id: str) -> None:
     """Closes a job's tab once the browser is free; a browser that has gone has nothing to close."""
     try:
@@ -108,45 +77,6 @@ def _site_of(con, job) -> str:
     """The site that holds a job's application form: the form's own, once Hal has reached it."""
     form = _app(con, job["id"])["form"] or {}
     return _site(form.get("url") or browser.application_url(job))
-
-
-def in_progress_around(con, job_id: str) -> dict:
-    """Where an application stands among those in progress, in the order they were chosen, best first.
-
-    Returns its place, how many there are, and the applications before and after it.
-    """
-    # The event that made each one 'applying': its id orders them, and jobs chosen together keep their score order.
-    ids = [r["id"] for r in con.execute("""
-        SELECT j.id FROM jobs j WHERE j.status = 'applying'
-        ORDER BY (SELECT MAX(e.id) FROM events e WHERE e.job_id = j.id AND e.kind = 'status'
-                  AND e.detail LIKE 'applying%'), j.score DESC""")]
-    if job_id not in ids:
-        return {"place": 0, "count": len(ids), "prev": None, "next": ids[0] if ids else None}
-    i = ids.index(job_id)
-    return {"place": i + 1, "count": len(ids), "prev": ids[i - 1] if i else None,
-            "next": ids[i + 1] if i + 1 < len(ids) else None}
-
-
-def effort_notes(con, job) -> list[str]:
-    """Reminders that its owner found an earlier application with this company or on this site too much effort.
-
-    A discarded application its owner has since reopened no longer counts.
-    """
-    rows = con.execute("""SELECT j.id, j.company, e.detail FROM events e JOIN jobs j ON j.id = e.job_id
-                          WHERE e.kind = 'effort' AND j.status = 'skipped' AND j.id != ?""",
-                       (job["id"],)).fetchall()
-    notes = []
-    same = [r for r in rows if r["company"].lower() == job["company"].lower()]
-    if same:
-        notes.append(f"EFFORT: you discarded {len(same)} earlier application{'s' if len(same) > 1 else ''} "
-                     f"to {job['company']} as too much effort")
-    site = _site(browser.application_url(job))
-    other = [r for r in rows if r["detail"] == site and r not in same]
-    # A job board stands in front of most jobs, whatever their own forms are like.
-    if site and other and not any(a in site for a in AGGREGATORS):
-        notes.append(f"EFFORT: you discarded {len(other)} earlier application{'s' if len(other) > 1 else ''} "
-                     f"on {site} as too much effort")
-    return notes
 
 
 def mark_applied(con, job, how: str, sent_how: str = "site_confirmed") -> None:

@@ -29,7 +29,7 @@ STATES = ("pending", "running", "done", "error")
 DONE = "done"
 WHY = "Hal is updating its records after an update"
 NOT_TASK_MODULES = {"jobhunt.tasks"}    # the to-do list, older than data tasks
-TASK_MODULES = ("jobhunt.core.answers_rescope",)   # `answers.rescope` lives beside the import it serves
+TASK_MODULES = ("jobhunt.core.answers_rescope", "jobhunt.cvstudio.import_v1")
 
 
 @dataclass(frozen=True)

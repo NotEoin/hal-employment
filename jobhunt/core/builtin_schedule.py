@@ -100,7 +100,7 @@ def record_after(after: datetime) -> datetime:
 
 
 def sync_record() -> dict:
-    """Reads new or changed files in the record folder (the legacy worker did this every 10 minutes)."""
+    """Reads new or changed files in the record folder."""
     from .worker import sync_record as sync
 
     return sync()

@@ -1,8 +1,8 @@
 """Applying in Hal's own browser, against the practice site in tests/site: reaching the form, filling it,
-waiting for approval, discarding, choosing what to apply for, and forms already open.
+waiting for approval, discarding, and forms already open.
 
-Moved by class from tests/test_apply.py. Hal never presses Submit, so the two tests that had Hal
-send the form now end with the form handed over, and the applicant presses Submit in the page.
+Hal never presses Submit, so a test that reaches the last page ends with the form handed over, and the
+applicant presses Submit in the page.
 """
 import tempfile
 import threading
@@ -15,10 +15,10 @@ from support import legacy
 from support.legacy import PROSE, Practice
 from test_runner import WAIT_S, fresh_home
 
-from jobhunt import autofill, browser, db, documents, replenish
-from jobhunt.apply import driver
+from jobhunt import autofill, browser, db, documents, tasks
+from jobhunt.apply import actions, driver, queries
+from jobhunt.core import runner
 from jobhunt.sites import notes
-from jobhunt.web import server
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
@@ -57,7 +57,7 @@ class Applying(Practice):
 
     def test_fills_the_form_waits_for_approval_and_never_submits(self):
         job_id = self.job("full", "advert.html")
-        said = server.act_auto(self.con, job_id)
+        said = driver.act_auto(self.con, job_id)
         # Page one cannot be passed: nothing Hal knows answers the date of birth.
         form = self.form(job_id)
         self.assertEqual((form["state"], form["step"], form["final"]), ("needs", 1, False))
@@ -67,7 +67,7 @@ class Applying(Practice):
         self.assertEqual([f["label"] for f in form["fields"] if f.get("error")], [])
 
         dob = self.field(job_id, "Date of birth")
-        server.act_approve(self.con, job_id, [{"hid": dob["hid"], "value": "01/02/2003", "edited": True}])
+        driver.act_approve(self.con, job_id, [{"hid": dob["hid"], "value": "01/02/2003", "edited": True}])
         # The last page is filled in and held: the essay is there to read, and nothing has gone.
         form = self.form(job_id)
         self.assertEqual((form["state"], form["step"], form["final"]), ("ready", 2, True))
@@ -79,7 +79,7 @@ class Applying(Practice):
         sent = browser.BROWSER.call(lambda b: b.tab(job_id).evaluate("() => window.halSent || null"))
         self.assertIsNone(sent)
         # Approving the last page hands it over; nothing is pressed and nothing is sent.
-        self.assertEqual(server.act_approve(self.con, job_id, []), driver.HANDED_OVER)
+        self.assertEqual(driver.act_approve(self.con, job_id, []), driver.HANDED_OVER)
         self.assertIsNone(browser.BROWSER.call(lambda b: b.tab(job_id).evaluate("() => window.halSent || null")))
         self.assertEqual(self.status(job_id), "applying")
         app = self.con.execute("SELECT handed_over_at FROM applications WHERE job_id = ?", (job_id,)).fetchone()
@@ -87,7 +87,7 @@ class Applying(Practice):
         # The applicant presses Submit; the site's thanks marks the job applied.
         driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         self.press_yourself(job_id, "#send")
-        self.assertFalse(server._watch_step(self.con, job_id, {}))
+        self.assertFalse(driver._watch_step(self.con, job_id, {}))
         self.assertEqual(self.status(job_id), "applied")
         # What he typed himself is kept for the next form that asks it.
         kept = self.con.execute("SELECT answer FROM answers2 WHERE question = 'date of birth' "
@@ -99,23 +99,23 @@ class Applying(Practice):
         self.con.execute("INSERT INTO answers2 (question, label, answer, scope, updated) "
                          "VALUES ('date of birth', 'Date of birth', '\"01/02/2003\"', 'everywhere', ?)", (db.now(),))
         self.con.commit()
-        server.act_auto(self.con, job_id)
+        driver.act_auto(self.con, job_id)
         form = self.form(job_id)
         self.assertEqual((form["state"], form["step"]), ("ready", 2))
         self.assertEqual(form["done"][0]["fields"][-1]["source"], "your earlier answer")
-        self.assertEqual(server.act_approve(self.con, job_id, []), driver.HANDED_OVER)
+        self.assertEqual(driver.act_approve(self.con, job_id, []), driver.HANDED_OVER)
         # The applicant presses Submit; the site asks for the code it emailed.
         driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         self.press_yourself(job_id, "#send")
         seen = {}
-        self.assertTrue(server._watch_step(self.con, job_id, seen))
+        self.assertTrue(driver._watch_step(self.con, job_id, seen))
         tab = lambda b: b.tab(job_id)  # noqa: E731 - read on the browser thread
         self.assertEqual(browser.BROWSER.call(lambda b: tab(b).input_value("#code")), "A1b2C3d4")
         self.assertIsNone(browser.BROWSER.call(lambda b: tab(b).evaluate("() => window.halSent || null")))
         self.assertEqual(self.status(job_id), "applying")
         # Hal never presses the button beside the code; once the applicant does, the site's thanks counts.
         self.press_yourself(job_id, "#send")
-        self.assertFalse(server._watch_step(self.con, job_id, seen))
+        self.assertFalse(driver._watch_step(self.con, job_id, seen))
         self.assertEqual(self.status(job_id), "applied")
 
     def test_what_the_form_received(self):
@@ -123,8 +123,8 @@ class Applying(Practice):
         self.con.execute("INSERT INTO answers2 (question, label, answer, scope, updated) "
                          "VALUES ('date of birth', 'Date of birth', '\"01/02/2003\"', 'everywhere', ?)", (db.now(),))
         self.con.commit()
-        server.act_auto(self.con, job_id)
-        server.act_approve(self.con, job_id, [])
+        driver.act_auto(self.con, job_id)
+        driver.act_approve(self.con, job_id, [])
         # The applicant presses Submit, and the form's own record of what it received is read back.
         self.press_yourself(job_id, "#send")
         sent = browser.BROWSER.call(lambda b: b.tab(job_id).evaluate("() => window.halSent"))
@@ -134,7 +134,7 @@ class Applying(Practice):
 
     def test_a_posting_taken_down_is_marked_closed(self):
         job_id = self.job("closed", "closed.html")
-        self.assertIn("taken down", server.act_auto(self.con, job_id))
+        self.assertIn("taken down", driver.act_auto(self.con, job_id))
         self.assertEqual(self.status(job_id), "closed")
 
     def test_follows_the_control_the_model_picks_when_no_apply_button_is_recognised(self):
@@ -143,7 +143,7 @@ class Applying(Practice):
         autofill.choose_control = lambda job, found: (asked.append([c["name"] for c in found["controls"]])
                                                       or "Register your interest in this vacancy")
         try:
-            server.act_auto(self.con, job_id)
+            driver.act_auto(self.con, job_id)
         finally:
             autofill.choose_control = lambda job, found: ""
         self.assertIn("Tell a friend", asked[0])
@@ -151,11 +151,11 @@ class Applying(Practice):
 
     def test_an_approval_after_the_window_closed_refills_and_sends_nothing(self):
         job_id = self.job("lost", "form.html")
-        server.act_auto(self.con, job_id)
+        driver.act_auto(self.con, job_id)
         dob = self.field(job_id, "Date of birth")
         browser.BROWSER.call(lambda b: b.tab(job_id).close())
         with self.assertRaisesRegex(RuntimeError, "sent nothing"):
-            server.act_approve(self.con, job_id, [{"hid": dob["hid"], "value": "01/02/2003", "edited": True}])
+            driver.act_approve(self.con, job_id, [{"hid": dob["hid"], "value": "01/02/2003", "edited": True}])
         # His answer survived the refill, which let the form reach its last page; it is still unsent.
         form = self.form(job_id)
         self.assertEqual((form["state"], form["step"]), ("ready", 2))
@@ -165,7 +165,7 @@ class Applying(Practice):
         job_id = self.job("gone", "form.html")
         browser.open_form(job_id, f"{self.base}/form.html")
         browser.BROWSER.call(lambda b: b.tab(job_id).close())
-        server.act_auto(self.con, job_id, here=True)
+        driver.act_auto(self.con, job_id, here=True)
         self.assertEqual(self.form(job_id)["state"], "needs")
 
 
@@ -191,34 +191,39 @@ class Discarding(unittest.TestCase):
             db.set_status(self.con, f"greenhouse:{n}", status)
         self.con.commit()
 
-    def discard(self, job_id: str, **body):
-        return server.Handler.job_action(None, self.con, job_id, "discard", body)
+    def discard(self, job_id: str, reason: str = "skipped_for_now", words: str = "") -> None:
+        actions.discard(self.con, job_id, reason, words)
+
+    def listed(self) -> list[str]:
+        """Every application on the Applications board, in its columns or under Closed."""
+        found = queries.board(self.con)
+        return [c["id"] for col in found["columns"] for c in col["items"]] + [c["id"] for c in found["closed"]]
 
     def test_a_closed_job_leaves_the_applications_in_progress_and_stops_its_watch(self):
-        self.discard("greenhouse:1", closed=True, reason="The job has closed")
-        jobs = {j["id"]: j for j in server.applications(self.con)}
-        self.assertEqual(jobs["greenhouse:1"]["status"], "closed")
+        self.discard("greenhouse:1", "advert_closed", "The job has closed")
+        self.assertEqual(queries._job(self.con, "greenhouse:1")["status"], "closed")
+        self.assertIn("greenhouse:1", [c["id"] for c in queries.board(self.con)["closed"]])
         self.assertIn("discarded mid-application: The job has closed",
                       self.con.execute("SELECT detail FROM events WHERE job_id = 'greenhouse:1' ORDER BY id DESC").fetchone()[0])
         saved = browser.peek
         browser.peek = lambda job_id: self.fail("a discarded application's tab was looked at")
         self.addCleanup(setattr, browser, "peek", saved)
-        self.assertFalse(server._watch_step(self.con, "greenhouse:1", {}))
+        self.assertFalse(driver._watch_step(self.con, "greenhouse:1", {}))
 
     def test_another_reason_skips_the_application(self):
-        self.discard("greenhouse:1", reason="Not eligible")
-        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "skipped")
-        self.assertIn("greenhouse:1", [j["id"] for j in server.applications(self.con)])
+        self.discard("greenhouse:1", words="Not eligible")
+        self.assertEqual(queries._job(self.con, "greenhouse:1")["status"], "skipped")
+        self.assertIn("greenhouse:1", self.listed())
 
     def test_a_job_discarded_from_the_queue_is_not_listed_as_an_application(self):
-        self.discard("greenhouse:2", reason="Too senior")
-        self.assertEqual(server._job(self.con, "greenhouse:2")["status"], "skipped")
-        self.assertNotIn("greenhouse:2", [j["id"] for j in server.applications(self.con)])
+        self.discard("greenhouse:2", words="Too senior")
+        self.assertEqual(queries._job(self.con, "greenhouse:2")["status"], "skipped")
+        self.assertNotIn("greenhouse:2", self.listed())
 
     def test_an_application_sent_back_to_the_queue_and_discarded_there_is_not_listed(self):
-        server.Handler.job_action(None, self.con, "greenhouse:1", "restore", {})
-        self.discard("greenhouse:1", reason="Too senior")
-        self.assertNotIn("greenhouse:1", [j["id"] for j in server.applications(self.con)])
+        actions.restore(self.con, "greenhouse:1")
+        self.discard("greenhouse:1", words="Too senior")
+        self.assertNotIn("greenhouse:1", self.listed())
 
     def slow_action(self, job_id: str, name: str = "applying", replace: bool = False):
         """Starts an action that stands in for a slow page load; returns its entry and the event that ends the load."""
@@ -227,15 +232,15 @@ class Discarding(unittest.TestCase):
         def act(con, job_id):
             reached.set()
             release.wait(10)
-            server._say(job_id, "filling in the form")
-            server._set_app(con, job_id, stage="filled", form={"state": "ready", "message": "", "fields": []})
+            runner._say(job_id, "filling in the form")
+            queries._set_app(con, job_id, stage="filled", form={"state": "ready", "message": "", "fields": []})
             return "filled"
 
-        server.run_action(job_id, name, act, job_id, replace=replace)
+        runner.run_action(job_id, name, act, job_id, replace=replace)
         self.addCleanup(release.set)
-        self.addCleanup(server.ACTIONS.pop, job_id, None)
+        self.addCleanup(runner.ACTIONS.pop, job_id, None)
         self.assertTrue(reached.wait(5))
-        return server.ACTIONS[job_id], release
+        return runner.ACTIONS[job_id], release
 
     def finished(self, entry: dict) -> str:
         deadline = time.monotonic() + 5
@@ -247,121 +252,46 @@ class Discarding(unittest.TestCase):
         # Discarding used to be refused until Hal finished, which on an expired advert could take minutes.
         entry, release = self.slow_action("greenhouse:1")
         began = time.monotonic()
-        self.discard("greenhouse:1", closed=True, reason="The job has closed")
+        self.discard("greenhouse:1", "advert_closed", "The job has closed")
         self.assertLess(time.monotonic() - began, 1)
-        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "closed")
-        self.assertNotIn("greenhouse:1", server.ACTIONS)
+        self.assertEqual(queries._job(self.con, "greenhouse:1")["status"], "closed")
+        self.assertNotIn("greenhouse:1", runner.ACTIONS)
         release.set()
         self.assertEqual(self.finished(entry), "stopped")
-        self.assertIsNone(server._app(self.con, "greenhouse:1")["stage"])
-        server.POOL.submit(lambda: None).result(5)
+        self.assertIsNone(queries._app(self.con, "greenhouse:1")["stage"])
+        runner.POOL.submit(lambda: None).result(5)
         self.assertEqual(self.closed, ["greenhouse:1"])
 
     def test_starting_again_takes_over_from_hal_and_the_first_run_writes_nothing(self):
         first, release = self.slow_action("greenhouse:1")
-        server.run_action("greenhouse:1", "applying", lambda con, job_id: "fresh start", "greenhouse:1", replace=True)
-        second = server.ACTIONS["greenhouse:1"]
+        runner.run_action("greenhouse:1", "applying", lambda con, job_id: "fresh start", "greenhouse:1", replace=True)
+        second = runner.ACTIONS["greenhouse:1"]
         self.assertEqual(self.finished(second), "done")
         release.set()
         self.assertEqual(self.finished(first), "stopped")
-        self.assertIs(server.ACTIONS["greenhouse:1"], second)
-        self.assertIsNone(server._app(self.con, "greenhouse:1")["stage"])
+        self.assertIs(runner.ACTIONS["greenhouse:1"], second)
+        self.assertIsNone(queries._app(self.con, "greenhouse:1")["stage"])
 
     def test_marking_applied_while_hal_works_stops_hal(self):
         entry, release = self.slow_action("greenhouse:1")
-        saved = server.tasks.after_sent
-        server.tasks.after_sent = lambda con, job: None
-        self.addCleanup(setattr, server.tasks, "after_sent", saved)
-        server.Handler.job_action(None, self.con, "greenhouse:1", "applied", {"how": "submitted by hand"})
+        saved = tasks.after_sent
+        tasks.after_sent = lambda con, job: None
+        self.addCleanup(setattr, tasks, "after_sent", saved)
+        actions.sent_myself(self.con, "greenhouse:1")
         release.set()
         self.assertEqual(self.finished(entry), "stopped")
-        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "applied")
-        self.assertEqual(server._app(self.con, "greenhouse:1")["stage"], "submitted")
+        self.assertEqual(queries._job(self.con, "greenhouse:1")["status"], "applied")
+        self.assertEqual(queries._app(self.con, "greenhouse:1")["stage"], "submitted")
 
-    def test_too_much_effort_is_remembered_for_the_company_and_the_site(self):
-        for n, company in (("3", "Monzo"), ("4", "Starling")):
-            db.upsert(self.con, {"id": f"greenhouse:{n}", "source": "greenhouse", "company": company,
-                                 "title": "Platform Engineer", "location": "London", "url": f"https://jobs.example.org/{n}",
-                                 "description": "", "salary": "", "posted_at": None, "board_size": None})
-            db.set_status(self.con, f"greenhouse:{n}", "ready")
-        self.discard("greenhouse:1", reason="Too much effort", effort=True)
-        notes = server.effort_notes(self.con, server._job(self.con, "greenhouse:3"))
-        self.assertEqual(len(notes), 1)
-        self.assertIn("to Monzo as too much effort", notes[0])
-        self.assertIn("on example.org as too much effort", server.effort_notes(self.con, server._job(self.con, "greenhouse:4"))[0])
-        self.assertTrue(next(j for j in server.applications(self.con) if j["id"] == "greenhouse:1")["effort"])
-        # A job board found tiresome once says nothing about the forms of the other jobs it lists.
-        self.con.execute("UPDATE events SET detail = 'adzuna.co.uk' WHERE kind = 'effort'")
-        self.con.execute("UPDATE jobs SET url = 'https://www.adzuna.co.uk/jobs/land/ad/4' WHERE id = 'greenhouse:4'")
-        self.assertEqual(server.effort_notes(self.con, server._job(self.con, "greenhouse:4")), [])
-        # Reopened, it is no longer held against the company.
-        db.set_status(self.con, "greenhouse:1", "applying", "reopened after discarding")
-        self.assertEqual(server.effort_notes(self.con, server._job(self.con, "greenhouse:3")), [])
+    def test_too_much_effort_is_remembered_against_the_site(self):
+        self.discard("greenhouse:1", "too_much_effort")
+        found = self.con.execute("SELECT detail FROM events WHERE job_id = 'greenhouse:1' AND kind = 'effort'")
+        self.assertEqual([r["detail"] for r in found], ["example.org"])
 
     def test_a_site_is_named_by_its_domain_and_a_shared_system_by_its_employer(self):
-        self.assertEqual(server._site("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"),
+        self.assertEqual(queries._site("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"),
                          "acme.wd3.myworkdayjobs.com")
-        self.assertEqual(server._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
-
-
-class Choosing(unittest.TestCase):
-    """Applications start with their documents, and are worked through one at a time."""
-
-    def setUp(self):
-        path = Path(tempfile.mkdtemp()) / "jobs.db"
-        self.con = db.connect(path)
-        self.addCleanup(self.con.close)
-        for n, score in (("1", 90), ("2", 80), ("3", 70)):
-            db.upsert(self.con, {"id": f"greenhouse:{n}", "source": "greenhouse", "company": f"Firm {n}",
-                                 "title": "Graduate Engineer", "location": "London", "url": f"https://example.org/{n}",
-                                 "description": "", "salary": "", "posted_at": None, "board_size": None})
-            self.con.execute("UPDATE jobs SET score = ? WHERE id = ?", (score, f"greenhouse:{n}"))
-            db.set_status(self.con, f"greenhouse:{n}", "ready")
-        self.con.commit()
-        saved = server.db.connect, server.act_auto, server.run_action
-        def restore():
-            server.db.connect, server.act_auto, server.run_action = saved
-        self.addCleanup(restore)
-        connect = saved[0]
-        server.db.connect = lambda p=path: connect(p)
-        self.started = []
-        server.run_action = lambda job_id, name, fn, *args, replace=False: self.started.append((job_id, fn)) or {}
-
-    def post(self, route: str, body: dict):
-        handler = server.Handler.__new__(server.Handler)
-        return handler.api_post(route, body)
-
-    def test_applying_to_all_starts_every_job_when_nothing_is_prepared_ahead(self):
-        # with Claude, scoring.prepare_ahead defaults to 0, and "Apply to all 3" started only one job
-        replenish.TARGET = 0
-        self.addCleanup(delattr, replenish, "TARGET")
-        started = self.post("queue/apply", {"count": 3})["started"]
-        self.assertEqual(started, ["greenhouse:1", "greenhouse:2", "greenhouse:3"])
-
-    def test_applying_to_all_opens_no_form_and_orders_them_best_first(self):
-        # Every form was opened at once, so tabs behind others were never filled.
-        started = self.post("queue/apply", {"count": 3})["started"]
-        self.assertEqual(started, ["greenhouse:1", "greenhouse:2", "greenhouse:3"])
-        self.assertEqual(self.started, [])
-        self.assertEqual(server.in_progress_around(self.con, "greenhouse:2"),
-                         {"place": 2, "count": 3, "prev": "greenhouse:1", "next": "greenhouse:3"})
-        self.assertEqual(server.in_progress_around(self.con, "greenhouse:1")["prev"], None)
-
-    def test_hal_fills_the_form_only_once_the_documents_are_approved(self):
-        saved = server.documents.save, server.documents.load
-        def restore():
-            server.documents.save, server.documents.load = saved
-        self.addCleanup(restore)
-        stored = {}
-        server.documents.load = lambda con, job: dict(stored)
-        server.documents.save = lambda con, job, docs: stored.update(docs)
-        self.post("job/greenhouse:1/apply", {})
-        self.assertEqual(server._job(self.con, "greenhouse:1")["status"], "applying")
-        self.assertEqual(self.started, [])
-        self.post("job/greenhouse:1/docs-approve", {"docs": {"letter": "Dear Firm 1"}})
-        self.assertEqual(self.started, [("greenhouse:1", server.act_auto)])
-        self.assertEqual(stored["letter"], "Dear Firm 1")
-        self.assertTrue(stored["approved"])
+        self.assertEqual(queries._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
 
 
 class OpenForms(unittest.TestCase):
@@ -396,22 +326,22 @@ class OpenForms(unittest.TestCase):
         # A Workable form whose fields Hal missed was closed by Hal pressing "Apply now" to look for it.
         browser.peek = lambda job_id: {"form": False}
         with self.assertRaisesRegex(RuntimeError, "cannot see a form"):
-            server.act_auto(self.con, "workable:1", here=True)
+            driver.act_auto(self.con, "workable:1", here=True)
         self.assertEqual(self.calls, ["read"])
 
     def test_fill_in_the_form_uses_the_form_open_in_the_jobs_tab_rather_than_reopening_the_advert(self):
         browser.peek = lambda job_id: {"form": True}
         with self.assertRaisesRegex(RuntimeError, "cannot see a form"):
-            server.act_auto(self.con, "workable:1")
+            driver.act_auto(self.con, "workable:1")
         self.assertEqual(self.calls, ["read"])
 
     def test_starting_over_opens_the_advert_even_with_a_form_open(self):
         browser.peek = lambda job_id: self.fail("starting over looked for an open form")
-        saved = server.autofill.choose_control
-        server.autofill.choose_control = lambda job, found: ""
-        self.addCleanup(setattr, server.autofill, "choose_control", saved)
+        saved = autofill.choose_control
+        autofill.choose_control = lambda job, found: ""
+        self.addCleanup(setattr, autofill, "choose_control", saved)
         with self.assertRaises(RuntimeError):
-            server.act_auto(self.con, "workable:1", fresh=True)
+            driver.act_auto(self.con, "workable:1", fresh=True)
         self.assertEqual(self.calls[0], "open")
 
 

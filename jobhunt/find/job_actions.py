@@ -4,8 +4,8 @@ advert, and "This does not matter to me".
 Each slow piece is a persisted action, so it shows in the status line with its steps and can be stopped.
 
 Requirements change a job's score on its own page and card, never the stored `jobs.score`: the points are
-worked out when the job is read (`requirement_points`), so a re-check of every job keeps them, Classic and
-the command line keep today's numbers, and "This does not matter to me" changes only that one job.
+worked out when the job is read (`requirement_points`), so a re-check of every job keeps them, the command
+line keeps today's numbers, and "This does not matter to me" changes only that one job.
 
 Adding one advert reads JSON-LD `JobPosting` first, then the page's title and text; reading a page with the
 AI is not built yet, so a page without either is refused with plain words.

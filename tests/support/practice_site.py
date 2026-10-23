@@ -5,13 +5,14 @@ no post to `/sent/...` may have arrived. A post to `/next/...` is a page of a fo
 real submit, which Hal may press. The pages are in `tests/site/practice/`; every name, employer and
 answer on them is made up.
 
-`HelperBrowser` runs a test class with the browser helper loaded unpacked in Playwright's Chromium, as
-the applicant's own browser loads it, so each flow can run in both modes.
+`HelperBrowser` runs a test class with the browser helper loaded unpacked in Playwright's Chromium and
+paired with Hal, as the applicant's own browser has it, so each flow can run in both modes.
 """
 from __future__ import annotations
 
 import collections
 import concurrent.futures
+import contextlib
 import functools
 import http.server
 import os
@@ -21,6 +22,9 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+
+from .api import Client
 
 PRACTICE = Path(__file__).resolve().parent.parent / "site" / "practice"
 THANKS = (b"<!doctype html><html><head><meta charset='utf-8'><title>Application received</title></head><body>"
@@ -28,6 +32,7 @@ THANKS = (b"<!doctype html><html><head><meta charset='utf-8'><title>Application 
 # What a post answers with, when it is not the site's thanks: the next page of that form.
 FOLLOWS = {"/next/next-submits": "next-submits-2.html", "/sent/signed-in": "after-apply.html"}
 HELPER_WAIT_S = 30   # the helper's first poll can take a while in a fresh browser
+PAIR_WAIT_MS = 20000  # as long again for a fresh browser's helper to start and take the pairing code
 POLL_S = 0.25
 LAUNCH_S = 60        # starting or closing the helper's browser
 CALL_S = 120         # one call into the helper's browser: a Playwright action waits 30 s at most by default
@@ -97,10 +102,11 @@ class PracticeSite:
 
 
 class HelperBrowser:
-    """Mixin for a `support.legacy.Practice` class: forms are filled through the unpacked helper.
+    """Mixin for a `support.legacy.Practice` class: forms are filled through the paired helper.
 
-    Starts the legacy web helper on a free port, Playwright's Chromium with the helper loaded, and
-    points the helper at that port, as tests/test_extension.py does.
+    Starts Hal's real server on a free port, Playwright's Chromium with the helper loaded unpacked, and pairs
+    the helper the way a person does: a signed-in window asks for a code, and the helper's browser opens
+    Hal's /pair page, where pair.js hands the code to the helper. Every request after that carries its key.
 
     The browser has a thread of its own that keeps Playwright serviced between calls. Playwright's sync API
     reads its driver only while its thread is inside a Playwright call, and a test waits minutes in plain
@@ -111,30 +117,91 @@ class HelperBrowser:
 
     @classmethod
     def start_helper(cls, tmp: Path) -> None:
-        """Starts the helper's browser and waits for its first poll."""
+        """Starts Hal and the helper's browser, and pairs the helper; `cls.helper_id` is its id."""
         from jobhunt import extension
-        from jobhunt.web import server
 
         from .legacy import EXTENSION
 
-        server.SERVABLE, cls.servable = (*server.SERVABLE, tmp.resolve()), server.SERVABLE
-        cls.helper = http.server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-        threading.Thread(target=cls.helper.serve_forever, name="helper-api", daemon=True).start()
+        extension.reset()
+        cls.start_hal()
         os.environ["JOBHUNT_APPLY_BROWSER"] = "extension"
-        cls._calls: queue.Queue = queue.Queue()
+        cls.launch(EXTENSION, tmp)
+        cls.helper_id = cls.pair_in(cls.window())
+
+    @classmethod
+    def stop_helper(cls) -> None:
+        from jobhunt import extension
+
+        cls.close_browser()
+        cls.stop_hal()
+        extension.reset()
+        os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
+
+    @classmethod
+    def start_hal(cls) -> None:
+        """Hal's real server on a free port, `cls.port`."""
+        from jobhunt.web import app
+
+        cls.hal = app.make_server(0)
+        cls.port = cls.hal.server_address[1]
+        threading.Thread(target=cls.hal.serve_forever, name="hal-for-helper", daemon=True).start()
+
+    @classmethod
+    def stop_hal(cls) -> None:
+        cls.hal.stop()
+
+    @classmethod
+    def window(cls) -> Client:
+        """A signed-in app window: the person's Edge, say, where the helper is not."""
+        from jobhunt.web import auth
+
+        c = Client(cls.port)
+        url = urlparse(auth.mint_open_url(port=cls.port))
+        if c.get(f"{url.path}?{url.query}").status != 302:
+            raise AssertionError("the open link did not sign the window in")
+        return c
+
+    @classmethod
+    def launch(cls, folder: Path, profile_home: Path) -> None:
+        """Starts the browser with the helper in `folder` loaded unpacked, on its own thread.
+
+        The browser's profile is `profile_home / "helper-browser"`; `cls.ctx` and `cls.worker` live on that thread.
+        """
+        cls._calls = queue.Queue()
         ready: concurrent.futures.Future = concurrent.futures.Future()
-        cls._owner = threading.Thread(target=cls._own_browser, args=(tmp, EXTENSION, ready), name="helper-browser",
-                                      daemon=True)
+        cls._owner = threading.Thread(target=cls._own_browser, args=(profile_home, folder, ready),
+                                      name="helper-browser", daemon=True)
         cls._owner.start()
-        worker = ready.result(LAUNCH_S)
-        address = f"http://127.0.0.1:{cls.helper.server_address[1]}"
-        cls.on_helper(lambda: worker.evaluate("url => chrome.storage.local.set({hal: url})", address))
+        ready.result(LAUNCH_S)
+
+    @classmethod
+    def close_browser(cls) -> None:
+        """Closes the browser `launch` started and ends its thread."""
+        cls._calls.put(None)
+        cls._owner.join(LAUNCH_S)
+
+    @classmethod
+    def pair_in(cls, window: Client, host: str = "127.0.0.1") -> str:
+        """Pairs the helper from `window`, as the setup step's Connect does; returns its id."""
+        from jobhunt import db, extension
+
+        code = window.post("/api/v2/helpers/pairing-code", {"browser": "chrome"}).json()["code"]
+
+        def pair():
+            page = cls.ctx.new_page()
+            page.goto(f"http://{host}:{cls.port}/pair#code={code}")
+            page.wait_for_selector('#hal-pair-result[data-ok="yes"]', timeout=PAIR_WAIT_MS)
+            page.close()
+
+        cls.on_helper(pair)
+        with contextlib.closing(db.connect()) as con:
+            helper_id = con.execute("SELECT id FROM helpers ORDER BY rowid DESC LIMIT 1").fetchone()["id"]
         deadline = time.monotonic() + HELPER_WAIT_S
-        # the helper started here polls as an old (unpaired) helper; another one still in touch must not count
-        while not extension.connected(extension.OLD) and time.monotonic() < deadline:
+        while not extension.connected(helper_id) and time.monotonic() < deadline:
             time.sleep(POLL_S)
-        if not extension.connected(extension.OLD):
-            raise RuntimeError("the helper never polled the test server")
+        if not extension.connected(helper_id):
+            raise AssertionError("the paired helper never polled")
+        return helper_id
 
     @classmethod
     def _own_browser(cls, tmp: Path, unpacked: Path, ready: concurrent.futures.Future) -> None:
@@ -176,17 +243,6 @@ class HelperBrowser:
         done: concurrent.futures.Future = concurrent.futures.Future()
         cls._calls.put((fn, done))
         return done.result(CALL_S)
-
-    @classmethod
-    def stop_helper(cls) -> None:
-        from jobhunt.web import server
-
-        cls._calls.put(None)
-        cls._owner.join(LAUNCH_S)
-        cls.helper.shutdown()
-        cls.helper.server_close()
-        server.SERVABLE = cls.servable
-        os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
     def in_tab(self, address: str, act: Callable[[Any], Any]) -> Any:
         """Runs `act(tab)` in the helper's newest tab whose address holds `address`, as the person would."""

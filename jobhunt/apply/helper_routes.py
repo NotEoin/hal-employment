@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 PREFIX = "/api/v2/helpers"
 BROWSERS_FILE = Path(__file__).with_name("browsers.toml")
 PICTURES = "/app/setup/img/helper/"
-ADOPT_WAIT_S = 2         # as Classic's slow routes; after that the helper asks again
+ADOPT_WAIT_S = 2         # a reply within this keeps the toolbar button quick; after that the helper asks again
 PDF_MIME = "application/pdf"
 FILE_KINDS = ("cv", "letter")
 
@@ -206,12 +206,12 @@ def adopt(req: Request) -> dict:
 @route("POST", PREFIX + "/fill-empty", auth="helper")
 def fill_empty(req: Request) -> dict:
     """The panel's "Fill empty boxes": fills what the job's tab shows that is still empty."""
-    from ..web import server
+    from .driver import act_page
 
     job_id = str(_body(req).get("job_id") or "")
     if not job_id:
         raise BadRequest("The helper did not say which job this tab is for.")
-    entry = server.run_action(job_id, "filling this page", server.act_page, job_id)
+    entry = runner.run_action(job_id, "filling this page", act_page, job_id)
     return {"ok": True, "state": entry.get("state")}
 
 

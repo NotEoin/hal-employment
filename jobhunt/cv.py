@@ -1,65 +1,24 @@
-"""The person's main CV as Hal keeps it: where it starts, the person's edits to it, and its variants per job.
+"""The person's main CV in the cv.json shape that the PDF builder, the packs and the scorer read.
 
-Hal keeps its own copy of the CV in the CV store (`cvstudio/store.py`): numbered versions that
-never change. This module keeps the old cv.json-shaped functions working over that store for the callers
-not converted yet (Classic, pack, cvpdf, cvscore): `load()` and `for_editing()` read the
-version in use, and `save_base()` writes a new version. The store's first version is imported once from
-the importer's copy of the website CV and the old overrides (`cvstudio/import_v1.py`); Hal never reads or
-writes a website folder after that. `site()` and `starter()` still say where a CV would start from, for the
-CV builder (cvbuild.py). A variant for one job reorders projects and skill groups by relevance to the
-advert. The PDF is drawn by cvpdf.py.
+Hal keeps the CV in the CV store (`cvstudio/store.py`): numbered versions that never change. `load()`
+reads the version in use in the older cv.json shape, so the modules that draw or score a CV need no store
+of their own. The store's first version is imported once from the importer's copy of the website CV and
+its old overrides (`cvstudio/import_v1.py`), or made from the settings by `starter()`. A variant for one
+job reorders projects and skill groups by relevance to the advert. The PDF is drawn by cvpdf.py.
 """
 import copy
 import json
 import re
 from pathlib import Path
 
-from .core import paths
-
 # Title lines per kind of role, chosen by the advert's words. None are built in, so the CV's own title
-# stands.
+# stands; the CV types choose titles instead.
 TRACKS: dict[str, tuple[str, str]] = {}
-SITE_COPY = ("import", "cv", "site-cv.json")   # the importer's one copy of the website CV
 LINKS = (("linkedin", "you.links.linkedin"), ("site", "you.links.website"), ("github", "you.links.github"))
-
-
-def _data() -> Path:
-    # The old layout kept these files loose in data/; a moved data folder keeps them in data/cv/.
-    return paths.data_dir() if paths.is_legacy_layout() else paths.cv_dir()
-
-
-# Resolved when used: DATA, the CV folder; and in it BUILT, the CV built from the person's material
-# by cvbuild.py, with what to check.
-_LIVE = {"DATA": _data, "BUILT": lambda: _live("DATA") / "cv-built.json"}
-
-
-def __getattr__(name):  # old path constants, read live (PEP 562)
-    if name in _LIVE:
-        return _LIVE[name]()
-    raise AttributeError(name)
-
-
-def _live(name: str):
-    """An old path constant: the value a test assigned to the module, else the live path."""
-    return globals()[name] if name in globals() else _LIVE[name]()
-
 
 # Entries are matched across versions by what names them, not by position, so the site can add or reorder them.
 NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}
 PAIRS = ("skills", "additional")  # entries written as [name, value]; only the value is edited
-# Whole fields the applicant may set: text, and for Hal's layout the number of projects drawn in full.
-TEXT = ("title", "summary", "moreProjects", "closing", "pdfProjects")
-CLASSIC_EDIT = "You edited your CV in the classic screens"
-BUILT_CHOSEN = "You chose the CV Hal built from your material"
-SITE_CHOSEN = "You went back to the CV you started from"
-
-
-def site() -> dict:
-    """The CV Hal's main CV started from: the importer's copy of the website CV, else the starter CV."""
-    copied = paths.data_dir().joinpath(*SITE_COPY)
-    if copied.exists():
-        return json.loads(copied.read_text(encoding="utf-8"))
-    return starter()
 
 
 def _you(key: str) -> str:
@@ -93,64 +52,6 @@ def profile() -> dict:
     return {"contact": contact()}
 
 
-def _store():
-    from .cvstudio import store
-
-    return store
-
-
-def _current_v1(keep_hidden: bool) -> dict:
-    from .cvstudio import model
-
-    data = model.to_v1(_store().current()[1], profile())
-    for section in NAMED_BY:
-        for item in data.get(section) or []:
-            item["_key"] = item.get(NAMED_BY[section]) or ""
-    return data if keep_hidden else printable(data)
-
-
-def origin_name() -> str:
-    """Which CV Hal's starts from: "built", the one built from the applicant's material, else "site"."""
-    _, doc = _store().current()
-    return "built" if doc.extras.get("from") == "built" else "site"
-
-
-def set_origin(name: str) -> None:
-    """Starts Hal's CV again from the built CV, or from the first version; either way as a new version."""
-    from .cvstudio import model
-
-    store = _store()
-    if name == "built" and _live("BUILT").exists():
-        doc = model.from_v1(json.loads(_live("BUILT").read_text())["cv"])
-        doc.extras["from"] = "built"
-        store.new_version(doc, origin="generated", what=BUILT_CHOSEN, by="you")
-        return
-    first = next((v for v in reversed(store.versions()) if not v["binned"]), None)
-    if first is not None and origin_name() == "built":
-        store.new_version(store.get(first["id"]), origin="manual", what=SITE_CHOSEN, by="you")
-
-
-def origin() -> dict:
-    """The CV Hal's starts from, before the applicant's changes: the first version, in cv.json shape."""
-    from .cvstudio import model
-
-    store = _store()
-    store.current()
-    first = store.versions()[-1]
-    data = model.to_v1(store.get(first["id"]), profile())
-    for section in NAMED_BY:
-        for item in data.get(section) or []:
-            item["_key"] = item.get(NAMED_BY[section]) or ""
-    return data
-
-
-def overrides() -> list[dict]:
-    """How Hal's CV differs from the one it started from, one item per change."""
-    store = _store()
-    vid, _ = store.current()
-    return store.compare(store.versions()[-1]["id"], vid)
-
-
 def printable(data: dict) -> dict:
     """The CV as the PDF builder takes it: entries left out are dropped, and the editor's bookkeeping removed."""
     from .cvstudio import import_v1
@@ -158,23 +59,15 @@ def printable(data: dict) -> dict:
     return import_v1.printable(data)
 
 
-def _apply(data: dict, changes: list[dict], keep_hidden: bool = False) -> dict:
-    """The old way of laying saved changes over a CV, kept for the import and its callers."""
-    from .cvstudio import import_v1
-
-    out = import_v1.apply_overrides(data, changes)
-    return out if keep_hidden else printable(out)
-
-
 def load() -> dict:
     """Hal's base CV in cv.json shape: the version in use, entries left out dropped."""
-    return _current_v1(keep_hidden=False)
+    from .cvstudio import model, store
 
-
-def for_editing() -> dict:
-    """The base CV for the classic CV screens: entries left out kept and flagged; each entry carries its
-    id (`_id`) and its name (`_key`)."""
-    return _current_v1(keep_hidden=True)
+    data = model.to_v1(store.current()[1], profile())
+    for section in NAMED_BY:
+        for item in data.get(section) or []:
+            item["_key"] = item.get(NAMED_BY[section]) or ""
+    return printable(data)
 
 
 def _find(data: dict, section: str, key):
@@ -241,65 +134,6 @@ def changes(base: dict, variant: dict) -> list[dict]:
                 out.append({"path": f"{section}.{i}.{field}", "kind": "text", "label": f"{name}: {field}",
                             "before": was.get(field) or ""})
     return out
-
-
-def _keep_what_cv_json_cannot_hold(doc, new) -> None:
-    """Puts back what the cv.json shape flattens: sections of other kinds, hidden sections, locks and order.
-
-    Volunteering-like entries travel through the classic screens as experience and return to their own
-    section by id; other sections (and hidden ones) cannot be edited there, so they are kept as they were.
-    """
-    from .cvstudio import model
-
-    by_id = {s.id: s for s in new.sections}
-    kept = []
-    for s in doc.sections:
-        if s.kind in model.V1_TITLES and s.visible:
-            continue
-        if s.kind in model.V1_AS_EXPERIENCE and s.visible and "experience" in by_id:
-            mine = {e.id for e in s.entries}
-            exp = by_id["experience"]
-            back = copy.deepcopy(s)
-            back.entries = [e for e in exp.entries if e.id in mine]
-            exp.entries = [e for e in exp.entries if e.id not in mine]
-            kept.append(back)
-            continue
-        if s.visible and "additional" in by_id and s.kind not in model.V1_TITLES:
-            labels = {s.title, *(e.heading for e in s.entries)}
-            add = by_id["additional"]
-            add.entries = [e for e in add.entries if e.heading not in labels]
-        kept.append(copy.deepcopy(s))
-    kept_ids = {s.id for s in kept}
-    merged = {**{s.id: s for s in new.sections if s.id not in kept_ids}, **{s.id: s for s in kept}}
-    before = {s.id: s for s in doc.sections}
-    for s in merged.values():
-        if s.id in before:
-            s.locked = before[s.id].locked
-    order = [i for i in before if i in merged] + [i for i in merged if i not in before]
-    new.sections = [merged[i] for i in order]
-
-
-def save_base(edited: dict) -> list[dict]:
-    """Saves the classic screens' edit of the base CV as a new version; returns what changed (none: no version).
-
-    Entries are matched by the `_id` the screens got from `for_editing`, so a renamed entry keeps its id.
-    """
-    from .cvstudio import model
-
-    store = _store()
-    vid, doc = store.current()
-    merged = {**model.to_v1(doc, profile()), **{k: v for k, v in edited.items() if k != "contact"}}
-    for section in NAMED_BY:
-        for item in merged.get(section) or []:
-            item.pop("_key", None)
-    new = model.from_v1(merged)
-    new.extras = {**doc.extras, **{k: v for k, v in new.extras.items() if k != "v1_order"}}
-    new.contact_snapshot = doc.contact_snapshot
-    _keep_what_cv_json_cannot_hold(doc, new)
-    found = model.diff(doc, new)
-    if found:
-        store.new_version(new, origin="edited", what=CLASSIC_EDIT, by="you", parent=vid)
-    return found
 
 
 def _words(text: str) -> set[str]:

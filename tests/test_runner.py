@@ -1,5 +1,5 @@
 """The persisted action runner: steps, Stop, one action per subject, restarts, Carry on and the
-classic API that the driver and Classic still use.
+job-keyed API that the form driver uses.
 """
 import contextlib
 import json
@@ -17,7 +17,6 @@ import support  # noqa: F401 - puts the run in a temporary home before jobhunt i
 
 from jobhunt import db
 from jobhunt.core import paths, runner
-from jobhunt.web import server
 
 WAIT_S = 10
 SHORT_S = 0.2   # long enough to see that a held action keeps `idle` waiting
@@ -371,30 +370,30 @@ class Restart(unittest.TestCase):
         self.assertEqual(len(rows), 2)
 
 
-class Classic(unittest.TestCase):
-    """The classic API on top of the runner."""
+class ByJob(unittest.TestCase):
+    """The form driver's job-keyed API on top of the runner."""
 
     def setUp(self):
         self.con = self.enterContext(fresh_home())
-        self.addCleanup(server.ACTIONS.clear)
+        self.addCleanup(runner.ACTIONS.clear)
 
-    def test_the_legacy_actions_mirror_keeps_classic_working(self):
+    def test_the_actions_mirror_shows_each_jobs_action_and_its_steps(self):
         reached, release = threading.Event(), threading.Event()
         self.addCleanup(release.set)
 
         def fill(con, job_id):
-            server._say(job_id, "reading the page")
+            runner._say(job_id, "reading the page")
             reached.set()
             release.wait(WAIT_S)
-            server._say(job_id, "filling in the form")
+            runner._say(job_id, "filling in the form")
             return "form filled"
-        entry = server.run_action("demo:1", "applying", fill, "demo:1")
+        entry = runner.run_action("demo:1", "applying", fill, "demo:1")
         self.assertTrue(reached.wait(WAIT_S))
-        self.assertIs(server.ACTIONS["demo:1"], entry)
+        self.assertIs(runner.ACTIONS["demo:1"], entry)
         self.assertEqual(set(entry), {"name", "state", "message", "at"})
         self.assertEqual((entry["name"], entry["state"], entry["message"]), ("applying", "running", "reading the page"))
         with self.assertRaisesRegex(RuntimeError, "still busy with 'applying'"):
-            server.run_action("demo:1", "applying", fill, "demo:1")
+            runner.run_action("demo:1", "applying", fill, "demo:1")
         release.set()
         found = None
         for _ in range(100):
@@ -403,38 +402,38 @@ class Classic(unittest.TestCase):
             if found["state"] == "done":
                 break
             threading.Event().wait(0.05)
-        self.assertEqual((found["state"], found["kind"], found["message"]), ("done", "classic.applying", "form filled"))
+        self.assertEqual((found["state"], found["kind"], found["message"]), ("done", "form.applying", "form filled"))
         self.assertEqual(entry["state"], "done")
         steps = [s["text"] for s in runner.get(found["id"])["steps"]]
         self.assertEqual(steps, ["Reading the page", "Filling in the form"])
         text = self.con.execute("SELECT text FROM activity WHERE action_id = ?", (found["id"],)).fetchone()[0]
         self.assertEqual(text, "Applying for Junior Archivist at Riverside Records")
 
-    def test_a_new_action_with_a_subject_shows_in_classic_and_stops_from_it(self):
+    def test_a_new_action_with_a_subject_shows_in_the_mirror_and_stops_from_it(self):
         reached, release = threading.Event(), threading.Event()
         self.addCleanup(release.set)
-        runner.action("test.classic_view", area="applying", label="Filling in the form for {title}",
+        runner.action("test.job_view", area="applying", label="Filling in the form for {title}",
                       why="You approved the documents")(lambda ctx: gate(ctx, reached, release))
-        self.addCleanup(runner.forget, "test.classic_view")
-        action_id = runner.start("test.classic_view", job_id="demo:2")
+        self.addCleanup(runner.forget, "test.job_view")
+        action_id = runner.start("test.job_view", job_id="demo:2")
         self.assertTrue(reached.wait(WAIT_S))
-        entry = server.ACTIONS["demo:2"]
+        entry = runner.ACTIONS["demo:2"]
         self.assertEqual((entry["name"], entry["state"]), ("Filling in the form for Research Assistant", "running"))
-        self.assertTrue(server.stop_action("demo:2"))
-        self.assertNotIn("demo:2", server.ACTIONS)
+        self.assertTrue(runner.stop_action("demo:2"))
+        self.assertNotIn("demo:2", runner.ACTIONS)
         release.set()
         self.assertEqual(runner.wait(action_id)["state"], "stopped")
 
     def test_a_watched_form_page_is_recorded_as_an_action(self):
-        server.ACTIONS["demo:1"] = {"name": "filling the next page", "state": "running", "message": "", "at": db.now()}
-        server._carry_out(self.con, "demo:1", lambda con, job_id: server._say(job_id, "answering 2 questions") or "ok",
+        runner.ACTIONS["demo:1"] = {"name": "filling the next page", "state": "running", "message": "", "at": db.now()}
+        runner._carry_out(self.con, "demo:1", lambda con, job_id: runner._say(job_id, "answering 2 questions") or "ok",
                           "demo:1")
         runner.flush()
         row = self.con.execute("SELECT * FROM actions WHERE subject = 'demo:1'").fetchone()
         self.assertEqual((row["state"], row["step_n"]), ("done", 1))
         why = self.con.execute("SELECT why FROM activity WHERE action_id = ?", (row["id"],)).fetchone()[0]
         self.assertEqual(why, runner.WATCH_WHY)
-        self.assertEqual(server.ACTIONS["demo:1"]["state"], "done")
+        self.assertEqual(runner.ACTIONS["demo:1"]["state"], "done")
 
 
 if __name__ == "__main__":

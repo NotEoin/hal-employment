@@ -2,7 +2,7 @@
 
 `score(job, goal, weights)` is pure. It runs every rule in a fixed order and keeps each verdict as a
 `Reason`; the first rule that hides a job is the one shown under Hidden, and a hidden job scores 0, as
-Classic and the command line expect. `score_notes` is the comma-joined short notes, in the order and words
+the command line expects. `score_notes` is the comma-joined short notes, in the order and words
 of L score.py, so the technical-graduate preset with the owner's goal reproduces today's scores and notes
 (the compatibility test), except that a paid internship the goal includes no longer loses 10 points.
 

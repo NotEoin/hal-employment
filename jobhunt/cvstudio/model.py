@@ -9,7 +9,7 @@
 - The name and contact block are never part of the CV body: they come from the profile (`you.*`), so a new
   phone number reaches every document at once. `contact_snapshot` only keeps what an upload or import said.
 - `to_v1` and `from_v1` translate to and from today's `cv.json` shape, for the callers not converted yet
-  (Classic, pack, cvpdf, cvscore) and for the "website cv.json" export. Fields of `cv.json` that schema 2
+  (pack, cvpdf, cvscore) and for the "website cv.json" export. Fields of `cv.json` that schema 2
   has no place for are kept in `extras`, so nothing is lost on the way through.
 """
 from __future__ import annotations
@@ -590,7 +590,7 @@ def _mark_out(mark: str) -> Any:
 def from_v1(v1: dict) -> CVDoc:
     """Today's `cv.json` (with Hal's `hidden`, `_key`, `_id` and `pdfProjects`) as schema 2.
 
-    An entry's id is `_id` when the classic screens sent one back, else made from its kind and its
+    An entry's id is the `_id` it carries, if any, else made from its kind and its
     original name (`_key`, else its name), so every import of the same CV gives the same ids.
     """
     taken: set[str] = set()

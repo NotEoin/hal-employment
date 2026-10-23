@@ -76,19 +76,20 @@ class Access(unittest.TestCase):
     def test_api_needs_a_session_and_posts_need_the_header(self):
         with HalServer() as hal:
             self.assertEqual(hal.client().get("/api/v2/session").status, 401)
-            self.assertEqual(hal.client().get("/api/queue").status, 401)
+            self.assertEqual(hal.client().get("/files?path=made-up.pdf").status, 401)
             signed = hal.signed_in()
             self.assertEqual(signed.get("/api/v2/session").status, 200)
-            self.assertEqual(signed.get("/api/queue").status, 200)
+            self.assertEqual(signed.get("/files?path=made-up.pdf").status, 404)
             self.assertEqual(signed.post("/api/v2/session/end", csrf=False).status, 403)
             self.assertEqual(signed.post("/api/v2/session/end").status, 200)
             self.assertEqual(signed.get("/api/v2/session").status, 401)
 
-    def test_the_local_key_opens_the_legacy_api_without_a_window(self):
+    def test_the_local_key_opens_the_api_without_a_window(self):
         with HalServer() as hal:
             key = {"Authorization": f"Bearer {auth.local_api_key()}"}
-            self.assertEqual(hal.client().get("/api/queue", headers=key).status, 200)
-            self.assertEqual(hal.client().get("/api/queue", headers={"Authorization": "Bearer wrong"}).status, 401)
+            self.assertEqual(hal.client().get("/api/v2/version", headers=key).status, 200)
+            self.assertEqual(hal.client().get("/api/v2/version", headers={"Authorization": "Bearer wrong"}).status,
+                             401)
             if sys.platform != "win32":   # Windows keeps no Unix modes; the profile folder's ACL guards the key
                 self.assertEqual((hal.home / "config" / auth.KEY_FILE).stat().st_mode & 0o777, auth.SECRET_MODE)
 
@@ -101,7 +102,7 @@ class Access(unittest.TestCase):
                     self.assertEqual(signed.get("/healthz", headers={"Host": host}).status, 403)
             evil = {"Origin": "http://evil.example"}
             self.assertEqual(signed.post("/api/v2/session/end", headers=evil).status, 403)
-            self.assertEqual(signed.post("/api/todos", {"title": "x"}, headers=evil).status, 403)
+            self.assertEqual(signed.post("/api/ext/poll", {}, headers=evil).status, 403)
             own = {"Origin": f"http://127.0.0.1:{hal.port}"}
             self.assertEqual(signed.post("/api/v2/session/end", headers=own).status, 200)
 

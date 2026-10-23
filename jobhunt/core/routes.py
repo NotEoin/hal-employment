@@ -53,8 +53,6 @@ def first_name() -> str:
 @route("GET", "/api/v2/session")
 def session(req: Request) -> dict:
     """Who and where: the session, read by the app shell before anything else."""
-    from ..web import app
-
     remote = req.remote
     here = not remote
     developer = bool(_setting("advanced.developer_mode", paths.is_developer_checkout()))
@@ -62,7 +60,7 @@ def session(req: Request) -> dict:
             "developer": developer, "version": __version__, "platform": paths.platform_name(),
             "setup_done": setup_done(req.con), "first_name": first_name(),
             "simple_menu": bool(_setting("advanced.simple_menu", not developer)),
-            "theme": _setting("advanced.theme", "system"), "classic": app.classic_on(),
+            "theme": _setting("advanced.theme", "system"),
             "install_id": auth.install_id(),
             "caps": {"open_folder": here, "window_mode": here and paths.platform_name() == "linux",
                      "sign_in_here": here, "start_at_login": here}}

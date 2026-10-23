@@ -170,14 +170,6 @@ def own_words() -> set[str]:
     return {w.strip().lower() for w in words.read_text().split()} if words.exists() else set()
 
 
-def add_words(words: list[str]) -> None:
-    """Accepts words the dictionary did not know, so they are not flagged again."""
-    words_file = _live("WORDS")
-    words_file.parent.mkdir(parents=True, exist_ok=True)
-    known = own_words() | {w.lower() for w in words if re.fullmatch(r"[a-z']+", w.lower())}
-    words_file.write_text("\n".join(sorted(known)) + "\n")
-
-
 def misspelt(text: str, known: set[str]) -> list[str] | None:
     """Lower-case words a British English dictionary does not know, or None when no dictionary is installed.
 
@@ -556,8 +548,8 @@ def keywords(advert: str, cv_text: str, terms: list[str] | None = None,
              aliases: dict[str, list[str]] | None = None) -> dict:
     """Which of the advert's skills the CV names, weighted by how much the advert leans on them.
 
-    `terms` and `aliases` come from the CV type's `[keywords]`; without them the old list of
-    software skills is used, for the classic screens."""
+    `terms` and `aliases` come from the CV type's `[keywords]`; without them the built-in list of
+    software skills is used."""
     table = None if terms is None else {a.lower(): k.lower() for k, names in (aliases or {}).items() for a in names}
     skills = SKILLS if terms is None else sorted({t.lower() for t in terms} | set(table.values()))
     mine = _canon(cv_text, table)

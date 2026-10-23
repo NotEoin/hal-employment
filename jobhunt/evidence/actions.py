@@ -1,9 +1,9 @@
 """The record's action kinds: reading the folder again (`record.sync`) and asking it a question (`record.ask`).
 
-Both are persisted actions, so the page and Classic's old routes start them and
-return at once; progress and the answer arrive on the event stream and in Activity. Reading the folder is
-background work (priority 2); a question is something the person is waiting for (priority 0). Only one
-read of the folder runs at a time, whoever asked for it.
+Both are persisted actions, so the page starts them and returns at once; progress and the answer arrive
+on the event stream and in Activity. Reading the folder is background work (priority 2); a question is
+something the person is waiting for (priority 0). Only one read of the folder runs at a time, whoever
+asked for it.
 """
 from __future__ import annotations
 

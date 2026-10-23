@@ -54,9 +54,8 @@ else
   gate "G8 ruff (since $BASE)" "$PY" scripts/dev/check_ruff.py --base "$BASE"
   gate "G8 personal strings (tree)" "$PY" scripts/dev/check_personal.py --tree
   gate "G1 tests, browser on" env HAL_TEST_BROWSER=1 "$PY" -m unittest discover tests
-  # G2, G3, G5, G6, G7, G9 and G10 also run inside G1; named here so a failure says which promise broke.
+  # G2, G5, G6, G7, G9 and G10 also run inside G1; named here so a failure says which promise broke.
   gate "G2 UI smoke" env HAL_TEST_BROWSER=1 PYTHONPATH=tests "$PY" -m unittest ui.test_shell
-  gate "G3 Classic on the new server" env PYTHONPATH=tests "$PY" -m unittest test_classic
   [ -f scripts/dev/golden_cli.py ] && gate "G4 CLI goldens" "$PY" scripts/dev/golden_cli.py --check
   gate "G5 privacy (guard, store, form fill)" env PYTHONPATH=tests "$PY" -m unittest test_ai_guard test_settings_private test_autofill.PrivatePaths test_autofill.WhyThisAnswer test_answers_routes
   gate "G6 never Submit" env HAL_TEST_BROWSER=1 PYTHONPATH=tests "$PY" -m unittest test_never_submit test_guard

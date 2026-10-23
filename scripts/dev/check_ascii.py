@@ -29,8 +29,7 @@ EXEMPT_FILES = {"uv.lock"}
 LEGACY = {
     "extension/background.js", "extension/content.js", "jobhunt/adopt.py", "jobhunt/autofill.py",
     "jobhunt/browser.py", "jobhunt/cvscore.py", "jobhunt/salary.py", "jobhunt/web/static/app.js",
-    "jobhunt/web/static/classic/app.js", "tests/test_salary.py", "tests/test_autofill.py",
-    "tests/test_cvbuild.py",
+    "tests/test_salary.py", "tests/test_autofill.py",
 }
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 

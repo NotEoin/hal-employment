@@ -301,7 +301,6 @@ class Settings(ImportCase):
         self.assertEqual(self.setting("ai.model.quick"), "made-up-fast:3b")
         self.assertEqual(self.setting("ai.provider"), "local")
         self.assertTrue(self.setting("ai.local_only"))
-        self.assertTrue(self.setting("advanced.classic"))
         self.assertFalse(self.setting("addon.respect_off"))
         self.assertEqual(self.setting("goal.kinds"), importer.KINDS)
         self.assertEqual(self.setting("goal.min_pay"), 24000)

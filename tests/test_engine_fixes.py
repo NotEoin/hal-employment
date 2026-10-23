@@ -127,9 +127,8 @@ class SiteKeys(unittest.TestCase):
 
         with mock.patch.object(extension, "_ask", ask):
             extension.peek("test:watched")
-            extension.look("test:watched", None)
             extension.read_here("test:watched")
-        self.assertEqual(asked, [("read", False), ("read", False), ("read", True)])
+        self.assertEqual(asked, [("read", False), ("read", True)])
 
 
 def forget_notes() -> None:

@@ -18,18 +18,15 @@ from email.message import EmailMessage
 from pathlib import Path
 from typing import ClassVar
 from unittest import mock
-from urllib.parse import quote
 
 from support import legacy
-from support.api import HalServer
 from support.legacy import Practice
 from support.practice_site import HelperBrowser, PracticeSite
-from support.world import World, job_id
+from support.world import World
 
 from jobhunt import autofill, browser, digest, extension
 from jobhunt.apply import driver, guard
-from jobhunt.core import settings
-from jobhunt.web import server
+from jobhunt.core import runner, settings
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
@@ -135,15 +132,15 @@ class Email(unittest.TestCase):
             self.assertEqual(msg["From"], inbox)
 
 
-class LegacyRoutes(unittest.TestCase):
-    """Classic's routes: `submit` is gone, and `approve` hands the form over."""
+class Routes(unittest.TestCase):
+    """No route of the server sends a form: Hal only hands the last page over."""
 
-    def test_the_legacy_submit_route_answers_gone(self):
-        with World(), HalServer() as hal:
-            c = hal.signed_in()
-            reply = c.post(f"/api/job/{quote(job_id('sorrel-ready'), safe='')}/submit", {"fields": []})
-        self.assertEqual(reply.status, 410, reply.text)
-        self.assertEqual(reply.json()["error"], "Hal never presses Submit. Press it on the employer's site.")
+    def test_no_route_is_for_submitting(self):
+        from jobhunt.web import app, router
+
+        app.load_routes()
+        self.assertTrue(router.ROUTES)
+        self.assertEqual([pattern for _, pattern in router.ROUTES if "submit" in pattern.lower()], [])
 
 
 class Flows:
@@ -172,11 +169,11 @@ class Flows:
 
     def to_hand_over(self, job_id: str) -> str:
         """Fills the form and approves each page, as the person would, until Hal hands it over."""
-        said = server.act_auto(self.con, job_id)
+        said = driver.act_auto(self.con, job_id)
         for _ in range(MAX_PAGES):
             if (self.form(job_id) or {}).get("handed_over"):
                 return said
-            said = server.act_approve(self.con, job_id, [])
+            said = driver.act_approve(self.con, job_id, [])
         self.fail(f"never handed over: {said}")
 
     def would_submit(self, job_id: str) -> list[str]:
@@ -186,9 +183,9 @@ class Flows:
     def finish(self, job_id: str) -> str:
         """Waits for a background action to end and returns its message."""
         deadline = time.monotonic() + WAIT_S
-        while server.ACTIONS.get(job_id, {}).get("state") == "running" and time.monotonic() < deadline:
+        while runner.ACTIONS.get(job_id, {}).get("state") == "running" and time.monotonic() < deadline:
             time.sleep(POLL_S)
-        return server.ACTIONS[job_id]["message"]
+        return runner.ACTIONS[job_id]["message"]
 
     def test_hal_never_presses_submit_in_any_mode(self):
         for page in HANDED:
@@ -208,7 +205,7 @@ class Flows:
         driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         self.on_page(job_id, "single.html", lambda tab: tab.click("text=Submit application"))
         self.assertEqual(self.site.sent("single"), 1)
-        self.assertFalse(server._watch_step(self.con, job_id, {}))
+        self.assertFalse(driver._watch_step(self.con, job_id, {}))
         self.assertEqual(self.status(job_id), "applied")
 
     def test_types_the_emailed_code_and_leaves_the_button_to_you(self):
@@ -220,7 +217,7 @@ class Flows:
         # a look while the helper cannot read the tab yet ("busy") changes nothing; the watch looks again, as here
         deadline = time.monotonic() + WAIT_S
         while True:
-            self.assertTrue(server._watch_step(self.con, job_id, seen))
+            self.assertTrue(driver._watch_step(self.con, job_id, seen))
             if seen.get("code"):
                 break
             if time.monotonic() > deadline:
@@ -230,27 +227,27 @@ class Flows:
         self.assertEqual(self.site.sent(), 0)
         self.on_page(job_id, "code.html", lambda tab: tab.click("#send"))
         self.assertEqual(self.site.sent("code"), 1)
-        self.assertFalse(server._watch_step(self.con, job_id, seen))
+        self.assertFalse(driver._watch_step(self.con, job_id, seen))
         self.assertEqual(self.status(job_id), "applied")
 
     def test_a_signed_in_apply_waits_for_you_to_press_it_then_follows(self):
         job_id = self.practice_job("signed-in", "signed-in.html")
-        server.ACTIONS.pop(job_id, None)
-        server.run_action(job_id, "applying", server.act_auto, job_id)
+        runner.ACTIONS.pop(job_id, None)
+        runner.run_action(job_id, "applying", driver.act_auto, job_id)
         deadline = time.monotonic() + WAIT_S
-        while "press Apply" not in server.ACTIONS[job_id]["message"] and time.monotonic() < deadline:
+        while "press Apply" not in runner.ACTIONS[job_id]["message"] and time.monotonic() < deadline:
             time.sleep(POLL_S)
-        self.assertIn("press Apply on", server.ACTIONS[job_id]["message"])
+        self.assertIn("press Apply on", runner.ACTIONS[job_id]["message"])
         time.sleep(1)
         self.assertEqual(self.site.sent(), 0)
         self.on_page(job_id, "signed-in.html", lambda tab: tab.click("text=Apply now"))
         said = self.finish(job_id)
-        self.assertEqual(server.ACTIONS[job_id]["state"], "done", said)
+        self.assertEqual(runner.ACTIONS[job_id]["state"], "done", said)
         # Hal followed through to the form the board showed next, filled it, and pressed nothing.
         self.assertEqual(self.site.posts["/sent/signed-in"], 1)
         self.assertEqual(self.site.sent("after-apply"), 0)
         self.assertEqual(self.field(job_id, "First name")["value"], "Ada")
-        server.act_approve(self.con, job_id, [])
+        driver.act_approve(self.con, job_id, [])
         self.assertEqual(self.site.sent("after-apply"), 0)
 
     def test_the_guard_refuses_submit_like_controls_the_ai_picks(self):
@@ -259,11 +256,11 @@ class Flows:
         picks = mock.patch.object(autofill, "choose_control", lambda job, found: (
             offered.append([c["name"] for c in found["controls"]]) or "Confirm and submit"))
         with picks:
-            said = server.act_auto(self.con, job_id)
+            said = driver.act_auto(self.con, job_id)
             for _ in range(MAX_PAGES):
                 if guard.STOPPED in said:
                     break
-                said = server.act_approve(self.con, job_id, [])
+                said = driver.act_approve(self.con, job_id, [])
         self.assertIn(guard.STOPPED, said)
         self.assertNotIn("Confirm and submit", offered[0])
         self.assertIn("Back", offered[0])

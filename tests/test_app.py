@@ -19,7 +19,7 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
 from jobhunt.core import paths
-from jobhunt.web import app, server
+from jobhunt.web import app
 from jobhunt.web.router import Request, route
 
 GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
@@ -67,11 +67,6 @@ class ClosedPage(unittest.TestCase):
         for error in GONE:
             with self.subTest(error=error.__name__):
                 handler(app.AppHandler, error).send_json({"ok": True})
-
-    def test_a_classic_reply_to_a_closed_page_is_dropped_quietly(self):
-        for error in GONE:
-            with self.subTest(error=error.__name__):
-                handler(server.Handler, error)._send(200, b"{}", "application/json")
 
     def test_the_server_logs_no_error_when_a_browser_disconnects(self):
         for error in GONE:

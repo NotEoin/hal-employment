@@ -316,11 +316,6 @@ def _hold(con, job, form: dict) -> str:
     return message
 
 
-def _hold_in_tab(con, job, form: dict, parts: list[str]) -> str:
-    """Kept for callers of the old name: the helper's tab is held as Hal's window is (`_hold`)."""
-    return _hold(con, job, form)
-
-
 def _marks(form: dict) -> list[dict]:
     """Says, for each field, how it should look in the page: fine, to check, to answer, or refused."""
     out = []
