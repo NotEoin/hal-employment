@@ -21,6 +21,8 @@ $Pins = @{
 $MinBuild = 17763                  # Windows 10 1809
 $MinFreeBytes = 3GB
 $HealthWaitSeconds = 60
+$LogTries = 30                     # 30 x 100 ms: a scan of a small file ends well within 3 s
+$LogWaitMs = 100
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
@@ -37,7 +39,12 @@ $Log = Join-Path $Logs ('install-' + (Get-Date).ToUniversalTime().ToString('yyyy
 $script:LastOut = ''
 
 function Write-Log([string]$Text) {
-  Add-Content -LiteralPath $Log -Value ((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss') + 'Z ' + $Text)
+  # an antivirus scan or another reader can hold the log for a moment; a line that still cannot be written is
+  # dropped rather than shown in red or stopping the install (Windows 11 install test)
+  $line = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss') + 'Z ' + $Text
+  for ($try = 0; $try -lt $LogTries; $try++) {
+    try { Add-Content -LiteralPath $Log -Value $line -ErrorAction Stop; return } catch { Start-Sleep -Milliseconds $LogWaitMs }
+  }
 }
 
 function Say([string]$Text) {

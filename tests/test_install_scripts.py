@@ -114,6 +114,13 @@ class Shapes(unittest.TestCase):
                 if "pause" in runs[0]:
                     self.assertRegex(runs[0], r"(& pause|pause >nul) & exit /b\)?$")
 
+    def test_a_busy_log_file_never_stops_the_install(self):
+        # Windows 11 install test: Add-Content failed with "being used by another process" and printed a red error
+        text = powershell_part(WINDOWS)
+        body = text[text.index("function Write-Log"):text.index("function Say")]
+        self.assertIn("-ErrorAction Stop; return } catch { Start-Sleep -Milliseconds $LogWaitMs }", body)
+        self.assertIn("for ($try = 0; $try -lt $LogTries; $try++)", body)
+
     def test_the_install_window_is_named_for_hal(self):
         # Windows 11 install test: the console's title was C:\\WINDOWS\\system32\\cmd.exe
         self.assertIn("$Host.UI.RawUI.WindowTitle = 'Installing Hal Employment'", powershell_part(WINDOWS))
