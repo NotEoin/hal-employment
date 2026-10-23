@@ -31,7 +31,7 @@ import queue
 import re
 import threading
 from pathlib import Path
-from urllib.parse import parse_qs, quote_plus, urlparse
+from urllib.parse import quote_plus, urlparse
 
 from .apply import guard
 from .config import CONFIG
@@ -189,17 +189,12 @@ def _facts(survey: dict, fields: list[dict]) -> dict:
 # Notes about job sites -------------------------------------------
 
 def notes_for(url: str, job_id: str | None = None):
-    """The notes about job sites that apply to this page (`sites.notes.for_page`), or None without them.
+    """The notes about job sites that apply to this page (`sites.notes.for_page`).
 
-    With no note of a kind, each hook below does what Hal did before notes existed, which is what the
-    built-in notes say; so a checkout without `jobhunt.sites.notes` behaves exactly as today.
+    With only the built-in notes on, each hook below does what Hal did before notes existed.
     """
-    try:
-        from .sites import notes
-    except ModuleNotFoundError as e:  # not in this checkout yet: only the built-in behaviour applies
-        if e.name != f"{__package__}.sites.notes":
-            raise
-        return None
+    from .sites import notes
+
     return notes.for_page(url or "", job_id=job_id)
 
 
@@ -274,34 +269,12 @@ def with_notes(job_id: str, url: str, fields: list[dict]) -> tuple[list[dict], l
 
 
 def application_url(job) -> str:
-    """Returns the page holding the application form for a job, as best it can be known.
+    """Returns the page holding the application form for a job, as the `open_url` notes about its site say
+    (`sites.behaviour.application_url`): the built-in ones open Ashby's and Lever's forms directly and the
+    Greenhouse form on an employer's own careers page; a person's note about the site wins over them."""
+    from .sites import behaviour
 
-    An `open_url` note about the advert's site wins over the built-in rules below: `{append: "/apply"}` or
-    `{rewrite: {from, to}}`.
-    """
-    url = job["url"] or ""
-    note = _first(notes_for(url, job["id"]), "open_url")
-    if note is not None:
-        act = note.act
-        if act.get("append"):
-            base = url.split("?")[0].rstrip("/")
-            return base if base.endswith(act["append"]) else base + act["append"]
-        if act.get("rewrite"):
-            return url.replace(act["rewrite"].get("from", ""), act["rewrite"].get("to", ""))
-    host = urlparse(url).netloc
-    base = url.split("?")[0].rstrip("/")
-    if "ashbyhq.com" in host and not base.endswith("/application"):
-        return base + "/application"
-    if "lever.co" in host and not base.endswith("/apply"):
-        return base + "/apply"
-    m = re.search(r"gh_jid=(\d+)", url)
-    if m and "greenhouse.io" not in host and job["id"].startswith("greenhouse:"):
-        from .config import boards
-        slug = next((b["slug"] for b in boards() if b["ats"] == "greenhouse"
-                     and b["name"] == job["company"]), None)
-        if slug:
-            return f"https://job-boards.greenhouse.io/embed/job_app?for={slug}&token={m.group(1)}"
-    return url
+    return behaviour.application_url(job, notes_for(job["url"] or "", job["id"]))
 
 
 class Browser:
@@ -481,30 +454,16 @@ def _settle(page) -> None:
         pass
 
 
-# Application systems that host many employers on one site; each employer (tenant) has its own sign-in.
-TENANT_HOSTS = ("myworkdayjobs.com",)
-TENANT_PATHS = ("greenhouse.io",)
-
-
 def site_key(url: str) -> str:
-    """The site a page belongs to, such as reed.co.uk for secure.reed.co.uk; shared systems keep the employer.
+    """The site a page belongs to, such as reed.co.uk for secure.reed.co.uk (`sites.notes.site_key`).
 
     `acme.wd3.myworkdayjobs.com` and `boards.greenhouse.io/acme` are each their own site, so signing in to one
-    Workday employer never marks every other as signed in (`sites.notes.site_key`).
+    Workday employer never marks every other as signed in. One rule for the engines, the notes and the sites
+    table, so a sign-in and a note about an employer are kept under the same key.
     """
-    parsed = urlparse(url)
-    host = parsed.netloc.lower().split(":")[0]
-    if any(host == t or host.endswith("." + t) for t in TENANT_HOSTS) and host.count(".") > 1:
-        return host
-    if any(host == t or host.endswith("." + t) for t in TENANT_PATHS):
-        first = next((p for p in parsed.path.split("/") if p), "")
-        slug = parse_qs(parsed.query).get("for", [""])[0] if first == "embed" else first
-        if slug:
-            return f"{host}/{slug.lower()}"
-    labels = host.split(".")
-    # Second-level names such as .co.uk take a third label.
-    keep = 3 if len(labels) > 2 and labels[-2] in ("co", "ac", "org", "gov", "com") and len(labels[-1]) == 2 else 2
-    return ".".join(labels[-keep:])
+    from .sites import notes
+
+    return notes.site_key(url)
 
 
 _site = site_key   # the old name, kept for callers

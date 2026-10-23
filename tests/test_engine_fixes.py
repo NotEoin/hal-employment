@@ -4,6 +4,7 @@ Each page is in `tests/site/practice/` and served by `support.practice_site.Prac
 form post, so each test also proves Hal sent nothing. The fixes are generic engine code, never a
 branch for a test. The browser tests run with `HAL_TEST_BROWSER=1`; the rules beside them run always.
 """
+import contextlib
 import os
 import tempfile
 import time
@@ -14,13 +15,10 @@ from unittest import mock
 from support import legacy
 from support.legacy import Practice
 from support.practice_site import HelperBrowser, PracticeSite
-from support.stubs import site_notes
 
-STUB_NOTES = site_notes.install()   # the notes store may not be there yet
-
-from jobhunt import browser, extension  # noqa: E402 - the notes stand-in goes in before the engines use it
-from jobhunt.apply import driver, queries  # noqa: E402
-from jobhunt.sites import notes  # noqa: E402
+from jobhunt import browser, db, extension
+from jobhunt.apply import driver, queries
+from jobhunt.sites import notes
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
@@ -59,7 +57,7 @@ class SiteKeys(unittest.TestCase):
         self.assertTrue(browser.signed_in_at("https://boards.greenhouse.io/fernvale/jobs/4002"))
         self.assertFalse(browser.signed_in_at("https://boards.greenhouse.io/quillworks/jobs/4003"))
         self.assertEqual(browser.site_key("https://job-boards.greenhouse.io/embed/job_app?for=Fernvale&token=1"),
-                         "job-boards.greenhouse.io/fernvale")
+                         "boards.greenhouse.io/fernvale")
 
     def test_a_site_is_named_by_its_domain_and_shared_systems_keep_the_employer(self):
         self.assertEqual(queries._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
@@ -135,9 +133,11 @@ class SiteKeys(unittest.TestCase):
 
 
 def forget_notes() -> None:
-    """Removes the notes a test added (the stand-in keeps them in memory)."""
-    if STUB_NOTES:
-        site_notes.reset()
+    """Removes the notes a test added and the uses they recorded, so the next test has only the built-in ones."""
+    with contextlib.closing(db.connect()) as con:
+        con.execute("DELETE FROM site_events")
+        con.execute("DELETE FROM site_notes")
+        con.commit()
 
 
 class NoteHooks(unittest.TestCase):
@@ -157,8 +157,8 @@ class NoteHooks(unittest.TestCase):
 
     def test_a_field_note_changes_only_its_own_question_and_leaves_a_trace(self):
         url = "https://jobs.example.org/apply/7"
-        notes.add("job", "https://jobs.example.org/apply/", "field_transform", {},
-                  {"label": "^location", "transform": "city_only"}, "In \"Location\", type only the city")
+        notes.add("job", "https://jobs.example.org/apply/", "field_transform", {"label": "^location"},
+                  {"transform": "city_only"}, "In \"Location\", type only the city")
         fields = [{"hid": "h1", "kind": "text", "label": "Location", "value": "Leeds, United Kingdom"},
                   {"hid": "h2", "kind": "text", "label": "Address", "value": "1 Made-up Row, Leeds"}]
         out, trace = browser.with_notes("test:city", url, fields)
@@ -290,8 +290,8 @@ class Fixes:
         values = {"First name": "Ada", "Last name": "Lovelace", "Location": "Leeds, United Kingdom"}
         self.fill(job_id, self.answers(found, values))
         self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#loc")), "", "the form refuses it")
-        notes.add("job", f"{self.site.base}/{page}", "field_transform", {},
-                  {"label": "^location", "transform": "city_only"}, "In \"Location\", type only the city")
+        notes.add("job", f"{self.site.base}/{page}", "field_transform", {"label": "^location"},
+                  {"transform": "city_only"}, "In \"Location\", type only the city")
         out = self.fill(job_id, self.answers(found, values))
         self.assertEqual(out["errors"], {})
         self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#loc")), "Leeds")

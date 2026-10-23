@@ -51,22 +51,31 @@ class BuiltInNotes(Home):
         def page(url: str, job_id: str | None = None) -> notes.NoteSet:
             return notes.for_page(url, job_id=job_id, con=self.con)
 
-        # Addresses: Ashby and Lever forms, and the Greenhouse form on an employer's own careers page.
+        # Addresses: Ashby and Lever forms, and the Greenhouse form on an employer's own careers page, each
+        # with the address the old `browser.application_url` (before the engines read notes) gave.
         boards = [{"ats": "greenhouse", "name": "Harbour Arts Trust", "slug": "harbourarts"}]
-        jobs = [{"id": "ashby:1", "company": "Fenwick Lane", "url": "https://jobs.ashbyhq.com/fenwick/7f3?src=x"},
-                {"id": "ashby:2", "company": "Fenwick Lane", "url": "https://jobs.ashbyhq.com/fenwick/7f3/application"},
-                {"id": "lever:1", "company": "Moss Row", "url": "https://jobs.lever.co/mossrow/42/"},
-                {"id": "greenhouse:9", "company": "Harbour Arts Trust",
-                 "url": "https://harbourarts.example.org/careers?gh_jid=5551234"},
-                {"id": "greenhouse:9", "company": "Nobody Listed", "url": "https://other.example.org/c?gh_jid=77"},
-                {"id": "manual:1", "company": "Harbour Arts Trust", "url": "https://harbourarts.example.org/c?gh_jid=5"},
-                {"id": "manual:2", "company": "Quayside Books", "url": "https://quaysidebooks.example.org/jobs/2"},
-                {"id": "manual:3", "company": "Quayside Books", "url": ""}]
+        jobs = [({"id": "ashby:1", "company": "Fenwick Lane", "url": "https://jobs.ashbyhq.com/fenwick/7f3?src=x"},
+                 "https://jobs.ashbyhq.com/fenwick/7f3/application"),
+                ({"id": "ashby:2", "company": "Fenwick Lane",
+                  "url": "https://jobs.ashbyhq.com/fenwick/7f3/application"},
+                 "https://jobs.ashbyhq.com/fenwick/7f3/application"),
+                ({"id": "lever:1", "company": "Moss Row", "url": "https://jobs.lever.co/mossrow/42/"},
+                 "https://jobs.lever.co/mossrow/42/apply"),
+                ({"id": "greenhouse:9", "company": "Harbour Arts Trust",
+                  "url": "https://harbourarts.example.org/careers?gh_jid=5551234"},
+                 "https://job-boards.greenhouse.io/embed/job_app?for=harbourarts&token=5551234"),
+                ({"id": "greenhouse:9", "company": "Nobody Listed", "url": "https://other.example.org/c?gh_jid=77"},
+                 "https://other.example.org/c?gh_jid=77"),
+                ({"id": "manual:1", "company": "Harbour Arts Trust", "url": "https://harbourarts.example.org/c?gh_jid=5"},
+                 "https://harbourarts.example.org/c?gh_jid=5"),
+                ({"id": "manual:2", "company": "Quayside Books", "url": "https://quaysidebooks.example.org/jobs/2"},
+                 "https://quaysidebooks.example.org/jobs/2"),
+                ({"id": "manual:3", "company": "Quayside Books", "url": ""}, "")]
         with mock.patch("jobhunt.config.boards", return_value=boards):
-            for job in jobs:
+            for job, today in jobs:
                 with self.subTest(url=job["url"]):
-                    self.assertEqual(hal.application_url(job, page(job["url"], job["id"])),
-                                     browser.application_url(job))
+                    self.assertEqual(hal.application_url(job, page(job["url"], job["id"])), today)
+                    self.assertEqual(browser.application_url(job), today)
 
         # Page words: Apply buttons, thanks, already applied, closed, human checks, blocks and code walls.
         words = hal.page_words(page(WORKABLE_FORM))
