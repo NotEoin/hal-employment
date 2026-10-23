@@ -11,8 +11,6 @@ import socket
 import sys
 import tarfile
 
-from ..core import paths
-
 SKIP_PARTS = ("__pycache__", "node_modules")
 
 
@@ -43,7 +41,9 @@ def _tar_filter(info: tarfile.TarInfo) -> tarfile.TarInfo:
 
 def cmd_helper_files(args) -> None:
     """Writes the browser helper's files as a tar to stdout (`--tar`), or prints where they are."""
-    src = paths.code_dir() / "extension"
+    from ..apply import helper_mirror
+
+    src = helper_mirror.source()   # the folder the desktop refreshes its visible copy from
     if not (src / "manifest.json").is_file():
         print(f"The browser helper's files are missing from {src}.", file=sys.stderr)
         sys.exit(1)
