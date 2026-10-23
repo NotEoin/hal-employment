@@ -83,6 +83,16 @@ $s.WorkingDirectory = $env:HAL_CODE
 $s.Save()
 """
 
+ANY_SHORTCUT = r"""
+$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:HAL_LINK)
+$s.TargetPath = $env:HAL_TARGET
+$s.Arguments = $env:HAL_ARGS
+$s.WorkingDirectory = $env:HAL_CODE
+$s.Description = $env:HAL_DESCRIPTION
+if ($env:HAL_ICON) { $s.IconLocation = $env:HAL_ICON }
+$s.Save()
+"""
+
 
 def _reg_default(hive: str, key: str) -> str | None:
     """The default value of a registry key, or None."""
@@ -243,6 +253,25 @@ class WindowsPlatform:
         """The shortcut in the Startup folder that starts Hal at sign-in."""
         base = PureWindowsPath(self.env.get("APPDATA", ""))
         return Path(str(base / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / STARTUP_LINK))
+
+    def special_folder(self, name: str) -> Path:
+        """The person's "start_menu", "desktop" or "startup" folder."""
+        appdata = PureWindowsPath(self.env.get("APPDATA", ""))
+        programs = appdata / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        if name == "start_menu":
+            return Path(str(programs))
+        if name == "startup":
+            return Path(str(programs / "Startup"))
+        if name == "desktop":
+            return Path(str(PureWindowsPath(self.env.get("USERPROFILE", "")) / "Desktop"))
+        raise ValueError(f"no special folder called {name!r}")
+
+    def make_shortcut(self, link: Path, target: str, arguments: str = "", *, workdir: str = "",
+                      description: str = "", icon: str = "") -> None:
+        """A `.lnk` made through WScript.Shell (U setup.ps1:112-121), so no extra library is needed."""
+        self._powershell(ANY_SHORTCUT, {"HAL_LINK": str(link), "HAL_TARGET": target, "HAL_ARGS": arguments,
+                                        "HAL_CODE": workdir, "HAL_DESCRIPTION": description, "HAL_ICON": icon},
+                         TOOL_TIMEOUT_S * 2)
 
     def service(self) -> str:
         """"startup-folder" when the Startup shortcut exists, else "none"."""

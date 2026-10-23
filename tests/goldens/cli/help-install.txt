@@ -1,0 +1,12 @@
+$ jobhunt install --help
+usage: jobhunt install [-h] [--windows | --linux | --dev | --remove] [--extras EXTRAS]
+                       [--delete-data]
+
+options:
+  -h, --help       show this help message and exit
+  --windows        a Windows install made by the install file
+  --linux          a Linux install made by the install file
+  --dev            your own checkout: the command and menu entry only
+  --remove         remove Hal Employment from this computer
+  --extras EXTRAS  the optional parts the install file set up, such as browser,documents
+  --delete-data    with --remove: delete your data too

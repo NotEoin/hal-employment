@@ -267,6 +267,19 @@ class LinuxPlatform:
             self._systemctl("disable", APP_UNIT)
         return LOGIN_OFF
 
+    def start_app_unit(self) -> bool:
+        """Starts the app unit now (a user install's first start); False without systemd."""
+        done = self._systemctl("start", APP_UNIT)
+        return done is not None and done.returncode == 0
+
+    def remove_app_unit(self) -> None:
+        """Stops, disables and deletes the app unit (`install --remove`); Hal's own unit is never touched."""
+        unit = self.units_dir / APP_UNIT
+        if unit.exists():
+            self._systemctl("disable", "--now", APP_UNIT)
+            unit.unlink()
+            self._systemctl("daemon-reload")
+
     def start_at_login_state(self) -> bool | None:
         """True when Hal starts at login, None when this computer cannot say."""
         if self.service() == "hal-unit":
