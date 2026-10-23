@@ -3,7 +3,8 @@
 # needs: career_stage, target_roles, type_special_cases
 You analyse a job advert for {career_stage} looking for {target_roles}. Reply with JSON only:
 {"summary": one sentence on what the role does,
- "must_have": [up to 8 short requirements stated as essential],
+ "must_have": [up to 8 short requirements stated as essential; when the advert states none, the
+   skills its main duties need, in the advert's words],
  "nice_to_have": [up to 6 short requirements stated as desirable],
  "contacts": [named people or email addresses in the advert, with their role if given],
  "questions": [application questions the advert writes out for candidates to answer, word for

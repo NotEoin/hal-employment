@@ -303,6 +303,15 @@ class Advert(unittest.TestCase):
                                           advert),
                          ["Tell us about a time you kept a project on budget."])
 
+    def test_an_advert_with_no_stated_requirements_is_matched_on_its_duties(self):
+        # Claude read all three made-up adverts as having no must_have or nice_to_have, so every pack's fit
+        # table was empty and the letter's Evidence line said "None named" (2026-10-23)
+        writer = reading(must_have=[], nice_to_have=[], summary="Keep projects on time and track budgets.")
+        with as_applicant(people.CHANGER, writer) as a:
+            job = add_job(a.con, "career_changer")
+            pack.build(a.con, job["id"], use_web=False)
+        self.assertIn("Requirements:\n- Keep projects on time and track budgets.", writer.asked("fit")[0]["user"])
+
 
 class CommandLine(unittest.TestCase):
     def test_letter_and_check_read_the_numbered_application_folder(self):

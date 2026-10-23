@@ -128,7 +128,12 @@ def written_out(questions: list, advert: str) -> list[str]:
 
 
 def _requirements(analysis: dict) -> list[str]:
-    return analysis.get("must_have", []) + analysis.get("nice_to_have", [])
+    """What the fit map matches the CV against; the role summary when the advert states no requirement."""
+    # short adverts state duties but no "essential" list; Claude answered [] for all three made-up adverts,
+    # so the fit map, the letter's Evidence line and the prep notes' fit map were empty (2026-10-23)
+    stated = (analysis.get("must_have") or []) + (analysis.get("nice_to_have") or [])
+    summary = (analysis.get("summary") or "").strip()
+    return stated or ([summary] if summary else [])
 
 
 def _kept(analysis: dict) -> str:

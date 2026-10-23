@@ -314,7 +314,9 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   Activity "Used".
 - The advert reading (`pack._analyse`, prompt `analyse`) keeps only the questions the advert writes out
   (`pack.written_out`: most of a question's words are in the advert), so a model's note about questions is
-  never answered.
+  never answered. When the advert states no requirement, its main duties are the requirements, and the
+  role summary stands in when the reading still has none (`pack._requirements`), so the fit map is never
+  empty.
 - `docs/write_routes.py` serves `POST /applications/{id}/documents/change`, `documents/letter/rewrite`,
   `/prep` and `/contacts`; each starts its kind in `docs/write_actions.py` (`docs.change`,
   `docs.rewrite_letter`, `docs.prep`, `docs.contacts`) and returns `{action_id}`.
