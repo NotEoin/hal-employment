@@ -199,8 +199,9 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     return {"text": letter, "flags": flags, "used": used, "notes": letter_notes(who, letter, evidence, flags)}
 
 
-def _eligibility_flag(job, who: dict, fit: dict) -> str:
-    if fit.get("eligible") is False:
+def _eligibility_flag(job, who: dict, fit: dict, conditions: list) -> str:
+    # with no condition to judge, Claude still answered "eligible": false ("nothing to match", 2026-10-23)
+    if fit.get("eligible") is False and conditions:
         return f"ELIGIBILITY: {fit.get('eligibility_notes', 'may not be eligible')}"
     if who.get("not_eligible"):
         return f"ELIGIBILITY: {who.get('eligibility_line') or 'the advert may not be open to you'}"
@@ -260,7 +261,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     history = previous_applications(con, job)
     if history:
         flagged.insert(0, f"REAPPLICATION: you applied here before: {history}")
-    eligibility = _eligibility_flag(job, who, fit)
+    eligibility = _eligibility_flag(job, who, fit, analysis.get("eligibility") or [])
     if eligibility:
         flagged.insert(0, eligibility)
     if ctx is not None:

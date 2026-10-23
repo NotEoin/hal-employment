@@ -246,6 +246,26 @@ class Checklist(unittest.TestCase):
                 self.assertNotIn(word, checklist.lower())
             self.assertNotIn("python3 -m", md)
 
+    def test_an_advert_with_no_conditions_gives_no_eligibility_warning(self):
+        # Claude's fit map for a made-up advert with no conditions said "eligible": false because there was
+        # "nothing to match" (2026-10-23), and the pack warned the person they might not be eligible
+        writer = FakeWriter()
+        fit = writer.reply
+        unsure = {"eligible": False, "eligibility_notes": "The conditions are empty, so nothing can be judged."}
+        writer.reply = lambda system, user: ({**fit(system, user), **unsure} if prompt_id(system) == "fit"
+                                             else fit(system, user))
+        with as_applicant(people.CHANGER, writer) as a:
+            job = add_job(a.con, "career_changer")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertNotIn("ELIGIBILITY", md)
+        analyse = writer.reply
+        writer.reply = lambda system, user: ({**analyse(system, user), "eligibility": ["Current students only"]}
+                                             if prompt_id(system) == "analyse" else analyse(system, user))
+        with as_applicant(people.CHANGER, writer) as a:
+            job = add_job(a.con, "career_changer")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertIn(f"- ELIGIBILITY: {unsure['eligibility_notes']}", section(md, "Check before sending"))
+
     def test_a_students_only_advert_is_flagged_from_the_jobs_eligibility(self):
         verdict = {"requires": "current_students", "eligible": False,
                    "why": "For current students only. You finished your course in 2026."}
