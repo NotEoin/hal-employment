@@ -15,15 +15,15 @@ document is listed in [docs/README.md](docs/README.md).
 ## Install
 
 Hal's files are a private GitHub repository. The person who set Hal up adds your GitHub account to it and
-gives you an install file. You need no admin rights, and you never type a command.
+gives you an install file. You need no admin rights, and on Windows you never type a command.
 
 - **Windows 10 or 11:** double-click `install-hal-windows.cmd` (from a USB stick or a cloud-storage link,
   never an email attachment). Steps and pictures: [docs/howto/install-on-windows.md](docs/howto/install-on-windows.md).
 - **Linux:** run `install-hal-linux.sh`. Steps: [docs/howto/install-on-linux.md](docs/howto/install-on-linux.md).
 
 The install file signs you in to GitHub in your browser, downloads Hal, makes the shortcuts and opens the
-setup guide. Updates come the same way: press **Update Hal** in Settings, Updates
-([docs/howto/update-hal.md](docs/howto/update-hal.md)).
+setup guide. Updates come from GitHub too, and install only when you press **Update Hal** in Settings,
+Updates ([docs/howto/update-hal.md](docs/howto/update-hal.md)).
 
 To hand Hal to someone else, see [docs/howto/give-someone-access.md](docs/howto/give-someone-access.md).
 The blank install files are `scripts/install/install-hal-windows.cmd` and
