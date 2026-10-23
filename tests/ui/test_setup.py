@@ -55,7 +55,9 @@ class SetupGuide(unittest.TestCase):
         cls._stack.close()
 
     def setUp(self) -> None:
-        self.hal = self.enterContext(HalServer())
+        # the fakes go in before the server, so they come out after it: the page's last request (All set's
+        # PUT, which starts the first search) can land after the test ends, and once ran a real search
+        # over the network (Windows CI, 2026-10-23)
         self.enterContext(fake_ai({"cv_parse": LLMUnavailable("The made-up AI is switched off.")}))
         self.enterContext(mock.patch.object(email_test, "IMAP", FakeGmail))
         self.sent = []
@@ -63,6 +65,7 @@ class SetupGuide(unittest.TestCase):
                                             or contextlib.nullcontext()))
         self.first_search = self.enterContext(mock.patch("jobhunt.setup.routes.start_first_search",
                                                          return_value=None))
+        self.hal = self.enterContext(HalServer())
 
     def tab(self, size: str, scheme: str) -> AppPage:
         p = AppPage(self.browser, f"http://127.0.0.1:{self.hal.port}", size, scheme)
