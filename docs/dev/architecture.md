@@ -57,7 +57,9 @@ older rows end in `+00:00` and compare the same on 19 characters.
 `db.connect(path=None)` opens `paths.db_path()` with WAL, foreign keys and a 30 s busy timeout, then runs
 `core.db.migrate.migrate` when `PRAGMA user_version` is below `LATEST`, and raises `DataTooNew` when above.
 Only migrations make the schema: 0001 is the baseline, so `db.py` holds no `CREATE` statement. A migration
-backs up `jobs.db` first.
+backs up `jobs.db` first. `LATEST` is 18. Migration 0018 (`0018_old_answers`) is the one destructive
+migration: it drops the old `answers` table, because the saved answers live in `answers2` alone; every other
+migration only adds.
 
 ## Settings (`core/settings/`)
 
@@ -88,14 +90,26 @@ or CV choices by itself. The registry and catalogue are `core/settings/registry.
 order, for the kinds `routes`, `settings`, `actions`, `health`, `home`, `search`, `schedule`, `undo` and
 `tasks`. A module that fails to import is logged and kept in `plugins.FAILED` for the health page.
 `@plugins.on_start` registers work the server runs once at start. Data tasks are also found in `actions`
-modules; the to-do list module `jobhunt.tasks` is never loaded as one. Migrations (`core/db/migrations/`) and
+modules; the to-do list module `jobhunt.tasks` is never loaded as one. A data task whose module name does not
+fit the `actions` pattern is listed in `TASK_MODULES` in `core/db/tasks.py`; `cv.import_v1`
+(`cvstudio/import_v1.py`) is registered that way. Migrations (`core/db/migrations/`) and
 command modules (`cli/`) are never loaded this way: the migration runner and `cli.register_all` find them.
 
 ## Server (`web/app.py`, `web/router.py`)
 
-One `ThreadingHTTPServer` on `127.0.0.1` (never a setting). `AppHandler` answers, in order: the Host check,
-`/healthz`, `/open`, `/pair`, the write check, the session or local key, `/api/v2/*` through the router,
-then the app's files from `static/app/` under a strict Content-Security-Policy.
+One `ThreadingHTTPServer` on `127.0.0.1` (never a setting). `AppHandler`, a subclass of the standard
+library's `BaseHTTPRequestHandler`, answers in this order:
+
+1. the Host check, which refuses a request that reaches the port under another name;
+2. `/healthz`, `/open` and `/pair`;
+3. the CSRF check for writes;
+4. the session or the local key;
+5. `/api/v2/*` through the router;
+6. `/files` and `/doc/<job>/<cv|letter>`, an application's documents;
+7. the app's own files from `static/app/`, under a strict Content-Security-Policy.
+
+There is one server and one app. The older Classic screens, `/classic/`, the unversioned `/api/*` routes and
+`web/server.py` are gone, so a new area adds routes under `/api/v2/` and a page under `static/app/`.
 
 An area adds routes in its own `routes.py` or `*_routes.py`:
 
@@ -195,8 +209,11 @@ processes, once a second. Payloads carry ids, never private data.
   `docs/folders.publish`), fixes the mode, session and helper the form is filled with, and starts
   `apply.fill`. Editing documents after a fill marks the form out of date. `discard` keeps each reason
   apart; `restore`, `sent_myself`, `change_status` and `add_note` are the rest of the board's buttons.
-- The kinds `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`, `apply.adopt`,
-  `apply.match_tab` and `apply.look` wrap the driver, so each run has steps, Stop and an Activity row.
+- The kinds `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`, `apply.adopt`
+  and `apply.match_tab` wrap the driver, so each run has steps, Stop and an Activity row.
+- The form driver's API in `core/runner.py` is keyed by job (`run_action`, `stop_action`, `ACTIONS`), so
+  one application has at most one run of the driver. Each run is persisted as an action of kind
+  `form.<name>`, and the driver's `_say` adds a step to it.
 - `apply/routes.py` serves the Applications routes and only calls those rules. `apply/queries.application`
   builds the application page: the steps, previous and next, the documents, the form's fields with where
   each answer came from, and the Sent timeline. A private answer leaves the page API only as "Filled in from
@@ -293,6 +310,8 @@ runs: tests use `tests/support/fake_claude/`.
 - `cvstudio/model.py` gives every section, entry and line a stable id. `apply` changes a document by
   target (`""` is the whole document), `diff` compares by id (a swap counts as one move), and
   `to_v1`/`from_v1` keep the printable `cv.json`.
+- `jobhunt/cv.py` is the reader of the store in the `cv.json` shape: `load()` returns the version in use as
+  the PDF builder, the packs and the matching code expect it, so none of them needs the store itself.
 - Versions never change after they are written. `store.new_version` adds one under `BEGIN IMMEDIATE`, so two
   saves at once get two numbers, and publishes the event `cv`. A version made with `job_id=` belongs to that
   job: it is kept out of the main list and never becomes Hal's main copy.
@@ -510,6 +529,9 @@ Conventions for pages and dialogs:
   paths it makes stale.
 - Words: text for Advanced and Details panels goes in a literal preceded by `/* details */`, which the
   words test skips.
+- State that follows a prop or the route is synced with `useLayoutEffect`, not `useEffect`: Preact runs
+  effects after the next frame, so a plain effect shows the old value for one paint and a quick click or key
+  press can act on it, as `pages/job.js` does.
 - Setup steps default-export `Step`; `setup/setup.js` exports `Setup` (drawn over any page).
 - `core/store.js` has `setTheme("light"|"dark"|"system")` and `setSimpleNav(bool)`.
 

@@ -60,14 +60,18 @@ old lines new. `check_ascii.py --tree` checks every file except a short list of 
 
 `check_personal.py` reads its patterns from `~/.config/hal-employment/personal-strings.txt`, which is never
 in the repository, and prints file and line only, never the match. It is skipped when the list is absent, so
-any clone can run the checks. `--tree` scans every tracked file, `--staged` the staged lines and `--base REV`
+any clone can run the checks. A string matches as a whole word, so a public handle that contains a listed name is not a hit. `--tree` scans every tracked file, `--staged` the staged lines and `--base REV`
 the lines added since a commit.
 
 ## Rules for tests
 
 - Names are behaviour sentences: `test_a_closed_job_leaves_the_applications_in_progress`.
 - People, employers and places are made up. Never use a real person's details.
-- No test touches the network, a real model or real data. Fakes stand in for each.
+- No test touches the network, a real model or real data. Fakes stand in for each. `tests/support/offline.py`
+  enforces the first: a lookup of any name but `localhost` and this computer's own raises `NoLookup`, and a
+  stream connection to a public address raises `NoRoute`, so code under test sees what it sees on a computer
+  with no network, at once instead of after a timeout. Loopback, private addresses and Unix sockets still work.
+  A browser or other child process is not covered; serve its pages from `127.0.0.1`.
 - Shared helpers live in `tests/support/`; import them as `from support import ...`, because
   `unittest discover tests` puts `tests/` on the import path.
 - Every test passes on Linux and Windows. Windows cannot remove a file that is still open, so a test closes
@@ -78,6 +82,14 @@ the lines added since a commit.
   name, rather than as a `PermissionError` when its home goes.
 - Enter the fakes a request may use before `HalServer`, so they come out after the server stops: a page's
   last request can land after the test ends.
+- A test that starts an action waits for it with `support.actions.wait_for_actions()`, or for one action
+  with `finished(action_id)`, which fails by naming the step an action is stuck at. `World` calls
+  `wait_for_actions` first when it closes, because the actions still need its database.
+- A browser test that must act before the app's effects have run calls `support.ui.late_effects(page)`
+  before the page loads. It holds back the page's animation frames and 100 ms timers, as a busy computer
+  does, which is when state that follows a prop or route shows up one render late. To wait for something to
+  appear, use `AppPage.shows(locator, "what it is")`: its failure says what the page was still waiting for,
+  with the errors and failed requests the page reported.
 - Wait on a condition with a timeout (`runner.idle()`, `runner.wait()`, a deadline loop), never on a sleep.
 - Build expected paths with `pathlib` (`str(Path("/usr/bin/flatpak"))`), and write a path into TOML as a
   literal string (`'C:\Users\...'`), because a basic string reads `\U` as an escape.
@@ -87,7 +99,9 @@ the lines added since a commit.
   reason in the skip.
 - A browser the test drives with Playwright while it waits on Hal has a thread of its own that keeps
   Playwright serviced between calls, as `HelperBrowser` in `tests/support/practice_site.py` does; call into it
-  with `on_helper` or `in_tab`. Playwright's sync API reads its driver only during a call, and on Windows a
+  with `on_helper` or `in_tab`. `HelperBrowser` starts Hal's real server on a free port, loads the helper
+  unpacked into Chromium and pairs it the way a person does: a signed-in window asks for a code, and the
+  helper's browser opens Hal's `/pair` page. Playwright's sync API reads its driver only during a call, and on Windows a
   page's own form post otherwise waits for the test's next call.
 
 ## Docs tests
