@@ -1,10 +1,10 @@
 """Writes the owner's search preferences and form facts, read from the old code, for the one-time import.
 
-Before the rebuild, the owner's preferences were constants in the code: the pay floor, the places and the
+In Hal's first version the owner's preferences were constants in the code: the pay floor, the places and the
 skill weights in `score.py`, the aggregator searches, the email address in `gmail.py`, and the form facts
-in `autofill.py`'s `profile()`. Later packages turn that code generic, so this script reads it once, at
-the move to the new app, from a fixed git ref (ef53088 by default), and writes
-`<config>/import/owner-prefs.toml`, which `python -m jobhunt import` reads.
+in `autofill.py`'s `profile()`. The code is now generic, so this script reads it once, when moving to the
+new version, from a fixed git ref (ef53088 by default), and writes `<config>/import/owner-prefs.toml`,
+which `python -m jobhunt import` reads.
 
     python scripts/dev/export_owner_prefs.py [--repo PATH] [--ref REF] [--out FILE]
 
@@ -37,9 +37,9 @@ if str(ROOT) not in sys.path:
 DEFAULT_REF = "ef53088"
 GIT_TIMEOUT_S = 30         # `git show` of one small file; a slower answer means git is stuck
 PRIVATE_KEYS = ("carer", "disability", "disability_type", "guaranteed_interview", "adjustments")
-CV_JSON = ("src", "data", "cv.json")                 # L cv.py:21
-CONTACT_MODULE = ("tools", "cv_contact.py")          # L autofill.py:63-73
-LINK_FORMS = {"linkedin": "https://www.{}", "github": "https://{}", "website": "https://{}"}   # L autofill.py:86-88
+CV_JSON = ("src", "data", "cv.json")
+CONTACT_MODULE = ("tools", "cv_contact.py")
+LINK_FORMS = {"linkedin": "https://www.{}", "github": "https://{}", "website": "https://{}"}
 LINK_SOURCE = {"linkedin": "linkedin", "github": "github", "website": "site"}
 
 
@@ -118,7 +118,7 @@ def places(tree: ast.Module) -> list[tuple[str, str, int]]:
 
 
 def training_places(tree: ast.Module) -> list[str]:
-    """Constants of the `if train_and_place and not re.search(X, ...)` rule (L score.py:211-215)."""
+    """Constants of the `if train_and_place and not re.search(X, ...)` rule."""
     for node in ast.walk(_function(tree, "score")):
         if isinstance(node, ast.If) and "train_and_place" in ast.unparse(node.test):
             name = _searched_constant(node.test)

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Runs the test gates in one command, from any folder of a checkout.
+# Runs the project's checks in one command, from any folder of a checkout.
 #
 #   scripts/dev/checkpoint.sh --quick        before each commit: staged lines, tests without the browser
 #   scripts/dev/checkpoint.sh                before a pull request: lines since the base, every test, the goldens
 #
-# Both modes also run the personal-string scan (gate G8); it skips itself when the private list is
-# absent, so any clone can run the gates. `--personal` is still accepted and changes nothing.
+# Both modes also run the personal-string scan; it skips itself when the private list is absent, so any
+# clone can run the gates. `--personal` is still accepted and changes nothing.
 #
-# The base is $HAL_CHECK_BASE, else the merge base with the `rebuild` branch, else the root commit.
+# The base is $HAL_CHECK_BASE, else the merge base with the `main` branch, else the root commit.
 # Tests always run in a temporary HAL_EMPLOYMENT_HOME with HAL_TEST_MODE=1, so no gate can reach real data.
 set -euo pipefail
 
@@ -28,13 +28,13 @@ done
 
 BASE="${HAL_CHECK_BASE:-}"
 if [ -z "$BASE" ]; then
-  BASE="$(git merge-base HEAD rebuild 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n 1)"
+  BASE="$(git merge-base HEAD main 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n 1)"
 fi
 
 TEST_HOME="$(mktemp -d)"
 trap 'rm -rf "$TEST_HOME"' EXIT
 export HAL_EMPLOYMENT_HOME="$TEST_HOME" HAL_TEST_MODE=1
-# A random port in 20000-29999, so a gate never meets the owner's server on 8737.
+# A random port in 20000-29999, so a gate never meets a running Hal on its usual port.
 export HAL_EMPLOYMENT_PORT="${HAL_EMPLOYMENT_PORT:-$((20000 + RANDOM % 10000))}"
 
 failed=()

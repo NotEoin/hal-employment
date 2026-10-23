@@ -1,7 +1,7 @@
 """Finds non-ASCII characters in the repo's text: in added lines (staged, or since a base commit) or the whole tree.
 
 Repo text is ASCII. Fonts, vendored libraries, the lock file and the Unicode test fixtures are
-exempt. The whole-tree mode also skips the files that held non-ASCII before the rebuild (`LEGACY`), because a
+exempt. The whole-tree mode also skips the files that already held non-ASCII text (`LEGACY`), because a
 clean-up is its own change; added lines in those files are still checked. Matches are printed with the
 characters escaped, so the report itself is ASCII.
 
@@ -25,11 +25,11 @@ EXEMPT_PREFIXES = ("jobhunt/web/static/app/lib/", "jobhunt/web/static/app/fonts/
                    "tests/fixtures/unicode/")
 EXEMPT_SUFFIXES = (".woff2", ".woff", ".ttf", ".otf", ".png", ".jpg", ".pdf", ".ico")
 EXEMPT_FILES = {"uv.lock"}
-# Non-ASCII already present at ef53088; each line is fixed by the change that next edits it.
+# Files with non-ASCII text that has not been cleaned up yet; each line is fixed when it is next edited.
 LEGACY = {
     "extension/background.js", "extension/content.js", "jobhunt/adopt.py", "jobhunt/autofill.py",
-    "jobhunt/browser.py", "jobhunt/cvscore.py", "jobhunt/salary.py", "jobhunt/web/static/app.js",
-    "tests/test_salary.py", "tests/test_autofill.py",
+    "jobhunt/browser.py", "jobhunt/cvscore.py", "jobhunt/salary.py", "tests/test_salary.py",
+    "tests/test_autofill.py",
 }
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 

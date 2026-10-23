@@ -1,6 +1,6 @@
 """Compares Hal's PDF reader (pypdfium2, `jobhunt/cvstudio/pdfread.py`) with poppler on a folder of PDFs.
 
-For the switch from poppler: run it on real application PDFs on your own computer. It
+For checking the reader against real application PDFs, which are not in the repo: run it on this computer. It
 prints numbers only (word counts, differences, pages, body size, last-page fill), never any text, so the
 output can be shared. Needs poppler's `pdftotext` and `pdfinfo` on the PATH.
 

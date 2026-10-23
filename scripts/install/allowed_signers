@@ -1,8 +1,8 @@
-# The owner's public SSH signing key, in git's allowed-signers format (ssh-keygen(1)
+# The maintainer's public SSH signing key, in git's allowed-signers format (see ssh-keygen(1),
 # ALLOWED SIGNERS). Hal's updater checks every new commit against the copy of this file in the version
 # already installed, so a push can never bring its own key.
 #
-# No key is here yet: the owner has not set up commit signing. Until a key line is added, updates install
+# No key is here yet: commits are not signed. Until a key line is added, updates install
 # without the check, and Settings, Updates says so. To switch the check on, see
 # docs/dev/release-and-update.md, "Signing your commits". A key line looks like:
 #
