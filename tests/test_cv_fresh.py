@@ -4,10 +4,12 @@ its checks, with module marks optional for everyone.
 from __future__ import annotations
 
 import contextlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
+from support.fake_ai import fake_ai
 from support.people import HUMANITIES, as_person
 
 from jobhunt import db
@@ -78,6 +80,17 @@ class FreshCv(unittest.TestCase):
         out = fresh.make(answers, "humanities_grad")
         self.assertIn("One spelling throughout", out["failing"])
         self.assertGreaterEqual(out["suggestions"], 1)
+
+    def test_an_ai_profile_in_the_first_person_is_not_used(self):
+        # Claude's profile for these answers said "where I catalogued 120 parish letters" (2026-10-23)
+        said = ("History graduate (BA Hons, 2:1) from the University of Nowhere Fen. Has volunteered at Fenmoor "
+                "Records Office since January 2024, where I catalogued 120 parish letters for the public search.")
+        with fake_ai({"cv_compose": json.dumps({"summary": said})}) as backend:
+            fresh.make(NO_MARKS, "humanities_grad")
+        self.assertTrue(backend.requests("cv_compose"))
+        summary = store.current()[1].sections[0].text
+        self.assertEqual(summary, fresh.profile_line(NO_MARKS))
+        self.assertNotIn(" I ", f" {summary} ")
 
 
 if __name__ == "__main__":

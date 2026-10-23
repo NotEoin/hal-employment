@@ -264,6 +264,18 @@ class Guards(CvCase):
             suggest.accept(self.con, mine[0]["id"])
         self.assertEqual(self.text_at(VISITORS), "Helped visitors find family records")
 
+    def test_a_wording_in_the_first_person_never_reaches_a_card(self):
+        # Claude offered "applied their feedback to [how many?] of my changes" for a CV with no first person
+        before = "Ran the local history table and wrote weekly staff recommendations"
+        mine = "Ran the history table and applied feedback to my weekly recommendations"
+        plain = "Ran the history table and wrote weekly recommendations for staff"
+        with fake_ai({"cv_suggest": ai_suggests(TABLE, before, mine, plain),
+                      "cv_another": json.dumps({"afters": ["We ran the local history table together"]})}):
+            suggest.look_again(self.con)
+            table = self.one("Wording", "Bookseller")
+            self.assertEqual(table["afters"], [plain])
+            self.assertFalse(suggest.another(self.con, table["id"])["new"])
+
     def test_a_locked_line_is_never_touched(self):
         doc = made_up_cv()
         doc.sections[3].entries[0].bullets[0].locked = True

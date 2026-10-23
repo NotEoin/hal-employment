@@ -5,7 +5,7 @@ interests. `build` turns the answers into a schema 2 document with the type's se
 Module marks are optional for everyone: a module with no mark is listed by name only when the type shows
 all modules, and never makes the build fail (U cvbuild.py:195-199; L cvbuild.py:184-185 crashed without
 them). When the AI is ready, it may write the profile line from the same facts, through the suggestion
-guards, so it cannot add a number or qualification the answers do not hold.
+guards, so it cannot add a number or qualification the answers do not hold, or speak as I or we.
 
 `make` saves the result as a generated version, checks it against its type, and runs the reviewers, so a
 failing check arrives as a suggestion rather than as a silent edit.
@@ -167,7 +167,8 @@ def _ai_profile(doc, type_, answers: dict) -> str | None:
         return None
     gapped = suggest.with_gaps(text, json.dumps(answers))
     phrases = suggest.banned_phrases(type_)
-    if suggest.GAP.search(gapped) or any(p in gapped.lower() for p in phrases):
+    if (suggest.GAP.search(gapped) or any(p in gapped.lower() for p in phrases)
+            or suggest.first_person(gapped, type_)):
         return None
     return gapped
 

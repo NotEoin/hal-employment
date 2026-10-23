@@ -8,8 +8,8 @@ prompt for at most one more suggestion for that section. So suggestions appear w
 Every suggestion passes the same guards before it is stored: the target exists and is not locked or kept
 in the person's wording, `before` is the text there now, numbers, years and qualifications Hal cannot find
 become gaps (`[how many?]`, `[when?]`, `[which?]`), no banned phrase, not a fingerprint the person already
-left, and it fits the type's limits. Any bracketed question counts as a gap, whoever wrote it, so a gap is
-never accepted into the CV or sent in a job's CV.
+left, no I or we when the type writes without them, and it fits the type's limits. Any bracketed question
+counts as a gap, whoever wrote it, so a gap is never accepted into the CV or sent in a job's CV.
 
 Design decisions:
 - One suggestion per line. A spelling fix covers every word on its line, so accepting one never makes
@@ -40,6 +40,8 @@ KINDS = ("Wording", "Results", "Order", "Cut", "Consistency", "Symbols", "Dates"
 OPS = ("replace", "insert", "delete", "move", "hide", "reorder", "retitle")
 REASONS = ("Keep my wording", "This is not true", "Too formal", "Too long", "Not relevant")
 GAPS = {"number": "[how many?]", "year": "[when?]", "qualification": "[which?]"}
+# I, my, we in a CV line; Claude wrote "applied their feedback to [how many?] of my changes" (2026-10-23)
+FIRST_PERSON = re.compile(r"\b(?:I|I'm|I've|me|[Mm]y|[Ww]e|[Oo]ur)\b")
 # Hal's own gaps, and any bracketed question the AI writes instead: Claude wrote "[what outcome?]" and
 # "[which languages, and what level?]" on 2026-10-23, and a gap of any wording must stop Accept.
 GAP = re.compile(r"\[[^\[\]\n]{1,80}\?\]")
@@ -432,6 +434,11 @@ def _fits(draft: Draft, after: str, type_) -> bool:
     return "/b:" not in draft.target or not span or words <= int(span[1])
 
 
+def first_person(text: str, type_) -> bool:
+    """True when `text` speaks as I or we and the CV type writes with no first person."""
+    return (type_.writing or {}).get("person") == "none" and FIRST_PERSON.search(text) is not None
+
+
 def _has(text: str, phrase: str) -> bool:
     return re.search(r"\b" + re.escape(phrase) + r"\b", text, re.I) is not None
 
@@ -456,6 +463,9 @@ def guard(draft: Draft, ctx: Context) -> Draft | None:
     for after in draft.afters:
         after = with_gaps(str(after), ctx.known_text) if draft.op == "replace" else str(after)
         if any(_has(after, p) and not _has(now, p) for p in phrases):
+            continue
+        # a fix that needs no AI keeps the person's own I; the AI's wording never speaks as I
+        if first_person(after, ctx.type_) and (draft.ai or not first_person(now, ctx.type_)):
             continue
         if not _fits(draft, after, ctx.type_) or after in afters or after == now:
             continue
@@ -912,7 +922,8 @@ def another(con: sqlite3.Connection, sugg_id: str) -> dict:
     seen = {" ".join(a.lower().split()) for a in afters}
     for text in offered:
         draft = Draft(row["target"], row["op"], row["kind"], row["title"], row["why"],
-                      json.loads(row["trigger"]), row["before"] or "", [str(text)], row["section_id"] or "")
+                      json.loads(row["trigger"]), row["before"] or "", [str(text)], row["section_id"] or "",
+                      ai="cv_another")
         ok = guard(draft, ctx)
         if ok is None or " ".join(ok.afters[0].lower().split()) in seen:
             continue
