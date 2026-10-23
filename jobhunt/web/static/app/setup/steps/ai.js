@@ -17,7 +17,8 @@ export const STATUS = "/ai/status?fresh=1";
 const CLAUDE_TEXT = "Fast and good at writing. Needs Claude Pro or Max (the free plan cannot be used). The advert, your CV and the evidence Hal picks are sent to Claude when it writes.";
 const LOCAL_TEXT = "Everything stays on this computer, but it needs a strong graphics card.";
 const INSTALLING = "Installing Claude (this usually takes about a minute)";
-const SIGN_IN_NOTE = "When you press Sign in, your browser opens Claude's page, and a small \"Claude sign-in\" window may appear too. If the browser shows a code, paste it into that small window. This page ticks as soon as you are signed in.";
+// Claude names its own window "claude" on Windows 11, whatever title Hal gives it (Windows 11 install test)
+const SIGN_IN_NOTE = "When you press Sign in, your browser opens Claude's page, and a small black window called \"claude\" may appear too. If the browser shows a code, paste it into that small window. This page ticks as soon as you are signed in.";
 const TICK_MS = 1000;
 const POLL_MS = 1000;   // the step list of a running action is read this often, so the installer's lines show live
 const FINISHED = new Set(["done", "error", "stopped", "interrupted"]);

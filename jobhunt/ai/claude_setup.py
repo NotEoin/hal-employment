@@ -352,7 +352,7 @@ def sign_in(step: Callable[[str], None], checkpoint: Callable[[], None] = lambda
         words = account_words(now)
         step("Already " + words[0].lower() + words[1:])
         return now
-    step("Opening Claude's sign-in page and the small Claude sign-in window")
+    step("Opening Claude's sign-in page and a small window called claude")
     pid = open_sign_in()
     step("Waiting for you to sign in")
     acct = wait_for_sign_in(checkpoint, wait_s)

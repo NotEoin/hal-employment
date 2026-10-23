@@ -106,6 +106,8 @@ class AiStep(unittest.TestCase):
         self.assertIn("Installed", self.row(p, "install", "done"))
         os.environ["FAKE_CLAUDE_LOGIN_S"] = "0.3"
         self.assertIn("paste it into that small window", p.page.inner_text("#test-step"))
+        # Windows 11 install test: on Windows 11 the window's title is Claude's own "claude", not the one Hal sets
+        self.assertIn('a small black window called "claude"', p.page.inner_text("#test-step"))
         self.press(p, "sign", "Sign in")
         self.assertIn("Signed in as robin.example@example.com (Claude Pro)", self.row(p, "sign", "done"))
         self.assertEqual([title for _, title in self.console.opened], ["Claude sign-in"])
