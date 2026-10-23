@@ -13,8 +13,8 @@ Design decisions, each with its reason:
 - Values that depend on the job (`eligibility_line`, `test_kinds`) are never prompt
   placeholders: they go in the request text, so a prompt reads the same for every job of one person and an
   edit of it on the Advanced page applies everywhere.
-- With no CV type to read (the CV store or type files absent, or a type that was deleted), the documents
-  use neutral wording that names no career, rather than another type's (a log line says why).
+- With no CV type to read (a copied type that was deleted), the documents use neutral wording that names
+  no career, rather than another type's (a log line says why).
 """
 from __future__ import annotations
 
@@ -67,13 +67,8 @@ def _words(items: list[str], last: str = "or") -> str:
 
 def cv_type():
     """The CV type of Hal's copy of the CV, or None when none can be read."""
-    try:
-        from . import store, types
-    except ImportError as e:
-        # info, not warning: the command line's output is a contract, and a warning
-        # with no logging set up would print on it
-        log.info("documents use neutral wording: %s", e)
-        return None
+    from . import store, types
+
     try:
         return types.load(store.doc()["type_id"])
     except LookupError as e:
