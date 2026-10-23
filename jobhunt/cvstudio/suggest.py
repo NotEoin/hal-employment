@@ -42,7 +42,7 @@ GAPS = {"number": "[how many?]", "year": "[when?]", "qualification": "[which?]"}
 GAP = re.compile(r"\[(how many|when|which)\?\]")
 META_REVIEWED = "cv_suggest_reviewed"       # the version id a full pass last found nothing more in
 DOC_ID = "main"
-WHOLE_CV = "cv"
+WHOLE_CV = "cv"     # a suggestion's target and reviewer id for the whole CV; the model's own target is ""
 
 ALL_REVIEWED = "All reviewed. Hal will suggest more when your CV, its type or your goal changes."
 ONLY_OPTION = "This is the only sensible option here. Edit it instead?"
@@ -141,9 +141,14 @@ def _section(doc, sid: str):
     return next((s for s in doc.sections if s.id == sid), None)
 
 
+def model_target(target: str) -> str:
+    """The CV model's target for a suggestion's target (`WHOLE_CV` is the whole document, "")."""
+    return "" if target == WHOLE_CV else target
+
+
 def names_at(doc, target: str) -> list[str]:
     """The names a reorder works on, in their current order."""
-    node = _model().find(doc, target)
+    node = _model().find(doc, model_target(target))
     if target == WHOLE_CV:
         return [s.title for s in node.sections if s.visible]
     if hasattr(node, "entries"):
@@ -155,7 +160,7 @@ def shown_at(doc, op: str, target: str) -> str:
     """What the card's "Now" shows for this target: the text, the names in order, or the part's name."""
     if op == "reorder":
         return ", ".join(names_at(doc, target))
-    node = _model().find(doc, target)
+    node = _model().find(doc, model_target(target))
     if op == "hide":
         if hasattr(node, "visible"):
             return node.title if node.visible else ""
@@ -726,7 +731,7 @@ def _row(con: sqlite3.Connection, sugg_id: str) -> sqlite3.Row:
 
 def _ids_for(doc, target: str, shown: str) -> list[str]:
     names = [n.strip() for n in shown.split(",") if n.strip()]
-    node = _model().find(doc, target)
+    node = _model().find(doc, model_target(target))
     if target == WHOLE_CV:
         by_name = {s.title: s.id for s in node.sections}
         hidden = [s.id for s in node.sections if not s.visible]
@@ -742,7 +747,7 @@ def change_for(doc, op: str, target: str, text: str):
     """The model change that makes `target` show `text` (the inverse for hide when `text` is the name)."""
     model = _model()
     if op == "reorder":
-        return model.Change("reorder", target, _ids_for(doc, target, text))
+        return model.Change("reorder", model_target(target), _ids_for(doc, target, text))
     if op == "hide":
         return model.Change("hide" if not text else "show", target)
     return model.Change("replace" if op != "retitle" else "retitle", target, text)

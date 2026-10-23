@@ -1,8 +1,7 @@
 """Suggestions on Hal's copy of the CV: the reviewers, the guards, and Accept, Edit, Undo, Leave it as
 it is, Try another way and Accept all, on a made-up humanities graduate's CV.
 
-The CV store, model and types are stand-ins while those modules are missing (`support/stubs/cv_early_*`). The AI is
-the fake one, or none at all.
+The CV is held to the humanities graduate's CV type; the AI is the fake one, or none at all.
 """
 from __future__ import annotations
 
@@ -12,17 +11,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from support.stubs import cv_early_contracts
+from support.api import HalServer
+from support.fake_ai import fake_ai
 
-cv_early_contracts.install()
-
-from support.api import HalServer  # noqa: E402 - the CV stand-ins go in before any jobhunt.cvstudio import
-from support.fake_ai import fake_ai  # noqa: E402
-
-from jobhunt import db  # noqa: E402
-from jobhunt.core import paths, runner  # noqa: E402
-from jobhunt.core.settings import store as settings_store  # noqa: E402
-from jobhunt.cvstudio import model, store, suggest  # noqa: E402
+from jobhunt import db
+from jobhunt.core import paths, runner
+from jobhunt.core.settings import store as settings_store
+from jobhunt.cvstudio import model, store, suggest
 
 PROFILE = "s:summary/text"
 TABLE = "s:experience/e:ex-shop/b:b-table"
@@ -86,6 +81,7 @@ class CvCase(unittest.TestCase):
         self.con = db.connect()
         self.addCleanup(self.con.close)
         self.first = store.new_version(made_up_cv(), origin="imported", what="Your made-up CV", by="baseline")
+        store.set_type("humanities_grad")   # the store starts on the technical type; this CV is a history one
 
     def pending(self, kind: str | None = None) -> list[dict]:
         return [s for s in suggest.listing(self.con)["pending"] if kind is None or s["kind"] == kind]
@@ -112,6 +108,13 @@ class Reviewers(CvCase):
         for s in self.pending():
             self.assertTrue(s["why"] and s["trigger"], s)
             self.assertFalse(s["ai"])
+
+    def test_accepting_the_order_suggestion_reorders_the_sections(self):
+        # Regression: the whole-CV target "cv" is not a CV model target, so the Order suggestion never appeared
+        suggest.look_again(self.con)
+        suggest.accept(self.con, self.one("Order")["id"])
+        self.assertEqual([s.id for s in store.current()[1].sections],
+                         ["summary", "education", "volunteering", "experience", "skills", "interests"])
 
     def test_look_again_stops_at_six_waiting(self):
         settings_store.drop_cache()
