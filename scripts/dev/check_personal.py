@@ -2,7 +2,8 @@
 
 The patterns live outside the repo, one per line (`#` starts a comment), in
 `~/.config/hal-employment/personal-strings.txt` or the file named by `--list` or `HAL_PERSONAL_STRINGS`.
-Matching ignores case. When the list is absent the check is skipped, so the script works on any clone.
+Matching ignores case and takes whole words only, so a public handle that contains a listed name is not a hit.
+When the list is absent the check is skipped, so the script works on any clone.
 
     python scripts/dev/check_personal.py              every tracked file (the same as --tree)
     python scripts/dev/check_personal.py --tree       every tracked file
@@ -28,10 +29,12 @@ DEFAULT_LIST = Path.home() / ".config" / "hal-employment" / "personal-strings.tx
 
 
 def patterns(path: Path) -> re.Pattern | None:
-    """One case-insensitive pattern matching any listed string, or None when the list is empty."""
+    """One case-insensitive pattern matching any listed string as a whole word, or None when the list is empty."""
     words = [w.strip() for w in path.read_text(encoding="utf-8").splitlines()]
     words = [w for w in words if w and not w.startswith("#")]
-    return re.compile("|".join(re.escape(w) for w in words), re.I) if words else None
+    if not words:
+        return None
+    return re.compile(r"(?<!\w)(?:" + "|".join(re.escape(w) for w in words) + r")(?!\w)", re.I)
 
 
 def diff_lines(base: str | None) -> dict[str, list[tuple[int, str]]]:
