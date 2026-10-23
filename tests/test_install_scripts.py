@@ -51,6 +51,24 @@ def powershell_part(path: Path) -> str:
     return re.split(r"(?m)^#PS1#\r?$", path.read_bytes().decode("ascii"), maxsplit=1)[1]
 
 
+def linux_bash() -> str | None:
+    """A bash that can parse the Linux scripts, or None.
+
+    On Windows, `bash` on PATH is often System32's launcher for WSL, which fails with no message on stderr
+    when no Linux is installed (windows-2025 runners, 2026-10-23); Git for Windows' own bash is used there.
+    """
+    if os.name != "nt":
+        return shutil.which("bash")
+    git = shutil.which("git")
+    if not git:
+        return None
+    for top in Path(git).resolve().parents[:3]:
+        for bash in (top / "bin" / "bash.exe", top / "usr" / "bin" / "bash.exe"):
+            if bash.is_file():
+                return str(bash)
+    return None
+
+
 def cmd_files() -> list[Path]:
     """Every `.cmd` in the clone outside the virtual environment and caches."""
     return sorted(p for p in ROOT.rglob("*.cmd") if not ({".venv", ".git", ".tmp-home", "node_modules"} & set(p.parts)))
@@ -159,15 +177,12 @@ class Shapes(unittest.TestCase):
         text = (INSTALL / "allowed_signers").read_text(encoding="ascii")
         self.assertTrue(all(not line.strip() or line.lstrip().startswith("#") for line in text.splitlines()))
 
-    # Regression (CI windows-2025, 2026-10-23): `bash` there can be WSL's launcher, which fails with no Linux
-    # installed and says nothing, so the Linux scripts are parsed on the Linux runners only.
-    @unittest.skipIf(os.name == "nt", "the Linux scripts are parsed on Linux; Windows' bash may be WSL's launcher")
-    @unittest.skipUnless(shutil.which("bash"), "bash checks the Linux scripts")
+    @unittest.skipUnless(linux_bash(), "bash checks the Linux scripts (Git for Windows' bash on Windows)")
     def test_the_shell_scripts_parse(self):
         for path in (LINUX, UPDATE_SH):
-            done = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True, timeout=PARSE_TIMEOUT_S,
-                                  check=False)
-            self.assertEqual(done.returncode, 0, done.stderr)
+            done = subprocess.run([linux_bash(), "-n", path.as_posix()], capture_output=True, text=True,
+                                  timeout=PARSE_TIMEOUT_S, check=False)
+            self.assertEqual(done.returncode, 0, f"{path.name}: {done.stdout}{done.stderr}")
 
     @unittest.skipUnless(os.name == "nt", "Windows PowerShell 5.1 is only on Windows (the Windows CI runs this)")
     def test_the_powershell_part_parses(self):
