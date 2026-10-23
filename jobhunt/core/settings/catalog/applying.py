@@ -44,7 +44,7 @@ register(
                 ("headless", "In a hidden window (for tests)"))),
     Setting("applying.window", "seg", "separate", "Open forms in", order=30,
             choices=choices(("separate", "A separate window"), ("this", "This window")),
-            help="\"This window\" is coming later."),
+            help="\"This window\" opens each form as a tab beside yours, brought forward while Hal fills it in."),
     Setting("applying.press_next", "bool", True, "Press Next on pages with nothing for you to check", order=40),
     Setting("applying.wait_minutes", "choice", 15, "Wait for you to sign in or pass a check for up to", order=50,
             choices=same(5, 15, 30, unit="minutes")),

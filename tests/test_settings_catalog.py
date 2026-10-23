@@ -178,6 +178,14 @@ class Catalogue(unittest.TestCase):
         with self.assertRaises(registry.SettingError):
             parse.check(s, "Always")
 
+    def test_forms_can_open_in_this_window(self):
+        """The choice waited for the helper to bring a form's tab forward before reading it (proved by
+        `test_engine_fixes.WithTheHelper.test_this_window_brings_the_tab_forward_before_reading`)."""
+        s = REGISTRY["applying.window"]
+        self.assertEqual([c[0] for c in s.choices], ["separate", "this"])
+        self.assertNotIn("coming later", s.help.lower())
+        self.assertEqual(parse.check(s, "this"), "this")
+
     def test_secrets_and_private_answers_have_no_stored_value(self):
         for s in REGISTRY.values():
             if s.kind in ("secret", "private"):
