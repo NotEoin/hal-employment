@@ -352,6 +352,24 @@ class Signatures(UpdaterCase):
         self.assertFalse(result["signed"])
 
 
+class SignIn(UpdaterCase):
+    @unittest.skipIf(os.name == "nt", "Windows signs in through Git Credential Manager, not a terminal")
+    def test_sign_in_again_opens_the_github_sign_in_in_a_window_on_linux(self):
+        from jobhunt.core import runner, update_actions  # noqa: F401 - registers the kinds
+
+        tools = self.repos.app.parent / "tools"
+        tools.mkdir()
+        (tools / "gh").write_text("#!/bin/sh\n", encoding="utf-8")
+        updates.write_install(updates.Install(**{**updates.asdict(self.inst), "tools": str(tools)}))
+        fake = mock.Mock()
+        with mock.patch("jobhunt.core.platform.current", return_value=fake):
+            done = runner.run("updates.sign_in")
+        self.assertEqual(done["state"], "done")
+        args, title = fake.open_console.call_args[0]
+        self.assertEqual(args[:3], [str(tools / "gh"), "auth", "login"])
+        self.assertEqual(title, "Sign in to GitHub")
+
+
 class Spawning(unittest.TestCase):
     INST = updates.Install(kind="user", code=str(Path("/opt/hal/app")), uv=str(Path("/opt/hal/tools/uv")),
                            python_dir=str(Path("/opt/hal/tools/python")), uv_cache=str(Path("/opt/hal/tools/c")))

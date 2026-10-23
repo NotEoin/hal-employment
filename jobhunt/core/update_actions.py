@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 
 from .. import db
@@ -71,6 +72,15 @@ def sign_in(ctx: runner.Ctx) -> dict:
     if inst.developer:
         ctx.step(updates.DEVELOPER)
         return {"developer": True}
+    gh = Path(inst.tools) / "gh" if inst.tools else None
+    if os.name != "nt" and gh is not None and gh.is_file():
+        # Linux signs in through the GitHub CLI, whose browser sign-in needs a terminal to show its code
+        from . import platform
+
+        platform.current().open_console([str(gh), "auth", "login", "--web", "--hostname", "github.com",
+                                         "--git-protocol", "https"], "Sign in to GitHub")
+        ctx.step("Finish signing in in the window that opened, then press Check now.")
+        return {"signed_in": None}
     world = updates.World(inst, interactive=True)
     try:
         updates.check_and_keep(world)
