@@ -7,10 +7,14 @@ answers to common form questions. It is written to the job's folder (`documents.
 folder (`addon.applications_mirror`). Nothing is sent or submitted.
 
 Design notes:
-- The prompts live in `ai/prompts/*.txt` and name no one: `person()` fills them from the `you.*` and
-  `goal.*` settings. The old constants (`pack.LETTER` and the rest) are rendered when read, so
-  callers that pass them to the model, and tests that match on them, see the text the person's edits and
-  settings give.
+- The prompts live in `ai/prompts/*.txt` and name no one: `cvstudio.context.build` fills them from the
+  `you.*`, `goal.*` and `cvdocs.*` settings and the CV type. The old constants
+  (`pack.LETTER` and the rest) are rendered when read, so callers that pass them to the model, and tests
+  that match on them, see the text the person's edits and settings give.
+- One letter path: `write_letter` reads the advert, the record and the fit map, writes the letter and checks
+  it, for a pack and for a letter a form asks for (`documents.draft_letter`), so every letter is checked
+  the same way.
+- The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
 import textwrap
@@ -20,6 +24,7 @@ from pathlib import Path
 from . import cv, db, llm, record, reputation, research
 from .ai import prompts
 from .core import events, paths
+from .cvstudio import context as cv_context
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -29,7 +34,7 @@ PROMPTS = {"ANALYSE": "analyse", "BRIEF": "brief", "FIT": "fit", "LETTER": "lett
 # The vault mirror moved to the Hal add-on; these answer None only so the made-up world's patches
 # (tests/support/world.py) still apply until its owner drops them.
 RETIRED = ("VAULT", "APPLICATIONS")
-SOMEONE = "the applicant"     # what a prompt calls the person before they have given a name
+SOMEONE = cv_context.SOMEONE  # what a prompt calls the person before they have given a name
 PREPARED = "docs.prepared"    # the event the Hal add-on's Applications mirror listens for
 
 
@@ -43,33 +48,9 @@ def __getattr__(name):  # old path constants and prompts, read live (PEP 562)
     raise AttributeError(name)
 
 
-def person() -> dict:
-    """The placeholders every document prompt may use, from the person's settings (never a private answer)."""
-    from . import screen
-    from .core import settings
-    from .find import goal as goal_mod
-
-    goal = goal_mod.current()
-    name = (settings.get("you.name") or "").strip()
-    first = (settings.get("you.preferred_name") or "").strip() or (name.split()[0] if name else "")
-    subject = (settings.get("you.education.subject") or "").strip()
-    degree = (settings.get("you.education.degree") or "").strip()
-    studied = " in ".join(p for p in (degree, subject) if p)
-    end = goal.finished_year()
-    if goal.is_student():
-        status = f"They are studying now; the course ends in {end}" if end else "They are studying now"
-    elif goal.study_status == "none":
-        status = "They did not go to university"
-    else:
-        status = f"They finished their course in {end}" if end else "They have finished studying"
-    return {
-        "name": name or SOMEONE, "first_name": first or SOMEONE,
-        "career_stage": screen.STAGE_LINES.get(goal.stage, goal.stage),
-        "status_line": status,
-        "target_roles": ", ".join(goal.roles) or "roles that suit them",
-        "kinds": goal_mod.kinds_words(goal),
-        "field_line": f"They studied {studied}." if studied else "",
-    }
+def person(job=None) -> dict:
+    """The placeholders every document prompt may use; never a private answer."""
+    return cv_context.build(job)
 
 
 def prompt(prompt_id: str, values: dict | None = None) -> str:
@@ -78,6 +59,17 @@ def prompt(prompt_id: str, values: dict | None = None) -> str:
 
 
 COMMON_QUESTIONS = ["Why do you want to work here?", "Why are you a good fit for this role?"]
+# The pack's last section. It names no command: the Documents page has a button for each.
+CHECKLIST = ("Read every draft and correct anything that is not true", "Attach the CV made for this job",
+             "Press Submit on the employer's site yourself, then press \"I sent it myself\" if Hal has not seen it",
+             "Send the message to the person hiring the same day")
+FIND_PREFIX = "find the person hiring"   # the start of the To line when the advert names nobody
+NOTES_HEADING = "Letter notes"
+NOTE_KEYS = {"Tone": "tone", "Length": "length", "Evidence": "evidence", "Checked": "checked"}
+TONE_LABELS = {"plain": "Plain", "formal": "Formal", "warm": "Warm"}   # the setting's choices (catalog/cvdocs.py)
+CHECKED_CLEAN = "Every fact is in your CV, record or the advert. No numbers were invented."
+EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence line
+PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
 
 # Phrases that mark generic or machine-written prose; drafts containing them are flagged.
 CLICHES = re.compile(
@@ -110,39 +102,144 @@ def _research(company: str) -> tuple[str, list[str]]:
     return sources, [url for url, _ in pages]
 
 
-def build(con, job_id: str, use_web: bool = True) -> Path:
-    """Drafts the pack for one job and returns the pack's Markdown path."""
+def _analyse(job, who: dict) -> dict:
+    return llm.chat_json(prompt("analyse", who), _job_text(job)[:12000], role="main")
+
+
+def _requirements(analysis: dict) -> list[str]:
+    return analysis.get("must_have", []) + analysis.get("nice_to_have", [])
+
+
+def _kept(analysis: dict) -> str:
+    """What the CV leaves out (certificates, the detail of each job), looked up in the employment record."""
+    return record.context(_requirements(analysis) + (analysis.get("questions") or [])) or "none"
+
+
+def passages(kept: str) -> list[str]:
+    """The record passages a prompt was given, as "file > heading" labels."""
+    return PASSAGE.findall(kept or "")
+
+
+def _fit(who: dict, analysis: dict, facts: str, kept: str) -> dict:
+    conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
+    return llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in _requirements(analysis))
+                         + f"\n\nConditions:\n{conditions}\n\nToday: {date.today().isoformat()}\n\nCV:\n{facts}"
+                         + f"\n\nEmployment record:\n{kept}",
+                         role="main")
+
+
+def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, kept: str, history: str) -> str:
+    """The request text every drafted document shares: the job, the evidence and the person's dates."""
+    return (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
+            + (f"Earlier applications to this employer: {history}. Do not mention them unless asked.\n"
+               if history else "") +
+            f"{who['status_line']}. Mention availability only if the advert's start date is "
+            f"flexible; for a fixed intake, refer to that intake instead.\n"
+            f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
+            f"\n\nEmployment record (true; use it where the CV is silent):\n{kept}")
+
+
+def _letter(who: dict, context: str) -> str:
+    return llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip())
+
+
+def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, fit: dict, sources: tuple[str, ...]) -> list[str]:
+    """What to check before sending: numbers no source holds, claims the facts do not support, banned words."""
+    flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, kept, *sources)]
+    flagged += [f"unsupported claim: {c}" for c in
+                llm.chat_json(prompt("verify", who),
+                              f"Facts:\n{facts}\n\nEmployment record:\n{kept}"
+                              f"\n\nEvidence map:\n{fit.get('matches', [])}\n\nDrafts:\n{drafts}",
+                              role="main").get("unsupported", [])]
+    flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
+    lowered = drafts.lower()
+    flagged += [f"a phrase you never use: {a}" for a in avoided(who) if a.lower() in lowered]
+    return flagged
+
+
+def avoided(who: dict) -> list[str]:
+    """The never-use phrases of the settings and the CV type, as the prompts list them."""
+    return re.findall(r'"([^"]+)"', who.get("avoid_phrases") or "")
+
+
+def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str]) -> dict:
+    """The Tone, Length, Evidence and Checked lines shown beside a letter."""
+    from .core import settings
+
+    tone = TONE_LABELS.get(settings.get("cvdocs.letter_tone"), who["tone"].capitalize())
+    letter_flags = [f for f in flags if not f.startswith(("REAPPLICATION", "ELIGIBILITY"))]
+    return {"tone": f"{tone} (your setting)",
+            "length": f"{len(letter.split())} words (you prefer about {who['letter_words']})",
+            "evidence": ", ".join(evidence[:EVIDENCE_SHOWN]) or "None named",
+            "checked": (CHECKED_CLEAN if not letter_flags else
+                        f"{len(letter_flags)} {'thing' if len(letter_flags) == 1 else 'things'} to check before "
+                        "sending: see Check before sending.")}
+
+
+def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = None, about: str = "",
+                 kept: str | None = None, fit: dict | None = None, request: str = "") -> dict:
+    """Writes and checks a cover letter for one job: {text, flags, used, notes}.
+
+    The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
+    the fit map made (each unless given), then the letter and its checks. `request` holds the person's own
+    words when they asked for a rewrite.
+    """
+    who = who or person(job)
+    facts = cv.facts_text()
+    analysis = analysis if analysis is not None else _analyse(job, who)
+    kept = kept if kept is not None else _kept(analysis)
+    fit = fit if fit is not None else _fit(who, analysis, facts, kept)
+    text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
+    if request:
+        text += f"\n\nThe applicant asked for this change: {request}"
+    letter = _letter(who, text)
+    flags = check_drafts(who, letter, facts=facts, kept=kept, fit=fit, sources=(_job_text(job), about))
+    used = passages(kept)
+    evidence = used or [m.get("evidence", "") for m in fit.get("matches", []) if m.get("strength") == "strong"]
+    return {"text": letter, "flags": flags, "used": used, "notes": letter_notes(who, letter, evidence, flags)}
+
+
+def _eligibility_flag(job, who: dict, fit: dict) -> str:
+    if fit.get("eligible") is False:
+        return f"ELIGIBILITY: {fit.get('eligibility_notes', 'may not be eligible')}"
+    if who.get("not_eligible"):
+        return f"ELIGIBILITY: {who.get('eligibility_line') or 'the advert may not be open to you'}"
+    return ""
+
+
+def message_to(job, analysis: dict, who: dict) -> str:
+    """Who the message goes to: the people the advert names, else where to find a title the CV type names."""
+    contacts = [", ".join(str(v) for v in c.values() if v) if isinstance(c, dict) else str(c)
+                for c in analysis.get("contacts") or []]
+    if contacts:
+        return "; ".join(contacts)
+    title = (who.get("hiring_titles") or ["hiring manager"])[0]
+    return f"{FIND_PREFIX} on LinkedIn (search \"{job['company']} {title}\")"
+
+
+def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
+    """Drafts the pack for one job and returns the pack's Markdown path.
+
+    With `ctx` (a running action) the record passages used are noted under its Activity "Used".
+    """
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     from . import documents
 
     job_text = _job_text(job)
     facts = cv.facts_text()
     out_dir = documents.pack_dir(job)
-    who = person()
+    who = person(job)
 
-    analysis = llm.chat_json(prompt("analyse", who), job_text[:12000], role="main")
+    analysis = _analyse(job, who)
     web, urls = _research(job["company"]) if use_web else ("", [])
     about = llm.chat(prompt("brief", who),
                      f"Company: {job['company']}\n\nJob advert:\n{job_text[:4000]}\n\nWeb sources:\n{web[:8000]}",
                      role="main")
-    requirements = analysis.get("must_have", []) + analysis.get("nice_to_have", [])
-    conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
-    # What the CV leaves out (certificates, the detail of each job) is looked up in the employment record.
-    kept = record.context(requirements + (analysis.get("questions") or [])) or "none"
-    fit = llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
-                        + f"\n\nConditions:\n{conditions}\n\nToday: {date.today().isoformat()}\n\nCV:\n{facts}"
-                        + f"\n\nEmployment record:\n{kept}",
-                        role="main")
-
-    history = previous_applications(con, job)
-    context = (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
-               + (f"Earlier applications to this employer: {history}. Do not mention them unless asked.\n"
-                  if history else "") +
-               f"{who['status_line']}. Mention availability only if the advert's start date is "
-               f"flexible; for a fixed intake, refer to that intake instead.\n"
-               f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
-               f"\n\nEmployment record (true; use it where the CV is silent):\n{kept}")
-    letter = llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip())
+    kept = _kept(analysis)
+    fit = _fit(who, analysis, facts, kept)
+    written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit)
+    letter = written["text"]
+    context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     message = llm.undash(llm.chat(prompt("message", who), context, role="writer").strip())
     questions = analysis.get("questions") or []
     answers = llm.chat_json(prompt("answers", who),
@@ -153,26 +250,25 @@ def build(con, job_id: str, use_web: bool = True) -> Path:
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
-    drafts = "\n\n".join([letter, message, *(a.get("answer", "") for a in answers)])
-    flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, job_text, about, kept)]
-    flagged += [f"unsupported claim: {c}" for c in
-                llm.chat_json(prompt("verify", who),
-                              f"Facts:\n{facts}\n\nEmployment record:\n{kept}"
-                              f"\n\nEvidence map:\n{fit.get('matches', [])}\n\nDrafts:\n{drafts}",
-                              role="main").get("unsupported", [])]
-    flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
-    # KTP posts are listed under the scheme; the employer is the host company in the advert.
-    employer = (analysis.get("employer") or job["company"]) if job["company"] == "KTP" else job["company"]
+    others = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
+    flagged = written["flags"] + check_drafts(who, others, facts=facts, kept=kept, fit=fit, sources=(job_text, about))
+    # The type's special cases: a KTP advert's employer is the host company, not the scheme.
+    ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
+    employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]
     company_flags, company_md = reputation.check(employer)
     flagged += company_flags
+    history = previous_applications(con, job)
     if history:
         flagged.insert(0, f"REAPPLICATION: you applied here before: {history}")
-    if fit.get("eligible") is False:
-        flagged.insert(0, f"ELIGIBILITY: {fit.get('eligibility_notes', 'may not be eligible')}")
-    elif "current students" in (job["score_notes"] or ""):
-        flagged.insert(0, "ELIGIBILITY: the advert appears to be for current students; confirm graduates can apply")
+    eligibility = _eligibility_flag(job, who, fit)
+    if eligibility:
+        flagged.insert(0, eligibility)
+    if ctx is not None:
+        for label in written["used"]:
+            ctx.used("record", label)
 
-    md = _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged, who["name"])
+    md = _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged, who,
+                   written["notes"])
     md = md.replace("## Role\n", company_md + "\n## Role\n", 1)
     pack_md = out_dir / "pack.md"
     pack_md.write_text(md)
@@ -223,7 +319,15 @@ def add_company_check(pack_md: Path, company: str) -> None:
     events.publish(PREPARED, company=company_name, title=role, pack=str(pack_md))
 
 
-def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged, name) -> str:
+def read_letter_notes(job) -> dict:
+    """The letter's Tone, Length, Evidence and Checked lines as the pack recorded them; {} for older packs."""
+    from . import documents
+
+    notes = documents.read_pack(job).get(NOTES_HEADING, "")
+    return {NOTE_KEYS[k]: v.strip() for k, v in re.findall(r"^- (\w+): (.*)$", notes, re.M) if k in NOTE_KEYS}
+
+
+def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged, who, notes) -> str:
     lines = [f"# {job['company']}: {job['title']}", "",
              f"- Apply: {job['url']}",
              f"- Location: {job['location'] or 'not stated'} | Salary: {job['salary'] or 'not stated'}",
@@ -238,17 +342,11 @@ def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, tr
               for m in fit.get("matches", [])]
     gaps = fit.get("gaps", [])
     lines += ["", "Gaps to address or accept: " + ("; ".join(gaps) if gaps else "none found"), ""]
-    contacts = [", ".join(str(v) for v in c.values() if v) if isinstance(c, dict) else str(c)
-                for c in analysis.get("contacts") or []]
-    lines += ["## Cover letter", "", "Dear Hiring Team,", "", letter, "", "Kind regards,", name, ""]
-    lines += ["## Message to the hiring manager", "",
-              "To: " + ("; ".join(contacts) if contacts else
-                        f"find the person hiring on LinkedIn (search \"{job['company']} hiring manager\")"),
-              "", message, ""]
+    lines += ["## Cover letter", "", "Dear Hiring Team,", "", letter, "", f"{who['signoff']},", who["name"], ""]
+    lines += [f"## {NOTES_HEADING}", ""] + [f"- {k}: {notes[v]}" for k, v in NOTE_KEYS.items()] + [""]
+    lines += ["## Message to the hiring manager", "", "To: " + message_to(job, analysis, who), "", message, ""]
     lines += ["## Form answers", ""]
     for a in answers:
         lines += [f"**{a.get('question', '')}**", "", textwrap.fill(a.get("answer", ""), 100), ""]
-    lines += ["## Before submitting", "", "- [ ] Read every draft and correct anything that is not true",
-              "- [ ] Attach the tailored CV", "- [ ] Submit, then run `python3 -m jobhunt set "
-              f"{job['id']} applied`", "- [ ] Send the hiring-manager message the same day", ""]
+    lines += ["## Before submitting", "", *(f"- [ ] {item}" for item in CHECKLIST), ""]
     return "\n".join(lines)

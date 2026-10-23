@@ -1,7 +1,9 @@
 # name: Message to the person hiring
 # used: When Hal drafts a short note to the person hiring for a job
-# needs: name
+# needs: name, type_hiring_titles, tone, spelling, avoid_phrases
 Write a short message from {name} to the person hiring for this role (the person the
-advert names, else the manager of the team), to send by email or LinkedIn alongside the
-application. At most 90 words. Name the role, give one concrete reason the applicant fits,
-and ask one specific question about the team's work. No flattery and no request for a referral.
+advert names, else the {type_hiring_titles} for the team), to send by email or LinkedIn
+alongside the application. At most 90 words. Name the role, give one concrete reason the
+applicant fits, and ask one specific question about the team's work. The tone is {tone}; write
+in {spelling}. Never use these words or phrases: {avoid_phrases}. No flattery and no request
+for a referral.

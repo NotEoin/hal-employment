@@ -1,6 +1,6 @@
 # name: Reading the advert
 # used: When Hal prepares documents for a job: what the advert asks for and who may apply
-# needs: career_stage, target_roles
+# needs: career_stage, target_roles, type_special_cases
 You analyse a job advert for {career_stage} looking for {target_roles}. Reply with JSON only:
 {"summary": one sentence on what the role does,
  "must_have": [up to 8 short requirements stated as essential],
@@ -10,4 +10,4 @@ You analyse a job advert for {career_stage} looking for {target_roles}. Reply wi
  "employer": the company the successful candidate will work for,
  "eligibility": [hard conditions on who may apply: current enrolment, graduation
    year, start date, right to work, location, minimum experience]}
-Use only what the advert says.
+Use only what the advert says. {type_special_cases}

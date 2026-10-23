@@ -1,10 +1,11 @@
 # name: How you fit the job
 # used: When Hal prepares documents for a job: each requirement matched to your evidence
-# needs: career_stage
+# needs: career_stage, type_evidence
 Match a candidate's evidence to a job's requirements. The candidate is {career_stage}.
+The evidence that counts most for them is {type_evidence}.
 Reply with JSON only:
-{"matches": [{"requirement": ..., "evidence": the named project, course, qualification,
-  job or volunteering that shows it, in at most 20 words, "strength": "strong" | "partial"}],
+{"matches": [{"requirement": ..., "evidence": the named piece of evidence (for example their
+  {type_evidence}) that shows it, in at most 20 words, "strength": "strong" | "partial"}],
  "gaps": [requirements the CV gives no evidence for],
  "eligible": true | false, "eligibility_notes": why, in one sentence}
 Rules: use only the CV text and the employment record, which holds course notes too. Cite record

@@ -2,10 +2,13 @@
 
 Candidates come from three places: people the advert names, people who wrote
 to the job inbox about the job, and public search results for the employer's
-engineering and hiring leads. The local model picks the best few; without it,
+team managers and recruiters. The local model picks the best few; without it,
 rules on job titles do. LinkedIn itself is never opened: profile links come
 from a search engine's result page, read in Hal's browser, and are for the
 applicant to visit by hand.
+
+Which managers count comes from the CV type's `hiring_titles`, so a museum assistant's search
+looks for a head of collections, not an engineering manager.
 """
 import email.utils
 import json
@@ -17,15 +20,33 @@ from . import browser, db, documents, gpu, llm, pack
 SEARCH_PAUSE = 8  # seconds between queries, so the search engine does not refuse them
 _last_query = 0.0
 KEEP = 3          # people suggested for one job
-QUERIES = (
-    'site:linkedin.com/in "{company}" "engineering manager" OR "head of engineering" OR "CTO" OR "team lead"',
-    'site:linkedin.com/in "{company}" "talent acquisition" OR "recruiter" OR "early careers"',
-)
-LEAD = re.compile(r"engineering manager|head of (engineering|software|technology|development)|\bcto\b|"
-                  r"chief technology|director of engineering|vp,? (of )?engineering|"
-                  r"(team|tech|technical|engineering) lead|founder", re.I)
+TITLES_QUERIED = 4  # hiring titles in one search query, so the search engine does not cut it short
+LEAD_QUERY = 'site:linkedin.com/in "{company}" {titles}'
+TALENT_QUERY = 'site:linkedin.com/in "{company}" "talent acquisition" OR "recruiter" OR "early careers"'
+# Titles that lead a team whatever the career; the CV type's `hiring_titles` are added to them.
+ANY_LEAD = r"founder|head of the team|team manager"
 TALENT = re.compile(r"talent|recruit|early careers|people (partner|team)|human resources|resourcing", re.I)
 SUFFIX = re.compile(r"[\s,]+(ltd|limited|plc|llp|inc)\.?$", re.I)
+
+def hiring_titles() -> list[str]:
+    """The job titles of the people who hire for this person's kind of role (the CV type's)."""
+    from .cvstudio import context
+
+    return list(context.build()["hiring_titles"])
+
+
+def queries(company: str, titles: list[str]) -> list[str]:
+    """The search queries for one employer: its managers under `titles`, then its recruiters."""
+    quoted = " OR ".join(f'"{t}"' for t in titles[:TITLES_QUERIED])
+    found = [LEAD_QUERY.format(company=_employer(company), titles=quoted)] if quoted else []
+    return [*found, TALENT_QUERY.format(company=_employer(company))]
+
+
+def lead_pattern(titles: list[str]) -> re.Pattern:
+    """Matches a profile's job title that leads the hiring team, from `titles` and the titles of any career."""
+    alts = [re.escape(t).replace(r"\ ", r"\s+") for t in titles if t.strip()]
+    return re.compile(r"\b(" + "|".join([*alts, ANY_LEAD]) + r")\b", re.I)
+
 
 def _employer(company: str) -> str:
     """Returns the company name without its legal suffix, as people write it on a profile."""
@@ -48,7 +69,8 @@ def _profile(result: dict, company: str) -> dict | None:
 def from_advert(job) -> list[dict]:
     """Returns the people or addresses the advert names, as the pack recorded them."""
     to = documents.drafts(job).get("message_to", "")
-    if not to or to.startswith("find the engineering lead"):
+    # "find the ..." is where to look, not a person: today's `pack.FIND_PREFIX` and older packs' wording.
+    if not to or to.startswith("find the "):
         return []
     people = []
     for entry in to.split(";"):
@@ -74,9 +96,8 @@ def from_search(job) -> tuple[list[dict], str]:
     """Returns the employer's people found by public search, and a note if the search was cut short."""
     global _last_query
     time.sleep(max(0.0, _last_query + SEARCH_PAUSE - time.monotonic()))
-    queries = [q.format(company=_employer(job["company"])) for q in QUERIES]
     try:
-        pages, refused = browser.search(queries, SEARCH_PAUSE)
+        pages, refused = browser.search(queries(job["company"], hiring_titles()), SEARCH_PAUSE)
         note = "the search engine refused some queries; search again later" if refused else ""
     except Exception as e:  # noqa: BLE001 - the advert and the inbox may still name someone
         pages, note = [], f"the search did not run: {str(e).splitlines()[0][:160]}"
@@ -91,10 +112,12 @@ def from_search(job) -> tuple[list[dict], str]:
 
 
 def _by_rules(people: list[dict]) -> list[dict]:
+    lead = lead_pattern(hiring_titles())
+
     def weight(p: dict) -> int:
         if p["source"] in ("advert", "email"):
             return 3
-        return 2 if LEAD.search(p["role"]) else 1 if TALENT.search(p["role"]) else 0
+        return 2 if lead.search(p["role"]) else 1 if TALENT.search(p["role"]) else 0
 
     ranked = sorted((p for p in people if weight(p)), key=weight, reverse=True)
     return [{**p, "why": "", "sure": p["source"] != "web search"} for p in ranked[:KEEP]]

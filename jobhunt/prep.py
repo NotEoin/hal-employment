@@ -2,23 +2,33 @@
 
 Reads the advert, the pack's fit map, the CV facts and the employment record; writes Markdown into the
 applications table. The notes prepare the person for the stage; they are not answers
-to send on their behalf. The prompt (`ai/prompts/prep.txt`) names no one; `pack.person()` fills it in.
+to send on their behalf. The prompt (`ai/prompts/prep.txt`) names no one: `cvstudio.context.build` fills it
+with the person and the CV type's `prep_topics`, and the tests the advert names go in the request.
 """
 from . import cv, db, documents, llm, pack, record
 
+PREP_TIMEOUT = 600   # seconds; the notes are long, and a local model on a busy graphics card is slow
+ADVERT_CHARS = 8000  # what fits a local model's context beside the instructions and the evidence
 
-def build(con, job) -> str:
-    """Drafts the preparation notes for a job, stores them, and returns them."""
+
+def request(job, who: dict) -> str:
+    """The text the prep prompt is asked about: stage, advert, tests it names, fit map and evidence."""
     s = documents.summary(job)
     fit = "\n".join(f"- {m['requirement']}: {m['evidence']} ({m['strength']})" for m in s["fit"])
     stage = job["status"] if job["status"] in ("assessment", "interview", "offer") else "first interview"
     # Stories come from everything recorded about each job and project, not only the CV's lines.
     kept = record.context([job["title"], *(m["requirement"] for m in s["fit"])], per_query=2)
-    notes = llm.chat(pack.prompt("prep"), f"Stage: {stage}\nJob: {job['title']} at {job['company']}\n\n"
-                           f"Advert:\n{(job['description'] or '')[:8000]}\n\nFit map:\n{fit}\n"
-                           f"Gaps: {s['gaps']}\n\nCV facts:\n{cv.facts_text()}"
-                           f"\n\nEmployment record (true; fuller than the CV):\n{kept or 'none'}",
-                     role="main", timeout=600).strip()
+    return (f"Stage: {stage}\nJob: {job['title']} at {job['company']}\n"
+            f"Tests the advert names: {who['test_kinds_line']}\n\n"
+            f"Advert:\n{(job['description'] or '')[:ADVERT_CHARS]}\n\nFit map:\n{fit}\n"
+            f"Gaps: {s['gaps']}\n\nCV facts:\n{cv.facts_text()}"
+            f"\n\nEmployment record (true; fuller than the CV):\n{kept or 'none'}")
+
+
+def build(con, job) -> str:
+    """Drafts the preparation notes for a job, stores them, and returns them."""
+    who = pack.person(job)
+    notes = llm.chat(pack.prompt("prep", who), request(job, who), role="main", timeout=PREP_TIMEOUT).strip()
     con.execute("""INSERT INTO applications (job_id, stage, prep, updated) VALUES (?, 'submitted', ?, ?)
                    ON CONFLICT(job_id) DO UPDATE SET prep = excluded.prep, updated = excluded.updated""",
                 (job["id"], notes, db.now()))

@@ -203,15 +203,18 @@ def _ascii(text: str) -> str:
 
 
 def draft_letter(con, job) -> str:
-    """Writes a cover letter for a job that has none, when a form asks for one, and renders its PDF."""
+    """Writes a cover letter for a job that has none, when a form asks for one, and renders its PDF.
+
+    It takes the pack's letter path (`pack.write_letter`: advert, record, fit map, checks), so the letter
+    is checked like any other; what the checks found is kept with it as `letter_notes` and `letter_flags`.
+    """
     if gpu.busy():
         return ""
-    context = (f"Job: {job['title']} at {job['company']}\n\nAdvert:\n{(job['description'] or '')[:6000]}"
-               f"\n\nCV facts:\n{cv.facts_text()}")
     try:
-        text = llm.undash(llm.chat(pack.LETTER, context, role="writer").strip())
+        written = pack.write_letter(con, job)
     except llm.LLMUnavailable:
         return ""
-    docs = {**load(con, job), "letter": text}
+    docs = {**load(con, job), "letter": written["text"], "letter_notes": written["notes"],
+            "letter_flags": written["flags"]}
     save(con, job, docs)
-    return text
+    return written["text"]
