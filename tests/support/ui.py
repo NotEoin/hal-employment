@@ -43,6 +43,12 @@ def skip_unless_browser(cls: type) -> type:
     return unittest.skipUnless(browser_tests_on(), "browser tests need HAL_TEST_BROWSER=1 and Playwright")(cls)
 
 
+def console_line(message: Any) -> str:
+    """A console error's text, then the address it came from, so a failed load names the resource."""
+    url = (message.location or {}).get("url")
+    return f"{message.text} ({url})" if url else message.text
+
+
 @contextmanager
 def chromium() -> Iterator[Any]:
     """A headless Chromium for the length of the block."""
@@ -64,7 +70,7 @@ class AppPage:
         self.page.set_default_timeout(LOAD_TIMEOUT_MS)
         self.base_url = base_url
         self.errors: list[str] = []
-        self.page.on("console", lambda m: m.type == "error" and self.errors.append(m.text))
+        self.page.on("console", lambda m: m.type == "error" and self.errors.append(console_line(m)))
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
 
     def open(self, route: str = "") -> AppPage:
