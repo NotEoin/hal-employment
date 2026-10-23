@@ -55,7 +55,8 @@ STILL_RUNNING = "The last run is still going"
 CHILD_EXAMPLE = ("--help",)  # what gate G9 runs: a quick child that prints and ends well
 # Settings the plan depends on; a change to any of them plans again.
 WATCHED = ("schedule.search_times", "schedule.mail_every", "schedule.mail_hours", "schedule.record_every",
-           "schedule.catch_up", "goal.mode", "notify.daily_summary", "updates.auto_check")
+           "schedule.catch_up", "goal.mode", "notify.daily_summary", "updates.auto_check",
+           "learn.enabled")
 
 
 @dataclass(frozen=True)

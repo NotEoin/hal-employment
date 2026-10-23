@@ -7,6 +7,7 @@ real UK towns so that distances have something to measure.
 import os
 import unittest
 from contextlib import closing
+from datetime import UTC, datetime
 from unittest import mock
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
@@ -18,6 +19,7 @@ from jobhunt.core import activity, events, plugins, runner, settings
 from jobhunt.core.settings import store
 from jobhunt.find import feedback
 from jobhunt.learn import actions, home, items, patterns, places
+from jobhunt.learn import schedule as learn_schedule
 
 NOW = "2026-10-22T09:00:00Z"
 LATER_THIS_WEEK = "2026-10-24T09:00:00Z"
@@ -334,6 +336,18 @@ class Listening(unittest.TestCase):
         with mock.patch.object(patterns, "enabled", return_value=True):
             self.assertIsNone(listener.tick())
         self.assertEqual(listener.pending, "feedback")
+
+
+class Nightly(unittest.TestCase):
+    def test_the_nightly_run_is_at_half_past_three_and_stops_when_learning_is_off(self):
+        after = datetime(2026, 10, 22, 9, 0, tzinfo=UTC)
+        with mock.patch.object(learn_schedule, "daily", lambda times, at: (times, at)):
+            with mock.patch.object(patterns, "enabled", return_value=True):
+                self.assertEqual(learn_schedule.run_after(after), (["03:30"], after))
+            with mock.patch.object(patterns, "enabled", return_value=False):
+                self.assertIsNone(learn_schedule.run_after(after))
+        job = learn_schedule.JOBS[0]
+        self.assertEqual((job.id, job.area, job.catch_up), ("learn.patterns", "learning", False))
 
 
 class Distances(unittest.TestCase):
