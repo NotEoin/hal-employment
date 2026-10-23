@@ -277,6 +277,10 @@ class Ci(unittest.TestCase):
                     loose.append(f"{workflow.name}: {line.strip()}")
         self.assertEqual(loose, [])
 
+    # Regression (windows-2025 runner): a font load failed with net::ERR_NO_BUFFER_SPACE late in the suite.
+    def test_the_windows_job_has_room_for_the_browser_tests_connections(self):
+        self.assertIn("netsh int ipv4 set dynamicport tcp start=32768 num=32768", self.body)
+
     def test_the_windows_job_proves_its_own_checks_ran(self):
         named = re.search(r"for t in ([\w ]+); do", self.body)
         self.assertIsNotNone(named, "the Windows step lists the tests that must say ok")

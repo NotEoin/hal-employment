@@ -38,6 +38,10 @@ jobs:
             uv run python scripts/dev/check_ruff.py --base HEAD~1
           fi
       - run: uv run python scripts/dev/check_ascii.py --tree
+      # The browser tests open a connection per request, and late in one run Windows ran out
+      # (net::ERR_NO_BUFFER_SPACE). This doubles its default 16384 client ports, above the tests' 20000-29999.
+      - if: runner.os == 'Windows'
+        run: netsh int ipv4 set dynamicport tcp start=32768 num=32768
       # bash runs with pipefail, so a failing test still fails the step through tee
       - name: Tests, browser on
         shell: bash
