@@ -244,7 +244,7 @@ def boards_path():
     """The board list's file: the import's copy in the data folder, else the checkout's (or a test's) file.
 
     The import copies the checkout's `boards.toml` to `<data>/import/boards.toml`, and the copy
-    in the checkout is deleted, so the imported copy wins once it exists.
+    in the checkout is deleted once the import has run, so the imported copy wins once it exists.
     """
     if BOARDS_PATH == ROOT / "boards.toml" and not paths.is_legacy_layout():
         imported = paths.data_dir() / "import" / "boards.toml"

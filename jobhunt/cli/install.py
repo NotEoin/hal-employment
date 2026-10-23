@@ -122,7 +122,7 @@ class Installer:
         plat = self.platform
         scripts = self.code / ".venv" / "Scripts"
         pythonw = str(scripts / "pythonw.exe")
-        # without an icon the shortcuts show pythonw.exe's Python logo (Windows 11 install test)
+        # without an icon the shortcuts show pythonw.exe's Python logo (seen on a Windows install)
         ico = str(hal_icon.write_ico(self.tools / ICON_FILE))
         for folder in ("start_menu", "desktop"):
             plat.make_shortcut(plat.special_folder(folder) / "Hal Employment.lnk", pythonw, "-m jobhunt open",

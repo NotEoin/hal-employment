@@ -87,7 +87,7 @@ def week(con, now: datetime | None = None) -> dict:
                                AND substr(at, 1, 19) >= ?""", (*statuses, since_utc)).fetchone()[0]
 
     # only jobs that Matches or Saved shows: counting hidden jobs said "255 new matches" beside an empty
-    # Matches tab after the first search (Windows 11 install test)
+    # Matches tab after the first search
     from .find import routes as find_routes
 
     matches = 0

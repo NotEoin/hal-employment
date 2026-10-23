@@ -1,7 +1,7 @@
 """Commands for moving and keeping data: `import`, `migrate` and `backup`.
 
-`import` moves the owner's old in-checkout data into Hal's own folders (`core.importer`), or hands a
-USB stick install to `core.importer_usb` once that exists. `migrate` shows and runs pending
+`import` moves the owner's old in-checkout data into Hal's own folders (`core.importer`), or hands an
+old USB-stick install to `core.importer_usb` once that exists. `migrate` shows and runs pending
 database migrations without opening the database through `db.connect()`, which would migrate it silently.
 `backup` writes one snapshot of the database. Each prints plain lines and exits 1 with the reason when it
 stops.
