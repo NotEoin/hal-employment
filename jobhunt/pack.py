@@ -71,6 +71,7 @@ CHECKED_CLEAN = "Every fact is in your CV, record or the advert. No numbers were
 EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence line
 PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
 QUESTION_SHARE = 0.8      # share of a question's words the advert must hold for it to count as written out
+NOTE_PARA = re.compile(r"\(.*\)\Z|(notes?|word count)\b", re.S | re.I)   # a closing paragraph about the draft
 
 # Phrases that mark generic or machine-written prose; drafts containing them are flagged.
 CLICHES = re.compile(
@@ -166,7 +167,17 @@ def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, 
 
 
 def _letter(who: dict, context: str) -> str:
-    return llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip())
+    return drop_notes(llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip()))
+
+
+def drop_notes(text: str) -> str:
+    """A draft without the model's closing notes about it, and without Markdown bold."""
+    # Claude ended a message with "(About 75 words. The advert names no individual, ...)" and began one with
+    # "**Subject:** ..." (2026-10-23); neither belongs in what the person sends
+    paras = [p for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
+    while len(paras) > 1 and NOTE_PARA.match(paras[-1].strip()):
+        paras.pop()
+    return re.sub(r"\*\*(.+?)\*\*", r"\1", "\n\n".join(paras))
 
 
 def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, fit: dict, sources: tuple[str, ...]) -> list[str]:
@@ -278,7 +289,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit)
     letter = written["text"]
     context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
-    message = llm.undash(llm.chat(prompt("message", who), context, role="writer").strip())
+    message = drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip()))
     questions = analysis.get("questions") or []
     answers = llm.chat_json(prompt("answers", who),
                             "Questions:\n" + "\n".join(f"- {q}" for q in [*questions, *COMMON_QUESTIONS])

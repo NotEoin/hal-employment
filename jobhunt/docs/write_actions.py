@@ -61,7 +61,7 @@ def rewrite_letter_now(ctx, job, words: str) -> dict:
 def _message(job, who: dict, docs: dict, words: str) -> str:
     request = (f"Job: {job['title']} at {job['company']}\n\nThe message as it stands:\n{docs.get('message') or ''}"
                f"\n\nThe applicant asked for this change: {words}")
-    return llm.undash(llm.chat(pack.prompt("message", who), request, role="writer").strip())
+    return pack.drop_notes(llm.undash(llm.chat(pack.prompt("message", who), request, role="writer").strip()))
 
 
 def _answers(job, who: dict, docs: dict, words: str) -> list[dict]:

@@ -323,6 +323,25 @@ class Advert(unittest.TestCase):
         self.assertEqual(pack.salutation({"contacts": [{"name": "Sam Example", "role": "Lead"}]}),
                          "Dear Sam Example,")
 
+    def test_the_models_notes_about_a_message_never_reach_the_message(self):
+        # Claude's message (made-up career changer, 2026-10-23) began with Markdown bold and ended with a note
+        # about itself, and its "75" was then flagged as an invented number
+        reply = ("**Subject:** Application: Project Coordinator\n\nDear Hiring Manager,\n\nI planned a refit "
+                 "that opened two days early.\n\nKind regards,\nPriya Ashdown-Vell\n\n(About 75 words. The "
+                 "advert names no individual, so I used \"Hiring Manager\".)")
+        writer = FakeWriter()
+        plain = writer.reply
+        writer.reply = lambda system, user: reply if prompt_id(system) == "message" else plain(system, user)
+        with as_applicant(people.CHANGER, writer) as a:
+            job = add_job(a.con, "career_changer")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        message = section(md, "Message to the hiring manager")
+        self.assertIn("Subject: Application: Project Coordinator", message)
+        self.assertIn("Kind regards,\nPriya Ashdown-Vell", message)
+        for leak in ("**", "About 75 words", "names no individual"):
+            self.assertNotIn(leak, message)
+        self.assertNotIn("number not in the CV or advert: 75", md)
+
 
 class CommandLine(unittest.TestCase):
     def test_letter_and_check_read_the_numbered_application_folder(self):

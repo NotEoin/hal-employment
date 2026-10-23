@@ -6,4 +6,4 @@ advert names, else the {type_hiring_titles} for the team), to send by email or L
 alongside the application. At most 90 words. Name the role, give one concrete reason the
 applicant fits, and ask one specific question about the team's work. The tone is {tone}; write
 in {spelling}. Never use these words or phrases: {avoid_phrases}. No flattery and no request
-for a referral.
+for a referral. Reply with the message only, with no notes about it.
