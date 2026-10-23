@@ -244,6 +244,17 @@ def message_to(job, analysis: dict, who: dict) -> str:
     return f"{FIND_PREFIX} on LinkedIn (search \"{job['company']} {title}\")"
 
 
+def salutation(analysis: dict) -> str:
+    """The letter's greeting: the first person the advert names, else the hiring team."""
+    # the letter said "Dear Hiring Team" while the message beside it greeted the person the advert names
+    # (made-up humanities advert, 2026-10-23)
+    for c in analysis.get("contacts") or []:
+        name = str(c.get("name") or "") if isinstance(c, dict) else str(c).split(",")[0]
+        if name.strip() and "@" not in name:
+            return f"Dear {name.strip()},"
+    return "Dear Hiring Team,"
+
+
 def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     """Drafts the pack for one job and returns the pack's Markdown path.
 
@@ -369,7 +380,7 @@ def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, tr
               for m in fit.get("matches", [])]
     gaps = fit.get("gaps", [])
     lines += ["", "Gaps to address or accept: " + ("; ".join(gaps) if gaps else "none found"), ""]
-    lines += ["## Cover letter", "", "Dear Hiring Team,", "", letter, "", f"{who['signoff']},", who["name"], ""]
+    lines += ["## Cover letter", "", salutation(analysis), "", letter, "", f"{who['signoff']},", who["name"], ""]
     lines += [f"## {NOTES_HEADING}", ""] + [f"- {k}: {notes[v]}" for k, v in NOTE_KEYS.items()] + [""]
     lines += ["## Message to the hiring manager", "", "To: " + message_to(job, analysis, who), "", message, ""]
     lines += ["## Form answers", ""]

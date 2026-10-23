@@ -312,6 +312,17 @@ class Advert(unittest.TestCase):
             pack.build(a.con, job["id"], use_web=False)
         self.assertIn("Requirements:\n- Keep projects on time and track budgets.", writer.asked("fit")[0]["user"])
 
+    def test_the_letter_greets_the_person_the_advert_names(self):
+        # the letter said "Dear Hiring Team" while the message beside it greeted the named contact (2026-10-23)
+        writer = reading(contacts=["Ada Penhallow, Head of Collections"])
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertTrue(section(md, "Cover letter").lstrip().startswith("Dear Ada Penhallow,\n"))
+        self.assertEqual(pack.salutation({"contacts": ["jobs@example.org"]}), "Dear Hiring Team,")
+        self.assertEqual(pack.salutation({"contacts": [{"name": "Sam Example", "role": "Lead"}]}),
+                         "Dear Sam Example,")
+
 
 class CommandLine(unittest.TestCase):
     def test_letter_and_check_read_the_numbered_application_folder(self):

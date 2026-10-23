@@ -316,7 +316,7 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   (`pack.written_out`: most of a question's words are in the advert), so a model's note about questions is
   never answered. When the advert states no requirement, its main duties are the requirements, and the
   role summary stands in when the reading still has none (`pack._requirements`), so the fit map is never
-  empty.
+  empty. The letter greets the first person the advert names (`pack.salutation`), else "Hiring Team".
 - `docs/write_routes.py` serves `POST /applications/{id}/documents/change`, `documents/letter/rewrite`,
   `/prep` and `/contacts`; each starts its kind in `docs/write_actions.py` (`docs.change`,
   `docs.rewrite_letter`, `docs.prep`, `docs.contacts`) and returns `{action_id}`.
