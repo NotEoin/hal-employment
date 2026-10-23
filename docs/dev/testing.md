@@ -73,7 +73,8 @@ commit.
   so a test closes its connections before its home goes: `with HalServer(), closing(db.connect()) as con:`,
   never an `addCleanup(con.close)` that runs after the home is removed. `fresh_home()`, `HalServer` and the
   legacy `Practice` wait for actions (`runner.idle()`), requests (`AppServer.stop()`) and tab watches
-  (`driver.stop_watching()`) before removing theirs.
+  (`driver.stop_watching()`) before removing theirs. An action still going 10 s after a `HalServer` test
+  is stopped and fails the test by name, rather than as a `PermissionError` when its home goes.
 - Wait on a condition with a timeout (`runner.idle()`, `runner.wait()`, a deadline loop), never on a sleep.
 - Build expected paths with `pathlib` (`str(Path("/usr/bin/flatpak"))`), and write a path into TOML as a
   literal string (`'C:\Users\...'`), because a basic string reads `\U` as an escape.

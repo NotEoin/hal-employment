@@ -12,6 +12,7 @@ import http.client
 import json
 import tempfile
 import threading
+import time
 from dataclasses import dataclass
 from http.cookies import SimpleCookie
 from pathlib import Path
@@ -93,6 +94,26 @@ class Client:
         return self.request("POST", path, {} if body is None else body, **kw)
 
 
+def wait_for_actions(timeout: float = IDLE_S) -> None:
+    """Waits for the test's actions to end; one that outlives `timeout` is stopped and named in the failure.
+
+    Without this, a slow action only shows as a `PermissionError` when its home is removed on Windows, or as
+    "FOREIGN KEY constraint failed" when it writes its steps into the next test's database.
+    """
+    if runner.idle(timeout):
+        return
+    with runner._lock:  # the runner's own view of what is still going
+        going = [f"{live.kind.kind} ({live.subject}, {live.state}, {time.monotonic() - live.started:.1f} s: "
+                 f"{live.text!r})" for live in runner._LIVE.values()]
+        ending = sorted(runner._ENDING)
+        closing = runner._executing[0]
+    for live_id in list(runner._LIVE):
+        runner.stop(live_id)
+    runner.idle(timeout)
+    raise AssertionError(f"actions still going {timeout} s after the test: {going or 'none'}; rows still being "
+                         f"written for: {ending or 'none'}; action threads still closing: {closing}")
+
+
 class HalServer:
     """The new server in a temporary home, on a free port, for the length of a `with` block."""
 
@@ -104,7 +125,7 @@ class HalServer:
         self.home = Path(tmp).resolve()
         self._stack.enter_context(paths.set_override(self.home))
         # runs after the server stops and before the home goes: Windows cannot remove a file an action holds open
-        self._stack.callback(runner.idle, IDLE_S)
+        self._stack.callback(wait_for_actions)
         store.drop_cache()
         self._stack.callback(store.drop_cache)
         paths.ensure()
