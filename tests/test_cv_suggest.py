@@ -10,6 +10,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from support.api import HalServer
 from support.fake_ai import fake_ai
@@ -115,6 +116,15 @@ class Reviewers(CvCase):
         suggest.accept(self.con, self.one("Order")["id"])
         self.assertEqual([s.id for s in store.current()[1].sections],
                          ["summary", "education", "volunteering", "experience", "skills", "interests"])
+
+    def test_a_suggestion_accepted_while_the_tab_reloads_stays_accepted(self):
+        # Regression: the store's "cv" event reloads the tab mid-Accept all; its recheck superseded the accepted rows
+        suggest.look_again(self.con)
+        stale = suggest._pending(self.con)
+        out = suggest.accept_kind(self.con, "Consistency")
+        with mock.patch.object(suggest, "_pending", lambda con: stale):
+            suggest.recheck(self.con, out["version_id"], store.current()[1])
+        self.assertEqual(suggest.listing(self.con)["reviewed"], 2)
 
     def test_look_again_stops_at_six_waiting(self):
         settings_store.drop_cache()

@@ -606,12 +606,12 @@ def recheck(con: sqlite3.Connection, vid: str, doc) -> int:
             same = " ".join(shown_at(doc, row["op"], row["target"]).split()) == " ".join((row["before"] or "").split())
         except (model.CVError, AttributeError, StopIteration):
             same = False
+        # only rows still pending: a request deciding a suggestion at the same time keeps its decision
         if same:
-            con.execute("UPDATE cv_suggestions SET based_on = ? WHERE id = ?", (vid, row["id"]))
+            con.execute("UPDATE cv_suggestions SET based_on = ? WHERE id = ? AND status = 'pending'", (vid, row["id"]))
         else:
-            con.execute("UPDATE cv_suggestions SET status = 'superseded', decided = ? WHERE id = ?",
-                        (clock.iso(), row["id"]))
-            gone += 1
+            gone += con.execute("UPDATE cv_suggestions SET status = 'superseded', decided = ?"
+                                " WHERE id = ? AND status = 'pending'", (clock.iso(), row["id"])).rowcount
     con.commit()
     return gone
 
