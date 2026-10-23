@@ -1,4 +1,4 @@
-"""The setup guide's steps and where the person is in them (table `setup_steps`).
+"""The setup guide's steps and where the person is in them.
 
 Each of the eleven steps has a row once the person reaches it: `todo`, `done` or `skipped`. The guide's own
 place (the step to open at, and whether the person chose "Save and finish later") is the row `guide`, whose

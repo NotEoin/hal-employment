@@ -1,4 +1,4 @@
-"""The setup guide's Email step: try a Gmail app password before keeping it (`POST /email/test`).
+"""The setup guide's Email step: try a Gmail app password before keeping it.
 
 The password is checked by signing in to Gmail's IMAP server read-only and signing out again; only a
 password Gmail accepted is saved (in the secrets store, never in a setting), so a typing slip can never

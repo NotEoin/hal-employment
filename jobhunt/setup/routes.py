@@ -38,7 +38,7 @@ FROM_CV = ("you.name", "you.email", "you.phone", "you.city")
 # The step's own words for each right-to-work choice; the stored values are the setting's.
 RIGHT_TO_WORK_WORDS = {"uk_no_visa": "Yes, no visa needed", "uk_visa": "Yes, with a visa",
                        "need_sponsorship": "I would need sponsorship"}
-# Who provides each "found" line, when that module is there (`found`): (module, function).
+# Who provides each "found" line, when that package is installed: (module, function).
 FINDERS = {"usb_install": ("jobhunt.core.importer_usb", "find"), "old_helper": ("jobhunt.apply.helpers", "old_helper")}
 
 

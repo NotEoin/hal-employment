@@ -56,7 +56,7 @@ def qr_svg(topic: str) -> str:
     """The QR code for subscribing to `topic`, as SVG text that draws on its own as an image.
 
     The page shows it as an `<img>`, and an SVG image without the SVG namespace draws nothing, so this is
-    not segno's `svg_inline`, which leaves the namespace out (the broken picture of the Windows 11 install test).
+    not segno's `svg_inline`, which leaves the namespace out (it once drew a broken picture).
     """
     out = io.BytesIO()
     segno.make(NTFY + topic, error="m").save(out, kind="svg", xmldecl=False, svgns=True, nl=False,
