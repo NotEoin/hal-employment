@@ -3,7 +3,8 @@
    Four steps per browser: open its page of add-ons, switch on "Developer mode", press "Load unpacked" and
    choose Hal's helper folder, then Connect. Browsers refuse to open their own pages (`edge://extensions`)
    from a web page or from their command line, so the first button copies that address and opens a new
-   browser window, whose address bar is ready for the paste (Windows 11 install test). The steps, their words and their pictures come from
+   browser window to paste it in (Windows 11 install test). A browser that was never opened
+   shows its own welcome pages there first, so the words say to click the address bar. The steps, their words and their pictures come from
    GET /helpers/browsers (apply/browsers.toml), so each browser is explained in its own words.
 
    Connect asks for a one-time pairing code and opens Hal's /pair page in the chosen browser, because the
@@ -95,8 +96,8 @@ export function Step() {
           : html`<div style="margin-top:8px"><button type="button" class="btn primary small" disabled=${!b.found} onClick=${openPage}>Copy the address and open ${b.name}</button>
             ${!b.found ? html`<span class="small sub"> Hal did not find ${b.name} here. Type <code>${b.extensions_url}</code> in its address bar.</span>`
               : html`<div class="small sub helper-paste" style="margin-top:6px">${pasted === false
-                ? html`In the new ${b.name} window, type <code>${b.extensions_url}</code> in the address bar at the top and press Enter.`
-                : html`In the new ${b.name} window, press Ctrl and V together to paste <code>${b.extensions_url}</code> into the address bar at the top, then press Enter.`}</div>`}</div>`}
+                ? html`In the new ${b.name} window, click the address bar at the top, type <code>${b.extensions_url}</code> and press Enter.`
+                : html`In the new ${b.name} window, click the address bar at the top, press Ctrl and V together to paste <code>${b.extensions_url}</code>, then press Enter.`}</div>`}</div>`}
         <${Picture} step=${open} /></li>
       <li><b>${devMode.text}</b> <span class="small sub">Leave it on: ${b.name} turns the helper off without it.</span><${Picture} step=${devMode} /></li>
       <li><b>${load.text}</b>
