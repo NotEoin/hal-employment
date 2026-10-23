@@ -67,9 +67,11 @@ from .cli.find import (  # noqa: E402 - after the venv trampoline
 from .cli.mail import cmd_digest, cmd_inbox, cmd_mail, cmd_todo  # noqa: E402 - after the venv trampoline
 from .cli.record import cmd_record  # noqa: E402 - after the venv trampoline
 from .cli.system import cmd_serve, cmd_vault  # noqa: E402 - after the venv trampoline
+from .core import tls  # noqa: E402 - after the venv trampoline
 
 
 def main():
+    tls.use_system_trust()
     p = argparse.ArgumentParser(prog="jobhunt", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)

@@ -9,6 +9,8 @@ dependencies = [
     "pypdfium2>=4.30",
     "pyspellchecker>=0.8",
     "segno>=1.6",
+    # Windows checks website certificates itself; see jobhunt/core/tls.py
+    "truststore>=0.10; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
