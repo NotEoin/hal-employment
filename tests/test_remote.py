@@ -10,6 +10,7 @@ import contextlib
 import http.client
 import ipaddress
 import os
+import queue
 import socket
 import threading
 import time
@@ -238,6 +239,10 @@ class ShowTheForm(unittest.TestCase):
                         (self.job, db.now()))
             con.commit()
         self.enterContext(mock.patch.object(browser, "show", side_effect=AssertionError("the desktop's window")))
+        # A command left in the shared queue by an earlier test's timed-out ask would reach the fake helper
+        # first and leave "show" unanswered until the client gave up (seen once in a full run, 2026-10-23).
+        self.enterContext(mock.patch.object(extension, "_commands", queue.Queue()))
+        self.enterContext(mock.patch.object(extension, "_waiting", {}))
         self.away = self.hal.signed_in(remote=True, remote_host=DESK)
         self.path = f"/api/v2/applications/{quote(self.job, safe='')}/form/show"
 
@@ -261,7 +266,7 @@ class ShowTheForm(unittest.TestCase):
         self.assertEqual(asked[0]["args"]["job"], self.job)
 
     def test_show_me_the_form_says_what_to_do_when_no_helper_is_connected(self):
-        with mock.patch.object(extension, "_seen", 0.0), mock.patch.dict(extension._waiting, clear=True):
+        with mock.patch.object(extension, "_seen", 0.0):
             refused = self.away.post(self.path)
         self.assertEqual(refused.status, 409)
         self.assertEqual(refused.json()["error"]["code"], "remote")
