@@ -292,7 +292,8 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
 - Accept makes a new version (`origin="improved"`, `by="you"`); Undo and Accept all are versions too. Leaving
   a suggestion keeps the reason; "Remember this" is a `cv_preferences` row.
 - `tailor.for_job` (No, A little, More) keeps each change as a model change in `job_cvs`, and rebuilds the
-  job's CV from the base version plus the changes still on. Sending the original file forces No.
+  job's CV from the base version plus the changes still on. An AI change for a job only rewords: one with a
+  gap, or of a kind that adds what came of the work (Results, Add), is dropped. Sending the original file forces No.
 - The whole CV is the target `cv` in a suggestion (`suggest.WHOLE_CV`) and `""` in the model
   (`suggest.model_target`). `recheck` touches only rows still pending, so a decision made while the tab
   reloads is kept.

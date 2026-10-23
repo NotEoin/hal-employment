@@ -6,6 +6,9 @@
   line, which must name its evidence.
 - More: also up to three bullets rewritten by the AI, through the same guards as every suggestion.
 
+A job's CV goes out after one look, so an AI change never carries a gap and never adds what came of the
+work (a Results or Add suggestion): those need the person's own facts and stay on My CV's Suggestions.
+
 While the person sends their original file the level is forced to No, with the words the documents step
 shows. With `cvdocs.pick_first`, `priorities` are the three to five requirements the person ticked, and only
 they are used. The result is kept in `job_cvs` with its change list, so each
@@ -34,6 +37,7 @@ MIN_WORD = 3                        # shorter words ("a", "of", "to") say nothin
 # Sections whose entries Hal may put in a different order for a job; dated history keeps its order.
 MOVABLE_KINDS = ("projects", "skills", "achievements", "certifications", "publications", "portfolio", "talks")
 REWRITE_KINDS = ("experience", "volunteering", "projects")
+ADDS_FACTS = ("Results", "Add", "Gap")   # suggestion kinds that add what came of the work; a job's CV only rewords
 STOP = frozenset("and the for with you your our will who are this that from have has can able into any all "
                  "role team work working job jobs using use including such other strong good".split())
 ORIGINAL_WHY = ("Adjusting for each job is off while you send your original file. Employers get it exactly as "
@@ -117,6 +121,8 @@ def _ai_change(con, doc, type_, sids: list[str], job: dict, ctx, *, bullets: boo
     draft = suggest.ask_ai(con, doc, type_, sids, [], suggest.passages_for(doc, sids), job=job)
     if draft is None or ("/b:" in draft.target) != bullets or (not bullets and not draft.evidence):
         return None
+    if draft.kind in ADDS_FACTS:
+        return None    # Claude added "giving staff a searchable record" to a job's CV (checked 2026-10-23)
     ok = suggest.guard(draft, ctx)
     if ok is None or suggest.GAP.search(ok.afters[0]):
         return None    # a job's CV goes out after one look, so it never carries a gap to fill in

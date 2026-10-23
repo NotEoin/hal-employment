@@ -129,6 +129,20 @@ class Tailoring(CvCase):
         self.assertEqual([c["kind"] for c in changes], ["Moved"])
         self.assertNotIn("[what outcome?]", json.dumps(changes))
 
+    def test_a_job_cv_never_gains_an_outcome_the_cv_does_not_have(self):
+        # Claude's change for a made-up Collections Assistant job (2026-10-23), kind "Results", added a claim
+        added = "Ran the local history table and wrote weekly staff recommendations, which raised sales"
+        def outcome(req) -> str:
+            out = json.loads(tailoring_ai(req))
+            if out.get("target") == TABLE:
+                out.update(kind="Results", afters=[added])
+            return json.dumps(out)
+        with fake_ai({"cv_suggest": outcome}):
+            doc, changes = tailor.for_job(JOB, level="more")
+        self.assertNotIn(TABLE, [c["target"] for c in changes])
+        self.assertNotIn(added, self.bullets(doc))
+        self.assertIn(PROFILE, [c["target"] for c in changes])
+
     def test_a_locked_line_is_never_touched_for_a_job(self):
         self.con.execute("UPDATE cv_documents SET layout = ?", (json.dumps({"locked_lines": [TABLE, PROFILE]}),))
         self.con.commit()
