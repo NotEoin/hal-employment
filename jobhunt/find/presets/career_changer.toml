@@ -1,4 +1,4 @@
-# Career changer: the points of this preset. Roles and interests come from the person's goal.
+# Career changer: points for this kind of search. Roles and interests come from the person's goal.
 label = "Career changer"
 kinds = ["graduate_job", "graduate_scheme", "internship", "apprenticeship", "experienced", "fixed_term"]
 role_filter = false

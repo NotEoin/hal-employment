@@ -1,4 +1,4 @@
-# Experienced: the points of this preset. Roles and interests come from the person's goal.
+# Experienced: points for this kind of search. Roles and interests come from the person's goal.
 label = "Experienced"
 kinds = ["experienced", "fixed_term"]
 role_filter = false

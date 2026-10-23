@@ -11,7 +11,7 @@ laid over them. Only changed settings count, because the catalogue's plain defau
 round numbers, not the technical preset's exact ones.
 
 Not yet built: distances (`goal.max_distance`; places match by name and alias only), "Older than 21
-days", "You chose: <reason>" (the job feedback) and the "Starts before your course ends" note.
+days", "You chose: <reason>" (from the person's feedback) and the "Starts before your course ends" note.
 """
 
 from __future__ import annotations
@@ -33,16 +33,16 @@ log = logging.getLogger(__name__)
 
 PRESETS = Path(__file__).resolve().parent / "presets"
 DEFAULT_PRESET = "technical_grad"
-SCORE_RANGE = (1, 100)      # a shown job never scores 0, which means hidden (L score.py:321)
+SCORE_RANGE = (1, 100)      # a shown job never scores 0, which means hidden
 TEXT_WINDOW = 4000          # characters of the advert the title-like rules read (L score.py)
 PLACE_TEXT_WINDOW = 3000    # characters read for an office place when the location says nothing useful
 FRESH_DAYS, OLD_DAYS, STALE_DAYS = 3, 45, 180
-SMALL_BOARD, MID_BOARD = 15, 40        # open roles on the employer's board (L score.py:293-300)
+SMALL_BOARD, MID_BOARD = 15, 40        # open roles on the employer's board
 FAR_UNDER = 0.85            # pay below this share of the person's lowest hides the job (presets that say so)
 MAX_YEARS_READ = 20         # "25 years of trading" is history, not an experience requirement
 NICHE_SOURCES = ("hn", "ktp")
 ALERT_ONLY_SOURCES = ("indeed",)
-TITLE_RULES_SKIP = ("hn",)  # HN "titles" are free text; judged on the body (L score.py:225)
+TITLE_RULES_SKIP = ("hn",)  # HN "titles" are free text; judged on the body
 
 
 def _rx(pattern: str) -> re.Pattern:

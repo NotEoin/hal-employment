@@ -26,7 +26,7 @@ from jobhunt.core import activity, clock, events, settings
 
 log = logging.getLogger(__name__)
 
-ASK_AGAIN_DAYS = 7          # "Not now" asks again next week ("Hal will ask again next week")
+ASK_AGAIN_DAYS = 7          # "Not now" asks again next week
 AREA = "learning"           # Activity area of every decision
 ON = ("yes", "active")      # an item in use
 LEARNED = ("yes", "active", "off")   # what the Learned tab lists

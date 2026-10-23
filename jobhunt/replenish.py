@@ -1,10 +1,10 @@
-"""Keeps documents ready for the best matches: screens the next job and drafts its pack (`find.prepare`).
+"""Keeps documents ready for the best matches: screens the next job and drafts its pack.
 
 The queue is the open jobs with status 'ready'. While it holds fewer than `scoring.prepare_ahead`, the best
 shown job among the kinds the person chose (`hidden_rule IS NULL`, at or above `scoring.min_show`) is
 screened by the AI when `scoring.screen` is on and, if it fits, gets a pack. Paid internships, placements
 and the other kinds are prepared like any job when the goal includes them; today's code never queued a
-graduate internship (L replenish.py:18). Model work waits for the GPU.
+graduate internship. Model work waits for the GPU.
 """
 from . import db, gpu, pack, screen
 from .core import settings

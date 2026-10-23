@@ -1,6 +1,6 @@
 """Is the advert still open? The cheap check before a job first appears in Matches.
 
-One fetch per job: a 404 or 410, the closed wording Hal's form filler already knows (L browser.py:69), or
+One fetch per job: a 404 or 410, the closed wording Hal's form filler already knows, or
 Greenhouse's `error=true` redirect means closed. At most `PER_SEARCH` checks a search, `AT_ONCE` at a time,
 so a search never hammers an employer's site. Saved jobs are re-checked daily by the scheduler. The fetch
 is passed in, so tests never touch the network.

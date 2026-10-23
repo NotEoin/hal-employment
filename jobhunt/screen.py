@@ -1,4 +1,4 @@
-"""The AI check on a new match: does it fit this person? (prompt `screen`).
+"""The AI check on a new match: does it fit this person?
 
 Keyword rules catch stated years, seniority and students-only wording; this catches the rest, such as
 requirements that only make sense for someone who has held the job before. The prompt is filled from the

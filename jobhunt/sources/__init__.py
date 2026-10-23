@@ -1,7 +1,7 @@
 """Job sources: each module fetches adverts from one kind of site and returns them as job dicts.
 
 `places()` is where the place-based searches look: the person's own goal places, so no source names a place
-of its own (the source queries). The sources registry replaces these modules.
+of its own. The sources registry replaces these modules.
 """
 from __future__ import annotations
 

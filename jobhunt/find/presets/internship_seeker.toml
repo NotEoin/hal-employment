@@ -1,4 +1,4 @@
-# Student looking for internships: the points of this preset. Roles and interests come from the person's goal.
+# Student looking for internships: points for this kind of search. Roles and interests come from the person's goal.
 label = "Student looking for internships"
 kinds = ["internship", "placement", "insight", "graduate_scheme", "part_time", "fixed_term"]
 role_filter = false

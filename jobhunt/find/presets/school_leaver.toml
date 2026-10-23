@@ -1,4 +1,4 @@
-# School leaver: the points of this preset. Roles and interests come from the person's goal.
+# School leaver: points for this kind of search. Roles and interests come from the person's goal.
 label = "School leaver"
 kinds = ["apprenticeship", "graduate_job", "part_time", "fixed_term"]
 role_filter = false

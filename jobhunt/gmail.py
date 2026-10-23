@@ -493,7 +493,7 @@ CONTEXT_CHARS = 240                 # text after a link that may name the employ
 # the words after a link are read ahead without being consumed, so the next link is still found
 ANCHOR = re.compile(r"<a\b[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>(?=(.{0,"
                     + str(CONTEXT_CHARS) + "}))", re.I | re.S)
-# A link's words read as a job when they name a kind of role; the fallback when a board is not known.
+# A link's words read as a job when they name a kind of role; the fallback when a link has no other sign of being a job.
 JOB_WORDS = re.compile(
     r"\b(assistant|officer|intern(ship)?s?|placements?|graduates?|trainee|apprentice(ship)?|analyst|engineer|"
     r"developer|designer|coordinator|co-ordinator|manager|executive|researcher|research|associate|scheme|"
@@ -552,7 +552,7 @@ def alert_links(msg) -> list[tuple[str, str, str]]:
 
 
 def lead_from_link(url: str, words: str, after: str, sender_name: str) -> dict | None:
-    """A lead from one alert link when its words read as a job title (the fallback), else None."""
+    """A lead from one alert link when its words read as a job title, else None."""
     if not url.startswith(("http://", "https://")) or not words or len(words) > MAX_TITLE:
         return None
     if NOT_JOBS.search(words) or not JOB_WORDS.search(words):

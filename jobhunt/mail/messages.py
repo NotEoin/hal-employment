@@ -20,7 +20,7 @@ WEEK_DAYS = 6
 EMPLOYER_KINDS_NOT = ("alert",)
 EMAIL_TONES = {"interview": "good", "offer": "good", "assessment": "info", "human": "info"}
 ALERT_TONES = {"urgent": "warn", "error": "bad", "good": "good", "info": "info"}
-ATTENTION = ("assessment", "interview", "offer", "human")   # L gmail.py:41
+ATTENTION = ("assessment", "interview", "offer", "human")   # the kinds of email that need the person
 SENDER_NAME = re.compile(r'^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$')
 
 

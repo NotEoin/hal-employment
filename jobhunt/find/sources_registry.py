@@ -8,8 +8,8 @@ off for a programmer, and so on) until the person switches it themselves; from t
 
 Fetching is separate from storing: `fetch()` touches only the network, so the search can run many sources
 in threads, and `record()` writes one `source_runs` row and the source's health afterwards. A source that
-needs a key Hal does not have is skipped with plain words saying what is missed, never an error (most
-people never get job-board keys).
+needs a key Hal does not have is skipped with plain words saying what is missed, never an error, so
+someone without job-board keys still gets every source that needs none.
 
 `BUILTIN_FETCHERS` is the same dict object as `cli.find.STANDALONE`, so code and tests that replace a
 built-in fetcher there change what the registry runs.
@@ -499,7 +499,7 @@ def fix_for(source: dict) -> dict | None:
 
 
 def listing(con: sqlite3.Connection) -> list[dict]:
-    """Every source as Where Hal looks shows it (GET /sources)."""
+    """Every source as Where Hal looks shows it."""
     sync(con)
     order = "enabled DESC, CASE kind WHEN 'aggregator' THEN 0 WHEN 'board' THEN 1 WHEN 'email_alerts' THEN 2 " \
             "ELSE 3 END, created, name"

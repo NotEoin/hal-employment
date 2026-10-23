@@ -67,7 +67,7 @@ def _prepare_example(world) -> dict:
                why="One of your best matches; Hal prepares documents ahead ({n} of {target})", priority=2,
                example=_prepare_example)
 def prepare(ctx, n: int = 1, target: int | None = None) -> dict:
-    """One unit of preparing ahead: the next screen or pack (L replenish.py)."""
+    """One unit of preparing ahead: the next screen or pack."""
     from jobhunt import replenish
 
     ctx.step("Looking for the next best match to prepare")

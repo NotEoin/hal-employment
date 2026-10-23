@@ -69,7 +69,7 @@ area = "Charities, policy and research with a social purpose"
 fetch = "80k"
 on_for = ["technical_grad", "humanities_grad", "career_changer", "internship_seeker"]
 # The search key is the one 80,000 Hours' own job board sends from every visitor's browser: believed public
-# and search-only (not confirmed with 80,000 Hours). Moved here from sources/startups.py.
+# and search-only. Moved here from sources/startups.py.
 config = { app_id = "W6KM1UDIB3", search_key = "d1d7f2c8696e7b36837d5ed337c4a319" }
 
 [[source]]

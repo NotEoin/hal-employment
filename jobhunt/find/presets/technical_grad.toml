@@ -1,4 +1,4 @@
-# Technical graduate: today's scoring (L score.py:161-321), so the owner's scores carry over unchanged.
+# Technical graduate: the scoring Hal began with, so existing scores carry over unchanged.
 # The role and avoid lists are today's FIELD and NOT_FIELD words; "re:" lines are regular expressions.
 label = "Technical graduate"
 kinds = ["graduate_job", "graduate_scheme", "internship", "fixed_term"]

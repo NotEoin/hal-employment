@@ -8,7 +8,7 @@ from ..core import clock
 from . import messages
 
 URGENCY = 20                 # after actions waiting for you (10), before documents to make again (30)
-RECENT_DAYS = 3              # as gmail.sync's attention window (L gmail.py:440)
+RECENT_DAYS = 3              # as gmail.sync's attention window
 ICONS = {"interview": "calendar", "assessment": "calendar", "offer": "star", "human": "mail"}
 TITLES = {"interview": "Interview email", "assessment": "Test or assessment email", "offer": "Offer email",
           "human": "A person wrote to you"}

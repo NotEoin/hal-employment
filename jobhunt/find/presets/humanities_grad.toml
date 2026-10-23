@@ -1,4 +1,4 @@
-# Humanities graduate: the points of this preset. Roles and interests come from the person's goal.
+# Humanities graduate: points for this kind of search. Roles and interests come from the person's goal.
 label = "Humanities graduate"
 kinds = ["graduate_job", "graduate_scheme", "internship", "fixed_term"]
 role_filter = false
