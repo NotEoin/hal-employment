@@ -13,6 +13,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import support  # noqa: F401 - must come before jobhunt
+
 from jobhunt.core import tls
 
 ROOT = Path(__file__).resolve().parent.parent
