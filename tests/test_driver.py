@@ -84,6 +84,7 @@ class Applying(Practice):
         app = self.con.execute("SELECT handed_over_at FROM applications WHERE job_id = ?", (job_id,)).fetchone()
         self.assertTrue(app["handed_over_at"].endswith("Z"))
         # The applicant presses Submit; the site's thanks marks the job applied.
+        driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         self.press_yourself(job_id, "#send")
         self.assertFalse(server._watch_step(self.con, job_id, {}))
         self.assertEqual(self.status(job_id), "applied")
@@ -103,6 +104,7 @@ class Applying(Practice):
         self.assertEqual(form["done"][0]["fields"][-1]["source"], "your earlier answer")
         self.assertEqual(server.act_approve(self.con, job_id, []), driver.HANDED_OVER)
         # The applicant presses Submit; the site asks for the code it emailed.
+        driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         self.press_yourself(job_id, "#send")
         seen = {}
         self.assertTrue(server._watch_step(self.con, job_id, seen))

@@ -205,6 +205,7 @@ class Flows:
     def test_your_own_submit_still_works_after_hal_hands_over(self):
         job_id = self.practice_job("yours", "single.html")
         self.to_hand_over(job_id)
+        driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         self.on_page(job_id, "single.html", lambda tab: tab.click("text=Submit application"))
         self.assertEqual(self.site.sent("single"), 1)
         self.assertFalse(server._watch_step(self.con, job_id, {}))
@@ -213,6 +214,7 @@ class Flows:
     def test_types_the_emailed_code_and_leaves_the_button_to_you(self):
         job_id = self.practice_job("code", "code.html")
         self.to_hand_over(job_id)
+        driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         self.on_page(job_id, "code.html", lambda tab: tab.click("#send"))
         seen = {}
         self.assertTrue(server._watch_step(self.con, job_id, seen))

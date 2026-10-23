@@ -13,6 +13,7 @@ from support import legacy
 from support.legacy import EXTENSION, PROSE, Practice
 
 from jobhunt import db, extension
+from jobhunt.apply import driver
 from jobhunt.web import server
 
 # unittest runs these for this module: no salary research, and no private answers.
@@ -97,6 +98,7 @@ class InYourBrowser(Practice):
     def test_marks_the_page_then_follows_the_applicant_through_to_submitting(self):
         job_id = self.job("ext-journey", "form.html")
         server.act_auto(self.con, job_id)
+        driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         page = self.tab("form.html")
         marks = page.evaluate("""() => Object.fromEntries(['#fn', '#dob', '#notice'].map(
             s => [s, document.querySelector(s).closest('[data-hal-mark]')?.getAttribute('data-hal-mark') || null]))""")
