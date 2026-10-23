@@ -6,6 +6,7 @@ name come from `core.naming`. Each command reads and writes the job's numbered a
 and a pack drafted before those folders existed is still found where it was.
 """
 import sys
+from contextlib import closing
 
 from .. import db
 from ..core import naming
@@ -52,8 +53,9 @@ def cmd_letter(args):
     import re as _re
 
     from .. import letter
-    con = db.connect()
-    r = _find(con, args.id)
+    # closed here, not left to the garbage collector: Windows cannot remove an open database (CI, 2026-10-23)
+    with closing(db.connect()) as con:
+        r = _find(con, args.id)
     found = _pack_md(r)
     section = found and _re.search(r"## Cover letter\n(.*?)(?=\n## )", found.read_text(), _re.S)
     if not section:
@@ -67,8 +69,8 @@ def cmd_letter(args):
 
 def cmd_check(args):
     from .. import pack
-    con = db.connect()
-    rows = con.execute("SELECT * FROM jobs WHERE status = 'ready'").fetchall() if args.ready else [_find(con, args.id)]
+    with closing(db.connect()) as con:
+        rows = con.execute("SELECT * FROM jobs WHERE status = 'ready'").fetchall() if args.ready else [_find(con, args.id)]
     for r in rows:
         pack_md = _pack_md(r)
         if pack_md is not None:

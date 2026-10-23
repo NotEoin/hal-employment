@@ -12,6 +12,7 @@ import contextlib
 import io
 import json
 import re
+import sqlite3
 import time
 import unittest
 from collections.abc import Iterator
@@ -256,19 +257,28 @@ class Checklist(unittest.TestCase):
 
 class CommandLine(unittest.TestCase):
     def test_letter_and_check_read_the_numbered_application_folder(self):
-        """Regression: both read the old shared packs folder after packs moved into application folders."""
+        """Regression: both read the old shared packs folder after packs moved into application folders.
+
+        Also: both left their database open, so Windows could not remove the home afterwards (CI, 2026-10-23).
+        """
         from jobhunt.cli import docs as cli_docs
 
         with as_applicant(people.HUMANITIES) as a:
             job = add_job(a.con, "humanities_grad")
             pack_md = pack.build(a.con, job["id"], use_web=False)
-            made = []
+            made, opened = [], []
+            connect = db.connect
             with mock.patch.object(letter, "render", lambda body, out, *a, **k: made.append((body, out)) or out), \
-                    mock.patch.object(pack, "add_company_check", lambda md, company: made.append(md)):
+                    mock.patch.object(pack, "add_company_check", lambda md, company: made.append(md)), \
+                    mock.patch.object(db, "connect", lambda *a, **k: opened.append(connect(*a, **k)) or opened[-1]):
                 out = io.StringIO()
                 with redirect_stdout(out):
                     cli_docs.cmd_letter(SimpleNamespace(id=job["id"], to=None, subject=None))
                     cli_docs.cmd_check(SimpleNamespace(id=job["id"], ready=False))
+            self.assertTrue(opened)
+            for con in opened:
+                with self.assertRaises(sqlite3.ProgrammingError):   # closed
+                    con.execute("SELECT 1")
         self.assertEqual(made[0][1].parent, pack_md.parent)
         self.assertIn("Marnie Quillfeather", made[0][0])
         self.assertEqual(made[1], pack_md)
