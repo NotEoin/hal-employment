@@ -72,6 +72,15 @@ with World() as w:      # w.root, w.con, w.now
     ...
 ```
 
+Made-up CV files for the CV reading tests (a humanities graduate, a technical graduate and a career
+changer, each as PDF, Word and text, plus a picture-only PDF) are made by `tests/support/make_cv_fixtures.py`
+into `tests/fixtures/cv/`. The files are the same byte for byte on every run; `--check` compares them with
+the files on disk.
+
+```bash
+.venv/bin/python tests/support/make_cv_fixtures.py --check   # 0 when tests/fixtures/cv/ is up to date
+```
+
 ## Command-line goldens
 
 `tests/goldens/cli/*.txt` hold what each command of gate G4 printed at ef53088, run in-process in a fresh

@@ -203,6 +203,39 @@ stopped. In a test run the backend is a made-up AI that is never ready. `llm.py`
 shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. One classifier,
 `autofill.private_question(field)`, keeps private questions out of every AI request.
 
+## CV store (`cvstudio/model.py`, `cvstudio/store.py`, `jobhunt/cv.py`)
+
+- `cvstudio/model.py` is schema 2: every section, entry and line has a stable id. `apply` changes a document
+  by target (`""` is the whole document), `diff` compares by id (a swap counts as one move), and
+  `to_v1`/`from_v1` keep the printable `cv.json`. Fields schema 2 has no place for travel in `extras`.
+- Versions never change after they are written. `store.new_version` adds one under `BEGIN IMMEDIATE`, so two
+  saves at once get two numbers, and publishes the event `cv`. A version made with `job_id=` belongs to that
+  job: it is kept out of the main list and never becomes Hal's main copy.
+- The bin keeps a version for 30 days. It is emptied lazily (`purge_bin`, whenever versions are listed),
+  and never removes a version an application or job still points at.
+- Files are kept read-only as `cv/files/<sha256>.<ext>`; `file_bytes` checks the SHA-256 on every read and
+  raises `CVError` when it no longer matches. `set_baseline_file` makes a kept file "your original file".
+- `jobhunt/cv.py` is a compatibility layer over the store for Classic and the old modules (`load`,
+  `for_editing`, `save_base`); a classic save becomes a version. Nothing reads the website folder any more.
+- The data task `cv.import_v1` (after migration 11) imports today's `cv.json`, each overrides snapshot and
+  the overrides as versions. The task loader does not look for a module named `import_v1`, so the task is
+  registered by importing it from `cvstudio/legacy_actions.py`. Text it could not
+  place goes into `extras.not_found`, which shows on Home and My CV until a later version holds it again.
+
+## CV reading (`cvstudio/parse.py`, `parse_actions.py`, `parse_routes.py`)
+
+- `POST /cv/upload` does the cheap checks (10 MB, 6 pages, kind, a PDF with no text layer), keeps the file
+  with `store.add_file(..., role="baseline")` and starts `cv.parse` (subject `cv.parse`, replacing a reading
+  still running). The action makes the file the baseline, then version "Your file: <name> (never changed)"
+  from Hal's own reading, then asks the AI (`cv_parse`, role checker, priority 0) and makes "Hal read your
+  uploaded CV into sections" only when the AI's reading differs.
+- A field says "Check this" when its value is not in the file's normalised text, the AI's confidence is
+  under 0.6, the year has two digits, or a field a CV normally has is missing. With no AI, a `PrivateLeak` or
+  an empty reply, Hal's own reading is kept and a step says why.
+- Report rows name one field each (`contact/<key>`, `s:<section>/e:<entry>/<field>`, `.../b:<bullet>`). A
+  correction makes "You corrected N things Hal misread". `GET /cv/parse-report` answers an empty report before
+  any CV is added, so no page meets a 404.
+
 ## Names (`core/naming.py`)
 
 `file_name("cv" | "letter")` fills the `cvdocs.*file_name` template with `you.name`; `folder_name(n, company,
