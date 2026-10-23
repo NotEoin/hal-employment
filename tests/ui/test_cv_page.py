@@ -14,8 +14,8 @@ from test_cv_import import SITE, lay_out
 
 from jobhunt.cvstudio import import_v1, store
 
-# Addresses other parts answer: Home's summary, and the Word export.
-NOT_YET = ("/api/v2/home", "/api/v2/cv/export")
+# Home's summary, which this test's bare server does not draw.
+NOT_YET = ("/api/v2/home",)
 FAILED_LOAD = "Failed to load resource"
 
 
@@ -55,10 +55,10 @@ class CvPage(unittest.TestCase):
                 p = self.page("cv", size, scheme)
                 p.page.wait_for_selector("text=At a glance")
                 self.assertEqual(p.page.inner_text("#main h1"), "My CV")
-                body = p.page.inner_text("#main")
-                self.assertIn("Employers get: Hal's copy of your CV, version 4.", body)
-                self.assertIn(SITE["education"][0]["qualification"], body)
-                self.assertIn("Tree index in C", body)
+                self.assertIn("Employers get: Hal's copy of your CV, version 4.", p.page.inner_text("#main"))
+                paper = p.page.frame_locator("iframe[title='Your CV']").locator("main").inner_text()
+                self.assertIn(SITE["education"][0]["qualification"], paper)
+                self.assertIn("Tree index in C", paper)
                 self.assertEqual(self.errors(p), [])
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])

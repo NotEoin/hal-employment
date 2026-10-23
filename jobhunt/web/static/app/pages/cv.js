@@ -6,6 +6,7 @@ import { useApi, openDialog } from "../core/store.js";
 import { Head, Tabs, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { CvTab } from "../cv/cv-tab.js";
+import { previewUrl } from "../ui/doc-preview.js";
 import { SuggTab } from "../cv/sugg-tab.js";
 import { StyleTab } from "../cv/style-tab.js";
 import { ChecksTab } from "../cv/checks-tab.js";
@@ -31,6 +32,8 @@ export function CvStudio({ arg }) {
     <//>
     ${error && html`<${Note} icon="warn" tone="warn">${error.message}<//>`}
     ${cv && html`<div class="note lock cv-employers"><${Icon} n="file" /><div style="flex:1;min-width:0"><b>${cv.employers_get}</b> <span class="sub">${cv.employers_get_sub}</span></div>
+      <a class="btn quiet small" href=${cv.send === "original" ? "/api/v2/cv/original" : previewUrl({ versionId: cv.version.id, look: cv.look.id })}
+        target="_blank" rel="noopener">${cv.send === "original" ? "Your file" : "Preview"}</a>
       <button type="button" class="btn small" onClick=${() => setT("cv")}>Change</button></div>`}
     <${Tabs} label="My CV" value=${t} onChange=${setT} tabs=${[["cv", "Your CV", ""], ["sugg", "Suggestions", pending || ""],
       ["style", "Type and look", ""], ["checks", "Checks", ""], ["versions", "Versions", shown || ""]]} />

@@ -1,40 +1,13 @@
 /* The Your CV tab: the CV as it stands, your file, what employers get, and a glance at
-   the checks and suggestions. The paper here is a plain reading of the version in use; the preview drawn in
-   the chosen look replaces it when looks arrive (ui/doc-preview.js). */
+   the checks and suggestions. The CV is the page Hal prints, in the chosen look (ui/doc-preview.js), so what
+   the person reads here is what an employer gets as Hal's copy. */
 import { html } from "../core/html.js";
 import { put } from "../core/api.js";
-import { useApi, openDialog, toast, invalidate } from "../core/store.js";
+import { openDialog, toast, invalidate } from "../core/store.js";
 import { dayWords, clock } from "../core/format.js";
 import { Seg, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
-
-const DATE_SEP = " - ";
-
-function when(e) { return e.end ? e.start + DATE_SEP + e.end : e.start; }
-
-function Body({ e }) {
-  if (e.style === "paragraph") return e.text ? html`<p>${e.text}</p>` : null;
-  return e.bullets.length > 0 && html`<ul>${e.bullets.map(b => html`<li key=${b.id}>${b.text}</li>`)}</ul>`;
-}
-
-function Entry({ e, kind }) {
-  if (kind === "skills") return html`<p><b>${e.heading}:</b> ${e.items.join(", ")}</p>`;
-  const org = [e.org, e.location].filter(Boolean).join(", ");
-  const extra = [e.grade, e.meta].filter(Boolean).join(". ");
-  return html`<div class="ent"><div class="top"><b>${e.heading}</b><span>${when(e)}</span></div>
-    ${org && html`<div class="org">${org}</div>`}${extra && html`<div class="org">${extra}</div>`}<${Body} e=${e} /></div>`;
-}
-
-/** A plain reading of a CV document on paper: the name and contact from your details, then each section. */
-export function CvPaper({ doc, name, contact }) {
-  const secs = doc.sections.filter(s => s.visible);
-  return html`<div class="docwrap"><div class="doc l-classic" aria-label="Your CV">
-    <h1>${name || "Your name"}</h1>${doc.headline && html`<div class="contact">${doc.headline}</div>`}
-    ${contact && html`<div class="contact">${contact}</div>`}
-    ${secs.map(s => html`<div key=${s.id}><div class="sec">${s.title}</div>${s.text && html`<p>${s.text}</p>`}
-      ${s.entries.filter((e, i) => !e.hidden && (s.max_entries == null || i < s.max_entries)).map(e => html`<${Entry} key=${e.id} e=${e} kind=${s.kind} />`)}
-      ${s.also && html`<p>${s.also}</p>`}</div>`)}</div></div>`;
-}
+import { DocPreview } from "../ui/doc-preview.js";
 
 function YourFile({ cv }) {
   const b = cv.baseline;
@@ -76,11 +49,10 @@ function Glance({ cv, setT }) {
 
 /** The tab. */
 export function CvTab({ cv, setT }) {
-  const { data: doc } = useApi("/cv/document");
-  if (!cv || !doc) return html`<p class="sub">Loading your CV.</p>`;
+  if (!cv) return html`<p class="sub">Loading your CV.</p>`;
   return html`<div class="grid2 even">
-    <div><${CvPaper} doc=${doc} name=${cv.name} contact=${cv.contact} />
-      <p class="small sub" style="margin-top:8px">This is your CV as it stands (version ${doc.n}).</p></div>
+    <div><${DocPreview} versionId=${cv.version.id} look=${cv.look.id} label="Your CV" />
+      <p class="small sub" style="margin-top:8px">This is your CV as it stands (version ${cv.version.n}).</p></div>
     <div class="stack">
       ${cv.not_found.length > 0 && html`<${Note} icon="warn" tone="warn"><b>Some of your old CV is not in Hal's copy yet.</b> Check these and add them back if you need them: ${cv.not_found.join("; ")}<//>`}
       <${YourFile} cv=${cv} /><${Sending} cv=${cv} /><${Glance} cv=${cv} setT=${setT} /></div></div>`;

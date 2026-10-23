@@ -210,7 +210,19 @@ MADE_UP_PAGES = {
                      {"id": "result_bullets", "name": "Bullets show a result where there is one", "ok": False,
                       "weight": 2.0, "note": "One bullet has no result.", "suggestion_id": None}]},
         "recruiter": None, "job": None, "jobs": []},
+    # My CV, the look gallery
+    "/cv/looks": [{"id": "classic", "name": "Classic", "safe": True, "note": "One column, plain headings",
+                   "chosen": True},
+                  {"id": "modern", "name": "Modern", "safe": True, "note": "One column, coloured headings",
+                   "chosen": False},
+                  {"id": "compact", "name": "Compact", "safe": True, "note": "Fits more on each page", "chosen": False},
+                  {"id": "two", "name": "Two columns", "safe": False, "note": "For printing and networking",
+                   "chosen": False}],
 }
+# The page a CV preview iframe shows (the real server sends the printed page; every version and look get this).
+MADE_UP_PREVIEW = (b'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>CV</title></head>'
+                   b"<body><main><h1>Robin Example</h1><p>A made-up profile.</p></main></body></html>")
+PREVIEW_POLICY = "default-src 'none'; style-src 'unsafe-inline'"
 
 
 @dataclass
@@ -289,6 +301,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(st.home)
         elif unquote(path) in st.pages:
             self._json(st.pages[unquote(path)])
+        elif path.startswith("/cv/versions/") and path.endswith("/preview.html"):
+            self._send(200, MADE_UP_PREVIEW, "text/html; charset=utf-8", {"Content-Security-Policy": PREVIEW_POLICY})
         elif path == "/search":
             q = (query.get("q") or [""])[0].lower()
             self._json([r for r in st.search if q in r["label"].lower()])
