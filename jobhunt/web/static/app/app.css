@@ -364,7 +364,8 @@ input[type="range"] { accent-color: var(--primary); width: 180px; max-width: 100
 .settings { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 28px; align-items: start; }
 @media (max-width: 860px) { .settings { grid-template-columns: minmax(0, 1fr); } .sgroups { position: static !important; flex-direction: row !important; overflow-x: auto; } .sgroups .nav { width: auto; white-space: nowrap; } }
 .sgroups { position: sticky; top: 70px; display: flex; flex-direction: column; gap: 1px; }
-.setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 22px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line); }
+/* the label column keeps room for its words: a wide row of choices squeezed it to one word a line (Windows 11 install test) */
+.setting { display: grid; grid-template-columns: minmax(min(13em, 40%), 1fr) auto; gap: 6px 22px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .setting:last-child { border-bottom: 0; }
 .setting .lab { font-weight: 700; }
 .setting .ctl { justify-self: end; max-width: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }

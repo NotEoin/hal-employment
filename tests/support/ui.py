@@ -15,7 +15,9 @@ from typing import Any
 
 AXE = Path(__file__).resolve().parents[1] / "vendor" / "axe.min.js"
 LOAD_TIMEOUT_MS = 10000   # the shell draws in well under a second; this only bounds a broken page
-SIZES = {"wide": {"width": 1400, "height": 900}, "narrow": {"width": 400, "height": 860}}
+SIZES = {"wide": {"width": 1400, "height": 900}, "narrow": {"width": 400, "height": 860},
+         # Hal's Edge app window as it opens on a 1280 x 800 laptop (Windows 11 test VM)
+         "laptop": {"width": 1033, "height": 690}}
 SERIOUS = ("serious", "critical")
 
 # Every deep link of the app, with made-up ids where a route takes one.

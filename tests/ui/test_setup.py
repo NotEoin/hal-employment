@@ -26,6 +26,7 @@ GOOD_PASSWORD = "qrst uvwx yzab cdef"   # made up
 ADDRESS = "marnie.quillfeather@example.com"
 STEPS = ["welcome", "cv", "about", "goal", "record", "ai", "helper", "email", "phone", "updates", "done"]
 FAILED_LOAD = "Failed to load resource"
+MIN_LABEL_PX = 150                      # room for "Kinds of role" on one line
 
 
 class FakeGmail:
@@ -185,6 +186,18 @@ class SetupGuide(unittest.TestCase):
         p.page.goto(f"http://127.0.0.1:{self.hal.port}/#setup")
         self.at(p, "cv")
         self.check(p, "resumed")
+
+    def test_labels_keep_room_for_their_words_in_the_laptop_window(self) -> None:
+        # Windows 11 install test (2026-10-23): in the 1033-pixel app window the rows of choices squeezed "Kinds of
+        # role" and "Start from a career area" into a column one word wide
+        p = self.tab("laptop", "light")
+        p.page.goto(f"http://127.0.0.1:{self.hal.port}/#setup-goal")
+        self.at(p, "goal")
+        widths = p.page.evaluate("[...document.querySelectorAll('.sinner .setting')].map(r => [r.querySelector('.lab')"
+                                 ".textContent, r.firstElementChild.getBoundingClientRect().width])")
+        narrow = [label for label, width in widths if width < MIN_LABEL_PX]
+        self.assertEqual(narrow, [], widths)
+        self.check(p, "laptop goal")
 
     def test_every_step_has_a_heading_and_the_list_names_all_eleven(self) -> None:
         p = self.tab("wide", "light")
