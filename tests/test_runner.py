@@ -20,6 +20,7 @@ from jobhunt.core import paths, runner
 from jobhunt.web import server
 
 WAIT_S = 10
+SHORT_S = 0.2   # long enough to see that a held action keeps `idle` waiting
 CHILD_TIMEOUT_S = 60
 REPO = Path(__file__).resolve().parents[1]
 
@@ -39,7 +40,8 @@ def fresh_home():
         try:
             yield con
         finally:
-            runner.flush()
+            # every action's thread lets go of its connection and lock file first: Windows cannot remove them
+            runner.idle(WAIT_S)
             con.close()
 
 
@@ -80,6 +82,16 @@ class Runner(unittest.TestCase):
         action_id = runner.start("test.gated", **start)
         self.assertTrue(reached.wait(WAIT_S))
         return action_id, reached, release
+
+    def test_idle_waits_until_every_action_has_let_go_of_its_files(self):
+        # regression: Windows could not remove a test's home while an action still held its lock file open
+        action_id, _, release = self.gated()
+        self.assertFalse(runner.idle(SHORT_S))
+        self.assertTrue(runner._lock_path(action_id).exists())
+        release.set()
+        self.assertTrue(runner.idle(WAIT_S))
+        self.assertFalse(runner._lock_path(action_id).exists())
+        self.assertEqual(runner.get(action_id)["state"], "done")
 
     def test_an_action_writes_its_steps_its_result_and_one_activity_row_with_a_why(self):
         def check(ctx, n):

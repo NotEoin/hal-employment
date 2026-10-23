@@ -1,6 +1,7 @@
 """The event stream: heartbeat, replay with Last-Event-ID, resync, the four-stream cap, the poller
 that brings other processes' rows in, and the bus underneath.
 """
+import contextlib
 import http.client
 import json
 import unittest
@@ -112,9 +113,8 @@ class Poller(unittest.TestCase):
     """Rows written by the CLI and scheduled children reach the page."""
 
     def test_rows_written_by_another_process_are_published(self):
-        with HalServer():
-            con = db.connect()
-            self.addCleanup(con.close)
+        # the connection closes before the server's home is removed: Windows cannot delete an open database
+        with HalServer(), contextlib.closing(db.connect()) as con:
             db.alert(con, "info", "Written before the poller started")
             con.commit()
             poller = sse.DbPoller(db.connect, stop=None)

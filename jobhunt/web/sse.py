@@ -60,6 +60,14 @@ def _unregister(session_id: str, bye: threading.Event) -> None:
             _open.pop(session_id, None)
 
 
+def end_all() -> None:
+    """Says bye to every open stream, so each ends at its next wake-up (a server that stops)."""
+    with _lock:
+        for byes in _open.values():
+            for bye in byes:
+                bye.set()
+
+
 def open_count(session_id: str) -> int:
     """How many streams this session has open."""
     with _lock:

@@ -18,11 +18,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from jobhunt.core import paths
+from jobhunt.core import paths, runner
 from jobhunt.core.settings import store
 from jobhunt.web import app, auth
 
 TIMEOUT_S = 10   # every request in these tests answers at once; a hang fails the test instead
+IDLE_S = 10      # the longest a test's background action may take to end once the test is over
 
 
 @dataclass
@@ -102,6 +103,8 @@ class HalServer:
         tmp = self._stack.enter_context(tempfile.TemporaryDirectory(prefix="hal-api-"))
         self.home = Path(tmp).resolve()
         self._stack.enter_context(paths.set_override(self.home))
+        # runs after the server stops and before the home goes: Windows cannot remove a file an action holds open
+        self._stack.callback(runner.idle, IDLE_S)
         store.drop_cache()
         self._stack.callback(store.drop_cache)
         paths.ensure()
@@ -109,8 +112,7 @@ class HalServer:
         self.port = self.httpd.server_address[1]
         thread = threading.Thread(target=self.httpd.serve_forever, name="test-server", daemon=True)
         thread.start()
-        self._stack.callback(self.httpd.server_close)
-        self._stack.callback(self.httpd.shutdown)
+        self._stack.callback(self.httpd.stop)
         return self
 
     def __exit__(self, *exc) -> None:

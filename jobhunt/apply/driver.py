@@ -676,6 +676,25 @@ def act_refill(con, job_id: str, edits: list[dict]) -> str:
 
 WATCH_PAUSE = 3  # seconds between looks at a tab Hal is watching
 WATCH_FOR = 3 * 60 * 60  # seconds a tab is watched after Hal last filled it
+WATCH_STOP_S = 30  # one look at a tab takes a few seconds at most; `stop_watching` waits this long in all
+_WATCH_STOP = threading.Event()   # set by `stop_watching`; every watch ends at its next look
+_WATCHERS: dict[str, threading.Thread] = {}
+
+
+def stop_watching(timeout: float = WATCH_STOP_S) -> bool:
+    """Ends every tab watch and waits for each to close its database connection; True when all ended.
+
+    A watch holds its connection for hours, and Windows cannot move or remove an open database, so whatever
+    replaces or removes the data folder (a test's clean-up, a restore) stops the watches first.
+    """
+    _WATCH_STOP.set()
+    try:
+        deadline = time.monotonic() + timeout
+        for thread in list(_WATCHERS.values()):
+            thread.join(max(0.0, deadline - time.monotonic()))
+        return not any(t.is_alive() for t in list(_WATCHERS.values()))
+    finally:
+        _WATCH_STOP.clear()
 
 
 def watch_tab(job_id: str) -> None:
@@ -691,7 +710,8 @@ def watch_tab(job_id: str) -> None:
         try:
             deadline = time.time() + WATCH_FOR
             while time.time() < deadline:
-                time.sleep(WATCH_PAUSE)
+                if _WATCH_STOP.wait(WATCH_PAUSE):
+                    return
                 busy = ACTIONS.get(job_id, {}).get("state") == "running"
                 if busy:
                     deadline = time.time() + WATCH_FOR
@@ -701,10 +721,14 @@ def watch_tab(job_id: str) -> None:
         except Exception:  # noqa: BLE001 - a watch that fails leaves the form as it is
             traceback.print_exc()
         finally:
-            WATCHING.discard(job_id)
             con.close()
+            if _WATCHERS.get(job_id) is threading.current_thread():
+                del _WATCHERS[job_id]
+            WATCHING.discard(job_id)
 
-    threading.Thread(target=watch, name="watch", daemon=True).start()
+    thread = threading.Thread(target=watch, name="watch", daemon=True)
+    _WATCHERS[job_id] = thread
+    thread.start()
 
 
 def _watch_step(con, job_id: str, seen: dict) -> bool:

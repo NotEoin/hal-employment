@@ -104,6 +104,12 @@ class Practice(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        from jobhunt.apply import driver
+        from jobhunt.core import runner
+
+        # tab watches and classic actions hold the database open; Windows cannot remove it until they end
+        driver.stop_watching()
+        runner.idle()
         cls.con.close()
         (autofill.profile, autofill.ask_model, autofill.choose_control, documents.render, documents.files,
          documents.load, gmail.security_code, server.browser.search, db.connect) = cls.saved

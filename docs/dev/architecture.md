@@ -105,7 +105,8 @@ row in area system. `local_only=True` answers 409 `remote` in a session from ano
 
 A browser that closes the page mid-reply is normal: any `ConnectionError` while replying (Linux
 `BrokenPipeError`, Windows `ConnectionAbortedError`, WinError 10053) is dropped without a log line or an
-Activity row.
+Activity row. `AppServer.stop()` stops serving, ends the event streams and waits for the requests in flight,
+because each holds a database connection and Windows cannot remove an open file.
 ## Sign-in (`web/auth.py`)
 
 - `mint_open_url(remote=, remote_host=, port=, next=)` writes a one-time token (SHA-256 only, 120 s) to
@@ -135,6 +136,8 @@ processes, once a second. Payloads carry ids, never private data.
   subject unless `replace=True`.
 - Bookkeeping writes go through one writer thread with its own connection, so a caller holding a write
   transaction never waits on itself; reads in the same process call `runner.flush()` first.
+- `runner.idle(timeout)` waits until no action of this process is queued or running, each has closed its
+  connection and lock file, and every row has landed (tests call it before removing their home).
 - Each live action holds `state/actions/<id>.lock`. At server start `recover()` marks only rows whose lock
   is free as interrupted ("Hal closed before this finished"), so a command-line run beside the server is
   left alone. A stop from another process is read at the next checkpoint.

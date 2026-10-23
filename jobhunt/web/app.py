@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -43,6 +44,7 @@ HELPER_PATHS = ("/api/v2/helpers/", "/api/ext/")   # where a browser extension's
 LEGACY_PREFIXES = ("/api/", "/doc/")
 LEGACY_PATHS = ("/files", "/pages")
 HEALTH_TIMEOUT_S = 2
+STOP_WAIT_S = 10           # an event stream ends within its wake-up time; other replies are quicker still
 GIT_TIMEOUT_S = 5
 LOG_BYTES = 2 * 1024 * 1024        # 5 files of 2 MB
 LOG_COUNT = 5
@@ -326,6 +328,35 @@ class AppServer(ThreadingHTTPServer):
 
     def __init__(self, port: int) -> None:
         super().__init__((BIND, port), AppHandler)
+        self._in_flight: set[threading.Thread] = set()
+        self._in_flight_lock = threading.Lock()
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        """Handles one request on its own thread, remembered until it ends so `stop` can wait for it."""
+        me = threading.current_thread()
+        with self._in_flight_lock:
+            self._in_flight.add(me)
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            with self._in_flight_lock:
+                self._in_flight.discard(me)
+
+    def stop(self, timeout: float = STOP_WAIT_S) -> bool:
+        """Stops serving, ends the event streams and waits for requests in flight; True when every one ended.
+
+        A request thread holds its database connection until it ends, and Windows cannot move or remove an
+        open file, so a restart or a test's clean-up waits here rather than racing the last replies.
+        """
+        self.shutdown()
+        sse.end_all()
+        deadline = time.monotonic() + timeout
+        with self._in_flight_lock:
+            threads = list(self._in_flight)
+        for t in threads:
+            t.join(max(0.0, deadline - time.monotonic()))
+        self.server_close()
+        return not any(t.is_alive() for t in threads)
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """A client that disconnected is not an error; anything else is logged with its traceback."""

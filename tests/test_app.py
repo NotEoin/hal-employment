@@ -1,18 +1,36 @@
-"""The new server (web/app.py): a browser that closes the page mid-reply is not an error.
+"""The new server (web/app.py): a browser that closes the page mid-reply is not an error, and `stop` waits for
+the requests in flight.
 
 Regression: on Windows a closed page raises ConnectionAbortedError (WinError 10053), which the replies did not
 catch, so every early close printed a traceback and the handler then tried to write a 500 to the dead socket.
 """
 import contextlib
+import http.client
 import io
 import logging
+import tempfile
+import threading
+import time
 import unittest
+from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
+from jobhunt.core import paths
 from jobhunt.web import app, server
+from jobhunt.web.router import Request, route
 
 GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+WAIT_S = 10       # every wait here ends in well under a second; this bounds a broken server
+HOLD_S = 0.3      # how long the slow route keeps its request in flight
+ENTERED, RELEASE = threading.Event(), threading.Event()
+
+
+@route("GET", "/api/v2/test-app/slow", auth="none")
+def _slow(req: Request) -> dict:
+    ENTERED.set()
+    RELEASE.wait(WAIT_S)
+    return {"ok": True}
 
 
 class Gone(io.RawIOBase):
@@ -68,6 +86,40 @@ class ClosedPage(unittest.TestCase):
             except ZeroDivisionError:
                 app.AppServer.handle_error(None, None, ("127.0.0.1", 0))
         self.assertIn("ZeroDivisionError", logs.output[0])
+
+
+class Serving(unittest.TestCase):
+    def setUp(self):
+        home = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="hal-app-")))
+        self.enterContext(paths.set_override(home))
+        paths.ensure()
+        self.httpd = app.AppServer(0)
+        self.port = self.httpd.server_address[1]
+        threading.Thread(target=self.httpd.serve_forever, name="test-app-server", daemon=True).start()
+        self.addCleanup(self.httpd.stop)   # a second stop does nothing
+
+    def get(self, path: str, out: list) -> None:
+        con = http.client.HTTPConnection(app.BIND, self.port, timeout=WAIT_S)
+        try:
+            con.request("GET", path, headers={"Host": f"{app.BIND}:{self.port}"})
+            out.append(con.getresponse().status)
+        finally:
+            con.close()
+
+    def test_stop_waits_for_the_requests_in_flight(self):
+        # regression: a request thread still held the database when a test removed its home on Windows
+        ENTERED.clear()
+        RELEASE.clear()
+        got: list[int] = []
+        client = threading.Thread(target=self.get, args=("/api/v2/test-app/slow", got))
+        client.start()
+        self.assertTrue(ENTERED.wait(WAIT_S))
+        threading.Timer(HOLD_S, RELEASE.set).start()
+        started = time.monotonic()
+        self.assertTrue(self.httpd.stop())
+        self.assertGreaterEqual(time.monotonic() - started, HOLD_S / 2)
+        client.join(WAIT_S)
+        self.assertEqual(got, [200])
 
 
 if __name__ == "__main__":

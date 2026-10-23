@@ -23,6 +23,7 @@ from jobhunt.core.settings import store
 KINDS = ["graduate_job", "graduate_scheme"]
 # Home's route is not built yet; the shell asks it for the menu counts and gets a 404.
 NOT_YET_BUILT = ("/api/v2/home",)
+ACTION_WAIT_S = 10   # a stand-in action ends at once; this only bounds a broken one
 LOAD_FAILED = "Failed to load resource"
 
 
@@ -123,6 +124,8 @@ class JobsPages(unittest.TestCase):
 
         p.page.keyboard.press("a")
         p.page.wait_for_url("**#app-*")
+        # the page moves on when the action is queued; the action itself runs on a pool thread
+        self.assertTrue(runner.idle(ACTION_WAIT_S))
         self.assertEqual(len(started), 1)
         self.assert_no_errors(p)
 

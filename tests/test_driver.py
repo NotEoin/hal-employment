@@ -9,9 +9,11 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from support import legacy
 from support.legacy import PROSE, Practice
+from test_runner import WAIT_S, fresh_home
 
 from jobhunt import autofill, browser, db, documents, replenish
 from jobhunt.apply import driver
@@ -407,6 +409,25 @@ class OpenForms(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             server.act_auto(self.con, "workable:1", fresh=True)
         self.assertEqual(self.calls[0], "open")
+
+
+class Watching(unittest.TestCase):
+    """A tab watch holds its database connection for hours; `stop_watching` ends every watch at once."""
+
+    def test_stop_watching_ends_every_watch_and_closes_its_connection(self):
+        # regression: Windows could not remove a test's database while a watch still held it open
+        looks = threading.Event()
+
+        def look(con, job_id, seen):
+            looks.set()
+            return True                       # the applicant is still on the form
+        with fresh_home(), mock.patch.object(driver, "_watch_step", look), \
+                mock.patch.object(driver, "WATCH_PAUSE", 0.05):
+            driver.watch_tab("test:watched")
+            self.assertTrue(looks.wait(WAIT_S))
+            self.assertTrue(driver.stop_watching())
+            self.assertNotIn("test:watched", driver.WATCHING)
+            self.assertEqual(driver._WATCHERS, {})
 
 
 if __name__ == "__main__":

@@ -32,8 +32,7 @@ def real_app(browser, size: str = "wide", scheme: str = "light"):
         yield p
     finally:
         p.close()
-        httpd.shutdown()
-        httpd.server_close()
+        httpd.stop()   # waits for its requests, which hold the world's database open until they end
 
 
 @skip_unless_browser

@@ -53,6 +53,7 @@ CARRY_ON_FROM = ("interrupted", "stopped", "error")
 USER_THREADS = 4             # priorities 0 and 1
 BACKGROUND_THREADS = 2       # priority 2
 CLASSIC_THREADS = 6          # as before the rebuild: classic actions mostly wait on the browser or the model
+IDLE_POLL_S = 0.5            # `idle()` looks again this often even unwoken, so a missed wake-up costs little
 STOP_POLL_S = 1.0            # how often a checkpoint asks the database whether another process said stop
 FLUSH_S = 2.0                # how long a read waits for this process's own writes to land
 EXIT_FLUSH_S = 10.0          # what a command-line run waits at exit for its last rows
@@ -94,6 +95,8 @@ _BACKGROUND = ThreadPoolExecutor(max_workers=BACKGROUND_THREADS, thread_name_pre
 _PRIORITY: contextvars.ContextVar[int] = contextvars.ContextVar("hal_action_priority", default=0)
 _CURRENT: contextvars.ContextVar[Ctx | None] = contextvars.ContextVar("hal_action", default=None)
 _lock = threading.RLock()
+_ended = threading.Condition(_lock)   # notified when an action's thread has let go of its connection
+_executing = [0]                       # threads inside `_execute`, which close their connection last
 
 
 class Stopped(BaseException):
@@ -592,6 +595,7 @@ def _finish(live: _Live, state: str, *, message: str = "", result: Any = None, e
         live.closed = True
         _LIVE.pop(live.id, None)
         _ENDING.add(live.id)
+        _ended.notify_all()
     if live.state == "stopped":
         state = "stopped"
     live.state = state
@@ -635,6 +639,17 @@ def _execute(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *,
     """Runs one action in this thread from start to end and records how it ended; never raises."""
     if live.state in FINAL:
         return
+    with _lock:
+        _executing[0] += 1
+    try:
+        _execute_counted(live, fn, resumed_from, classic=classic)
+    finally:
+        with _ended:
+            _executing[0] -= 1
+            _ended.notify_all()
+
+
+def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *, classic: bool) -> None:
     live.state, live.started = "running", time.monotonic()
     at, aid = clock.iso(), live.id
     _WRITER.put(live.connect, lambda con: con.execute(
@@ -746,6 +761,22 @@ def run(kind: str, *, subject: str | None = None, job_id: str | None = None, par
                   session_id=session_id, helper_id=helper_id)
     _execute(live, _bound(k, params), params.get("_carry_on_from"))
     return get(live.id)
+
+
+def idle(timeout: float = EXIT_FLUSH_S) -> bool:
+    """Waits until no action of this process is queued or running and every row has landed; True if so.
+
+    Each running action holds its database connection and lock file until then, and Windows cannot remove a
+    folder while a file in it is open, so a test's home (or the importer's dry run) waits here first.
+    """
+    deadline = time.monotonic() + timeout
+    with _ended:
+        while _LIVE or _executing[0]:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return False
+            _ended.wait(min(left, IDLE_POLL_S))
+    return flush(max(0.0, deadline - time.monotonic()))
 
 
 def wait(action_id: str, timeout: float = 10.0) -> dict:
