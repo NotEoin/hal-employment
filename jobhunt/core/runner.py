@@ -316,6 +316,9 @@ class _Live:
 
 
 _LIVE: dict[str, _Live] = {}
+# Actions of this process that have ended but whose last row write is still queued: their rows still say
+# running and their lock files are still held, yet no other window holds them.
+_ENDING: set[str] = set()
 
 
 class _Values(dict):
@@ -369,7 +372,7 @@ def _guarded(text: str | None) -> str | None:
 def _held_elsewhere(con: sqlite3.Connection, column: str, value: str, connect: Connect) -> dict | None:
     """An active row for `value` that another live process holds; rows left by an ended process are interrupted."""
     with _lock:
-        mine = set(_LIVE)
+        mine = set(_LIVE) | _ENDING
     rows = con.execute(f"SELECT * FROM actions WHERE {column} = ? AND state IN ('queued','running','waiting_for_you')",
                        (value,)).fetchall()
     for r in rows:
@@ -588,6 +591,7 @@ def _finish(live: _Live, state: str, *, message: str = "", result: Any = None, e
             return
         live.closed = True
         _LIVE.pop(live.id, None)
+        _ENDING.add(live.id)
     if live.state == "stopped":
         state = "stopped"
     live.state = state
@@ -602,6 +606,13 @@ def _finish(live: _Live, state: str, *, message: str = "", result: Any = None, e
     fault = _guarded(error)
 
     def op(con: sqlite3.Connection) -> None:
+        try:
+            _end_rows(con)
+        finally:
+            with _lock:
+                _ENDING.discard(aid)
+
+    def _end_rows(con: sqlite3.Connection) -> None:
         con.execute("""UPDATE actions SET state = ?, message = ?, result = ?, error = ?, ended = ?
                        WHERE id = ?""", (state, words, raw, fault, at, aid))
         con.execute("UPDATE action_steps SET state = ? WHERE action_id = ? AND state = 'running'", (step_state, aid))

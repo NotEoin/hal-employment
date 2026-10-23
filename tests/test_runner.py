@@ -10,6 +10,7 @@ import tempfile
 import textwrap
 import threading
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import support  # noqa: F401 - puts the run in a temporary home before jobhunt is imported
@@ -139,6 +140,35 @@ class Runner(unittest.TestCase):
         release.set()
         self.assertEqual(runner.wait(first)["state"], "stopped")
         self.assertIsNone(runner.running_for("demo:1"))
+
+    def test_an_action_that_just_ended_does_not_hold_its_subject(self):
+        # Regression: two quick CV type changes; the first cv.suggest had ended but its last row write was still
+        # queued, so the next start said "Hal is busy ... in another window"
+        held, holding = [], threading.Event()
+        put = runner._WRITER.put
+
+        def hold(connect, op):
+            (held.append((connect, op)) if holding.is_set() else put(connect, op))
+
+        def quick(ctx):
+            ctx.step("one look")
+            runner.flush()
+            holding.set()          # from here the ending's row write waits, as on a busy machine
+            return "ok"
+        self.kinds.add("test.quick", quick)
+        self.addCleanup(runner.flush)
+        with unittest.mock.patch.object(runner._WRITER, "put", hold):
+            first = runner.start("test.quick", subject="cv")
+            for _ in range(int(WAIT_S / 0.05)):
+                if first not in runner._LIVE and holding.is_set():
+                    break
+                threading.Event().wait(0.05)
+            second = runner.start("test.quick", subject="cv", replace=True)
+            holding.clear()
+            for connect, op in held:
+                put(connect, op)
+        self.assertEqual(runner.wait(second)["state"], "done")
+        self.assertEqual(runner.wait(first)["state"], "done")
 
     def test_the_running_action_is_found_by_its_subject(self):
         action_id, _, release = self.gated(job_id="demo:2")
