@@ -144,6 +144,12 @@ MADE_UP_PAGES = {
                              "at": "2026-10-22T09:00:00Z", "when": "09:00", "text": "Nothing was sent.",
                              "action": None, "tone": "warn", "employer": False}]},
     "/activity": {"days": [{"day": "Today", "items": []}], "more": None},
+    # What Hal remembers
+    "/memory/waiting": [{"id": "m1", "title": "Lower your distance from 35 to 20 miles?", "area": "Finding jobs",
+                         "why": 'You chose "Too far" for 4 jobs this week.', "effect": "A made-up effect.",
+                         "evidence": [{"label": "Researcher, Barnsley (22 miles)", "route": "job-demo:1"}]}],
+    "/memory/learned": [{"id": "l1", "what": "Travel up to 20 miles, not 35", "from": "A made-up reason",
+                         "when": "Today", "area": "Finding jobs", "on": True}],
     # Applications
     "/applications": MADE_UP_BOARD,
     "/applications/1": MADE_UP_APP,
