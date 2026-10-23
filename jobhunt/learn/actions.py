@@ -3,7 +3,7 @@
 The action is background work (priority 2) and needs no AI. A listener started with the server watches the
 event bus and runs it `DELAY_S` after the last event that could change a pattern, so hiding five jobs in a row
 makes one run, not five. Learning's own `suggestions` events carry `source="learn"` and are ignored, so a run
-never wakes the listener again. The nightly run comes from the in-app schedule.
+never wakes the listener again. The nightly run is `learn/schedule.py`, at 03:30.
 """
 from __future__ import annotations
 
