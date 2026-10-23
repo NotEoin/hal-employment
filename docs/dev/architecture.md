@@ -210,6 +210,55 @@ processes, once a second. Payloads carry ids, never private data.
 - Both modes show the same words for the form (`driver.form_words`), and the last page hands over as in
   the section above. `apply/home.py` and `apply/search.py` add applications to Home and to Ctrl K.
 
+## Notes about job sites (`jobhunt/sites/`)
+
+- Every page trick the engines know is a note: a kind (one hook each), a scope (`global`, `ats`, `site`,
+  `tenant`, `job`), a condition, an action and words for the person. `notes.for_page(url, ats=, job_id=,
+  step=)` gives the page's `NoteSet`; the most specific active note of a kind wins, and two that disagree are
+  a conflict named on the site's card. The 25 built-in notes ship in `sites/seed.toml` with stable ids; a
+  person's switch-off or rewording is a `site_notes` row naming the `seed_id`, so an update changes a built-in
+  note's action without undoing their choice.
+- `notes.site_key(url)` is the one rule for "which site is this": the registrable domain, except that Workday
+  and Greenhouse keep the employer (`acme.wd3.myworkdayjobs.com`, `boards.greenhouse.io/acme`).
+  `browser.site_key` and `apply/queries.py` use it, and sign-in state is kept per employer in `sites.account`.
+- "Something wrong here?" (`sites/report.py`, `sites/actions.py`) sends the person's words and a survey of the
+  page (labels and button names only, never answers, never a private question) to the `site_note` prompt.
+  A valid answer is shown as a draft with its scope choices and is used only after Save; with no AI, the
+  words are saved at once as a `note` for the site.
+- How notes are chosen, the hook table and the report flow: [Notes about job sites](site-notes.md).
+
+## Engines and note hooks (`browser.py`, `jobhunt/extension.py`, `apply/driver.py`)
+
+- Both engines read the page's `NoteSet` at the hook points below. Built today: `open_url`,
+  `press_first`, `cookie_button` and `field_transform` (`city_only`, `digits_only`, `uk_phone`,
+  `date:FORMAT`, `max_len:N`). The helper's hooks run on the server side, so `content.js` needs no notes.
+  With only the built-in notes on, each hook gives what the old constants gave
+  (`test_with_only_built_in_notes_hal_behaves_as_today`). Each use is recorded with `notes.used` and its trace
+  line (`{note, field, what}`) is kept on the field and in `form["notes_used"]`, which the Form step lists.
+- An upload is checked by finding the file's name in the input or on the page; a dropped file is
+  `UPLOAD_FAILED`, never done. The cookie clicker never presses inside a form. Multi-select lists get every
+  value. Google Forms frames are read. With "Open forms in: This window", the helper brings the tab forward
+  before each read, fill and press; watches (`peek`, `look`) never switch tabs.
+- `Browser._run` services Playwright while its queue is empty, so a tab the page opens is followed at once and
+  a person's own Submit in Hal's window is not held until Hal's next call. The page-world submit block counts
+  its holders, so two commands in one tab never lift each other's block.
+- Not built yet: forms in frames for the helper (`allFrames`), drop zones, review-page detection, and the
+  note kinds `wait_redirect`, `form_frame`, `ignore_frame`, `needs_account`, `buttons`, `widget`,
+  `upload_via` and `timing` (each is one more `notes.first(kind)` at its hook point).
+
+## Saved answers and "Why this answer?" (`autofill.py`, `jobhunt/answers/`)
+
+- `autofill.propose(..., notes=)` answers in this order: private and carer answers, site notes
+  (`field_answer`, `field_skip`), saved answers (by scope), the profile, the CV and record, then the AI. A note
+  never answers a question `autofill.private_question` matches. The driver passes the form's `NoteSet`, so the
+  employer's own notes apply, not only the advert's.
+- Every field carries `why` (the words under "Why this answer?") and `notes_used`. A private answer's why is
+  only "From your private answers. These are never shown to the AI or saved in logs.", in the API and again in
+  `app/form-step.js`. `autofill.by_you()` resets the why when the person's value replaces Hal's.
+- `answers/saved.py` and `answers/routes.py` serve the Saved answers tab (`GET`, `PUT`, `DELETE /answers`):
+  each answer with "Where may Hal use this?"; rows waiting for a choice are never used until the person picks;
+  a private question is never listed, changed or deleted (404).
+
 ## AI contract (`ai/base.py`, `ai/fake.py`, `ai/prompts.py`)
 
 `ChatRequest`, `ChatResult`, `Status`, `Backend`, `LLMUnavailable` (with `kind`), `Limited` and
@@ -349,6 +398,26 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   process for 30 minutes under `detected_id`. Saving a site is undone through `find/source_undo.py`.
 - Job alert emails from the senders in `find/seed/alert_senders.toml` (or `email.alert_senders`) go through
   one generic parser in `gmail.py`: each linked job becomes a lead.
+
+## How Hal learns (`jobhunt/learn/`)
+
+- `learn/patterns.py` finds three patterns: "Too far" for 4 or more jobs in 7 days, all beyond X miles (a
+  smaller distance); 5 or more saved or applied-to jobs sharing a title word missing from `goal.roles` (add the
+  word); two "Keep my wording" answers on one CV line (lock it). A pattern only calls `items.offer()`; it never
+  changes a setting, note or the CV (`test_nothing_changes_without_your_yes`). A waiting suggestion whose
+  pattern no longer holds is withdrawn on the next run.
+- `learn/items.py` applies a yes from the live value: a setting through `settings.set(..., by="learned")` with
+  its own Activity row and Undo (type `learned_item`), or a CV lock as a `cv_preferences` row of kind
+  `lock_line`. The replaced value is kept, and switch off, Delete and Undo put it back only while the value is
+  still the one Hal set. "Not now" asks again after 7 days; "Never suggest this" keeps the fingerprint
+  (`finding:max_distance:<current>:lower`, `finding:roles:add:<word>`, `cv:lock_line:<target>`).
+- Distances: scoring has none yet, so `learn/places.py` holds 160 UK town centres and measures straight-line
+  miles from "Where you live". A job whose location names no town in the table is never evidence.
+- When it runs: the action `learn.patterns` (priority 2, no AI) starts 20 s after the last job event, CV
+  suggestions event or finished search (a listener started with the server), nightly at 03:30
+  (`learn/schedule.py`), and for the "Too far" pattern alone when a job is hidden, so the reply's
+  `suggestion_id` says one is waiting. Learning's own events never start a run. Settings, Advanced,
+  "Suggestions from your choices" (`learn.enabled`) switches it off for jobs, the CV or both.
 
 ## Schedule (`core/scheduler.py`)
 

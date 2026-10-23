@@ -86,6 +86,13 @@ commit.
   with `on_helper` or `in_tab`. Playwright's sync API reads its driver only during a call, and on Windows a
   page's own form post waited for the test's next call (CI, 2026-10-23).
 
+## Docs tests
+
+`tests/test_docs.py` checks the docs as code: a new doc goes in `docs/README.md` (every row and every relative
+link must point at a file), each how-to has a task title, numbered steps, a trailing comment on every
+command and ends with a `| Symptom | Fix |` table, and the README's script options and `jobhunt` commands
+are read back from each command's `--help`. Add a doc and its index row in the same commit.
+
 ## The made-up world
 
 `tests/support/world.py` builds a temporary home with an invented applicant, 17 jobs across every status,
