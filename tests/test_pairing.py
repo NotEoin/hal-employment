@@ -4,6 +4,7 @@ These drive the real server over HTTP the way the helper's background does, with
 in the Origin header. The helper itself, loaded in a browser, is in tests/test_extension.py.
 """
 import threading
+import time
 import unittest
 from contextlib import closing
 from datetime import timedelta
@@ -17,6 +18,7 @@ from jobhunt.core import clock, events, settings
 
 SHORT_POLL_S = 0.2     # long enough for a poll to be held, short enough for a quick test
 WAIT_S = 5
+HELD_WRITE_S = 5   # far under the 30 s busy timeout a held write cost before
 
 
 def helper_origin() -> str:
@@ -173,6 +175,38 @@ class Keys(HelperTest):
             paired = pair(hal)
             self.assertEqual(hal.client().get("/api/v2/helpers", headers=key_headers(paired)).status, 401)
             self.assertEqual(hal.client().get("/api/v2/session", headers=key_headers(paired)).status, 401)
+
+
+class HeldWrite(HelperTest):
+    """Regression: the form driver held a write while it waited on the helper, so the helper's poll waited the
+    whole 30 s busy timeout to record itself, failed, and the command meant for it never arrived."""
+
+    def test_a_poll_is_answered_while_another_write_holds_the_database(self):
+        with HalServer() as hal:
+            paired = pair(hal)
+            with closing(db.connect()) as holder:
+                holder.execute("BEGIN IMMEDIATE")
+                started = time.monotonic()
+                reply = hal.client().post("/api/v2/helpers/poll", {"version": "1.0.0", "protocol": 1},
+                                          headers=key_headers(paired))
+                waited = time.monotonic() - started
+                holder.rollback()
+        self.assertEqual(reply.status, 200, reply.text)
+        self.assertLess(waited, SHORT_POLL_S + HELD_WRITE_S)
+
+    def test_the_carrier_is_kept_later_while_another_write_holds_the_database(self):
+        with HalServer(), closing(db.connect()) as con:
+            con.execute("INSERT INTO jobs (id, source, company, title, first_seen, last_seen) "
+                        "VALUES ('made-up:1', 'test', 'Made-up Ltd', 'Archivist', '2026-10-01', '2026-10-01')")
+            con.execute("INSERT INTO applications (job_id, stage, updated) VALUES ('made-up:1', 'form', '2026-10-01')")
+            con.commit()
+            with closing(db.connect()) as holder:
+                holder.execute("BEGIN IMMEDIATE")
+                started = time.monotonic()
+                self.assertFalse(helpers.carry(con, "made-up:1", "helper-1"))
+                self.assertLess(time.monotonic() - started, HELD_WRITE_S)
+                holder.rollback()
+            self.assertTrue(helpers.carry(con, "made-up:1", "helper-1"))
 
 
 class OldHelper(HelperTest):

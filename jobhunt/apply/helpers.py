@@ -15,6 +15,9 @@ Design decisions, each with its reason:
   extension id. A web page always sends its own Origin on a cross-site request and can never learn a key.
 - The version Hal wants is read from `<code>/extension/manifest.json` once (decision 16): the file and the
   server are updated together by git, and the updater always restarts Hal.
+- A poll's `last_seen` and the carrier of an application are bookkeeping, written with a short wait and
+  skipped while another write holds the database. The form driver can hold a write while it waits on this
+  very helper, so a full busy wait would hold up the poll that is to bring the driver its answer.
 """
 from __future__ import annotations
 
@@ -49,6 +52,7 @@ EXTENSION_SCHEME = "chrome-extension://"
 ID_HEX_DIGITS = 32
 ID_ALPHABET_START = ord("a")
 OLD_HELPER = "old"           # the queue of a 0.4 or 0.5 helper, which has no key and polls /api/ext/*
+BOOKKEEPING_WAIT_MS = 500    # how long a poll's bookkeeping waits for another write before it skips
 VERSION_PART = re.compile(r"\d+")
 
 _pairing = threading.local()
@@ -197,11 +201,21 @@ auth.register_verifier("pairing", _verify_pairing)
 
 # ------------------------------------------------------------------------------------------------ rows
 
+def _locked(e: sqlite3.OperationalError) -> bool:
+    return "locked" in str(e) or "busy" in str(e)
+
+
 def seen(con: sqlite3.Connection, helper_id: str, version: str | None, protocol: int | None) -> None:
-    """Records a poll: when it came and the version it carried."""
-    with con:
-        con.execute("UPDATE helpers SET last_seen = ?, version = COALESCE(?, version), protocol = COALESCE(?, protocol)"
-                    " WHERE id = ?", (clock.iso(), version, protocol, helper_id))
+    """Records a poll: when it came and the version it carried; skipped while another write holds the database."""
+    con.execute(f"PRAGMA busy_timeout = {BOOKKEEPING_WAIT_MS}")
+    try:
+        with con:
+            con.execute("UPDATE helpers SET last_seen = ?, version = COALESCE(?, version), "
+                        "protocol = COALESCE(?, protocol) WHERE id = ?", (clock.iso(), version, protocol, helper_id))
+    except sqlite3.OperationalError as e:
+        if not _locked(e):
+            raise
+        log.info("a poll of helper %s was not recorded: another write held the database", helper_id)
 
 
 def row(con: sqlite3.Connection, helper_id: str) -> sqlite3.Row | None:
@@ -287,11 +301,16 @@ def choose(con: sqlite3.Connection, job_id: str | None, connected: set[str]) -> 
 
 
 def carry(con: sqlite3.Connection, job_id: str, helper_id: str) -> bool:
-    """Keeps which helper carries a job's application; False while the job has no application row yet."""
+    """Keeps which helper carries a job's application; False while the job has no application row yet, or
+    while another write holds the database (the next command tries again)."""
+    con.execute(f"PRAGMA busy_timeout = {BOOKKEEPING_WAIT_MS}")
     try:
         with con:
             done = con.execute("UPDATE applications SET helper_id = ? WHERE job_id = ?", (helper_id, job_id))
-    except sqlite3.OperationalError:
-        log.warning("could not keep the helper of %s; the applications table is missing", job_id)
+    except sqlite3.OperationalError as e:
+        if _locked(e):
+            log.info("the helper of %s is kept at the next command: another write held the database", job_id)
+        else:
+            log.warning("could not keep the helper of %s: %s", job_id, e)
         return False
     return done.rowcount > 0
