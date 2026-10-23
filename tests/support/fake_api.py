@@ -186,6 +186,30 @@ MADE_UP_PAGES = {
                                    "entries": [], "also": "", "visible": True, "locked": False, "max_entries": None}]},
     "/cv/layout": {"sections": [{"id": "summary", "kind": "summary", "title": "Profile", "show": True, "lock": False,
                                  "max": None}], "locked_lines": []},
+    # My CV, Type and look and Checks
+    "/cv/types": {
+        "suggested": {"id": "general_grad", "name": "Graduate, any subject", "why": "You are a graduate."},
+        "current": {"id": "humanities_grad", "name": "Humanities and social science graduate", "builtin": True},
+        "writing": {"pages": 1, "tone": "plain", "format": "bullets", "results": "where_have",
+                    "never_use": ["passionate"]},
+        "spelling": "en-GB",
+        "types": [{"id": "humanities_grad", "name": "Humanities and social science graduate",
+                   "fits": "Recent graduates in history, politics, English, languages and similar",
+                   "order": "Profile, Education, Volunteering or experience, Skills", "pages": "Up to 2 pages",
+                   "note": "Shows the dissertation and strong modules.", "builtin": True, "tips": [],
+                   "based_on": ""}]},
+    "/cv/checks": {
+        "version_id": "v1-demo",
+        "scanner": {"score": 50, "parts": [
+            {"id": "readable", "name": "Text can be read", "got": 30, "max": 30, "note": "", "fix_id": None},
+            {"id": "headings", "name": "Standard headings", "got": 20, "max": 20, "note": "", "fix_id": None}]},
+        "type": {"type_id": "humanities_grad", "name": "Humanities and social science graduate", "passed": 1,
+                 "total": 2, "items": [
+                     {"id": "profile_evidence", "name": "Profile shows evidence, not qualities", "ok": True,
+                      "weight": 1.0, "note": "", "suggestion_id": None},
+                     {"id": "result_bullets", "name": "Bullets show a result where there is one", "ok": False,
+                      "weight": 2.0, "note": "One bullet has no result.", "suggestion_id": None}]},
+        "recruiter": None, "job": None, "jobs": []},
 }
 
 
