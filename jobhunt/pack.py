@@ -71,6 +71,7 @@ CHECKED_CLEAN = "Every fact is in your CV, record or the advert. No numbers were
 EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence line
 PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
 QUESTION_SHARE = 0.8      # share of a question's words the advert must hold for it to count as written out
+TITLED = re.compile(r"^Dear (Mr|Mrs|Ms|Miss|Mx|Dr)\.? ([^\s,]+),", re.M)   # a greeting with a title
 NOTE_PARA = re.compile(r"\(.*\)\Z|(notes?|word count)\b", re.S | re.I)   # a closing paragraph about the draft
 
 # Phrases that mark generic or machine-written prose; drafts containing them are flagged.
@@ -257,15 +258,31 @@ def message_to(job, analysis: dict, who: dict) -> str:
     return f"{FIND_PREFIX} on LinkedIn (search \"{job['company']} {title}\")"
 
 
+def contact_names(analysis: dict) -> list[str]:
+    """The names of the people the advert names; an email address is not a name."""
+    names = [(str(c.get("name") or "") if isinstance(c, dict) else str(c).split(",")[0]).strip()
+             for c in analysis.get("contacts") or []]
+    return [n for n in names if n and "@" not in n]
+
+
 def salutation(analysis: dict) -> str:
     """The letter's greeting: the first person the advert names, else the hiring team."""
     # the letter said "Dear Hiring Team" while the message beside it greeted the person the advert names
     # (made-up humanities advert, 2026-10-23)
-    for c in analysis.get("contacts") or []:
-        name = str(c.get("name") or "") if isinstance(c, dict) else str(c).split(",")[0]
-        if name.strip() and "@" not in name:
-            return f"Dear {name.strip()},"
-    return "Dear Hiring Team,"
+    names = contact_names(analysis)
+    return f"Dear {names[0]}," if names else "Dear Hiring Team,"
+
+
+def untitled(message: str, analysis: dict, advert: str) -> str:
+    """The message greeting the named person by full name, without a title (Ms, Mr) the advert never gives."""
+    # Claude greeted the advert's "Ada Penhallow" as "Dear Ms Penhallow," (2026-10-23), a guess at her title
+    m = TITLED.search(message)
+    if not m or re.search(rf"\b{m.group(1)}\.? {re.escape(m.group(2))}\b", advert):
+        return message
+    for name in contact_names(analysis):
+        if name.split()[-1] == m.group(2):
+            return message[:m.start()] + f"Dear {name}," + message[m.end():]
+    return message
 
 
 def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
@@ -292,6 +309,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     letter = written["text"]
     context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     message = drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip()))
+    message = untitled(message, analysis, job_text)
     questions = analysis.get("questions") or []
     answers = llm.chat_json(prompt("answers", who),
                             "Questions:\n" + "\n".join(f"- {q}" for q in [*questions, *COMMON_QUESTIONS])

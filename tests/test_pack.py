@@ -361,6 +361,21 @@ class Advert(unittest.TestCase):
             shown = pack.read_letter_notes(job)
         self.assertEqual(shown["evidence"], "Catalogued 300 letters into a spreadsheet; Guided 40 open-day tours")
 
+    def test_the_message_never_gives_the_named_person_a_title_the_advert_does_not(self):
+        # Claude greeted the advert's "Ada Penhallow, Head of Collections" as "Dear Ms Penhallow," (2026-10-23)
+        writer = reading(contacts=["Ada Penhallow, Head of Collections"])
+        plain = writer.reply
+        writer.reply = lambda system, user: ("Dear Ms Penhallow,\n\nI am applying.\n\nKind regards,\nMarnie"
+                                             if prompt_id(system) == "message" else plain(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertIn("\nDear Ada Penhallow,\n\nI am applying.", section(md, "Message to the hiring manager"))
+        self.assertNotIn("Ms Penhallow", md)
+        given = "Contact Dr Penhallow, Head of Collections."
+        self.assertEqual(pack.untitled("Dear Dr Penhallow,\n\nHello.", {"contacts": ["Ada Penhallow"]}, given),
+                         "Dear Dr Penhallow,\n\nHello.", "a title the advert gives is kept")
+
 
 class CommandLine(unittest.TestCase):
     def test_letter_and_check_read_the_numbered_application_folder(self):
