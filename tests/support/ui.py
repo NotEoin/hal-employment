@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -88,9 +89,36 @@ class AppPage:
         self.base_url = base_url
         self.errors: list[str] = []
         self.failed: list[str] = []   # requests that got no answer at all, with the browser's reason
-        self.page.on("requestfailed", lambda r: self.failed.append(f"{r.url}: {r.failure}"))
+        self._asked: dict[Any, float] = {}   # requests still waiting for an answer, with when they were sent
+        self.page.on("request", lambda r: self._asked.__setitem__(r, time.monotonic()))
+        self.page.on("requestfinished", lambda r: self._asked.pop(r, None))
+        self.page.on("requestfailed", self._failed)
         self.page.on("console", lambda m: m.type == "error" and self.errors.append(self._named(console_line(m))))
         self.page.on("pageerror", lambda e: self.errors.append(self._named(str(e))))
+
+    def _failed(self, request: Any) -> None:
+        self._asked.pop(request, None)
+        self.failed.append(f"{request.url}: {request.failure}")
+
+    def unanswered(self) -> list[str]:
+        """The requests still waiting for an answer and how long each has waited (the event stream always is)."""
+        now = time.monotonic()
+        return [f"{r.method} {r.url.removeprefix(self.base_url)} ({now - at:.1f} s)"
+                for r, at in list(self._asked.items())]
+
+    def problems(self) -> str:
+        """What the page reported and what it was still waiting for, for a failure message."""
+        return (f"errors: {self.errors}; requests with no answer: {self.failed}; requests still waiting: "
+                f"{self.unanswered()}")
+
+    def shows(self, locator: Any, what: str) -> None:
+        """Waits until `locator` is visible; the failure says what the page was still waiting for."""
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
+        try:
+            locator.first.wait_for(state="visible")
+        except PlaywrightTimeout as e:
+            raise AssertionError(f"{what} never showed; {self.problems()}") from e
 
     def _named(self, line: str) -> str:
         """`line`, then the browser's reason for any failed request it mentions (a module that never came)."""
@@ -121,8 +149,7 @@ class AppPage:
             self.page.wait_for_selector("#main .loading", state="detached")
             self.page.wait_for_selector("#main h1, .setup", state="visible")
         except PlaywrightTimeout as e:
-            raise AssertionError(f"the page never drew; errors: {self.errors}; requests with no answer: "
-                                 f"{self.failed}") from e
+            raise AssertionError(f"the page never drew; {self.problems()}") from e
 
     def sideways(self) -> int:
         """How many pixels the page scrolls sideways (0 is right)."""

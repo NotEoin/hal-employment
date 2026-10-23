@@ -13,7 +13,7 @@ from support.world import World
 
 from jobhunt.core import activity
 
-PAGE = 50   # the Activity route's page size (`limit=50`)
+PAGE = activity.PAGE_LIMIT   # one more line than this makes "Show earlier" appear
 
 
 @skip_unless_browser
@@ -51,9 +51,11 @@ class ActivityPage(unittest.TestCase):
         with real_app(self.browser) as p:
             p.open("activity")
             pg = p.page
+            # the heading draws before the lines arrive, so the count below means something only after this
+            p.shows(pg.locator(".act", has_text=f"Searched made-up site {PAGE + 1}"), "the newest line")
             self.assertEqual(pg.locator(".act", has_text="Sorted 3 new made-up emails").count(), 0)
             pg.get_by_role("button", name="Show earlier").click()
-            pg.locator(".act", has_text="Sorted 3 new made-up emails").wait_for()
+            p.shows(pg.locator(".act", has_text="Sorted 3 new made-up emails"), "the earlier email line")
             pg.get_by_role("button", name="Email", exact=True).click()
             pg.locator(".act", has_text="Searched made-up site").first.wait_for(state="detached")
             pg.locator(".act", has_text="Sorted 3 new made-up emails").wait_for()
