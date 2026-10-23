@@ -6,7 +6,7 @@
    (add a kind of role, show unpaid roles) the button changes it here and offers a re-check of every job.
 
    J and K move the choice down and up the list; A, S and N act on the chosen job. */
-import { html, cx, useState, useEffect, useRef } from "../core/html.js";
+import { html, cx, useState, useEffect, useRef, useLayoutEffect } from "../core/html.js";
 import { get, post, put, run } from "../core/api.js";
 import { go } from "../core/router.js";
 import { useApi, openDialog, toast } from "../core/store.js";
@@ -54,7 +54,8 @@ function JobList({ tab }) {
   // the keys read the newest list and choice through a ref, so two quick presses never use a stale one
   const live = useRef({ list: [], sel: -1 });
   live.current.list = list;
-  useEffect(() => { setMore([]); setSel(-1); live.current.sel = -1; }, [path]);
+  // a layout effect: Preact runs a plain one up to a frame late, where it can undo the person's first action
+  useLayoutEffect(() => { setMore([]); setSel(-1); live.current.sel = -1; }, [path]);
   const pick = delta => {
     const l = live.current;
     if (!l.list.length) return;

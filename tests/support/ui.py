@@ -20,6 +20,10 @@ SIZES = {"wide": {"width": 1400, "height": 900}, "narrow": {"width": 400, "heigh
          # Hal's Edge app window as it opens on a 1280 x 800 laptop (Windows 11 test VM)
          "laptop": {"width": 1033, "height": 690}}
 SERIOUS = ("serious", "critical")
+# Preact 10.24 runs effects after the next frame, or after 100 ms when no frame comes (`afterNextFrame` in
+# preact/hooks); `late_effects` holds both back, as a busy computer does.
+EFFECT_FALLBACK_MS = 100
+LATE_EFFECTS_MS = 1500
 
 # Every deep link of the app, with made-up ids where a route takes one.
 ROUTES = ["home", "jobs", "jobs-saved", "jobs-hidden", "jobs-where", "job-demo%3A1", "apps", "app-1", "inbox",
@@ -60,6 +64,18 @@ def chromium() -> Iterator[Any]:
             yield b
         finally:
             b.close()
+
+
+def late_effects(page: Any, delay_ms: int = LATE_EFFECTS_MS) -> None:
+    """Makes the app's effects run `delay_ms` late in `page`, so a test can act before they have run.
+
+    Call it before the page loads. It delays every animation frame and every 100 ms timer of the page's own
+    scripts; Playwright's scripts run in a world of their own and keep their timing.
+    """
+    page.add_init_script(
+        f"(() => {{ const later = window.setTimeout.bind(window), frame = window.requestAnimationFrame.bind(window);"
+        f" window.setTimeout = (fn, ms, ...args) => later(fn, ms === {EFFECT_FALLBACK_MS} ? {delay_ms} : ms, ...args);"
+        f" window.requestAnimationFrame = fn => frame(t => later(() => fn(t), {delay_ms})); }})()")
 
 
 class AppPage:

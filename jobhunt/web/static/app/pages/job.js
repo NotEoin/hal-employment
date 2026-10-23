@@ -3,7 +3,7 @@
    Every point is listed with the starting points and the total, so the score always adds up. Opening a job
    asks Hal to check its requirements once; "This does not matter to me" takes one
    requirement out of this job's score only. A hidden job says why it is hidden and how to change that. */
-import { html, useState, useEffect } from "../core/html.js";
+import { html, useState, useEffect, useLayoutEffect } from "../core/html.js";
 import { post, put } from "../core/api.js";
 import { go } from "../core/router.js";
 import { useApi, toast } from "../core/store.js";
@@ -21,7 +21,8 @@ const asked = new Set();   // jobs whose requirements Hal was asked to check in 
 /** One requirement, with the advert's words, what the person has and "This does not matter to me". */
 export function Req({ r, jobId }) {
   const [st, setSt] = useState(r.s);
-  useEffect(() => setSt(r.s), [r.s]);
+  // a layout effect: Preact runs a plain one up to a frame late, where it can undo the person's first action
+  useLayoutEffect(() => setSt(r.s), [r.s]);
   const off = async on => {
     try {
       const res = await post(jobPath(jobId) + "/requirements/" + r.n + "/off", { off: on });

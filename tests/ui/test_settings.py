@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from support.api import HalServer
-from support.ui import AppPage, chromium, skip_unless_browser
+from support.ui import AppPage, chromium, late_effects, skip_unless_browser
 
 from jobhunt import db
 from jobhunt.core import health_routes, paths, settings
@@ -45,9 +45,11 @@ class SettingsPage(unittest.TestCase):
         self.addCleanup(self.hal.__exit__, None, None, None)
         self.client = self.hal.signed_in()
 
-    def tab(self, route: str = "settings", size: str = "wide", scheme: str = "light") -> AppPage:
+    def tab(self, route: str = "settings", size: str = "wide", scheme: str = "light", *, busy: bool = False) -> AppPage:
         p = AppPage(self.browser, f"http://127.0.0.1:{self.hal.port}", size, scheme)
         self.addCleanup(p.close)
+        if busy:
+            late_effects(p.page)
         p.page.goto(self.hal.open_url(next="/#" + route))
         p.settle()
         p.page.wait_for_selector(".settings .card .setting")
@@ -61,14 +63,14 @@ class SettingsPage(unittest.TestCase):
         if more.count():
             more.first.click()
 
-    def until(self, done) -> None:
+    def until(self, done, what: str) -> None:
         deadline = time.monotonic() + SAVE_WAIT_S
         while not done() and time.monotonic() < deadline:
             time.sleep(POLL_S)
-        self.assertTrue(done())
+        self.assertTrue(done(), f"waited {SAVE_WAIT_S} s for {what}")
 
     def saved(self, key: str, expected) -> None:
-        self.until(lambda: settings.get(key) == expected)
+        self.until(lambda: settings.get(key) == expected, f"{key} to become {expected!r}")
 
     def test_every_registered_setting_can_be_changed_on_the_settings_page(self) -> None:
         changeable = {k for k, s in registry.REGISTRY.items()
@@ -112,7 +114,7 @@ class SettingsPage(unittest.TestCase):
         self.row(p, "goal.pattern").get_by_role("radio", name="Remote").click()
         self.saved("goal.pattern", "remote")
         self.row(p, "goal.kinds").get_by_label("Apprenticeships").check()
-        self.until(lambda: "apprenticeship" in settings.get("goal.kinds"))
+        self.until(lambda: "apprenticeship" in settings.get("goal.kinds"), "goal.kinds to take Apprenticeships")
         roles = self.row(p, "goal.roles").get_by_label("Add to Roles you want")
         roles.fill("archivist")
         roles.press("Enter")
@@ -134,6 +136,15 @@ class SettingsPage(unittest.TestCase):
         times.press("Enter")
         self.saved("schedule.search_times", ["08:00", "14:00"])
         self.assertEqual([e for e in p.errors if not e.startswith(MISSING_ROUTE)], [])
+
+    def test_what_you_type_as_the_page_draws_is_saved_on_a_busy_computer(self) -> None:
+        # a regression: a text box put its stored value back over what was typed when the page's effects ran
+        # late, so on a slow CI runner "Search for jobs at" never saved
+        p = self.tab("settings-schedule", busy=True)
+        times = self.row(p, "schedule.search_times").get_by_label("Search for jobs at")
+        times.fill("08:00 and 14:00")
+        times.press("Enter")
+        self.saved("schedule.search_times", ["08:00", "14:00"])
 
     def test_a_value_hal_cannot_read_shows_words_under_the_field(self) -> None:
         p = self.tab("settings-goal")

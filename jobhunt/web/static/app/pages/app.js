@@ -1,7 +1,7 @@
 /* One application and its four steps: Documents, Form, Sent, Interview, with Previous
    and Next through the applications in progress ([ and ] on the keyboard). Discard, Back to Matches and
    "I sent it myself" work at every step. */
-import { html, cx, useState, useEffect } from "../core/html.js";
+import { html, cx, useState, useLayoutEffect } from "../core/html.js";
 import { useApi, openDialog } from "../core/store.js";
 import { go, route } from "../core/router.js";
 import { useKeys } from "../core/keys.js";
@@ -24,7 +24,8 @@ export function AppPage({ arg }) {
   const path = arg ? "/applications/" + encodeURIComponent(arg) : null;
   const { data: a, error, reload } = useApi(path, { on: REFRESH_ON });
   const [view, setView] = useState(null);
-  useEffect(() => { setView(null); }, [arg]);
+  // a layout effect: Preact runs a plain one up to a frame late, where it can undo the person's first action
+  useLayoutEffect(() => { setView(null); }, [arg]);
   const nav = (a && a.nav) || {};
   useKeys({ "[": () => nav.prev && go(route("app", nav.prev)), "]": () => nav.next && go(route("app", nav.next)) },
           [nav.prev, nav.next]);

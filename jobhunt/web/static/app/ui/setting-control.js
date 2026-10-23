@@ -6,7 +6,7 @@
    parses them and answers with its own words ("Hal reads this as 24,000 pounds a year"), so the page and
    the command line can never read a value differently. Text boxes save when the person leaves them or
    presses Enter, not on every key, so one change is one history row. */
-import { html, cx, useState, useEffect } from "../core/html.js";
+import { html, cx, useState, useLayoutEffect } from "../core/html.js";
 import { go } from "../core/router.js";
 import { openDialog } from "../core/store.js";
 import { Switch, Seg } from "./controls.js";
@@ -36,7 +36,8 @@ export function asText(kind, value) {
 function TextBox({ it, value, onChange, disabled }) {
   const shown = asText(it.kind, value);
   const [draft, setDraft] = useState(shown);
-  useEffect(() => setDraft(shown), [shown]);
+  // a layout effect: Preact runs a plain one up to a frame late, where it can undo the person's first action
+  useLayoutEffect(() => setDraft(shown), [shown]);
   const commit = () => {
     if (draft === shown) return;
     onChange(it.kind === "int" && draft.trim() !== "" && !Number.isNaN(Number(draft)) ? Number(draft) : draft);
@@ -79,7 +80,8 @@ function Multi({ it, value, onChange, disabled }) {
 
 function Range({ it, value, onChange, disabled }) {
   const [live, setLive] = useState(value);
-  useEffect(() => setLive(value), [value]);
+  // a layout effect: Preact runs a plain one up to a frame late, where it can undo the person's first action
+  useLayoutEffect(() => setLive(value), [value]);
   const n = Number(live);
   return html`<input type="range" min=${it.min} max=${it.max} value=${live} aria-label=${it.label} disabled=${disabled}
     onInput=${e => setLive(+e.target.value)} onChange=${e => onChange(+e.target.value)} />

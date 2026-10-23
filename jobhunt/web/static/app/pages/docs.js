@@ -1,7 +1,7 @@
 /* Documents: every application's files, ready to copy or download, and "Copy-paste
    details" for forms Hal cannot fill. Files come from the application's folder through /files, so a window
    opened from another computer gets them too; "Open the folder" shows only where folders can open. */
-import { html, cx, useState, useEffect } from "../core/html.js";
+import { html, cx, useState, useLayoutEffect } from "../core/html.js";
 import { useApi, toast } from "../core/store.js";
 import { copyText } from "../ui/clipboard.js";
 import { get, post } from "../core/api.js";
@@ -76,7 +76,8 @@ export function Docs({ arg }) {
   const list = useApi("/documents" + (q.trim() ? "?q=" + encodeURIComponent(q.trim()) : ""));
   const apps = (list.data && list.data.apps) || [];
   const [sel, setSel] = useState(arg && arg !== "details" ? arg : "");
-  useEffect(() => { if (arg && arg !== "details") setSel(arg); if (arg === "details") setTab("profile"); }, [arg]);
+  // a layout effect: Preact runs a plain one up to a frame late, where it can undo the person's first action
+  useLayoutEffect(() => { if (arg && arg !== "details") setSel(arg); if (arg === "details") setTab("profile"); }, [arg]);
   const chosen = sel || (apps[0] && String(apps[0].id)) || "";
   const pick = id => { setSel(String(id)); go("docs-" + id, { replace: true }); };
   return html`
