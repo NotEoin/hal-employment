@@ -213,7 +213,9 @@ MADE_UP_PAGES = {
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
-    # My CV
+    # My CV; the parse report is the real server's answer before any CV is added
+    "/cv/parse-report": {"version_id": None, "n": None, "found": "", "rows": [], "unsure": 0,
+                         "original_preview_url": None, "original": None, "file": None, "from_cv": {}},
     "/cv": {"route": "improve", "route_words": "Help me improve it", "send": "hal_copy",
             "employers_get": "Employers get: Hal's copy of your CV, version 1.",
             "employers_get_sub": "Every change in it was accepted by you.",
