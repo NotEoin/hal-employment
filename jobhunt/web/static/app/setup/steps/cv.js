@@ -3,7 +3,7 @@
    The three ways to start are the CV routes (as_is, improve, fresh), saved through PUT /cv/route.
    For the first two the step offers the upload part; Hal speaks for itself here, as in the rest of the
    guide. What the CV gives for About you is saved there only where nothing was typed yet. */
-import { html, cx, useState, useEffect } from "../../core/html.js";
+import { html, cx, useState, useEffect, useRef } from "../../core/html.js";
 import { get, put } from "../../core/api.js";
 import { toast } from "../../core/store.js";
 import { Icon } from "../../ui/icons.js";
@@ -18,8 +18,11 @@ export const ROUTES = [
 /** The step's body. */
 export function Step() {
   const [route, setRoute] = useState("improve");
-  useEffect(() => { get("/cv").then(cv => { if (cv && cv.route) setRoute(cv.route); }).catch(() => {}); }, []);
+  // the saved route arrives after the step draws; a choice made before then wins (CI, 2026-10-23)
+  const chosen = useRef(false);
+  useEffect(() => { get("/cv").then(cv => { if (cv && cv.route && !chosen.current) setRoute(cv.route); }).catch(() => {}); }, []);
   const choose = async id => {
+    chosen.current = true;
     setRoute(id);
     try { await put("/cv/route", { route: id }); } catch (err) { toast(err.message); }
   };

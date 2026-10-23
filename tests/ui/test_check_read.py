@@ -20,6 +20,7 @@ from jobhunt import db
 from jobhunt.ai.base import LLMUnavailable
 
 FAILED_LOAD = "Failed to load resource"
+SETTLE_MS = 500   # a reply's re-draw takes a few milliseconds; this only gives a wrong one time to show
 MOUNT_STEP = """async () => {
   const [{ html, render }, { Step }] = await Promise.all([import("/app/core/html.js"),
                                                          import("/app/setup/steps/cv.js")]);
@@ -130,6 +131,27 @@ class CheckRead(unittest.TestCase):
         self.assertIn("Read Pasted CV.txt", card.inner_text())
         self.assertIn("2 projects", card.inner_text())
         self.assertEqual([e for e in self.errors(p) if "/api/v2/cv/upload" not in e and FAILED_LOAD not in e], [])
+
+    def test_a_choice_made_before_the_saved_one_arrives_is_kept(self) -> None:
+        # regression: on a slow computer (Windows CI, 2026-10-23) the saved route came back after the click and
+        # put "help me improve it" back, so the upload showed again under "Build me a fresh CV"
+        p = AppPage(self.browser, f"http://127.0.0.1:{self.hal.port}")
+        self.addCleanup(p.close)
+        p.page.goto(self.hal.open_url())
+        p.open("home")
+        held = []
+        p.page.route("**/api/v2/cv", lambda route: held.append(route))
+        p.page.evaluate(MOUNT_STEP)
+        p.page.wait_for_selector("#test-step h1")
+        self.assertEqual(len(held), 1, "the step asked for the saved route once")
+        saved = held[0].fetch()   # the server answers now, before the click; the page hears it after
+        p.page.click("button:has-text('Build me a fresh CV')")
+        p.page.wait_for_selector("text=Next, Hal asks about your education, jobs, volunteering and skills.")
+        with p.page.expect_response("**/api/v2/cv"):
+            held[0].fulfill(response=saved)
+        p.page.wait_for_timeout(SETTLE_MS)
+        self.assertEqual(p.page.locator("input[aria-label='Choose your CV']").count(), 0)
+        self.assertEqual(p.page.get_attribute("button:has-text('Build me a fresh CV')", "aria-pressed"), "true")
 
     def test_choosing_build_me_a_fresh_cv_hides_the_upload(self) -> None:
         p = self.step()
