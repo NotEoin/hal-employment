@@ -114,6 +114,10 @@ class Shapes(unittest.TestCase):
                 if "pause" in runs[0]:
                     self.assertRegex(runs[0], r"(& pause|pause >nul) & exit /b\)?$")
 
+    def test_the_install_window_is_named_for_hal(self):
+        # Windows 11 install test: the console's title was C:\\WINDOWS\\system32\\cmd.exe
+        self.assertIn("$Host.UI.RawUI.WindowTitle = 'Installing Hal Employment'", powershell_part(WINDOWS))
+
     def test_the_windows_install_calls_only_the_bundled_git(self):
         text = powershell_part(WINDOWS)
         self.assertIn("$Git = Join-Path $GitDir 'cmd\\git.exe'", text)

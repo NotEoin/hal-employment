@@ -9,10 +9,12 @@ command: the install file does everything in one window.
 2. Get the file `install-hal-windows.cmd` from the person who set Hal up: on a USB stick, or through a
    cloud-storage link. It never comes as an email attachment, because Gmail and Outlook block `.cmd` files.
 3. If it came from a link, your browser may warn about the download. Choose **Keep**.
-4. Double-click the file. If Windows shows "Windows protected your PC", press **More info**, then
-   **Run anyway**. A file copied from a USB stick does not show this.
+4. Double-click the file. If Windows shows "Open File - Security Warning" ("The publisher could not be
+   verified"), press **Run**. If it shows "Windows protected your PC" instead, press **More info**, then
+   **Run anyway**. A file copied from a USB stick shows neither.
 5. Your browser opens GitHub's sign-in page. Sign in and press **Authorize**. Hal never sees your password.
-6. Wait about 5 minutes. The window shows numbered steps, "1 of 7" to "7 of 7".
+6. Wait about 5 minutes. The window, called "Installing Hal Employment", shows numbered steps, "1 of 7" to
+   "7 of 7".
 7. If you used the older Hal from the USB stick, the window says "Copied your jobs, applications and settings
    from your old Hal. Nothing was deleted." Your old folder is kept as `HalEmployment.old-<date>`.
 8. Hal's setup guide opens. You can close the install window.

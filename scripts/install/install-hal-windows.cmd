@@ -9,6 +9,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Get-Content -Raw -L
 # The full log goes to %APPDATA%\Hal Employment\data\logs\install-<UTC>.log, with no secrets in it.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# the window otherwise says C:\WINDOWS\system32\cmd.exe (Windows 11 install test)
+try { $Host.UI.RawUI.WindowTitle = 'Installing Hal Employment' } catch { }
 # PINS-START (written by scripts/install/pins.py from pins.toml)
 $Pins = @{
   'uv' = @{ Version = '0.8.22'; Url = 'https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip'; Sha256 = '5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12' }
