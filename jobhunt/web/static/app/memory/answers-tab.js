@@ -47,6 +47,13 @@ function AnswerRow({ an }) {
     </div></div>`;
 }
 
+/** The number on the tab in What Hal remembers: the saved answers, not the ones Hal works out each time. */
+export function useCount() {
+  const { data } = useApi(PATH);
+  const n = (data || []).filter(an => !an.auto).length;
+  return n || "";
+}
+
 /** The Saved answers tab. */
 export function AnswersTab() {
   const { data, error } = useApi(PATH);

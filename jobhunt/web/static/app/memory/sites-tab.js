@@ -100,9 +100,17 @@ function SiteCard({ site, open, onToggle, reload }) {
     </div>`}</section>`;
 }
 
+const SITE_EVENTS = [ev => ev.type === "activity"];
+
+/** The number on the tab in What Hal remembers: one per site card. */
+export function useCount() {
+  const { data } = useApi("/sites", { on: SITE_EVENTS });
+  return data && data.length ? data.length : "";
+}
+
 /** The tab: what the notes are, then one card per site. */
 export function SitesTab() {
-  const { data, error, loading, reload } = useApi("/sites", { on: [ev => ev.type === "activity"] });
+  const { data, error, loading, reload } = useApi("/sites", { on: SITE_EVENTS });
   const [openKey, setOpenKey] = useState(null);
   const cards = data || [];
   const current = openKey === null ? (cards[0] && cards[0].key) : openKey;

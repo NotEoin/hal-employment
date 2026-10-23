@@ -1,5 +1,5 @@
 """What Hal remembers in a real browser against the real server: a waiting suggestion with its evidence, "Yes,
-do this", and the Learned tab's switch and Delete, at both sizes.
+do this", the Learned tab's switch and Delete, and the site notes and saved answers tabs, at both sizes.
 
 They need `HAL_TEST_BROWSER=1` and Playwright, as every browser test does (docs/dev/testing.md). The person
 and the employers are made up; the towns are real so distances can be measured.
@@ -116,3 +116,23 @@ class MemoryPage(unittest.TestCase):
             self.assertEqual(p.sideways(), 0)
             self.assertEqual(p.serious_axe(), [])
             self.assertEqual(p.errors, [])
+
+    def test_the_site_notes_and_saved_answers_tabs_open_inside_the_page_with_their_counts(self) -> None:
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            with self.subTest(size=size), real_app(self.browser, size, scheme) as p:
+                p.open("memory-sites")
+                pg = p.page
+                pg.locator("section.card[data-site]").first.wait_for()
+                tab = pg.get_by_role("tab", name="Notes about job sites")
+                self.assertEqual(tab.get_attribute("aria-selected"), "true")
+                cards = pg.locator("section.card[data-site]").count()
+                tab.locator(".count").wait_for()
+                self.assertEqual(tab.locator(".count").inner_text(), str(cards))
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
+                pg.get_by_role("tab", name="Saved answers").click()
+                pg.locator("[data-answers-tab]").wait_for()
+                self.assertEqual(pg.url.rsplit("#", 1)[1], "memory-answers")
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
+                self.assertEqual(p.errors, [])
