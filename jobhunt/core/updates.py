@@ -705,7 +705,7 @@ def _update(world: World) -> dict:
     backup = backup_db(head)
     _write_json(paths.state_dir() / RECORD_FILE, {"from": head, "to": new, "at": utc_now(), "done": False,
                                                   "backup": str(backup) if backup else ""})
-    migrated = False
+    migrated = started = False
     try:
         world.say("Getting the new version")
         world.git("merge", "--ff-only", f"{REMOTE}/{BRANCH}")
@@ -715,11 +715,12 @@ def _update(world: World) -> dict:
         migrated = True
         world.migrate()
         world.say("Starting Hal")
+        started = True
         world.start_server()
         world.wait_for(new)
     except UpdateError as e:
         world.say(f"The update failed: {e.details or e.words}")
-        _roll_back(world, head, backup if migrated else None)
+        _roll_back(world, head, backup if migrated else None, stop_first=started)
         write_status({"state": "failed", "words": WENT_BACK, "details": e.details or e.words, "from": head,
                       "to": new, "held": new, "recorded": False})
         return status()
@@ -734,9 +735,15 @@ def _update(world: World) -> dict:
     return status()
 
 
-def _roll_back(world: World, to: str, backup: Path | None) -> None:
-    """Spec 11.4 step 11: the old commit, its packages, the backup when a migration ran, the old server."""
+def _roll_back(world: World, to: str, backup: Path | None, *, stop_first: bool = False) -> None:
+    """Spec 11.4 step 11: the old commit, its packages, the backup when a migration ran, the old server.
+
+    `stop_first` stops a new server that started but did not answer as expected: while it runs, it holds
+    the single-instance lock, so the old version could not start.
+    """
     world.say("Going back to the version you had")
+    if stop_first:
+        world.stop_server()
     world.git("reset", "--keep", to)
     try:
         world.sync()

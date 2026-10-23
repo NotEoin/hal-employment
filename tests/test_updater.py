@@ -104,7 +104,13 @@ class FakeWorld(updates.World):
 
     def start_server(self) -> None:
         self.calls.append("start")
-        self.running = git(self.inst.code_dir, "rev-parse", "HEAD")
+        if self.running is not None:
+            return    # the running server holds the single-instance lock, so this one exits
+        self.running = "a broken start" if self.fail == "start" and self.calls.count("start") == 1 \
+            else git(self.inst.code_dir, "rev-parse", "HEAD")
+
+    def wait_for(self, sha: str, timeout: float = 0.2) -> None:
+        super().wait_for(sha, timeout)
 
     def running_commit(self):
         return self.running
@@ -181,6 +187,15 @@ class Updating(UpdaterCase):
         self.assertEqual(self.repos.head(), self.repos.first)
         self.assertEqual(w.calls, ["stop", "sync", "sync", "start"])
         self.assertEqual(result["held"], new)
+        self.assertEqual(w.running, self.repos.first)
+
+    def test_a_new_version_that_does_not_answer_is_stopped_before_the_old_one_starts(self):
+        """Regression: the rollback left the new server running, so the old one could not start (VM, 2026-10-23)."""
+        self.repos.commit({"README.md": "Hal 2\n"}, "docs: new words")
+        w = self.world(fail="start")
+        result = updates.update(w)
+        self.assertEqual(result["state"], "failed")
+        self.assertEqual(w.calls, ["stop", "sync", "migrate", "start", "stop", "sync", "start"])
         self.assertEqual(w.running, self.repos.first)
 
     def test_a_failed_migration_restores_the_backup(self):
