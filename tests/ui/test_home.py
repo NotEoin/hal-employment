@@ -6,31 +6,12 @@ They need `HAL_TEST_BROWSER=1` and Playwright, as every browser test does (docs/
 from __future__ import annotations
 
 import contextlib
-import threading
 import unittest
 
-from support.ui import LOAD_TIMEOUT_MS, AppPage, chromium, skip_unless_browser
+from support.ui import LOAD_TIMEOUT_MS, chromium, real_app, skip_unless_browser
 from support.world import World, job_id
 
 from jobhunt.core import activity
-from jobhunt.core.settings import store
-from jobhunt.web import app, auth
-
-
-@contextlib.contextmanager
-def real_app(browser, size: str = "wide", scheme: str = "light"):
-    """The new server inside the made-up world, and a signed-in tab on it."""
-    store.drop_cache()
-    httpd = app.make_server(0)
-    port = httpd.server_address[1]
-    threading.Thread(target=httpd.serve_forever, name="ui-test-server", daemon=True).start()
-    p = AppPage(browser, f"http://127.0.0.1:{port}", size, scheme)
-    try:
-        p.page.goto(auth.mint_open_url(port=port))
-        yield p
-    finally:
-        p.close()
-        httpd.stop()   # waits for its requests, which hold the world's database open until they end
 
 
 @skip_unless_browser

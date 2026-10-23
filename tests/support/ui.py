@@ -7,6 +7,7 @@ Content-Security-Policy refusals; `sideways` and `serious_axe` are the checks of
 from __future__ import annotations
 
 import os
+import threading
 import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -130,3 +131,23 @@ class AppPage:
     def close(self) -> None:
         """Closes the tab and its context."""
         self.ctx.close()
+
+
+@contextmanager
+def real_app(browser, size: str = "wide", scheme: str = "light") -> Iterator[AppPage]:
+    """The new server inside the made-up world, and a signed-in tab on it."""
+    # imported here, so a test module sets its temporary home before jobhunt loads
+    from jobhunt.core.settings import store
+    from jobhunt.web import app, auth
+
+    store.drop_cache()
+    httpd = app.make_server(0)
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, name="ui-test-server", daemon=True).start()
+    p = AppPage(browser, f"http://127.0.0.1:{port}", size, scheme)
+    try:
+        p.page.goto(auth.mint_open_url(port=port))
+        yield p
+    finally:
+        p.close()
+        httpd.stop()   # waits for its requests, which hold the world's database open until they end
