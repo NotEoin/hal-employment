@@ -1,9 +1,5 @@
-# Where Hal's files live on GitHub. People the owner adds to the private repository
-# install by cloning it and update by pulling it.
-#
-# The account and repository names are not kept here: `python scripts/install/pins.py --make <folder>` reads
-# them from this checkout's `origin` remote (or `--slug account/repo`) and writes filled-in copies of the
-# install files into <folder>, ready to hand over. The copies in the repository say OWNER/REPO and refuse to
-# run until they are filled in.
-slug = ""
-branch = "main"
+# Where Hal's files live on GitHub: the account and repository, https://github.com/<slug>. The repository is
+# public, so installing and updating need no sign-in. `python scripts/install/pins.py --write` copies the
+# address into both install files, and `--check` (run by the tests) fails when a copy differs. The updater
+# also reads the account name from here for the words it shows.
+slug = "NotEoin/hal-employment"

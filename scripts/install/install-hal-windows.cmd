@@ -1,15 +1,16 @@
 @echo off
 rem Hal Employment installer and repair. Double-click it. No admin rights are needed.
-set "HAL_REPO=https://github.com/OWNER/REPO.git"
+set "HAL_REPO=https://github.com/NotEoin/hal-employment.git"
 set "HAL_SELF=%~f0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Get-Content -Raw -LiteralPath $env:HAL_SELF; $p = ($t -split '(?m)^#PS1#\r?$', 2)[1]; Invoke-Expression $p" & pause & exit /b
 #PS1#
 # PowerShell 5.1 from here; ASCII only; every download pinned by version and SHA-256 (scripts/install/pins.toml values, copied in).
-# Spec 11.1. Each step checks whether it is already done, so running this file again repairs an install.
+# Hal's repository is public, so nothing signs in to GitHub unless the repository cannot be read without it.
+# Each step checks whether it is already done, so running this file again repairs an install.
 # The full log goes to %APPDATA%\Hal Employment\data\logs\install-<UTC>.log, with no secrets in it.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-# the window otherwise says C:\WINDOWS\system32\cmd.exe (Windows 11 install test)
+# the window otherwise says C:\WINDOWS\system32\cmd.exe (checked on a Windows 11 virtual machine)
 try { $Host.UI.RawUI.WindowTitle = 'Installing Hal Employment' } catch { }
 # PINS-START (written by scripts/install/pins.py from pins.toml)
 $Pins = @{
@@ -23,12 +24,16 @@ $MinFreeBytes = 3GB
 $HealthWaitSeconds = 60
 $LogTries = 30                     # 30 x 100 ms: a scan of a small file ends well within 3 s
 $LogWaitMs = 100
+$Old = Join-Path $env:USERPROFILE 'HalEmployment'
+$HasOld = Test-Path -LiteralPath (Join-Path $Old 'data\jobs.db')
+$Total = 6 + [int]$HasOld
+$script:Step = 0
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 
 $Slug = ($env:HAL_REPO -replace '^https://github.com/', '') -replace '\.git$', ''
-$Owner = ($Slug -split '/')[0]
+$Issues = 'https://github.com/' + $Slug + '/issues'
 $P = Join-Path $env:LOCALAPPDATA 'Programs\Hal Employment'
 $Tools = Join-Path $P 'tools'
 $App = Join-Path $P 'app'
@@ -40,7 +45,7 @@ $script:LastOut = ''
 
 function Write-Log([string]$Text) {
   # an antivirus scan or another reader can hold the log for a moment; a line that still cannot be written is
-  # dropped rather than shown in red or stopping the install (Windows 11 install test)
+  # dropped rather than shown in red or stopping the install (seen on a Windows 11 virtual machine)
   $line = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss') + 'Z ' + $Text
   for ($try = 0; $try -lt $LogTries; $try++) {
     try { Add-Content -LiteralPath $Log -Value $line -ErrorAction Stop; return } catch { Start-Sleep -Milliseconds $LogWaitMs }
@@ -50,6 +55,11 @@ function Write-Log([string]$Text) {
 function Say([string]$Text) {
   Write-Host $Text
   Write-Log $Text
+}
+
+function Say-Step([string]$Text) {
+  $script:Step++
+  Say ('' + $script:Step + ' of ' + $Total + ': ' + $Text)
 }
 
 function Stop-Install([string]$Text) {
@@ -72,7 +82,7 @@ function Invoke-Native([string]$Exe, [string[]]$Arguments) {
 function Get-Pinned([string]$Name, [string]$Destination) {
   $pin = $Pins[$Name]
   if (-not $pin.Sha256) {
-    Stop-Install "This install file is not finished: it has no checksum for $Name. Ask $Owner for a new one."
+    Stop-Install "This install file is not finished: it has no checksum for $Name. Report it at $Issues."
   }
   if (Test-Path -LiteralPath $Destination) {
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $Destination).Hash -eq $pin.Sha256.ToUpper()) { return }
@@ -98,9 +108,6 @@ function Test-HalAnswers([string]$Python) {
 
 # 1. Checks ---------------------------------------------------------------------------------------------
 Say 'Installing Hal Employment. This takes about 5 minutes. You do not need to type anything.'
-if ($env:HAL_REPO -like '*OWNER/REPO*') {
-  Stop-Install 'This install file is not filled in yet. Ask the person who set Hal up for a new one.'
-}
 $version = [Environment]::OSVersion.Version
 if (-not [Environment]::Is64BitOperatingSystem -or $version.Major -lt 10 -or $version.Build -lt $MinBuild) {
   Stop-Install 'Hal needs 64-bit Windows 10 (version 1809 or newer) or Windows 11.'
@@ -111,7 +118,7 @@ if ($drive.Free -lt $MinFreeBytes) {
 }
 
 # 2. Tools: uv and the bundled Git, never another git on PATH, nothing added to PATH ------------------------
-Say '1 of 7: Getting the tools Hal needs'
+Say-Step 'Getting the tools Hal needs'
 $UvDir = Join-Path $Tools 'uv'
 $Uv = Join-Path $UvDir 'uv.exe'
 if (-not (Test-Path -LiteralPath $Uv)) {
@@ -137,20 +144,25 @@ $env:UV_PYTHON_INSTALL_DIR = Join-Path $Tools 'python'
 $env:UV_CACHE_DIR = Join-Path $Tools 'uv-cache'
 $env:UV_NO_MODIFY_PATH = '1'
 
-# 3. GitHub sign-in and Hal's files ---------------------------------------------------------------------
-Say '2 of 7: Signing you in to GitHub. Your browser will open.'
+# 3. Hal's files, with a GitHub sign-in only if they cannot be read without one -----------------------
+Say-Step "Getting Hal's files from GitHub"
 if (Test-Path -LiteralPath (Join-Path $App '.git')) {
   if ((Invoke-Native $Git @('-C', $App, 'pull', '--ff-only')) -ne 0) {
     Stop-Install 'Hal could not get its newest files. Check the internet connection, then double-click this file again.'
   }
 } else {
-  $code = Invoke-Native $Git @('-c', 'credential.helper=manager', '-c', 'credential.https://github.com.provider=github', 'clone', $env:HAL_REPO, $App)
-  if ($code -ne 0 -and $script:LastOut -match '403|404|not found|denied') {
-    Start-Process ('https://github.com/' + $Slug + '/invitations')
-    Stop-Install "Your GitHub account cannot see Hal Employment yet. Ask $Owner to add you, accept the invitation email from GitHub, then double-click this file again."
-  }
-  if ($code -ne 0 -and $script:LastOut -match 'Could not resolve host|unable to access|timed out') {
+  # no helper and no prompt: a repository that needs a login must fail here, not wait for a password nobody can see
+  $env:GIT_TERMINAL_PROMPT = '0'
+  $code = Invoke-Native $Git @('-c', 'credential.helper=', 'clone', $env:HAL_REPO, $App)
+  Remove-Item Env:\GIT_TERMINAL_PROMPT
+  if ($code -ne 0 -and $script:LastOut -notmatch '403|404|not found|denied|authentication|could not read (username|password)') {
     Stop-Install 'Hal could not reach GitHub. Check the internet connection, then double-click this file again.'
+  }
+  $SignedIn = $false
+  if ($code -ne 0) {
+    Say 'GitHub wants you to sign in before Hal can get its files. Your browser will open.'
+    $code = Invoke-Native $Git @('-c', 'credential.helper=manager', '-c', 'credential.https://github.com.provider=github', 'clone', $env:HAL_REPO, $App)
+    $SignedIn = ($code -eq 0)
   }
   if ($code -ne 0) {
     # Git Credential Manager did not sign in: fall back to the GitHub CLI's code
@@ -166,9 +178,9 @@ if (Test-Path -LiteralPath (Join-Path $App '.git')) {
     & $Gh auth login --web --hostname github.com --git-protocol https --clipboard
     Invoke-Native $Gh @('auth', 'setup-git', '--hostname', 'github.com') | Out-Null
     if ((Invoke-Native $Git @('clone', $env:HAL_REPO, $App)) -ne 0) {
-      Stop-Install "Hal could not sign you in to GitHub. Double-click this file again, or ask $Owner for help."
+      Stop-Install "Hal could not sign you in to GitHub, or your account cannot read $env:HAL_REPO. Report it at $Issues, then double-click this file again."
     }
-  } else {
+  } elseif ($SignedIn) {
     # the same sign-in for later updates, in the clone's own config; the person's global git config is untouched
     Invoke-Native $Git @('-C', $App, 'config', 'credential.helper', 'manager') | Out-Null
     Invoke-Native $Git @('-C', $App, 'config', 'credential.https://github.com.provider', 'github') | Out-Null
@@ -176,23 +188,22 @@ if (Test-Path -LiteralPath (Join-Path $App '.git')) {
 }
 
 # 4. Hal's own Python and packages ----------------------------------------------------------------------
-Say '3 of 7: Setting up Hal (about 2 minutes)'
+Say-Step 'Setting up the Python and packages Hal uses (about 2 minutes)'
 if ((Invoke-Native $Uv @('sync', '--frozen', '--no-dev', '--project', $App)) -ne 0) {
-  Stop-Install "Hal could not set itself up. Double-click this file again. If it happens again, send $Owner the file $Log"
+  Stop-Install "Hal could not set itself up. Double-click this file again. If it happens again, report it at $Issues with the file $Log"
 }
 $Py = Join-Path $App '.venv\Scripts\python.exe'
 $Pyw = Join-Path $App '.venv\Scripts\pythonw.exe'
 
 # 5. Shortcuts, the Startup entry and the install record --------------------------------------------------
-Say '4 of 7: Making shortcuts'
+Say-Step 'Making the shortcuts and the Startup entry'
 if ((Invoke-Native $Py @('-X', 'utf8', '-m', 'jobhunt', 'install', '--windows')) -ne 0) {
-  Stop-Install "Hal could not make its shortcuts. Double-click this file again. If it happens again, send $Owner the file $Log"
+  Stop-Install "Hal could not make its shortcuts. Double-click this file again. If it happens again, report it at $Issues with the file $Log"
 }
 
-# 6. The older Hal from the USB stick ------------------------------------------------------------------
-Say '5 of 7: Looking for an older Hal'
-$Old = Join-Path $env:USERPROFILE 'HalEmployment'
-if (Test-Path -LiteralPath (Join-Path $Old 'data\jobs.db')) {
+# 6. An older Hal in the user's folder, copied only when one is found ---------------------------------
+if ($HasOld) {
+  Say-Step 'Copying your jobs, applications and settings from your older Hal'
   if ((Invoke-Native $Py @('-X', 'utf8', '-m', 'jobhunt', 'import', '--from-usb-install', $Old)) -eq 0) {
     Say 'Copied your jobs, applications and settings from your old Hal. Nothing was deleted.'
   } else {
@@ -201,19 +212,19 @@ if (Test-Path -LiteralPath (Join-Path $Old 'data\jobs.db')) {
 }
 
 # 7. Start Hal ------------------------------------------------------------------------------------------
-Say '6 of 7: Starting Hal'
+Say-Step 'Starting Hal'
 if (-not (Test-HalAnswers $Py)) {
   Start-Process -FilePath $Pyw -ArgumentList '-X utf8 -m jobhunt serve --background' -WorkingDirectory $App
   $deadline = (Get-Date).AddSeconds($HealthWaitSeconds)
   while (-not (Test-HalAnswers $Py)) {
     if ((Get-Date) -gt $deadline) {
-      Stop-Install "Hal did not start. Double-click this file again. If it happens again, send $Owner the file $Log"
+      Stop-Install "Hal did not start. Double-click this file again. If it happens again, report it at $Issues with the file $Log"
     }
     Start-Sleep -Seconds 1
   }
 }
 
 # 8. The setup guide -----------------------------------------------------------------------------------
-Say '7 of 7: Opening the setup guide'
+Say-Step 'Opening the setup guide'
 Start-Process -FilePath $Pyw -ArgumentList '-X utf8 -m jobhunt open --next /#setup' -WorkingDirectory $App
 Say 'Hal Employment is installed. You can close this window.'

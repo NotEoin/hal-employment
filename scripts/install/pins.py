@@ -1,14 +1,11 @@
-"""Keeps the install files' pinned downloads equal to `pins.toml`, and makes the copies the owner hands over.
+"""Keeps the install files' pinned downloads and repository address equal to `pins.toml` and `repo.toml`.
 
     python scripts/install/pins.py --check              the install files hold exactly the pins (tests run this)
-    python scripts/install/pins.py --write              copy the pins from pins.toml into the install files
+    python scripts/install/pins.py --write              copy the pins and the address into the install files
     python scripts/install/pins.py --fill               download each file once, record its SHA-256, then --write
-    python scripts/install/pins.py --make DIR [--slug account/repo]
-                                                        filled-in install files for handing over, in DIR
 
-The Windows install file is sent on its own, so its pins are copied into it between `# PINS-START` and
-`# PINS-END` rather than read at run time. The copies in the repository say OWNER/REPO, because the account
-name is a personal string that is never committed; `--make` takes it from this checkout's `origin` remote.
+The Windows install file runs on its own, before any clone exists, so its pins and the repository address are
+copied into it (the pins between `# PINS-START` and `# PINS-END`) rather than read at run time.
 `--fill` is the only part that downloads anything; it uses the standard library with a timeout.
 """
 from __future__ import annotations
@@ -16,7 +13,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import re
-import subprocess
 import sys
 import tomllib
 import urllib.request
@@ -27,11 +23,10 @@ PINS = HERE / "pins.toml"
 REPO = HERE / "repo.toml"
 WINDOWS = HERE / "install-hal-windows.cmd"
 LINUX = HERE / "install-hal-linux.sh"
-PLACEHOLDER = "https://github.com/OWNER/REPO.git"
+# the line of each install file that names the repository
+REPO_LINE = {WINDOWS: re.compile(r'(?m)^set "HAL_REPO=[^"\n]*"'), LINUX: re.compile(r'(?m)^HAL_REPO="[^"\n]*"')}
 BLOCK = re.compile(r"(# PINS-START[^\n]*\n)(.*?)(# PINS-END)", re.S)
 DOWNLOAD_TIMEOUT_S = 300
-GIT_TIMEOUT_S = 10
-SLUG = re.compile(r"github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$")
 
 
 def load() -> dict:
@@ -68,6 +63,18 @@ def _write(path: Path, text: str) -> None:
     path.write_bytes(data.encode("ascii"))
 
 
+def repo_line(path: Path, url: str) -> str:
+    """The line of install file `path` that names the repository `url`."""
+    if path == WINDOWS:
+        return f'set "HAL_REPO={url}"'
+    return f'HAL_REPO="${{HAL_REPO:-{url}}}"'
+
+
+def repo_url() -> str:
+    """The repository address, built from the slug in repo.toml."""
+    return f"https://github.com/{tomllib.loads(REPO.read_text(encoding='utf-8'))['slug']}.git"
+
+
 def with_pins(text: str, block: str) -> str:
     """`text` with its pins block replaced."""
     if not BLOCK.search(text):
@@ -88,16 +95,18 @@ def check() -> list[str]:
     pins = load()
     out = []
     for path, block in ((WINDOWS, windows_block(pins)), (LINUX, linux_block(pins))):
-        if pinned_block(_read(path)) != block:
+        text = _read(path)
+        if pinned_block(text) != block or repo_line(path, repo_url()) not in REPO_LINE[path].findall(text):
             out.append(path.name)
     return out
 
 
 def write() -> None:
-    """Copies pins.toml into both install files."""
+    """Copies pins.toml and the repository address into both install files."""
     pins = load()
     for path, block in ((WINDOWS, windows_block(pins)), (LINUX, linux_block(pins))):
-        _write(path, with_pins(_read(path), block))
+        line = repo_line(path, repo_url())
+        _write(path, REPO_LINE[path].sub(lambda _m, line=line: line, with_pins(_read(path), block), count=1))
 
 
 def fill() -> None:
@@ -114,36 +123,6 @@ def fill() -> None:
     write()
 
 
-def slug(given: str | None) -> str:
-    """account/repo: `--slug`, else repo.toml's, else this checkout's `origin` remote."""
-    if given:
-        return given
-    configured = tomllib.loads(REPO.read_text(encoding="utf-8")).get("slug")
-    if configured:
-        return configured
-    done = subprocess.run(["git", "-C", str(HERE), "remote", "get-url", "origin"], capture_output=True, text=True,
-                          timeout=GIT_TIMEOUT_S, check=False)
-    m = SLUG.search(done.stdout.strip())
-    if not m:
-        raise SystemExit("This checkout has no GitHub origin remote. Pass --slug account/repo.")
-    return m.group(1)
-
-
-def make(folder: Path, given: str | None) -> list[Path]:
-    """Filled-in copies of both install files in `folder`, ready to hand over."""
-    url = f"https://github.com/{slug(given)}.git"
-    folder.mkdir(parents=True, exist_ok=True)
-    out = []
-    for path in (WINDOWS, LINUX):
-        text = _read(path)
-        if PLACEHOLDER not in text:
-            raise SystemExit(f"{path.name} has no {PLACEHOLDER} to fill in.")
-        dest = folder / path.name
-        _write(dest, text.replace(PLACEHOLDER, url))
-        out.append(dest)
-    return out
-
-
 def main() -> int:
     """The command line above."""
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -151,21 +130,16 @@ def main() -> int:
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--fill", action="store_true")
-    mode.add_argument("--make", type=Path, metavar="DIR")
-    p.add_argument("--slug", help="the GitHub account/repo, when not the origin remote")
     args = p.parse_args()
     if args.check:
         bad = check()
         for name in bad:
-            print(f"{name}: its pins differ from pins.toml; run pins.py --write")
+            print(f"{name}: its pins or repository address differ from pins.toml or repo.toml; run pins.py --write")
         return 1 if bad else 0
     if args.write:
         write()
-    elif args.fill:
-        fill()
     else:
-        for path in make(args.make, args.slug):
-            print(path)
+        fill()
     return 0
 
 

@@ -151,16 +151,19 @@ class Shapes(unittest.TestCase):
             self.assertNotRegex(code, r"(^|[\s&(])git(\.exe)?\s", f"a bare git call: {line.strip()}")
         self.assertNotRegex(text, r"\$env:PATH\s*=|setx\s", "the install must not change PATH")
 
-    def test_the_install_files_refuse_to_run_until_filled_in(self):
-        self.assertIn('set "HAL_REPO=https://github.com/OWNER/REPO.git"', batch_lines(WINDOWS))
-        self.assertIn('HAL_REPO="https://github.com/OWNER/REPO.git"', LINUX.read_text(encoding="ascii"))
-        folder = Path(tempfile.mkdtemp(prefix="hal-make-"))
-        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
-        made = pins_module().make(folder, "example-owner/hal-employment")
-        win = (folder / WINDOWS.name).read_bytes()
-        self.assertIn(b'set "HAL_REPO=https://github.com/example-owner/hal-employment.git"\r\n', win)
-        self.assertNotIn(b"https://github.com/OWNER/REPO.git", win)
-        self.assertEqual(len(made), 2)
+    def test_the_install_files_name_the_public_repository(self):
+        url = "https://github.com/NotEoin/hal-employment.git"
+        self.assertIn(f'set "HAL_REPO={url}"', batch_lines(WINDOWS))
+        self.assertIn(f'HAL_REPO="${{HAL_REPO:-{url}}}"', LINUX.read_text(encoding="ascii"))
+        self.assertEqual(tomllib.loads((INSTALL / "repo.toml").read_text(encoding="utf-8"))["slug"],
+                         "NotEoin/hal-employment")
+        self.assertNotIn("OWNER/REPO", WINDOWS.read_text(encoding="ascii") + LINUX.read_text(encoding="ascii"))
+
+    def test_the_windows_steps_are_counted_and_the_older_hal_step_is_optional(self):
+        text = powershell_part(WINDOWS)
+        self.assertIn("$Total = 6 + [int]$HasOld", text)
+        self.assertRegex(text, r"if \(\$HasOld\) \{\r?\n  Say-Step 'Copying")
+        self.assertNotIn("Looking for an older Hal", text)
 
     def test_both_install_files_end_by_opening_the_setup_guide(self):
         self.assertIn("-m jobhunt open --next /#setup'", powershell_part(WINDOWS))
@@ -196,6 +199,72 @@ class Shapes(unittest.TestCase):
                               env={**os.environ, "HAL_PS1": str(script)}, capture_output=True, text=True,
                               timeout=PARSE_TIMEOUT_S, check=False)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
+
+GH_SIGNED_OUT = """#!/bin/sh
+echo "gh $*" >> "$FAKE_LOG"
+case "$*" in "auth status"*) exit 1 ;; esac
+exit 0
+"""
+FAKE_GIT = """#!/bin/sh
+echo "git $*" >> "$FAKE_LOG"
+case "$*" in
+  *clone*)
+    for last; do :; done
+    made() { mkdir -p "$last/.git" "$last/.venv/bin"; printf '#!/bin/sh\\nexit 0\\n' > "$last/.venv/bin/python"
+             chmod +x "$last/.venv/bin/python"; exit 0; }
+    case "$*" in *credential.https://github.com.helper=*) made ;; esac
+    case "$FAKE_ANON" in
+      open) made ;;
+      unreachable) echo "fatal: unable to access: Could not resolve host: github.com" >&2; exit 128 ;;
+      *) echo "remote: Repository not found." >&2; echo "fatal: Authentication failed" >&2; exit 128 ;;
+    esac ;;
+esac
+exit 0
+"""
+
+
+@unittest.skipUnless(linux_bash() and os.name != "nt", "the Linux install file runs under bash with fake tools")
+class LinuxSignIn(unittest.TestCase):
+    """The Linux install file signs in to GitHub only when the repository cannot be read without it."""
+
+    def run_install(self, anonymous: str) -> tuple[int, str, str]:
+        """Runs the install file with fake git, gh, uv and curl; returns (exit code, output, tool call log)."""
+        home = Path(tempfile.mkdtemp(prefix="hal-install-"))
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        fake = home / "bin"
+        tools = home / ".local" / "opt" / "hal-employment" / "tools"
+        for folder in (fake, tools):
+            folder.mkdir(parents=True)
+        calls = home / "calls.log"
+        scripts = {fake / "git": FAKE_GIT, fake / "curl": "#!/bin/sh\nexit 0\n",
+                   tools / "uv": "#!/bin/sh\nexit 0\n", tools / "gh": GH_SIGNED_OUT}
+        for path, body in scripts.items():
+            path.write_text(body, encoding="ascii")
+            path.chmod(0o755)
+        env = {"HOME": str(home), "XDG_DATA_HOME": str(home / "data"), "PATH": f"{fake}:/usr/bin:/bin",
+               "FAKE_LOG": str(calls), "FAKE_ANON": anonymous}
+        done = subprocess.run([linux_bash(), LINUX.as_posix()], env=env, capture_output=True, text=True,
+                              timeout=PARSE_TIMEOUT_S, check=False)
+        return done.returncode, done.stdout, calls.read_text(encoding="ascii") if calls.exists() else ""
+
+    def test_a_readable_repository_is_cloned_without_signing_in(self):
+        code, out, calls = self.run_install("open")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("gh ", calls)
+        self.assertNotIn("sign in", out)
+
+    def test_a_repository_that_needs_a_login_triggers_the_github_sign_in(self):
+        code, out, calls = self.run_install("login")
+        self.assertEqual(code, 0, out)
+        self.assertIn("gh auth login", calls)
+        self.assertIn("sign in", out)
+
+    def test_an_unreachable_github_stops_without_signing_in(self):
+        code, out, calls = self.run_install("unreachable")
+        self.assertEqual(code, 1)
+        self.assertNotIn("gh ", calls)
+        self.assertIn("could not reach GitHub", out)
 
 
 if __name__ == "__main__":

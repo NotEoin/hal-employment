@@ -3,11 +3,13 @@
 # No admin rights are needed, except to install git itself if the computer has none.
 # Everything goes into ~/.local/opt/hal-employment; nothing is added to PATH, and your global git config is
 # not changed. Every download is pinned by version and SHA-256 (scripts/install/pins.toml, copied in).
+# Hal's repository is public, so nothing signs in to GitHub unless the repository cannot be read without it.
+# HAL_REPO in the environment overrides the address below, for a fork.
 # The whole script is one block, so a repair that pulls a new copy of this file cannot change it mid-run.
 {
 set -euo pipefail
 
-HAL_REPO="https://github.com/OWNER/REPO.git"
+HAL_REPO="${HAL_REPO:-https://github.com/NotEoin/hal-employment.git}"
 # PINS-START (written by scripts/install/pins.py from pins.toml)
 UV_VERSION="0.8.22"
 UV_URL="https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-unknown-linux-gnu.tar.gz"
@@ -19,7 +21,7 @@ GH_SHA256="e7af0c72a607c0528fda1989f7c8e3be85e67d321889002af0e2938ad9c8fb68"
 
 slug="${HAL_REPO#https://github.com/}"
 slug="${slug%.git}"
-owner="${slug%%/*}"
+issues="https://github.com/$slug/issues"
 base="$HOME/.local/opt/hal-employment"
 tools="$base/tools"
 app="$base/app"
@@ -32,7 +34,7 @@ stop() { say "$1"; exit 1; }
 quiet() { "$@" >>"$log" 2>&1; }
 
 pinned() {   # pinned NAME URL SHA256 DEST
-  [ -n "$3" ] || stop "This install file is not finished: it has no checksum for $1. Ask $owner for a new one."
+  [ -n "$3" ] || stop "This install file is not finished: it has no checksum for $1. Report it at $issues."
   if [ -f "$4" ] && [ "$(sha256sum "$4" | cut -d' ' -f1)" = "$3" ]; then return 0; fi
   curl -fsSL --retry 2 -o "$4" "$2" 2>>"$log" ||
     stop "Hal could not reach GitHub. Check the internet connection, then run this file again."
@@ -43,7 +45,6 @@ pinned() {   # pinned NAME URL SHA256 DEST
 }
 
 say "Installing Hal Employment. This takes about 5 minutes."
-case "$HAL_REPO" in *OWNER/REPO*) stop "This install file is not filled in yet. Ask the person who set Hal up for a new one." ;; esac
 command -v git >/dev/null || stop "Hal needs git. Install it from your Software app (search for git), then run this file again."
 command -v curl >/dev/null || stop "Hal needs curl. Install it from your Software app (search for curl), then run this file again."
 
@@ -54,41 +55,47 @@ if [ ! -x "$uv" ]; then
   tar -xzf "$tools/uv.tar.gz" -C "$tools" --strip-components=1
   rm -f "$tools/uv.tar.gz"
 fi
-gh="$tools/gh"
-if [ ! -x "$gh" ]; then
-  pinned gh "$GH_URL" "$GH_SHA256" "$tools/gh.tar.gz"
-  tar -xzf "$tools/gh.tar.gz" -C "$tools" --strip-components=2 --wildcards '*/bin/gh'
-  rm -f "$tools/gh.tar.gz"
-fi
 export UV_NO_MODIFY_PATH=1 UV_PYTHON_INSTALL_DIR="$tools/python" UV_CACHE_DIR="$tools/uv-cache"
 
-say "2 of 6: Signing you in to GitHub"
-"$gh" auth status --hostname github.com >>"$log" 2>&1 ||
-  "$gh" auth login --web --hostname github.com --git-protocol https ||
-  stop "Hal could not sign you in to GitHub. Run this file again."
-helper="!$gh auth git-credential"
+say "2 of 6: Getting Hal's files"
 if [ -d "$app/.git" ]; then
   quiet git -C "$app" pull --ff-only || stop "Hal could not get its newest files. Check the internet connection, then run this file again."
 else
-  if ! quiet git -c credential.helper= -c "credential.https://github.com.helper=$helper" clone "$HAL_REPO" "$app"; then
-    if grep -qiE '403|404|not found|denied' "$log"; then
-      stop "Your GitHub account cannot see Hal Employment yet. Ask $owner to add you, accept the invitation email from GitHub, then run this file again."
+  # no prompt: a repository that needs a login must fail here, not wait for a password nobody can see
+  clone_out="$(GIT_TERMINAL_PROMPT=0 git clone "$HAL_REPO" "$app" 2>&1)" && cloned=1 || cloned=0
+  printf '%s\n' "$clone_out" >>"$log"
+  if [ "$cloned" = 0 ]; then
+    # GitHub answers 404 for a private repository the caller may not see, and 403 or a login prompt otherwise
+    printf '%s' "$clone_out" | grep -qiE '403|404|not found|denied|authentication|could not read (username|password)' ||
+      stop "Hal could not reach GitHub. Check the internet connection, then run this file again."
+    say "GitHub wants you to sign in before Hal can get its files. Your browser will open."
+    gh="$tools/gh"
+    if [ ! -x "$gh" ]; then
+      pinned gh "$GH_URL" "$GH_SHA256" "$tools/gh.tar.gz"
+      tar -xzf "$tools/gh.tar.gz" -C "$tools" --strip-components=2 --wildcards '*/bin/gh'
+      rm -f "$tools/gh.tar.gz"
     fi
-    stop "Hal could not reach GitHub. Check the internet connection, then run this file again."
+    "$gh" auth status --hostname github.com >>"$log" 2>&1 ||
+      "$gh" auth login --web --hostname github.com --git-protocol https ||
+      stop "Hal could not sign you in to GitHub. Run this file again."
+    helper="!$gh auth git-credential"
+    if ! quiet git -c credential.helper= -c "credential.https://github.com.helper=$helper" clone "$HAL_REPO" "$app"; then
+      stop "Your GitHub account cannot read $HAL_REPO. Report it at $issues, then run this file again."
+    fi
+    quiet git -C "$app" config credential.https://github.com.helper "$helper"
   fi
-  quiet git -C "$app" config credential.https://github.com.helper "$helper"
 fi
 
 say "3 of 6: Setting up Hal (about 2 minutes)"
 quiet "$uv" sync --frozen --no-dev --extra browser --extra documents --project "$app" ||
-  stop "Hal could not set itself up. Run this file again. If it happens again, send $owner the file $log"
+  stop "Hal could not set itself up. Run this file again. If it happens again, report it at $issues with the file $log"
 py="$app/.venv/bin/python"
 quiet "$py" -m playwright install chromium ||
   say "Hal could not get its own browser for printing. It will use another way; Is Hal working? says more."
 
 say "4 of 6: Making the menu entry and starting Hal"
 "$py" -m jobhunt install --linux --extras browser,documents >>"$log" 2>&1 ||
-  stop "Hal could not finish installing. Run this file again. If it happens again, send $owner the file $log"
+  stop "Hal could not finish installing. Run this file again. If it happens again, report it at $issues with the file $log"
 
 say "5 of 6: Opening the setup guide"
 "$py" -m jobhunt open --next "/#setup" >>"$log" 2>&1 || say "Open Hal Employment from your applications menu."
