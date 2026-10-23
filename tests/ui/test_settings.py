@@ -14,7 +14,7 @@ from support.api import HalServer
 from support.ui import AppPage, chromium, skip_unless_browser
 
 from jobhunt import db
-from jobhunt.core import health_routes, settings
+from jobhunt.core import health_routes, paths, settings
 from jobhunt.core.settings import registry
 
 SAVE_WAIT_S = 5    # a save answers in well under a second; this bounds a broken one
@@ -73,6 +73,7 @@ class SettingsPage(unittest.TestCase):
     def test_every_registered_setting_can_be_changed_on_the_settings_page(self) -> None:
         changeable = {k for k, s in registry.REGISTRY.items()
                       if (s.stored or s.kind in ("secret", "private")) and s.group_id != registry.INTERNAL_GROUP}
+        here = paths.platform_name()     # the page shows the rows for the computer the server runs on
         seen = set()
         for provider in ("openai_compat", "local"):     # rows for each kind of AI show only with it chosen
             settings.set_many({**SHOW_ALL, "ai.provider": provider})
@@ -84,7 +85,7 @@ class SettingsPage(unittest.TestCase):
                 self.show_more(p)
                 for it in gr["items"]:
                     if it["key"] not in changeable or not registry.visible(registry.REGISTRY[it["key"]], settings.get,
-                                                                           developer=True, platform="linux"):
+                                                                           developer=True, platform=here):
                         continue
                     with self.subTest(key=it["key"], provider=provider):
                         row = self.row(p, it["key"])
@@ -92,8 +93,8 @@ class SettingsPage(unittest.TestCase):
                         self.assertGreater(row.locator(CONTROLS).count(), 0, "no control to change it")
                         seen.add(it["key"])
             self.assertEqual([e for e in p.errors if not e.startswith(MISSING_ROUTE)], [])
-        linux = {k for k in changeable if registry.REGISTRY[k].platforms in ((), ("linux",))}
-        self.assertEqual(linux - seen, set(), "registered settings with no control on the page")
+        shown_here = {k for k in changeable if registry.REGISTRY[k].platforms in ((), (here,))}
+        self.assertEqual(shown_here - seen, set(), "registered settings with no control on the page")
 
     def test_each_kind_of_control_saves_its_value(self) -> None:
         p = self.tab("settings-you")

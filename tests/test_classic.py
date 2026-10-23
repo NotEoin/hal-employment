@@ -40,6 +40,9 @@ class Classic(unittest.TestCase):
         return f"/api/job/{quote(job_id(key), safe='')}"
 
     def test_classic_works_on_the_new_server(self):
+        # on by itself only in a git checkout (developer mode); a copy of the code without .git must pass too
+        settings.set("advanced.classic", True)
+        self.addCleanup(settings.reset, "advanced.classic")
         page = self.c.get("/classic/")
         self.assertEqual(page.status, 200)
         self.assertIn('href="/classic/app.css"', page.text)

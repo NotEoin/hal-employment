@@ -9,7 +9,7 @@ import contextlib
 import threading
 import unittest
 
-from support.ui import AppPage, chromium, skip_unless_browser
+from support.ui import LOAD_TIMEOUT_MS, AppPage, chromium, skip_unless_browser
 from support.world import World, job_id
 
 from jobhunt.core import activity
@@ -56,6 +56,8 @@ class HomePage(unittest.TestCase):
             with self.subTest(size=size), real_app(self.browser, size, scheme) as p:
                 p.open("home")
                 pg = p.page
+                # the greeting replaces the page's first heading once /home answers; wait for it, not a sleep
+                pg.wait_for_selector("#main h1:text-matches('^Good ')", timeout=LOAD_TIMEOUT_MS)
                 self.assertTrue(pg.inner_text("#main h1").startswith("Good "))
                 needs = pg.locator("[aria-labelledby=needs-h] .li b").all_inner_texts()
                 self.assertEqual(needs[0], "Book the interview with Cobalt Ledger")

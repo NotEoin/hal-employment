@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 from support.fake_api import FakeServer, FakeState, made_up_session, made_up_status
-from support.ui import ROUTES, AppPage, chromium, skip_unless_browser
+from support.ui import LOAD_TIMEOUT_MS, ROUTES, AppPage, chromium, skip_unless_browser
 
 TITLES = {"home": "Home", "jobs": "Jobs", "job": "Job", "apps": "Applications", "app": "Application",
           "inbox": "Messages", "cv": "My CV", "docs": "Documents", "record": "Your record", "activity": "Activity",
@@ -225,6 +225,9 @@ class ShellTest(unittest.TestCase):
     def test_unknown_routes_go_home(self) -> None:
         srv = self.serve()
         p = self.tab(srv).open("nowhere-at-all")
+        # the count in the title comes with the status line, a moment after the page itself
+        p.page.wait_for_function("t => document.title === t", arg="(1) Home - Hal Employment",
+                                 timeout=LOAD_TIMEOUT_MS)
         self.assertEqual(p.page.title(), "(1) Home - Hal Employment")
         self.assertEqual(p.errors, [])
 

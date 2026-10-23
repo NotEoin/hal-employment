@@ -86,7 +86,8 @@ class DataTasks(unittest.TestCase):
         self.addCleanup(tasks.TASKS.pop, "test.from_module", None)
         self.addCleanup(runner.forget, "test.from_module")
         names = {"tasks": [], "actions": ["made_up_area_actions"]}
-        with mock.patch.object(plugins, "names", lambda kind: names[kind]):
+        real = plugins.names   # other kinds keep theirs: the status line lists the schedule on another thread
+        with mock.patch.object(plugins, "names", lambda kind: names[kind] if kind in names else real(kind)):
             done = tasks.run_due(self.con)
         self.assertEqual([(d["kind"], d["state"]) for d in done], [("test.from_module", "done")])
 

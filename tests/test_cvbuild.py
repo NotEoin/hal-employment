@@ -4,6 +4,7 @@ Moved by class from tests/test_apply.py. The applicant and their material are ma
 one, answering by purpose, and the record is a folder of its own with a private folder in it.
 """
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +20,7 @@ from jobhunt.core import naming
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
+OLDER_NS = 1_000_000_000   # a second earlier: plainly older on every file system
 
 
 class BuildingCv(unittest.TestCase):
@@ -58,6 +60,9 @@ class BuildingCv(unittest.TestCase):
     def test_material_is_kept_as_plain_text(self):
         name = cvbuild.add("Dissertation summary", "I studied timetables.")
         self.assertEqual(name, "dissertation-summary")
+        # two files written at once can share a modified time (Windows updates its clock every 15.6 ms)
+        first = cvbuild.SOURCES / f"{name}.txt"
+        os.utime(first, ns=(first.stat().st_atime_ns, first.stat().st_mtime_ns - OLDER_NS))
         self.assertEqual(cvbuild.add("notes.md", data=b"More notes"), "notes")
         self.assertEqual([x["name"] for x in cvbuild.sources()], ["notes", "dissertation-summary"])
         cvbuild.remove("notes")
