@@ -23,6 +23,19 @@ HAL_TEST_BROWSER=1 .venv/bin/python -m unittest discover tests
 The legacy tests from `tests/test_apply.py` drive Playwright's Chromium whatever `HAL_TEST_BROWSER` says;
 new browser tests skip unless it is `1`.
 
+On Windows (PowerShell), with git on `PATH` for the importer's tests:
+
+```powershell
+uv sync --frozen --extra browser                     # no documents extra on Windows
+.venv\Scripts\python.exe -m playwright install chromium
+$env:HAL_EMPLOYMENT_HOME = "$PWD\.tmp-home"; $env:HAL_TEST_MODE = "1"; $env:HAL_EMPLOYMENT_PORT = "24321"
+$env:HAL_TEST_BROWSER = "1"
+.venv\Scripts\python.exe -m unittest discover tests
+```
+
+Run it from a normal sign-in (a desktop session or a scheduled task with a password). An SSH session signed in
+with a key cannot use Windows' data protection (DPAPI), so the secrets tests fail there with "Access is denied".
+
 ## Gates
 
 | Gate | Command | What it proves |
@@ -56,6 +69,18 @@ commit.
 - No test touches the network, a real model or the owner's data. Fakes stand in for each.
 - Shared helpers live in `tests/support/`; import them as `from support import ...`, because
   `unittest discover tests` puts `tests/` on the import path.
+- Every test passes on Linux and Windows (the CI runs both). Windows cannot remove a file that is still open,
+  so a test closes its connections before its home goes: `with HalServer(), closing(db.connect()) as con:`,
+  never an `addCleanup(con.close)` that runs after the home is removed. `fresh_home()`, `HalServer` and the
+  legacy `Practice` wait for actions (`runner.idle()`), requests (`AppServer.stop()`) and tab watches
+  (`driver.stop_watching()`) before removing theirs.
+- Wait on a condition with a timeout (`runner.idle()`, `runner.wait()`, a deadline loop), never on a sleep.
+- Build expected paths with `pathlib` (`str(Path("/usr/bin/flatpak"))`), and write a path into TOML as a
+  literal string (`'C:\Users\...'`), because a basic string reads `\U` as an escape.
+- A test that needs a time zone sets `HAL_EMPLOYMENT_TZ` (`UTC` needs no zone database), never `TZ` with
+  `time.tzset()`, which exists only on Unix. File modes (`0o600`) are checked on Linux only.
+- Skip a test on Windows only when the behaviour is Linux-only (systemd units, `/usr/bin/python3`), with the
+  reason in the skip.
 
 ## The made-up world
 
