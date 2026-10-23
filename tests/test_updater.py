@@ -342,6 +342,32 @@ class Signatures(UpdaterCase):
         self.assertEqual(updates.signing(self.world())["words"],
                          "Every update is checked: it must be signed by the person who set Hal up.")
 
+    def test_once_a_key_is_committed_every_later_commit_in_the_same_update_must_verify(self):
+        # an install with no key yet would otherwise take the key commit and an unsigned one after it
+        key, line = self.key("owner")
+        installed = self.repos.head()
+        self.repos.commit({"scripts/install/allowed_signers": NO_KEY + line}, "build: the owner's signing key", key=key)
+        self.repos.commit({"README.md": "Hal 2\n"}, "docs: an unsigned change after the key")
+        self.assertEqual(updates.update(self.world())["state"], "not_owner")
+        self.assertEqual(self.repos.head(), installed)
+
+    def test_signed_commits_after_a_new_key_install_in_the_same_update(self):
+        key, line = self.key("owner")
+        self.repos.commit({"scripts/install/allowed_signers": NO_KEY + line}, "build: the owner's signing key", key=key)
+        new = self.repos.commit({"README.md": "Hal 2\n"}, "docs: signed after the key", key=key)
+        result = updates.update(self.world())
+        self.assertEqual(result["state"], "updated")
+        self.assertFalse(result["signed"])       # the key commit itself had nothing to be checked against
+        self.assertEqual(self.repos.head(), new)
+
+    def test_the_daily_check_does_not_offer_a_commit_not_signed_by_the_owner(self):
+        self.owner_key_installed()
+        self.repos.commit({"README.md": "Hal 2\n"}, "docs: an unsigned change")
+        with self.assertRaises(updates.UpdateError) as e:
+            updates.check_and_keep(self.world())
+        self.assertEqual(e.exception.state, "not_owner")
+        self.assertFalse(updates.last_check()["available"])
+
     def test_updates_install_unchecked_while_allowed_signers_holds_no_key(self):
         self.repos.commit({"README.md": "Hal 2\n"}, "docs: unsigned while signing is not set up")
         w = self.world()

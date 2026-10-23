@@ -565,29 +565,44 @@ def _ssh_keygen(world: World) -> list[str]:
     return ["-c", f"gpg.ssh.program={exe}"] if exe.is_file() else []
 
 
-def verify(world: World, commits: list[str]) -> bool:
-    """Checks every new commit's SSH signature against the installed `allowed_signers`.
+def _signers_for(world: World, sha: str, new: set[str]) -> str:
+    """The `allowed_signers` that `sha` is checked against.
 
-    Returns False when the installed file holds no key yet (updates install unchecked); raises
-    `UpdateError(NOT_OWNER)` naming the first commit that fails.
+    Its first parent's copy when that parent is itself a new commit (checked before it, so its file is
+    trusted), else the installed commit's copy. A push therefore cannot bring its own key, and once a key is
+    committed every later commit must verify, even within one update.
     """
-    text = signers_text(world)
-    if not has_keys(text):
-        world.say("Signatures are not checked yet: the installed allowed_signers holds no key.")
-        return False
-    fd, name = tempfile.mkstemp(prefix="hal-signers-", dir=str(paths.state_dir()))
+    parent = world.git("rev-parse", "--verify", "--quiet", f"{sha}^1", check=False).stdout.strip()
+    return signers_text(world, parent if parent in new else "HEAD")
+
+
+def verify(world: World, commits: list[str]) -> bool:
+    """Checks the SSH signature of every new commit (`rev-list` order, newest first), oldest first.
+
+    Returns True when every commit was checked, False when some installed unchecked because the file they
+    are checked against holds no key yet (the owner has not set up signing); raises `UpdateError(NOT_OWNER)`
+    naming the first commit that fails.
+    """
+    new, files, every = set(commits), {}, True
+    folder = Path(tempfile.mkdtemp(prefix="hal-signers-", dir=str(paths.state_dir())))
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text)
-        for sha in commits:
-            done = world.git("-c", "gpg.format=ssh", "-c", f"gpg.ssh.allowedSignersFile={Path(name).as_posix()}",
+        for sha in reversed(commits):
+            text = _signers_for(world, sha, new)
+            if not has_keys(text):
+                every = False
+                continue
+            if text not in files:
+                files[text] = folder / f"allowed_signers-{len(files)}"
+                files[text].write_text(text, encoding="utf-8", newline="\n")
+            done = world.git("-c", "gpg.format=ssh", "-c", f"gpg.ssh.allowedSignersFile={files[text].as_posix()}",
                              *_ssh_keygen(world), "verify-commit", sha, check=False)
             if done.returncode != 0:
                 raise UpdateError(NOT_OWNER, f"{sha[:SHORT]}: {done.stderr.strip()[-500:]}", state="not_owner")
     finally:
-        with contextlib.suppress(OSError):
-            os.unlink(name)
-    return True
+        shutil.rmtree(folder, ignore_errors=True)
+    if not every:
+        world.say("Some commits were not checked for a signature: the owner has not set up signing yet.")
+    return every
 
 
 def backup_db(sha: str) -> Path | None:
@@ -633,6 +648,7 @@ def check(world: World) -> dict:
     if not commits or new == held:
         out.update(available=False, words=UP_TO_DATE, whats_new=[])
         return out
+    verify(world, commits)
     out.update(available=True, whats_new=whats_new(world, head, new), version=version_at(world, new),
                words=f"Hal {version_at(world, new)} is ready.")
     return out

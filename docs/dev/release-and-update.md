@@ -64,14 +64,18 @@ updater runs, for every new commit,
 git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=<file> verify-commit <commit>   # <file>: see below
 ```
 
-where `<file>` is `scripts/install/allowed_signers` as the installed commit has it (`git show
-HEAD:scripts/install/allowed_signers`), so a push can never bring its own key. A failure says "This update
-was not made by the person who set Hal up, so Hal did not install it. Ask them." and nothing changes.
+oldest first, where `<file>` is `scripts/install/allowed_signers` as the commit before it has it: the
+installed commit's copy (`git show HEAD:scripts/install/allowed_signers`) for the first new commit, and the
+previous new commit's copy after that, which was itself checked first. So a push can never bring its own
+key, a key change must be signed by the old key, and a key added inside one update already applies to the
+commits after it. The daily check runs the same check, so it never offers such a commit. A failure says
+"This update was not made by the person who set Hal up, so Hal did not install it. Ask them." and nothing
+changes.
 
 **Not set up yet.** The shipped `allowed_signers` holds comments only, because the owner has no signing key
 yet. While it holds no key line, updates install without the check and Settings, Updates says "Updates are
-not yet checked for the owner's signature: they have not set up signing." From the first installed commit
-whose `allowed_signers` holds a key, every later commit must verify. To switch it on:
+not yet checked for the owner's signature: they have not set up signing." From the first commit
+whose `allowed_signers` holds a key, every later commit must verify, even when both arrive in one update. To switch it on:
 
 1. Make a signing key and sign every commit in your clone (its worktrees share the setting):
 
