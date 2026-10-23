@@ -1,8 +1,11 @@
 /* The Form step of an application: what Hal filled, each answer outlined fine or to
-   check with its source and "Why this answer?", and the buttons that act on the form. The words come from
-   the server (`form.words`), so they are the same in Hal's window and with the browser helper. */
+   check with its source and "Why this answer?", the notes about the job site Hal used, and the buttons that
+   act on the form. The words come from the server (`form.words`, each field's `why` and `notes_used`), so
+   they are the same in Hal's window and with the browser helper. A private answer's "Why this answer?" is
+   the one fixed sentence below whatever the server sends, so nothing more about it can reach the page. */
 import { html, cx, useState } from "../core/html.js";
 import { post } from "../core/api.js";
+import { go } from "../core/router.js";
 import { toast, openDialog, invalidate } from "../core/store.js";
 import { Icon } from "../ui/icons.js";
 import { ShowFormButton } from "../ui/open-buttons.js";
@@ -10,6 +13,31 @@ import { HelperView } from "./helper-view.js";
 
 const SRC_LOOK = { profile: ["info", "user"], cv: ["info", "file"], record: ["info", "book"], saved: ["why", "bookmark"],
                    note: ["why", "globe"], hal: ["hal", "spark"], private: ["", "lock"], you: ["good", "user"] };
+export const PRIVATE_WHY = "From your private answers. These are never shown to the AI or saved in logs.";
+const ORIGIN_WORDS = { you: "You told Hal.", builtin: "Built into Hal.", learned: "Hal learned this from you.",
+                       hal: "Hal suggested this." };
+
+const sentence = t => (/[.!?]$/.test(t) ? t : t + ".");
+
+/** The notes Hal used on this form: the form's own list, then each field's, once each. */
+export function notesUsed(form) {
+  const seen = new Set();
+  const out = [];
+  for (const n of [...(form.notes_used || []), ...form.fields.flatMap(x => x.notes_used || [])]) {
+    const key = n.id || n.text;
+    if (!n.text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(n);
+  }
+  return out;
+}
+
+/** "Why this answer?" for one field, with the trace line of each note used on it. */
+function WhyLine({ x }) {
+  if (x.src === "private") return html`<div class="whyline">${PRIVATE_WHY}</div>`;
+  const traces = (x.notes_used || []).map(n => n.what).filter(w => w && w !== x.why);
+  return html`<div class="whyline">${x.why}${traces.map(t => html`<div class="small" style="margin-top:4px">${t}</div>`)}</div>`;
+}
 
 /** The Form step. */
 export function FormStep({ a, reload }) {
@@ -25,6 +53,7 @@ export function FormStep({ a, reload }) {
   const fields = [...f.fields].sort((x, y) => (x.ok ? 1 : 0) - (y.ok ? 1 : 0));
   const changed = Object.entries(edits).map(([hid, value]) => ({ hid, value }));
   const warn = f.to_check > 0;
+  const used = notesUsed(f);
   return html`
     <div class="approve" style=${warn ? "background:var(--warn-soft)" : ""}><div class=${cx("ic", warn ? "warn" : "info")}><${Icon} n=${warn ? "warn" : "info"} /></div>
       <div class="grow"><b>${f.words || f.message}</b>${f.handed_over && html`<div class="small">Hal stops before Submit. You press Submit on the employer's site.</div>`}</div>
@@ -40,9 +69,10 @@ export function FormStep({ a, reload }) {
           <div class="ans"><input class="input" aria-label=${x.q} value=${x.hid in edits ? edits[x.hid] : x.a} disabled=${x.src === "private"}
             onInput=${e => setEdits({ ...edits, [x.hid]: e.target.value })} /></div>
           <div class="row tight" style="grid-column:1/-1"><span class=${cx("chip", look[0])}><${Icon} n=${look[1]} c="s" />${x.src_label}</span>
+            ${x.src !== "note" && x.src !== "private" && (x.notes_used || []).length > 0 && html`<span class="chip why"><${Icon} n="globe" c="s" />Site note</span>`}
             <button type="button" class="why" aria-expanded=${open === k ? "true" : "false"} onClick=${() => setOpen(open === k ? null : k)}>Why this answer?</button></div>
           ${x.problem && html`<div class="small" style="grid-column:1/-1;color:var(--bad)">${x.problem}</div>`}
-          ${open === k && html`<div class="whyline">${x.why}</div>`}</div>`; })}
+          ${open === k && html`<${WhyLine} x=${x} />`}</div>`; })}
         <div class="row" style="margin-top:14px">
           <button type="button" class="btn" disabled=${!changed.length} onClick=${() => act("/form/edits", { edits: changed }, "Hal is putting your changes into the form")}>Put my changes in the form</button>
           ${!f.last_page && html`<button type="button" class="btn" onClick=${() => act("/form/next", {}, "Hal is carrying on to the next page")}>Carry on to the next page</button>`}
@@ -53,8 +83,10 @@ export function FormStep({ a, reload }) {
       <div class="stack">
         <section><h2 class="h2">What you see on the site</h2><${HelperView} a=${a} />
           <p class="small sub" style="margin-top:8px">Green: Hal is sure. Amber: please check. The helper's panel sits in the corner of the employer's page.</p></section>
-        ${f.notes_used && f.notes_used.length > 0 && html`<section class="card soft"><h3 class="h3">Notes Hal used on this site</h3>
-          ${f.notes_used.map(n => html`<div class="li"><div class="ic why"><${Icon} n="globe" /></div><div class="grow small">${n.text}</div></div>`)}</section>`}
+        ${used.length > 0 && html`<section class="card soft" data-notes-used><h3 class="h3">Notes Hal used on this site</h3>
+          ${used.map(n => html`<div class="li"><div class="ic why"><${Icon} n="globe" /></div><div class="grow small">${sentence(n.text)}
+            ${ORIGIN_WORDS[n.origin] && html` <span class="sub">${ORIGIN_WORDS[n.origin]}</span>`}</div></div>`)}
+          <button type="button" class="btn quiet small" onClick=${() => go("memory-sites")}>See all notes for this site</button></section>`}
       </div>
     </div>`;
 }
