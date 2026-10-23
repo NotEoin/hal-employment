@@ -3,3 +3,8 @@
 *.sh eol=lf
 *.woff2 binary
 *.png binary
+# The made-up CVs are compared byte for byte with what tests/support/make_cv_fixtures.py makes, so git must
+# never turn their line ends into CRLF (core.autocrlf on Windows); a PDF with no NUL byte looks like text.
+tests/fixtures/** -text
+*.pdf binary
+*.docx binary

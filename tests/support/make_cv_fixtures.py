@@ -28,6 +28,7 @@ from xml.sax.saxutils import escape
 
 FOLDER = Path(__file__).resolve().parents[1] / "fixtures" / "cv"
 ZIP_DATE = (2026, 1, 1, 0, 0, 0)   # any fixed date keeps the Word files reproducible
+UNIX = 3                           # the zip "made by" system of the committed files
 
 PAGE_W, PAGE_H = 595, 842          # A4 in points
 MARGIN_X, MARGIN_TOP, MARGIN_BOTTOM = 50, 60, 60
@@ -341,6 +342,7 @@ def docx_bytes(lines: list[Line], *, skills_table: bool = False) -> bytes:
             info = zipfile.ZipInfo(name, ZIP_DATE)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
+            info.create_system = UNIX   # zipfile writes 0 (MS-DOS) on Windows, so the bytes differed there
             z.writestr(info, text.encode("utf-8"))
     return buf.getvalue()
 
