@@ -1,7 +1,7 @@
 # Built-in CV type. Copy it in My CV to change it; this file stays as it is.
 id = "technical_grad"
 name = "Technical graduate"
-fits = "Computing, engineering and science graduates"
+fits = "Computing, software and data graduates"
 note = "Projects with tools and results. Numbers where you have them."
 order_words = "Profile, Education, Projects, Experience, Skills"
 length_words = "1 page preferred"
