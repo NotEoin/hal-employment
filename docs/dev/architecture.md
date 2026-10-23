@@ -248,6 +248,21 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   `recruiter_read` is the AI's opinion and part of no score.
 - `cvscore.keywords` takes the type's keywords and aliases; Classic keeps the old list.
 
+## Looks and printing (`cvstudio/render.py`, `printer.py`, `export.py`)
+
+- A look is `cvstudio/looks/<id>/{look.toml, cv.css, letter.css}` over `looks/base.css`. `render.render_cv_html`
+  draws the page; the type sets order, titles and limits, and the person's Sections layout wins. The page
+  holds no script and carries its own Content-Security-Policy (`render.POLICY`) in a meta tag; the preview route
+  sends the exact bytes the printer prints, with the same policy as its header (`HtmlResponse.policy`).
+- `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
+  Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser. 60 s timeout, and
+  the whole process tree is ended when it runs out. Every PDF is checked (opens, page count, name, first
+  section title). When no browser can print, `cvpdf.draw_view` makes the simple PDF and Activity says why.
+- `export.py` gives PDF, Word (stdlib WordprocessingML), plain text, JSON Resume 1.0.0 and the website's
+  `cv.json`. PDFs are cached in `cache/cv-print/` by the page's hash.
+- Keeping an uploaded Word file's own design is not built yet. The later approach: anchors from
+  the parse, run-preserving replacement, refusal words, PDF only through Word or LibreOffice.
+
 ## Names (`core/naming.py`)
 
 `file_name("cv" | "letter")` fills the `cvdocs.*file_name` template with `you.name`; `folder_name(n, company,
