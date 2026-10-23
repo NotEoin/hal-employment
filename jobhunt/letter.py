@@ -1,7 +1,10 @@
-"""Cover letters as PDFs in the CV's style, drawn with the same PDF writer (`pdfdraw.py`).
+"""Cover letters as PDFs in the CV's style.
 
-The header (name, title, contact line, location) is drawn exactly as on the CV sent with the letter, then
-the date, recipient, subject line and letter body. The caller passes that CV; without one the header comes
+With a look, the letter is an HTML page in that look (`cvstudio.render.render_letter_html`), printed by the
+same browser printer as the CV, so its header matches a CV printed in the same look; Hal's own PDF writer
+(`pdfdraw.py`) is the printer's fallback. Without a look, it is drawn with that writer as before. The drawn
+header (name, title, contact line, location) is exactly the one on the CV sent with the letter, then the
+date, recipient, subject line and letter body. The caller passes that CV; without one the header comes
 from the person's main CV, never from a file outside Hal.
 """
 from datetime import date
@@ -30,8 +33,12 @@ def _header(b, doc, data: dict) -> None:
     doc.y -= 22
 
 
+def _day(when: date) -> str:
+    return f"{when.day} {when:%B %Y}"
+
+
 def render(body: str, out: Path, recipient: list[str], subject: str, when: date | None = None,
-           cv_sent: dict | None = None) -> Path:
+           cv_sent: dict | None = None, look: str | None = None) -> Path:
     """Writes a one-page cover letter PDF and returns its path.
 
     Args:
@@ -41,10 +48,31 @@ def render(body: str, out: Path, recipient: list[str], subject: str, when: date 
         subject: Subject line, set in bold above the greeting.
         when: Date shown on the letter; today by default.
         cv_sent: The CV sent with the letter, whose header the letter repeats; the main CV by default.
+        look: A CV look id: print the letter in that look with the browser printer.
 
     Raises:
         ValueError: the letter runs past one page.
     """
+    if look is None:
+        return draw(body, out, recipient, subject, when, cv_sent)
+    from .cvstudio import export, printer
+    from .cvstudio import render as pages
+
+    when = when or date.today()
+    title = (cv.printable(cv_sent) if cv_sent is not None else cv.load()).get("title", "")
+    profile = pages.profile_from_settings()
+    page = pages.render_letter_html(body, profile, recipient, look, when=_day(when), subject=subject, headline=title)
+    done = printer.to_pdf(page, out, expect_name=profile["name"], max_pages=0, expect_text=[subject],
+                          fallback=lambda path: draw(body, path, recipient, subject, when, cv_sent),
+                          fold=export.fold_for_simple_pdf, why="Your cover letter was printed")
+    if done["pages"] > 1:
+        raise ValueError(f"letter runs to {done['pages']} pages; shorten it to one")
+    return Path(done["path"])
+
+
+def draw(body: str, out: Path, recipient: list[str], subject: str, when: date | None = None,
+         cv_sent: dict | None = None) -> Path:
+    """Draws the letter with Hal's own PDF writer; `render` without a look, and the printer's fallback."""
     b = pdfdraw
     data = _drawable(cv.printable(cv_sent) if cv_sent is not None else cv.load())
     body, recipient, subject = _drawable(body), _drawable(recipient), _drawable(subject)
@@ -53,7 +81,7 @@ def render(body: str, out: Path, recipient: list[str], subject: str, when: date 
     doc = b.Doc()
     _header(b, doc, data)
     when = when or date.today()
-    doc.paragraph(f"{when.day} {when:%B %Y}", size=b.BODY_SIZE, lead=b.BODY_LEAD)
+    doc.paragraph(_day(when), size=b.BODY_SIZE, lead=b.BODY_LEAD)
     doc.y -= BODY_GAP
     for line in recipient:
         doc.paragraph(line, size=b.BODY_SIZE, lead=b.BODY_LEAD)
