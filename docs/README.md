@@ -26,7 +26,7 @@ documents explain how Hal works and how to change it.
 | --- | --- |
 | [Architecture](dev/architecture.md) | How the server, the shared contracts and each area fit together |
 | [Testing](dev/testing.md) | How to run the tests and checks, the fakes, the made-up people, and rules for tests that pass on Windows too |
-| [Release and update](dev/release-and-update.md) | Install kinds, the updater, signed updates and the install files' pinned downloads |
+| [How updates work](dev/release-and-update.md) | Install kinds, the updater, signed updates and the install files' pinned downloads |
 | [Notes about job sites](dev/site-notes.md) | How Hal keeps what works on each job site, and how the form engines read it |
 
 ## In the repository's top folder
