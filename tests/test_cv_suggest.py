@@ -253,6 +253,17 @@ class Guards(CvCase):
         self.assertEqual(tuple(row), ("edited", mine_text))
         self.assertTrue(out["version_id"])
 
+    def test_a_gap_in_the_ais_own_words_must_be_filled_before_accept(self):
+        # Claude wrote "[what was the result, and by how much?]" instead of Hal's gaps (2026-10-23); Accept took it
+        asked = "Helped visitors find family records, [what was the result, and by how much?]"
+        with fake_ai({"cv_suggest": ai_suggests(VISITORS, "Helped visitors find family records", asked)}):
+            suggest.look_again(self.con)
+        mine = [s for s in self.pending("Wording") if s["target"] == VISITORS]
+        self.assertEqual(mine[0]["afters"], [asked])
+        with self.assertRaisesRegex(ValueError, r"Fill in the gap first.*\[what was the result, and by how much\?\]"):
+            suggest.accept(self.con, mine[0]["id"])
+        self.assertEqual(self.text_at(VISITORS), "Helped visitors find family records")
+
     def test_a_locked_line_is_never_touched(self):
         doc = made_up_cv()
         doc.sections[3].entries[0].bullets[0].locked = True

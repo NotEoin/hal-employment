@@ -8,7 +8,8 @@ prompt for at most one more suggestion for that section. So suggestions appear w
 Every suggestion passes the same guards before it is stored: the target exists and is not locked or kept
 in the person's wording, `before` is the text there now, numbers, years and qualifications Hal cannot find
 become gaps (`[how many?]`, `[when?]`, `[which?]`), no banned phrase, not a fingerprint the person already
-left, and it fits the type's limits.
+left, and it fits the type's limits. Any bracketed question counts as a gap, whoever wrote it, so a gap is
+never accepted into the CV or sent in a job's CV.
 
 Design decisions:
 - One suggestion per line. A spelling fix covers every word on its line, so accepting one never makes
@@ -39,7 +40,9 @@ KINDS = ("Wording", "Results", "Order", "Cut", "Consistency", "Symbols", "Dates"
 OPS = ("replace", "insert", "delete", "move", "hide", "reorder", "retitle")
 REASONS = ("Keep my wording", "This is not true", "Too formal", "Too long", "Not relevant")
 GAPS = {"number": "[how many?]", "year": "[when?]", "qualification": "[which?]"}
-GAP = re.compile(r"\[(how many|when|which)\?\]")
+# Hal's own gaps, and any bracketed question the AI writes instead: Claude wrote "[what outcome?]" and
+# "[which languages, and what level?]" on 2026-10-23, and a gap of any wording must stop Accept.
+GAP = re.compile(r"\[[^\[\]\n]{1,80}\?\]")
 META_REVIEWED = "cv_suggest_reviewed"       # the version id a full pass last found nothing more in
 DOC_ID = "main"
 WHOLE_CV = "cv"     # a suggestion's target and reviewer id for the whole CV; the model's own target is ""

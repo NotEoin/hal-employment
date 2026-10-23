@@ -117,6 +117,18 @@ class Tailoring(CvCase):
         with self.assertRaises(RuntimeError):
             tailor.set_change(JOB["id"], ids["Moved"], False)
 
+    def test_a_job_cv_never_carries_a_gap_in_the_ais_own_words(self):
+        # Claude's gaps on 2026-10-23 read "[what outcome?]", which the old gap pattern let through to a job's CV
+        def asks(req) -> str:
+            out = json.loads(tailoring_ai(req))
+            if out.get("afters"):
+                out["afters"] = [out["afters"][0].rstrip(".") + ", achieving [what outcome?]"]
+            return json.dumps(out)
+        with fake_ai({"cv_suggest": asks}):
+            _, changes = tailor.for_job(JOB, level="more")
+        self.assertEqual([c["kind"] for c in changes], ["Moved"])
+        self.assertNotIn("[what outcome?]", json.dumps(changes))
+
     def test_a_locked_line_is_never_touched_for_a_job(self):
         self.con.execute("UPDATE cv_documents SET layout = ?", (json.dumps({"locked_lines": [TABLE, PROFILE]}),))
         self.con.commit()

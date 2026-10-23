@@ -284,7 +284,8 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   numeric dates, banned and never-use phrases, limits, empty sections and order need no AI; the `cv_suggest`
   prompt may add at most one suggestion per section after them.
 - The guards run on every suggestion: the target exists and is unlocked, `before` matches the text there now,
-  numbers, years and qualifications Hal cannot find become `[how many?]`, `[when?]` or `[which?]`, no new
+  numbers, years and qualifications Hal cannot find become `[how many?]`, `[when?]` or `[which?]` (any
+  bracketed question counts as a gap, so Accept refuses it and a job's CV drops it), no new
   banned phrase, the fingerprint (sha1 of target, trigger id and first after) is not one the person left, and
   the type's limits hold.
 - Accept makes a new version (`origin="improved"`, `by="you"`); Undo and Accept all are versions too. Leaving
