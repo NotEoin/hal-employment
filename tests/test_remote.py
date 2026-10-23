@@ -170,8 +170,11 @@ class Remote(unittest.TestCase):
         self.assertTrue(any(c == f"ssh-copy-id {login}" for c in commands))
         self.assertTrue(any("remote-launcher --os windows" in c for c in commands))
         self.assertEqual([s["n"] for s in how["steps"]], list(range(1, len(how["steps"]) + 1)))
+        # the desktop is Linux: a Windows runner's checkout (D:/a/...) cannot be called over SSH, and
+        # test_remote_launcher covers which command the launcher calls (CI windows-2025, 2026-10-23)
         with mock.patch.object(launcher, "this_host", return_value=DESK), \
-                mock.patch.object(launcher, "this_user", return_value="sam"):
+                mock.patch.object(launcher, "this_user", return_value="sam"), \
+                mock.patch.object(launcher, "hal_command", return_value=launcher.SHIM):
             sh = self.away.get("/api/v2/remote/launcher?os=linux")
             cmd = self.away.get("/api/v2/remote/launcher?os=windows")
         self.assertEqual(sh.status, 200)

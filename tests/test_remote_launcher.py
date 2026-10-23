@@ -20,6 +20,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.api import HalServer
@@ -162,7 +163,9 @@ class Filled(unittest.TestCase):
             bin_dir.mkdir(parents=True)
             # Hal's own command on the owner's desktop: it ignores its arguments and opens a browser tab
             (bin_dir / "hal-employment").write_text("#!/bin/sh\nxdg-open http://127.0.0.1:8737/\n", encoding="utf-8")
-            command = launcher.hal_command(home)
+            # the desktop is Linux; a Windows runner's checkout (D:/a/...) is refused for its colon
+            with mock.patch.object(launcher.paths, "code_dir", return_value=Path("/home/sam/hal-employment")):
+                command = launcher.hal_command(home)
             self.assertNotIn("hal-employment ", command + " ")
             self.assertTrue(command.endswith(" -m jobhunt"), command)
             (bin_dir / "hal-employment-cli").write_text("#!/bin/sh\n", encoding="utf-8")

@@ -148,6 +148,9 @@ class Shapes(unittest.TestCase):
         text = (INSTALL / "allowed_signers").read_text(encoding="ascii")
         self.assertTrue(all(not line.strip() or line.lstrip().startswith("#") for line in text.splitlines()))
 
+    # Regression (CI windows-2025, 2026-10-23): `bash` there can be WSL's launcher, which fails with no Linux
+    # installed and says nothing, so the Linux scripts are parsed on the Linux runners only.
+    @unittest.skipIf(os.name == "nt", "the Linux scripts are parsed on Linux; Windows' bash may be WSL's launcher")
     @unittest.skipUnless(shutil.which("bash"), "bash checks the Linux scripts")
     def test_the_shell_scripts_parse(self):
         for path in (LINUX, UPDATE_SH):
