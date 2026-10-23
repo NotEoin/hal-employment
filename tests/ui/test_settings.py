@@ -240,7 +240,8 @@ class SettingsPage(unittest.TestCase):
         self.assertNotIn("{store}", password)
         p.go("settings-sites")
         where = self.row(p, "sites.where")
-        p.page.wait_for_selector('[data-key="sites.where"] >> text=switched on')
+        # the fixed help also says "switched on", so wait for the counts themselves
+        p.page.wait_for_selector(r'[data-key="sites.where"] >> text=/\d+ sites?, \d+ switched on\./')
         self.assertRegex(where.inner_text(), r"\d+ sites?, \d+ switched on\.")
 
     def test_the_helper_folder_row_shows_the_folder_with_copy(self) -> None:
