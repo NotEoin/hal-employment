@@ -14,6 +14,7 @@ Design notes:
 """
 from __future__ import annotations
 
+import io
 import logging
 import secrets as random
 import urllib.request
@@ -52,8 +53,15 @@ def _saved_topic() -> str | None:
 
 
 def qr_svg(topic: str) -> str:
-    """The QR code for subscribing to `topic`, as SVG text."""
-    return segno.make(NTFY + topic, error="m").svg_inline(scale=QR_SCALE, dark="#111111", light="#ffffff")
+    """The QR code for subscribing to `topic`, as SVG text that draws on its own as an image.
+
+    The page shows it as an `<img>`, and an SVG image without the SVG namespace draws nothing, so this is
+    not segno's `svg_inline`, which leaves the namespace out (the broken picture of the Windows 11 install test).
+    """
+    out = io.BytesIO()
+    segno.make(NTFY + topic, error="m").save(out, kind="svg", xmldecl=False, svgns=True, nl=False,
+                                            scale=QR_SCALE, dark="#111111", light="#ffffff")
+    return out.getvalue().decode("ascii")
 
 
 def topic_qr(*, new: bool = False) -> dict:

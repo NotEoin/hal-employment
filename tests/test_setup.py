@@ -185,6 +185,8 @@ class SetupRoutes(unittest.TestCase):
         first = self.post("/notify/phone/topic")
         self.assertTrue(first["new"])
         self.assertIn("<svg", first["qr_svg"])
+        # Windows 11 install test: without the namespace the page's <img> drew nothing where the code should be
+        self.assertTrue(first["qr_svg"].startswith('<svg xmlns="http://www.w3.org/2000/svg"'), first["qr_svg"][:80])
         topic = secrets.get(phone.SECRET)
         self.assertNotIn(topic, str(first), "the code itself is never sent to the page as text")
         self.assertTrue(self.get("/settings")["values"]["notify.phone"])
