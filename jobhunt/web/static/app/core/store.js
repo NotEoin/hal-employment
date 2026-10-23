@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from "./html.js";
 import { get } from "./api.js";
 
-const TOAST_MS = 4500;        // long enough to read a one-line message
+const TOAST_MS = 4500;        // long enough to read
 const TOAST_UNDO_MS = 8000;   // long enough to reach the Undo button by keyboard
 
 export const store = {

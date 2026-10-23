@@ -1,4 +1,4 @@
-/* The app's line icons: ICONS holds each icon's SVG paths on a 24-unit grid, Icon draws one.
+/* The line icons: ICONS holds each icon's SVG paths on a 24-unit grid, Icon draws one.
    Icons are decoration (aria-hidden); the words next to them carry the meaning. */
 import { html, cx } from "../core/html.js";
 

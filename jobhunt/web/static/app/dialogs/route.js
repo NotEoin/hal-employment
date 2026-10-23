@@ -1,4 +1,4 @@
-/* The "How your CV is made" dialog, in the words of the setup guide's CV step.
+/* The "How your CV is made" dialog.
    The choice also sets what employers get: your original file for "as it is", Hal's copy otherwise. */
 import { html, useState } from "../core/html.js";
 import { put } from "../core/api.js";

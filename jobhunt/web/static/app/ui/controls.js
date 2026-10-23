@@ -1,10 +1,10 @@
-/* Small building blocks every page uses: switches,
+/* Small building blocks every page uses, as in the design: switches,
    segmented choices, tabs, page heads, the match score, point chips, chips, notes, empty states and bars.
    Each carries its ARIA role, so colour is never the only signal. */
 import { html, cx, useRef } from "../core/html.js";
 import { Icon } from "./icons.js";
 
-const SCORE_STRONG = 80;  // bands as the scoring rules define them (JobCard.band)
+const SCORE_STRONG = 80;  // bands as the scoring rules define them
 const SCORE_GOOD = 65;
 const METER_STEPS = 5;
 

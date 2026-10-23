@@ -3,7 +3,7 @@
    A file or pasted text goes to POST /cv/upload. The server answers at once when it cannot read the file
    (too big, too long, a picture of a CV) and otherwise starts the reading as an action; this part follows
    that action and then shows what Hal found, with "Check what Hal read" and a note for anything Hal was
-   not sure of. In the setup guide Hal speaks for itself ("Check what I read"), as it does throughout the guide. */
+   not sure of. In the setup guide Hal speaks for itself ("Check what I read"). */
 import { html, useState } from "../core/html.js";
 import { run } from "../core/api.js";
 import { useApi, openDialog, invalidate } from "../core/store.js";

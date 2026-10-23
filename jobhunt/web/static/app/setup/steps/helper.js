@@ -3,7 +3,7 @@
    Four steps per browser: open its page of add-ons, switch on "Developer mode", press "Load unpacked" and
    choose Hal's helper folder, then Connect. Browsers refuse to open their own pages (`edge://extensions`)
    from a web page or from their command line, so the first button copies that address and opens a new
-   browser window to paste it in (Windows 11 install test). A browser that was never opened
+   browser window to paste it in (seen on a fresh Windows 11 install). A browser that was never opened
    shows its own welcome pages there first, so the words say to click the address bar. The steps, their words and their pictures come from
    GET /helpers/browsers (apply/browsers.toml), so each browser is explained in its own words.
 

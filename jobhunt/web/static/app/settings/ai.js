@@ -1,4 +1,4 @@
-/* Hal's brain in Settings: the Claude account, the allowance in counts, and Install, Sign in and Test
+/* Hal's brain in Settings: the Claude account, the allowance in counts, and Install, Sign in and Test.
 
    The account reads "Signed in as <email> (Claude Pro)" from `claude auth status`, and the allowance says
    what Hal can count ("Hal used Claude 23 times today. 12 were background checks (your limit is 30).")

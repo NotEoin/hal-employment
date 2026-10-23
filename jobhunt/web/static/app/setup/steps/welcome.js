@@ -1,4 +1,4 @@
-/* Setup guide step 1: Welcome (there is no tray icon).
+/* Setup guide step 1: Welcome.
 
    What Hal does, what it never does, what stays on the computer, and that closing the window does not
    stop Hal. When an older Hal is found on this computer (the stick install), the step offers to

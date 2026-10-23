@@ -1,4 +1,4 @@
-/* The Type and look tab: the frame that puts its five parts in order. Each
+/* The Type and look tab: the frame that puts its five parts in a fixed order. Each
    part is its owner's file: the CV type, the look, the Sections card (here), the Writing card
    and adjusting for each job. */
 import { html } from "../core/html.js";

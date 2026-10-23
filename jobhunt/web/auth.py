@@ -58,7 +58,7 @@ class Session:
 
 @dataclass(frozen=True)
 class Helper:
-    """A paired browser helper (the helpers module fills these in through its verifier)."""
+    """A paired browser helper."""
 
     id: str
     browser: str | None

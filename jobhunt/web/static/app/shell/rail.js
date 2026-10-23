@@ -1,4 +1,4 @@
-/* The rail: the app's main menu, in groups, with counts.
+/* The rail: the app's main menu, grouped as designed, with counts.
 
    The simple menu shows SIMPLE_MAIN and puts the rest under More. */
 import { html, cx, useState, useEffect, useRef } from "../core/html.js";

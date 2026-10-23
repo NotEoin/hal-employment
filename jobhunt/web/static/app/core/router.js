@@ -1,4 +1,4 @@
-/* Routing: hash routes of the form "#<page>" or "#<page>-<arg>" (the arg is everything after the
+/* Routing: hash routes in the form "#<page>" or "#<page>-<arg>" (the arg is everything after the
    first "-"; job ids are encodeURIComponent-ed, since they contain ":").
 
    ROUTES lists every page from the start. Pages load on first visit, so one page that fails to load

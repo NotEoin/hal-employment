@@ -1,5 +1,4 @@
-/* The status line over every page: what Hal is doing now, with Why? and Stop, or when it works next.
-   This file draws the line from /status and the `status` event; the runner
+/* The status line over every page: what Hal is doing now, with Why? and Stop, or when it works next. This file draws the line from /status and the `status` event; the runner
    owns what /status says.
 
    Actions run by the command line or a scheduled search live in another process, so their changes reach

@@ -1,4 +1,4 @@
-/* The "Restart Hal" dialog, offered after a change that works only once Hal restarts (such as the port).
+/* The "Restart Hal" dialog, offered after a change that works only once Hal restarts.
 
    Hal restarts after replying; work in progress is marked and can carry on afterwards. */
 import { html, useState } from "../core/html.js";

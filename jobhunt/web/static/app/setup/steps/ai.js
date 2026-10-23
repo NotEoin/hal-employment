@@ -17,7 +17,7 @@ export const STATUS = "/ai/status?fresh=1";
 const CLAUDE_TEXT = "Fast and good at writing. Needs Claude Pro or Max (the free plan cannot be used). The advert, your CV and the evidence Hal picks are sent to Claude when it writes.";
 const LOCAL_TEXT = "Everything stays on this computer, but it needs a strong graphics card.";
 const INSTALLING = "Installing Claude (this usually takes about a minute)";
-// Claude names its own window "claude" on Windows 11, whatever title Hal gives it (Windows 11 install test)
+// Claude names its own window "claude" on Windows 11, whatever title Hal gives it
 const SIGN_IN_NOTE = "When you press Sign in, your browser opens Claude's page, and a small black window called \"claude\" may appear too. If the browser shows a code, paste it into that small window. This page ticks as soon as you are signed in.";
 const TICK_MS = 1000;
 const POLL_MS = 1000;   // the step list of a running action is read this often, so the installer's lines show live
@@ -79,7 +79,7 @@ export function ClaudeRows({ status, reload, compact, signWords = "Sign in" }) {
       const a = await follow(path, x => { const last = x.steps && x.steps[x.steps.length - 1]; if (last && x.steps.length > 1) setLine(last.text); });
       if (a.state !== "done") setFail(a.error || "That did not work. Hal kept the details in Activity.");
       else if (key === "test") { setTested(a.result); if (!a.result.ok) setFail(a.result.words); }
-    // the new state is read first, so the Install button does not come back for a moment (Windows 11 install test)
+    // the new state is read first, so the Install button does not come back for a moment
     } catch (e) { setFail(e.message); } finally { await reload(); setBusy(""); }
   };
   const button = (key, path, words) => html`<button type="button" class="btn primary small" disabled=${!!busy}

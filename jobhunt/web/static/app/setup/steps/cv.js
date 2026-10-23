@@ -1,6 +1,6 @@
 /* Setup guide step: How should we start your CV?
 
-   The three ways to start are the CV routes (as_is, improve, fresh), saved through PUT /cv/route.
+   The three ways to start are the routes (as_is, improve, fresh), saved through PUT /cv/route.
    For the first two the step offers the upload part; Hal speaks for itself here, as in the rest of the
    guide. What the CV gives for About you is saved there only where nothing was typed yet. */
 import { html, cx, useState, useEffect, useRef } from "../../core/html.js";

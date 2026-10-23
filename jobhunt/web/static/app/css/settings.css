@@ -23,5 +23,5 @@
 .sc-version { align-items: center; }
 .card > .note { margin-bottom: 8px; }
 .sc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-/* a check's words can hold a long folder path, which Chromium does not break at "/" (400 px) */
+/* a check's words can hold a long folder path, which Chromium does not break at "/" */
 .setting[data-check] .sub { overflow-wrap: anywhere; }
