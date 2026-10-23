@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import time
 import unittest
 
 from support.api import HalServer
@@ -21,6 +22,8 @@ from jobhunt.ai.base import LLMUnavailable
 
 FAILED_LOAD = "Failed to load resource"
 SETTLE_MS = 500   # a reply's re-draw takes a few milliseconds; this only gives a wrong one time to show
+HELD_WAIT_S = 10  # the step asks for the saved route after it draws; under load that can take seconds
+POLL_MS = 50
 MOUNT_STEP = """async () => {
   const [{ html, render }, { Step }] = await Promise.all([import("/app/core/html.js"),
                                                          import("/app/setup/steps/cv.js")]);
@@ -143,6 +146,9 @@ class CheckRead(unittest.TestCase):
         p.page.route("**/api/v2/cv", lambda route: held.append(route))
         p.page.evaluate(MOUNT_STEP)
         p.page.wait_for_selector("#test-step h1")
+        deadline = time.monotonic() + HELD_WAIT_S
+        while not held and time.monotonic() < deadline:   # the step's request reaches the route after it draws
+            p.page.wait_for_timeout(POLL_MS)
         self.assertEqual(len(held), 1, "the step asked for the saved route once")
         saved = held[0].fetch()   # the server answers now, before the click; the page hears it after
         p.page.click("button:has-text('Build me a fresh CV')")
