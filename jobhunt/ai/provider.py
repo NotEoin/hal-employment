@@ -6,8 +6,8 @@ So the first time Hal needs an answer (the first server start, or the first AI c
 it stores the suggestion once, `by="setup"`, with an Activity row saying so. Setup and the importers write
 their own choice the same way.
 
-The minimal settings store deletes a row whose value equals the default (the rule for every other
-key), so `keep_stored` puts the row back after any change.
+The minimal settings store deletes a row whose value equals the default, so `keep_stored` puts the row back after any
+change.
 """
 from __future__ import annotations
 

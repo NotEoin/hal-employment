@@ -1,4 +1,4 @@
-"""The old way to ask the AI, kept so no caller has to change: a shim over `jobhunt.ai`.
+"""The old way to ask the AI, kept so no caller changes: a shim over `jobhunt.ai`.
 
 `chat(..., role="main"|"writer"|"fast")` maps the old role names onto the new ones and goes through
 `jobhunt.ai.chat`, so every old call site gets the private-answer guard, the allowance and the GPU gate.

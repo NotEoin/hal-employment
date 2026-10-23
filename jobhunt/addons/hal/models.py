@@ -1,6 +1,6 @@
 """hal.conf's role models, offered as choices for the AI model settings.
 
-hal.conf is a shell file of `HAL_*=value` lines that Hal's model setup writes (L llm.py:29-38). Only the
+hal.conf is a shell file of `HAL_*=value` lines that Hal's model setup writes. Only the
 Hal add-on reads it; the AI layer itself never does.
 """
 from __future__ import annotations

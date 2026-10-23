@@ -1,6 +1,6 @@
-"""A copy of each application note in a folder the owner chose (`addon.applications_mirror`).
+"""A copy of each application note in a folder the person chose (`addon.applications_mirror`).
 
-Replaces the copy into the vault's Applications folder that L pack.py:166-168 made. The documents code
+It replaces the older copy into the vault's Applications folder. The documents code
 calls `copy(path)` when it has written an application's `pack.md`; nothing happens unless the add-on is on
 and the folder exists.
 """

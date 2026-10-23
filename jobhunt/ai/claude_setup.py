@@ -1,8 +1,7 @@
 """Claude Code on this computer: finding it, installing it, signing in and reading who is signed in.
 
-Someone without a local model thinks with their own Claude Pro or Max plan through the Claude Code command
-line, so setup has to install it, sign them in and say which account and plan it found, all without a
-console or an admin prompt.
+Someone can think with their own Claude Pro or Max plan through the Claude Code command line, so setup has to
+install it, sign them in and say which account and plan it found, all without a console or an admin prompt.
 
 Design decisions, each with its reason:
 
@@ -74,7 +73,7 @@ _FREE = re.compile(r"\bfree\b", re.I)
 _TEXT_SIGNED_OUT = re.compile(r"not (logged|signed) in|logged out|signed out|/login|please (log|sign) in", re.I)
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 # installer advice about PATH and commands to type, which Hal handles itself: on screen it told the person to
-# edit Environment Variables and to type `claude --help` (Windows 11 install test)
+# edit Environment Variables and to type `claude --help` (seen on a Windows 11 test machine)
 _HANDLED_BY_HAL = re.compile(r"\bPATH\b|Environment Variables|\.(bash|zsh)rc|^\W*Setup notes:?$|claude --help")
 
 _popen: Callable[..., subprocess.Popen] = subprocess.Popen

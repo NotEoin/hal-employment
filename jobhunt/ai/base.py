@@ -12,7 +12,7 @@ from typing import Literal, Protocol
 
 Role = Literal["writer", "checker", "quick", "embed"]
 ROLES: tuple[str, ...] = ("writer", "checker", "quick", "embed")
-OLD_ROLES = {"writer": "writer", "main": "checker", "fast": "quick"}   # the names L llm.py:41 used
+OLD_ROLES = {"writer": "writer", "main": "checker", "fast": "quick"}   # the role names `llm.py` always used
 UNAVAILABLE_KINDS = ("signed_out", "limit", "free_plan", "timeout", "cap", "keep_free", "gpu_busy", "local_only",
                      "not_installed", "unavailable")
 

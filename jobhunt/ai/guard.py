@@ -1,7 +1,7 @@
 """The private-answer guard: the last check before any text goes to an AI.
 
 The first line of defence is that private-question fields never enter a request (`autofill.private_question`
-and the form-fill exclusions). This guard is the second: it searches every prompt for the person's saved
+and the field exclusions of the form filler). This guard is the second: it searches every prompt for the person's saved
 free-text private answers and refuses the request when one is there. Option answers ("Yes", "No", "Prefer
 not to say") are never searched for: they appear in ordinary text everywhere, so matching them would stop
 all AI form filling while catching nothing the field exclusion does not already stop. The values come only

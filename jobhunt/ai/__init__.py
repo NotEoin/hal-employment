@@ -51,7 +51,7 @@ log = logging.getLogger(__name__)
 
 TEST_ENV = "HAL_TEST_MODE"
 REAL_AI_ENV = "HAL_TEST_REAL_AI"
-OLD_ROLE_ENV = {"checker": "MAIN", "writer": "WRITER", "quick": "FAST"}   # JOBHUNT_<ROLE>_MODEL, as L llm.py:46
+OLD_ROLE_ENV = {"checker": "MAIN", "writer": "WRITER", "quick": "FAST"}   # JOBHUNT_<ROLE>_MODEL, as `llm.py` read it
 FENCE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n?(.*?)\n?```\s*$", re.S)
 SECRETS_MODULE = "jobhunt.core.settings.secrets"
 NOT_IN_TESTS = "The made-up AI in the tests has no answer for this."
@@ -104,7 +104,7 @@ def _openai_key() -> str | None:
     except ModuleNotFoundError as e:
         if e.name != SECRETS_MODULE:
             raise
-        return None   # no secrets store in this install; a local server rarely needs a key
+        return None   # a build without the secrets store has no key; a local server rarely needs one
     return secrets.get("ai.openai_key", interactive=False)
 
 

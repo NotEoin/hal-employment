@@ -1,4 +1,4 @@
-"""The old GPU check, kept so no caller has to change: a shim over `jobhunt.ai.gpu`.
+"""The old GPU check, kept so no caller changes: a shim over `jobhunt.ai.gpu`.
 
 `busy()` says why the AI cannot run now, or None: another program on the graphics card (only for AI on this
 computer, and only while `ai.gpu_gate` is on), or the chosen AI not being ready.

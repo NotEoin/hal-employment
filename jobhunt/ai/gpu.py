@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 # Hal's own GPU users: Ollama, the voice server and speech recognition.
 OWN = ("ollama", "GPT-SoVITS", "api_v2.py", "hal-voice", "halvoice", "faster_whisper")
 NVIDIA_SMI_TIMEOUT_S = 10
-FOREGROUND_WAIT_S = 60
+FOREGROUND_WAIT_S = 60          # a request the person is waiting for gives up after a minute
 BACKGROUND_WAIT_S = 3600        # a scheduled job runs at most an hour
 POLL_S = 5
 BACKGROUND = 2

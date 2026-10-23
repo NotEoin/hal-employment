@@ -1,4 +1,4 @@
-"""The owner's Hal add-on: what Hal Employment does only for someone running the Hal tools.
+"""The integration with the Hal ecosystem: what Hal Employment does only for someone running the Hal tools.
 
 Everything here runs only when `addon.enabled` is on: the Pipeline note in Hal's vault after each email
 check (`pipeline.py`), the copy of each application note (`mirror.py`), urgent alerts spoken through

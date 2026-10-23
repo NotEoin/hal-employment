@@ -1,4 +1,4 @@
-"""Routes for Hal's brain: which AI fits, whether it is ready, Claude's install and sign-in, Test, model lists.
+"""Routes for Hal's AI: which AI fits, whether it is ready, Claude's install and sign-in, Test, model lists.
 
 Install, sign-in and Test start actions (`ai/ai_actions.py`) and return their id at once. Sign-in and sign-out
 are refused in a window opened from another computer, because the sign-in window would open on the computer
