@@ -282,6 +282,21 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
 - `fresh.py` builds a CV of the chosen type from the interview answers and turns failing checks into
   suggestions.
 
+## Documents (`cvstudio/context.py`, `pack.py`, `docs/write_*.py`)
+
+- `cvstudio.context.build(job=None)` is the one source of every document prompt's placeholders: the person
+  (`you.*`, `goal.*`), the CV type's `[documents]` and `[writing]`, `cvdocs.*` and up to four voice examples
+  from `answers2` rows of scope `never` (never anything `autofill.private_question` marks). Job facts are never
+  placeholders, so a prompt reads the same for every job of one person.
+- One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
+  drafted at form time (`documents.draft_letter`) and the writing actions. The pack's `## Letter notes`
+  section says Tone, Length, Evidence and Checked; the application page reads them back
+  (`pack.read_letter_notes`), and `docs.prepare` passes its action so the record passages used show under
+  Activity "Used".
+- `docs/write_routes.py` serves `POST /applications/{id}/documents/change`, `documents/letter/rewrite`,
+  `/prep` and `/contacts`; each starts its kind in `docs/write_actions.py` (`docs.change`,
+  `docs.rewrite_letter`, `docs.prep`, `docs.contacts`) and returns `{action_id}`.
+
 ## Names (`core/naming.py`)
 
 `file_name("cv" | "letter")` fills the `cvdocs.*file_name` template with `you.name`; `folder_name(n, company,
