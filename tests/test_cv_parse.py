@@ -2,8 +2,8 @@
 the original file kept byte for byte, and the files Hal refuses with a reason.
 
 The CVs are the made-up people of `tests/support/make_cv_fixtures.py` (a humanities graduate, a technical
-graduate and a career changer), as PDF, Word and pasted text. The AI is the fake one; without the CV store
-`support.stubs.cv_store` stands in for it.
+graduate and a career changer), as PDF, Word and pasted text. The AI is the fake one; the CV store is the
+real one.
 """
 import hashlib
 import http.client
@@ -16,16 +16,12 @@ import uuid
 from support.api import TIMEOUT_S, HalServer
 from support.fake_ai import fake_ai
 from support.make_cv_fixtures import EXPECTED, FOLDER, NAMES, PEOPLE, main, pdf_bytes
-from support.stubs import cv_store
 
-cv_store.install()
-
-from jobhunt.cvstudio.model import to_json  # noqa: E402 - the CV store stand-in must be in place first
-
-from jobhunt import db  # noqa: E402 - as above
-from jobhunt.ai.base import LLMUnavailable  # noqa: E402 - as above
-from jobhunt.core import paths, runner, settings  # noqa: E402 - as above
-from jobhunt.cvstudio import parse, store  # noqa: E402 - as above
+from jobhunt import db
+from jobhunt.ai.base import LLMUnavailable
+from jobhunt.core import paths, runner, settings
+from jobhunt.cvstudio import parse, store
+from jobhunt.cvstudio.model import to_json
 
 WAIT_S = 20
 NO_AI = {"cv_parse": LLMUnavailable("The made-up AI is switched off.")}

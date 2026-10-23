@@ -14,17 +14,12 @@ import unittest
 from support.api import HalServer
 from support.fake_ai import fake_ai
 from support.make_cv_fixtures import FOLDER, NAMES
-from support.stubs import cv_store
 from support.ui import AppPage, chromium, skip_unless_browser
 
-cv_store.install()
-
-from jobhunt import db  # noqa: E402 - the CV store stand-in must be in place before the CV modules load
-from jobhunt.ai.base import LLMUnavailable  # noqa: E402 - as above
+from jobhunt import db
+from jobhunt.ai.base import LLMUnavailable
 
 FAILED_LOAD = "Failed to load resource"
-# `/cv` and `/cv/route` belong to the CV store, which may not be there yet; their 404s are not this part's.
-NOT_YET = ("/api/v2/cv?", "/api/v2/cv/route")
 MOUNT_STEP = """async () => {
   const [{ html, render }, { Step }] = await Promise.all([import("/app/core/html.js"),
                                                          import("/app/setup/steps/cv.js")]);
@@ -52,9 +47,8 @@ class CheckRead(unittest.TestCase):
         self.enterContext(fake_ai({"cv_parse": LLMUnavailable("The made-up AI is switched off.")}))
 
     def errors(self, p: AppPage) -> list[str]:
-        """Console errors, leaving out failed loads of addresses another package of this wave serves."""
-        ours = [u for u in p.missing if not any(n in u + "?" for n in NOT_YET)]
-        return [e for e in p.errors if ours or not e.startswith(FAILED_LOAD)] + ours
+        """Console errors, with every failed load named by its address."""
+        return [e for e in p.errors if p.missing or not e.startswith(FAILED_LOAD)] + p.missing
 
     def step(self, size: str = "wide", scheme: str = "light") -> AppPage:
         p = AppPage(self.browser, f"http://127.0.0.1:{self.hal.port}", size, scheme)
