@@ -1,6 +1,5 @@
 """Reading and writing one application: the job, its saved documents and form, its site, its place in the queue.
 
-Moved unchanged from `jobhunt/web/server.py`, which re-exports every name here for the legacy interface.
 `runner` and this module call each other, so each imports the other at its end, letting either load first.
 """
 import json

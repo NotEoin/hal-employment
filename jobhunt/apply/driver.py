@@ -1,7 +1,5 @@
 """Hal's form driver: reaching an application form, filling it page by page, and watching the applicant's tab.
 
-Moved from `jobhunt/web/server.py`, which re-exports every name here for the legacy interface and the tests.
-
 Hal never presses Submit, in any mode. On the last page Hal hands the form over: it says
 what to check, brings the form forward and watches for the site's thanks, while the person presses
 Submit on the site. On a signed-in job board Hal never presses Apply either, since it may send the
