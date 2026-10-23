@@ -147,7 +147,7 @@ def overview(con: sqlite3.Connection, found: dict | None = None) -> dict:
     return {"step": current(con), "done": done(con), "finished": finished(con),
             "steps": [{"id": s.id, "name": s.name, "sub": s.sub, "optional": s.optional, "state": st[s.id]}
                       for s in STEPS],
-            "found": found or {"usb_install": None, "old_helper": None}}
+            "found": found or {"usb_install": None}}
 
 
 def left(con: sqlite3.Connection) -> list[Step]:

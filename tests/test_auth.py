@@ -102,7 +102,7 @@ class Access(unittest.TestCase):
                     self.assertEqual(signed.get("/healthz", headers={"Host": host}).status, 403)
             evil = {"Origin": "http://evil.example"}
             self.assertEqual(signed.post("/api/v2/session/end", headers=evil).status, 403)
-            self.assertEqual(signed.post("/api/ext/poll", {}, headers=evil).status, 403)
+            self.assertEqual(signed.post("/api/v2/helpers/poll", {}, headers=evil).status, 403)
             own = {"Origin": f"http://127.0.0.1:{hal.port}"}
             self.assertEqual(signed.post("/api/v2/session/end", headers=own).status, 200)
 

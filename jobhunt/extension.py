@@ -7,8 +7,7 @@ Hal's own browser cannot; the applicant presses Submit.
 
 Each application goes to one helper: the one that already holds its tab, else the one
 paired in the browser of the window that started it, else the most recently seen helper of the same kind.
-Queues are per helper, so a desktop browser and a laptop browser never take each other's commands. An old
-0.4 or 0.5 helper (no key) has the queue `OLD`, and gets nothing once a 1.0 helper is paired.
+Queues are per helper, so a desktop browser and a laptop browser never take each other's commands.
 
 Hal never presses Submit. Every command carries the guard's patterns, so content.js refuses
 the same controls `apply.guard` refuses, and the helper keeps a block in the page's own world for the whole
@@ -56,10 +55,8 @@ FILL_WAIT = 180  # seconds a fill of a few fields may take: uploads and searched
 # A dropdown takes about 15 s to open, search and pick on a slow site (a form of a dozen lists once hit
 # 180 s), so the limit grows with the fields of the fill.
 FILL_PER_FIELD_S = 20
-OLD = "old"      # the queue of a 0.4 or 0.5 helper: no key, and polls /api/ext/*
 NOT_CONNECTED = "Open Hal in the browser that has the helper"
 CONNECTED_S = 2 * POLL_WAIT  # a helper in touch this recently is connected: it polls again as each poll ends
-OLD_SEEN_S = CONNECTED_S     # an old helper polled this recently is "found" by setup
 
 _lock = threading.Lock()
 _queues: dict[str, queue.Queue] = {}
@@ -69,7 +66,6 @@ _carriers: dict[str, str] = {}       # job id -> helper id, for jobs whose tab a
 _kept: set[str] = set()              # jobs whose carrier is written on their application row
 _told_reload: dict[str, str] = {}    # helper id -> the version it was asked to reload from
 _still_older: set[str] = set()       # helpers that reloaded and still came back older than Hal
-_old_seen = 0.0
 _last_url: dict[str, str] = {}       # job id -> the address its tab showed last, for the notes about that site
 # Bumped by `reset`: a poll still held open when everything was forgotten must not mark its helper as in touch
 # again when it ends (a stopped test server's last poll made the next test class see a helper that had gone).
@@ -99,18 +95,6 @@ def _connected_locked(helper_id: str) -> bool:
     return time.time() - _seen.get(helper_id, 0.0) < CONNECTED_S or busy
 
 
-def _old_allowed() -> bool:
-    """An old helper gets commands only while the setting allows it and no 1.0 helper is paired."""
-    from . import db
-    from .apply import helpers
-
-    con = db.connect()
-    try:
-        return not helpers.any_paired(con)
-    finally:
-        con.close()
-
-
 def _take(helper_id: str, wait: float) -> dict:
     """The helper's next command still waited for, within `wait` seconds; {} when none comes.
 
@@ -127,24 +111,6 @@ def _take(helper_id: str, wait: float) -> dict:
             live = command.get("id") in _waiting
         if live:
             return command
-
-
-def poll() -> dict:
-    """Hands an old (0.4 or 0.5) helper its next command, waiting a while for one to arrive.
-
-    Once a 1.0 helper is paired, old polls get no commands, so the two never share a form.
-    """
-    global _old_seen
-    _old_seen = time.time()
-    began = _generation
-    _touch(OLD)
-    try:
-        if not _old_allowed():
-            threading.Event().wait(POLL_WAIT)
-            return {}
-        return _take(OLD, POLL_WAIT)
-    finally:
-        _touch(OLD, began)
 
 
 def poll_helper(helper_id: str, version: str | None, protocol: int | None, wait: float | None = None) -> dict:
@@ -191,7 +157,7 @@ def poll_helper(helper_id: str, version: str | None, protocol: int | None, wait:
     return reply
 
 
-def deliver(result: dict, helper_id: str = OLD) -> None:
+def deliver(result: dict, helper_id: str) -> None:
     """Takes a helper's answer to a command; an answer to another helper's command is ignored."""
     _touch(helper_id)
     with _lock:
@@ -216,11 +182,6 @@ def still_older(helper_id: str) -> bool:
         return helper_id in _still_older
 
 
-def old_helper_seen() -> bool:
-    """True when an old helper polled recently, so setup can show how to remove it."""
-    return time.time() - _old_seen < OLD_SEEN_S
-
-
 def assign(job_id: str, helper_id: str) -> None:
     """Gives a job's commands to this helper: the one that holds its tab (a tab handed to Hal)."""
 
@@ -235,7 +196,7 @@ def _keep(job_id: str, helper_id: str) -> None:
     from . import db
     from .apply import helpers
 
-    if helper_id == OLD or job_id in _kept:
+    if job_id in _kept:
         return
     con = db.connect()
     try:
@@ -263,9 +224,7 @@ def _carrier(job_id: str | None, cmd: str) -> str:
             raise RuntimeError(f"the browser helper that has this form's tab is not connected. {NOT_CONNECTED}.")
     con = db.connect()
     try:
-        chosen = helpers.choose(con, job_id, live - {OLD})
-        if chosen is None and OLD in live and not helpers.any_paired(con):
-            chosen = OLD
+        chosen = helpers.choose(con, job_id, live)
     finally:
         con.close()
     if chosen is None:
@@ -303,7 +262,7 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
 
 def reset() -> None:
     """Forgets every queue, carrier and helper contact (tests start each class clean)."""
-    global _old_seen, _generation
+    global _generation
     with _lock:
         _generation += 1
         _queues.clear()
@@ -313,7 +272,6 @@ def reset() -> None:
         _kept.clear()
         _told_reload.clear()
         _still_older.clear()
-    _old_seen = 0.0
 
 
 def _read(job_id: str, banners: bool = True, options: bool = False, front: bool = True) -> dict:

@@ -21,8 +21,6 @@ def helper_check() -> CheckResult:
     with closing(db.connect()) as con:
         rows = helpers.paired(con)
     if not rows:
-        if extension.old_helper_seen():
-            return warn("An older Hal helper is in use. Set up the new one and remove the old one.", fix)
         return warn("No browser helper is connected yet. Hal cannot fill forms in your browser.", fix)
     for r in rows:
         if extension.still_older(r["id"]):

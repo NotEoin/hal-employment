@@ -53,7 +53,7 @@ Hal Employment is now an app with its own window, for any career, on Windows and
   Code with no admin prompt.
 - **The browser helper** fills forms in Opera, Google Chrome, Microsoft Edge, Brave or Vivaldi, where you
   are already signed in. It is paired once with a one-time code and acts only on tabs Hal opened or you
-  handed to it.
+  handed to it. A helper from before pairing is turned away, with words that say to load the new one.
 - **What Hal remembers**: suggestions from your choices (nothing changes until you say yes), what you said
   yes to, your saved answers and where each may be used, and notes about job sites. "Something wrong here?"
   turns your own words about a site into a note Hal uses next time.

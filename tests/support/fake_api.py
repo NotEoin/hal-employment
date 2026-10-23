@@ -120,7 +120,7 @@ MADE_UP_JOB = {"id": "demo:1", "title": "Museum Assistant", "org": "Riverside Tr
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
 MADE_UP_PAGES = {
     # The setup guide
-    "/setup": {"step": "welcome", "done": False, "finished": False, "found": {"usb_install": None, "old_helper": None},
+    "/setup": {"step": "welcome", "done": False, "finished": False, "found": {"usb_install": None},
                "steps": [{"id": i, "name": n, "sub": "", "optional": i in ("email", "phone", "updates"),
                           "state": "todo"}
                          for i, n in (("welcome", "Welcome"), ("cv", "Your CV"), ("about", "About you"),

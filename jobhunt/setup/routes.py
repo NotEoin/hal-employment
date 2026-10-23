@@ -39,7 +39,7 @@ FROM_CV = ("you.name", "you.email", "you.phone", "you.city")
 RIGHT_TO_WORK_WORDS = {"uk_no_visa": "Yes, no visa needed", "uk_visa": "Yes, with a visa",
                        "need_sponsorship": "I would need sponsorship"}
 # Who provides each "found" line, when that package is installed: (module, function).
-FINDERS = {"usb_install": ("jobhunt.core.importer_usb", "find"), "old_helper": ("jobhunt.apply.helpers", "old_helper")}
+FINDERS = {"usb_install": ("jobhunt.core.importer_usb", "find")}
 
 
 def _session_id(req: Request) -> str | None:
@@ -64,7 +64,7 @@ def _found() -> dict:
 
 @route("GET", "/api/v2/setup")
 def overview(req: Request) -> dict:
-    """The steps, their states, the step to open at, and an older Hal or helper found on this computer."""
+    """The steps, their states, the step to open at, and an older Hal found on this computer."""
     return state.overview(req.con, _found())
 
 

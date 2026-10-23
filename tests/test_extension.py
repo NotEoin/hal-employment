@@ -186,9 +186,9 @@ class Forgetting(unittest.TestCase):
         the next test class took that gone helper for its own and its commands found no helper."""
         extension.reset()
         self.addCleanup(extension.reset)
-        with mock.patch.object(extension, "POLL_WAIT", SHORT_POLL_S), \
-                mock.patch.object(extension, "_old_allowed", lambda: True):
-            held = threading.Thread(target=extension.poll, name="held-poll")
+        with mock.patch.object(extension, "POLL_WAIT", SHORT_POLL_S):
+            held = threading.Thread(target=extension.poll_helper, name="held-poll",
+                                    args=("held-helper", helpers.wanted_version(), helpers.PROTOCOL))
             held.start()
             deadline = time.monotonic() + CONNECT_WAIT_S
             while not extension.connected() and time.monotonic() < deadline:

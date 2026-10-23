@@ -20,7 +20,7 @@ import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.api import HalServer
 from ui.test_words import DETAILS, REMOTE_PAGE, literals
 
-from jobhunt import extension, record
+from jobhunt import record
 from jobhunt.core.settings import secrets
 from jobhunt.setup import email_test, phone, state
 
@@ -147,12 +147,6 @@ class SetupRoutes(unittest.TestCase):
         todo = {t["step"]: t["optional"] for t in self.get("/home")["setup"]["todo"]}
         self.assertFalse(todo["about"])
         self.assertTrue(todo["email"] and todo["phone"] and todo["updates"])
-
-    def test_setup_says_when_an_old_helper_polled(self) -> None:
-        # `found.old_helper` named a finder nobody provided, so it was always null
-        self.assertIsNone(self.get("/setup")["found"]["old_helper"])
-        with mock.patch.object(extension, "old_helper_seen", return_value=True):
-            self.assertEqual(self.get("/setup")["found"]["old_helper"], {"protocol": 0})
 
     def test_a_step_that_is_needed_cannot_be_skipped(self) -> None:
         r = self.c.request("PUT", "/api/v2/setup/about", {"state": "skipped"})

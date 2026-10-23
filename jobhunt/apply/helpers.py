@@ -51,7 +51,6 @@ EXTENSION_SCHEME = "chrome-extension://"
 # written with the letters a to p for the hex digits 0 to f.
 ID_HEX_DIGITS = 32
 ID_ALPHABET_START = ord("a")
-OLD_HELPER = "old"           # the queue of a 0.4 or 0.5 helper, which has no key and polls /api/ext/*
 BOOKKEEPING_WAIT_MS = 500    # how long a poll's bookkeeping waits for another write before it skips
 VERSION_PART = re.compile(r"\d+")
 
@@ -232,18 +231,6 @@ def paired(con: sqlite3.Connection) -> list[sqlite3.Row]:
         return []
 
 
-def any_paired(con: sqlite3.Connection) -> bool:
-    """True once a 1.0 helper is paired; from then on an old helper's polls get no commands."""
-    return bool(paired(con))
-
-
-def old_helper() -> dict | None:
-    """The old 0.4 or 0.5 helper, when one polled recently, for `GET /setup` `found.old_helper`; else None."""
-    from .. import extension
-
-    return {"protocol": 0} if extension.old_helper_seen() else None
-
-
 def forget(con: sqlite3.Connection, helper_id: str) -> None:
     """Forgets a helper: its key stops working at once."""
     with con:
@@ -263,12 +250,7 @@ def listing(con: sqlite3.Connection, session: auth.Session | None) -> list[dict]
                     "last_seen": r["last_seen"], "remote": bool(r["remote"]),
                     "this_browser": bool(session and r["browser_id"] == session.browser_id),
                     "connected": extension.connected(r["id"]), "older": older(r["version"]),
-                    "reloaded_still_older": extension.still_older(r["id"]), "old": False})
-    if extension.old_helper_seen():
-        out.append({"id": OLD_HELPER, "browser": None, "version": None, "label": "An older Hal helper",
-                    "last_seen": None, "remote": False, "this_browser": False,
-                    "connected": extension.connected(OLD_HELPER), "older": True, "reloaded_still_older": False,
-                    "old": True})
+                    "reloaded_still_older": extension.still_older(r["id"])})
     return out
 
 

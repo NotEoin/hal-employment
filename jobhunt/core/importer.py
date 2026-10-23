@@ -81,7 +81,7 @@ HAL_CONF_MODELS = {"HAL_MODEL": ("ai.model.checker", "main_model"),
 OWNER_DEFAULTS: dict[str, Any] = {
     "scoring.preset": "technical_grad", "goal.stage": "new_grad", "goal.kinds": KINDS,
     "ai.provider": "local", "ai.local_only": True, "advanced.developer_mode": True,
-    "advanced.allow_old_helper": True, "addon.enabled": True, "addon.respect_off": False,
+    "addon.enabled": True, "addon.respect_off": False,
 }
 CV_JSON = ("src", "data", "cv.json")
 CONTACT_MODULE = ("tools", "cv_contact.py")

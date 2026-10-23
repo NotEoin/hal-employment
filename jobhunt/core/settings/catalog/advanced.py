@@ -31,7 +31,6 @@ register(
     Setting("advanced.port", "int", PORT, "Port", restart=True, machine=True, min=LOWEST_PORT, max=HIGHEST_PORT,
             advanced=True, remote="label", order=60),
     Setting("advanced.developer_mode", "bool", False, "Developer mode", default_fn=developer_checkout, order=70),
-    Setting("advanced.allow_old_helper", "bool", False, "Accept the old browser helper", dev_only=True, order=80),
     Setting("advanced.simple_menu", "bool", True, "Simple menu: 5 items and More", order=90,
             default_fn=lambda get: not safe(get, "advanced.developer_mode", False)),
     Setting("advanced.theme", "choice", "system", "Light or dark", order=100, choices=choices(

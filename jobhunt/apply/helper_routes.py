@@ -72,7 +72,7 @@ def pair_url(port: int, code: str) -> str:
 
 @route("GET", PREFIX)
 def listing(req: Request) -> list:
-    """The paired helpers, and an old helper when one polled recently."""
+    """The paired helpers."""
     return helpers.listing(req.con, req.session)
 
 
@@ -85,11 +85,9 @@ def browsers(req: Request) -> dict:
     out = []
     for key, entry in browsers_table().items():
         steps = [{"text": s["text"], "picture": PICTURES + s["picture"]} for s in entry["steps"]]
-        remove = entry.get("remove")
         out.append({"id": key, "name": entry["name"], "found": key in found, "supported": entry["supported"],
                     "extensions_url": entry["extensions_url"], "steps": steps, "why": entry.get("why", ""),
-                    "sandboxed": bool(found[key].sandboxed) if key in found else False,
-                    "remove": {"text": remove["text"], "picture": PICTURES + remove["picture"]} if remove else None})
+                    "sandboxed": bool(found[key].sandboxed) if key in found else False})
     folder = paths.helper_dir()
     return {"browsers": out, "folder": str(folder),
             "folder_visible": not any(part.startswith(".") for part in folder.parts),

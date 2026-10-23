@@ -13,7 +13,6 @@ steps = [
   { text = "Switch on \"Developer mode\" with the switch at the top right of the page.", picture = "opera-2.svg" },
   { text = "Press \"Load unpacked\" and choose Hal's helper folder.", picture = "opera-3.svg" },
 ]
-remove = { text = "Find the older \"Hal Employment\" helper on Opera's extensions page and press \"Remove\".", picture = "opera-remove.svg" }
 
 [browsers.chrome]
 name = "Google Chrome"
@@ -24,7 +23,6 @@ steps = [
   { text = "Switch on \"Developer mode\" at the top right of the page.", picture = "chrome-2.svg" },
   { text = "Press \"Load unpacked\" at the top left and choose Hal's helper folder.", picture = "chrome-3.svg" },
 ]
-remove = { text = "Find the older \"Hal Employment\" helper on Chrome's extensions page and press \"Remove\".", picture = "chrome-remove.svg" }
 
 [browsers.edge]
 name = "Microsoft Edge"
@@ -35,7 +33,6 @@ steps = [
   { text = "Switch on \"Developer mode\" in the column on the left.", picture = "edge-2.svg" },
   { text = "Press \"Load unpacked\" at the top of the page and choose Hal's helper folder.", picture = "edge-3.svg" },
 ]
-remove = { text = "Find the older \"Hal Employment\" helper on Edge's extensions page and press \"Remove\".", picture = "edge-remove.svg" }
 
 [browsers.brave]
 name = "Brave"
@@ -46,7 +43,6 @@ steps = [
   { text = "Switch on \"Developer mode\" at the top right of the page.", picture = "brave-2.svg" },
   { text = "Press \"Load unpacked\" at the top left and choose Hal's helper folder.", picture = "brave-3.svg" },
 ]
-remove = { text = "Find the older \"Hal Employment\" helper on Brave's extensions page and press \"Remove\".", picture = "brave-remove.svg" }
 
 [browsers.vivaldi]
 name = "Vivaldi"
@@ -57,7 +53,6 @@ steps = [
   { text = "Switch on \"Developer mode\" at the top right of the page.", picture = "vivaldi-2.svg" },
   { text = "Press \"Load unpacked\" and choose Hal's helper folder.", picture = "vivaldi-3.svg" },
 ]
-remove = { text = "Find the older \"Hal Employment\" helper on Vivaldi's extensions page and press \"Remove\".", picture = "vivaldi-remove.svg" }
 
 [browsers.firefox]
 name = "Firefox"

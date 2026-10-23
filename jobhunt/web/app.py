@@ -1,8 +1,8 @@
 """The server: one process on 127.0.0.1 serving the app, API v2 and the event stream.
 
 Each request goes through, in order: the Host check, `/healthz`, `/open`, `/pair`, the CSRF check for writes,
-the session or local key, `/api/v2/*` through the router (the event stream is a route), the old helper's
-`/api/ext/*`, a document's `/files` and `/doc/*`, then the app's own files.
+the session or local key, `/api/v2/*` through the router (the event stream is a route), the refusal of a
+helper from before pairing at `/api/ext/*`, a document's `/files` and `/doc/*`, then the app's own files.
 
 The address is never a setting: Hal listens on `BIND` only, and over SSH the tunnel reaches it there.
 """
@@ -42,10 +42,12 @@ MIME = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
 IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)
 UNSAFE_METHODS = ("POST", "PUT", "DELETE", "PATCH")
 CSRF_HEADER = "X-Hal"     # a cross-site page cannot add a custom header without CORS, which is never granted
+# Where a browser helper from before pairing (0.4 or 0.5) asks for work. It may write here only to be refused.
 OLD_HELPER_PREFIX = "/api/ext/"
 HELPER_PATHS = (router.PREFIX + "/helpers/", OLD_HELPER_PREFIX)   # where a browser extension's origin may write
+OLD_HELPER_GONE = ("This browser helper is too old for this Hal. Remove it on your browser's extensions page, "
+                   "then load the new one in the Browser helper step of Hal's setup guide.")
 DOC_PATH = re.compile(r"/doc/([^/]+)/(cv|letter)")
-OLD_ADOPT_WAIT_S = 2.0    # as the paired helper's adopt; a slower match answers "started"
 HEALTH_TIMEOUT_S = 2
 LISTEN_BACKLOG = 64        # waiting connections; see AppServer
 STOP_WAIT_S = 10           # an event stream ends within its wake-up time; other replies are quicker still
@@ -80,16 +82,6 @@ def commit() -> str | None:
         except (OSError, subprocess.TimeoutExpired):
             _commit.append(None)
     return _commit[0]
-
-
-def setting(key: str, fallback: Any) -> Any:
-    """A live setting, or `fallback` while no code registers `key` yet."""
-    from ..core import settings
-
-    try:
-        return settings.get(key)
-    except KeyError:
-        return fallback
 
 
 def csp(index_html: str) -> str:
@@ -205,7 +197,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return True
         if origin == f"http://{self.headers.get('Host', '')}":
             return True
-        # a helper's own checks (its key, or the old-helper setting) decide whether it may write
+        # a paired helper's key decides whether it may write; a helper from before pairing is only refused
         return origin.startswith("chrome-extension://") and path.startswith(HELPER_PATHS)
 
     def _who(self) -> None:
@@ -249,7 +241,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": {"code": "not_found", "message": "There is nothing here."}}, 404)
             return None
         if path.startswith(OLD_HELPER_PREFIX):
-            return self._old_helper_api(method, path)
+            return self._old_helper(path)
         if method == "GET" and (path == "/files" or DOC_PATH.fullmatch(path)):
             return self._document(path, parse_qs(url.query))
         if method == "GET" and not path.startswith("/api/"):
@@ -291,41 +283,16 @@ class AppHandler(BaseHTTPRequestHandler):
         self._who()
         return self.session is not None or self.local
 
-    def _old_helper_api(self, method: str, path: str) -> None:
-        """A 0.4 or 0.5 helper polls /api/ext/* with `X-Hal: 1` and no key, only while the setting allows it."""
-        if not (self._signed_in() or setting("advanced.allow_old_helper", False)):
-            return self.send_json({"error": FROM_SHORTCUT}, 401)
-        if method != "POST":
-            return self._reply_bytes(405, b"method not allowed", "text/plain")
-        from .. import extension
+    def _old_helper(self, path: str) -> None:
+        """Refuses a helper from before pairing, in words that tell the person to load the new one.
 
-        length = int(self.headers.get("Content-Length") or 0)
-        try:
-            body = json.loads(self.rfile.read(length) or b"{}")
-        except ValueError:
-            return self.send_json({"error": "That request was not JSON."}, 400)
-        name = path.removeprefix(OLD_HELPER_PREFIX)
-        if name == "poll":
-            return self.send_json(extension.poll())
-        if name == "result":
-            extension.deliver(body)
-            return self.send_json({"ok": True})
-        if name == "adopt":
-            return self._old_adopt(body)
-        return self.send_json({"error": "There is nothing here."}, 404)
-
-    def _old_adopt(self, page: dict) -> None:
-        """A tab the old helper handed over: the job it belongs to, found or added, as the 0.5 helper reads it."""
-        from ..core import runner
-
-        runner.load_kinds()
-        action_id = runner.start("apply.match_tab", params={"page": page})
-        done = runner.wait(action_id, OLD_ADOPT_WAIT_S)
-        if done["state"] == "done":
-            return self.send_json(done["result"])
-        if done["state"] in ("error", "stopped", "interrupted"):
-            return self.send_json({"error": done["error"] or done["message"] or "Hal could not take this tab."}, 409)
-        self.send_json({"started": True, "action_id": action_id})
+        That helper reads a poll's reply as JSON and polls again at once when the reply holds no command, so
+        the poll's refusal is plain text, which makes it wait 5 s first. Its other requests show the reply's
+        `error` on its toolbar button.
+        """
+        if path == OLD_HELPER_PREFIX + "poll":
+            return self._reply_bytes(HTTPStatus.GONE, OLD_HELPER_GONE.encode("utf-8"), "text/plain; charset=utf-8")
+        return self.send_json({"error": OLD_HELPER_GONE}, HTTPStatus.GONE)
 
     def _document(self, path: str, query: dict[str, list[str]]) -> None:
         """An application's file by its path (`/files`), or its CV or letter under the name employers see."""

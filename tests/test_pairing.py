@@ -1,9 +1,8 @@
-"""Pairing the browser helper and the helper's key: codes, keys, origins and the old helper.
+"""Pairing the browser helper and its key: codes, keys, origins and refusing an old helper.
 
 These drive the real server over HTTP the way the helper's background does, with the extension's origin
 in the Origin header. The helper itself, loaded in a browser, is in tests/test_extension.py.
 """
-import threading
 import time
 import unittest
 from contextlib import closing
@@ -14,10 +13,9 @@ from support.api import HalServer
 
 from jobhunt import db, extension
 from jobhunt.apply import helpers
-from jobhunt.core import clock, events, settings
+from jobhunt.core import clock, events
 
 SHORT_POLL_S = 0.2     # long enough for a poll to be held, short enough for a quick test
-WAIT_S = 5
 HELD_WRITE_S = 5   # far under the 30 s busy timeout a held write cost before
 
 
@@ -210,41 +208,23 @@ class HeldWrite(HelperTest):
 
 
 class OldHelper(HelperTest):
-    """A 0.4 or 0.5 helper polls /api/ext/poll with `X-Hal: 1` and no key."""
+    """A helper from before pairing (0.4 or 0.5) asks at /api/ext/* with `X-Hal: 1` and no key."""
 
-    def old_poll(self, hal):
-        return hal.client().post("/api/ext/poll", {}, headers={"Origin": helper_origin()})
-
-    def test_an_old_helper_is_refused_unless_allowed(self):
+    def test_an_old_helper_is_refused_and_told_to_load_the_new_one(self):
         with HalServer() as hal:
-            self.assertEqual(self.old_poll(hal).status, 401)
-            settings.set("advanced.allow_old_helper", True, by="you")
-            self.assertEqual(self.old_poll(hal).status, 200)
-            self.assertTrue(extension.old_helper_seen())
-            listed = hal.signed_in().get("/api/v2/helpers").json()
-            self.assertEqual([h["old"] for h in listed], [True])
-
-    def test_once_a_new_helper_is_paired_old_polls_get_no_commands(self):
-        with HalServer() as hal:
-            settings.set("advanced.allow_old_helper", True, by="you")
-            # the old helper is in touch and would carry the next command
-            self.assertEqual(self.old_poll(hal).status, 200)
-            self.assertEqual(extension._carrier(None, "search"), extension.OLD)
-            pair(hal)
-            took = {}
-            ask = threading.Thread(target=lambda: took.setdefault("error", self._ask_quietly()), daemon=True)
-            ask.start()
-            self.assertEqual(self.old_poll(hal).json(), {})
-            ask.join(WAIT_S)
-            self.assertIn("not connected", took["error"])
-
-    @staticmethod
-    def _ask_quietly() -> str:
-        try:
-            extension._ask("search", timeout=1, queries=["graduate analyst"], pause=0)
-        except RuntimeError as e:
-            return str(e)
-        return ""
+            for who, client in (("no session", hal.client()), ("signed in", hal.signed_in())):
+                with self.subTest(who):
+                    poll = client.post("/api/ext/poll", {}, headers={"Origin": helper_origin()})
+                    self.assertEqual(poll.status, 410)
+                    self.assertIn("load the new one", poll.text)
+                    # plain text, so the old helper waits before it asks again
+                    self.assertTrue(poll.headers["Content-Type"].startswith("text/plain"))
+                    adopt = client.post("/api/ext/adopt", {"url": "https://jobs.example.org/sorrel/apply"},
+                                        headers={"Origin": helper_origin()})
+                    self.assertEqual(adopt.status, 410)
+                    self.assertIn("too old", adopt.json()["error"])
+            self.assertFalse(extension.connected())
+            self.assertEqual(hal.signed_in().get("/api/v2/helpers").json(), [])
 
 
 if __name__ == "__main__":

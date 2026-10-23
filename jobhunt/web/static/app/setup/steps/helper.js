@@ -58,8 +58,7 @@ export function Step() {
   const first = browsers.find(x => x.supported && x.found) || browsers.find(x => x.supported) || browsers[0];
   const b = browsers.find(x => x.id === chosen) || first;
   const helpers = paired.data || [];
-  const connected = helpers.some(h => !h.old && h.connected && (h.browser === b.id || h.this_browser));
-  const old = helpers.find(h => h.old);
+  const connected = helpers.some(h => h.connected && (h.browser === b.id || h.this_browser));
   const folder = info.data.folder;
   const [open, devMode, load] = b.steps;
 
@@ -114,10 +113,6 @@ export function Step() {
         <button type="button" class="btn small primary" disabled=${busy} onClick=${connect}>Connect</button>`}</div>
       ${link && !connected && html`<p class="small" style="margin:10px 0 0">Open this link in ${b.name}${remote ? " on this computer" : ""}: <code style="overflow-wrap:anywhere">${link}</code>
         <button type="button" class="btn small" onClick=${() => copy(link, "Copied the link")}><${Icon} n="copy" c="s" />Copy</button></p>`}
-    </section>
-    ${old ? html`<section class="card" style="margin-top:12px"><b>Hal found an older helper.</b>
-        <p class="small sub" style="margin:6px 0 0">Remove it, so the two do not get in each other's way. ${b.remove ? b.remove.text : ""}</p>
-        ${b.remove && html`<${Picture} step=${b.remove} />`}</section>`
-      : html`<p class="small sub" style="margin-top:12px">Found an older Hal helper in ${b.name}? Hal shows you how to remove it, so the two do not get in each other's way.</p>`}`}`;
+    </section>`}`;
 }
 export default Step;

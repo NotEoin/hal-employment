@@ -48,5 +48,4 @@ step shows the address to type and a link to open in that browser instead of the
 | The browser cannot see the helper folder | On Linux, a snap or flatpak browser cannot read hidden folders. The folder is in Documents for that reason; choose it from there. |
 | "Is Hal working?" says "The browser helper is older than Hal" | Restart Hal so it refreshes the folder, then press reload on the helper in the extensions page. On a laptop, run the launcher again; it copies the new helper. |
 | "Open Hal in the browser that has the helper" | Hal is filling a form through the helper, but that browser is closed. Open it, or open Hal from the browser where you loaded the helper. |
-| Setup says it found an older Hal helper | Remove the old "Hal Employment" helper on the extensions page, so the two do not get in each other's way. |
 | You use Firefox | The helper does not work in Firefox yet. Use one of the other browsers for applications. |

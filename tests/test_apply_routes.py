@@ -1,4 +1,4 @@
-"""The Applications routes, a document under the name employers see, and the old helper's adopt.
+"""The Applications routes, a document under the name employers see, and a tab the helper hands over.
 
 Each test serves the made-up world from a real server with a signed-in window. The browser and the form
 driver are replaced by stand-ins; the routes, the rules of `apply/actions.py` and the database are real.
@@ -14,7 +14,7 @@ from support.api import HalServer
 from support.world import World, job_id
 
 from jobhunt import browser, db, documents
-from jobhunt.apply import driver, queries
+from jobhunt.apply import driver, helpers, queries
 from jobhunt.core import naming, paths, runner
 
 WAIT_S = 10.0
@@ -182,12 +182,18 @@ class Routes(unittest.TestCase):
                 done = self.wait(r.json()["action_id"])
                 self.assertEqual((done["kind"], done["result"]), (kind, result))
 
-    def test_the_old_helpers_handed_over_tab_is_matched_as_an_action(self):
-        adopted = self.c.post("/api/ext/adopt", {"url": "https://jobs.example.org/sorrel/apply",
-                                                 "title": "Software Engineer, Graduate - Sorrel Payments",
-                                                 "text": "Sorrel Payments. Software Engineer, Graduate."})
+    def test_a_tab_the_paired_helper_hands_over_is_matched_as_an_action(self):
+        origin = {"Origin": f"chrome-extension://{helpers.manifest_id()}"}
+        code = self.c.post("/api/v2/helpers/pairing-code", {"browser": "opera"}).json()["code"]
+        paired = self.hal.client().post("/api/v2/helpers/pair", {
+            "code": code, "browser": "opera", "version": helpers.wanted_version(), "protocol": helpers.PROTOCOL,
+            "extension_id": helpers.manifest_id()}, headers=origin).json()
+        key = {**origin, "X-Hal-Key": f"{paired['helper_id']}:{paired['key']}"}
+        adopted = self.hal.client().post("/api/v2/helpers/adopt", {"tab": {
+            "url": "https://jobs.example.org/sorrel/apply", "title": "Software Engineer, Graduate - Sorrel Payments",
+            "text": "Sorrel Payments. Software Engineer, Graduate."}}, headers=key)
         self.assertEqual(adopted.status, 200, adopted.text)
-        self.assertEqual(adopted.json()["job"], job_id("sorrel-ready"))
+        self.assertEqual(adopted.json()["job_id"], job_id("sorrel-ready"))
         runner.flush()
         kinds = {r["kind"] for r in self.con.execute("SELECT kind FROM actions")}
         self.assertIn("apply.match_tab", kinds)

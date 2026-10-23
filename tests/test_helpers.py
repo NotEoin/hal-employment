@@ -213,7 +213,7 @@ class Browsers(unittest.TestCase):
             self.assertEqual(len(entry["steps"]), 3, key)
             self.assertIn('"Developer mode"', entry["steps"][1]["text"])
             self.assertIn('"Load unpacked"', entry["steps"][2]["text"])
-            for step in [*entry["steps"], entry["remove"]]:
+            for step in entry["steps"]:
                 picture = PICTURES / step["picture"]
                 self.assertTrue(picture.is_file(), picture)
                 self.assertIn(entry["extensions_url"].split("://")[0], picture.read_text(encoding="utf-8"))
