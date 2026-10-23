@@ -1,15 +1,41 @@
 {
   "manifest_version": 3,
   "name": "Hal Employment",
-  "version": "0.5",
-  "description": "Lets Hal read and fill job application forms in your tabs: ones it opens, or one you hand it. Hal never submits a form.",
-  "permissions": ["tabs", "scripting", "storage", "alarms"],
-  "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Hal: fill this application" },
+  "version": "1.0.0",
+  "description": "Lets Hal read and fill job application forms in your tabs: ones it opens, or one you hand it. Hal never presses Submit.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnnAe8g9gmYv/dNRjqg3hf1AU8SJGdo/ETcoHZdA8kJo2b4BcoxKRx+a7a8WkASBrjghXKSpRxRWbPoE21X83EpSz7CRqCcy3MCqp5VnZUe9jzwNQyuxEX/i6KkNElTToLnzxUq1kCW6Ey2JqNNHZJCGA7TxXlkCm068dFE3L6oSiuBKI74XKABtLJ0hRW87oyzO/NOC6qcOZKLuwMd/JRoiHxiDkVcCuOUgNkwTVLBcGOLfuRLEAK5CHLYZ0lQgTSROO/VqoSY2aY/T+toIsrxofmO7XEtDKScx1CA2M4AU+9U7u6ZUOFE8FarW7pq6hHq1UhcLq1sMf0Ytq9DO77QIDAQAB",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
+      "js": [
+        "pair.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Hal: fill this application"
+  },
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Alt+Shift+F" },
+      "suggested_key": {
+        "default": "Alt+Shift+F"
+      },
       "description": "Hand this tab's application to Hal to fill"
     }
   }

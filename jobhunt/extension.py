@@ -1,20 +1,24 @@
-"""Drives job application forms in the applicant's own browser through the Hal extension.
+"""Drives job application forms in the applicant's own browser through the Hal browser helper.
 
-The extension (extension/) asks the web helper for work and carries it out in
-tabs it opened for a job. This module holds the queue it reads from, and the
-steps of browser.py expressed as commands to it. A browser that nobody is
-remote-controlling keeps the applicant's sign-ins and passes sites' human
-checks, which Hal's own browser cannot; the applicant presses Submit.
+The helper (extension/) asks the server for work and carries it out in tabs it opened for a job. This
+module holds a queue per paired helper, and the steps of browser.py expressed as commands to it. A browser
+that nobody is remote-controlling keeps the applicant's sign-ins and passes sites' human checks, which
+Hal's own browser cannot; the applicant presses Submit.
 
-Hal never presses Submit. Every command carries the guard's
-patterns, so content.js refuses the same controls `apply.guard` refuses, and
-the helper keeps a block in the page's own world for the whole of each command
-that cancels any submit the page or a press would make. There is no submit
-command, and no command presses Enter.
+Each application goes to one helper: the one that already holds its tab, else the one
+paired in the browser of the window that started it, else the most recently seen helper of the same kind.
+Queues are per helper, so a desktop browser and a laptop browser never take each other's commands. An old
+0.4 or 0.5 helper (no key) has the queue `OLD`, and gets nothing once a 1.0 helper is paired.
+
+Hal never presses Submit. Every command carries the guard's patterns, so content.js refuses
+the same controls `apply.guard` refuses, and the helper keeps a block in the page's own world for the whole
+of each command that cancels any submit the page or a press would make. There is no submit command, and no
+command presses Enter.
 """
 import concurrent.futures
 import json
 import queue
+import threading
 import time
 import uuid
 from urllib.parse import urlparse
@@ -47,50 +51,217 @@ POLL_WAIT = 20  # seconds a poll is held open; the browser stops a worker whose 
 PATTERNS = {"apply": APPLY_BUTTON.pattern, "next": NEXT_BUTTON.pattern, "submit": SUBMIT_BUTTON.pattern,
             "signOut": SIGN_OUT.pattern, "frames": list(ATS_FRAME), "captcha": CAPTCHA}
 FILL_WAIT = 180  # seconds a fill may take: uploads and searched lists are slow
+OLD = "old"      # the queue of a 0.4 or 0.5 helper: no key, and polls /api/ext/*
+NOT_CONNECTED = "Open Hal in the browser that has the helper"
+CONNECTED_S = 2 * POLL_WAIT  # a helper in touch this recently is connected: it polls again as each poll ends
+OLD_SEEN_S = CONNECTED_S     # an old helper polled this recently is "found" by setup
 
-_commands: queue.Queue = queue.Queue()
-_waiting: dict[str, concurrent.futures.Future] = {}
-_seen = 0.0
+_lock = threading.Lock()
+_queues: dict[str, queue.Queue] = {}
+_waiting: dict[str, tuple[str, concurrent.futures.Future]] = {}   # command id -> (helper id, its answer)
+_seen: dict[str, float] = {}
+_carriers: dict[str, str] = {}       # job id -> helper id, for jobs whose tab a helper holds
+_kept: set[str] = set()              # jobs whose carrier is written on their application row
+_told_reload: dict[str, str] = {}    # helper id -> the version it was asked to reload from
+_still_older: set[str] = set()       # helpers that reloaded and still came back older than Hal
+_old_seen = 0.0
+
+
+def _queue(helper_id: str) -> queue.Queue:
+    with _lock:
+        return _queues.setdefault(helper_id, queue.Queue())
+
+
+def _touch(helper_id: str) -> bool:
+    """Notes contact from a helper; True when it was not connected before (so setup's tick can follow)."""
+    with _lock:
+        was = _connected_locked(helper_id)
+        _seen[helper_id] = time.time()
+        return not was
+
+
+def _connected_locked(helper_id: str) -> bool:
+    busy = any(h == helper_id for h, _ in _waiting.values())
+    return time.time() - _seen.get(helper_id, 0.0) < CONNECTED_S or busy
+
+
+def _old_allowed() -> bool:
+    """An old helper gets commands only while the setting allows it and no 1.0 helper is paired."""
+    from . import db
+    from .apply import helpers
+
+    con = db.connect()
+    try:
+        return not helpers.any_paired(con)
+    finally:
+        con.close()
+
+
+def _take(helper_id: str, wait: float) -> dict:
+    try:
+        return _queue(helper_id).get(timeout=wait)
+    except queue.Empty:
+        return {}
 
 
 def poll() -> dict:
-    """Hands the extension its next command, waiting a while for one to arrive."""
-    global _seen
-    _seen = time.time()
+    """Hands an old (0.4 or 0.5) helper its next command, waiting a while for one to arrive.
+
+    Once a 1.0 helper is paired, old polls get no commands, so the two never share a form.
+    """
+    global _old_seen
+    _old_seen = time.time()
+    _touch(OLD)
     try:
-        return _commands.get(timeout=POLL_WAIT)
-    except queue.Empty:
-        return {}
+        if not _old_allowed():
+            threading.Event().wait(POLL_WAIT)
+            return {}
+        return _take(OLD, POLL_WAIT)
     finally:
-        _seen = time.time()
+        _touch(OLD)
 
 
-def deliver(result: dict) -> None:
-    """Takes the extension's answer to a command."""
-    global _seen
-    _seen = time.time()
-    waiting = _waiting.pop(result.get("id"), None)
-    if waiting:
-        waiting.set_result(result)
+def poll_helper(helper_id: str, version: str | None, protocol: int | None, wait: float | None = None) -> dict:
+    """A paired helper's long poll (POST /helpers/poll): its next command, or a request to reload itself.
+
+    A helper older than Hal is asked to reload once (it re-reads the files git updated); one still older
+    after that is noted for "Is Hal working?".
+    """
+    from . import db
+    from .apply import helpers
+    from .core import events
+
+    first = _touch(helper_id)
+    con = db.connect()
+    try:
+        helpers.seen(con, helper_id, version, protocol)
+    finally:
+        con.close()
+    if first:
+        events.publish("helper", id=helper_id, connected=True)
+    wanted = helpers.wanted_version()
+    reply = {"commands": [], "reload": False, "wanted_version": wanted}
+    if helpers.older(version, wanted):
+        with _lock:
+            told = _told_reload.get(helper_id)
+            if told is None:
+                _told_reload[helper_id] = version or ""
+                reply["reload"] = True
+            else:
+                _still_older.add(helper_id)
+        if reply["reload"]:
+            return reply
+    else:
+        with _lock:
+            _told_reload.pop(helper_id, None)
+            _still_older.discard(helper_id)
+    try:
+        command = _take(helper_id, POLL_WAIT if wait is None else wait)
+    finally:
+        _touch(helper_id)
+    if command:
+        reply["commands"] = [command]
+    return reply
 
 
-def connected() -> bool:
-    """True when the extension has been in touch recently or is working on a command."""
-    return time.time() - _seen < 2 * POLL_WAIT or bool(_waiting)
+def deliver(result: dict, helper_id: str = OLD) -> None:
+    """Takes a helper's answer to a command; an answer to another helper's command is ignored."""
+    _touch(helper_id)
+    with _lock:
+        waiting = _waiting.get(result.get("id"))
+        if waiting is None or waiting[0] != helper_id:
+            return
+        del _waiting[result.get("id")]
+    waiting[1].set_result(result)
+
+
+def connected(helper_id: str | None = None) -> bool:
+    """True when that helper (or, with no id, any helper) has been in touch recently or is working on a command."""
+    with _lock:
+        if helper_id is not None:
+            return _connected_locked(helper_id)
+        return any(_connected_locked(h) for h in set(_seen) | {h for h, _ in _waiting.values()})
+
+
+def still_older(helper_id: str) -> bool:
+    """True when the helper reloaded itself and is still older than Hal ("Is Hal working?" says so)."""
+    with _lock:
+        return helper_id in _still_older
+
+
+def old_helper_seen() -> bool:
+    """True when an old helper polled recently, so setup can show how to remove it."""
+    return time.time() - _old_seen < OLD_SEEN_S
+
+
+def assign(job_id: str, helper_id: str) -> None:
+    """Gives a job's commands to this helper: the one that holds its tab (a tab handed to Hal)."""
+
+    with _lock:
+        _carriers[job_id] = helper_id
+        _kept.discard(job_id)
+    _keep(job_id, helper_id)
+
+
+def _keep(job_id: str, helper_id: str) -> None:
+    """Writes the carrier on the application row, once there is one (a handed-over tab gets its row later)."""
+    from . import db
+    from .apply import helpers
+
+    if helper_id == OLD or job_id in _kept:
+        return
+    con = db.connect()
+    try:
+        if helpers.carry(con, job_id, helper_id):
+            with _lock:
+                _kept.add(job_id)
+    finally:
+        con.close()
+
+
+def _carrier(job_id: str | None, cmd: str) -> str:
+    """The helper a command goes to; raises RuntimeError when no helper can take it."""
+    from . import db
+    from .apply import helpers
+
+    with _lock:
+        live = {h for h in set(_seen) | {h for h, _ in _waiting.values()} if _connected_locked(h)}
+        kept = _carriers.get(job_id) if job_id else None
+    if kept:
+        if kept in live:
+            _keep(job_id, kept)
+            return kept
+        if cmd != "open":
+            # the form's tab is in that helper's browser; another browser cannot reach it
+            raise RuntimeError(f"the browser helper that has this form's tab is not connected. {NOT_CONNECTED}.")
+    con = db.connect()
+    try:
+        chosen = helpers.choose(con, job_id, live - {OLD})
+        if chosen is None and OLD in live and not helpers.any_paired(con):
+            chosen = OLD
+    finally:
+        con.close()
+    if chosen is None:
+        raise RuntimeError(f"the browser helper is not connected. {NOT_CONNECTED}.")
+    if job_id:
+        assign(job_id, chosen)
+    return chosen
 
 
 def _ask(cmd: str, timeout: float = 90, **args) -> dict:
-    if not connected():
-        raise RuntimeError("the Hal extension is not connected; open Brave with the extension switched on")
+    helper_id = _carrier(args.get("job"), cmd)
     ident = uuid.uuid4().hex
-    _waiting[ident] = concurrent.futures.Future()
+    answer: concurrent.futures.Future = concurrent.futures.Future()
+    with _lock:
+        _waiting[ident] = (helper_id, answer)
     # Every command carries the guard's words, so content.js refuses what the guard refuses.
-    _commands.put({"id": ident, "cmd": cmd, "args": {**args, "guard": guard.PATTERNS}})
+    _queue(helper_id).put({"id": ident, "cmd": cmd, "args": {**args, "guard": guard.PATTERNS}})
     try:
-        result = _waiting[ident].result(timeout)
+        result = answer.result(timeout)
     except concurrent.futures.TimeoutError:
-        _waiting.pop(ident, None)
-        raise RuntimeError("the Hal extension did not answer; check Brave is still open") from None
+        with _lock:
+            _waiting.pop(ident, None)
+        raise RuntimeError("the browser helper did not answer; check the browser is still open") from None
     if result["ok"]:
         value = result["value"]
         # Submits the page tried while the helper acted on it, cancelled by the helper's block.
@@ -101,6 +272,20 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
     if result["error"] == "gone" or result["error"].startswith("No tab with id"):
         raise RuntimeError("the form's tab was closed; press \"Fill in the form\" to open it again")
     raise RuntimeError(result["error"])
+
+
+def reset() -> None:
+    """Forgets every queue, carrier and helper contact (tests start each class clean)."""
+    global _old_seen
+    with _lock:
+        _queues.clear()
+        _waiting.clear()
+        _seen.clear()
+        _carriers.clear()
+        _kept.clear()
+        _told_reload.clear()
+        _still_older.clear()
+    _old_seen = 0.0
 
 
 def _read(job_id: str, banners: bool = True, options: bool = False) -> dict:

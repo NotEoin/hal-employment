@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 200" width="360" height="200" role="img" aria-label="Microsoft Edge, edge://extensions">
+<rect x="1" y="1" width="358" height="198" rx="10" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+<rect x="1" y="1" width="358" height="24" rx="10" fill="#e5e7eb"/>
+<circle cx="16" cy="13" r="4" fill="#9ca3af"/><circle cx="30" cy="13" r="4" fill="#9ca3af"/><circle cx="44" cy="13" r="4" fill="#9ca3af"/>
+<text x="64" y="17" font-family="sans-serif" font-size="10" fill="#374151">Microsoft Edge</text>
+<rect x="60" y="32" width="196" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/>
+<text x="72" y="45" font-family="monospace" font-size="11" fill="#111827">edge://extensions</text>
+
+<line x1="1" y1="58" x2="359" y2="58" stroke="#e5e7eb"/>
+<rect x="1" y="59" width="110" height="140" fill="#f9fafb"/><text x="12" y="80" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">Extensions</text><text x="48" y="178" font-family="sans-serif" font-size="11" fill="#111827">Developer mode</text><rect x="14" y="168" width="28" height="14" rx="7" fill="#2563eb"/><circle cx="34" cy="175" r="6" fill="#ffffff" stroke="#6b7280"/><rect x="124" y="70" width="96" height="22" rx="5" fill="#ffffff" stroke="#6b7280"/><text x="134" y="85" font-family="sans-serif" font-size="11" fill="#111827">Load unpacked</text><rect x="124" y="128" width="200" height="56" rx="6" fill="#f9fafb" stroke="#d1d5db"/><text x="134" y="146" font-family="sans-serif" font-size="11" font-weight="bold" fill="#111827">Hal Employment</text><text x="134" y="160" font-family="sans-serif" font-size="10" fill="#4b5563">Version 0.5</text><rect x="134" y="166" width="52" height="14" rx="4" fill="#ffffff" stroke="#6b7280"/><text x="142" y="177" font-family="sans-serif" font-size="9" fill="#111827">Remove</text><rect x="129" y="161" width="62" height="24" rx="6" fill="none" stroke="#2563eb" stroke-width="3"/>
+</svg>

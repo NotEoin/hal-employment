@@ -1,13 +1,32 @@
-// Hal Employment's link to the local web helper. It asks the helper for work,
-// carries each command out in a job's tab, and reports the result. Only tabs
-// Hal opened for a job, tabs those open, and tabs the applicant hands to Hal
-// with the toolbar button are ever touched. There is no submit command: Hal
-// never presses Submit, and the person presses it on the site.
+// Hal Employment's browser helper. It asks Hal for work, carries each command out in a job's tab, and
+// reports the result. Only tabs Hal opened for a job, tabs those open, and tabs the applicant hands to Hal
+// with the toolbar button are ever touched. There is no submit command: Hal never presses Submit, and the
+// person presses it on the site.
+//
+// Protocol 1: the helper is paired once on Hal's /pair page in this browser (pair.js relays the
+// one-time code), and keeps {base, helper_id, key, install_id} in storage. Every request goes to that base,
+// the address the pairing page was opened at, so a laptop talks through its own tunnel port. Only APIs that
+// Firefox also has are used (tabs, scripting, storage, alarms, runtime).
 
-const HAL = "http://127.0.0.1:8737";
-// The helper's address: the default, unless storage names another (the tests run their own helper).
-const hal = async () => (await chrome.storage.local.get("hal")).hal || HAL;
-const HEADERS = { "X-Hal": "1", "Content-Type": "application/json" };
+const PROTOCOL = 1;
+const VERSION = chrome.runtime.getManifest().version;
+const JSON_HEADERS = { "X-Hal": "1", "Content-Type": "application/json" };
+const UNPAIRED_WAIT_MS = 5000;    // how often an unpaired helper looks for a pairing
+const REFUSED_WAIT_MS = 30000;    // Hal refused the key (forgotten in Settings): ask again much later
+const POLL_TIMEOUT_MS = 25000;    // Hal holds a poll for 20 s
+const ADOPT_TRIES = 60;           // finding a handed-over tab's job may ask the AI; Hal answers every 2 s
+
+// Where Hal is, and how to prove who this helper is. `hal` is a developer's address for a server that
+// speaks the old protocol (the legacy test harness); a pairing always wins over it.
+async function link() {
+  const { pairing, hal } = await chrome.storage.local.get(["pairing", "hal"]);
+  if (pairing && pairing.base && pairing.key) {
+    return { v1: true, base: pairing.base,
+             headers: { ...JSON_HEADERS, "X-Hal-Key": `${pairing.helper_id}:${pairing.key}` } };
+  }
+  if (hal) return { v1: false, base: hal, headers: JSON_HEADERS };
+  return null;
+}
 const SEARCH = "https://duckduckgo.com/?q=";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -193,8 +212,11 @@ const COMMANDS = {
   async fill({ job, fields, paths, guard }) {
     // Files come through the worker: a page may not fetch from the helper itself.
     const files = {};
+    const at = await link();
     for (const path of paths) {
-      const reply = await fetch(`${await hal()}/files?path=${encodeURIComponent(path)}`);
+      const where = at.v1 ? `/api/v2/helpers/file?job_id=${encodeURIComponent(job)}&path=${encodeURIComponent(path)}`
+        : `/files?path=${encodeURIComponent(path)}`;
+      const reply = await fetch(`${at.base}${where}`, { headers: at.v1 ? at.headers : {} });
       if (!reply.ok) throw new Error(`could not read ${path.split("/").pop()}`);
       files[path] = { name: path.split("/").pop(), type: reply.headers.get("Content-Type") || "application/pdf",
                       data: base64(await reply.arrayBuffer()) };
@@ -255,9 +277,12 @@ async function jobOf(tabId) {
 }
 
 async function post(path, body = {}) {
-  const reply = await fetch(`${await hal()}/api/${path}`, { method: "POST", headers: HEADERS, body: JSON.stringify(body) });
+  const at = await link();
+  if (!at) throw new Error("the helper is not connected to Hal yet; press Connect in Hal's setup");
+  const reply = await fetch(`${at.base}${at.v1 ? "/api/v2/helpers/" : "/api/"}${path}`,
+    { method: "POST", headers: at.headers, body: JSON.stringify(body) });
   const out = await reply.json().catch(() => ({}));
-  if (!reply.ok) throw new Error(out.error || `the helper answered ${reply.status}`);
+  if (!reply.ok) throw new Error((out.error && (out.error.message || out.error)) || `Hal answered ${reply.status}`);
   return out;
 }
 
@@ -270,13 +295,17 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     if (!job) return;
     // No opener: a tab the job's tab opens is taken for the next page of its form.
     const at = { index: sender.tab.index + 1, windowId: sender.tab.windowId };
+    const hal = await link();
+    if (!hal) return;
     if (ask.cmd === "fill") {
-      await chrome.action.setBadgeText({ tabId: sender.tab.id, text: "…" });
-      await post(`job/${encodeURIComponent(job)}/page`);
+      await chrome.action.setBadgeText({ tabId: sender.tab.id, text: "..." });
+      if (hal.v1) await post("fill-empty", { job_id: job });
+      else await post(`job/${encodeURIComponent(job)}/page`);
     } else if (ask.cmd === "open") {
-      await chrome.tabs.create({ url: `${await hal()}/#/job/${encodeURIComponent(job)}`, ...at });
+      const page = hal.v1 ? `/#app-${encodeURIComponent(job)}` : `/#/job/${encodeURIComponent(job)}`;
+      await chrome.tabs.create({ url: `${hal.base}${page}`, ...at });
     } else if (ask.cmd === "doc" && /^(cv|letter)$/.test(ask.which)) {
-      await chrome.tabs.create({ url: `${await hal()}/doc/${encodeURIComponent(job)}/${ask.which}`, ...at });
+      await chrome.tabs.create({ url: `${hal.base}/doc/${encodeURIComponent(job)}/${ask.which}`, ...at });
     }
   })().catch(e => console.warn("Hal:", e.message));
 });
@@ -289,18 +318,28 @@ async function handTab(tab) {
     await chrome.action.setTitle({ tabId: tab.id, title });
   };
   try {
-    await say("…", "Hal is filling this application");
+    await say("...", "Hal is filling this application");
     const [read] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({
       url: location.href, title: document.title,
       heading: (document.querySelector("h1")?.innerText || "").trim().slice(0, 200),
       site: document.querySelector("meta[property='og:site_name']")?.content || "",
       text: (document.body?.innerText || "").slice(0, 20000) }) });
-    const found = await post("ext/adopt", read.result);
+    const v1 = (await link() || {}).v1;
+    let found;
+    if (v1) {
+      // Hal fills the tab once it is registered under its job, so the job is found first, then filled.
+      let reply = await post("adopt", { tab: read.result });
+      for (let i = 0; reply.started && i < ADOPT_TRIES; i++) reply = await post("adopt", { action_id: reply.action_id, tab: read.result });
+      if (!reply.job_id) throw new Error("Hal took too long to find the job");
+      found = { job: reply.job_id, title: reply.title, company: reply.company };
+    } else {
+      found = await post("ext/adopt", read.result);
+    }
     await withJobs(jobs => {
       for (const job of Object.keys(jobs)) jobs[job] = jobs[job].filter(id => id !== tab.id);
       jobs[found.job] = [...(jobs[found.job] || []), tab.id];
     });
-    await post(`job/${encodeURIComponent(found.job)}/adopt`, { url: read.result.url });
+    if (!v1) await post(`job/${encodeURIComponent(found.job)}/adopt`, { url: read.result.url });
     await chrome.action.setTitle({ tabId: tab.id, title: `Hal: ${found.title} at ${found.company}` });
   } catch (e) {
     await say("!", `Hal could not take this tab: ${e.message}`);
@@ -324,8 +363,39 @@ async function carryOut(command) {
   } finally {
     running--;
   }
-  await fetch(`${await hal()}/api/ext/result`, { method: "POST", headers: HEADERS, body: JSON.stringify(result) })
-    .catch(() => {});
+  const at = await link();
+  if (!at) return;
+  await fetch(`${at.base}${at.v1 ? "/api/v2/helpers/result" : "/api/ext/result"}`,
+    { method: "POST", headers: at.headers, body: JSON.stringify(result) }).catch(() => {});
+}
+
+// One poll; returns how long to wait before the next, in milliseconds.
+async function pollOnce() {
+  const at = await link();
+  if (!at) return UNPAIRED_WAIT_MS;
+  const { pairing } = await chrome.storage.local.get("pairing");
+  const body = at.v1 ? { helper_id: pairing.helper_id, version: VERSION, protocol: PROTOCOL, tabs: running } : {};
+  let reply;
+  try {
+    reply = await fetch(`${at.base}${at.v1 ? "/api/v2/helpers/poll" : "/api/ext/poll"}`, {
+      method: "POST", headers: at.headers, body: JSON.stringify(body), signal: AbortSignal.timeout(POLL_TIMEOUT_MS) });
+  } catch {
+    return UNPAIRED_WAIT_MS;  // Hal is not running, or the wait timed out
+  }
+  if (reply.status === 401 || reply.status === 403) return REFUSED_WAIT_MS;
+  const out = await reply.json().catch(() => ({}));
+  chrome.runtime.getPlatformInfo(() => {});  // counts as activity, so the worker is kept running
+  if (!at.v1) {
+    if (out.id) carryOut(out);
+    return 0;
+  }
+  if (out.reload) {
+    // Hal was updated: re-read this folder's files, which git and Hal's start refreshed.
+    chrome.runtime.reload();
+    return REFUSED_WAIT_MS;
+  }
+  for (const command of out.commands || []) carryOut(command);
+  return 0;
 }
 
 let looping = false;
@@ -335,22 +405,32 @@ async function loop() {
   try {
     for (;;) {
       while (running >= MOST) await sleep(100);
-      let command;
-      try {
-        const reply = await fetch(`${await hal()}/api/ext/poll`, {
-          method: "POST", headers: HEADERS, body: "{}", signal: AbortSignal.timeout(25000) });
-        command = await reply.json();
-      } catch {
-        await sleep(5000);  // the helper is not running, or the wait timed out
-        continue;
-      }
-      chrome.runtime.getPlatformInfo(() => {});  // counts as activity, so the worker is kept running
-      if (command.id) carryOut(command);
+      const wait = await pollOnce().catch(() => UNPAIRED_WAIT_MS);
+      if (wait) await sleep(wait);
     }
   } finally {
     looping = false;
   }
 }
+
+// Pairing: pair.js found a one-time code on Hal's own /pair page in this browser. The base is
+// that page's origin, so a laptop pairs with its tunnel's address.
+async function pairWith(code, page, installId) {
+  const base = new URL(page).origin;
+  const reply = await fetch(`${base}/api/v2/helpers/pair`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({
+    code, browser: null, version: VERSION, protocol: PROTOCOL, extension_id: chrome.runtime.id }) });
+  const out = await reply.json().catch(() => ({}));
+  if (!reply.ok) throw new Error((out.error && out.error.message) || `Hal answered ${reply.status}`);
+  await chrome.storage.local.set({ pairing: { base, helper_id: out.helper_id, key: out.key, install_id: installId || null } });
+  loop();
+}
+
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  const ask = message && message.halPair;
+  if (!ask || !sender.tab || !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/pair$/.test(sender.url.split(/[?#]/)[0])) return false;
+  pairWith(String(ask.code), sender.url, ask.install_id).then(() => reply({ ok: true }), e => reply({ ok: false, error: e.message }));
+  return true;  // the reply comes later
+});
 
 chrome.runtime.onStartup.addListener(loop);
 chrome.runtime.onInstalled.addListener(loop);
