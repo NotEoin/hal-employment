@@ -22,6 +22,8 @@ WINDOWS = INSTALL / "install-hal-windows.cmd"
 LINUX = INSTALL / "install-hal-linux.sh"
 UPDATE_CMD = ROOT / "scripts" / "update-hal.cmd"
 UPDATE_SH = ROOT / "scripts" / "update-hal.sh"
+# a template the laptop fills in and runs outside any clone, so git never replaces it mid-run
+LAPTOP_LAUNCHER = ROOT / "scripts" / "remote" / "hal-remote.cmd"
 URL = re.compile(r"https://github\.com/[^\s'\"]+/releases/download/[^\s'\"]+")
 SHA = re.compile(r"^(|[0-9a-f]{64})$")
 BATCH_QUIET = re.compile(r'^(@echo off|rem( .*)?|set "[A-Z_]+=.*"|)$', re.I)
@@ -96,7 +98,7 @@ class Shapes(unittest.TestCase):
         files = cmd_files()
         self.assertIn(UPDATE_CMD, files)
         self.assertIn(WINDOWS, files)
-        for path in files:
+        for path in (p for p in files if p != LAPTOP_LAUNCHER):
             lines = batch_lines(path)
             runs = [line for line in lines if not BATCH_QUIET.match(line)]
             with self.subTest(cmd=path.name):
