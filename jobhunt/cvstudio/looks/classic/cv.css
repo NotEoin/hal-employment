@@ -1,0 +1,6 @@
+/* Classic: serif name and headings over sans body text, with a thin rule under each heading. */
+body { font-family: "Source Sans 3", Arial, sans-serif; }
+.cv-name, .cv-sec h2 { font-family: "Source Serif 4", Georgia, serif; }
+.cv-name { font-weight: 600; }
+.cv-sec h2 { font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-size: 10pt;
+  border-bottom: 0.6pt solid #8a8a84; padding-bottom: 0.6mm; }

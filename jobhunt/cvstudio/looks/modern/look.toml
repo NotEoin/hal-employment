@@ -1,0 +1,7 @@
+id = "modern"
+name = "Modern"
+safe = true
+note = "One column, coloured headings"
+fonts = ["Source Sans 3"]
+columns = 1
+order = 20

@@ -1,0 +1,13 @@
+{
+  "checks": {
+    "A date range on every entry": 1.0,
+    "Contact details in the body": 1.0,
+    "No ligatures or unmapped glyphs": 1.0,
+    "Single-column layout": 1.0,
+    "Standard section headings": 1.0,
+    "Tables read back in order": 1.0,
+    "Text can be read back": 1.0,
+    "Text reads as words": 1.0
+  },
+  "group": 1.0
+}

@@ -1,0 +1,7 @@
+id = "compact"
+name = "Compact"
+safe = true
+note = "Fits more on each page"
+fonts = ["Source Sans 3"]
+columns = 1
+order = 30

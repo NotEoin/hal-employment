@@ -1,0 +1,7 @@
+id = "two"
+name = "Two columns"
+safe = false
+note = "For printing and networking"
+fonts = ["Source Sans 3", "Source Serif 4"]
+columns = 2
+order = 40

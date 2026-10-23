@@ -1,0 +1,6 @@
+/* The letter in this look: the same header as the CV, then the date, recipient and body. */
+.letter-date { margin-top: 6mm; }
+.letter-to { margin-top: 4mm; }
+.letter-subject { margin-top: 5mm; font-weight: 600; }
+.letter-body { margin-top: 4mm; font-size: 10.5pt; line-height: 1.5; }
+.letter-body p { margin: 0 0 3.2mm; }

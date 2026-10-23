@@ -96,6 +96,55 @@ def _drawable(value):
 ORDER = ("education", "projects", "experience", "skills", "additional")
 
 
+def draw_view(view, out: Path) -> Path:
+    """Draws a CV as `cvstudio.render.view` lays it out: the printer's fallback when no browser can print.
+
+    The words and their order are the browser page's; only the type and spacing are this layout's.
+    """
+    b = pdfdraw
+    doc = b.Doc()
+    doc.y -= b.NAME_SIZE
+    doc.text(_drawable(view.name) + " ", b.ML, doc.y, b.F_BOLD, b.NAME_SIZE, b.INK)
+    if view.headline:
+        doc.y -= 11.5
+        doc.text(_drawable(view.headline) + " ", b.ML, doc.y, b.F_REG, 9.5, b.META_INK)
+    if view.contact:
+        doc.y -= 11
+        doc.text(_drawable(" | ".join(view.contact)) + " ", b.ML, doc.y, b.F_REG, b.CONTACT_SIZE, b.META_INK)
+    doc.y -= 9
+    doc.rule(b.ML, doc.y, b.CW, ink=0.55, thickness=0.7)
+    doc.y -= 13
+    for section in view.sections:
+        doc.y -= 6
+        doc.section(_drawable(section.title))
+        if section.text:
+            doc.paragraph(_drawable(section.text), size=BODY, lead=LEAD)
+        for i, e in enumerate(section.entries):
+            if i:
+                doc.y -= 5
+            if section.kind in ("skills", "languages") and e.items and not e.bullets:
+                label = f"**{_drawable(e.heading)}:** " if e.heading else ""
+                doc.paragraph(label + _drawable(e.items), size=BODY, lead=LEAD, gap=1.5)
+                continue
+            lines = [f"- {t}" for _, t in e.bullets] or ([e.text] if e.text else [])
+            meta = " | ".join(x for x in (e.org, e.dates, e.meta) if x)
+            _entry(b, doc, _drawable(e.heading), _drawable(meta), _drawable("\n".join(lines)), size=10.4)
+            if e.items:
+                doc.paragraph(_drawable(e.items), size=BODY, lead=LEAD, gap=1.0)
+            if e.modules:
+                doc.paragraph("**Selected modules:** " + _drawable(e.modules), size=BODY, lead=LEAD, gap=1.0)
+        if section.also:
+            doc.y -= 4
+            doc.paragraph("**Also:** " + _drawable(section.also), size=BODY, lead=LEAD)
+    pages = doc.finish()
+    b.add_footers(pages)
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    b.OUT = out
+    b.write_pdf(pages, doc.links)
+    return out
+
+
 def render(variant: dict, out_dir: Path) -> Path:
     """Writes a CV variant as Hal's layout to out_dir and returns the PDF's path."""
     b = pdfdraw

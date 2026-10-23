@@ -1,0 +1,5 @@
+/* Modern: sans text, the name and headings in a dark teal that prints well in black and white. */
+body { font-family: "Source Sans 3", Arial, sans-serif; }
+.cv-name { color: #0f5a6b; font-family: "Source Serif 4", Georgia, serif; font-weight: 600; }
+.cv-sec h2 { color: #0f5a6b; font-size: 12pt; font-weight: 600; }
+.cv-headline { color: #2f3f44; }
