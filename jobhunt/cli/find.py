@@ -14,8 +14,7 @@ import textwrap
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .. import db
-from ..config import CONFIG
-from ..core import clock
+from ..core import clock, settings
 from ..find import detect, rules
 from ..find import goal as goal_mod
 from ..find import sources_registry as registry
@@ -103,7 +102,7 @@ def cmd_discover(args):
     if errors:
         print(f"\n{len(errors)} errors:", *errors[:10], sep="\n  ")
 
-    strong = [(s, j) for s, j in new_jobs if s >= CONFIG.get("alert_score", 70)]
+    strong = [(s, j) for s, j in new_jobs if s >= settings.get("notify.alert_score")]
     if strong and not args.quiet:
         top = strong[0][1]
         notify(f"{len(strong)} strong new job match{'es' * (len(strong) > 1)}",
@@ -165,7 +164,7 @@ def cmd_queue(args):
                           ORDER BY score DESC, first_seen DESC LIMIT ?""", (replenish.TARGET,)).fetchall()
     for r in rows:
         print(f"{(r['score'] or 0):4.0f}  {r['company'][:22]:22}  {r['title'][:50]:50}  {r['id']}")
-    print(f"({len(rows)} of {replenish.TARGET}; open http://127.0.0.1:{CONFIG.get('web_port', 8737)}/ to apply)")
+    print(f"({len(rows)} of {replenish.TARGET}; open http://127.0.0.1:{settings.get('advanced.port')}/ to apply)")
 
 
 def cmd_rescore(args):

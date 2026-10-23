@@ -5,7 +5,7 @@
 Callers move to `jobhunt.ai.chat` with a `purpose` as their owners touch them. `LLMUnavailable` is the new
 one, so `except llm.LLMUnavailable` catches every kind. `undash` and `available` stay here.
 
-`HAL_ROOT` (Hal's own folder, for its retrieval library) is read from the `hal_root` config key when used;
+`HAL_ROOT` (Hal's own folder, for its retrieval library) is read from the `addon.hal_root` setting when used;
 it has no built-in default, because the folder is the owner's and other installs have none.
 """
 import re
@@ -21,9 +21,9 @@ OLD_TIMEOUT_S = 180       # what the old chat() waited when a caller named no ti
 
 def __getattr__(name):  # old constant, read live (PEP 562)
     if name == "HAL_ROOT":
-        from .config import CONFIG
+        from .core import settings
 
-        root = CONFIG.get("hal_root") or ""
+        root = settings.get("addon.hal_root") or ""
         return Path(root).expanduser() if root else Path("hal-not-configured")
     raise AttributeError(name)
 

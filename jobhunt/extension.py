@@ -48,7 +48,6 @@ from .browser import (
     note_signed_in,
     signed_in_at,
 )
-from .config import CONFIG
 
 POLL_WAIT = 20  # seconds a poll is held open; the browser stops a worker whose request takes 30
 PATTERNS = {"apply": APPLY_BUTTON.pattern, "next": NEXT_BUTTON.pattern, "submit": SUBMIT_BUTTON.pattern,
@@ -422,7 +421,9 @@ def _advance(job_id: str, pressed: bool = False) -> dict:
 
 def open_form(job_id: str, url: str) -> dict:
     _last_url[job_id] = url
-    _ask("open", timeout=120, job=job_id, url=url, window=CONFIG.get("apply_window", "separate"))
+    from .core import settings
+
+    _ask("open", timeout=120, job=job_id, url=url, window=settings.get("applying.window"))
     return _advance(job_id)
 
 

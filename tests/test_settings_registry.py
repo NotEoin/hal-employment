@@ -1,9 +1,7 @@
 """Gate G7: code reads only registered settings, the old `CONFIG` only where a module has not
 been converted yet, and Hal never sets the goal, the scoring or the CV by itself.
 
-`LEGACY_ALLOWED` holds today's `CONFIG` reads as (file, old key) pairs; "*" stands for a key built at run time.
-Converting a module removes its entries, until the list is empty. An entry no
-code uses any more fails too, so the list only ever shrinks.
+`LEGACY_ALLOWED` is empty: every module reads `settings.get`. A `CONFIG` read outside the shim fails.
 """
 import ast
 import unittest
@@ -18,15 +16,7 @@ JOBHUNT = ROOT / "jobhunt"
 SHIM = "jobhunt/config.py"
 READS = ("get", "set", "reset")
 PERSON_ONLY = settings.PERSON_ONLY
-LEGACY_ALLOWED = {
-    ("jobhunt/browser.py", "apply_browser"),
-    ("jobhunt/cli/find.py", "alert_score"),
-    ("jobhunt/cli/find.py", "web_port"),
-    ("jobhunt/extension.py", "apply_window"),
-    ("jobhunt/llm.py", "hal_root"),
-    ("jobhunt/record.py", "*"),
-    ("jobhunt/web/server.py", "web_port"),
-}
+LEGACY_ALLOWED: set[tuple[str, str]] = set()   # every module reads settings; a new CONFIG read fails G7
 
 
 def _modules():

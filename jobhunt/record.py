@@ -35,7 +35,6 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
-from .config import CONFIG
 from .core import paths
 
 log = logging.getLogger(__name__)
@@ -47,18 +46,14 @@ EMBED_BATCH = 32
 MEANING_MIN = 0.55        # nomic-embed-text similarities run high; below this a passage is off the subject
 
 
-def _setting(key: str, legacy_key: str | None = None, default=None):
-    # The stored setting wins; config.toml answers in the old layout until the importer has copied it.
+def _setting(key: str):
     from .core import settings
-    from .core.settings import store
 
-    if legacy_key is None:
-        return settings.get(key)
-    return store.stored(key) or CONFIG.get(legacy_key) or default
+    return settings.get(key)
 
 
 # Resolved when used: VAULT (the record folder, setting record.folder) and INDEX (the search index).
-_LIVE = {"VAULT": lambda: Path(_setting("record.folder", "record_vault") or paths.record_default()).expanduser(),
+_LIVE = {"VAULT": lambda: Path(_setting("record.folder") or paths.record_default()).expanduser(),
          "INDEX": lambda: paths.data_dir() / "record-index" / "index.json"}
 
 

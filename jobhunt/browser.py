@@ -34,7 +34,6 @@ from pathlib import Path
 from urllib.parse import quote_plus, urlparse
 
 from .apply import guard
-from .config import CONFIG
 from .core import paths
 
 # PROFILE, SHOTS and SIGNED_IN (sites the applicant has signed in to in Hal's browser, where Apply may send a
@@ -1297,7 +1296,10 @@ def _close(b: Browser, job_id: str) -> None:
 
 def mode() -> str:
     """Returns where forms are driven: Hal's own "window" or "headless" browser, or the "extension"."""
-    return os.environ.get("JOBHUNT_APPLY_BROWSER") or CONFIG.get("apply_browser", "window")
+    from .core import settings
+
+    mode = os.environ.get("JOBHUNT_APPLY_BROWSER") or settings.get("applying.mode")
+    return "extension" if mode == "helper" else mode   # the engines still call the helper "extension"
 
 
 def where() -> str:

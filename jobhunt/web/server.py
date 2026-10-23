@@ -86,7 +86,6 @@ from ..apply.queries import (
     in_progress_around,
     mark_applied,
 )
-from ..config import CONFIG
 from ..core import naming
 from ..core.runner import _RUN, ACTIONS, POOL, Stopped, _carry_out, _checkpoint, _note, _say, run_action, stop_action
 from ..core.worker import RECORD_EVERY, RECORD_SYNC, WORKER, WORKER_PAUSE, worker
@@ -648,7 +647,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(port: int | None = None, open_browser: bool = False) -> None:
     """Runs the interface and its worker until interrupted."""
-    port = port or int(CONFIG.get("web_port", 8737))
+    from . import auth
+
+    port = port or auth.server_port()
     threading.Thread(target=worker, name="worker", daemon=True).start()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}/"
