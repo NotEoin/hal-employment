@@ -1,0 +1,31 @@
+Tobias Wrenfield
+Lowmere | toby.wrenfield@example.org | 07700 900462 | github.com/example-wrenfield
+
+SUMMARY
+Software Studies graduate who builds small, well-tested tools and likes making data easy to use.
+
+EDUCATION
+BSc (Hons) Software Studies, First    Sep 2023 - Jul 2026
+Made-up Institute of Technology
+- Modules: Algorithms (78), Databases (72), Human Factors (69)
+
+PROJECTS
+Tide Tables App    2025
+Python, Flask, SQLite
+- Built a web app that shows the week's tides for 14 harbours
+- Wrote 120 tests that run in under 2 seconds
+Library Seat Finder    2024
+TypeScript, React
+- Showed free study seats live to 300 students in a pilot
+
+WORK EXPERIENCE
+Junior Developer Intern, Brackwater Analytics, Lowmere    Jun 2025 - Sep 2025
+- Cut a nightly report from 40 minutes to 6 by rewriting its queries
+- Reviewed code with two senior developers every week
+
+TECHNICAL SKILLS
+Languages: Python, TypeScript, SQL, Java
+Tools: Git, Docker, Linux, PostgreSQL
+
+CERTIFICATIONS
+Made-up Cloud Practitioner, 2025
