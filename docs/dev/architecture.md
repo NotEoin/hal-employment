@@ -36,7 +36,8 @@ Set `HAL_EMPLOYMENT_HOME` to a folder inside the worktree before running any Hal
 `now_utc()`, `iso()` (`2026-10-22T09:00:00Z`), `local()`, `from_local()` and `local_day()`.
 `HAL_EMPLOYMENT_FAKE_NOW` fixes the time in tests and `HAL_EMPLOYMENT_TZ` the local zone (`time.tzset()` is
 Unix only, so tests never set `TZ`). Code that shows or plans in local time calls `clock.local()`, never
-`astimezone()` with no zone. `db.now()` returns `iso()`; older rows end in `+00:00` and compare the same on 19
+`astimezone()` with no zone. `uk_zone()` is UK time on any computer: the zone database's Europe/London, or
+on Windows, which has none without `tzdata`, the UK's own summer-time rule. `db.now()` returns `iso()`; older rows end in `+00:00` and compare the same on 19
 characters.
 
 ## Database (`jobhunt/db.py`)

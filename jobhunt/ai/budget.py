@@ -20,7 +20,7 @@ import contextvars
 import logging
 import sqlite3
 from collections.abc import Iterator
-from datetime import UTC, datetime, time, timedelta, tzinfo
+from datetime import datetime, time, timedelta, tzinfo
 
 from ..core import clock
 from .base import ChatResult, Limited, LLMUnavailable
@@ -30,20 +30,14 @@ log = logging.getLogger(__name__)
 YOU_ASKED, YOU_CHOSE, BACKGROUND = 0, 1, 2
 PRIORITIES = (YOU_ASKED, YOU_CHOSE, BACKGROUND)
 CAPPED = ("claude_cli",)            # backends whose calls spend the person's subscription
-UK_ZONE = "Europe/London"           # UK only for now
 LIMIT_RETRY_MINUTES = 60   # a limit message that names no reset time pauses background work an hour
 
 _priority: contextvars.ContextVar[int | None] = contextvars.ContextVar("hal_ai_priority", default=None)
 
 
 def _london() -> tzinfo:
-    """UK time; the computer's own zone when tzdata is missing (it is not a Windows dependency)."""
-    try:
-        from zoneinfo import ZoneInfo
-
-        return ZoneInfo(UK_ZONE)
-    except Exception:
-        return datetime.now().astimezone().tzinfo or UTC
+    """UK time, also on a Windows computer with no zone database or set to another zone."""
+    return clock.uk_zone()
 
 
 def local_now() -> datetime:
