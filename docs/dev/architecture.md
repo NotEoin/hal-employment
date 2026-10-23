@@ -310,6 +310,19 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   `/prep` and `/contacts`; each starts its kind in `docs/write_actions.py` (`docs.change`,
   `docs.rewrite_letter`, `docs.prep`, `docs.contacts`) and returns `{action_id}`.
 
+## Sources (`find/sources_registry.py`, `find/detect.py`, `find/source_routes.py`)
+
+- Every place Hal searches is a `sources` row. Built-ins come from `find/seed/sources.toml` and follow the
+  scoring preset until the person switches one (`config.chosen`). `fetch()` touches only the network and
+  raises `Skipped` with words for a site left out on purpose (no key, read from email); `record()` writes
+  `source_runs` and the source's health. `BUILTIN_FETCHERS` is the same dict as `cli.find.STANDALONE`.
+- Queries come from `queries(source, goal)`: each role with each chosen kind's phrases, at most 12, the
+  source's own `config.queries` first.
+- Detection (`find/detect.py`) is pure over the address and the page's text; a look is held in the server
+  process for 30 minutes under `detected_id`. Saving a site is undone through `find/source_undo.py`.
+- Job alert emails from the senders in `find/seed/alert_senders.toml` (or `email.alert_senders`) go through
+  one generic parser in `gmail.py`: each linked job becomes a lead.
+
 ## Names (`core/naming.py`)
 
 `file_name("cv" | "letter")` fills the `cvdocs.*file_name` template with `you.name`; `folder_name(n, company,
