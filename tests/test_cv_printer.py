@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -145,7 +146,7 @@ class Printing(unittest.TestCase):
                          self)
         plat.popen_hidden = fake.popen
         self.assertEqual(self.to_pdf(plat, playwright=False)["how"], "chromium")
-        self.assertEqual(fake.started[0][0], "/usr/bin/chromium")
+        self.assertEqual(fake.started[0][0], str(Path("/usr/bin/chromium")))
 
     def test_printing_falls_back_to_the_simple_pdf_and_says_why(self):
         before = len(fallback_rows())
@@ -197,9 +198,18 @@ class Printing(unittest.TestCase):
         self.assertIn(name, pdfread.text(self.out))
 
 
+def platform_printer() -> str:
+    """The printer Hal uses on this computer: Edge on Windows, Playwright's Chromium elsewhere."""
+    return "edge" if sys.platform == "win32" else "playwright"
+
+
 @unittest.skipUnless(browser_tests_on(), "browser tests need HAL_TEST_BROWSER=1 and Playwright")
 class RealPrinting(unittest.TestCase):
     def test_accented_names_print_in_every_look(self):
+        """On Windows this is the real Edge printer test.
+
+        Regression: it expected Playwright's Chromium on Windows too, where Hal prints with Edge (CI, 2026-10-23).
+        """
         for person in people.PEOPLE:
             profile = profile_of(person, ACCENTED)
             doc, type_ = made_up_cv(person.key), type_for(person.key)
@@ -207,7 +217,7 @@ class RealPrinting(unittest.TestCase):
                 with self.subTest(person=person.key, look=look.id):
                     out = Path(tempfile.mkdtemp()) / "cv.pdf"
                     done = export.cv_pdf(doc, type_, look.id, profile, out)
-                    self.assertEqual((done["how"], done["fallback_reason"]), ("playwright", None))
+                    self.assertEqual((done["how"], done["fallback_reason"]), (platform_printer(), None))
                     squeezed = "".join(pdfread.text(out).split())
                     self.assertIn("".join(ACCENTED.split()), squeezed)
                     self.assertLessEqual(done["pages"], 2)

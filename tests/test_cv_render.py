@@ -222,9 +222,11 @@ class PreviewRoute(unittest.TestCase):
                 self.assertTrue((page.parent / "fonts" / render.font_files()[0].name).exists())
                 raise printer.PrintError("captured")
 
+            # Edge prints on Windows and Playwright's Chromium elsewhere; either gets the same page.
             row = store.doc()
             with mock.patch.object(printer, "_has_playwright", lambda: True), \
-                    mock.patch.object(printer, "_print_playwright", capture):
+                    mock.patch.object(printer, "_print_playwright", capture), \
+                    mock.patch.object(printer, "_print_headless", lambda chosen, page, pdf, plat: capture(page, pdf)):
                 export.cv_pdf(store.get(version), type_for(row["type_id"]), "modern", render.profile_from_settings(),
                               Path(hal.home) / "cv.pdf")
             self.assertEqual(printed, [reply.text])
