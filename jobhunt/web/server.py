@@ -220,6 +220,7 @@ NEVER_SUBMIT = "Hal never presses Submit. Press it on the employer's site."
 LEGACY_WAIT_S = 2.0          # a converted Classic route answers in today's shape within this
 PAGE_SCALE = 160 / 72        # the 160 dpi Classic's document panes were drawn at, as a PDF scale
 PAGES_KEPT = 64              # drawn pages kept in memory before the cache starts again
+APPLY_AT_ONCE_MAX = 50       # a bound only: "Apply to all" sends the queue's length, whatever is prepared ahead
 
 
 def _page_png(path: Path, page: int) -> bytes:
@@ -528,7 +529,7 @@ class Handler(BaseHTTPRequestHandler):
                 # for its documents to be approved, and its owner goes through them one at a time.
                 rows = con.execute("""SELECT id FROM jobs WHERE status = 'ready' AND active = 1
                                       ORDER BY score DESC, first_seen DESC LIMIT ?""",
-                                   (max(1, min(int(body.get("count", 10)), replenish.TARGET)),)).fetchall()
+                                   (max(1, min(int(body.get("count", 10)), APPLY_AT_ONCE_MAX)),)).fetchall()
                 for r in rows:
                     db.set_status(con, r["id"], "applying", "chosen from the queue")
                 con.commit()

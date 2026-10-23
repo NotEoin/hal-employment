@@ -13,7 +13,7 @@ from pathlib import Path
 from support import legacy
 from support.legacy import PROSE, Practice
 
-from jobhunt import autofill, browser, db, documents
+from jobhunt import autofill, browser, db, documents, replenish
 from jobhunt.apply import driver
 from jobhunt.web import server
 
@@ -324,6 +324,13 @@ class Choosing(unittest.TestCase):
     def post(self, route: str, body: dict):
         handler = server.Handler.__new__(server.Handler)
         return handler.api_post(route, body)
+
+    def test_applying_to_all_starts_every_job_when_nothing_is_prepared_ahead(self):
+        # with Claude, scoring.prepare_ahead defaults to 0, and "Apply to all 3" started only one job
+        replenish.TARGET = 0
+        self.addCleanup(delattr, replenish, "TARGET")
+        started = self.post("queue/apply", {"count": 3})["started"]
+        self.assertEqual(started, ["greenhouse:1", "greenhouse:2", "greenhouse:3"])
 
     def test_applying_to_all_opens_no_form_and_orders_them_best_first(self):
         # Every form was opened at once, so tabs behind others were never filled.
