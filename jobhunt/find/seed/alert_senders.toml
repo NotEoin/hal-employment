@@ -1,0 +1,86 @@
+# Job alert senders Hal reads when `email.alert_senders` is left empty. Each `match` is part of a
+# sender address. Every linked job in an alert from one of these becomes a lead.
+#
+# Indeed and LinkedIn are the formats Hal has read before (the old gmail.py); the rest are the UK student,
+# graduate, charity, public sector and apprenticeship boards that send alerts. Their exact email formats are
+# unverified until a real alert arrives, so they all go through the generic parser.
+
+[[sender]]
+name = "Indeed"
+match = ["match.indeed.com", "jm.indeed.com", "alert@indeed.com"]
+
+[[sender]]
+name = "LinkedIn"
+match = ["jobalerts-noreply@linkedin.com", "jobs-noreply@linkedin.com", "jobalert-noreply@linkedin.com"]
+
+[[sender]]
+name = "RateMyPlacement"
+match = ["ratemyplacement.co.uk"]
+
+[[sender]]
+name = "Bright Network"
+match = ["brightnetwork.co.uk"]
+
+[[sender]]
+name = "Prospects"
+match = ["prospects.ac.uk"]
+
+[[sender]]
+name = "TARGETjobs"
+match = ["targetjobs.co.uk"]
+
+[[sender]]
+name = "Gradcracker"
+match = ["gradcracker.com"]
+
+[[sender]]
+name = "Milkround"
+match = ["milkround.com"]
+
+[[sender]]
+name = "CharityJob"
+match = ["charityjob.co.uk"]
+
+[[sender]]
+name = "Guardian Jobs"
+match = ["jobs.theguardian.com", "guardianjobs"]
+
+[[sender]]
+name = "W4MP"
+match = ["w4mpjobs.org", "w4mp.org"]
+
+[[sender]]
+name = "Civil Service Jobs"
+match = ["civilservicejobs.service.gov.uk", "civil-service-jobs"]
+
+[[sender]]
+name = "jobs.ac.uk"
+match = ["jobs.ac.uk"]
+
+[[sender]]
+name = "Find an apprenticeship"
+match = ["findapprenticeship.service.gov.uk", "apprenticeships.gov.uk"]
+
+[[sender]]
+name = "Arts Jobs"
+match = ["artsjobs.org.uk", "artscouncil.org.uk"]
+
+[[sender]]
+name = "Museums Association"
+match = ["museumsassociation.org"]
+
+[[sender]]
+name = "NHS Jobs"
+match = ["jobs.nhs.uk"]
+
+[[sender]]
+name = "Totaljobs"
+match = ["totaljobs.com"]
+
+[[sender]]
+name = "CV-Library"
+match = ["cv-library.co.uk"]
+
+[[sender]]
+name = "Reed"
+match = ["reed.co.uk"]

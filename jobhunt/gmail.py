@@ -129,8 +129,9 @@ def classify(sender: str, rcpt: str, subject: str, body: str) -> str:
         if others and re.search(r"\bappl(y|ication)\b|\bCV\b|r[e\u00e9]sum[e\u00e9]", s, re.I):
             return "applied"
         return "other"
-    if ALERT_SENDERS.search(sender) or re.search(r" is hiring\b|new jobs?\b.*\bmore\b|jobs? for you|"
-                                                  r"deadlines this week|new opportunities at", subject, re.I):
+    if ALERT_SENDERS.search(sender) or _from_alert_sender(sender, subject) or re.search(
+            r" is hiring\b|new jobs?\b.*\bmore\b|jobs? for you|deadlines this week|new opportunities at",
+            subject, re.I):
         return "alert"
     if "indeedapply@indeed" in sender.lower():
         return "confirmed"
@@ -467,7 +468,7 @@ def sync(con, days: int | None = None) -> list[dict]:
                 db.log(con, job_id, "email", f"{kind}: {subject}", when)
                 advance(con, job_id, kind, f"email: {subject}", when)
         elif kind == "alert":
-            ingest_alert(con, sender, subject, body, when)
+            ingest_alert(con, sender, subject, body, when, links=alert_links(msg))
         con.execute(
             """INSERT INTO emails (msgid, thrid, date, sender, rcpt, subject, kind, company, role, job_id, snippet)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -483,24 +484,152 @@ def sync(con, days: int | None = None) -> list[dict]:
 
 
 INDEED_SUBJECT = re.compile(r"^(?P<title>.+?) (?:@|at) (?P<company>.+?)(?: in (?P<loc>.+?) and \d+ more new jobs?)?$")
+SENDERS_SEED = Path(__file__).resolve().parent / "find" / "seed" / "alert_senders.toml"
+ALERTS_SOURCE = "alerts"            # the sources row for email job alerts (find/seed/sources.toml)
+DETAIL_PER_EMAIL = 5                # adverts read in full from one alert; the rest wait for the job page
+DETAIL_TIMEOUT = 15                 # seconds per advert page
+CONTEXT_CHARS = 240                 # text after a link that may name the employer and place
+# the words after a link are read ahead without being consumed, so the next link is still found
+ANCHOR = re.compile(r"<a\b[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>(?=(.{0,"
+                    + str(CONTEXT_CHARS) + "}))", re.I | re.S)
+# A link's words read as a job when they name a kind of role; the fallback when a board is not known.
+JOB_WORDS = re.compile(
+    r"\b(assistant|officer|intern(ship)?s?|placements?|graduates?|trainee|apprentice(ship)?|analyst|engineer|"
+    r"developer|designer|coordinator|co-ordinator|manager|executive|researcher|research|associate|scheme|"
+    r"programme|program|administrator|editor|writer|curator|archivist|librarian|fellow(ship)?|consultant|"
+    r"technician|advis[eo]r|worker|producer|lecturer|teacher|tutor|nurse|scientist|specialist|accountant|"
+    r"caseworker|campaigner|fundraiser|spring week|insight|year in industry)\b", re.I)
+NOT_JOBS = re.compile(r"unsubscribe|manage (your )?alerts?|view (all|more|in browser)|privacy|preferences|"
+                      r"see all|sign in|log in|help centre|terms|edit (this )?alert|download the app|"
+                      r"https?://|^www\.|update your|cookie", re.I)
+MAX_TITLE = 120
+APPLICATION_NEWS = re.compile(r"your application|thank you for (applying|your application)|interview|assessment|"
+                              r"application (received|update|status|outcome)|offer|unsuccessful|next steps?", re.I)
 
 
-def ingest_alert(con, sender: str, subject: str, body: str, when: str) -> None:
-    """Indeed match emails name one job per subject: keep it as a lead."""
-    if "indeed" not in sender.lower():
+def alert_senders() -> list[tuple[str, str]]:
+    """(name, part of an address) for every job alert sender: the person's own list, else Hal's."""
+    from .core import settings
+
+    own = [line.strip() for line in settings.get("email.alert_senders") or [] if line.strip()]
+    if own:
+        return [(match, match.lower()) for match in own]
+    import tomllib
+
+    data = tomllib.loads(SENDERS_SEED.read_text(encoding="utf-8"))
+    return [(s["name"], m.lower()) for s in data.get("sender", []) for m in s.get("match", [])]
+
+
+def alert_sender(sender: str) -> str | None:
+    """The name of the alert sender an address belongs to, else None."""
+    low = (sender or "").lower()
+    return next((name for name, match in alert_senders() if match in low), None)
+
+
+def _from_alert_sender(sender: str, subject: str) -> bool:
+    """True for mail from a listed alert sender that is not about one of the person's applications.
+
+    Several senders (Civil Service Jobs, NHS Jobs, Reed) also send application news from the same address,
+    and those must reach the application, not become leads.
+    """
+    return alert_sender(sender) is not None and not APPLICATION_NEWS.search(subject or "")
+
+
+def alert_links(msg) -> list[tuple[str, str, str]]:
+    """(address, link words, the words after the link) of each link in a message's HTML part."""
+    out = []
+    for p in msg.walk():
+        if p.get_content_type() != "text/html":
+            continue
+        raw = (p.get_payload(decode=True) or b"").decode(p.get_content_charset() or "utf-8", "replace")
+        raw = re.sub(r"<(style|script|head)[^>]*>.*?</\1>", " ", raw, flags=re.S | re.I)
+        for href, words, after in ANCHOR.findall(raw):
+            text = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", words))).strip()
+            tail = html.unescape(re.sub(r"<[^>]+>", "\n", after.split("<a", 1)[0]))
+            out.append((html.unescape(href).strip(), text, tail))
+    return out
+
+
+def lead_from_link(url: str, words: str, after: str, sender_name: str) -> dict | None:
+    """A lead from one alert link when its words read as a job title (the fallback), else None."""
+    if not url.startswith(("http://", "https://")) or not words or len(words) > MAX_TITLE:
+        return None
+    if NOT_JOBS.search(words) or not JOB_WORDS.search(words):
+        return None
+    lines = [ln.strip(" \t-|,") for ln in after.splitlines() if ln.strip(" \t-|,")]
+    company = lines[0] if lines and len(lines[0]) <= 60 and not re.search(r"\d{2},?\d{3}", lines[0]) else ""
+    location = lines[1] if len(lines) > 1 and len(lines[1]) <= 60 else ""
+    key = __import__("hashlib").sha1(url.encode("utf-8")).hexdigest()[:12]
+    return {"id": f"alert:{key}", "source": "alert", "company": company or sender_name, "title": words,
+            "location": location, "url": url, "description": " ".join([words, *lines[:4]]), "salary": None,
+            "posted_at": None, "board_size": None}
+
+
+def _detail_page(url: str) -> str:
+    from . import http
+
+    return http.get(url, timeout=DETAIL_TIMEOUT, retries=0)
+
+
+def _read_detail(job: dict) -> None:
+    """Fills a lead's advert from its page, when it can be read; a page that fails leaves the lead as it is."""
+    from .find import job_actions
+
+    try:
+        found = job_actions.read_advert(job["url"], _detail_page(job["url"]))
+    except Exception as e:  # the lead keeps the alert's words; the reason is logged
+        log.info("alert advert not read for %s: %s", job["id"], e)
         return
-    m = INDEED_SUBJECT.match(subject)
-    if not m:
-        return
-    title, company, loc = m.group("title"), m.group("company"), m.group("loc")
-    if match_job(con, company, title, "confirmed"):
-        return  # already tracked from another source or an application
-    job = {
-        "id": f"indeed:{norm(company)}:{re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')}",
-        "source": "indeed", "company": company, "title": title, "location": loc or "",
-        "url": "https://uk.indeed.com/jobs?" + __import__("urllib.parse").parse.urlencode({"q": f'"{title}" {company}'}),
-        "description": body[:4000], "salary": None, "posted_at": when, "board_size": None,
-    }
-    if db.upsert(con, job):
-        s, why = score(job)
-        con.execute("UPDATE jobs SET score=?, score_notes=? WHERE id=?", (s, why, job["id"]))
+    job["description"] = found.get("description") or job["description"]
+    for k in ("location", "salary", "posted_at"):
+        if found.get(k) and not job.get(k):
+            job[k] = found[k]
+
+
+def ingest_alert(con, sender: str, subject: str, body: str, when: str, links: list | None = None) -> int:
+    """Keeps the jobs an alert email names as leads and returns how many were new.
+
+    Indeed's match emails name one job in the subject. Every other alert is read by the generic parser: each
+    link whose words read as a job title becomes a lead with the email's employer words, and the first few
+    get their advert read in full.
+    """
+    from .core import settings
+    from .find import rules
+
+    new = 0
+    m = INDEED_SUBJECT.match(subject) if "indeed" in sender.lower() else None
+    if m:
+        title, company, loc = m.group("title"), m.group("company"), m.group("loc")
+        if not match_job(con, company, title, "confirmed"):
+            job = {
+                "id": f"indeed:{norm(company)}:{re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')}",
+                "source": "indeed", "company": company, "title": title, "location": loc or "",
+                "url": "https://uk.indeed.com/jobs?" + __import__("urllib.parse").parse.urlencode(
+                    {"q": f'"{title}" {company}'}),
+                "description": body[:4000], "salary": None, "posted_at": when, "board_size": None,
+            }
+            if db.upsert(con, job):
+                s, why = score(job)
+                con.execute("UPDATE jobs SET score=?, score_notes=? WHERE id=?", (s, why, job["id"]))
+                new += 1
+    name = alert_sender(sender) or (email.utils.parseaddr(sender)[0] or "a job alert")
+    detail = bool(settings.get("sites.detail_fetch"))
+    read = 0
+    for url, words, after in links or []:
+        job = lead_from_link(url, words, after, name)
+        if job is None or match_job(con, job["company"], job["title"], "confirmed"):
+            continue
+        if con.execute("SELECT 1 FROM jobs WHERE id = ?", (job["id"],)).fetchone():
+            continue
+        if detail and read < DETAIL_PER_EMAIL:
+            read += 1
+            _read_detail(job)
+        job["posted_at"] = job["posted_at"] or when
+        if db.upsert(con, job):
+            con.execute("UPDATE jobs SET source_id = ? WHERE id = ?", (ALERTS_SOURCE, job["id"]))
+            rules.score_and_save(con, job)
+            new += 1
+    if new:
+        con.execute("""UPDATE sources SET seen = seen + ?, kept = kept + ?, last_run = ?, last_ok = ?
+                       WHERE id = ?""", (new, new, db.now(), db.now(), ALERTS_SOURCE))
+    return new
