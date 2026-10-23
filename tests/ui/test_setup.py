@@ -142,6 +142,8 @@ class SetupGuide(unittest.TestCase):
 
         self.at(p, "phone")
         p.page.wait_for_selector("img.qr-img")
+        # Windows 11 install test: the picture loaded but drew nothing, as its SVG had no namespace
+        self.assertGreater(p.page.evaluate("document.querySelector('img.qr-img').naturalWidth"), 0)
         p.page.click(".sinner button:has-text('Send a test')")
         p.page.wait_for_selector("text=Sent. Did your phone buzz?")
         self.check(p, f"{size} phone")
