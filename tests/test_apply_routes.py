@@ -179,6 +179,15 @@ class Routes(unittest.TestCase):
         fields = {f["hid"]: f for f in r.json()["form"]["fields"]}
         self.assertEqual((fields["a"]["src"], fields["b"]["src"]), ("private", "profile"))
 
+    def test_the_form_names_its_site_and_application_system_for_a_report(self):
+        self.start_applying("sorrel-ready")
+        form = {"url": "https://apply.workable.com/sorrel-made-up/j/AB12/apply/", "final": False,
+                "fields": [{"hid": "b", "label": "Full name", "kind": "text", "value": "Robin Testwell",
+                            "source": "profile"}], "filled": {"at": "x"}, "state": "needs"}
+        self.put_app("sorrel-ready", stage="form", form=json.dumps(form))
+        page = self.c.get(self.url("sorrel-ready")).json()["form"]
+        self.assertEqual((page["site"], page["platform"]), ("workable.com", "Workable"))
+
     def test_the_form_buttons_start_actions(self):
         self.start_applying("sorrel-ready")
         with mock.patch.object(driver, "act_refill", lambda con, job_id, edits: f"{len(edits)} put in"), \

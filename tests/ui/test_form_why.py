@@ -125,6 +125,18 @@ class FormWhyTest(unittest.TestCase):
         self.assertEqual(p.serious_axe(), [])
         self.assertEqual(p.errors, [])
 
+    def test_something_wrong_here_opens_the_report_for_this_application(self) -> None:
+        """Regression: the Form step opened the report without its job, so "Saved. What now?" offered no way out."""
+        p, _ = self.tab()
+        p.open(APP)
+        p.page.wait_for_selector(".field-row")
+        p.page.get_by_role("button", name="Something wrong here?").click()
+        p.page.get_by_role("dialog").wait_for()
+        shown = p.page.evaluate("""async () => { const { store } = await import("/app/core/store.js");
+          const d = store.s.dialog; return { kind: d.kind, site: d.site, job_id: d.job_id }; }""")
+        self.assertEqual(shown, {"kind": "report", "site": "jobs.example.org", "job_id": "demo:1"})
+        self.assertEqual(p.errors, [])
+
     def test_the_notes_hal_used_on_this_site_are_listed_once_each(self) -> None:
         p, _ = self.tab()
         p.open(APP)

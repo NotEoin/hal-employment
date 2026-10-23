@@ -96,6 +96,14 @@ def _site(url: str) -> str:
     return browser.site_key(url)
 
 
+def _platform(url: str) -> str:
+    """The application system's name for "Something wrong here?" ("Workable"), or "" for an employer's own site."""
+    from ..sites import notes
+
+    ats = notes.ats_of(url)
+    return notes.ATS_NAMES.get(ats, ats) if ats else ""
+
+
 def _site_of(con, job) -> str:
     """The site that holds a job's application form: the form's own, once Hal has reached it."""
     form = _app(con, job["id"])["form"] or {}
@@ -439,11 +447,13 @@ def application(con, ref: str) -> dict:
         "form": None, "sent": None, "interview": None,
     }
     if form is not None and step >= 2:
+        form_url = form.get("url") or r["url"] or ""
         out["form"] = {"state": form.get("state") or "", "message": form.get("message") or "", "filled": filled,
                        "total": total, "to_check": to_check, "fields": _fields(form),
-                       "notes_used": form.get("notes_used") or [], "site": _site(form.get("url") or r["url"] or ""),
-                       "platform": form.get("platform") or "", "mode": (row["mode"] if row is not None else None)
-                       or browser.mode(), "last_page": bool(form.get("final")),
+                       "notes_used": form.get("notes_used") or [], "site": _site(form_url),
+                       "platform": form.get("platform") or _platform(form_url),
+                       "mode": (row["mode"] if row is not None else None) or browser.mode(),
+                       "last_page": bool(form.get("final")),
                        "handed_over": bool(row is not None and row["handed_over_at"]),
                        "words": form_words(form)}
     if step >= 3 and row is not None:

@@ -58,7 +58,7 @@ export function FormStep({ a, reload }) {
     <div class="approve" style=${warn ? "background:var(--warn-soft)" : ""}><div class=${cx("ic", warn ? "warn" : "info")}><${Icon} n=${warn ? "warn" : "info"} /></div>
       <div class="grow"><b>${f.words || f.message}</b>${f.handed_over && html`<div class="small">Hal stops before Submit. You press Submit on the employer's site.</div>`}</div>
       <${ShowFormButton} appId=${a.id} />
-      <button type="button" class="btn" onClick=${() => openDialog("report", { site: f.site, platform: f.platform })}><${Icon} n="flag" c="s" />Something wrong here?</button></div>
+      <button type="button" class="btn" onClick=${() => openDialog("report", { site: f.site, platform: f.platform, job_id: a.id })}><${Icon} n="flag" c="s" />Something wrong here?</button></div>
     <div class="grid2">
       <section class="card">
         <div class="row" style="margin-bottom:6px"><h2 class="h2" style="margin:0">Answers</h2><span class="sp"></span>
