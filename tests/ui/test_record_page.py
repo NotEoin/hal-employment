@@ -18,8 +18,7 @@ from jobhunt.core import paths
 from jobhunt.evidence import routes
 
 ANSWER = "On 5 March 2025 [Certificates/First Aid.md]."
-# The shell asks for Home's summary, which the scheduler serves and this test does not start; its
-# 404 is that part's, not this page's.
+# The shell asks for Home's summary, which this test does not serve; its 404 is not this page's fault.
 NOT_YET = ("/api/v2/home",)
 FAILED_LOAD = "Failed to load resource"
 

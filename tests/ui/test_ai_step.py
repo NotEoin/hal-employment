@@ -106,7 +106,7 @@ class AiStep(unittest.TestCase):
         self.assertIn("Installed", self.row(p, "install", "done"))
         os.environ["FAKE_CLAUDE_LOGIN_S"] = "0.3"
         self.assertIn("paste it into that small window", p.page.inner_text("#test-step"))
-        # Windows 11 install test: on Windows 11 the window's title is Claude's own "claude", not the one Hal sets
+        # on Windows 11 the window's title is Claude's own "claude", not the one Hal sets
         self.assertIn('a small black window called "claude"', p.page.inner_text("#test-step"))
         self.press(p, "sign", "Sign in")
         self.assertIn("Signed in as robin.example@example.com (Claude Pro)", self.row(p, "sign", "done"))
@@ -117,7 +117,7 @@ class AiStep(unittest.TestCase):
         self.clean(p)
 
     def test_the_install_button_does_not_come_back_once_claude_is_installed(self):
-        # Windows 11 install test: between "Installing" and "Installed" the row showed Install again
+        # between "Installing" and "Installed" the row showed Install again
         p = self.step()
         p.page.evaluate("""() => { window.installBack = false; let began = false;
           new MutationObserver(() => {

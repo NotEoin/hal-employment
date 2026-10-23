@@ -2,7 +2,7 @@
 of the made-up person's CV with Hal's own fonts, choosing one saves it, and nothing breaks the page's
 policy, the axe check or the width.
 
-The Type and look tab that holds the gallery is the My CV page's, so the test draws `LookPicker` into the app page
+The Type and look tab that holds the gallery is built elsewhere, so the test draws `LookPicker` into the app page
 itself. It needs `HAL_TEST_BROWSER=1` and Playwright, as every browser test does (docs/dev/testing.md).
 """
 from __future__ import annotations

@@ -21,7 +21,7 @@ from jobhunt.core import clock, runner, settings
 from jobhunt.core.settings import store
 
 KINDS = ["graduate_job", "graduate_scheme"]
-# Home's route is not built yet; the shell asks it for the menu counts and gets a 404.
+# Home's route is not served in this test; the shell asks it for the menu counts and gets a 404.
 NOT_YET_BUILT = ("/api/v2/home",)
 ACTION_WAIT_S = 10   # a stand-in action ends at once; this only bounds a broken one
 LOAD_FAILED = "Failed to load resource"
@@ -97,7 +97,7 @@ class JobsPages(unittest.TestCase):
 
     def test_keys_j_k_a_s_n_act_on_the_chosen_job(self) -> None:
         started = []
-        # The real kind writes documents; a stand-in replaces it for this test and the real one comes back.
+        # the real kind writes documents; a stand-in replaces it for this test and the real one comes back.
         runner.load_kinds()
         self.enterContext(mock.patch.dict(runner.KINDS))
         self.enterContext(mock.patch.dict(runner._FNS))

@@ -19,7 +19,7 @@ from jobhunt.evidence import routes as record_routes
 from jobhunt.remote import instructions
 
 DESK = "deskbox"
-# The shell asks for Home's summary, which the scheduler serves and this test does not start.
+# The shell asks for Home's summary, which this test does not serve.
 NOT_YET = ("/api/v2/home",)
 FAILED_LOAD = "Failed to load resource"
 

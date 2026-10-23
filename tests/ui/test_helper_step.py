@@ -32,7 +32,7 @@ class HelperStep(unittest.TestCase):
         cls._stack.close()
 
     def test_the_step_loads_only_the_pictures_of_the_browser_found(self) -> None:
-        # Windows 11 install test (2026-10-23): the step drew Opera's pictures first and swapped to the browser found, so
+        # the step drew Opera's pictures first and swapped to the browser found, so
         # Opera's three picture requests were aborted on every visit
         vivaldi = platform.found("vivaldi", Path("/opt/vivaldi/vivaldi"))
         with HalServer() as hal, mock.patch("jobhunt.apply.helper_routes._found",
@@ -53,7 +53,7 @@ class HelperStep(unittest.TestCase):
 
 
     def test_the_first_button_copies_the_address_and_opens_a_window_to_paste_it_in(self) -> None:
-        # Windows 11 install test (2026-10-23): "Open Edge's extensions page" opened Edge on a new tab, because
+        # "Open Edge's extensions page" opened Edge on a new tab, because
         # Chromium browsers drop their own addresses given on the command line
         edge = platform.found("edge", Path("/opt/edge/msedge"))
         cls = type(platform.current())

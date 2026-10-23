@@ -22,8 +22,8 @@ POLL_S = 0.1
 CONTROLS = ("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), "
             "button[role=switch]:not([disabled]), [role=radio], button:not([disabled])")
 # Values that make every row with a visible_if condition show.
-# Routes other parts serve (/home, /goal/versions) may answer 404 here;
-# the browser logs each 404 as a console error, which is not this page's fault.
+# Routes that are not served here (/home, /goal/versions) answer 404; the browser logs each 404 as a
+# console error, which is not this page's fault.
 MISSING_ROUTE = "Failed to load resource: the server responded with a status of 404"
 SHOW_ALL = {"you.right_to_work": "uk_visa", "you.start": "date", "ai.provider": "openai_compat",
             "advanced.developer_mode": True}
@@ -280,7 +280,7 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(self.row(p, "goal.history").count(), 1)
 
     def test_no_control_sticks_out_of_its_card_in_the_laptop_window(self) -> None:
-        # Windows 11 install test (2026-10-23): Quiet hours stuck out 10 px past its card at 1033 px
+        # Quiet hours stuck out 10 px past its card at 1033 px
         settings.set_many(SHOW_ALL)
         p = self.tab("settings", "laptop")
         out = """() => [...document.querySelectorAll('.card .setting *')].filter(e => {

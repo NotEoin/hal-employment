@@ -145,7 +145,7 @@ class SetupGuide(unittest.TestCase):
 
         self.at(p, "phone")
         p.page.wait_for_selector("img.qr-img")
-        # Windows 11 install test: the picture loaded but drew nothing, as its SVG had no namespace
+        # the picture loaded but drew nothing, as its SVG had no namespace
         self.assertGreater(p.page.evaluate("document.querySelector('img.qr-img').naturalWidth"), 0)
         p.page.click(".sinner button:has-text('Send a test')")
         p.page.wait_for_selector("text=Sent. Did your phone buzz?")
@@ -193,7 +193,7 @@ class SetupGuide(unittest.TestCase):
         self.check(p, "resumed")
 
     def test_labels_keep_room_for_their_words_in_the_laptop_window(self) -> None:
-        # Windows 11 install test (2026-10-23): in the 1033-pixel app window the rows of choices squeezed "Kinds of
+        # in the 1033-pixel app window the rows of choices squeezed "Kinds of
         # role" and "Start from a career area" into a column one word wide
         p = self.tab("laptop", "light")
         p.page.goto(f"http://127.0.0.1:{self.hal.port}/#setup-goal")

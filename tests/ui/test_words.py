@@ -8,7 +8,7 @@ It reads every string literal and template text in `jobhunt/web/static/app/**/*.
 - in the browser helper's setup step, words in double quotes (the browser's own button names);
 - in "Use Hal from another computer", the terminal words that page is allowed.
 
-Every file must pass.
+Every file must pass (the test is strict).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ DETAILS = "/* details */"
 HELPER_STEP = "setup/steps/helper.js"
 REMOTE_PAGE = "settings/remote.js"
 
-# (pattern, what to say instead). Matched case-insensitively on words for people.
+# (pattern, what to say instead), from the vocabulary table. Matched case-insensitively on words for people.
 BANNED = [
     (r"\bpacks?\b", "documents for this job"),
     (r"\bbaseline\b", "your main CV"),
