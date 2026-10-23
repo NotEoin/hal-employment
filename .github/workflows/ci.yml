@@ -1,6 +1,7 @@
-# CI: tests on Linux and Windows.
+# Tests on Linux (two Pythons) and Windows for every push.
 # Ruff and the ASCII check run on lines added since the push's parent, because the code at ef53088 still has
-# findings that its later owners fix line by line.
+# findings that its later owners fix line by line. The test output is kept in tests.log so the Windows job can
+# prove its own checks ran: a skip there would hide the one place they can run.
 name: ci
 on: [push, pull_request]
 jobs:
@@ -21,6 +22,9 @@ jobs:
         with: { fetch-depth: 2 }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
       - run: uv sync --frozen ${{ matrix.extras }} --python ${{ matrix.python }}
+      # poppler is only the reference the PDF reader is compared with (tests/test_pdfread.py); Hal never needs it
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q poppler-utils
       - if: runner.os == 'Linux'
         run: uv run python -m playwright install --with-deps chromium
       - if: runner.os == 'Windows'
@@ -34,5 +38,22 @@ jobs:
             uv run python scripts/dev/check_ruff.py --base HEAD~1
           fi
       - run: uv run python scripts/dev/check_ascii.py --tree
-      - run: uv run python -m unittest discover tests -v
-        env: { HAL_TEST_MODE: "1", HAL_TEST_BROWSER: "1" }
+      # bash runs with pipefail, so a failing test still fails the step through tee
+      - name: Tests, browser on
+        shell: bash
+        run: uv run python -m unittest discover tests -v 2>&1 | tee tests.log
+        env: { HAL_TEST_MODE: "1", HAL_TEST_BROWSER: "1", PYTHONUNBUFFERED: "1" }
+      # The Windows-only checks: the install file's PowerShell parses under Windows PowerShell 5.1,
+      # CVs print with Microsoft Edge, and the platform layer finds browsers and opens the window with Edge.
+      # unittest prints a test's docstring on the line after its name, so the result may be one line down, and
+      # Python on Windows ends the lines with CR LF.
+      - if: runner.os == 'Windows'
+        name: The Windows-only checks ran and passed
+        shell: bash
+        run: |
+          for t in test_the_powershell_part_parses test_accented_names_print_in_every_look test_the_app_window_is_edge_on_windows test_browsers_are_found_from_app_paths_and_install_folders; do
+            awk -v t="$t" '{ sub(/\r$/, "") }
+              found { ok = /\.\.\. ok$/; exit }
+              index($0, t " (") == 1 { if (/ \.\.\. /) { ok = /\.\.\. ok$/; exit } found = 1 }
+              END { exit !ok }' tests.log || { echo "::error::$t was skipped or failed"; exit 1; }
+          done

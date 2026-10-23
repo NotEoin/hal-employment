@@ -1,4 +1,4 @@
-"""The project documents hold their shape: the index, the how-tos, the README, the notices.
+"""The project documents hold their shape: the index, the how-tos, the README, the notices, CI.
 
 Docs are checked as text, so the checks run the same on Linux and Windows: files are read with universal
 newlines (a Windows checkout has CRLF), and paths are compared as POSIX strings relative to the repo.
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 INDEX = DOCS / "README.md"
 README = ROOT / "README.md"
+CI = ROOT / ".github" / "workflows"
 HELP_TIMEOUT_S = 60      # `python -m jobhunt <cmd> --help` imports the command modules; a second or two is usual
 # Docs the index names that are not written yet.
 ARRIVING = {"dev/site-notes.md"}
@@ -33,6 +34,7 @@ JOBHUNT = re.compile(r"-m jobhunt ([a-z][\w-]*)((?: +-[-\w]+(?: +[^\s#-][^\s#]*)
 OPTION = re.compile(r"(?<![\w-])(--?[a-zA-Z][\w-]*)")
 EXTRA = re.compile(r"--extra +([\w-]+)")
 SHELL_LANGS = {"sh", "bash", "shell", "console", "powershell", "ps1", "pwsh", "bat", "cmd"}
+SHA_PIN = re.compile(r"^\s*-?\s*uses:\s*[\w./-]+@[0-9a-f]{40}\b")
 
 
 def text(path: Path) -> str:
@@ -259,6 +261,36 @@ class Notices(unittest.TestCase):
         headings = " ".join(re.findall(r"^## (.+)$", text(ROOT / "SECURITY.md"), re.M)).lower()
         for part in ("protects against", "cannot protect", "stored", "leaves", "report"):
             self.assertIn(part, headings)
+
+
+class Ci(unittest.TestCase):
+    def setUp(self):
+        self.body = text(CI / "ci.yml")
+
+    def test_ci_runs_linux_on_two_pythons_and_windows(self):
+        for row in ('os: ubuntu-24.04, python: "3.11"', 'os: ubuntu-24.04, python: "3.13"',
+                    'os: windows-2025, python: "3.13"'):
+            self.assertIn(row, self.body)
+        self.assertIn("unittest discover tests", self.body)
+        self.assertIn('HAL_TEST_BROWSER: "1"', self.body)
+
+    def test_every_action_is_pinned_to_a_commit(self):
+        loose = []
+        for workflow in sorted(CI.glob("*.yml")):
+            for line in text(workflow).splitlines():
+                if re.match(r"^\s*-?\s*uses:", line) and not SHA_PIN.match(line):
+                    loose.append(f"{workflow.name}: {line.strip()}")
+        self.assertEqual(loose, [])
+
+    def test_the_windows_job_proves_its_own_checks_ran(self):
+        named = re.search(r"for t in ([\w ]+); do", self.body)
+        self.assertIsNotNone(named, "the Windows step lists the tests that must say ok")
+        tests = named.group(1).split()
+        self.assertIn("test_the_powershell_part_parses", tests)
+        self.assertIn("test_accented_names_print_in_every_look", tests)
+        sources = "\n".join(text(p) for p in (ROOT / "tests").glob("test_*.py"))
+        for name in tests:
+            self.assertIn(f"def {name}(", sources, f"{name} was renamed; update ci.yml")
 
 
 if __name__ == "__main__":
