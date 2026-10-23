@@ -199,11 +199,15 @@ def notes_for(url: str, job_id: str | None = None):
 
 
 def note_used(note, job_id: str | None, field: str, what: str) -> dict:
-    """Records one use of a note (`sites.notes.used`) and returns its trace line for the form."""
+    """Records one use of a note (`sites.notes.used`) and returns its trace line for the form.
+
+    The line also carries the note's `id`, `text` and `origin`, the shape autofill lists a note in, so the Form
+    step's "Notes Hal used on this site" names every note, whichever part of Hal used it.
+    """
     from .sites import notes
 
     notes.used(note.id, job_id or "", ok=True, detail=what)
-    return {"note": note.id, "field": field, "what": what}
+    return {"note": note.id, "field": field, "what": what, "id": note.id, "text": note.text, "origin": note.origin}
 
 
 def _first(notes, kind: str):

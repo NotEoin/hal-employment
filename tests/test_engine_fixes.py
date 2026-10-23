@@ -167,6 +167,8 @@ class NoteHooks(unittest.TestCase):
         self.assertEqual(len(trace), 1)
         self.assertIn("Typed 'Leeds' for Location", trace[0]["what"])
         self.assertIn("Without it Hal would type 'Leeds, United Kingdom'", trace[0]["what"])
+        # named in "Notes Hal used on this site" with its words, as a note that answered a question is
+        self.assertEqual((trace[0]["text"], trace[0]["origin"]), ("In \"Location\", type only the city", "you"))
         self.assertEqual(out[0]["notes_used"], trace)
         # the form keeps the line on the field and in its list of notes used, once
         form = {"fields": [dict(f) for f in fields]}
