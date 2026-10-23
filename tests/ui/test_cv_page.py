@@ -1,7 +1,7 @@
 """My CV in a real browser, against a real server in a temporary home with a made-up imported CV.
 
-Needs `HAL_TEST_BROWSER=1` and Playwright. The tabs not built yet show their "being built"
-card; this checks the header, Your CV, the Sections card, Versions and the "How your CV is made" dialog.
+Needs `HAL_TEST_BROWSER=1` and Playwright. This checks the header, Your CV, the Sections card, Versions and
+the "How your CV is made" dialog.
 """
 from __future__ import annotations
 
@@ -62,6 +62,14 @@ class CvPage(unittest.TestCase):
                 self.assertEqual(self.errors(p), [])
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])
+
+    def test_with_no_cv_file_your_file_offers_the_upload(self) -> None:
+        # My CV said "You have not added a CV file" with no way to add one there
+        p = self.page()
+        p.page.wait_for_selector("text=At a glance")
+        card = p.page.locator("section.card", has_text="Your file")
+        self.assertIn("Drop your CV here", card.inner_text())
+        self.assertEqual(self.errors(p), [])
 
     def test_an_old_version_can_be_used_again_and_compared(self) -> None:
         p = self.page("cv-versions")

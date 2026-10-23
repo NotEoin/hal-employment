@@ -83,6 +83,15 @@ class RecordPage(unittest.TestCase):
         self.assertIn("From: Certificates/First Aid.md", p.page.inner_text("#main"))
         self.assertEqual(self.errors(p), [])
 
+    def test_without_the_ai_the_passage_is_not_called_hals_answer(self) -> None:
+        # a raw passage was labelled "Hal's answer", and the note saying why was never shown
+        p = self.page()
+        p.page.fill("input[aria-label=Question]", "When did I do first aid at work?")
+        p.page.click("button:has-text('Ask')")
+        p.page.wait_for_selector(".answer")
+        self.assertIn("From your record", p.page.text_content(".answer"))
+        self.assertIn("Hal could not write an answer", p.page.inner_text("#main"))
+
     def test_a_dropped_file_is_added_to_the_inbox(self) -> None:
         p = self.page()
         upload = Path(paths.cache_dir()) / "Reference.txt"

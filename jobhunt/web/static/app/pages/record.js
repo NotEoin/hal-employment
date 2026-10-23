@@ -58,12 +58,15 @@ function Ask() {
     } catch (err) { toast(err.message); }
     setBusy(false);
   };
-  const shown = out && (out.answer || (out.passages && out.passages.length ? out.passages[0].text : "Your record has nothing on that yet."));
+  // with no AI, record.ask answers with the passages and a note; a failed ask has only the note
+  const shown = out && (out.answer || (out.passages && out.passages.length ? out.passages[0].text
+    : out.note ? "" : "Your record has nothing on that yet."));
   return html`<section class="card"><h2 class="h2">Ask your record</h2>
     <form class="row" onSubmit=${e => { e.preventDefault(); ask(); }}>
       <input class="input" style="flex:1;min-width:200px" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Question" />
       <button class="btn" type="submit" disabled=${busy}>${busy ? "Asking" : "Ask"}</button></form>
-    ${out && html`<div class="quote mine answer" style="margin-top:12px"><small>Hal's answer</small>${shown}</div>`}
+    ${shown && html`<div class="quote mine answer" style="margin-top:12px"><small>${out.answer ? "Hal's answer" : "From your record"}</small>${shown}</div>`}
+    ${out && !out.answer && out.note && html`<p class="small sub" style="margin:8px 0 0">Hal could not write an answer: ${out.note}</p>`}
     ${out && out.sources && out.sources.length > 0 && html`<p class="small sub" style="margin:8px 0 0">From: ${out.sources.join("; ")}</p>`}
   </section>`;
 }

@@ -29,7 +29,7 @@ export function WritingSettings() {
   const save = async change => {
     try {
       const out = await put("/cv/writing", change);
-      toast(out.note || "Saved on " + out.type.name);
+      toast(out.note || "Saved for " + out.type.name);
       reload();
     } catch (err) { toast(err.message); }
   };

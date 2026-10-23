@@ -20,7 +20,7 @@ export function SuggTab({ preview }) {
   const [kind, setKind] = useState("All");
   const [looking, setLooking] = useState(false);
   if (error) return html`<div class="card empty">${error.message}</div>`;
-  if (!data) return html`<div class="card empty" aria-busy="true">Hal is reading your suggestions.</div>`;
+  if (!data) return html`<div class="card empty" aria-busy="true">Loading your suggestions.</div>`;
   const pending = data.pending.filter(x => kind === "All" || x.kind === kind);
   const kinds = ["All", ...data.kinds];
   const pct = data.total ? (data.reviewed / data.total) * 100 : 100;

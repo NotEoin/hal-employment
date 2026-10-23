@@ -205,7 +205,7 @@ def scanner(doc: Any, profile: dict, *, pdf: Path | bytes | None = None, columns
     missing = [w for w, ok in (("email", email), ("phone number", phone)) if not ok]
     out.append(_part(parts["contact"], EMAIL_POINTS * email + PHONE_POINTS * phone,
                      "Your email and phone number are at the top." if not missing else
-                     f"No {' or '.join(missing)} at the top. Add it in Settings, About you."))
+                     f"No {' or '.join(missing)} at the top. Add it in Settings, You."))
 
     wide = 0
     if pdf is not None:
@@ -326,7 +326,7 @@ def _entry_says_what(c: _In) -> tuple[bool, str]:
 def _contact_at_top(c: _In) -> tuple[bool, str]:
     top = c.text[:TOP_CHARS]
     ok = bool(cvscore.EMAIL.search(top)) and bool(c.profile.get("phone") or cvscore.PHONE.search(top))
-    return ok, "" if ok else "Add your email and phone number in Settings, About you."
+    return ok, "" if ok else "Add your email and phone number in Settings, You."
 
 
 def _projects_with_evidence(c: _In) -> tuple[bool, str]:
@@ -370,7 +370,7 @@ def _portfolio_link(c: _In) -> tuple[bool, str]:
     links = list((c.profile.get("links") or {}).values())
     links += [e.link for s in _sections(c.doc) if s.kind == "portfolio" for e in _entries(s) if e.link]
     ok = bool([x for x in links if x]) or bool(URL.search(_summary(c)))
-    return ok, "" if ok else "Add your portfolio address in Settings, About you, Website."
+    return ok, "" if ok else "Add your portfolio address in Settings, You, Website."
 
 
 def _year(value: str) -> int:

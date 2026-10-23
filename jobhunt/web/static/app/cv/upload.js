@@ -48,15 +48,16 @@ function ReadCard({ report, me }) {
     <${UnsureNote} unsure=${unsure} me=${me} /></section>`;
 }
 
-/** The upload part. `me` makes Hal speak for itself (the setup guide); `onRead` hears each finished reading. */
-export function Upload({ me = false, onRead }) {
+/** The upload part. `me` makes Hal speak for itself (the setup guide); `fresh` starts at the drop zone even
+    when a reading exists (My CV's Replace); `onRead` hears each finished reading. */
+export function Upload({ me = false, fresh = false, onRead }) {
   const { data: report, reload } = useApi("/cv/parse-report");
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState("");
   const [problem, setProblem] = useState("");
   const [pasting, setPasting] = useState(false);
   const [text, setText] = useState("");
-  const [again, setAgain] = useState(false);
+  const [again, setAgain] = useState(fresh);
 
   const read = async body => {
     setProblem("");

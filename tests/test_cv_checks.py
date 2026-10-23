@@ -55,7 +55,7 @@ class ScannerScore(unittest.TestCase):
         result = checks.scanner(humanities_cv(), {"name": "Marnie Quillfeather", "links": {}})
         contact = next(p for p in result["parts"] if p["id"] == "contact")
         self.assertEqual(contact["got"], 0)
-        self.assertIn("Settings, About you", contact["note"])
+        self.assertIn("Settings, You.", contact["note"])
 
 
 class TypeChecks(unittest.TestCase):
