@@ -132,7 +132,18 @@ def not_for_me(con: sqlite3.Connection, job_id: str, reason: str | None, words: 
                     f"You chose: {reason_words(code, own)}", job_id=job_id, icon="eye",
                     undo={"type": "job_hidden", "job_id": job_id, "status": job["status"]}, session_id=session_id)
     events.publish("job", id=job_id)
-    return {"hidden": True, "suggestion_id": None}
+    return {"hidden": True, "suggestion_id": _suggestion(con) if code == "too_far" else None}
+
+
+def _suggestion(con: sqlite3.Connection) -> str | None:
+    """The "Too far" suggestion waiting once this job is hidden, so the reply can say so."""
+    from jobhunt.learn import patterns  # learning reads feedback; imported here so this module loads alone
+
+    try:
+        return patterns.after_feedback(con)
+    except Exception:  # the job is already hidden and committed; a learning fault must not undo the reply
+        log.exception("could not look for a suggestion after hiding a job")
+        return None
 
 
 def put_back(con: sqlite3.Connection, job_id: str, *, status: str = "new", session_id: str | None = None) -> dict:

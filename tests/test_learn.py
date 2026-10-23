@@ -41,11 +41,13 @@ def add_job(con, key: str, title: str, location: str = "Leeds", company: str = "
 
 
 def hide_too_far(con, jobs=FAR) -> list[str]:
+    """Hides jobs as "Too far" without the reply's own look for a suggestion, so a test runs the patterns itself."""
     ids = []
-    for title, place in jobs:
-        job_id = add_job(con, "far-" + place.split(",")[0].lower(), title, place)
-        feedback.not_for_me(con, job_id, "Too far")
-        ids.append(job_id)
+    with mock.patch.object(feedback, "_suggestion", return_value=None):
+        for title, place in jobs:
+            job_id = add_job(con, "far-" + place.split(",")[0].lower(), title, place)
+            feedback.not_for_me(con, job_id, "Too far")
+            ids.append(job_id)
     return ids
 
 
@@ -96,6 +98,16 @@ class Learning(unittest.TestCase):
         found = [w for w in self.waiting() if title_part in w["title"]]
         self.assertEqual(len(found), 1, self.waiting())
         return found[0]
+
+    def test_hiding_the_fourth_too_far_job_says_a_suggestion_is_waiting(self):
+        said = []
+        for title, place in FAR:
+            job_id = add_job(self.con, "far-" + place.split(",")[0].lower(), title, place)
+            said.append(feedback.not_for_me(self.con, job_id, "Too far")["suggestion_id"])
+        self.assertEqual(said[:3], [None, None, None])
+        self.assertEqual(said[3], self.one("distance")["id"])
+        job_id = add_job(self.con, "pay", "Clerk")
+        self.assertIsNone(feedback.not_for_me(self.con, job_id, "Pay too low")["suggestion_id"])
 
     def test_nothing_changes_without_your_yes(self):
         hide_too_far(self.con)

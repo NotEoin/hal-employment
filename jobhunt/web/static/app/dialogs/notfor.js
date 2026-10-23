@@ -16,10 +16,11 @@ export default function NotFor({ d }) {
   const hide = async () => {
     setBusy(true);
     try {
-      await post(jobPath(d.job.id) + "/not-for-me", { reason: r || null });
+      const done = await post(jobPath(d.job.id) + "/not-for-me", { reason: r || null });
       closeDialog();
       refreshJobs();
-      toast("Hidden" + (r ? ": " + r.toLowerCase() : "") + ". It is in Jobs, Hidden, if you change your mind.", async () => {
+      const more = done && done.suggestion_id ? " Hal has a suggestion for you in What Hal remembers." : "";
+      toast("Hidden" + (r ? ": " + r.toLowerCase() : "") + ". It is in Jobs, Hidden, if you change your mind." + more, async () => {
         try { await post(jobPath(d.job.id) + "/put-back"); refreshJobs(); toast("Back in your matches"); }
         catch (err) { toast(err.message); }
       });
