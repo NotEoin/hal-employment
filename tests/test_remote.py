@@ -10,7 +10,6 @@ import contextlib
 import http.client
 import ipaddress
 import os
-import queue
 import socket
 import threading
 import time
@@ -26,7 +25,7 @@ from test_helpers import answer_one, session_id_of
 from test_helpers import poll as helper_poll
 from test_pairing import HelperTest, pair
 
-from jobhunt import browser, db, extension, notify, record
+from jobhunt import browser, db, notify, record
 from jobhunt.core import events, paths, settings
 from jobhunt.evidence import routes as record_routes
 from jobhunt.remote import instructions, launcher, sessions
