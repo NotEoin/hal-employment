@@ -21,7 +21,6 @@ documents explain how Hal works and how to change it.
 | [Add a job site, a careers page or a company to watch](howto/add-a-job-site.md) | Make Hal search somewhere new |
 | [Get job and internship alerts by email](howto/get-internship-alerts.md) | Sign up for alerts on UK student and graduate job sites, so Hal turns each one into a job |
 | [Send an application yourself](howto/send-an-application-yourself.md) | Use the documents Hal made on a site Hal cannot fill in |
-| [Give someone access to Hal Employment](howto/give-someone-access.md) | For the person who set Hal up: invite someone and hand over a filled-in install file |
 | [Use Hal from another computer](howto/use-hal-from-another-computer.md) | For people comfortable with a terminal: run Hal on a desktop and use it from a laptop over SSH |
 
 ## For developers
@@ -38,7 +37,7 @@ documents explain how Hal works and how to change it.
 | Document | What it is |
 | --- | --- |
 | [README](../README.md) | What Hal Employment is; install, run, test, and where your data lives |
-| [Changelog](../CHANGELOG.md) | What changed in each version: "What's new" in plain words, then developer notes |
+| [Changelog](../CHANGELOG.md) | What changed in each version, in plain words |
 | [Security](../SECURITY.md) | What Hal protects against and what it cannot, what is stored where, what leaves the computer, how to report a problem |
 | [Third-party notices](../THIRD_PARTY_NOTICES.md) | The libraries, fonts and tools Hal uses, with their licences |
 | [Licence](../LICENSE) | Private software for named collaborators; not for redistribution |

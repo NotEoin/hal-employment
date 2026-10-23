@@ -25,10 +25,6 @@ The install file signs you in to GitHub in your browser, downloads Hal, makes th
 setup guide. Updates come from GitHub too, and install only when you press **Update Hal** in Settings,
 Updates ([docs/howto/update-hal.md](docs/howto/update-hal.md)).
 
-To hand Hal to someone else, see [docs/howto/give-someone-access.md](docs/howto/give-someone-access.md).
-The blank install files are `scripts/install/install-hal-windows.cmd` and
-`scripts/install/install-hal-linux.sh`; the how-to explains how to fill them in.
-
 ### For developers
 
 ```sh
