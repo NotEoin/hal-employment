@@ -213,6 +213,15 @@ class Upload(unittest.TestCase):
                 self.assertIn(f'filename="{name}"', original.headers["Content-Disposition"])
                 self.assertEqual(hashlib.sha256(store.file_bytes(row["id"])).hexdigest(), sha)
 
+    def test_an_uploaded_file_can_be_sent_as_your_original(self):
+        # Regression: an upload kept the file but never made it the baseline, so "send my original" refused
+        name, data = fixture("technical", "pdf")
+        self.read(name, data)
+        first = self.versions()[-1]
+        self.assertEqual(store.doc()["baseline_file_id"], first["file_id"])
+        r = self.client.request("PUT", "/api/v2/cv/send", {"send": "original"})
+        self.assertEqual(r.status, 200, r.text)
+
     def test_reading_works_without_an_ai(self):
         name, data = fixture("humanities", "pdf")
         done = self.read(name, data, NO_AI)

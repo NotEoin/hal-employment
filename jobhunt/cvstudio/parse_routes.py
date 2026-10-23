@@ -18,6 +18,7 @@ from jobhunt.core import runner, settings
 from jobhunt.web.router import BadRequest, BytesResponse, Conflict, NotFound, route
 
 from . import parse, pdfread, store
+from .model import CVError
 from .parse_actions import fill_empty_settings
 
 PAGE_SCALE = 1.5          # page pictures at 108 dots per inch: readable beside Hal's reading, quick to make
@@ -180,7 +181,7 @@ def original(req) -> BytesResponse:
     row = _file_row(file_id)
     try:
         data = store.file_bytes(file_id)
-    except RuntimeError as e:
+    except CVError as e:  # the store raises CVError when the kept file's SHA-256 no longer matches
         raise Conflict(str(e)) from e
     return BytesResponse(data, row["name"], row["mime"] or "application/octet-stream", download=True)
 

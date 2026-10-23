@@ -1,7 +1,8 @@
 """The `cv.parse` action: reads a CV file the person added and keeps what Hal read as versions.
 
 The route stores the file first (`store.add_file`, read-only, by SHA-256) and starts this action with the
-file's id, so the slow part (reading, the AI) never runs in a request thread. Versions it makes:
+file's id, so the slow part (reading, the AI) never runs in a request thread. The action makes the file the
+baseline (`store.set_baseline_file`), so "your original file" means it. Versions it makes:
 
 1. "Your file: <name> (never changed)", origin uploaded, by baseline, with `file_id` set: the rules'
    reading, so the CV is usable at once and without an AI.
@@ -94,6 +95,7 @@ def parse_cv(ctx, file_id: str, file: str) -> dict:
     data = store.file_bytes(file_id)
     kind, pages = parse.check(data, file)
     _set_pages(file_id, pages)
+    store.set_baseline_file(file_id)
     lines = parse.lines_of(data, kind)
     ctx.step("Finding the sections, dates and contact details", total=3)
     rules = parse.read_rules(lines)
