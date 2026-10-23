@@ -192,9 +192,9 @@ def import_usb(req: Request) -> dict:
                                       why="You pressed Copy my old Hal", priority=0)}
 
 
-@route("GET", "/api/v2/version")
+@route("GET", "/api/v2/version", auth="session_or_local")
 def version(req: Request) -> dict:
-    """{app, commit, helper_wanted, protocol}; the updater checks `commit` after a restart."""
+    """{app, commit, helper_wanted, protocol}; the updater checks `commit` after a restart, with the local key."""
     return {"app": __version__, "commit": _commit(updates.read_install()), "helper_wanted": helper_wanted(),
             "protocol": PROTOCOL}
 

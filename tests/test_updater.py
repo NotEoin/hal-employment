@@ -491,6 +491,14 @@ class Routes(unittest.TestCase):
                 time.sleep(POLL_S)
             end.assert_called_once_with(0)
 
+    def test_the_updater_reads_the_restarted_servers_commit_with_the_local_key(self):
+        """Regression: the version route took only a session, so every update rolled back (VM, 2026-10-23)."""
+        with HalServer() as hal, mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_PORT": str(hal.port)}):
+            update_routes.at_start()
+            world = updates.World(updates.read_install())
+            self.assertEqual(world._request("GET", "/api/v2/version")[0], 200)
+            self.assertIsNotNone(world.running_commit())
+
     def test_the_version_names_the_commit_and_the_helper_it_wants(self):
         with HalServer() as hal:
             r = hal.signed_in().get("/api/v2/version")
