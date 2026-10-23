@@ -342,6 +342,22 @@ class Advert(unittest.TestCase):
             self.assertNotIn(leak, message)
         self.assertNotIn("number not in the CV or advert: 75", md)
 
+    def test_the_evidence_line_lists_the_fit_maps_sentences_cleanly(self):
+        # with no record, Claude's fit-map evidence (full sentences) was joined into "spreadsheet., Student"
+        # (2026-10-23)
+        writer = FakeWriter()
+        plain = writer.reply
+        matches = [{"requirement": "Cataloguing", "evidence": "Catalogued 300 letters into a spreadsheet.",
+                    "strength": "strong"},
+                   {"requirement": "Visitors", "evidence": "Guided 40 open-day tours.", "strength": "strong"}]
+        writer.reply = lambda system, user: ({**plain(system, user), "matches": matches}
+                                             if prompt_id(system) == "fit" else plain(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a, mock.patch.object(record, "context", lambda *q, **k: ""):
+            job = add_job(a.con, "humanities_grad")
+            pack.build(a.con, job["id"], use_web=False)
+            shown = pack.read_letter_notes(job)
+        self.assertEqual(shown["evidence"], "Catalogued 300 letters into a spreadsheet; Guided 40 open-day tours")
+
 
 class CommandLine(unittest.TestCase):
     def test_letter_and_check_read_the_numbered_application_folder(self):

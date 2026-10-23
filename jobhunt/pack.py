@@ -205,9 +205,11 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str]) 
 
     tone = TONE_LABELS.get(settings.get("cvdocs.letter_tone"), who["tone"].capitalize())
     letter_flags = [f for f in flags if not f.startswith(("REAPPLICATION", "ELIGIBILITY"))]
+    # the fit map's evidence is sentences ("... spreadsheet.", 2026-10-23), so the line joins them with ";"
+    shown = [e.strip().rstrip(".") for e in evidence[:EVIDENCE_SHOWN] if e.strip()]
     return {"tone": f"{tone} (your setting)",
             "length": f"{len(letter.split())} words (you prefer about {who['letter_words']})",
-            "evidence": ", ".join(evidence[:EVIDENCE_SHOWN]) or "None named",
+            "evidence": "; ".join(shown) or "None named",
             "checked": (CHECKED_CLEAN if not letter_flags else
                         f"{len(letter_flags)} {'thing' if len(letter_flags) == 1 else 'things'} to check before "
                         "sending: see Check before sending.")}
