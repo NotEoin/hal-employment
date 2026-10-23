@@ -143,6 +143,12 @@ def _kept(analysis: dict) -> str:
     return record.context(_requirements(analysis) + (analysis.get("questions") or [])) or "none"
 
 
+def _record_part(heading: str, kept: str) -> str:
+    """The record section of a request, or nothing when the record holds nothing for this job."""
+    # "Employment record: none" read to Claude as a record that lacked a job on the CV (real-model run, 2026-10-23)
+    return f"\n\n{heading}:\n{kept}" if kept and kept != "none" else ""
+
+
 def passages(kept: str) -> list[str]:
     """The record passages a prompt was given, as "file > heading" labels."""
     return PASSAGE.findall(kept or "")
@@ -152,7 +158,7 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str) -> dict:
     conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
     return llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in _requirements(analysis))
                          + f"\n\nConditions:\n{conditions}\n\nToday: {date.today().isoformat()}\n\nCV:\n{facts}"
-                         + f"\n\nEmployment record:\n{kept}",
+                         + _record_part("Employment record", kept),
                          role="main")
 
 
@@ -164,7 +170,7 @@ def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, 
             f"{who['status_line']}. Mention availability only if the advert's start date is "
             f"flexible; for a fixed intake, refer to that intake instead.\n"
             f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
-            f"\n\nEmployment record (true; use it where the CV is silent):\n{kept}")
+            + _record_part("Employment record (true; use it where the CV is silent)", kept))
 
 
 def _letter(who: dict, context: str) -> str:
@@ -186,7 +192,7 @@ def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, fit: dict, so
     flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, kept, *sources)]
     flagged += [f"unsupported claim: {c}" for c in
                 llm.chat_json(prompt("verify", who),
-                              f"Facts:\n{facts}\n\nEmployment record:\n{kept}"
+                              f"Facts:\n{facts}" + _record_part("Employment record", kept) +
                               f"\n\nEvidence map:\n{fit.get('matches', [])}\n\nDrafts:\n{drafts}",
                               role="main").get("unsupported", [])]
     flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]

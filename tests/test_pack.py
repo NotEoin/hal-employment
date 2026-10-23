@@ -237,6 +237,17 @@ class Letter(unittest.TestCase):
         self.assertIn("1 thing to check", docs["letter_notes"]["checked"])
 
 
+    def test_with_no_employment_record_no_request_mentions_one(self):
+        # Real-model run (2026-10-23): "Employment record: none" in the fit, letter and verify requests read to Claude as
+        # a record that lacked a job on the CV; prep already leaves it out
+        writer = FakeWriter()
+        with as_applicant(people.HUMANITIES, writer) as a, mock.patch.object(record, "context", lambda *q, **k: ""):
+            job = add_job(a.con, "humanities_grad")
+            pack.build(a.con, job["id"], use_web=False)
+        for pid in ("fit", "letter", "verify"):
+            self.assertTrue(writer.asked(pid), pid)
+            self.assertNotIn("Employment record", writer.asked(pid)[0]["user"], pid)
+
 class Checklist(unittest.TestCase):
     def test_the_checklist_never_says_to_open_a_command_line(self):
         for person in people.PEOPLE:
