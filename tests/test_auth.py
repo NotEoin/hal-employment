@@ -42,7 +42,7 @@ class OpenLinks(unittest.TestCase):
         with HalServer() as hal:
             url = urlparse(hal.open_url(next="//elsewhere.example/steal"))
             reply = hal.client().get(f"{url.path}?{url.query}")
-            self.assertEqual(reply.headers["Location"], "/")
+            self.assertEqual(reply.headers["Location"], "/#setup", "a new install's own start page, the setup guide")
 
     def test_the_token_itself_is_never_stored(self):
         with HalServer() as hal:
