@@ -105,6 +105,12 @@ class Registry(unittest.TestCase):
             if entry.setting in secrets.NAMES:
                 self.assertEqual(settings.setting(entry.setting).kind, "secret", entry.old)
 
+    def test_every_group_icon_is_one_the_page_can_draw(self):
+        # the remote and add-on groups named icons that ui/icons.js lacked, so they drew the info icon
+        icons = (JOBHUNT / "web" / "static" / "app" / "ui" / "icons.js").read_text(encoding="utf-8")
+        for gid, _name, icon in settings._registry().GROUPS:
+            self.assertRegex(icons, rf"(?m)^  {icon}: \[", gid)
+
     def test_the_checks_find_what_they_look_for(self):
         tree = ast.parse("settings.get('goal.nope')\nCONFIG.get('web_port')\nsettings.set('goal.x', 1, by='hal')\n")
         calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)]
