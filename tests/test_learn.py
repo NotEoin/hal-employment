@@ -14,7 +14,7 @@ from support.api import HalServer
 from support.jobs import advert
 
 from jobhunt import db
-from jobhunt.core import activity, events, runner, settings
+from jobhunt.core import activity, events, plugins, runner, settings
 from jobhunt.core.settings import store
 from jobhunt.find import feedback
 from jobhunt.learn import actions, home, items, patterns, places
@@ -359,7 +359,8 @@ class Wording(unittest.TestCase):
             self.assertEqual(items.when_words("2026-10-21T08:00:00Z"), "Yesterday")
             self.assertEqual(items.when_words("2026-10-16T08:00:00Z"), "16 Oct")
 
-    def test_every_decision_has_an_undo_only_when_something_changed(self):
+    def test_activity_finds_the_undo_for_a_yes_by_itself(self):
+        plugins.modules("undo")     # what `activity.undo` loads before it looks for a handler
         self.assertIn("learned_item", activity.UNDO)
 
 
