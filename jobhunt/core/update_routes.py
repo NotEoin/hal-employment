@@ -111,7 +111,7 @@ def overview(req: Request) -> dict:
         if last else None,
         "can_rollback": updates.can_go_back() and not inst.developer, "blocked_by": _blocked_by(req.con, inst),
         "held": held or None, "waiting": updates.waiting(), "signing": updates.signing(),
-        "go_back_warning": updates.GO_BACK_WARNING,
+        "go_back_warning": updates.GO_BACK_WARNING, "helper_wanted": helper_wanted(),
     }
 
 

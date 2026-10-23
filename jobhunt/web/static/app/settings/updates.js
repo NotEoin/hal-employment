@@ -5,12 +5,14 @@
    for Hal to come back. In a window from another computer, signing in to GitHub happens on the computer
    Hal runs on; Update Hal and Go back still work. */
 import { html, useState } from "../core/html.js";
-import { post, run } from "../core/api.js";
+import { post, put, run } from "../core/api.js";
 import { useApi, load, openDialog, toast } from "../core/store.js";
 import { can, host } from "../core/remote.js";
 import { ask } from "../ui/dialog.js";
+import { SettingCtl } from "../ui/setting-control.js";
 
 const CHECKING = "Looking for a new version";
+const AUTO = { key: "updates.auto_check", kind: "bool", label: "Check for updates every day" };
 
 /** "today at 09:00" or "21 October at 09:00". */
 export function when(iso) {
@@ -42,6 +44,7 @@ function Row({ k, label, sub, children }) {
 export function UpdatesPanel() {
   const r = useApi("/updates");
   const auth = useApi("/updates/auth");
+  const vals = useApi("/settings");
   const [busy, setBusy] = useState("");
   if (r.error) return html`<p class="small sub">${r.error.message}</p>`;
   if (!r.data) return html`<p class="small sub">Loading</p>`;
@@ -70,12 +73,18 @@ export function UpdatesPanel() {
     if (!yes) return;
     try { await post("/updates/rollback", { confirm: true }); openDialog("update", { goingBack: true }); } catch (e) { toast(e.message); }
   };
+  const auto = vals.data ? vals.data.values[AUTO.key] !== false : true;
+  const setAuto = async v => {
+    try { await put("/settings/" + AUTO.key, { value: v }); await load("/settings").catch(() => {}); toast("Saved"); }
+    catch (e) { toast(e.message); }
+  };
   const last = u.last_result;
   const github = signedOut ? "Hal cannot reach its updates on GitHub. Sign in to GitHub again."
     : "Hal uses the sign-in you made when you installed it.";
   return html`
     <${Row} k="updates.version" label="Version" sub=${versionWords(u)}>
       ${!u.developer && html`<button type="button" class="btn small" disabled=${!!busy} onClick=${checkNow}>${busy === "check" ? CHECKING : "Check now"}</button>`}<//>
+    ${!u.developer && html`<${Row} k=${AUTO.key} label=${AUTO.label}><${SettingCtl} it=${AUTO} value=${auto} onChange=${setAuto} /><//>`}
     ${u.developer ? html`<${Row} k="updates.developer" label="Updates" sub=${u.blocked_by}>
         ${u.commit && html`<span class="small sub sc-info">${/* details */ "git commit " + u.commit.slice(0, 7)}</span>`}<//>`
       : html`<${Row} k="updates.github" label="GitHub sign-in" sub=${github}>
@@ -92,5 +101,6 @@ export function UpdatesPanel() {
         ${last.details && html`<details class="small"><summary>Details</summary><p class="sub">${/* details */ last.details}</p></details>`}<//>`}
     ${u.can_rollback && html`<${Row} k="updates.rollback" label="Go back to the previous version" sub=${u.go_back_warning}>
         <button type="button" class="btn small" onClick=${goBack}>Go back</button><//>`}
-    <${Row} k="updates.signing" label="Who can send updates" sub=${u.signing && u.signing.words} />`;
+    <${Row} k="updates.signing" label="Who can send updates" sub=${u.signing && u.signing.words} />
+    ${u.helper_wanted && html`<${Row} k="updates.helper" label="Browser helper" sub=${"This Hal comes with version " + u.helper_wanted + " of the browser helper. It updates itself when Hal does."} />`}`;
 }
