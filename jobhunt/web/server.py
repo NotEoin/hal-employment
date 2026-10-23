@@ -5,7 +5,6 @@ the queue full and turns email into to-dos; browser and model work for one
 application runs in the background and is reported through /api/state.
 Stdlib only, apart from Playwright for form filling.
 """
-import base64
 import json
 import mimetypes
 import re
@@ -257,6 +256,13 @@ def _as_action(kind: str, params: dict, shape, fallback, *, subject: str | None 
     return {"started": True, "action_id": action_id}
 
 
+class _Quiet:
+    """A stand-in action context for a legacy route run in the request, when its kind is not registered."""
+
+    def step(self, *_a, **_k) -> None:
+        return None
+
+
 class Gone(LookupError):
     """A route that no longer does what it did: answered 410 with its words."""
 PAGES: dict[tuple, bytes] = {}  # document pages drawn as images, by file, its change time and page number
@@ -494,9 +500,10 @@ class Handler(BaseHTTPRequestHandler):
                 run_action("_cv", "updating application CVs", act_rerender_cvs, "_cv")
                 return {**base_cv(), "saved": len(changes)}
             if route == "cv/source":
-                data = base64.b64decode(body["data"]) if body.get("data") else None
-                name = cvbuild.add(body.get("name") or "notes", body.get("text") or "", data)
-                return {"name": name, "sources": cvbuild.sources()}
+                params = {"name": body.get("name") or "notes", "text": body.get("text") or "",
+                          "data": body.get("data") or ""}
+                return _as_action("cv.source", params, lambda done: done,
+                                  lambda: legacy_actions.add_source(_Quiet(), **params), subject="_cvsource")
             if route == "cv/source/remove":
                 cvbuild.remove(body["name"])
                 return {"sources": cvbuild.sources()}

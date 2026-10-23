@@ -2,14 +2,20 @@
 
 Moved from `jobhunt/web/server.py`, which re-exports every name here for the legacy interface. `BASE_CV`
 and `REVIEW` are resolved when used, so the folders follow the data folder and the test's home.
+Adding a source for the CV builder is the action kind `cv.source`, so Classic's request never
+holds a slow file read. Importing this module also registers the data task `cv.import_v1`, whose module
+name the data-task loader does not look for.
 """
+import base64
+import binascii
 import json
 from pathlib import Path
 
 from .. import cv, cvbuild, cvscore, db, documents
 from ..apply.queries import _job
-from ..core import naming, paths
+from ..core import naming, paths, runner
 from ..core.runner import _say
+from . import import_v1  # noqa: F401 - registers the data task cv.import_v1
 
 
 def base_cv_dir() -> Path:
@@ -42,7 +48,7 @@ def base_cv() -> dict:
     if review:
         review["stale"] = review.get("of") != cvscore.fingerprint(cv.load())
     return {"score": cvscore.score(cv.load(), pdf), "review": review, "cv": cv.for_editing(),
-            "site": cv._apply(cv.origin(), [], keep_hidden=True), "origin": cv.origin_name(),
+            "site": cv.origin(), "origin": cv.origin_name(),
             "changes": len(cv.overrides()), "pdf": str(pdf), "sources": cvbuild.sources(),
             "options": {**cvbuild.OPTIONS, **((built or {}).get("options") or {})},
             "built": built and {"at": built["built"], "flags": built["flags"],
@@ -96,3 +102,21 @@ def act_rerender_cvs(con, _job_id: str) -> str:
         cv.render(documents.tailored(job, docs), documents.pack_dir(job))
         made += 1
     return f"{made} application CVs made again from your base CV"
+
+
+def _source_example(world) -> dict:
+    return {"name": "volunteering notes", "text": "Made-up notes: ran a weekly reading club for six months."}
+
+
+@runner.action("cv.source", area="cv", label="Adding a source for your CV",
+               why="You added {name} for Hal to build your CV from", priority=0, exclusive="none",
+               example=_source_example)
+def add_source(ctx, name: str = "notes", text: str = "", data: str = "") -> dict:
+    """Keeps a pasted note or a file (base64) as a source for the CV builder; returns today's Classic shape."""
+    try:
+        raw = base64.b64decode(data, validate=True) if data else None
+    except (binascii.Error, ValueError) as e:
+        raise ValueError("That file did not arrive whole. Add it again.") from e
+    ctx.step(f"Reading {name}")
+    added = cvbuild.add(name or "notes", text or "", raw)
+    return {"name": added, "sources": cvbuild.sources()}
