@@ -1,8 +1,10 @@
-"""Y Combinator's London job board and the 80,000 Hours job board.
+"""Y Combinator's London job board, the 80,000 Hours job board and Workable's job search.
 
-YC listings name a hiring manager, which makes direct contact possible. 80,000
-Hours lists AI safety, policy and other high-impact roles; its public search
-key is the one its own site uses in the browser.
+YC listings name a hiring manager, which makes direct contact possible. 80,000 Hours lists policy, research
+and other high-impact roles; its search key is the one its own site sends from the browser, kept in the
+seed config (`find/seed/sources.toml`) with that note. Workable's search covers every Workable employer, so
+it reaches small charities and studios as well as start-ups; it asks the goal's phrases, plus "intern",
+"internship" and "placement" only when the person chose those kinds.
 """
 import html
 import json
@@ -18,9 +20,8 @@ from .ats import strip_html
 BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 YC_PAGES = ["https://www.ycombinator.com/jobs/location/london",
             "https://www.ycombinator.com/jobs/location/remote"]
-ALGOLIA = "https://W6KM1UDIB3-dsn.algolia.net/1/indexes/jobs_prod/query"
-ALGOLIA_HEADERS = {"X-Algolia-Application-Id": "W6KM1UDIB3",
-                   "X-Algolia-API-Key": "d1d7f2c8696e7b36837d5ed337c4a319"}
+ALGOLIA = "https://{app}-dsn.algolia.net/1/indexes/jobs_prod/query"
+UK_FACETS = ["tags_location_80k:London, UK", "tags_location_80k:UK"]
 
 
 def _page_props(url: str) -> dict:
@@ -58,13 +59,23 @@ def yc_detail(job: dict) -> str:
     return f"{job['description']}\n\n{body}".strip()
 
 
-def eighty_thousand_hours():
-    params = ("query=&hitsPerPage=1000&facetFilters="
-              + urllib.request.quote(json.dumps([["tags_location_80k:London, UK", "tags_location_80k:UK"]])))
-    req = urllib.request.Request(ALGOLIA, data=json.dumps({"params": params}).encode(),
-                                 headers={**ALGOLIA_HEADERS, "Content-Type": "application/json"})
+def _seed_80k() -> dict:
+    from ..find import sources_registry
+
+    return sources_registry.seed_by_id()["80k"].get("config", {})
+
+
+def eighty_thousand_hours(source: dict | None = None, goal=None):
+    """The board's UK jobs; with internships chosen, its internships too (they are UK jobs already)."""
+    cfg = {**_seed_80k(), **((source or {}).get("config") or {})}
+    params = ("query=&hitsPerPage=1000&facetFilters=" + urllib.request.quote(json.dumps([UK_FACETS])))
+    req = urllib.request.Request(ALGOLIA.format(app=cfg["app_id"]), data=json.dumps({"params": params}).encode(),
+                                 headers={"X-Algolia-Application-Id": cfg["app_id"],
+                                          "X-Algolia-API-Key": cfg["search_key"], "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as r:
         hits = json.loads(r.read())["hits"]
+    if goal is not None and "internship" not in goal.kinds:
+        hits = [h for h in hits if "Internship" not in (h.get("tags_role_type") or [])]
     jobs = []
     for h in hits:
         posted = h.get("posted_at")
@@ -84,16 +95,24 @@ def eighty_thousand_hours():
 
 
 WORKABLE_SEARCH = "https://jobs.workable.com/api/v1/jobs"
-WORKABLE_QUERIES = ["software engineer", "software developer", "graduate developer", "junior developer",
-                    "machine learning", "AI engineer", "data engineer", "python developer",
-                    "backend engineer", "security engineer", "research engineer",
-                    "graduate internship", "software engineering intern", "AI intern"]
+# Used only when a caller passes no source and goal (older callers); searches ask the goal.
+WORKABLE_QUERIES = ["graduate"]
+EARLY_TERMS = {"internship": "internship", "placement": "placement"}
+INTERN_TERM = "intern"
+MAX_PAGES = 3
 
 
-def workable_search(max_pages: int = 3):
-    """Searches every Workable employer's adverts, which skews towards small companies."""
+def workable_search(source: dict | None = None, goal=None, max_pages: int = MAX_PAGES):
+    """Searches every Workable employer's adverts, which skews towards small organisations."""
+    queries = list(WORKABLE_QUERIES)
+    if source is not None and goal is not None:
+        from ..find import sources_registry
+
+        extra = sources_registry.early_terms(goal, EARLY_TERMS)
+        extra = ((INTERN_TERM,) if "internship" in goal.kinds else ()) + extra
+        queries = sources_registry.queries(source, goal, extra=extra)
     jobs = {}
-    for query in WORKABLE_QUERIES:
+    for query in queries:
         for place in (f"{p}, UK" for p in places()):
             token = None
             for _ in range(max_pages):

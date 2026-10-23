@@ -1,39 +1,55 @@
 """Adzuna and Reed: UK job aggregators with free developer APIs.
 
-Each needs a key in ~/.config/jobhunt/ and returns nothing without one, so
-discovery runs the same with or without them. Both searches return snippets;
-full adverts are fetched for jobs that pass the first checks.
+Each needs a free key, saved as the secrets `sites.adzuna_key` and `sites.reed_key`, and returns nothing
+without one, so discovery runs the same with or without them (the sources registry says what is missed).
+Searches are the goal's phrases for the kinds of role chosen in the goal's places, as far as the
+goal's travel distance; both return snippets, so full adverts are fetched for jobs that pass the first checks.
 """
 import base64
 import json
 import re
 import urllib.parse
-from pathlib import Path
 
 from ..http import get
 from . import places
 from .ats import strip_html
 
-KEYS = Path.home() / ".config" / "jobhunt"
-QUERIES = ["graduate software", "junior developer", "software engineer graduate",
-           "machine learning graduate", "junior data engineer", "graduate cyber security"]
+SECRETS = {"adzuna": "sites.adzuna_key", "reed": "sites.reed_key"}
+# Used only when a caller passes no source and goal (older callers and tests); searches ask the goal.
+QUERIES = ["graduate"]
+KM_PER_MILE = 1.609
+DEFAULT_MILES = 10          # the old fixed radius, for a call with no goal
+DEFAULT_AGE_DAYS = 21
 
 
 def _key(name: str) -> str | None:
-    path = KEYS / name
-    return path.read_text().strip() if path.exists() else None
+    from ..core.settings import secrets
+
+    return (secrets.get(SECRETS[name]) or "").strip() or None
 
 
-def adzuna():
+def _plan(source: dict | None, goal) -> tuple[list[str], int, int]:
+    """(queries, travel miles, oldest advert in days) for one search."""
+    if source is None or goal is None:
+        return list(QUERIES), DEFAULT_MILES, DEFAULT_AGE_DAYS
+    from ..core import settings
+    from ..find import sources_registry
+
+    return (sources_registry.queries(source, goal), goal.max_distance_miles or DEFAULT_MILES,
+            int(settings.get("sites.max_age_days") or DEFAULT_AGE_DAYS))
+
+
+def adzuna(source: dict | None = None, goal=None):
     creds = _key("adzuna")  # "<app_id>:<app_key>"
     if not creds:
         return []
     app_id, app_key = creds.split(":", 1)
+    queries, miles, age = _plan(source, goal)
     jobs = {}
-    for query in QUERIES:
+    for query in queries:
         for place in places():
             params = {"app_id": app_id, "app_key": app_key, "results_per_page": 50, "what": query,
-                      "where": place, "distance": 10, "max_days_old": 21}
+                      "where": place, "distance": round(miles * KM_PER_MILE), "max_days_old": age}
             data = json.loads(get("https://api.adzuna.com/v1/api/jobs/gb/search/1?" + urllib.parse.urlencode(params),
                                   timeout=30))
             for j in data.get("results", []):
@@ -55,14 +71,15 @@ def _reed(path: str, key: str):
                           timeout=30))
 
 
-def reed():
+def reed(source: dict | None = None, goal=None):
     key = _key("reed")
     if not key:
         return []
+    queries, miles, _age = _plan(source, goal)
     jobs = {}
-    for query in QUERIES:
+    for query in queries:
         for place in places():
-            params = {"keywords": query, "locationName": place, "distanceFromLocation": 10, "resultsToTake": 100}
+            params = {"keywords": query, "locationName": place, "distanceFromLocation": miles, "resultsToTake": 100}
             for j in _reed("search?" + urllib.parse.urlencode(params), key).get("results", []):
                 low, high = j.get("minimumSalary"), j.get("maximumSalary")
                 jobs[j["jobId"]] = {

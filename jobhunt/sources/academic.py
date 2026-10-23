@@ -1,8 +1,9 @@
-"""University and research posts from jobs.ac.uk.
+"""University, research, library and teaching posts from jobs.ac.uk.
 
-Research software engineer, research assistant and KTP posts suit a new
-graduate with a research dissertation, and are rarely advertised elsewhere.
-The search's location filter is loose, so the scorer does the location work.
+Research assistant, library, archive and KTP posts suit graduates of every subject and are rarely advertised
+elsewhere. The searches are the goal's phrases; a student, or someone who chose internships or
+placements, also gets the source's `student_terms`. The search's location filter is loose, so the scorer
+does the location work.
 """
 import html
 import re
@@ -13,9 +14,9 @@ from . import places
 from .ats import strip_html
 
 BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
-SEARCHES = ["research software engineer", "software developer", "software engineer",
-            "machine learning", "artificial intelligence", "data scientist", "KTP associate",
-            "research assistant computer science", "cyber security", "internship"]
+# Used only when a caller passes no source and goal (older callers); searches ask the goal.
+SEARCHES = ["graduate", "research assistant"]
+STUDENT_KINDS = ("internship", "placement")
 BASE = "https://www.jobs.ac.uk"
 
 
@@ -23,9 +24,19 @@ def _text(fragment: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", fragment))).strip()
 
 
-def fetch():
+def _searches(source: dict | None, goal) -> list[str]:
+    if source is None or goal is None:
+        return list(SEARCHES)
+    from ..find import sources_registry
+
+    student = goal.is_student() or any(k in goal.kinds for k in STUDENT_KINDS)
+    extra = tuple(source.get("config", {}).get("student_terms", [])) if student else ()
+    return sources_registry.queries(source, goal, extra=extra)
+
+
+def fetch(source: dict | None = None, goal=None):
     jobs = {}
-    for keywords in SEARCHES:
+    for keywords in _searches(source, goal):
         for place in places():
             url = f"{BASE}/search/?" + urllib.parse.urlencode({"keywords": keywords, "location": place})
             page = get(url, headers=BROWSER, timeout=30)

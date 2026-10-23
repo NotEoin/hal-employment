@@ -1,0 +1,105 @@
+# The job sites every install starts with. The data task find.import_boards and every search
+# copy these into the `sources` table; a row keeps the person's own on/off choice once they have made one.
+#
+# Fields: kind (a sources_registry kind), name, area (words for Where Hal looks), fetch (the built-in fetcher),
+# on_for (presets that have it on by default; "all" for every preset), needs_secret (a key Hal works without),
+# config (passed to the fetcher), key_steps (the two-step "Get a free key" guide).
+#
+# Queries are built from the person's goal (their roles and the kinds of role they chose), so one list of
+# sites serves a history graduate, a nurse, a designer or a programmer alike. Phrases for internships,
+# placements, insight weeks and apprenticeships are added only when the person chose that kind.
+
+[[source]]
+id = "adzuna"
+kind = "aggregator"
+name = "Adzuna"
+area = "Every kind of job in the UK"
+fetch = "adzuna"
+on_for = "all"
+needs_secret = "sites.adzuna_key"
+key_steps = ["Open developer.adzuna.com, press Register and sign up for free.",
+             "Copy your Application ID and Application Key, and paste them here as id:key."]
+key_url = "https://developer.adzuna.com/signup"
+
+[[source]]
+id = "reed"
+kind = "aggregator"
+name = "Reed"
+area = "Every kind of job in the UK"
+fetch = "reed"
+on_for = "all"
+needs_secret = "sites.reed_key"
+key_steps = ["Open reed.co.uk/developers/jobseeker and sign up for a free key.",
+             "Copy the key Reed emails you and paste it here."]
+key_url = "https://www.reed.co.uk/developers/jobseeker"
+
+[[source]]
+id = "workable-search"
+kind = "aggregator"
+name = "Workable job search"
+area = "Small and growing employers of every kind"
+fetch = "workable-search"
+on_for = "all"
+
+[[source]]
+id = "jobsacuk"
+kind = "board"
+name = "jobs.ac.uk"
+area = "Universities, research, libraries and teaching"
+fetch = "jobsacuk"
+on_for = "all"
+# Asked as well when the person is a student or chose these kinds.
+config = { student_terms = ["internship", "placement", "research assistant"] }
+
+[[source]]
+id = "guardian"
+kind = "board"
+name = "Guardian Jobs"
+area = "Charities, arts, media, education and the public sector"
+fetch = "guardian"
+on_for = ["humanities_grad", "career_changer", "experienced", "school_leaver", "internship_seeker"]
+# The board's own RSS search (format not yet checked against the live site).
+config = { feed = "https://jobs.theguardian.com/jobsrss/?keywords={query}&radialtown={place}" }
+
+[[source]]
+id = "80k"
+kind = "board"
+name = "80,000 Hours job board"
+area = "Charities, policy and research with a social purpose"
+fetch = "80k"
+on_for = ["technical_grad", "humanities_grad", "career_changer", "internship_seeker"]
+# The search key is the one 80,000 Hours' own job board sends from every visitor's browser: believed public
+# and search-only (not confirmed with 80,000 Hours). Moved here from sources/startups.py.
+config = { app_id = "W6KM1UDIB3", search_key = "d1d7f2c8696e7b36837d5ed337c4a319" }
+
+[[source]]
+id = "yc"
+kind = "board"
+name = "Y Combinator jobs"
+area = "Technology start-ups"
+fetch = "yc"
+on_for = ["technical_grad"]
+
+[[source]]
+id = "hn"
+kind = "board"
+name = "Hacker News: Who is hiring"
+area = "Technology companies"
+fetch = "hn"
+on_for = ["technical_grad"]
+
+[[source]]
+id = "ktp"
+kind = "board"
+name = "Knowledge Transfer Partnerships"
+area = "Graduate projects between universities and employers"
+fetch = "ktp"
+on_for = ["technical_grad"]
+
+[[source]]
+id = "alerts"
+kind = "email_alerts"
+name = "Your email job alerts"
+area = "Alerts from job sites in your inbox"
+on_for = "all"
+needs_secret = "email.app_password"

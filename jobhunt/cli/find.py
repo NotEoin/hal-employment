@@ -2,6 +2,11 @@
 
 The bodies moved from `jobhunt/__main__.py`; the parser, its arguments and help stay there,
 because the voice bridge and the /jobs command parse what these commands print.
+
+`discover` searches every switched-on source of the sources registry and prints exactly what it
+printed before the registry. Sites skipped on purpose (no key, read with the email) are not counted and
+print nothing; Where Hal looks says what they miss. Each source's run, its health and any error are stored,
+so the scheduled search tells the page what happened without anyone reading its output.
 """
 import re
 import sys
@@ -9,54 +14,62 @@ import textwrap
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .. import db
-from ..config import BOARDS_PATH, CONFIG, boards
-from ..find import rules
-from ..http import NotFound
+from ..config import CONFIG
+from ..core import clock
+from ..find import detect, rules
+from ..find import goal as goal_mod
+from ..find import sources_registry as registry
 from ..notify import notify
 from ..score import prefilter
-from ..sources import academic, aggregators, ats, hn, ktp, startups
+from ..sources import academic, aggregators, ats, startups
 
-STANDALONE = {"hn": hn.fetch, "ktp": ktp.fetch, "yc": startups.yc, "80k": startups.eighty_thousand_hours,
-              "workable-search": startups.workable_search, "jobsacuk": academic.fetch,
-              "adzuna": aggregators.adzuna, "reed": aggregators.reed}
+# The registry's own table of built-in fetchers (the same dict object), named as before for older callers.
+STANDALONE = registry.builtin_fetchers()
 
 
 # Sources whose listings lack the advert text, fetched per job after the cheap checks.
 DETAIL = {**ats.DETAIL, "yc": startups.yc_detail, "jobsacuk": academic.detail, "reed": aggregators.reed_detail,
           "adzuna": aggregators.adzuna_detail}
+FULL_LISTINGS = ("ats_board", "company_watch")   # these list every open job, so a missing one has gone
 
 
-def _fetch_board(b):
-    jobs, size = ats.FETCHERS[b["ats"]](b["slug"], b["name"])
-    for j in jobs:
-        j["board_size"] = size
-    return b, jobs
+def _fetch(source, goal):
+    try:
+        return source, registry.fetch(source, goal), None
+    except registry.Skipped as s:
+        return source, None, str(s)
 
 
 def cmd_discover(args):
     con = db.connect()
+    goal = goal_mod.current()
+    sources = registry.enabled(con)
+    _resolve_watched(con, sources)
+    started = clock.iso()
     results, errors = [], []
     with ThreadPoolExecutor(max_workers=12) as pool:
-        futs = {pool.submit(_fetch_board, b): b["name"] for b in boards()}
-        futs.update({pool.submit(fn): name for name, fn in STANDALONE.items()})
+        futs = {pool.submit(_fetch, src, goal): src for src in sources}
         for f in as_completed(futs):
+            src = futs[f]
             try:
-                results.append(f.result())
+                _src, fetched, skipped = f.result()
             except Exception as e:  # noqa: BLE001 - one failing source must not stop the run
-                errors.append(f"{futs[f]}: {type(e).__name__} {e}")
+                words = f"{type(e).__name__} {e}"
+                errors.append(f"{src['name']}: {words}")
+                registry.record(con, src, started, error=words)
+                registry.note_error(src, words, con)
+                continue
+            if skipped is not None:
+                registry.record(con, src, started, skipped=skipped)
+                continue
+            results.append((src, fetched[0]))
 
     new_jobs, total = [], 0
-    for res in results:
-        if isinstance(res, tuple):  # ATS boards return (board, jobs)
-            b, jobs = res
-            source = b["ats"]
-        else:
-            jobs = res
-            source = jobs[0]["source"] if jobs else None
-            for j in jobs:
-                j.setdefault("board_size", None)
+    for src, jobs in results:
+        kept = 0
         for j in jobs:
             total += 1
+            j.setdefault("board_size", None)
             needs_detail = not j["description"] or j["source"] in ("yc", "reed", "adzuna")
             if needs_detail and j["source"] in DETAIL and prefilter(j):
                 known = con.execute("SELECT description FROM jobs WHERE id=?", (j["id"],)).fetchone()
@@ -68,13 +81,19 @@ def cmd_discover(args):
                     except Exception as e:
                         errors.append(f"{j['id']} detail: {e}")
             if db.upsert(con, j):
+                con.execute("UPDATE jobs SET source_id = ? WHERE id = ?", (src["id"], j["id"]))
+                if j.get("closes_at"):
+                    con.execute("UPDATE jobs SET closes_at = ? WHERE id = ?", (j["closes_at"], j["id"]))
                 s = rules.score_and_save(con, j)
                 if s > 0:
                     new_jobs.append((s, j))
-        if isinstance(res, tuple):
-            db.mark_gone(con, source, b["name"], {j["id"] for j in jobs})
-        elif source == "ktp":               # KTP is listed in full too; HN threads are monthly
+                    kept += 1
+        if src["kind"] in FULL_LISTINGS:
+            db.mark_gone(con, jobs[0]["source"] if jobs else src["config"].get("ats"), src["name"],
+                         {j["id"] for j in jobs})
+        elif src.get("builtin") == "ktp":   # KTP is listed in full too; HN threads are monthly
             db.mark_gone(con, "ktp", "KTP", {j["id"] for j in jobs})
+        registry.record(con, src, started, seen=len(jobs), new=kept, kept=kept)
     con.commit()
 
     new_jobs.sort(key=lambda x: -x[0])
@@ -90,6 +109,32 @@ def cmd_discover(args):
         notify(f"{len(strong)} strong new job match{'es' * (len(strong) > 1)}",
                "\n".join(f"{s:.0f} | {j['company']} | {j['title']}" for s, j in strong[:5]),
                url=top["url"])
+
+
+def _resolve_watched(con, sources):
+    """Looks up a few watched companies' boards on every application system before the search."""
+    import json
+    from datetime import timedelta
+
+    due = []
+    cutoff = clock.iso(clock.now_utc() - timedelta(days=registry.REPROBE_DAYS))
+    for src in sources:
+        cfg = src["config"]
+        if src["kind"] == "company_watch" and not cfg.get("slug") and (cfg.get("probed") or "") < cutoff:
+            due.append(src)
+    due = due[:registry.PROBES_PER_SEARCH]
+    if not due:
+        return
+    found = detect.probe([s["name"] for s in due], in_scope=prefilter)
+    for src in due:
+        hit = found.get(src["name"])
+        cfg = {**src["config"], "probed": clock.iso()}
+        if hit is not None:
+            cfg.update({"ats": hit.ats, "slug": hit.slug})
+            src["area"] = f"{registry.ATS_NAMES.get(hit.ats, hit.ats)} careers page"
+        src["config"] = cfg
+        con.execute("UPDATE sources SET config = ?, area = ? WHERE id = ?", (json.dumps(cfg), src["area"], src["id"]))
+    con.commit()
 
 
 def cmd_add(args):
@@ -198,64 +243,34 @@ def cmd_stats(args):
         print(f"  {r['source']:16} {r['n']:5} open, {r['rel']} relevant")
 
 
-def _slugs(name):
-    """'Name=slug' pins the slug; otherwise try the joined and hyphenated forms.
-    Never the first word alone: 'Bloom & Wild' must not match some 'bloom'."""
-    if "=" in name:
-        return [name.split("=", 1)[1]]
-    base = re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
-    return list(dict.fromkeys([base.replace(" ", ""), base.replace(" ", "-")]))
-
-
 def _names(raw):
     out = []
     for n in raw:
         if n.startswith("@"):
-            out += [l.split("#")[0].strip() for l in open(n[1:]) if l.split("#")[0].strip()]
+            with open(n[1:], encoding="utf-8") as f:
+                out += [line.split("#")[0].strip() for line in f if line.split("#")[0].strip()]
         else:
             out.append(n)
     return out
 
 
 def cmd_probe(args):
-    known = {(b["ats"], b["slug"]) for b in boards()}
+    con = db.connect()
+    registry.sync(con)
+    known = {(r["config"].get("ats"), r["config"].get("slug")) for r in registry.enabled(con)}
     args.names = _names(args.names)
-    found = []
-
-    def attempt(name, kind, slug):
-        try:
-            jobs, size = ats.FETCHERS[kind](slug, name)
-        except NotFound:
-            return None
-        except Exception:
-            return None
-        if size == 0:
-            return None
-        uk = sum(1 for j in jobs if prefilter(j))
-        return name, kind, slug, size, uk
-
-    with ThreadPoolExecutor(max_workers=16) as pool:
-        futs = [pool.submit(attempt, n, k, s) for n in args.names for s in _slugs(n) for k in ats.FETCHERS]
-        for f in as_completed(futs):
-            if r := f.result():
-                found.append(r)
-
-    best = {}
-    for name, kind, slug, size, uk in found:
-        name = name.split("=")[0]
-        if name not in best or (uk, size) > (best[name][4], best[name][3]):
-            best[name] = (name, kind, slug, size, uk)
+    best = detect.probe(args.names, in_scope=prefilter)
     for name in (n.split("=")[0] for n in args.names):
         if name in best:
-            _, kind, slug, size, uk = best[name]
-            print(f"  {name:28} {kind:15} {slug:24} {size:4} open, {uk:3} in scope")
+            b = best[name]
+            print(f"  {name:28} {b.ats:15} {b.slug:24} {b.size:4} open, {b.in_scope:3} in scope")
         else:
             print(f"  {name:28} -- not found on a supported ATS")
     print(f"{len(best)}/{len(args.names)} found")
 
     if args.save:
-        added = [b for b in best.values() if (b[1], b[2]) not in known and (b[4] > 0 or args.keep_empty)]
-        with BOARDS_PATH.open("a") as f:
-            for name, kind, slug, *_ in added:
-                f.write(f'\n[[board]]\nname = "{name}"\nats = "{kind}"\nslug = "{slug}"\n')
-        print(f"saved {len(added)} boards to {BOARDS_PATH.name}")
+        added = [b for b in best.values() if (b.ats, b.slug) not in known and (b.in_scope > 0 or args.keep_empty)]
+        for b in added:
+            registry.add_board(con, b.name, b.ats, b.slug, added_by="you")
+        con.commit()
+        print(f"saved {len(added)} boards to Where Hal looks")
