@@ -78,7 +78,7 @@ export function GoalCard({ goal }) {
 function Setup({ s }) {
   if (!s || !s.todo || s.todo.length === 0) return null;
   return html`<section class="card" aria-labelledby="setup-h"><h2 class="h2" id="setup-h">Finish setting up</h2>
-    <p class="small sub">${s.done} of ${s.total} steps done. The rest are optional.</p>
+    <p class="small sub">${s.done} of ${s.total} steps done.${s.todo.every(t => t.optional) ? " The rest are optional." : ""}</p>
     <div style="margin:8px 0 12px"><${Bar} pct=${s.total ? (100 * s.done) / s.total : 0} label="Setup steps done" /></div>
     ${s.todo.map(t => html`<div class="li"><div class="ic"><${Icon} n="check" /></div><div class="grow"><b>${t.title}</b>
       <div class="small sub">${t.detail}</div></div><button type="button" class="btn small" onClick=${() => openSetup(t.step)}>Set up</button></div>`)}

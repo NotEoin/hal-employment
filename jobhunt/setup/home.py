@@ -40,7 +40,8 @@ def sections(con: sqlite3.Connection) -> dict:
     if left:
         total = len(state.LISTED)
         out["setup"] = {"done": total - len(left), "total": total,
-                        "todo": [{"step": s.id, "title": s.name, "detail": s.home} for s in left]}
+                        "todo": [{"step": s.id, "title": s.name, "detail": s.home, "optional": s.optional}
+                                 for s in left]}
     first = _first_search(con)
     if first:
         out["first_search"] = first

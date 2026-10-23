@@ -139,6 +139,15 @@ class SetupRoutes(unittest.TestCase):
         self.put("/setup/phone", {"state": "done"})
         self.assertIsNone(self.get("/home")["setup"])
 
+    def test_home_marks_which_steps_left_are_optional(self) -> None:
+        # Home said "The rest are optional." while needed steps were still left
+        self.put("/setup/welcome", {"state": "current"})
+        self.put("/setup/welcome", {"state": "done"})
+        self.post("/setup/later")
+        todo = {t["step"]: t["optional"] for t in self.get("/home")["setup"]["todo"]}
+        self.assertFalse(todo["about"])
+        self.assertTrue(todo["email"] and todo["phone"] and todo["updates"])
+
     def test_a_step_that_is_needed_cannot_be_skipped(self) -> None:
         r = self.c.request("PUT", "/api/v2/setup/about", {"state": "skipped"})
         self.assertEqual(r.status, 409)
