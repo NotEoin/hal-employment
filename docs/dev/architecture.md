@@ -223,8 +223,9 @@ processes, once a second. Payloads carry ids, never private data.
 
 ## Engines and note hooks (`browser.py`, `jobhunt/extension.py`, `apply/driver.py`)
 
-- Hal fills forms two ways: in its own Playwright window (`browser.py`), or in the person's browser through
-  the helper (`extension.py` on the server, `extension/` in the browser). Both read the page's `NoteSet` at
+- Hal fills forms two ways: in the person's browser through the helper (`extension.py` on the server,
+  `extension/` in the browser), the default, or in its own Playwright window (`browser.py`), a developer
+  choice on Linux. Both read the page's `NoteSet` at
   the same hook points: `open_url`, `press_first`, `cookie_button` and `field_transform` (`city_only`,
   `digits_only`, `uk_phone`, `date:FORMAT`, `max_len:N`). The helper's hooks run on the server side, so
   `content.js` needs no notes. Each use is recorded with `notes.used`, and its trace line
