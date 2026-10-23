@@ -7,6 +7,7 @@ import logging
 import re
 import traceback
 from datetime import timedelta
+from urllib.parse import quote
 
 from .. import browser, db, documents, tasks
 from ..core import clock, settings
@@ -418,7 +419,8 @@ def _running_for(job_id: str) -> dict | None:
 
 
 def _file_url(path: str | None) -> str | None:
-    return f"/files?path={path}" if path else None
+    """The `/files` address of a stored file, with the path encoded so "+", "#" and "&" survive."""
+    return f"/files?path={quote(path)}" if path else None
 
 
 def form_words(form: dict) -> str:

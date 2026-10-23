@@ -14,7 +14,7 @@ from support.api import HalServer
 from support.world import World, job_id
 
 from jobhunt import browser, db, documents
-from jobhunt.apply import driver
+from jobhunt.apply import driver, queries
 from jobhunt.core import naming, paths, runner
 
 WAIT_S = 10.0
@@ -211,6 +211,16 @@ class Routes(unittest.TestCase):
         found = self.c.get(f"/files?path={quote(str(inside))}")
         self.assertEqual((found.status, found.headers["Content-Type"]), (200, "application/pdf"))
         self.assertEqual(self.c.get(f"/files?path={quote(str(outside))}").status, 404)
+
+    def test_a_file_address_survives_plus_hash_and_ampersand_in_the_path(self):
+        # regression: `_file_url` left the path unencoded, so "+", "#" and "&" cut it short
+        odd = paths.applications_dir() / "made-up-application" / "cv a+b #1 & c.pdf"
+        odd.parent.mkdir(parents=True, exist_ok=True)
+        odd.write_bytes(b"%PDF-1.4 made up")
+        self.addCleanup(odd.unlink)
+        found = self.c.get(queries._file_url(str(odd)))
+        self.assertEqual((found.status, found.headers["Content-Type"]), (200, "application/pdf"))
+        self.assertIsNone(queries._file_url(None))
 
 
 class Providers(unittest.TestCase):
