@@ -210,7 +210,93 @@ Each version has two parts. "What's new" is in plain words and is shown on the U
   employer, not a namesake. Suggestions on My CV and a recruiter's read speak to you; AI wording never says
   "I" or "my", and a job's CV never gains a result your CV does not have.
 
+- What Hal remembers is built. "Waiting for you" lists Hal's suggestions from your choices, each with why,
+  the evidence and what would change; nothing changes until "Yes, do this". "Not now" asks again after a week
+  and "Never suggest this" keeps it from coming back. "Learned" lists what you said yes to, where it came from
+  and when, with a switch and Delete that put back what it changed (unless you changed it yourself since). Each
+  tab shows how many items it holds.
+- Hal suggests a smaller travel distance when you hide four or more jobs as "Too far" in a week, all beyond it
+  (the jobs are the evidence); adding a word to the roles you want when five or more jobs you saved or applied
+  to share it; and locking a CV line you kept twice with "Keep my wording". Hiding the fourth such job says
+  "Hal has a suggestion for you". Hal also looks for patterns each night. Home shows "Hal has N suggestions for
+  you". Settings, Advanced, "Suggestions from your choices" switches this off for jobs, your CV or both.
+- Notes about job sites (What Hal remembers): one card per site with its application system, whether it needs
+  an account, the last visit and its notes. Every note says where it came from ("Built in", "You told Hal",
+  "Hal learned") and how often it worked, and can be switched off, reworded or shared. A note Hal learned
+  waits for "Use this". Notes that disagree are named on the card, and a note that worked and then keeps
+  failing is marked "May be out of date".
+- "Something wrong here?" (on the Form step and on each site's card): say what went wrong in your own words.
+  Hal shows the note it will remember and lets you use it on just this site, every site of the same
+  application system, or everywhere; nothing is used until you save it. When Hal's AI is busy or missing, your
+  words are kept as a note for the site at once. Then: try again with the note, finish it yourself with the
+  documents beside the tab, or skip the job for now. "Share this note" copies "Hal note for <site>: <text>";
+  a note that holds one of your answers is never shared, and no note ever answers a private question.
+- Notes drive both ways of filling forms: opening the application form directly, pressing "Apply" first, the
+  cookie banner's button, and typing an answer the way a site wants it (only the city, only digits, a UK
+  phone number, a date format, a length). Each note used is listed beside the answer it changed.
+- Every answer on the Form step says where it came from: "Why this answer?" names the profile setting, the
+  saved answer and where it may be used, the site note and whose it is, the researched salary, the CV line or
+  record passage an AI answer draws on, or why Hal left it for you. A private answer says only "From your
+  private answers. These are never shown to the AI or saved in logs." The Form step lists "Notes Hal used on
+  this site", once each. A site note can answer a question on that site only; Hal answers in this order:
+  private answers, notes about the site, your saved answers, your profile, your CV and record, then the AI.
+- What Hal remembers, Saved answers: every saved answer with "Where may Hal use this?" (Everywhere, Only on a
+  site, Only for one job, Never reused), how often it was used, and Delete. Answers marked "Choose where to
+  use it" come first and are never used until you pick. Private answers are never listed.
+- Applying: an upload is checked, and a file the site dropped is shown as "the site did not take the file",
+  never as done. The cookie clicker never presses a button inside the application form. Lists that take
+  several answers get every answer. Google Forms are read. Signing in to one employer's Workday or Greenhouse
+  site no longer marks every other employer on that system as signed in.
+- "Open forms in: This window" is ready: the form's tab is brought forward before Hal reads, fills or presses
+  in it, and Hal's checks every few seconds while it watches a form no longer switch tabs.
+- Browser helper: code walls, bot checks and closed adverts are seen the way Hal's window sees them; a form
+  with many slow lists gets longer to fill; reading a form opens only the lists still empty.
+- A new README says what Hal Employment is, how to install it, run it and test it, and where your data
+  lives. Two guides for people using Hal: "Getting started" (setup step by step, a normal day, where things
+  are, What Hal remembers, what to do when something goes wrong) and "Your privacy". SECURITY.md,
+  THIRD_PARTY_NOTICES.md and LICENSE ("private software, licensed to named collaborators for personal use;
+  not for redistribution") are added.
+
 ### Developer notes
+
+Notes about job sites, engine fixes, form answers with their why, learning, and the documentation
+(2026-10-23). How these parts work is in
+[docs/dev/architecture.md](docs/dev/architecture.md) and [docs/dev/site-notes.md](docs/dev/site-notes.md).
+
+- Notes about job sites: `jobhunt/sites/` (`notes.py`, the notes contract with `switch`, `edit`,
+  `accept`, `delete`, `share_text`, `seen` and `because`; `seed.toml`, 25 built-in notes with stable ids;
+  `behaviour.py`, one function per engine hook; `cards.py` for `GET /sites`; `report.py`; `actions.py` with
+  `sites.propose_note` and the data task `sites.import_state`; `routes.py`); prompt `site_note` (priority 0,
+  role checker); `memory/sites-tab.js` and `dialogs/report.js`. A person's choice about a built-in note is a
+  `site_notes` row with `seed_id`, so an update changes the note's action without undoing it.
+- Engines: the hooks `open_url`, `press_first`, `cookie_button` and `field_transform` in `browser.py` and
+  `extension.py`, each use recorded through `notes.used` with a trace line on the field and in
+  `form["notes_used"]`; `browser.site_key` is `notes.site_key`; the upload check (`UPLOAD_FAILED`); practice
+  pages `upload-check`, `upload-kept`, `consent-in-form`, `multiselect`, `gform`, `background-tab`,
+  `popup-later`, `city-only` and `apply-first`. `Browser._run` services Playwright while idle; the page-world
+  submit block counts its holders; `extension.reset()` forgets a helper whose poll was still held open;
+  `tests/test_extension.py` runs on `HelperBrowser`.
+- Answers: `autofill.propose(..., notes=)` and `ask_model(..., notes=)` take the page's `NoteSet`; every
+  field has `why` and `notes_used`; `autofill.by_you()`; `jobhunt/answers/` (`saved.py`, `routes.py`: `GET`,
+  `PUT`, `DELETE /answers`); `app/form-step.js` and `memory/answers-tab.js`.
+- Learning: `jobhunt/learn/` (`patterns`, `items`, `places`, `actions`, `routes`, `home`, `settings`,
+  `undo`, `schedule`); action kind `learn.patterns` (priority 2, no AI); `GET/POST /memory/waiting`,
+  `GET/PUT/DELETE /memory/learned/{id}`; Activity undo type `learned_item`; `pages/memory.js`,
+  `memory/waiting-tab.js`, `memory/learned-tab.js`, `css/memory.css`.
+- Documents and CI: README.md, `docs/README.md` (the index), `docs/user/`, SECURITY.md,
+  THIRD_PARTY_NOTICES.md, LICENSE, the final `docs/dev/architecture.md`, and `tests/test_docs.py` (the index,
+  links, how-to shape, README commands read back from `--help`, notices, pinned CI actions). CI's Linux rows
+  install poppler-utils, the test output goes to `tests.log`, and the Windows job fails unless the PowerShell
+  parse check, the real Edge print and the platform layer's Edge and browser-finding tests each said `ok`.
+- Joining the parts: the two `sites.notes` stand-ins are gone and every note test runs on the real store;
+  the driver passes the form's `NoteSet` to autofill, counts each note answer once and keeps the person's
+  edits as "You typed this."; a list answer stays a list for a multi-select; "This window" of
+  `applying.window` is enabled; the memory tabs export `useCount()`; `learn/schedule.py` runs
+  `learn.patterns` at 03:30 and `learn.enabled` is a watched setting; `POST /jobs/{id}/not-for-me` returns the
+  waiting suggestion's id for a "Too far" reason; the Form step's report carries its job and application
+  system, so "Saved. What now?" offers its three ways out; G5 also runs `test_autofill.WhyThisAnswer` and
+  `test_answers_routes`; the shell smoke's fake server answers `/sites` and `/answers` and names each 404;
+  `HelperBrowser.start_helper` waits for its own helper; `tests/test_docs.py` has no files still to come.
 
 Remote use, the browser helper, the setup guide, job sources, Claude setup, and install and update
 (2026-10-23), with the fixes from two Windows test passes and from a run of the documents on a real model.
