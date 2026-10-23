@@ -10,6 +10,7 @@ from ..web.router import BadRequest, NotHere, Request, route
 from . import actions, queries
 
 PREFIX = "/api/v2/applications"
+TAB_CLOSED = "The form's tab is closed. Press \"Fill it in again\" to open it."
 
 
 def _who(req: Request) -> dict:
@@ -104,14 +105,34 @@ def draft_rest(req: Request) -> dict:
 
 @route("POST", PREFIX + "/{app_id}/form/show")
 def show(req: Request) -> dict:
-    """Show me the form: brings its tab or window to the front on the computer Hal runs on."""
+    """Show me the form: brings its tab to the front, on the computer the person is using."""
     from .. import browser
 
     job_id = _id(req)
     if req.remote:
-        raise NotHere("The form is open on the computer Hal runs on.")
+        return _show_on_this_computer(job_id)
     if not browser.show(job_id):
         raise RuntimeError("The form's tab is closed. Press \"Fill it in again\" to open it.")
+    return {"ok": True}
+
+
+def _show_on_this_computer(job_id: str) -> dict:
+    """The remote branch: Hal's own window is not offered from another computer, so the form is in a tab of
+    the browser helper paired in that computer's browser, and that helper brings it forward."""
+    from .. import extension
+
+    if not extension.connected():
+        raise NotHere("The browser helper in this browser is not connected. Open Hal in the browser that has "
+                      "the helper, then try again.")
+    try:
+        shown = extension.show(job_id)
+    except RuntimeError as e:
+        if "closed" in str(e):
+            raise RuntimeError(TAB_CLOSED) from e
+        raise RuntimeError("The browser helper did not answer. Check the browser on this computer is still "
+                           "open.") from e
+    if not shown:
+        raise RuntimeError(TAB_CLOSED)
     return {"ok": True}
 
 

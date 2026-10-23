@@ -5,6 +5,11 @@ on. Phone alerts go to ntfy.sh only when `notify.phone` is on and a topic is sav
 the topic is read with `interactive=False`, so a locked keyring never prompts from the background.
 Outside urgent alerts, nothing pops up or buzzes during `notify.quiet_hours`. Urgent alerts are also
 spoken by the Hal add-on's `addon.speak_command` when the add-on is on.
+
+Every alert is also published as a `notify` event, so an open window shows it as a toast and, when the
+person allowed it, a browser notification. While a window opened from another computer is showing Hal, the
+desktop pop-up is held back: the person is at the other computer, and a pop-up on the desktop
+would only tell whoever sits there.
 """
 import logging
 import urllib.request
@@ -65,10 +70,24 @@ def _phone(title: str, body: str, url: str | None, urgent: bool) -> None:
         log.warning("the phone alert was not sent: %s", e)
 
 
+def _away() -> bool:
+    """True while a window from another computer is showing Hal, so the desktop pop-up goes there instead."""
+    from .remote import sessions
+
+    try:
+        return sessions.window_open()
+    except OSError as e:
+        log.warning("could not tell whether a window from another computer is open: %s", e)
+        return False
+
+
 def notify(title: str, body: str, url: str | None = None, urgent: bool = False) -> None:
     """Sends a desktop and phone alert as the settings say; urgent alerts are also spoken with the Hal add-on."""
+    from .core import events
+
     held = not urgent and quiet_now()
-    if _get("notify.desktop") and not held:
+    events.publish("notify", title=title, body=body, urgent=urgent)
+    if _get("notify.desktop") and not held and not _away():
         from .core import platform
 
         try:
