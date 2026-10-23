@@ -398,6 +398,13 @@ SOURCE_WHY = {"profile": "From your profile (Settings, You).", "cv": "From your 
               "you": "You typed this."}
 
 
+def _letter_notes(job, docs: dict) -> dict:
+    """The letter's Tone, Evidence and Checked: kept with a letter drafted at form time, else in its pack."""
+    from .. import pack
+
+    return docs.get("letter_notes") or pack.read_letter_notes(job)
+
+
 def application(con, ref: str) -> dict:
     """The application page (GET /applications/{id})."""
     job_id = resolve(con, ref)
@@ -408,6 +415,7 @@ def application(con, ref: str) -> dict:
     step, steps = _steps(con, job_id, col, app, row)
     docs = documents.load(con, r)
     letter = docs.get("letter") or ""
+    notes = _letter_notes(r, docs) if letter else {}
     entry = ACTIONS.get(job_id) or {}
     writing = ([{"text": entry.get("message") or entry.get("name") or "", "state": "running"}]
                if col == "ready" and _busy(job_id) else None)
@@ -426,8 +434,9 @@ def application(con, ref: str) -> dict:
                  "cv": {"changes": _cv_changes(r, docs), "preview_url": _file_url(files.get("cv")),
                         "version_n": None, "look": None,
                         "sent_as": (row["cv_sent_as"] if row is not None else None) or "hal_copy"},
-                 "letter": {"text": letter, "words": len(letter.split()), "tone": None, "evidence": None,
-                            "checked": None, "preview_url": _file_url(files.get("letter"))},
+                 "letter": {"text": letter, "words": len(letter.split()), "tone": notes.get("tone"),
+                            "evidence": notes.get("evidence"), "checked": notes.get("checked"),
+                            "preview_url": _file_url(files.get("letter"))},
                  "answers": [{"q": a.get("question", ""), "a": a.get("answer", "")} for a in docs.get("answers", [])],
                  "message": {"text": docs.get("message") or "", "to": docs.get("message_to") or "", "to_why": ""}},
         "form": None, "sent": None, "interview": None,

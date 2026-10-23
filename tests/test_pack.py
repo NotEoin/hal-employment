@@ -171,6 +171,33 @@ class Letter(unittest.TestCase):
         self.assertEqual(shown["tone"], "Formal (your setting)")
         self.assertEqual(shown["checked"], pack.CHECKED_CLEAN)
 
+    def test_the_application_page_shows_what_the_letter_used_and_what_was_checked(self):
+        # Regression: the page's letter Tone, Evidence and Checked were always empty
+        from jobhunt.apply import queries
+
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad", status="applying")
+            pack.build(a.con, job["id"], use_web=False)
+            letter = queries.application(a.con, job["id"])["docs"]["letter"]
+            shown = pack.read_letter_notes(job)
+        self.assertEqual((letter["tone"], letter["evidence"], letter["checked"]),
+                         (shown["tone"], shown["evidence"], shown["checked"]))
+        self.assertEqual(letter["checked"], pack.CHECKED_CLEAN)
+
+    def test_apply_with_hal_notes_the_record_passages_the_letter_used(self):
+        # Regression: docs.prepare built the pack without its action, so Activity "Used" never named them
+        from jobhunt.apply import actions
+        from jobhunt.core import runner
+
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad")
+            done = runner.wait(actions.start("docs.prepare", job["id"]), 30)
+            runner.flush()
+            row = a.con.execute("SELECT used FROM activity WHERE action_id = ?", (done["id"],)).fetchone()
+        self.assertEqual(done["state"], "done", done.get("error"))
+        self.assertIn({"kind": "record", "label": "Volunteering/guide.md > Role", "ref": ""},
+                      json.loads(row["used"] or "[]"))
+
     def test_your_own_rewritten_answers_shape_the_voice_but_never_a_private_one(self):
         with as_applicant(people.HUMANITIES) as a:
             for label, answer in (("Why do you want to work in heritage?", "Old maps made me curious early on."),

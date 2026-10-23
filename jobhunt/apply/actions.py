@@ -82,7 +82,7 @@ def prepare(ctx, job_id: str, time: str = "") -> dict:
     ctx.step("Reading the advert")
     if not documents.summary(job)["has_pack"]:
         ctx.step("Writing your CV and cover letter for this job")
-        pack.build(ctx.con, job_id)
+        pack.build(ctx.con, job_id, ctx=ctx)   # the record passages the letter used go under Activity "Used"
     ctx.step("Your documents are ready for you to check")
     return {"job_id": job_id}
 
