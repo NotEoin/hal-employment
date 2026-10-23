@@ -8,7 +8,7 @@ from unittest import mock
 from support.api import HalServer
 from support.world import World, job_id
 
-from jobhunt.core import activity, home_routes, plugins, runner
+from jobhunt.core import activity, clock, home_routes, plugins, runner
 from jobhunt.mail import home as mail_home
 
 
@@ -65,6 +65,22 @@ class Home(unittest.TestCase):
         self.assertEqual([r[0] for r in page["goal"]["rows"]][:2], ["Stage", "Looking for"])
         self.assertEqual([p["stage"] for p in page["week"]["pipeline"]],
                          ["Getting ready", "Form filled", "Sent", "Interview", "Offer", "Closed"])
+
+    def test_this_weeks_new_matches_count_only_jobs_matches_and_saved_show(self):
+        # Windows 11 install test (2026-10-23): Home said "255 new matches" while Matches showed none, as the goal
+        # hid every job the first search found
+        from jobhunt import stats
+        from jobhunt.find import routes as find_routes
+
+        self.con.execute("UPDATE jobs SET first_seen = ?", (clock.iso(),))
+        self.con.commit()
+        shown = sum(self.con.execute(f"SELECT count(*) FROM jobs j WHERE {w}", a).fetchone()[0]
+                    for w, a in (find_routes._shown_where("matches"), find_routes._shown_where("saved")))
+        self.assertGreater(shown, 0)
+        self.assertEqual(stats.week(self.con)["matches"], shown)
+        self.con.execute("UPDATE jobs SET hidden_rule = 'place'")
+        self.con.commit()
+        self.assertEqual(stats.week(self.con)["matches"], 0)
 
     def test_activity_shows_the_whole_day_after_a_restart(self):
         for n in range(6):

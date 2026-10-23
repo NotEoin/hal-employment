@@ -86,8 +86,15 @@ def week(con, now: datetime | None = None) -> dict:
                                AND substr(detail, 1, instr(detail || ':', ':') - 1) IN ({marks})
                                AND substr(at, 1, 19) >= ?""", (*statuses, since_utc)).fetchone()[0]
 
-    matches = con.execute("""SELECT count(*) FROM jobs WHERE substr(first_seen, 1, 19) >= ? AND active = 1
-                             AND status IN ('new', 'shortlisted', 'ready')""", (since_utc,)).fetchone()[0]
+    # only jobs that Matches or Saved shows: counting hidden jobs said "255 new matches" beside an empty
+    # Matches tab after the first search (Windows 11 install test)
+    from .find import routes as find_routes
+
+    matches = 0
+    for tab in ("matches", "saved"):
+        where, args = find_routes._shown_where(tab)
+        matches += con.execute(f"SELECT count(*) FROM jobs j WHERE {where} AND substr(j.first_seen, 1, 19) >= ?",
+                               (*args, since_utc)).fetchone()[0]
     # From job statuses, as the board reads them, because applications sent before Hal kept an application
     # row for every job still count.
     stages = Counter(column(r["status"], r["stage"]) for r in con.execute(
