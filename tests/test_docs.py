@@ -1,4 +1,4 @@
-"""The project documents hold their shape: the index, the how-tos, the README, the notices, CI.
+"""The project documents hold their shape: the index, the how-tos, the README, the licence, the notices and CI.
 
 Docs are checked as text, so the checks run the same on Linux and Windows: files are read with universal
 newlines (a Windows checkout has CRLF), and paths are compared as POSIX strings relative to the repo.
@@ -20,6 +20,7 @@ DOCS = ROOT / "docs"
 INDEX = DOCS / "README.md"
 README = ROOT / "README.md"
 CI = ROOT / ".github" / "workflows"
+MAX_PICTURE_BYTES = 250_000   # a README picture loads on every visit to the repository page
 HELP_TIMEOUT_S = 60      # `python -m jobhunt <cmd> --help` imports the command modules; a second or two is usual
 # Root documents every reader may need; the index links each of them too.
 ROOT_DOCS = ("README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "LICENSE")
@@ -183,15 +184,24 @@ class TheReadme(unittest.TestCase):
         self.commands = [line for lang, lines in fenced_blocks(self.body) for line in lines
                          if lang in SHELL_LANGS or lang == ""]
 
-    def test_the_readme_says_what_hal_is_and_how_to_install_run_and_test_it(self):
+    def test_the_readme_says_what_hal_is_and_how_to_install_use_and_develop_it(self):
         headings = [h.lower() for h in re.findall(r"^## (.+)$", self.body, re.M)]
-        for word in ("install", "run", "test", "where your data lives"):
+        for word in ("why it exists", "install", "use", "configuration", "development", "licence"):
             with self.subTest(word):
                 self.assertTrue(any(word in h for h in headings), f"a heading about {word}")
         intro = self.body.split("\n## ", 1)[0]
         self.assertIn("never presses Submit", intro)
         for name in ("install-hal-windows.cmd", "install-hal-linux.sh"):
             self.assertIn(name, self.body)
+
+    def test_every_picture_in_the_readme_is_in_the_repo_and_small(self):
+        pictures = re.findall(r"!\[[^\]]+\]\(([^)\s]+)\)", self.body)
+        self.assertTrue(pictures)
+        for rel in pictures:
+            with self.subTest(rel):
+                path = ROOT / rel
+                self.assertTrue(path.is_file())
+                self.assertLessEqual(path.stat().st_size, MAX_PICTURE_BYTES)
 
     def test_the_readme_commands_match_the_scripts(self):
         named = set()
