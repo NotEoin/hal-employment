@@ -9,7 +9,7 @@
 - The name and contact block are never part of the CV body: they come from the profile (`you.*`), so a new
   phone number reaches every document at once. `contact_snapshot` only keeps what an upload or import said.
 - `to_v1` and `from_v1` translate to and from today's `cv.json` shape, for the callers not converted yet
-  (pack, cvpdf, cvscore) and for the "website cv.json" export. Fields of `cv.json` that schema 2
+  (pack, cvpdf) and for the "website cv.json" export. Fields of `cv.json` that schema 2
   has no place for are kept in `extras`, so nothing is lost on the way through.
 """
 from __future__ import annotations

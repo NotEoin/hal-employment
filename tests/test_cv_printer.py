@@ -18,11 +18,11 @@ from pathlib import Path
 from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
-from support import people
+from support import people, scanner
 from support.ui import browser_tests_on
 from test_cv_render import ACCENTED, made_up_cv, profile_of, type_for
 
-from jobhunt import cvpdf, cvscore, db
+from jobhunt import cvpdf, db
 from jobhunt.core.platform import found
 from jobhunt.core.platform.windows import CREATE_NO_WINDOW, WindowsPlatform
 from jobhunt.cvstudio import export, model, pdfread, printer, render
@@ -224,7 +224,7 @@ class RealPrinting(unittest.TestCase):
 
 
     def test_the_scanner_reads_each_safe_look_as_it_did_when_recorded(self):
-        """Gate for the looks: today's parsing checks of cvscore on three people x three safe looks.
+        """Gate for the looks: the reference parsing checks (`support.scanner`) on three people x three safe looks.
 
         `HAL_RECORD_SCANNER=1` rewrites the goldens, only in a commit meant to change a look.
         """
@@ -235,8 +235,8 @@ class RealPrinting(unittest.TestCase):
                 with self.subTest(person=person.key, look=look):
                     out = Path(tempfile.mkdtemp()) / "cv.pdf"
                     export.cv_pdf(doc, type_for(person.key), look, profile, out)
-                    checks = cvscore.parsing(model.to_v1(doc, profile), out)
-                    got = {"group": round(cvscore._group_score(checks), 3),
+                    checks = scanner.parsing(model.to_v1(doc, profile), out)
+                    got = {"group": round(scanner.group_score(checks), 3),
                            "checks": {c["name"]: round(c["score"], 3) for c in checks}}
                     golden = GOLDENS / f"{person.key}-{look}.json"
                     if record:

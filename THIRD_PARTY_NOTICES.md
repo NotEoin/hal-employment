@@ -33,7 +33,6 @@ Installed by `uv sync` from `uv.lock`; each package ships its own licence file.
 | --- | --- | --- | --- |
 | keyring | 25.7.0 | MIT | Keeps passwords and keys in Windows Credential Manager or the desktop keyring |
 | pypdfium2 (with PDFium) | 5.14.0 | Apache-2.0 and BSD-3-Clause (PDFium: BSD-3-Clause and its own third-party notices) | Reads PDF text and draws page pictures |
-| pyspellchecker | 0.9.1 | MIT | Spelling checks on CVs, on both systems |
 | segno | 1.6.6 | BSD-3-Clause | The QR code for phone alerts |
 | truststore (Windows only) | 0.10.5 | MIT | Trusts the same web certificates Windows trusts, so job sites load on a new Windows |
 | playwright (extra `browser`) | 1.63.0 | Apache-2.0 | Hal's own browser window on Linux, printing on Linux, browser tests |

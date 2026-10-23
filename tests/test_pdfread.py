@@ -153,18 +153,16 @@ class Reading(unittest.TestCase):
 
 class Checks(unittest.TestCase):
     def test_cv_checks_need_no_poppler(self):
-        """The CV checks read the PDF themselves: with no poppler on the path the mark is unchanged."""
+        """The CV checks read the PDF themselves: with no poppler on the path they read the same text and pages."""
         pdf = draw(self, made_up_cvs()[0])
-        with_path = cvscore.score(made_up_cvs()[0], pdf)
+        with_path = (cvscore.pdf_text(pdf), cvscore.pdf_text(pdf, layout=True), cvscore.pdf_pages(pdf))
         empty = tempfile.mkdtemp()
         from unittest import mock
         with mock.patch.dict("os.environ", {"PATH": empty}), \
-                mock.patch.object(cvscore.subprocess, "run", side_effect=FileNotFoundError("no programs")):
-            without = cvscore.score(made_up_cvs()[0], pdf)
-        self.assertEqual(without["groups"][0], with_path["groups"][0])     # parsing reads the same text
-        self.assertGreater(without["mark"], 50)
-        readable = next(c for c in without["groups"][0]["checks"] if c["name"] == "Text can be read back")
-        self.assertEqual(readable["score"], 1.0)
+                mock.patch.object(subprocess, "run", side_effect=FileNotFoundError("no programs")):
+            without = (cvscore.pdf_text(pdf), cvscore.pdf_text(pdf, layout=True), cvscore.pdf_pages(pdf))
+        self.assertEqual(without, with_path)
+        self.assertGreater(len(without[0].split()), 30)   # a real text layer, not an empty read
 
 
 if __name__ == "__main__":

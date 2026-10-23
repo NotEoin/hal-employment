@@ -483,7 +483,7 @@ class _Run:
         (data / "jobs.db").chmod(0o600)
         self.copied: dict[Path, Path] = {}
         handled = {"jobs.db", "jobs.db-wal", "jobs.db-shm", "private.toml", "browser-profile", "apply",
-                   "signed-in.json", "cv-words.txt"}
+                   "signed-in.json"}
         private = self.old / "private.toml"
         if private.is_file():
             shutil.copyfile(private, data / "private.toml")
@@ -496,7 +496,6 @@ class _Run:
                                 ignore=shutil.ignore_patterns(*SKIPPED_PROFILE_FILES))
                 self.copied[self.old / name] = data / name
         self._file(self.old / "signed-in.json", data / "signed-in.json")
-        self._file(self.old / "cv-words.txt", data / "cv" / "words.txt")
         cv_import = data / "import" / "cv"
         for entry in sorted(self.old.iterdir()):
             if entry.name in handled:

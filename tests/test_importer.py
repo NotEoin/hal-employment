@@ -174,10 +174,9 @@ class Copying(ImportCase):
         self.assertEqual(importer._files(self.target / "legacy-packs"), packs)
         self.assertTrue((self.target / "apply" / "form-1.png").is_file())
         self.assertTrue((self.target / "signed-in.json").is_file())
-        self.assertEqual((self.target / "cv" / "words.txt").read_text(), "pandas\nnumpy\n")
         cv = self.target / "import" / "cv"
         for name in ("cv-overrides.json", "cv-overrides.before-20261001T090000Z.json", "cv-built.json",
-                     "cv-built-overrides.json", "cv-review.json", "cv-origin", "site-cv.json"):
+                     "cv-built-overrides.json", "cv-review.json", "cv-origin", "site-cv.json", "cv-words.txt"):
             self.assertTrue((cv / name).is_file(), name)
         self.assertTrue((cv / "cv-sources" / "projects.txt").is_file())
         for name in ("boards.toml", "companies.txt", "owner-prefs.toml", "report.json"):
