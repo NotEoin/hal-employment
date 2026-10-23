@@ -1,6 +1,19 @@
-# Architecture of the core runtime
+# Architecture
 
-How the new server and its shared contracts fit together, for anyone adding an area or changing the core.
+How Hal Employment's server, its shared contracts and each area fit together, for anyone adding an area or
+changing the core. How to run the tests is in
+[testing.md](testing.md); how Hal reaches people and updates itself is in
+[release-and-update.md](release-and-update.md).
+
+## The shape in one paragraph
+
+`python -m jobhunt` is the one entry point: the command line (`jobhunt/cli/`, every old command unchanged)
+and the server (`serve`). The server is the standard library's HTTP server on `127.0.0.1`, serving the app
+(`web/static/app/`, Preact without a build step), the API (`/api/v2/*`, routes found by name in each area)
+and Classic (`/classic/`, the old screens). Slow work runs as persisted actions with an Activity row each;
+the schedule starts them in-process. Data lives in the folders of `core/paths.py`, never in the code
+folder. Each area is a subpackage (`find/`, `apply/`, `cvstudio/`, `docs/`, `setup/`, `remote/`, `ai/` and
+so on) that plugs in through module names (Discovery, below), so adding an area edits no core file.
 
 ## Folders (`jobhunt/core/paths.py`)
 
@@ -336,6 +349,104 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   process for 30 minutes under `detected_id`. Saving a site is undone through `find/source_undo.py`.
 - Job alert emails from the senders in `find/seed/alert_senders.toml` (or `email.alert_senders`) go through
   one generic parser in `gmail.py`: each linked job becomes a lead.
+
+## Schedule (`core/scheduler.py`)
+
+- Jobs come from `schedule.py` or `*_schedule.py` modules that define `JOBS`. A thread wakes every
+  `TICK_S`; `tick()` starts each due job as a persisted action of its kind, so every run has steps, Stop and
+  an Activity row. A command-line job runs as a hidden child (`python -X utf8 -m jobhunt <args>`, one-hour
+  limit), each printed line a step.
+- The next run of each job is stored in `schedule_state`, so a slot missed while the computer was off runs
+  once at start (`schedule.catch_up`). Each tick compares the settings its plan was made from, so new times
+  apply without a restart, including a change made by another process.
+- A job whose old `jobhunt-*` systemd timer is still enabled never runs in-process (no double running). Pause
+  is the `meta` row `schedule:paused`, read the same by every process.
+
+## Platform (`core/platform/`)
+
+`platform.current()` is everything Hal asks of the computer: opening files and windows, pop-ups, start at
+login, finding browsers, hidden or detached children, retiring the old timers. No other module tests
+`os.name`. `linux.py` and `windows.py` take their outside world (command runner, registry reader, file
+checks, home) as constructor arguments, so tests drive the real code with fakes. The app window and PDF
+printing never depend on the person's browser: Microsoft Edge on Windows; on Linux the first Chromium-family
+browser (never a snap or flatpak one for printing), else a tab.
+
+## Health, Home and search providers
+
+An area adds lines to "Is Hal working?" with `CHECKS` in a `health.py` or `*_health.py` module, needs to
+Home in `home.py` or `*_home.py`, and results to Ctrl K in `search.py`. `core/health.run_all` turns a
+check that raises into a "bad" row naming it, so one broken area never hides the others.
+
+## Setup guide (`jobhunt/setup/`, `static/app/setup/`)
+
+`setup/state.py` keeps one `setup_steps` row per step reached (`todo`, `done`, `skipped`) and the guide's
+place in the row `guide`. It never reads or writes a setting, so going through a step again cannot reset a
+value changed in Settings; the steps save their own fields through the settings store. `state.done()` is
+what `/session` and `/open` ask before opening the guide by itself. The frame loads each step from
+`static/app/setup/steps/<id>.js` (default export `Step`), so an area adds or changes its step without
+touching the frame. Only Email, Phone alerts and Updates can be skipped.
+
+## Claude Code (`ai/claude_setup.py`)
+
+Install runs Anthropic's own per-user script with no window and no admin rights (PATH in
+`HKCU\Environment` on Windows). Sign-in is `claude auth login` in a small window; Hal reads only `claude
+auth status` (JSON, kept 60 s) and never sees a password or token. In a test run the real installer never
+runs: tests use `tests/support/fake_claude/`.
+
+## Install and updates (`cli/install.py`, `core/updates.py`, `scripts/updater.py`)
+
+The install files clone Hal's files, run `uv sync`, then `jobhunt install --windows|--linux`, which makes
+the shortcuts, the start-at-login entry and the install record; `install --dev` is a developer's checkout.
+Updates are `git pull --ff-only` with commit-signature checks, `uv sync`, migrations (with a backup) and a
+restart, run by `scripts/updater.py` under uv's own Python so `.venv` can be replaced while it runs.
+`core/updates.py` uses the standard library and `core.paths` only, and reaches git, uv and the server through
+one `World` object, so tests run the real steps against local bare repositories. The details, signing
+included, are in [release-and-update.md](release-and-update.md).
+
+## Using Hal from another computer (`jobhunt/remote/`)
+
+The laptop runs a launcher (`scripts/remote/hal-remote.sh` or `.cmd`, filled in by `remote/launcher.py`)
+that opens an SSH tunnel and asks the desktop, over SSH, for a one-time link (`jobhunt open-url --remote`).
+The server still listens only on the desktop's `127.0.0.1`; the session's `remote` flag is the only sign of
+a remote window, because tunnel traffic looks local. `local_only=True` routes answer 409 `remote` there,
+and `core/remote.js` turns desktop-only buttons into downloads. `remote/service.ensure_running` uses a
+server that answers, else the platform's unit (read back with `is-active`), else a transient unit of its
+own. `remote/sessions.py` writes `state/remote-window.json` with an expiry while a remote window is open,
+so every process holds back desktop pop-ups.
+
+## Browser helper (`apply/helpers.py`, `jobhunt/extension.py`, `extension/`)
+
+- A helper is paired once: a signed-in window asks for a one-time code (two minutes, single use), the helper
+  swaps it for its own key, and only SHA-256 hashes are stored. Every helper request carries `X-Hal-Key`
+  and, when the browser sends one, an `Origin` of an allowed extension id; the checks plug into `web.auth`
+  through `auth.register_verifier`.
+- Each application goes to one helper: the one holding its tab, else the one paired in the browser of the
+  window that started it, else the most recently seen helper of the same kind. Queues are per helper.
+- Browsers load the helper unpacked from a visible copy (`paths.helper_dir()`, refreshed at every start by
+  `apply/helper_mirror.py`), because snap and flatpak browsers cannot read hidden folders and Windows hides
+  AppData in its folder picker.
+
+## Privacy and help files (`core/privacy_routes.py`, `core/helpfile.py`)
+
+"Privacy and data" builds its rows from `GET /privacy`. Export everything (`privacy.export`) leaves out
+`private.toml`, the config folder, the browser profile, form pictures and logs by folder, and drops any
+file holding a saved secret or, through the AI guard, a private answer. Delete everything never touches
+the code folder or the record folder. The help file passes every line through `helpfile.scrub()` (names,
+contacts and saved answers replaced, lines holding a private answer dropped) and is shown before it is
+saved.
+
+## Importers (`core/importer.py`, `core/importer_usb.py`)
+
+`jobhunt import` moves the owner's old in-checkout data into the data folder: it builds a staging home
+beside the target through `paths.set_override`, migrates it with the normal code, and appears only at the
+seal, by one rename. `--from-usb-install` copies a USB stick install the same way and only renames
+the old folder at the end. Both copy, never move, and write counts and hashes, never content, to the report.
+
+## Hal add-on (`jobhunt/addons/hal/`)
+
+What Hal Employment does only for someone running the Hal tools, all behind `addon.enabled`: the Pipeline
+note, application note copies, spoken alerts, the Hal tools' model choices, the `hal off` pause and the
+`/jobs` command. Nothing in the Hal tools is edited from here.
 
 ## Names (`core/naming.py`)
 
