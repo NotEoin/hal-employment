@@ -2,7 +2,8 @@
 
 Each person is a set of `you.*` and `goal.*` settings plus a LEAKS list: words that belong to
 other kinds of career and must never appear in this person's prompts. `as_person(p)` saves the settings in
-the current temporary home for the length of a block. Every name, place of study, employer and address
+the current temporary home for the length of a block, and `cv_type(key)` gives Hal's copy of the CV that
+CV type (each person's `key` is the id of their built-in type). Every name, place of study, employer and address
 here is invented; the email addresses use the reserved `example.org` domain.
 """
 from __future__ import annotations
@@ -73,3 +74,16 @@ def as_person(person: Person) -> Iterator[Person]:
     finally:
         for key in keys:
             settings.reset(key, by="setup")
+
+
+@contextlib.contextmanager
+def cv_type(type_id: str) -> Iterator[str]:
+    """Hal's copy of the CV uses CV type `type_id` for the length of the block, through the real CV store."""
+    from jobhunt.cvstudio import store
+
+    before = store.doc()["type_id"]
+    store.set_type(type_id)
+    try:
+        yield type_id
+    finally:
+        store.set_type(before)

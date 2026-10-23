@@ -12,11 +12,11 @@ from unittest import mock
 from urllib.parse import quote
 
 from support import people
-from support.stubs import cv_types
 from test_pack import POLL_S, WAIT_S, add_job, as_applicant, section
 
 from jobhunt import browser, contacts, documents, pack
 from jobhunt.core import runner
+from jobhunt.cvstudio import types as cvtypes
 
 
 def profile(name: str, role: str, company: str) -> dict:
@@ -29,7 +29,7 @@ def profile(name: str, role: str, company: str) -> dict:
 class HiringTitles(unittest.TestCase):
     def test_the_hiring_manager_message_goes_to_a_title_the_type_names(self):
         for person in people.PEOPLE:
-            titles = cv_types.TYPES[person.key].documents["hiring_titles"]
+            titles = cvtypes.load(person.key).documents["hiring_titles"]
             with self.subTest(person=person.key), as_applicant(person) as a:
                 job = add_job(a.con, person.key)
                 md = pack.build(a.con, job["id"], use_web=False).read_text()

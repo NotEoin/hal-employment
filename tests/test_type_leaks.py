@@ -14,11 +14,11 @@ import unittest
 from unittest import mock
 
 from support import people
-from support.stubs import cv_types
 from test_pack import FakeWriter, add_job, as_applicant
 
 from jobhunt import contacts, documents, gpu, pack, prep
 from jobhunt.ai import prompts
+from jobhunt.cvstudio import types as cvtypes
 
 PRONOUN = re.compile(r"\b(he|him|his)\b", re.I)
 DOCUMENT_PROMPTS = ("analyse", "brief", "fit", "letter", "message", "answers", "verify", "prep", "contacts_pick")
@@ -61,7 +61,7 @@ class NoLeaks(unittest.TestCase):
 
     def test_every_document_prompt_reads_the_persons_own_cv_type(self):
         for person in people.PEOPLE:
-            kind = cv_types.TYPES[person.key]
+            kind = cvtypes.load(person.key)
             with as_applicant(person):
                 values = pack.person()
                 texts = {pid: prompts.text(pid, **values) for pid in DOCUMENT_PROMPTS}

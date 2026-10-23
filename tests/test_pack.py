@@ -1,10 +1,10 @@
 """Application packs shaped by the CV type: the letter, its checks, the checklist, the requests.
 
 Each test runs in the made-up world as one of the made-up people of `support.people`, with their CV type
-(`support.stubs.cv_types`), and a recording fake AI that answers each document prompt the way a model would
-be asked to. The fake's letter repeats what the prompt told it to mention, so a test can follow the CV
-type from the settings to the finished letter. The helpers here are shared by `test_type_leaks.py`,
-`test_prep.py` and `test_contacts.py`.
+(`support.people.cv_type`, through the real CV store), and a recording fake AI that answers each document
+prompt the way a model would be asked to. The fake's letter repeats what the prompt told it to mention, so
+a test can follow the CV type from the settings to the finished letter. The helpers here are shared by
+`test_type_leaks.py`, `test_prep.py` and `test_contacts.py`.
 """
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ from unittest import mock
 from urllib.parse import quote
 
 from support import people
-from support.stubs import cv_types
 from support.world import World
 
 from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
@@ -132,7 +131,7 @@ def add_job(con, key: str, *, status: str = "shortlisted", eligibility: dict | N
 def as_applicant(person: people.Person, writer: FakeWriter | None = None) -> Iterator[SimpleNamespace]:
     """A made-up world where `person`, with their CV type and their own made-up CV, has the fake writer."""
     writer = writer or FakeWriter()
-    with World() as w, people.as_person(person), cv_types.using(person.key), contextlib.ExitStack() as stack:
+    with World() as w, people.as_person(person), people.cv_type(person.key), contextlib.ExitStack() as stack:
         for p in (mock.patch.object(llm, "chat", writer.chat), mock.patch.object(llm, "chat_json", writer.chat_json),
                   mock.patch.object(cv, "facts_text", lambda: FACTS[person.key]),
                   mock.patch.object(record, "context", lambda queries, per_query=3, limit=6000: RECORD)):
