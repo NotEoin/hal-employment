@@ -70,8 +70,15 @@ class AppPage:
         self.page.set_default_timeout(LOAD_TIMEOUT_MS)
         self.base_url = base_url
         self.errors: list[str] = []
-        self.page.on("console", lambda m: m.type == "error" and self.errors.append(console_line(m)))
-        self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        self.failed: list[str] = []   # requests that got no answer at all, with the browser's reason
+        self.page.on("requestfailed", lambda r: self.failed.append(f"{r.url}: {r.failure}"))
+        self.page.on("console", lambda m: m.type == "error" and self.errors.append(self._named(console_line(m))))
+        self.page.on("pageerror", lambda e: self.errors.append(self._named(str(e))))
+
+    def _named(self, line: str) -> str:
+        """`line`, then the browser's reason for any failed request it mentions (a module that never came)."""
+        why = [f for f in self.failed if f.split(": ", 1)[0] in line]
+        return f"{line} [{'; '.join(why)}]" if why else line
 
     def open(self, route: str = "") -> AppPage:
         """Loads the app afresh at `#route` and waits until the shell or the no-session screen is drawn."""
@@ -91,8 +98,14 @@ class AppPage:
         Waits use selectors, never wait_for_function: its polling evaluates strings, which the app's
         Content-Security-Policy rightly refuses.
         """
-        self.page.wait_for_selector("#main .loading", state="detached")
-        self.page.wait_for_selector("#main h1, .setup", state="visible")
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
+        try:
+            self.page.wait_for_selector("#main .loading", state="detached")
+            self.page.wait_for_selector("#main h1, .setup", state="visible")
+        except PlaywrightTimeout as e:
+            raise AssertionError(f"the page never drew; errors: {self.errors}; requests with no answer: "
+                                 f"{self.failed}") from e
 
     def sideways(self) -> int:
         """How many pixels the page scrolls sideways (0 is right)."""
