@@ -11,7 +11,8 @@ raises `RealDataInTests`, so a test that forgets its temporary home fails instea
 
 The worktree guard: a linked git worktree (`.git` is a file) is a second working copy of the code, so with no
 override it refuses folders under the account's real home and raises `RealDataFromWorktree`, test mode or
-not. A server started in a worktree once created the real data folder that way (2026-10-22).
+not. A server started in a worktree once created the real data folder that way (2026-10-22). Linux and
+macOS only, because worktrees are used there.
 """
 from __future__ import annotations
 

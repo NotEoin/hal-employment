@@ -105,6 +105,7 @@ class Guard(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.strip(), paths.APP_DIR)
 
+    @unittest.skipIf(os.name == "nt", "the worktree guard is for Linux and macOS")
     def test_a_build_worktree_never_reaches_the_real_folders(self):
         # a server started in a worktree without a temporary home created the real data folder (2026-10-22)
         account = temp_dir(self)
