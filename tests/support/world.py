@@ -2,8 +2,11 @@
 
 `World` points every legacy module at its own folder for as long as it is open: the database, config, inbox,
 vaults, packs and private answers. The owner's data, his private answers file and the network are never
-reached, so command-line goldens and integration tests can run anywhere. Timestamps are set relative to the
-moment the world opens, because the commands filter on "the last day" and "ten days without a reply".
+reached, so command-line goldens and integration tests can run anywhere: company research finds nothing
+here, and `support.offline` refuses anything else that would leave the computer.
+
+Timestamps are set relative to the moment the world opens, because the commands filter on "the last day"
+and "ten days without a reply".
 
 Everything here is invented: the person, the employers and the email addresses. Place names are real UK
 cities so that scoring by place has something to read.
@@ -21,7 +24,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from jobhunt import config, cv, db, gmail, llm, pack, record, replenish, reputation, tasks, vault
+from jobhunt import config, cv, db, gmail, llm, pack, record, replenish, reputation, research, tasks, vault
 
 PERSON = {
     "first_name": "Robin", "last_name": "Testwell", "full_name": "Robin Testwell",
@@ -276,6 +279,7 @@ class World:
             mock.patch.object(cv, "render", self._render_cv),
             mock.patch.object(record, "context", lambda queries, per_query=3, limit=6000: ""),
             mock.patch.object(reputation, "check", lambda company: ([], "")),
+            mock.patch.object(research, "company_pages", lambda company, max_pages=2: []),
         ]
         if self.imap:
             patches.append(mock.patch.object(gmail, "connect", lambda: FakeImap(inbox_messages(self.now))))
