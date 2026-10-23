@@ -1,0 +1,73 @@
+# Prints the made-up people's CVs on Linux (Playwright's Chromium) and Windows (Microsoft Edge) and compares
+# the words and page counts. Non-blocking until it has been stable for a week: a difference is
+# reported in the job summary, and the workflow never fails a push.
+name: print-compare
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  print:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, extras: "--extra browser --extra documents" }
+          - { os: windows-2025, extras: "--extra browser" }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+      - run: uv sync --frozen ${{ matrix.extras }} --python 3.13
+      - if: runner.os == 'Linux'
+        run: uv run python -m playwright install --with-deps chromium
+      - name: Print the made-up CVs
+        shell: bash
+        env: { HAL_TEST_MODE: "1", PYTHONIOENCODING: "utf-8" }
+        run: |
+          export HAL_EMPLOYMENT_HOME="$RUNNER_TEMP/old-home"
+          uv run python - <<'PY'
+          import json, sys, tempfile
+          from pathlib import Path
+          sys.path.insert(0, "tests")
+          import support  # noqa: F401 - the temporary home first
+          try:
+              from support.stubs import cv_contracts
+              cv_contracts.install()
+          except ImportError:
+              pass  # the real CV store and types are there
+          from support import people
+          from test_cv_render import made_up_cv, profile_of, type_for
+          from jobhunt.cvstudio import export, pdfread, render
+          out = {}
+          for person in people.PEOPLE:
+              for look in render.looks():
+                  pdf = Path(tempfile.mkdtemp()) / "cv.pdf"
+                  done = export.cv_pdf(made_up_cv(person.key), type_for(person.key), look.id, profile_of(person), pdf)
+                  out[f"{person.key}-{look.id}"] = {"how": done["how"], "pages": done["pages"],
+                                                    "words": pdfread.text(pdf).split()}
+          Path("printed.json").write_text(json.dumps(out, indent=1, sort_keys=True), encoding="ascii")
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with: { name: "printed-${{ runner.os }}", path: printed.json }
+  compare:
+    needs: print
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+      - name: Compare words and page counts
+        run: |
+          python3 - <<'PY'
+          import json, os
+          a = json.load(open("printed-Linux/printed.json"))
+          b = json.load(open("printed-Windows/printed.json"))
+          lines = ["| CV and look | Linux | Windows | Same words |", "| --- | --- | --- | --- |"]
+          for key in sorted(a):
+              x, y = a[key], b.get(key, {})
+              lines.append(f"| {key} | {x['how']}, {x['pages']} p | {y.get('how')}, {y.get('pages')} p | "
+                           f"{'yes' if x['words'] == y.get('words') else 'no'} |")
+          open(os.environ["GITHUB_STEP_SUMMARY"], "a").write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
