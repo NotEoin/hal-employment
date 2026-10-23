@@ -1,8 +1,8 @@
 """My CV routes for looks, previews, PDFs and exports.
 
-The preview page is sent as the exact bytes the printer prints (with highlights only when asked for), and
-without the server's default page policy, because that policy blocks fonts: the page carries its own
-Content-Security-Policy instead (`render.POLICY`). Its fonts are served under the preview's own address,
+The preview page is sent as the exact bytes the printer prints (with highlights only when asked for), with
+the page's own Content-Security-Policy (`render.POLICY`) as the header as well as in its meta tag, because
+the server's default page policy blocks fonts. Its fonts are served under the preview's own address,
 so the page's relative `fonts/<file>` links work in the iframe as they do in the printer's folder.
 
 The PDF and export routes print in the request thread: a CV prints in about a second, and the result is
@@ -13,12 +13,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from jobhunt.web.router import BadRequest, BytesResponse, FileResponse, NotFound, Request, route
+from jobhunt.web.router import BadRequest, BytesResponse, FileResponse, HtmlResponse, NotFound, Request, route
 
 from . import export, render
 
 log = logging.getLogger(__name__)
-HTML_MIME = "text/html; charset=utf-8"
 CURRENT = "current"           # a version id that means Hal's copy as it is now
 
 
@@ -98,12 +97,12 @@ def choose_look(req: Request) -> dict:
 
 
 @route("GET", "/api/v2/cv/versions/{version_id}/preview.html")
-def preview(req: Request) -> BytesResponse:
+def preview(req: Request) -> HtmlResponse:
     """The page the preview iframe shows and the printer prints; `hl` lists the ids to highlight."""
     doc, type_, look_id, layout = _parts(req, req.params["version_id"])
     hl = [x for x in (req.query.get("hl") or "").split(",") if x]
     page = render.render_cv_html(doc, type_, look_id, render.profile_from_settings(), highlight=hl, layout=layout)
-    return BytesResponse(page.encode("utf-8"), "preview.html", HTML_MIME)
+    return HtmlResponse(page, policy=render.POLICY)
 
 
 @route("GET", "/api/v2/cv/versions/{version_id}/fonts/{name}")

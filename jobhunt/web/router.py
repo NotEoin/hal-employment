@@ -123,10 +123,11 @@ class BytesResponse:
 
 @dataclass
 class HtmlResponse:
-    """A small HTML page."""
+    """A small HTML page; `policy` replaces the default Content-Security-Policy, which blocks fonts and images."""
 
     text: str
     status: int = 200
+    policy: str | None = None
 
 
 @dataclass

@@ -211,6 +211,7 @@ class PreviewRoute(unittest.TestCase):
             reply = client.get(f"/api/v2/cv/versions/{version}/preview.html?look=modern")
             self.assertEqual(reply.status, 200)
             self.assertIn("Content-Security-Policy", reply.text)    # the page's own policy, in a meta tag
+            self.assertEqual(reply.headers["Content-Security-Policy"], render.POLICY)   # and as the header
             font = client.get(f"/api/v2/cv/versions/{version}/fonts/{render.font_files()[0].name}")
             self.assertEqual((font.status, font.headers["Content-Type"]), (200, "font/woff2"))
 

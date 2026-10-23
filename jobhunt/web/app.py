@@ -153,7 +153,7 @@ class AppHandler(server.Handler):
                 self.send_header("Set-Cookie", c)
             return self.end_headers()
         if isinstance(result, router.HtmlResponse):
-            return self.send_html(result.text, result.status)
+            return self.send_html(result.text, result.status, policy=result.policy)
         if isinstance(result, router.Stream):
             return result.writer(self)
         if isinstance(result, (router.FileResponse, router.BytesResponse)):
