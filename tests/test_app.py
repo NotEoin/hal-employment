@@ -8,6 +8,7 @@ import contextlib
 import http.client
 import io
 import logging
+import socket
 import tempfile
 import threading
 import time
@@ -23,6 +24,8 @@ from jobhunt.web.router import Request, route
 GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 WAIT_S = 10       # every wait here ends in well under a second; this bounds a broken server
 HOLD_S = 0.3      # how long the slow route keeps its request in flight
+BURST = 24        # about what a page opens at once: its modules, styles, data and event stream
+CONNECT_S = 2     # a connection the backlog has room for is made at once
 ENTERED, RELEASE = threading.Event(), threading.Event()
 
 
@@ -105,6 +108,18 @@ class Serving(unittest.TestCase):
             out.append(con.getresponse().status)
         finally:
             con.close()
+
+    def test_a_burst_of_connections_waits_its_turn(self):
+        # regression: with socketserver's backlog of 5, Windows refused part of a page's first burst of requests
+        self.httpd.shutdown()          # nothing accepts, so every connection waits in the backlog
+        socks = []
+        try:
+            for _ in range(BURST):
+                socks.append(socket.create_connection((app.BIND, self.port), timeout=CONNECT_S))
+        finally:
+            for s in socks:
+                s.close()
+        self.assertEqual(len(socks), BURST)
 
     def test_stop_waits_for_the_requests_in_flight(self):
         # regression: a request thread still held the database when a test removed its home on Windows

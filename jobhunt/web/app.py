@@ -44,6 +44,7 @@ HELPER_PATHS = ("/api/v2/helpers/", "/api/ext/")   # where a browser extension's
 LEGACY_PREFIXES = ("/api/", "/doc/")
 LEGACY_PATHS = ("/files", "/pages")
 HEALTH_TIMEOUT_S = 2
+LISTEN_BACKLOG = 64        # waiting connections; see AppServer
 STOP_WAIT_S = 10           # an event stream ends within its wake-up time; other replies are quicker still
 GIT_TIMEOUT_S = 5
 LOG_BYTES = 2 * 1024 * 1024        # 5 files of 2 MB
@@ -325,6 +326,9 @@ class AppServer(ThreadingHTTPServer):
     """The HTTP server, on `BIND` only, one thread per request."""
 
     daemon_threads = True
+    # socketserver's default backlog is 5; a page opening its modules, styles and event stream at once can
+    # need more, and Windows refuses the extra connections outright (Chromium: ERR_CONNECTION_REFUSED)
+    request_queue_size = LISTEN_BACKLOG
 
     def __init__(self, port: int) -> None:
         super().__init__((BIND, port), AppHandler)
