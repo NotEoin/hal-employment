@@ -30,6 +30,7 @@ HAL_COMMAND = "hal-employment"                 # Hal's own command on the owner'
 ECOSYSTEM = "hal-ecosystem"
 DESKTOP_FILE = "hal-employment.desktop"
 UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\HalEmployment"
+ICON_FILE = "hal-employment.ico"               # in tools/, beside the clone, so the clone stays unchanged
 REMOVE_DELAY_S = 3                             # the app folder goes once this process has ended
 KEEP_DATA = "Keep your data? [Y/n] "
 
@@ -116,20 +117,26 @@ class Installer:
 
     def windows(self, extras: list[str]) -> None:
         """Start menu and desktop shortcuts, Update Hal, the Startup entry, the uninstall entry, the record."""
+        from ..core.platform import icon as hal_icon
+
         plat = self.platform
         scripts = self.code / ".venv" / "Scripts"
         pythonw = str(scripts / "pythonw.exe")
+        # without an icon the shortcuts show pythonw.exe's Python logo (Windows 11 install test)
+        ico = str(hal_icon.write_ico(self.tools / ICON_FILE))
         for folder in ("start_menu", "desktop"):
             plat.make_shortcut(plat.special_folder(folder) / "Hal Employment.lnk", pythonw, "-m jobhunt open",
-                               workdir=str(self.code), description="Find jobs and prepare applications")
+                               workdir=str(self.code), description="Find jobs and prepare applications",
+                               icon=f"{ico},0")
         plat.make_shortcut(plat.special_folder("start_menu") / "Update Hal Employment.lnk",
                            str(self.code / "scripts" / "update-hal.cmd"), workdir=str(self.code),
-                           description="Update Hal Employment")
+                           description="Update Hal Employment", icon=f"{ico},0")
         self.say(plat.start_at_login(True))
         python = str(scripts / "python.exe")
         self._reg_write(UNINSTALL_KEY, {"DisplayName": "Hal Employment", "Publisher": "Hal Employment",
                                         "UninstallString": f'"{python}" -m jobhunt install --remove',
-                                        "InstallLocation": str(self.code.parent), "NoModify": "1", "NoRepair": "1"})
+                                        "InstallLocation": str(self.code.parent), "DisplayIcon": ico,
+                                        "NoModify": "1", "NoRepair": "1"})
         self.record(git=self.windows_git(), uv=str(self.tools / "uv" / "uv.exe"), extras=extras)
         self.say("Made the shortcuts in the Start menu and on the desktop.")
 

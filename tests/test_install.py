@@ -18,6 +18,7 @@ class FakePlatform:
     def __init__(self, root: Path, service: str = "none") -> None:
         self.root, self._service = root, service
         self.links: list[tuple[Path, str, str]] = []
+        self.icons: dict[str, str] = {}
         self.login: list[bool] = []
         self.started = 0
         self.removed_unit = 0
@@ -29,6 +30,7 @@ class FakePlatform:
         link.parent.mkdir(parents=True, exist_ok=True)
         link.write_bytes(b"lnk")
         self.links.append((link, target, arguments))
+        self.icons[link.name] = kw.get("icon", "")
 
     def start_at_login(self, on: bool) -> str:
         self.login.append(on)
@@ -87,6 +89,17 @@ class Windows(InstallCase):
         self.assertEqual(self.platform.login, [True])
         entry = self.registry[install.UNINSTALL_KEY]
         self.assertTrue(entry["UninstallString"].endswith("-m jobhunt install --remove"))
+
+    def test_the_shortcuts_show_hals_eye_not_the_python_logo(self):
+        # Windows 11 install test (2026-10-23): with no icon set, the desktop shortcut showed pythonw.exe's logo
+        self.installer("windows").windows([])
+        ico = self.root / "Hal Employment" / "tools" / install.ICON_FILE
+        self.assertEqual(self.platform.icons, {"Hal Employment.lnk": f"{ico},0",
+                                               "Update Hal Employment.lnk": f"{ico},0"})
+        self.assertEqual(self.registry[install.UNINSTALL_KEY]["DisplayIcon"], str(ico))
+        data = ico.read_bytes()
+        self.assertEqual(data[:6], b"\0\0\1\0\4\0", "an icon file with four pictures")
+        self.assertEqual(data.count(b"\x89PNG\r\n\x1a\n"), 4)
 
     def test_remove_takes_away_the_shortcuts_and_keeps_the_data_by_default(self):
         inst = self.installer("windows")
