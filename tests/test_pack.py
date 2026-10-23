@@ -275,6 +275,35 @@ class Checklist(unittest.TestCase):
         self.assertIn(f"- ELIGIBILITY: {verdict['why']}", section(md, "Check before sending"))
 
 
+def reading(**changes) -> FakeWriter:
+    """A fake writer whose reading of the advert has `changes`, as a real model replied (2026-10-23)."""
+    writer = FakeWriter()
+    plain = writer.reply
+    writer.reply = lambda system, user: ({**plain(system, user), **changes} if prompt_id(system) == "analyse"
+                                         else plain(system, user))
+    return writer
+
+
+class Advert(unittest.TestCase):
+    NOTE = "Competency questions (the advert mentions them but doesn't list the actual questions)"
+
+    def test_a_note_about_questions_is_never_answered_as_a_question(self):
+        # Claude's reading of an advert that only said "competency questions" listed this note as a question,
+        # and the pack wrote an answer to it (2026-10-23)
+        writer = reading(questions=[self.NOTE])
+        with as_applicant(people.CHANGER, writer) as a:
+            job = add_job(a.con, "career_changer")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertNotIn("Competency questions", writer.asked("answers")[0]["user"])
+        self.assertNotIn("Competency questions", md)
+
+    def test_a_question_the_advert_writes_out_is_answered(self):
+        advert = 'Please answer: "Tell us about a time you kept a project on budget." Then attach your CV.'
+        self.assertEqual(pack.written_out(["Tell us about a time you kept a project on budget.", self.NOTE],
+                                          advert),
+                         ["Tell us about a time you kept a project on budget."])
+
+
 class CommandLine(unittest.TestCase):
     def test_letter_and_check_read_the_numbered_application_folder(self):
         """Regression: both read the old shared packs folder after packs moved into application folders.

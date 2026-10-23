@@ -70,6 +70,7 @@ TONE_LABELS = {"plain": "Plain", "formal": "Formal", "warm": "Warm"}   # the set
 CHECKED_CLEAN = "Every fact is in your CV, record or the advert. No numbers were invented."
 EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence line
 PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
+QUESTION_SHARE = 0.8      # share of a question's words the advert must hold for it to count as written out
 
 # Phrases that mark generic or machine-written prose; drafts containing them are flagged.
 CLICHES = re.compile(
@@ -103,7 +104,27 @@ def _research(company: str) -> tuple[str, list[str]]:
 
 
 def _analyse(job, who: dict) -> dict:
-    return llm.chat_json(prompt("analyse", who), _job_text(job)[:12000], role="main")
+    text = _job_text(job)[:12000]
+    analysis = llm.chat_json(prompt("analyse", who), text, role="main")
+    analysis["questions"] = written_out(analysis.get("questions") or [], text)
+    return analysis
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]{3,}", text.lower())
+
+
+def written_out(questions: list, advert: str) -> list[str]:
+    """The questions the advert itself writes out; a model's note about questions is not one."""
+    # Claude listed "Competency questions (the advert mentions them but doesn't list the actual questions)"
+    # for an advert that only said there would be some, and the pack answered it (2026-10-23)
+    held = set(_words(advert))
+    kept = []
+    for q in questions:
+        words = _words(str(q))
+        if words and sum(w in held for w in words) >= QUESTION_SHARE * len(words):
+            kept.append(str(q))
+    return kept
 
 
 def _requirements(analysis: dict) -> list[str]:

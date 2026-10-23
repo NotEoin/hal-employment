@@ -312,6 +312,9 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   section says Tone, Length, Evidence and Checked; the application page reads them back
   (`pack.read_letter_notes`), and `docs.prepare` passes its action so the record passages used show under
   Activity "Used".
+- The advert reading (`pack._analyse`, prompt `analyse`) keeps only the questions the advert writes out
+  (`pack.written_out`: most of a question's words are in the advert), so a model's note about questions is
+  never answered.
 - `docs/write_routes.py` serves `POST /applications/{id}/documents/change`, `documents/letter/rewrite`,
   `/prep` and `/contacts`; each starts its kind in `docs/write_actions.py` (`docs.change`,
   `docs.rewrite_letter`, `docs.prep`, `docs.contacts`) and returns `{action_id}`.
