@@ -97,5 +97,25 @@ class Classic(unittest.TestCase):
         self.assertEqual(self.c.get("/classic/").status, 200)
 
 
+
+class GoneMidReply(unittest.TestCase):
+    """A page that goes away mid-reply (c4-open.md: a closed socket printed a traceback and tried a 500)."""
+
+    def test_a_page_that_goes_away_mid_reply_is_not_logged_as_a_failure(self):
+        handler = server.Handler.__new__(server.Handler)
+        handler.headers = {"Host": "127.0.0.1", server.CSRF_HEADER: "1", "Content-Length": "0"}
+        handler.rfile = mock.Mock(read=lambda n: b"")
+        sent = []
+        handler._send = lambda *a, **k: sent.append(a)
+        gone = mock.Mock(side_effect=ConnectionResetError("the browser closed the tab"))
+        for method, call in (("api_get", handler.do_GET), ("api_post", handler.do_POST)):
+            with self.subTest(method=method), mock.patch.object(server.Handler, method, gone, create=True), \
+                    mock.patch.object(server.traceback, "print_exc") as printed:
+                handler.path = "/api/queue"
+                call()
+                printed.assert_not_called()
+        self.assertEqual(sent, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -318,6 +318,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, target.read_bytes(), ctype)
         except LookupError as e:
             self._json({"error": str(e)}, 404)
+        except ConnectionError:
+            pass  # the browser went away mid-reply, so there is no one to send a 500 to
         except Exception as e:  # noqa: BLE001 - report every failure to the page
             traceback.print_exc()
             self._json({"error": str(e)}, 500)
@@ -336,6 +338,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(e)}, 404)
         except (RuntimeError, ValueError) as e:
             self._json({"error": str(e)}, 409)
+        except ConnectionError:
+            pass  # the browser went away mid-reply, so there is no one to send a 500 to
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             self._json({"error": str(e)}, 500)
