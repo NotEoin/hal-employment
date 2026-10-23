@@ -167,7 +167,7 @@ class Flows:
     def on_page(self, job_id: str, page: str, act):
         """Runs `act(tab)` in the job's tab, as the person would."""
         if self.helper:
-            return act(self.helper_tab(page))
+            return self.in_tab(page, act)
         return browser.BROWSER.call(lambda b: act(b.tab(job_id)))
 
     def to_hand_over(self, job_id: str) -> str:
@@ -340,6 +340,34 @@ class WithTheHelper(Flows, HelperBrowser, Practice):
         super().setUpClass()
         cls.start_site()
         cls.start_helper(Path(cls.tmp.name))
+
+    def test_the_helpers_browser_keeps_up_while_the_test_waits_on_hal(self):
+        """Regression: Playwright was serviced only inside a call, so on Windows the post of Hal's own Next press
+        waited for the test's next call into the browser, and the form "would not move on" (CI, 2026-10-23)."""
+        seen: list[str] = []
+
+        def listen(tab):
+            seen.append(tab.url)
+
+        self.on_helper(lambda: self.ctx.on("page", listen))
+        try:
+            # the helper opens a tab a second from now, while this thread waits in plain Python as it does on Hal
+            self.on_helper(lambda: self.worker.evaluate(
+                "url => { setTimeout(() => chrome.tabs.create({ url }), 1000); return true; }",
+                f"{self.site.base}/single.html"))
+            deadline = time.monotonic() + WAIT_S
+            while not seen and time.monotonic() < deadline:
+                time.sleep(POLL_S)
+        finally:
+            self.on_helper(lambda: self.ctx.remove_listener("page", listen))
+        self.assertTrue(seen, "Playwright heard nothing while the test waited")
+
+    def tearDown(self):
+        # A test's tabs and watches end with it: an old job's watch keeps bringing its own tab to the front in
+        # Hal's window, and two tabs at one address would leave it to chance which one `in_tab` acts on.
+        driver.stop_watching()
+        self.close_tabs()
+        super().tearDown()
 
     @classmethod
     def tearDownClass(cls):

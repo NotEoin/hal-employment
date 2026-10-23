@@ -81,6 +81,10 @@ commit.
   `time.tzset()`, which exists only on Unix. File modes (`0o600`) are checked on Linux only.
 - Skip a test on Windows only when the behaviour is Linux-only (systemd units, `/usr/bin/python3`), with the
   reason in the skip.
+- A browser the test drives with Playwright while it waits on Hal has a thread of its own that keeps
+  Playwright serviced between calls, as `HelperBrowser` in `tests/support/practice_site.py` does; call into it
+  with `on_helper` or `in_tab`. Playwright's sync API reads its driver only during a call, and on Windows a
+  page's own form post waited for the test's next call (CI, 2026-10-23).
 
 ## The made-up world
 
