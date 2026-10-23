@@ -10,8 +10,8 @@ from __future__ import annotations
 import importlib
 import logging
 
-from jobhunt.core import activity
-from jobhunt.cvstudio import model, store
+from jobhunt.core import activity, settings
+from jobhunt.cvstudio import checks, model, store
 from jobhunt.cvstudio.model import CVError
 from jobhunt.web.router import BadRequest, NotFound, route
 
@@ -37,10 +37,19 @@ def _pending(con) -> int:
                        (store.DOC_ID,)).fetchone()[0]
 
 
-def _glance(con, vid: str) -> dict:
-    row = con.execute("SELECT scanner_score FROM cv_versions WHERE id = ?", (vid,)).fetchone()
-    return {"scanner": row["scanner_score"] if row else None, "type_pass": None, "type_total": None,
-            "pending": _pending(con)}
+def _glance(con) -> dict:
+    """The At a glance card: the Checks tab's numbers for the version in use (cached in `cv_checks`)."""
+    out = {"scanner": None, "type_pass": None, "type_total": None, "pending": _pending(con)}
+    try:
+        version_id, doc, t, row = checks.current_cv()
+        found = checks.for_version(con, version_id, doc, t, row["look_id"], checks.profile_now(),
+                                   spelling=settings.get("cvdocs.spelling"), columns=checks.columns_of(row["look_id"]))
+    except Exception:  # the glance is a summary; the page must draw even when the checks cannot run
+        log.exception("could not work out the CV checks for the glance card")
+        return out
+    out.update(scanner=found["scanner"]["score"], type_pass=found["type"]["passed"],
+               type_total=found["type"]["total"])
+    return out
 
 
 def summary(con) -> dict:
@@ -59,7 +68,7 @@ def summary(con) -> dict:
             "type": {"id": d["type_id"], "name": _name_of("jobhunt.cvstudio.types", "load", d["type_id"])},
             "look": {"id": d["look_id"], "name": _name_of("jobhunt.cvstudio.looks", "load", d["look_id"])},
             "version": {"id": vid, "n": v["n"], "what": v["what"], "when": v["created"]},
-            "baseline": baseline, "glance": _glance(con, vid),
+            "baseline": baseline, "glance": _glance(con),
             "not_found": list(doc.extras.get("not_found") or []), **_profile()}
 
 

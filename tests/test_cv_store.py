@@ -293,6 +293,15 @@ class Routes(unittest.TestCase):
         self.assertTrue(self.c.get("/api/v2/cv/versions").json()[0]["binned"])
         self.assertEqual(self.c.post(f"/api/v2/cv/versions/{saved['version_id']}/restore").json(), {"ok": True})
 
+    def test_at_a_glance_shows_the_scanner_score_and_the_types_checks(self):
+        # Regression: the glance card stayed empty and the type showed as its id once the type checks were in
+        cv = self.c.get("/api/v2/cv").json()
+        checked = self.c.get("/api/v2/cv/checks").json()
+        self.assertEqual(cv["type"]["name"], "Technical graduate")
+        self.assertEqual(cv["glance"]["scanner"], checked["scanner"]["score"])
+        self.assertEqual((cv["glance"]["type_pass"], cv["glance"]["type_total"]),
+                         (checked["type"]["passed"], checked["type"]["total"]))
+
     def test_a_bad_document_or_route_is_a_400_naming_the_field(self):
         doc = self.c.get("/api/v2/cv/document").json()
         doc["sections"][0]["visible"] = "yes"
