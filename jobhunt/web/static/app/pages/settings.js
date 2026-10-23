@@ -1,9 +1,9 @@
 /* Settings, drawn from /settings/schema.
 
    Every row comes from the registry, so a setting an area adds shows here with no change to this file.
-   Groups with more than plain rows hand over to their panels: Is Hal working?, Privacy and data, the
-   goal's earlier versions, Hal's instructions, and the panels other areas own (AI, Updates, another
-   computer). A change saves at once; the server's SetResult says whether it needs a restart (the page
+   Groups with more than plain rows hand over to their panels: Is Hal working?, Privacy and data and
+   "Use Hal from another computer" draw the whole group (the panel draws its rows under the same
+   `data-key`s); the goal's earlier versions, Hal's instructions, AI and Updates add to the rows. A change saves at once; the server's SetResult says whether it needs a restart (the page
    offers Restart) or changes scores (the page offers "Re-check N jobs"). Rows marked advanced sit under
    "Show more" in their group, except while searching, which looks through every row's words. */
 import { html, cx, useState } from "../core/html.js";
@@ -23,7 +23,7 @@ import { RemotePanel } from "../settings/remote.js";
 
 const SUB = "Everything Hal does can be changed here. Most changes save straight away; the few that need a restart say so and offer a Restart button.";
 const SHOWN_WORDS = new Set(["money", "times", "hours"]);  // kinds whose typed value the server rewords
-const OTHER_PANELS = { ai: AiPanel, updates: UpdatesPanel, remote: RemotePanel };
+const OTHER_PANELS = { ai: AiPanel, updates: UpdatesPanel };
 // Buttons whose action has an API path; the rest belong to panels or to areas still being built.
 const BUTTON_PATHS = { "find.rescore": "/jobs/rescore", "ai.test": "/ai/test", "system.pause": "/status/pause",
   "system.quit": "/system/quit" };
@@ -86,6 +86,7 @@ function Group({ gr, ctx, searching }) {
   let body;
   if (gr.id === "health" && !searching) body = html`<${HealthPanel} />`;
   else if (gr.id === "privacy" && !searching) body = html`<${PrivacyPanel} />`;
+  else if (gr.id === "remote" && !searching) body = html`<${RemotePanel} />`;
   else {
     body = html`${plain.map(it => html`<${Row} key=${it.key} it=${it} ctx=${ctx} />`)}
       ${more && hidden.map(it => html`<${Row} key=${it.key} it=${it} ctx=${ctx} />`)}

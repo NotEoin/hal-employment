@@ -70,6 +70,9 @@ class RemoteWindow(unittest.TestCase):
                     self.assertIn(words, body)
                 if size == "wide":
                     self.assertIn(f"On {DESK}, from this computer", p.page.inner_text("body"))
+                # the registry's rows used to draw above the panel too, so each label showed twice
+                for key in ("remote.how", "remote.launcher", "remote.sessions"):
+                    self.assertEqual(p.page.locator(f"[data-group=remote] [data-key='{key}']").count(), 1, key)
                 self.assertEqual(self.errors(p), [])
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])
