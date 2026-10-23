@@ -4,6 +4,7 @@ without ever prompting, and only the Hal add-on speaks urgent alerts.
 import os
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
@@ -87,7 +88,7 @@ class Alerts(unittest.TestCase):
         settings.set("addon.speak_command", "/opt/made-up/speak")
         notify.notify("Interview: Northgate Institute", "Invitation to interview", urgent=True)
         self.assertEqual(self.spoken.call_args.args[0],
-                         ["/opt/made-up/speak", "Interview: Northgate Institute. Invitation to interview"])
+                         [str(Path("/opt/made-up/speak")), "Interview: Northgate Institute. Invitation to interview"])
         notify.notify("A new match", "Library Assistant")
         self.assertEqual(self.spoken.call_count, 1)
 

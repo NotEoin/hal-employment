@@ -81,7 +81,8 @@ class Guard(unittest.TestCase):
         home = temp_dir(self)
         env = {k: v for k, v in os.environ.items() if k not in (paths.ENV_HOME, paths.ENV_TEST)}
         env |= {"HOME": str(home), "XDG_DATA_HOME": str(home / "xdg-data"), "XDG_CONFIG_HOME": str(home / "xdg-config"),
-                "PYTHONPATH": str(REPO)}
+                "APPDATA": str(home / "appdata"), "LOCALAPPDATA": str(home / "localappdata"), "PYTHONPATH": str(REPO)}
+        self.home = home
         return subprocess.run([sys.executable, *args], cwd=cwd, env=env, capture_output=True, text=True,
                               timeout=RUN_TIMEOUT_S, check=False)
 
@@ -101,9 +102,11 @@ class Guard(unittest.TestCase):
         self.assertIn("OK", done.stderr)
 
     def test_a_program_that_is_not_the_test_runner_gets_its_folders(self):
-        done = self.run_python(["-c", "from jobhunt.core import paths; print(paths.data_dir().name)"], REPO)
+        done = self.run_python(["-c", "from jobhunt.core import paths; print(paths.data_dir())"], REPO)
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stdout.strip(), paths.APP_DIR)
+        want = (self.home / "appdata" / paths.WIN_DIR / "data" if os.name == "nt"
+                else self.home / "xdg-data" / paths.APP_DIR)
+        self.assertEqual(Path(done.stdout.strip()), want)
 
     @unittest.skipIf(os.name == "nt", "the worktree guard is for Linux and macOS")
     def test_a_build_worktree_never_reaches_the_real_folders(self):
@@ -163,7 +166,9 @@ class Layout(unittest.TestCase):
         (self.code / "data" / "jobs.db").write_bytes(b"")
         self.xdg_data, self.xdg_config = root / "xdg-data", root / "xdg-config"
         env = {k: v for k, v in os.environ.items() if k != paths.ENV_HOME}
-        env |= {"XDG_DATA_HOME": str(self.xdg_data), "XDG_CONFIG_HOME": str(self.xdg_config)}
+        # the Windows folders too, so no test here resolves the person's real %APPDATA%
+        env |= {"XDG_DATA_HOME": str(self.xdg_data), "XDG_CONFIG_HOME": str(self.xdg_config),
+                "APPDATA": str(root / "appdata"), "LOCALAPPDATA": str(root / "localappdata")}
         for patch in (mock.patch.dict(os.environ, env, clear=True),
                       mock.patch.object(paths, "code_dir", lambda: self.code),
                       # the guard is what these tests switch off on purpose, to see the real resolution order
@@ -189,7 +194,7 @@ class Layout(unittest.TestCase):
         self.assertNotEqual(paths.data_dir(), self.code / "data")
 
     def test_paths_toml_moves_the_data_but_never_to_an_imported_copy(self):
-        config = self.xdg_config / paths.APP_DIR
+        config = paths.config_dir()
         config.mkdir(parents=True)
         elsewhere = self.code.parent / "elsewhere"
         (config / paths.PATHS_FILE).write_text(f'data_dir = "{elsewhere.as_posix()}"\n', encoding="utf-8")

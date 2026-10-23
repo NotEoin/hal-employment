@@ -107,14 +107,14 @@ class LinuxBrowsers(unittest.TestCase):
         self.assertFalse(found["chrome"].sandboxed)
         self.assertTrue(found["opera"].sandboxed)
         self.assertEqual(found["opera"].argv("https://example.org"),
-                         ["/usr/bin/flatpak", "run", "com.opera.Opera", "https://example.org"])
+                         [str(Path("/usr/bin/flatpak")), "run", "com.opera.Opera", "https://example.org"])
         self.assertFalse(found["firefox"].supported)
 
     def test_the_app_window_is_the_first_chromium_browser_else_a_tab(self):
         cmds = Commands()
         lin = self.linux({"firefox": "/usr/bin/firefox", "vivaldi-stable": "/usr/bin/vivaldi-stable"}, cmds)
         lin.open_app_window("http://127.0.0.1:24321/open?t=made-up")
-        self.assertEqual(cmds.started, [["/usr/bin/vivaldi-stable", "--app=http://127.0.0.1:24321/open?t=made-up"]])
+        self.assertEqual(cmds.started, [[str(Path("/usr/bin/vivaldi-stable")), "--app=http://127.0.0.1:24321/open?t=made-up"]])
         with mock.patch("webbrowser.open") as tab:
             self.linux({"firefox": "/usr/bin/firefox"}).open_app_window("http://127.0.0.1:24321/")
         tab.assert_called_once_with("http://127.0.0.1:24321/")

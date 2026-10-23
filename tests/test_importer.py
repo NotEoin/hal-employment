@@ -15,6 +15,7 @@ import logging
 import os
 import sqlite3
 import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -397,7 +398,8 @@ class Private(ImportCase):
 
         copy = self.target / "private.toml"
         self.assertEqual(copy.read_bytes(), (self.old.root / f"data.imported-{DAY}" / "private.toml").read_bytes())
-        self.assertEqual(stat.S_IMODE(copy.stat().st_mode), 0o600)
+        if sys.platform != "win32":   # Windows keeps no Unix modes; the account folder's ACL guards it
+            self.assertEqual(stat.S_IMODE(copy.stat().st_mode), 0o600)
         canary = old_repo.PRIVATE_CANARY
         self.assertNotIn(canary, logs.getvalue())
         self.assertNotIn(canary, "\n".join(self.lines))
@@ -426,7 +428,8 @@ class Export(ImportCase):
         for word in (old_repo.PRIVATE_CANARY, old_repo.CARER_CANARY, "carer", "disability", "adjustments"):
             self.assertNotIn(word, text)
         self.assertNotIn("Sam", printed.getvalue())
-        self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o600)
+        if sys.platform != "win32":   # Windows keeps no Unix modes; the account folder's ACL guards it
+            self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o600)
 
     def test_the_export_reads_the_old_code_from_git_not_the_working_tree(self):
         (self.old.root / "jobhunt" / "gmail.py").write_text('ADDRESS = "changed.later@example.org"\n')

@@ -89,7 +89,8 @@ class Access(unittest.TestCase):
             key = {"Authorization": f"Bearer {auth.local_api_key()}"}
             self.assertEqual(hal.client().get("/api/queue", headers=key).status, 200)
             self.assertEqual(hal.client().get("/api/queue", headers={"Authorization": "Bearer wrong"}).status, 401)
-            self.assertEqual((hal.home / "config" / auth.KEY_FILE).stat().st_mode & 0o777, auth.SECRET_MODE)
+            if sys.platform != "win32":   # Windows keeps no Unix modes; the profile folder's ACL guards the key
+                self.assertEqual((hal.home / "config" / auth.KEY_FILE).stat().st_mode & 0o777, auth.SECRET_MODE)
 
     def test_foreign_origins_and_hosts_are_refused(self):
         with HalServer() as hal:

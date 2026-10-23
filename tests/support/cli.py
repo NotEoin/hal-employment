@@ -6,8 +6,9 @@ runs in a fresh world, so a command that writes (`set`, `note`, `todo add`) cann
 Commands the rebuild adds (`NEW_COMMANDS`) have help goldens recorded when they were added. `comparable()`
 takes out only what G4 lets the old help gain: those command names, and the options in `NEW_OPTIONS`.
 
-Output is normalised before it is stored or compared: the world's folder becomes `<home>`, timestamps and
-dates become `<time>`, and the greeting's part of the day is dropped, because those change with every run.
+Output is normalised before it is stored or compared: the world's folder becomes `<home>` (and the path after
+it uses `/`, as on Linux, where the goldens were recorded), timestamps and dates become `<time>`, and the
+greeting's part of the day is dropped, because those change with every run.
 Python 3.13 prints `-s, --status STATUS` where 3.11 and 3.12 print `-s STATUS, --status STATUS`; the older
 form is rewritten to the newer, so the help goldens hold on every supported Python.
 """
@@ -31,6 +32,7 @@ from support.world import World, jobs
 GOLDENS = Path(__file__).resolve().parent.parent / "goldens" / "cli"
 HELP_WIDTH = "100"  # argparse wraps help to $COLUMNS; fixed so the goldens do not follow the terminal
 TIME = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?")
+HOME_PATH = re.compile(r"<home>[^\n]*")   # a path under the world's folder, to the end of its line
 GREETING = re.compile(r"\bGood (morning|afternoon|evening)\b")
 OLD_OPTION = re.compile(r"(?<![\w-])(-\w) ([A-Z][A-Z_]*), (--[\w-]+) \2\b")
 
@@ -82,6 +84,9 @@ def normalise(text: str, root: Path | None = None) -> str:
     """`text` with the run-to-run differences of the module docstring replaced."""
     if root is not None:
         text = text.replace(str(root), "<home>")
+        if os.sep != "/":
+            # the goldens were recorded on Linux; a path under the world prints with `\` on Windows
+            text = HOME_PATH.sub(lambda m: m.group(0).replace(os.sep, "/"), text)
     text = TIME.sub("<time>", text)
     text = GREETING.sub("Good <part of day>", text)
     return OLD_OPTION.sub(r"\1, \3 \2", text)

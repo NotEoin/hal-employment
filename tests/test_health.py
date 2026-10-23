@@ -1,10 +1,8 @@
 """Is Hal working?: every area's checks with their Fix buttons, and the browsers Hal found."""
 import os
-import tempfile
 import time
 import unittest
 from dataclasses import dataclass
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -91,14 +89,12 @@ class Health(unittest.TestCase):
 
 class Browsers(unittest.TestCase):
     def test_settings_lists_the_chromium_browsers_found_and_firefox_as_not_supported(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            for name in ("opera", "google-chrome", "microsoft-edge", "brave-browser", "vivaldi-stable", "firefox"):
-                exe = Path(tmp, name)
-                exe.write_text("#!/bin/sh\n", encoding="ascii")
-                exe.chmod(0o755)
-            with mock.patch.dict(os.environ, {"PATH": tmp}), mock.patch.object(os, "name", "posix"), \
-                    mock.patch.object(health_routes, "_platform_browsers", return_value=None):
-                rows = {b["id"]: b for b in health_routes.browsers()}
+        # a fake PATH lookup: Windows' own `which` finds only names with a PATHEXT ending, never a Linux binary
+        on_path = {"opera", "google-chrome", "microsoft-edge", "brave-browser", "vivaldi-stable", "firefox"}
+        with mock.patch.object(health_routes.shutil, "which", lambda name: f"/usr/bin/{name}" if name in on_path
+                               else None), mock.patch.object(os, "name", "posix"), \
+                mock.patch.object(health_routes, "_platform_browsers", return_value=None):
+            rows = {b["id"]: b for b in health_routes.browsers()}
         for bid in ("opera", "chrome", "edge", "brave", "vivaldi"):
             self.assertTrue(rows[bid]["found"], bid)
             self.assertTrue(rows[bid]["supported"], bid)
