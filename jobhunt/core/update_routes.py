@@ -8,7 +8,8 @@ Design decisions, each with its reason:
 - The updater runs under uv's managed Python with `--no-project`, outside `.venv`, so `uv sync` can replace
   `.venv` while it runs. `systemd-run` does not pass the environment on, so the uv folders from the install
   record go in front of the command through `env`.
-- At start the server writes `state/server.pid` (the updater waits for that process to end) and turns the
+- At start the server makes the local key (the updater sends it to stop the server), writes
+  `state/server.pid` (the updater waits for that process to end) and turns the
   updater's last result into an Activity row, because the updater has no Activity code of its own.
 - An update that waits for a form to be finished is started again by a small watcher thread here, once no
   `apply.*` action is left.
@@ -23,6 +24,7 @@ import threading
 from pathlib import Path
 
 from .. import __version__, db
+from ..web import auth
 from ..web.router import BadRequest, Conflict, Request, route
 from . import activity, paths, plugins, runner, updates
 
@@ -293,7 +295,12 @@ def watch_waiting() -> None:
 
 @plugins.on_start
 def at_start() -> None:
-    """Writes the pid, records the last update's result, and watches for an update that waits for a form."""
+    """Makes the local key, writes the pid, records the last update's result, and watches for a waiting update.
+
+    The key is made here because nothing else makes it on a new install, and without it the updater's
+    shutdown request is refused (Windows 11 test VM, 2026-10-23).
+    """
+    auth.local_api_key()
     write_pid()
     absorb_result()
     if updates.waiting():

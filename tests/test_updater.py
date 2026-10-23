@@ -471,6 +471,18 @@ class Routes(unittest.TestCase):
                 time.sleep(POLL_S)
             end.assert_called_once_with(0)
 
+    def test_the_updater_can_stop_a_new_install_that_never_made_its_key(self):
+        """Regression: nothing made the local key on a new install, so the updater's stop got a 401 (VM, 2026-10-23)."""
+        with HalServer() as hal, mock.patch.object(update_routes, "_exit") as end, \
+                mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_PORT": str(hal.port)}):
+            update_routes.at_start()
+            code, _ = updates.World(updates.read_install())._request("POST", "/api/v2/system/shutdown")
+            self.assertEqual(code, 200)
+            deadline = time.monotonic() + EXIT_WAIT_S
+            while not end.called and time.monotonic() < deadline:
+                time.sleep(POLL_S)
+            end.assert_called_once_with(0)
+
     def test_the_version_names_the_commit_and_the_helper_it_wants(self):
         with HalServer() as hal:
             r = hal.signed_in().get("/api/v2/version")
