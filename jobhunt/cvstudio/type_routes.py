@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote
 
-from jobhunt import db
 from jobhunt.core import runner, settings
 from jobhunt.cvstudio import types as cvtypes
 from jobhunt.web.router import BadRequest, NotFound, Request, route
@@ -43,9 +42,8 @@ def _goal():
 
 
 def _set_type(con, type_id: str) -> None:
-    _store().doc()
-    con.execute("UPDATE cv_documents SET type_id = ?, updated = ? WHERE id = 'main'", (type_id, db.now()))
-    con.commit()
+    _store().set_type(type_id, con=con)
+    con.commit()  # the store joins a transaction already open on `con` rather than committing it
 
 
 def _type_or_404(type_id: str, con) -> cvtypes.CVType:
