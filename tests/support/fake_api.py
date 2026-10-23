@@ -218,6 +218,17 @@ MADE_UP_PAGES = {
                   {"id": "compact", "name": "Compact", "safe": True, "note": "Fits more on each page", "chosen": False},
                   {"id": "two", "name": "Two columns", "safe": False, "note": "For printing and networking",
                    "chosen": False}],
+    # My CV, Suggestions and Adjust for each job
+    "/cv/suggestions": {"state": "ready", "reviewed": 0, "total": 1, "kinds": ["Dates"], "done": [], "message": "",
+                        "pending": [{"id": "s-demo", "kind": "Dates", "where": "Education, BA (Hons) History",
+                                     "target": "s:education/e:ed-1/start", "title": "Write dates the same way",
+                                     "why": "Month names read the same to people and to job-site scanners.",
+                                     "trigger": "Check for your CV type: \"Dates in one format\"",
+                                     "trigger_type": "check", "evidence": [], "before": "09/2023",
+                                     "afters": ["Sep 2023"], "alt": 0, "edited": None, "status": "pending",
+                                     "reason": None, "op": "replace", "can_accept_all": True, "ai": False,
+                                     "result_version_id": None}]},
+    "/cv/adjust": {"level": "little", "setting": "little", "pick_first": False, "forced_no": ""},
 }
 # The page a CV preview iframe shows (the real server sends the printed page; every version and look get this).
 MADE_UP_PREVIEW = (b'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>CV</title></head>'
