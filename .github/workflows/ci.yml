@@ -14,6 +14,8 @@ jobs:
           - { os: windows-2025, python: "3.13", extras: "--extra browser" }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    # uv run would otherwise make a fresh venv on .python-version's Python, without the extras
+    env: { UV_PYTHON: "${{ matrix.python }}" }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with: { fetch-depth: 2 }
@@ -23,8 +25,14 @@ jobs:
         run: uv run python -m playwright install --with-deps chromium
       - if: runner.os == 'Windows'
         run: uv run python -m playwright install chromium
-      - run: uv run python scripts/dev/check_ascii.py --base HEAD~1
-      - run: uv run python scripts/dev/check_ruff.py --base HEAD~1
+      # the root commit has no parent, so only the whole-tree ASCII check below applies to it
+      - name: ASCII and ruff on the lines this commit adds
+        shell: bash
+        run: |
+          if git rev-parse -q --verify HEAD~1 >/dev/null; then
+            uv run python scripts/dev/check_ascii.py --base HEAD~1
+            uv run python scripts/dev/check_ruff.py --base HEAD~1
+          fi
       - run: uv run python scripts/dev/check_ascii.py --tree
       - run: uv run python -m unittest discover tests -v
         env: { HAL_TEST_MODE: "1", HAL_TEST_BROWSER: "1" }
