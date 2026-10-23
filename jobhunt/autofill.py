@@ -1,13 +1,21 @@
-"""Proposes a value for every field of an application form.
+"""Proposes a value for every field of an application form, and says why each answer was chosen.
 
-Sources, in order: the private answers (only for the questions `private_question` names), answers the
-person has given to the same question before, the profile (the `you.*` settings), the job's documents,
-then the AI for what is left. Each proposal records its source, and a field nothing can answer is left
-for the person; what they type is remembered for the next form that asks it, at the scope it suits.
-Diversity questions get the `you.diversity` answer ("Prefer not to say" unless the person chose to
-answer them themselves).
+Sources, in order: the private answers (only for the questions `private_question` names),
+answers from notes about the job site (`field_answer` and `field_skip`), answers the person has given to
+the same question before, the profile (the `you.*` settings), the job's documents, then the AI for what is
+left. Each proposal records its source and a `why` in plain words ("Why this answer?" on the Form step),
+naming the profile setting, saved answer, note, CV line or record passage it came from; a field nothing
+can answer is left for the person; what they type is remembered for the next form that asks it, at the
+scope it suits. Diversity questions get the `you.diversity` answer ("Prefer not to say" unless the person
+chose to answer them themselves).
 
 Design notes:
+- A private answer's `why` is one fixed sentence and nothing else, so neither the value nor which private
+  answer was used reaches the page, a log or the form state's words.
+- Site notes come from `sites.notes.for_page`, or the `NoteSet` the engine passes in. A note never
+  applies to a private question, because those are settled before notes are read. Each note used is listed
+  on its field (`notes_used`); the engines record the use and its result through `sites.notes.used`,
+  so a note is counted once.
 - Saved answers live in `answers2` with a scope: `everywhere`, `site` (this site),
   `job` (this job), `never` (kept only as an example of the person's writing) and `review` (not used
   until the person chooses). An answer about the job applied for (salary, start date, notice, office,
@@ -19,13 +27,20 @@ Design notes:
   (`you.salary_answer`).
 - No prompt names the person: `ai/prompts/form_fill.txt` and the others are filled from the settings.
 """
+from __future__ import annotations
+
 import difflib
+import importlib
 import re
 from datetime import date
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from . import cv, db, gpu, llm, record, salary
 from .ai import prompts
+
+if TYPE_CHECKING:
+    from .sites.notes import Note, NoteSet
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
              "workable": "Company careers page", "smartrecruiters": "Company careers page",
@@ -80,6 +95,37 @@ SHORT_FACTS = 60      # of those, short answers listed
 VOICE_EXAMPLES = 2    # "never" answers shown as examples of the person's writing
 # Answers longer than this are essays: never reused as they stand, only shown to the model as the applicant's writing.
 ESSAY = 400
+
+# "Why this answer?". The private sentence is the whole of what a private
+# answer ever says about itself.
+PRIVATE_WHY = "From your private answers. These are never shown to the AI or saved in logs."
+LEFT_PRIVATE_WHY = ("Hal leaves questions like this for you. It never guesses them and never sends them to "
+                    "the AI.")
+YOU_WHY = "You typed this."
+LEFT_WHY = "Hal had nothing to answer this with, so it is left for you."
+PROFILE_WORDS = {
+    "first_name": "your name", "last_name": "your name", "full_name": "your name", "middle_name": "your name",
+    "preferred_name": "the name you like to be called", "email": "your email address", "phone": "your phone number",
+    "linkedin": "your LinkedIn address", "github": "your GitHub address", "website": "your website",
+    "sponsorship": "your right to work in the UK", "right_to_work": "your right to work in the UK",
+    "notice": "your notice period", "start": "when you can start", "office": "whether you can work in an office",
+    "relocate": "whether you would move for a job", "postcode": "your postcode", "address1": "your address",
+    "country": "your country", "city": "your town or city", "location": "where you are based",
+    "nationality": "your nationality", "university": "your university", "degree": "your degree",
+    "grade": "your grade", "grad_year": "when your course ends or ended", "salary": "the salary answer you set",
+}
+SCOPE_WORDS = {"everywhere": "Hal may use it on every form", "site": "Hal uses it only on {key}",
+               "job": "Hal uses it only for this job"}
+ORIGIN_WORDS = {"you": "your note", "builtin": "a note built into Hal", "learned": "a note Hal learned from you",
+                "hal": "a note Hal suggested"}
+# The note kinds `propose` acts on; the engines act on the others.
+ANSWER_NOTES = ("field_answer", "field_skip")
+# Words shorter than this say little about where an answer came from ("the", "and", "with").
+SUPPORT_WORD = 5
+SUPPORT_SHARED = 3     # content words an answer shares with a CV line or record passage it is said to use
+SUPPORT_QUOTE = 90     # characters of that line or passage quoted in the why
+CV_FACTS = "CV facts:\n"
+NOTES_MODULE = "jobhunt.sites.notes"
 
 
 START_WORDS = {"now": "Immediately", "1w": "In 1 week", "1m": "In 1 month"}
@@ -289,15 +335,19 @@ def _diversity(f: dict, prof: dict) -> bool:
     """Answers a diversity question with the profile's choice; returns whether it settled the field."""
     if prof.get("diversity") == "":
         # The person chose to answer equality questions themselves.
-        f.update(value=None, source="you", note=YOURSELF)
+        f.update(value=None, source="you", note=YOURSELF,
+                 why="You chose to answer equality questions yourself (Settings, You).")
         return True
     value = prof.get("diversity") or "Prefer not to say"
     options = f.get("options") or []
     note = "diversity question; change it if you want to answer"
+    why = (f"An equality question. Your choice for these (Settings, You) is \"{value}\". Change it here if you "
+           "want to answer this one.")
     if f["kind"] in ("select", "radio", "combobox", "checkgroup") and options:
         choice = _choose(options, value, [DECLINE])
         if choice:
-            f.update(value=[choice] if f["kind"] == "checkgroup" else choice, source="profile: diversity", note=note)
+            f.update(value=[choice] if f["kind"] == "checkgroup" else choice, source="profile: diversity", note=note,
+                     why=why)
         elif not f.get("required"):
             f.update(skip=True, source="skipped", note="optional diversity question with no 'prefer not to say'")
         else:
@@ -305,7 +355,7 @@ def _diversity(f: dict, prof: dict) -> bool:
         return True
     if f["kind"] in ("text", "textarea"):
         if f.get("required"):
-            f.update(value=value, source="profile: diversity", note=note)
+            f.update(value=value, source="profile: diversity", note=note, why=why)
         else:
             f.update(skip=True, source="skipped", note="optional diversity question")
         return True
@@ -488,6 +538,12 @@ def _usable(con, job) -> list:
 
 def _recall(con, f: dict, job=None):
     """The answer the person gave to this question before, where it may be used for this job, or None."""
+    found = _recall_row(con, f, job)
+    return found[0] if found else None
+
+
+def _recall_row(con, f: dict, job=None) -> tuple[object, object] | None:
+    """(answer fitted to the field, its `answers2` row) for this question where this job may use it, or None."""
     if con is None:
         return None
     question = _key(f, job["company"] if job is not None else "")
@@ -506,7 +562,107 @@ def _recall(con, f: dict, job=None):
     value = db.json_value(found[1]["answer"])
     if isinstance(value, str) and len(value) > ESSAY:
         return None  # an essay answers one employer's question; it shows the AI the person's voice instead
-    return _fit(f, value, [])
+    fitted = _fit(f, value, [])
+    return (fitted, found[1]) if fitted not in (None, []) else None
+
+
+def _saved_why(row) -> str:
+    """Why a saved answer was used: the question it answered and where it may be used."""
+    where = SCOPE_WORDS.get(row["scope"], SCOPE_WORDS["everywhere"]).format(key=row["scope_key"])
+    return (f"You gave this answer before, to \"{row['label']}\". {where} (What Hal remembers, Saved "
+            "answers).")
+
+
+def _count_use(con, row) -> None:
+    """Counts one more use of a saved answer, for "Used N times" on the Saved answers tab."""
+    con.execute("UPDATE answers2 SET uses = uses + 1, last_used = ? WHERE id = ?", (db.now(), row["id"]))
+    con.commit()
+
+
+# Notes about the job site ------------------------------------------------------
+
+def page_notes(job, notes: NoteSet | None = None) -> NoteSet | None:
+    """The notes for this job's form: the `NoteSet` the engine passed, else `sites.notes.for_page` for its address."""
+    if notes is not None:
+        return notes
+    url = _get(job, "url")
+    if not url:
+        return None
+    try:
+        site_notes = importlib.import_module(NOTES_MODULE)
+    except ModuleNotFoundError as e:
+        # Without `sites.notes` no note applies.
+        if e.name != NOTES_MODULE:
+            raise
+        return None
+    return site_notes.for_page(url, job_id=str(_get(job, "id") or "") or None)
+
+
+def _get(job, key: str):
+    """A job's value by key, from a dict or a database row; None when it has none."""
+    if job is None:
+        return None
+    try:
+        return job[key]
+    except (KeyError, IndexError):
+        return None
+
+
+def _note_words(note: Note) -> str:
+    """Whose note it is and where it applies: "your note for acme.example", "a note built into Hal"."""
+    whose = ORIGIN_WORDS.get(note.origin, "a note about this job site")
+    if note.scope_kind in ("site", "tenant", "job") and note.scope_key:
+        return f"{whose} for {note.scope_key}"
+    if note.scope_kind == "ats" and note.scope_key:
+        return f"{whose} for every {note.scope_key.title()} site"
+    return whose
+
+
+def _used(note: Note) -> dict:
+    """The note as a field's `notes_used` entry."""
+    return {"id": note.id, "text": note.text, "origin": note.origin}
+
+
+def _note_answer(f: dict, notes: NoteSet | None) -> bool:
+    """Answers or skips the field as the most specific `field_answer` or `field_skip` note says; True if settled.
+
+    Never called for a private question. A note whose answer the field cannot take (a choice its
+    list does not offer) is passed over, so the next source gets its turn.
+    """
+    if notes is None:
+        return False
+    label = f.get("label") or ""
+    for note in sorted((n for n in notes.for_field(label) if n.kind in ANSWER_NOTES),
+                       key=lambda n: NOTE_RANK.get(n.scope_kind, len(NOTE_RANK))):
+        if note.kind == "field_skip":
+            f.update(skip=True, source="note: field_skip", note=note.text, notes_used=[_used(note)],
+                     why=f"Left as it is because of {_note_words(note)}: \"{note.text}\".")
+            return True
+        value = note.act.get("value", note.cond.get("value"))
+        if value in (None, "", []):
+            continue
+        key = next((k for pattern, k, _ in RULES if re.search(pattern, label, re.I)), None)
+        preferred = (HEARD_SITE if re.search(r"careers page|website", str(value), re.I) else HEARD_BOARD) \
+            if key == "how_heard" else []
+        fitted = _fit(f, value, preferred)
+        if fitted in (None, []):
+            continue
+        shown = ", ".join(map(str, fitted)) if isinstance(fitted, list) else fitted
+        f.update(value=fitted, source="note: field_answer", notes_used=[_used(note)],
+                 why=f"Answered with \"{shown}\" because of {_note_words(note)}: \"{note.text}\".")
+        return True
+    return False
+
+
+# The most specific note of a kind wins; `NoteSet` keeps that order, and this keeps it here too.
+NOTE_RANK = {"job": 0, "tenant": 1, "site": 2, "ats": 3, "global": 4}
+
+
+def _site_facts(notes: NoteSet | None) -> list[str]:
+    """The free-words notes (`note` kind) the AI is given as facts; never one that reads as a private question."""
+    if notes is None:
+        return []
+    return [n.text for n in notes.all("note") if n.text and private_question({"label": n.text}) is None]
 
 
 WHY = re.compile(r"why (do you want|are you (interested|applying)|this (role|company|team)|us\b|join)|"
@@ -538,8 +694,8 @@ def profile_for(job, con=None) -> dict:
     return prof
 
 
-def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[dict]:
-    """Fills in `value`, `source` and `note` on each field and returns the list.
+def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: NoteSet | None = None) -> list[dict]:
+    """Fills in `value`, `source`, `note` and `why` on each field and returns the list.
 
     Args:
         job: The job row.
@@ -547,64 +703,67 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
         docs: The approved documents (documents.load).
         files: Paths of the CV and cover letter PDFs (documents.files).
         con: Database connection, for the answers the person has given before.
+        notes: The notes for this page, as the engine read them; None reads them for the job's address.
     """
     prof = profile_for(job, con)
+    notes = page_notes(job, notes)
     answers = docs.get("answers") or []
     uploads = [f for f in fields if f["kind"] == "file"]
-    named = any(re.search(r"cover|resume|résumé|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
+    named = any(re.search(r"cover|resume|r\u00e9sum\u00e9|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
                 for f in uploads)
     for f in fields:
-        f.update(value=None, source="you", note="", skip=False)
+        f.update(value=None, source="you", note="", skip=False, why=LEFT_WHY, notes_used=[])
         label = f.get("label") or ""
         text = f"{label} {f.get('context', '')}"
         if f.get("type") == "password":
             # Passwords never pass through Hal or its database.
-            f.update(skip=True, source="skipped", note="type this into the form yourself")
+            f.update(skip=True, source="skipped", note="type this into the form yourself",
+                     why="Hal never types passwords. Type it into the form yourself.")
             continue
         if CODE_BOX.search(label):
-            f.update(skip=True, source="skipped", note=CODE_NOTE)
+            f.update(skip=True, source="skipped", note=CODE_NOTE,
+                     why="The site emails you this code. Hal never guesses it.")
             continue
         if f["kind"] == "file":
-            if re.search(r"autofill|photo|picture|avatar", text, re.I):
-                f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
-            elif re.search(r"cover", text, re.I) and files.get("letter"):
-                f.update(value=files["letter"], source="documents: cover letter")
-            elif re.search(r"resume|résumé|\bcv\b", text, re.I) and files.get("cv"):
-                f.update(value=files["cv"], source="documents: CV")
-            elif not named and f is uploads[0] and files.get("cv"):
-                # A form whose uploads name no document wants the CV in the first.
-                f.update(value=files["cv"], source="documents: CV", note="taken to be the CV upload; check this")
-            else:
-                f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
+            _upload(f, text, files, named, f is uploads[0])
             continue
         if private_question(f) is not None:
             if not (_health(f) or _carer(f)) or f.get("value") is None:
                 # Never guessed, never recalled, never sent to the AI.
                 note = f.get("note") if f.get("source") == "you" and f.get("note") else YOURSELF
-                f.update(value=None, source="you", note=note)
+                f.update(value=None, source="you", note=note, why=LEFT_PRIVATE_WHY)
+            else:
+                f["why"] = PRIVATE_WHY
             continue
-        recalled = _recall(con, f, job)
-        if recalled not in (None, []):
-            f.update(value=recalled, source="your earlier answer")
+        if _note_answer(f, notes):
+            continue
+        recalled = _recall_row(con, f, job)
+        if recalled is not None:
+            f.update(value=recalled[0], source="your earlier answer", why=_saved_why(recalled[1]))
+            _count_use(con, recalled[1])
             continue
         if DIVERSITY.search(label) and _diversity(f, prof):
             continue
         single = f["kind"] in ("radio", "checkgroup") and len(f.get("options") or []) == 1
         if f["kind"] == "checkbox" or single:
             if MARKETING.search(text) and not f.get("required"):
-                f.update(skip=True, source="skipped", note="optional sign-up, left as it is")
+                f.update(skip=True, source="skipped", note="optional sign-up, left as it is",
+                         why="An optional sign-up, so Hal leaves it as it is.")
                 continue
             if CONSENT.search(text) or (single and f.get("required")):
                 only = f["options"][0] if single else True
                 f.update(value=[only] if f["kind"] == "checkgroup" else only, source="profile: consent",
-                         note="consent to the employer's terms; check them")
+                         note="consent to the employer's terms; check them",
+                         why="Hal agrees to the employer's terms so the form can go on. Read them before you send it.")
                 continue
         if f["kind"] in ("text", "textarea") and re.search(r"cover letter", label, re.I) and docs.get("letter"):
-            f.update(value=docs["letter"], source="documents: cover letter")
+            f.update(value=docs["letter"], source="documents: cover letter",
+                     why="Your cover letter for this job, as you approved it.")
             continue
         hit = _rule(f, prof)
         if hit:
             f["value"], f["source"] = hit
+            f["why"] = _profile_why(hit[1].removeprefix("profile: "), prof, job)
             if hit[1] == "profile: salary" and prof.get("salary_basis"):
                 f["note"] = f"researched for this job: {prof['salary_basis']}"
             continue
@@ -615,8 +774,46 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None) -> list[
             if drafted is None and FIT.search(label):
                 drafted = _match_answer("Why are you a good fit for this role?", answers)
             if drafted:
-                f.update(value=drafted, source="documents: drafted answer")
+                f.update(value=drafted, source="documents: drafted answer",
+                         why="From the answers you approved with this job's documents.")
     return mark_written(fields)
+
+
+def _upload(f: dict, text: str, files: dict, named: bool, first: bool) -> None:
+    """Puts the CV or the cover letter into a file upload, or leaves an upload that wants neither."""
+    if re.search(r"autofill|photo|picture|avatar", text, re.I):
+        f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
+    elif re.search(r"cover", text, re.I) and files.get("letter"):
+        f.update(value=files["letter"], source="documents: cover letter",
+                 why="Your cover letter for this job, as you approved it.")
+    elif re.search(r"resume|r\u00e9sum\u00e9|\bcv\b", text, re.I) and files.get("cv"):
+        f.update(value=files["cv"], source="documents: CV", why="Your CV for this job, as you approved it.")
+    elif not named and first and files.get("cv"):
+        # A form whose uploads name no document wants the CV in the first.
+        f.update(value=files["cv"], source="documents: CV", note="taken to be the CV upload; check this",
+                 why="Your CV for this job. The form does not say which upload is the CV, so Hal used the first. "
+                     "Check this.")
+    else:
+        f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
+
+
+def _profile_why(key: str, prof: dict, job) -> str:
+    """Why a profile answer was used, naming the setting it came from."""
+    if key == "how_heard":
+        where = prof.get("how_heard") or "the employer's careers page"
+        if re.fullmatch(r"company careers page", where, re.I):
+            where = "the employer's own careers page"
+        return f"Hal found this job on {where}. This answer is worked out per job site."
+    if key == "salary" and prof.get("salary_basis"):
+        return f"Researched for this job: {prof['salary_basis']}. Please check you are happy with it."
+    words = PROFILE_WORDS.get(key)
+    return f"From your profile (Settings, You): {words}." if words else "From your profile (Settings, You)."
+
+
+def by_you(f: dict, value, note: str = "") -> dict:
+    """Marks a field as answered by the person, so its words and "Why this answer?" say so; returns it."""
+    f.update(value=value, source="you", note=note, skip=False, why=YOU_WHY, notes_used=[])
+    return f
 
 
 def mark_written(fields: list[dict]) -> list[dict]:
@@ -628,8 +825,9 @@ def mark_written(fields: list[dict]) -> list[dict]:
     return fields
 
 
-def _facts(job, docs: dict, con) -> str:
-    """What the AI may know when it fills a form: the profile, the CV, saved answers this job may use."""
+def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
+    """What the AI may know when it fills a form: the profile, the CV, saved answers this job may use, and the
+    free-words notes about this job site."""
     hidden = ("salary_figure", "salary_basis", "preferred_name", *PRIVATE_KEYS)
     prof = {k: v for k, v in profile_for(job, con).items() if k not in hidden and v not in ("", None)}
     parts = [f"Today is {date.today():%d %B %Y}.",
@@ -637,7 +835,7 @@ def _facts(job, docs: dict, con) -> str:
              f"Applicant profile: {prof}",
              "The applicant has never worked for, interviewed with or been referred to this employer "
              "unless stated below.",
-             f"CV facts:\n{cv.facts_text()}"]
+             f"{CV_FACTS}{cv.facts_text()}"]
     if con is not None:
         before = con.execute("""SELECT title, status FROM jobs WHERE lower(company) = lower(?) AND id != ?
                                 AND status IN ('applied','assessment','interview','offer','rejected','withdrawn')""",
@@ -659,6 +857,9 @@ def _facts(job, docs: dict, con) -> str:
             parts.append("Answers the applicant wrote for other employers, as examples of their voice and phrasing "
                          "(write fresh answers for this job; never copy their claims about other employers):\n"
                          + "\n\n".join(f"Q: {q}\nA: {str(a)[:1500]}" for q, a in voice))
+    told_notes = _site_facts(notes)
+    if told_notes:
+        parts.append("Notes about this job site (follow them):\n" + "\n".join(f"- {t}" for t in told_notes))
     if docs.get("answers"):
         parts.append("Drafted answers:\n" + "\n".join(f"- {a['question']}: {a['answer']}" for a in docs["answers"]))
     if docs.get("letter"):
@@ -666,6 +867,48 @@ def _facts(job, docs: dict, con) -> str:
     if job["description"]:
         parts.append(f"Advert (for context only, not facts about the applicant):\n{job['description'][:1800]}")
     return "\n\n".join(parts)
+
+
+def _cv_lines(facts: str) -> list[str]:
+    """The CV's lines as the AI was given them in `facts`, for naming the one an answer draws on."""
+    _, found, rest = facts.partition(CV_FACTS)
+    return [line for line in rest.split("\n\n", 1)[0].splitlines() if line.strip()] if found else []
+
+
+def _content_words(text: str) -> set[str]:
+    return set(re.findall(rf"[a-z]{{{SUPPORT_WORD},}}", str(text).lower()))
+
+
+def _best_support(value, passages: list[str]) -> str | None:
+    """The passage sharing the most content words with the answer, when it shares enough to have been used."""
+    words = _content_words(value)
+    best, shared = None, 0
+    for passage in passages:
+        n = len(words & _content_words(passage))
+        if n > shared:
+            best, shared = passage, n
+    return best if shared >= SUPPORT_SHARED else None
+
+
+def _quote(text: str) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= SUPPORT_QUOTE else text[:SUPPORT_QUOTE].rsplit(" ", 1)[0] + "..."
+
+
+def _written_why(value, cv_lines: list[str], found: str, *, sure: bool) -> str:
+    """Why the AI's answer reads as it does: the CV line and the record passage it draws on, when one shows."""
+    used = []
+    line = _best_support(value, cv_lines)
+    if line:
+        used.append(f"your CV (\"{_quote(line)}\")")
+    passages = re.split(r"\n\n(?=\[)", found) if found else []
+    passage = _best_support(value, passages)
+    if passage:
+        head = re.match(r"\[(.+?)\]", passage)
+        used.append(f"your record ({head.group(1) if head else _quote(passage)})")
+    source = f" from {' and '.join(used)}" if used else " from your profile, your CV and the advert"
+    check = "Please read it." if sure else "Hal is unsure, so please check it."
+    return f"Written for this job by Hal{source}. {check}"
 
 
 def _shortlist(options: list[str], facts: str, limit: int = 60) -> list[str]:
@@ -678,11 +921,13 @@ def _shortlist(options: list[str], facts: str, limit: int = 60) -> list[str]:
     return [o for o in options if o in keep]
 
 
-def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | None = None) -> tuple[int, str | None]:
+def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | None = None,
+              notes: NoteSet | None = None) -> tuple[int, str | None]:
     """Asks the local model for the fields still without a value.
 
     Args:
         problems: For fields the form refused, the site's message by field id; those are answered again.
+        notes: The notes for this page, as for `propose`; their free words are given to the AI as facts.
 
     Returns:
         (answered, reason): how many fields it filled, and why it could not run, if so.
@@ -698,7 +943,8 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
     reason = gpu.busy()
     if reason:
         return 0, reason
-    facts = _facts(job, docs, con)
+    facts = _facts(job, docs, con, notes=page_notes(job, notes))
+    cv_lines = _cv_lines(facts)
     answered = 0
     for start in range(0, len(open_fields), MODEL_BATCH):
         batch = open_fields[start:start + MODEL_BATCH]
@@ -745,7 +991,8 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
                 value = llm.undash(value)
             if f.get("type") == "number" and not re.fullmatch(r"\s*-?[\d.,]+\s*", str(value)):
                 continue
-            f.update(value=value, source="hal", skip=False, note="" if a.get("sure") else "Hal is unsure; check this")
+            f.update(value=value, source="hal", skip=False, note="" if a.get("sure") else "Hal is unsure; check this",
+                     why=_written_why(value, cv_lines, found, sure=bool(a.get("sure"))))
             answered += 1
     mark_written(fields)
     return answered, None
@@ -772,7 +1019,9 @@ def _review(job, fields: list[dict]) -> None:
         f = by_hid.get(str(w.get("hid"))) if isinstance(w, dict) else None
         if f is not None:
             why = str(w.get("why") or "").strip()
-            f.update(value=None, source="you", note=f"Hal's first answer looked wrong{': ' + why if why else ''}")
+            f.update(value=None, source="you", note=f"Hal's first answer looked wrong{': ' + why if why else ''}",
+                     why="Hal's first answer did not seem to fit the question, so it is left for you"
+                         + (f": {why}" if why else "."))
 
 
 def choose_control(job, found: dict) -> str:

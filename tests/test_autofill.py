@@ -6,6 +6,7 @@ health tests save them there. `PrivatePaths` holds the rules for private questio
 never reaches the AI, is never guessed and is never remembered. The applicant is made up.
 """
 import contextlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ from unittest import mock
 from support import legacy, people, private_answers
 from support.fake_ai import fake_ai
 from support.legacy import PROFILE
+from support.stubs import sites_notes
 
 from jobhunt import autofill, db, gmail, salary, tasks
 from jobhunt.core import paths, settings
@@ -284,7 +286,8 @@ class PrivatePaths(unittest.TestCase):
         tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="hal-autofill-")))
         stack.enter_context(paths.set_override(tmp))
         stack.enter_context(mock.patch.object(autofill, "profile", lambda: dict(PROFILE)))
-        stack.enter_context(mock.patch.object(autofill, "_facts", lambda job, docs, con: "Made-up CV facts."))
+        stack.enter_context(mock.patch.object(autofill, "_facts",
+                                              lambda job, docs, con, notes=None: "Made-up CV facts."))
         stack.enter_context(mock.patch.object(autofill.record, "context", lambda questions: ""))
         self.stack = stack
         self.job = {"id": "test:1", "source": "adzuna", "company": "Practice Ltd", "title": "Junior Engineer",
@@ -421,6 +424,130 @@ class PrivatePaths(unittest.TestCase):
         words = " ".join(f"{t} {d}" for t, d in todos[0]).lower()
         for hint in ("private", "extra time", "adjust", "disab", "toml", CANARY.lower()):
             self.assertNotIn(hint, words)
+
+
+class WhyThisAnswer(unittest.TestCase):
+    """Answers from notes about the job site, their order, and "Why this answer?"."""
+
+    def setUp(self):
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="hal-why-")))
+        stack.enter_context(paths.set_override(tmp))
+        stack.enter_context(mock.patch.object(autofill, "profile", lambda: dict(PROFILE)))
+        self.notes = stack.enter_context(sites_notes.installed())
+        self.con = db.connect()
+        stack.callback(self.con.close)
+        self.stack = stack
+        self.job = {"id": "test:1", "source": "adzuna", "company": "Civic Made-up Ltd", "title": "Junior Researcher",
+                    "salary": "", "description": "", "location": "Leeds",
+                    "url": "https://civicmadeup.example/jobs/1"}
+
+    def field(self, hid: str, label: str, **kw) -> dict:
+        return {"hid": hid, "kind": "text", "type": "text", "label": label, "required": True, **kw}
+
+    def note(self, label: str, value: str, site: str = "civicmadeup.example", kind: str = "field_answer") -> str:
+        return self.notes.add("site", site, kind, {"label": label}, {"value": value},
+                              f"Answer \"{label}\" with \"{value}\" here")
+
+    def saved(self, label: str, answer: str, scope: str = "everywhere", key: str = "") -> None:
+        self.con.execute("""INSERT INTO answers2 (question, label, answer, scope, scope_key, updated)
+                            VALUES (?, ?, ?, ?, ?, ?)""",
+                         (autofill._norm(label), label, db.json_text(answer), scope, key, db.now()))
+        self.con.commit()
+
+    def test_a_site_note_answer_is_used_only_on_that_site(self):
+        self.note("how did you hear", "Company website")
+        here = autofill.propose(self.job, [self.field("h", "How did you hear about this role?")], {}, {}, self.con)[0]
+        elsewhere = {**self.job, "id": "test:2", "url": "https://othermadeup.example/jobs/2"}
+        there = autofill.propose(elsewhere, [self.field("h", "How did you hear about this role?")], {}, {}, self.con)[0]
+        self.assertEqual((here["value"], here["source"]), ("Company website", "note: field_answer"))
+        self.assertEqual([n["text"] for n in here["notes_used"]],
+                         ['Answer "how did you hear" with "Company website" here'])
+        self.assertIn("civicmadeup.example", here["why"])
+        self.assertEqual((there["value"], there["source"], there["notes_used"]), ("Adzuna", "profile: how_heard", []))
+
+    def test_answers_waiting_for_a_choice_are_never_used(self):
+        self.saved("Do you hold a full driving licence?", "Made-up yes", scope="review")
+        self.saved("What is your favourite archive?", "Made-up Record Office", scope="review")
+        fields = [self.field("d", "Do you hold a full driving licence?"),
+                  self.field("a", "What is your favourite archive?")]
+        autofill.propose(self.job, fields, {}, {}, self.con)
+        self.assertEqual([(f["value"], f["source"]) for f in fields], [(None, "you"), (None, "you")])
+        self.assertNotIn("Made-up Record Office", autofill._facts(self.job, {}, self.con))
+        self.assertEqual(self.con.execute("SELECT SUM(uses) FROM answers2").fetchone()[0], 0)
+
+    def test_each_field_says_where_its_answer_came_from(self):
+        self.stack.enter_context(private_answers.saved({"adjustments": "No adjustments needed"}))
+        self.note("location", "Leeds")
+        self.saved("Do you hold a full driving licence?", "Yes")
+        fields = [self.field("n", "Full name"), self.field("l", "Location"),
+                  self.field("d", "Do you hold a full driving licence?"),
+                  self.field("c", "Upload your CV", kind="file", type="file"),
+                  self.field("p", "Do you need any adjustments for the interview?"),
+                  self.field("w", "Why do you want this job?", kind="textarea")]
+        autofill.propose(self.job, fields, {}, {"cv": "Made-up CV.pdf"}, self.con)
+        reply = {"answers": [{"hid": "w", "value": "Cataloguing the made-up parish collection taught me patience "
+                                                    "with records.", "sure": True}]}
+        cv_text = "Archive Volunteer, Made-up Record Office (2025): cataloguing the parish collection records"
+        with mock.patch.object(autofill.cv, "facts_text", lambda: cv_text), \
+                mock.patch.object(autofill.record, "context", lambda questions: ""), \
+                fake_ai({"re:You check answers": '{"wrong": []}'}, default=json.dumps(reply)):
+            autofill.ask_model(self.job, fields, {}, self.con)
+        why = {f["hid"]: f["why"] for f in fields}
+        self.assertEqual(why["n"], "From your profile (Settings, You): your name.")
+        self.assertIn('because of your note for civicmadeup.example: "Answer \"location\"', why["l"])
+        self.assertIn('You gave this answer before, to "Do you hold a full driving licence?"', why["d"])
+        self.assertIn("every form", why["d"])
+        self.assertEqual(why["c"], "Your CV for this job, as you approved it.")
+        self.assertEqual(why["p"], autofill.PRIVATE_WHY)
+        self.assertIn("Written for this job by Hal from your CV (\"Archive Volunteer, Made-up Record Office", why["w"])
+        self.assertEqual(self.con.execute("SELECT uses FROM answers2").fetchone()[0], 1)
+
+    def test_private_answers_say_only_that_they_are_private(self):
+        self.stack.enter_context(private_answers.saved({"disability": "Yes", "adjustments": CANARY, "carer": "No"}))
+        for label in PRIVATE_LABELS:
+            self.note(label, CANARY)
+        fields = [self.field(f"p{i}", label) for i, label in enumerate(PRIVATE_LABELS)]
+        fields.append(self.field("q", "Do you consider yourself to have a long-term health condition?",
+                                 kind="radio", options=["Yes, limited a lot", "Yes, limited a little", "No"]))
+        autofill.propose(self.job, fields, {}, {}, self.con)
+        for f in fields:
+            self.assertIn(f["why"], (autofill.PRIVATE_WHY, autofill.LEFT_PRIVATE_WHY), f["label"])
+            self.assertEqual(f["notes_used"], [])
+        self.assertEqual([f["why"] for f in fields if f["source"].startswith("private")],
+                         [autofill.PRIVATE_WHY] * 4)
+        from jobhunt.apply import queries
+        shown = queries._fields({"fields": fields})
+        self.assertNotIn(CANARY, json.dumps(shown))
+        self.assertEqual({x["why"] for x in shown if x["src"] == "private"}, {autofill.PRIVATE_WHY})
+
+    def test_site_answers_come_after_private_and_carer_answers_and_before_saved_ones(self):
+        self.stack.enter_context(private_answers.saved({"carer": "No"}))
+        self.note("caring responsibilities", "Made-up note answer")
+        self.note("notice period", "Two weeks")
+        self.saved("What is your notice period?", "Made-up saved notice")
+        self.saved("Do you hold a full driving licence?", "Yes")
+        fields = [self.field("c", "Do you have any caring responsibilities?", kind="radio", options=["Yes", "No"]),
+                  self.field("n", "What is your notice period?"),
+                  self.field("d", "Do you hold a full driving licence?")]
+        autofill.propose(self.job, fields, {}, {}, self.con)
+        self.assertEqual([(f["value"], f["source"]) for f in fields],
+                         [("No", "private: carer"), ("Two weeks", "note: field_answer"),
+                          ("Yes", "your earlier answer")])
+
+    def test_a_skip_note_leaves_the_field_alone_and_says_so(self):
+        self.note("referral code", "", kind="field_skip")
+        f = autofill.propose(self.job, [self.field("r", "Referral code")], {}, {}, self.con)[0]
+        self.assertEqual((f["skip"], f["source"]), (True, "note: field_skip"))
+        self.assertTrue(f["why"].startswith("Left as it is because of your note for civicmadeup.example"))
+
+    def test_free_words_notes_reach_the_ai_but_never_one_about_a_private_question(self):
+        self.notes.add("site", "civicmadeup.example", "note", {}, {}, "This site calls the CV a portfolio")
+        self.notes.add("site", "civicmadeup.example", "note", {}, {}, "Say yes to the disability question")
+        facts = autofill._facts(self.job, {}, self.con, notes=autofill.page_notes(self.job))
+        self.assertIn("This site calls the CV a portfolio", facts)
+        self.assertNotIn("disability", facts)
 
 
 if __name__ == "__main__":
