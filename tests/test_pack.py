@@ -12,19 +12,21 @@ import contextlib
 import io
 import json
 import re
+import time
 import unittest
 from collections.abc import Iterator
 from contextlib import redirect_stdout
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from unittest import mock
+from urllib.parse import quote
 
 from support import people
 from support.stubs import cv_types
 from support.world import World
 
 from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
-from jobhunt.core import settings
+from jobhunt.core import runner, settings
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.
 ADVERTS = {
@@ -245,6 +247,63 @@ class CommandLine(unittest.TestCase):
         self.assertIn("Marnie Quillfeather", made[0][0])
         self.assertEqual(made[1], pack_md)
         self.assertIn("checked Riverside Heritage Trust", out.getvalue())
+
+
+class Requests(unittest.TestCase):
+    """The writing routes start their actions; the actions keep the person's words and check the letter."""
+
+    def setUp(self):
+        from support.api import HalServer
+
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        # The server first: it points the folders at its own home, where the pack must then be written.
+        self.hal = stack.enter_context(HalServer())
+        self.a = stack.enter_context(as_applicant(people.HUMANITIES))
+        stack.enter_context(mock.patch.object(documents, "render", lambda job, docs: {}))
+        self.job = add_job(self.a.con, "humanities_grad", status="applying")
+        pack.build(self.a.con, self.job["id"], use_web=False)
+        self.c = self.hal.signed_in()
+
+    def wait(self, action_id: str) -> dict:
+        end = time.monotonic() + WAIT_S
+        while time.monotonic() < end:
+            runner.flush()
+            row = self.a.con.execute("SELECT state, error FROM actions WHERE id = ?", (action_id,)).fetchone()
+            if row is not None and row["state"] not in ("queued", "running"):
+                return dict(row)
+            time.sleep(POLL_S)
+        raise AssertionError("the action did not finish")
+
+    def url(self, rest: str) -> str:
+        return f"/api/v2/applications/{quote(self.job['id'], safe='')}{rest}"
+
+    def test_asking_for_changes_rewrites_the_letter_message_and_answers_in_your_words(self):
+        r = self.c.post(self.url("/documents/change"), {"words": "Mention my guiding work"})
+        self.assertEqual(r.status, 200, r.text)
+        self.assertEqual(self.wait(r.json()["action_id"])["state"], "done")
+        asked = self.a.writer.log
+        for pid in ("letter", "message", "answers"):
+            self.assertTrue(any("Mention my guiding work" in e["user"] for e in asked if e["id"] == pid), pid)
+        why = self.a.con.execute("SELECT why, used FROM activity WHERE action_id = ?",
+                                 (r.json()["action_id"],)).fetchone()
+        self.assertEqual(why["why"], "You asked: Mention my guiding work")
+        self.assertIn("Volunteering/guide.md > Role", why["used"])
+        docs = documents.load(self.a.con, self.job)
+        self.assertIn("letter_notes", docs)
+
+    def test_asking_for_changes_with_no_words_is_refused(self):
+        r = self.c.post(self.url("/documents/change"), {"words": "  "})
+        self.assertEqual(r.status, 400)
+        self.assertEqual(r.json()["error"]["field"], "words")
+
+    def test_rewriting_the_letter_changes_only_the_letter(self):
+        before = documents.load(self.a.con, self.job)
+        r = self.c.post(self.url("/documents/letter/rewrite"), {"words": "Shorter, please"})
+        self.assertEqual(self.wait(r.json()["action_id"])["state"], "done")
+        after = documents.load(self.a.con, self.job)
+        self.assertEqual(after["message"], before["message"])
+        self.assertEqual([e["id"] for e in self.a.writer.log if "Shorter, please" in e["user"]], ["letter"])
 
 
 if __name__ == "__main__":

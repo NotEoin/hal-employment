@@ -5,14 +5,18 @@ The search engine and the AI are fakes: the search returns made-up profile resul
 """
 from __future__ import annotations
 
+import contextlib
+import time
 import unittest
 from unittest import mock
+from urllib.parse import quote
 
 from support import people
 from support.stubs import cv_types
-from test_pack import add_job, as_applicant, section
+from test_pack import POLL_S, WAIT_S, add_job, as_applicant, section
 
-from jobhunt import contacts, documents, pack
+from jobhunt import browser, contacts, documents, pack
+from jobhunt.core import runner
 
 
 def profile(name: str, role: str, company: str) -> dict:
@@ -63,6 +67,38 @@ class HiringTitles(unittest.TestCase):
                          "find the engineering lead on LinkedIn"):
                 with mock.patch.object(documents, "drafts", lambda job, line=line: {"message_to": line}):
                     self.assertEqual(contacts.from_advert(job), [])
+
+
+class Route(unittest.TestCase):
+    def test_find_who_to_message_searches_for_the_types_titles_and_stores_the_people(self):
+        from support.api import HalServer
+
+        searched = []
+
+        def search(queries, pause):
+            searched.extend(queries)
+            return [[profile("Ada Penhallow", "Head of Research", "Riverside Heritage Trust")]], False
+
+        with contextlib.ExitStack() as stack:
+            hal = stack.enter_context(HalServer())
+            a = stack.enter_context(as_applicant(people.HUMANITIES))
+            stack.enter_context(mock.patch.object(browser, "search", search))
+            stack.enter_context(mock.patch.object(contacts, "SEARCH_PAUSE", 0))
+            job = add_job(a.con, "humanities_grad", status="applied")
+            c = hal.signed_in()
+            r = c.post(f"/api/v2/applications/{quote(job['id'], safe='')}/contacts")
+            self.assertEqual(r.status, 200, r.text)
+            end = time.monotonic() + WAIT_S
+            while time.monotonic() < end:
+                runner.flush()
+                row = a.con.execute("SELECT state FROM actions WHERE id = ?", (r.json()["action_id"],)).fetchone()
+                if row is not None and row["state"] not in ("queued", "running"):
+                    break
+                time.sleep(POLL_S)
+            self.assertEqual(row["state"], "done")
+            stored = a.con.execute("SELECT contacts FROM applications WHERE job_id = ?", (job["id"],)).fetchone()
+        self.assertIn('"head of research"', searched[0])
+        self.assertIn("Ada Penhallow", stored["contacts"])
 
 
 if __name__ == "__main__":
