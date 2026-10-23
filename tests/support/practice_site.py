@@ -130,9 +130,10 @@ class HelperBrowser:
         address = f"http://127.0.0.1:{cls.helper.server_address[1]}"
         cls.on_helper(lambda: worker.evaluate("url => chrome.storage.local.set({hal: url})", address))
         deadline = time.monotonic() + HELPER_WAIT_S
-        while not extension.connected() and time.monotonic() < deadline:
+        # the helper started here polls as an old (unpaired) helper; another one still in touch must not count
+        while not extension.connected(extension.OLD) and time.monotonic() < deadline:
             time.sleep(POLL_S)
-        if not extension.connected():
+        if not extension.connected(extension.OLD):
             raise RuntimeError("the helper never polled the test server")
 
     @classmethod
