@@ -10,7 +10,7 @@ code is described in [docs/dev/architecture.md](docs/dev/architecture.md).
 Hal's server listens only on `127.0.0.1`, never on the network, and every request is checked:
 
 - **Web pages in any browser.** A page on another site cannot drive Hal or read its replies. The `Host`
-  header must name `127.0.0.1` or `localhost` (this stops DNS rebinding). Every API route needs Hal's
+  header must name `127.0.0.1` or `localhost`, which stops DNS rebinding. Every API route needs Hal's
   session cookie, which is `HttpOnly` and `SameSite=Strict`, so another site's requests never carry it.
   Every write also needs the header `X-Hal: 1` and, when the browser sends an `Origin`, an origin equal to
   `http://` plus the request's `Host`.
@@ -25,20 +25,25 @@ Hal's server listens only on `127.0.0.1`, never on the network, and every reques
 - **The browser helper.** Each helper is paired once with a one-time code and gets its own key. A helper
   request needs that key and an `Origin` of the helper's fixed extension id, so another extension or a web
   page cannot pose as it. The helper acts only on tabs Hal opened or that the person handed to it.
-- **Updates.** Updates come from GitHub with `git pull --ff-only`, never as downloads. When the owner has
-  set up commit signing, every new commit is checked against the signing key in the version already
-  installed, so a push cannot bring its own key ([docs/dev/release-and-update.md](docs/dev/release-and-update.md)).
-  Every tool the install file downloads is pinned by version and SHA-256 (`scripts/install/pins.toml`).
+- **Sending by mistake.** Hal never presses Submit. Every press in a form goes through one guard that
+  refuses Submit, Send and Finish controls, and the tests fill practice forms whose servers count posts.
+- **Updates.** Updates come from GitHub as a fast-forward of the installed clone, never as downloads. Once
+  the maintainer's signing key is in `scripts/install/allowed_signers`, every new commit is checked against
+  the key in the version already installed, so a commit cannot bring its own key
+  ([docs/dev/release-and-update.md](docs/dev/release-and-update.md)). Every tool the install files download
+  is pinned by version and SHA-256 (`scripts/install/pins.toml`).
 
 ## What Hal cannot protect against
 
 - **Programs run by the same user.** They can read that user's files anyway, including Hal's database and
   its local key. Hal does not claim to stop them.
 - **A computer that is already compromised,** or someone who can sign in as the user.
-- **Commits not yet signed.** Until the owner adds a key to `scripts/install/allowed_signers`, updates are
-  not checked for the owner's signature, and the updater says so each time.
+- **Unsigned updates.** While `scripts/install/allowed_signers` holds no key, updates are not checked for a
+  signature, and Settings, Updates says so.
 - **What the person sends.** Hal fills in forms but never presses Submit and never sends anything to an
   employer; what the person submits is theirs to check.
+- **What a job site or an AI service does with what it receives.** Hal limits what it sends (below), not
+  what happens to it afterwards.
 
 ## What is stored where
 
@@ -53,16 +58,16 @@ Hal's server listens only on `127.0.0.1`, never on the network, and every reques
 | Application documents | `Documents/Hal Employment/Applications` | The user's own Documents folder |
 | Logs and database backups | `logs/` and `backups/` in the data folder | No private answer is written to a log, and `jobs.db` holds none |
 
-The folders for each system are listed in the [README](README.md#where-your-data-lives). Nothing is kept
-inside Hal's program folder, so an update never touches the data.
+The folders for each system are listed in [docs/user/privacy.md](docs/user/privacy.md#where-your-data-lives).
+Nothing is kept inside Hal's program folder, so an update never touches the data.
 
 ## What leaves the computer
 
 - Searches, to the job sites the person switched on.
 - Update checks, to GitHub.
 - With the Claude subscription chosen: the advert, the CV and the evidence Hal picked, to Claude, through
-  the person's own Claude Code sign-in. With "On this computer" the AI runs locally, and "Never use online
-  AI" keeps it so.
+  the person's own Claude Code sign-in. With a local model the AI runs on the computer, and "Never use
+  online AI" keeps it so.
 - With email set up: Gmail is read with an app password, read only. The only email Hal sends is the
   person's own daily summary, to themselves.
 - With phone alerts on: short alert text, to ntfy.sh under a private random code.
@@ -70,15 +75,17 @@ inside Hal's program folder, so an update never touches the data.
 
 Private answers never reach the AI: one classifier (`autofill.private_question`) keeps those fields out of
 every AI request, and a guard in the AI layer refuses any prompt that holds a saved private answer. They
-never appear in logs, Activity, events, exports or help files. Gate G5 of the tests checks each of these
-with a canary value.
+never appear in logs, Activity, events, exports or help files. The privacy tests check each of these with a
+canary value.
 
 ## How to report a problem
 
 Please do not open a public issue for a security problem.
 
-- Tell the owner of Hal's GitHub repository directly (the person who gave you access), with what you saw,
-  the steps that show it, and your Hal version (Settings, Updates).
-- When the repository is public, use **Report a vulnerability** on its **Security** tab instead.
+- Use **Report a vulnerability** on the repository's **Security** tab (GitHub's private vulnerability
+  reporting). Say what you saw, the steps that show it, and your Hal version (Settings, Updates).
 - Do not attach your own data. A help file (Settings, Is Hal working?, Make a help file) has names, contact
   details and answers taken out, and you read it before it is saved.
+
+You should hear back within a week. A confirmed problem is fixed on `main`, and installs offer the fix as
+an update.
