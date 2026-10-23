@@ -162,13 +162,14 @@ def _answer(con, job, found: dict, step: int, done: list) -> dict:
         if documents.draft_letter(con, job):
             docs = documents.load(con, job)
     _say(job_id, f"answering {len(found['fields'])} questions" + (f" on step {step}" if step > 1 else ""))
-    fields = autofill.propose(job, found["fields"], docs, documents.files(job), con)
+    notes = browser.notes_for(found["url"], job_id)
+    fields = autofill.propose(job, found["fields"], docs, documents.files(job), con, notes=notes)
     # Answers its owner gave on an earlier run at this form stand.
     for f in fields:
         mine = KEPT.get(job_id, {}).get(f["sig"])
         if mine is not None and f["kind"] != "file":
-            f.update(value=mine, source="you", note="", skip=False)
-    _answered, waiting = autofill.ask_model(job, fields, docs, con)
+            autofill.by_you(f, mine)
+    _answered, waiting = autofill.ask_model(job, fields, docs, con, notes=notes)
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": fields,
             "model": waiting or "", "filled": None, "submit": None, "step": step, "done": done,
             "final": not found["next"], "state": "working", "message": "", "press": ""}
@@ -190,6 +191,7 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
     job_id = job["id"]
     docs = documents.load(con, job)
     fields = form["fields"]
+    notes = browser.notes_for(form.get("url") or "", job_id)
     _say(job_id, "filling in the form")
     out = browser.fill(job_id, only if only is not None else fields, _shot(job_id))
     _note_uses(form, out)
@@ -201,13 +203,14 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
             break
         if fresh:
             _say(job_id, f"answering {len(fresh)} more questions the form has just shown")
-            fields.extend(autofill.propose(job, fresh, docs, documents.files(job), con))
-        autofill.ask_model(job, fields, docs, con, problems=retry)
+            fields.extend(autofill.propose(job, fresh, docs, documents.files(job), con, notes=notes))
+        autofill.ask_model(job, fields, docs, con, problems=retry, notes=notes)
         _checkpoint(job_id)
         out = browser.fill(job_id, fields, _shot(job_id))
         _note_uses(form, out)
     for f in fields:
         f["error"] = out["errors"].get(f["hid"], "")
+    _count_note_answers(form, job_id)
     form["final"] = not out["next"]
     form["filled"] = {"at": db.now(), "screenshot": out["screenshot"], "errors": len(out["errors"]),
                       "next": out["next"], "password": out["password"]}
@@ -223,9 +226,35 @@ def _note_uses(form: dict, out: dict) -> None:
     for f in form.get("fields", []):
         mine = [line for line in lines if line["field"] == (f.get("label") or "")]
         if mine:
-            f["notes_used"] = mine
-    known = {line["what"] for line in form.get("notes_used") or []}
-    form["notes_used"] = [*(form.get("notes_used") or []), *(line for line in lines if line["what"] not in known)]
+            # kept beside what autofill listed (a note that answered the question), each line once
+            have = f.get("notes_used") or []
+            said = {x.get("what") for x in have}
+            f["notes_used"] = [*have, *(line for line in mine if line["what"] not in said)]
+    _add_notes_used(form, lines)
+
+
+def _add_notes_used(form: dict, lines: list[dict]) -> None:
+    """Adds trace lines to the form's "Notes Hal used on this site" list, each line once."""
+    known = {line.get("what") or line.get("id") for line in form.get("notes_used") or []}
+    form["notes_used"] = [*(form.get("notes_used") or []),
+                          *(line for line in lines if (line.get("what") or line.get("id")) not in known)]
+
+
+def _count_note_answers(form: dict, job_id: str) -> None:
+    """Counts each site note that answered or skipped a question (autofill lists it on the field), once per
+    question, as working when the form took the answer, and adds it to the form's list of notes used."""
+    from ..sites import notes
+
+    counted = set(form.get("notes_counted") or [])
+    for f in form.get("fields", []):
+        for n in f.get("notes_used") or []:
+            key = f"{n.get('id')}|{f.get('sig') or f.get('label')}"
+            if "what" in n or not n.get("id") or key in counted:
+                continue   # an engine's trace line, which the engine counted when it used the note
+            notes.used(n["id"], job_id, ok=not f.get("error"), detail=f.get("why") or "")
+            counted.add(key)
+            _add_notes_used(form, [n])
+    form["notes_counted"] = sorted(counted)
 
 
 def _open_points(form: dict) -> tuple[list, list, list]:
@@ -347,10 +376,10 @@ def _learn(con, job, form: dict, values: dict) -> int:
         shown = values[f["sig"]]
         if shown in (None, "", [], False) or _same_answer(f, shown):
             continue
-        f.update(value=shown, source="you", note="changed by you in the form", skip=False)
+        autofill.by_you(f, shown, "changed by you in the form")
         changed.append(f)
     if changed:
-        autofill.remember(con, changed, job["company"])
+        autofill.remember(con, changed, job["company"], job=job)
         autofill.mark_written(form["fields"])
     return len(changed)
 
@@ -378,9 +407,11 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
     shown = {f["sig"]: f.get("current") for f in found["fields"]}
     _learn(con, job, form, shown)
     docs = documents.load(con, job)
-    fresh = autofill.propose(job, [f for f in found["fields"] if f["sig"] not in known], docs, documents.files(job), con)
+    notes = browser.notes_for(found["url"], job_id)
+    new = [f for f in found["fields"] if f["sig"] not in known]
+    fresh = autofill.propose(job, new, docs, documents.files(job), con, notes=notes)
     form["fields"].extend(fresh)
-    autofill.ask_model(job, form["fields"], docs, con)
+    autofill.ask_model(job, form["fields"], docs, con, notes=notes)
     by_sig = {f["sig"]: f for f in found["fields"]}
     empty = [{**f, "hid": by_sig[f["sig"]]["hid"]} for f in form["fields"]
              if f.get("sig") in by_sig and shown.get(f["sig"]) in (None, "", [], False)
@@ -393,6 +424,7 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
             if f.get("sig") in by_sig:
                 f["hid"] = by_sig[f["sig"]]["hid"]
                 f["error"] = out["errors"].get(f["hid"], f.get("error", "") if f in empty else "")
+        _count_note_answers(form, job_id)
         form["final"] = not out["next"]
     return _hold(con, job, form)
 
@@ -588,7 +620,7 @@ def _approve(con, job_id: str, edits: list[dict]) -> str:
     form = _app(con, job_id)["form"]
     changed = _apply_edits(form, edits)
     _set_app(con, job_id, form=form)
-    autofill.remember(con, form["fields"], job["company"])
+    autofill.remember(con, form["fields"], job["company"], job=job)
     if form.get("press") == "apply":
         # A form stored before Hal stopped pressing Apply on signed-in sites.
         raise RuntimeError(APPLY_YOURSELF)
@@ -612,10 +644,10 @@ def _apply_edits(form: dict, edits: list[dict]) -> list[dict]:
         e = values.get(f["hid"])
         if e is None:
             continue
-        f["skip"] = bool(e.get("skip"))
         if e.get("edited"):
-            f.update(value=e.get("value"), source="you", note="")
+            autofill.by_you(f, e.get("value"))
             changed.append(f)
+        f["skip"] = bool(e.get("skip"))
     autofill.mark_written(form["fields"])
     return changed
 

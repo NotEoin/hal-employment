@@ -17,6 +17,7 @@ from test_runner import WAIT_S, fresh_home
 
 from jobhunt import autofill, browser, db, documents, replenish
 from jobhunt.apply import driver
+from jobhunt.sites import notes
 from jobhunt.web import server
 
 # unittest runs these for this module: no salary research, and no private answers.
@@ -431,6 +432,38 @@ class Watching(unittest.TestCase):
             self.assertTrue(driver.stop_watching())
             self.assertNotIn("test:watched", driver.WATCHING)
             self.assertEqual(driver._WATCHERS, {})
+
+
+class NotesAndYourAnswers(unittest.TestCase):
+    """What the driver does with autofill's answers: notes counted, your own answers named and kept."""
+
+    def setUp(self):
+        self.con = self.enterContext(fresh_home())
+        self.job = self.con.execute("SELECT * FROM jobs WHERE id = 'demo:1'").fetchone()
+
+    def test_a_note_that_answered_a_question_is_counted_once_and_listed(self):
+        note_id = notes.add("site", "example.org", "field_answer", {"label": "how did you hear"},
+                            {"value": "Company website"}, "Answer \"How did you hear\" with \"Company website\" here")
+        field = {"sig": "s1", "label": "How did you hear about us?", "kind": "text", "value": "Company website",
+                 "source": "note: field_answer", "why": "Answered because of your note.", "error": "",
+                 "notes_used": [{"id": note_id, "text": "Answer ...", "origin": "you"}]}
+        form = {"fields": [field]}
+        driver._count_note_answers(form, "demo:1")
+        driver._count_note_answers(form, "demo:1")
+        uses = next(s.uses for s in notes.stored(self.con) if s.note.id == note_id)
+        self.assertEqual(uses, 1)
+        self.assertEqual([n["id"] for n in form["notes_used"]], [note_id])
+
+    def test_an_answer_you_change_in_the_form_says_so_and_is_kept_for_this_job(self):
+        """Regression: a changed answer kept its old "Why this answer?", and answers about the job were saved
+        waiting for a choice instead of for this job."""
+        field = {"sig": "n1", "hid": "h1", "label": "What is your notice period?", "kind": "text", "value": "One month",
+                 "source": "profile: notice", "why": "From your profile (Settings, You): your notice period."}
+        form = {"fields": [field]}
+        self.assertEqual(driver._learn(self.con, self.job, form, {"n1": "Two weeks"}), 1)
+        self.assertEqual((field["value"], field["source"], field["why"]), ("Two weeks", "you", autofill.YOU_WHY))
+        row = self.con.execute("SELECT scope, scope_key FROM answers2").fetchone()
+        self.assertEqual((row["scope"], row["scope_key"]), ("job", "demo:1"))
 
 
 if __name__ == "__main__":

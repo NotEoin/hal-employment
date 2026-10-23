@@ -78,12 +78,12 @@ class FakeEngine:
             mock.patch.object(driver, "watch_tab", lambda job_id: None)]
 
 
-def answer_all(job, fields, docs, files, con):
+def answer_all(job, fields, docs, files, con, notes=None):
     """`autofill.propose` for a person whose profile answers every question."""
     return [{**f, "value": f"made-up answer to {f['label']}", "source": "profile"} for f in fields]
 
 
-def answer_page_one(job, fields, docs, files, con):
+def answer_page_one(job, fields, docs, files, con, notes=None):
     """Answers the profile questions; the essay is written by Hal, so the person should read it."""
     return [{**f, "value": "A made-up essay.", "source": "hal", "written": True} if f["kind"] == "textarea"
             else {**f, "value": "Robin Testwell", "source": "profile"} for f in fields]
@@ -114,7 +114,7 @@ class Flow(unittest.TestCase):
             self.con.execute("DELETE FROM applications WHERE job_id = ?", (self.job_id,))
             engine = FakeEngine(page1=[field("n", "Full name"), field("d", "Date of birth")], page2=[])
             # Date of birth stays empty: nothing in the made-up profile answers it.
-            propose = lambda job, fields, docs, files, con: [  # noqa: E731 - a one-line stand-in
+            propose = lambda job, fields, docs, files, con, notes=None: [  # noqa: E731 - a one-line stand-in
                 {**f, "value": None if f["hid"] == "d" else "Robin Testwell", "source": "profile"} for f in fields]
             engine.pages = [engine.pages[0]]
             said[mode] = (self.run_in(mode, engine, propose), self.form()["state"])

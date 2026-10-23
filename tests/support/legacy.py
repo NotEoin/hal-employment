@@ -50,7 +50,7 @@ PROSE = ("I want to work here because the practice forms are a good test of care
          "and careful engineering is what I enjoy most.")
 
 
-def fake_model(job, fields, docs, con=None, problems=None):
+def fake_model(job, fields, docs, con=None, problems=None, notes=None):
     """Stands in for the local model: writes prose for the essay and leaves the date of birth unanswered."""
     answered = 0
     for f in fields:
