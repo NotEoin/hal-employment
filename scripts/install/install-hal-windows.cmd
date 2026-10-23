@@ -206,5 +206,5 @@ if (-not (Test-HalAnswers $Py)) {
 
 # 8. The setup guide -----------------------------------------------------------------------------------
 Say '7 of 7: Opening the setup guide'
-Start-Process -FilePath $Pyw -ArgumentList '-X utf8 -m jobhunt open' -WorkingDirectory $App
+Start-Process -FilePath $Pyw -ArgumentList '-X utf8 -m jobhunt open --next /#setup' -WorkingDirectory $App
 Say 'Hal Employment is installed. You can close this window.'

@@ -91,7 +91,7 @@ say "4 of 6: Making the menu entry and starting Hal"
   stop "Hal could not finish installing. Run this file again. If it happens again, send $owner the file $log"
 
 say "5 of 6: Opening the setup guide"
-"$py" -m jobhunt open >>"$log" 2>&1 || say "Open Hal Employment from your applications menu."
+"$py" -m jobhunt open --next "/#setup" >>"$log" 2>&1 || say "Open Hal Employment from your applications menu."
 
 say "6 of 6: Done. Hal Employment is installed. You can close this window."
 exit 0

@@ -131,6 +131,10 @@ class Shapes(unittest.TestCase):
         self.assertNotIn(b"https://github.com/OWNER/REPO.git", win)
         self.assertEqual(len(made), 2)
 
+    def test_both_install_files_end_by_opening_the_setup_guide(self):
+        self.assertIn("-m jobhunt open --next /#setup'", powershell_part(WINDOWS))
+        self.assertIn('-m jobhunt open --next "/#setup"', LINUX.read_text(encoding="ascii"))
+
     def test_the_update_script_reads_the_uv_folders_from_the_install_record(self):
         last = next(line for line in batch_lines(UPDATE_CMD) if line.startswith("powershell"))
         for part in ("install.json", "UV_PYTHON_INSTALL_DIR", "UV_CACHE_DIR", "run --no-project --python 3.13",
