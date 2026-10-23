@@ -148,6 +148,9 @@ class AiStep(unittest.TestCase):
                 self.assertEqual(p.page.inner_text("[data-ai-panel] [data-account]"),
                                  "Signed in as robin.example@example.com (Claude Max)")
                 self.assertTrue(p.page.is_visible("[data-ai-panel] button:has-text('Sign out')"))
+                # the empty catalogue rows drew above the panel's, so each label showed twice
+                for label in ("Claude account", "Your Claude allowance"):
+                    self.assertEqual(p.page.locator(f"[data-group=ai] .lab:text-is('{label}')").count(), 1, label)
                 self.clean(p)
 
 

@@ -17,13 +17,15 @@ import { HealthPanel } from "../settings/health.js";
 import { PrivacyPanel } from "../settings/privacy.js";
 import { PromptsPanel } from "../settings/prompts.js";
 import { GoalPanel } from "../settings/goal.js";
-import { AiPanel } from "../settings/ai.js";
+import { AiPanel, PANEL_KEYS as AI_PANEL_KEYS } from "../settings/ai.js";
 import { UpdatesPanel } from "../settings/updates.js";
 import { RemotePanel } from "../settings/remote.js";
 
 const SUB = "Everything Hal does can be changed here. Most changes save straight away; the few that need a restart say so and offer a Restart button.";
 const SHOWN_WORDS = new Set(["money", "times", "hours"]);  // kinds whose typed value the server rewords
 const OTHER_PANELS = { ai: AiPanel, updates: UpdatesPanel };
+// Info rows a panel draws with their words, so the group leaves out their empty catalogue rows.
+const DRAWN_BY_PANEL = { ai: AI_PANEL_KEYS };
 // Buttons whose action has an API path; the rest belong to panels or to areas still being built.
 const BUTTON_PATHS = { "find.rescore": "/jobs/rescore", "ai.test": "/ai/test", "system.pause": "/status/pause",
   "system.quit": "/system/quit" };
@@ -79,7 +81,8 @@ function Row({ it, ctx }) {
 
 function Group({ gr, ctx, searching }) {
   const [more, setMore] = useState(false);
-  const shown = gr.items.filter(it => visibleIf(it.visible_if, ctx.vals.values));
+  const drawn = !searching && DRAWN_BY_PANEL[gr.id];
+  const shown = gr.items.filter(it => visibleIf(it.visible_if, ctx.vals.values) && !(drawn && drawn.has(it.key)));
   const plain = searching ? shown : shown.filter(it => !it.advanced);
   const hidden = searching ? [] : shown.filter(it => it.advanced);
   const Other = OTHER_PANELS[gr.id];
