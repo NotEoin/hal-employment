@@ -169,6 +169,23 @@ MADE_UP_PAGES = {
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
+    # My CV
+    "/cv": {"route": "improve", "route_words": "Help me improve it", "send": "hal_copy",
+            "employers_get": "Employers get: Hal's copy of your CV, version 1.",
+            "employers_get_sub": "Every change in it was accepted by you.",
+            "type": {"id": "humanities_grad", "name": "Humanities and social science graduate"},
+            "look": {"id": "classic", "name": "Classic"}, "version": {"id": "v1-demo", "n": 1, "what": "Made up",
+                                                                       "when": "2026-10-20T09:00:00Z"},
+            "baseline": None, "glance": {"scanner": None, "type_pass": None, "type_total": None, "pending": 0},
+            "not_found": [], "name": "Robin Example", "contact": "Leeds"},
+    "/cv/versions": [{"id": "v1-demo", "n": 1, "when": "2026-10-20T09:00:00Z", "what": "A made-up CV", "by": "hal",
+                      "origin": "generated", "current": True, "baseline": False, "binned": None}],
+    "/cv/document": {"schema": 2, "headline": "History graduate", "contact_snapshot": {}, "closing": "",
+                     "locale": "en-GB", "extras": {}, "version_id": "v1-demo", "n": 1,
+                     "sections": [{"id": "summary", "kind": "summary", "title": "Profile", "text": "A made-up profile.",
+                                   "entries": [], "also": "", "visible": True, "locked": False, "max_entries": None}]},
+    "/cv/layout": {"sections": [{"id": "summary", "kind": "summary", "title": "Profile", "show": True, "lock": False,
+                                 "max": None}], "locked_lines": []},
 }
 
 

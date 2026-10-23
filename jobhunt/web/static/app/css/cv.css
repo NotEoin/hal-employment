@@ -1,1 +1,4 @@
 /* Rules for the cv pages only; the page's owner adds them here, never in app.css. */
+.cv-employers { margin: -4px 0 18px; align-items: center; }
+.cv-changes .ba { margin-top: 6px; }
+.cv-changes .h3 { margin: 0 0 6px; }
