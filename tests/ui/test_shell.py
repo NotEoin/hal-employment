@@ -92,7 +92,7 @@ class ShellTest(unittest.TestCase):
                     self.assertEqual(p.sideways(), 0)
                     if page != "setup":
                         p.page.wait_for_selector("#main h1:focus")
-            self.assertEqual(p.errors, [], f"console or CSP errors at {size}")
+            self.assertEqual(p.errors, [], f"console or CSP errors at {size}; answered 404: {srv.state.missing}")
 
     def test_the_shell_has_no_serious_accessibility_findings(self) -> None:
         srv = self.serve(session=made_up_session(developer=True), status=made_up_status(

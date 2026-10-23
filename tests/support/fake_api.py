@@ -297,6 +297,7 @@ class FakeState:
     search: list = field(default_factory=lambda: list(MADE_UP_SEARCH))
     pages: dict = field(default_factory=lambda: json.loads(json.dumps(MADE_UP_PAGES)))
     posts: list = field(default_factory=list)      # (path, body) of every POST, PUT and DELETE received
+    missing: list = field(default_factory=list)    # every address answered 404, so a failing test can name it
     stopping: threading.Event = field(default_factory=threading.Event)
 
 
@@ -310,6 +311,8 @@ class Handler(BaseHTTPRequestHandler):
         return
 
     def _send(self, status: int, body: bytes, ctype: str, extra: dict[str, str] | None = None) -> None:
+        if status == 404:
+            self.server.state.missing.append(self.path)
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
