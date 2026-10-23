@@ -156,6 +156,25 @@ class StickImport(unittest.TestCase):
         self.assertIn("already has jobs", str(e.exception))
         self.assertTrue(again.exists())
 
+    def test_setup_copies_the_old_hal_as_an_action(self):
+        from support.api import HalServer
+
+        with HalServer() as hal:
+            stick = make_stick(hal.home / "HalEmployment")
+            (stick / "hal-commands" / "jobs.md").unlink()
+            c = hal.signed_in()
+            self.assertEqual(c.post("/api/v2/setup/import-usb", {"path": str(hal.home / "none")}).status, 400)
+            r = c.post("/api/v2/setup/import-usb", {"path": str(stick)})
+            self.assertEqual(r.status, 200)
+            done = runner.wait(r.json()["action_id"], timeout=60)
+            self.assertEqual(done["state"], "done", done["error"])
+            # the window that pressed the button is still signed in, and the jobs arrived
+            self.assertEqual(c.get("/api/v2/session").status, 200)
+            with contextlib.closing(db.connect()) as con:
+                self.assertEqual(con.execute("SELECT count(*) FROM jobs").fetchone()[0],
+                                 old_db.counts(next(hal.home.glob("HalEmployment.old-*")) / "data" / "jobs.db")["jobs"])
+            self.assertTrue((hal.home / "HalEmployment.old-" f"{importer_usb.clock.local_day().isoformat()}").exists())
+
     def test_a_folder_with_no_old_hal_stops_with_words(self):
         with self.assertRaises(importer.ImportStopped):
             importer_usb.run(self.root / "nothing-here", system=self.win.system())

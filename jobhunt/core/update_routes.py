@@ -173,6 +173,23 @@ def sign_in(req: Request) -> dict:
     return {"action_id": runner.start("updates.sign_in", why="You pressed Sign in again", priority=0)}
 
 
+def usb_install_folder() -> Path:
+    """Where the stick's Hal installed itself on this computer (U setup.ps1:24)."""
+    return Path(os.environ.get("USERPROFILE") or Path.home()) / "HalEmployment"
+
+
+@route("POST", "/api/v2/setup/import-usb", local_only=True)
+def import_usb(req: Request) -> dict:
+    """"We found an older Hal on this computer": copies it in as an action."""
+    body = req.body if isinstance(req.body, dict) else {}
+    folder = Path(str(body.get("path") or usb_install_folder())).expanduser()
+    if not (folder / "data" / "jobs.db").is_file():
+        raise BadRequest("There is no older Hal in that folder.", field="path")
+    runner.flush()
+    return {"action_id": runner.start("setup.import_usb", params={"path": str(folder)},
+                                      why="You pressed Copy my old Hal", priority=0)}
+
+
 @route("GET", "/api/v2/version")
 def version(req: Request) -> dict:
     """{app, commit, helper_wanted, protocol}; the updater checks `commit` after a restart."""

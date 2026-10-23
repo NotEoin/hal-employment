@@ -50,6 +50,10 @@ OLD_SUFFIX = ".old-"
 POWERSHELL_TIMEOUT_S = 30
 DONE = "Copied your jobs, applications and settings from your old Hal. Nothing was deleted."
 WHY = "Hal found an older Hal on this computer"
+STAGING_DB = "usb-import.db"            # state/: the stick's records while they are migrated
+# The person's own records from the stick, in an order that keeps every reference to a job valid; the rest
+# (sign-ins, settings, actions, Activity, schedule) belong to this Hal and are never written over.
+COPIED_TABLES = ("jobs", "events", "emails", "applications", "answers", "answers2", "todos", "alerts", "meta")
 ALREADY = "This Hal already has jobs, so the old Hal's were not copied over them."
 
 STOP_OLD = r"""
@@ -106,7 +110,10 @@ def _set_user_path(value: str) -> None:
         winreg.SetValueEx(k, "Path", 0, winreg.REG_EXPAND_SZ, value)
 
 
-def _special(name: str) -> Path:
+def _special(name: str) -> Path | None:
+    """The Startup or Desktop folder on Windows; None elsewhere, where the stick never installed."""
+    if os.name != "nt":
+        return None
     env = os.environ
     if name == "startup":
         return Path(env.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
@@ -118,7 +125,7 @@ class System:
     """What the import asks of the computer; tests pass fakes."""
 
     stop_old: Callable[[Path], None] = _stop_old
-    folder: Callable[[str], Path] = _special                 # "startup" | "desktop"
+    folder: Callable[[str], Path | None] = _special          # "startup" | "desktop"
     link_points_into: Callable[[Path, Path], bool] = _link_points_into
     user_path: Callable[[], str | None] = _user_path
     set_user_path: Callable[[str], None] = _set_user_path
@@ -290,26 +297,65 @@ def run(folder: Path, dry_run: bool = False, *, say: Callable[[str], None] | Non
 
 
 def _copy_database(src: Path, dest: Path, report: Report) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.is_file():
-        from . import backup
+    """The stick's records, migrated in a copy of their own, then added row by row to this Hal's database.
 
-        con = sqlite3.connect(dest)
-        try:
-            backup.snapshot(con, "before usb import", folder=paths.backups_dir())
-        finally:
-            con.close()
-    a = sqlite3.connect(src, timeout=30)
-    b = sqlite3.connect(dest, timeout=30)
+    Rows are added rather than the file replaced, because the new Hal may already be running (setup's "We
+    found an older Hal"): its sign-ins, settings, actions and Activity must survive the copy.
+    """
+    from .. import db
+    from . import backup
+    from .db import migrate
+
+    copy = paths.state_dir() / STAGING_DB
+    copy.unlink(missing_ok=True)
+    a, b = sqlite3.connect(src, timeout=30), sqlite3.connect(copy)
     try:
         a.backup(b)
     finally:
         b.close()
         a.close()
-    from .. import db
-
-    db.connect().close()     # migrates the copy, with its own backup first
+    try:
+        staged = sqlite3.connect(copy, timeout=30)
+        try:
+            migrate.migrate(staged, db_path=copy, backup_dir=paths.backups_dir())
+        except (migrate.MigrationError, migrate.DataTooNew) as e:
+            raise ImportStopped(f"The old Hal's records could not be read: {e}") from e
+        finally:
+            staged.close()
+        con = db.connect()
+        try:
+            backup.snapshot(con, "before usb import", folder=paths.backups_dir())
+            con.execute("PRAGMA foreign_keys = OFF")     # tables go in one by one; the rows are consistent
+            con.execute("ATTACH DATABASE ? AS old", (str(copy),))
+            try:
+                for table in COPIED_TABLES:
+                    _add_rows(con, table)
+                con.commit()
+            finally:
+                con.execute("DETACH DATABASE old")
+                con.execute("PRAGMA foreign_keys = ON")
+        finally:
+            con.close()
+    finally:
+        copy.unlink(missing_ok=True)
     report.add("database", f"Copied {_jobs(dest)} jobs and their history.", jobs=_jobs(dest))
+
+
+def _columns(con: sqlite3.Connection, schema: str, table: str) -> list[tuple[str, bool]]:
+    """(name, is the integer row id) for each column of `schema.table`."""
+    rows = con.execute(f'PRAGMA {schema}.table_info("{table}")').fetchall()
+    return [(r[1], bool(r[5]) and str(r[2]).upper() == "INTEGER") for r in rows]
+
+
+def _add_rows(con: sqlite3.Connection, table: str) -> None:
+    old = _columns(con, "old", table)
+    new = {name for name, _ in _columns(con, "main", table)}
+    if not old or not new:
+        return
+    # a numbered row gets a new number here, so it never collides with a row this Hal already made
+    names = [name for name, rowid in old if name in new and not rowid]
+    cols = ", ".join(f'"{n}"' for n in names)
+    con.execute(f'INSERT OR IGNORE INTO main."{table}" ({cols}) SELECT {cols} FROM old."{table}"')
 
 
 def _copy_files(old: Path, folder: Path, counts: _Counts, report: Report) -> None:
@@ -378,21 +424,21 @@ def _move_secrets(folder: Path, names: list[str], counts: _Counts, report: Repor
 
 
 def _retire(folder: Path, system: System, report: Report) -> None:
-    startup = system.folder("startup") / STARTUP_LINK
-    if startup.exists():
-        startup.unlink()
-    desktop = system.folder("desktop") / DESKTOP_LINK
-    if desktop.exists() and system.link_points_into(desktop, folder):
-        desktop.unlink()
+    startup_dir, desktop_dir = system.folder("startup"), system.folder("desktop")
+    if startup_dir is not None and (startup_dir / STARTUP_LINK).exists():
+        (startup_dir / STARTUP_LINK).unlink()
+    if desktop_dir is not None and (desktop_dir / DESKTOP_LINK).exists() and \
+            system.link_points_into(desktop_dir / DESKTOP_LINK, folder):
+        (desktop_dir / DESKTOP_LINK).unlink()
     current = system.user_path()
     if current:
         parts = [p for p in current.split(";") if p]
         kept = [p for p in parts if not p.lower().startswith(str(folder).lower())]
         if len(kept) != len(parts):
             system.set_user_path(";".join(kept))
-    jobs_md = system.home() / ".claude" / "commands" / "jobs.md"
     ours = folder / "hal-commands" / "jobs.md"
-    if jobs_md.is_file() and ours.is_file() and _sha(jobs_md) == _sha(ours):
+    jobs_md = system.home() / ".claude" / "commands" / "jobs.md"
+    if ours.is_file() and jobs_md.is_file() and _sha(jobs_md) == _sha(ours):
         jobs_md.unlink()
     renamed = folder.with_name(f"{folder.name}{OLD_SUFFIX}{system.today()}")
     n = 2
