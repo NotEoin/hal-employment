@@ -141,13 +141,21 @@ def _write(path: Path, text: str | bytes) -> None:
         path.write_text(text, encoding="utf-8")
 
 
+def _literal(path: Path) -> str:
+    """`path` as a TOML literal string, so a Windows `C:\\Users` is not read as a `\\U` escape."""
+    if "'" in str(path):
+        raise ValueError(f"a TOML literal string cannot hold {path}")
+    return f"'{path}'"
+
+
 def config_toml(repo: OldRepo, *, carer: bool = True) -> str:
     """A made-up config.toml in the L shape."""
-    lines = ["alert_score = 70", f'ntfy_topic = "{OLD_TOPIC}"', f'hal_root = "{repo.hal}"',
-             f'hal_vault = "{repo.hal / "vault"}"', 'speak_command = "/usr/bin/true"',
-             f'record_vault = "{repo.root.parent / "record"}"', "queue_size = 5", "queue_min_score = 55",
+    lines = ["alert_score = 70", f'ntfy_topic = "{OLD_TOPIC}"', f"hal_root = {_literal(repo.hal)}",
+             f"hal_vault = {_literal(repo.hal / 'vault')}", 'speak_command = "/usr/bin/true"',
+             f"record_vault = {_literal(repo.root.parent / 'record')}", "queue_size = 5", "queue_min_score = 55",
              'apply_browser = "extension"', 'apply_window = "same"', "signed_in_apply = []",
-             'gpu_ignore = ["made-up-voice"]', f'cv_site = "{repo.site}"', 'digest_to = "sam.example@example.org"',
+             'gpu_ignore = ["made-up-voice"]', f"cv_site = {_literal(repo.site)}",
+             'digest_to = "sam.example@example.org"',
              "", "[applicant]", 'city = "Bristol"', 'notice = "None, available immediately"',
              'diversity = "Prefer not to say"', 'salary = "Around 26,000 pounds"']
     if carer:
