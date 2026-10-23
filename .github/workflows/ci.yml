@@ -14,7 +14,8 @@ jobs:
           - { os: ubuntu-24.04, python: "3.13", extras: "--extra browser --extra documents" }
           - { os: windows-2025, python: "3.13", extras: "--extra browser" }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Windows runs the 1274 tests in about 28 minutes and Linux in about 15
+    timeout-minutes: 45
     # uv run would otherwise make a fresh venv on .python-version's Python, without the extras
     env: { UV_PYTHON: "${{ matrix.python }}" }
     steps:
