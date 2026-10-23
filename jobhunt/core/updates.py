@@ -469,8 +469,9 @@ def _alive(pid: int) -> bool:
 
 
 def _end(pid: int) -> None:
+    """Ends the server process only: on Windows the updater is its child, so `taskkill /T` ended it too."""
     if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=HTTP_TIMEOUT_S,
+        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=HTTP_TIMEOUT_S,
                        check=False)
         return
     import signal

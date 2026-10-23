@@ -426,6 +426,14 @@ class Spawning(unittest.TestCase):
                      windows_platform.CREATE_BREAKAWAY_FROM_JOB):
             self.assertTrue(flags & flag)
 
+    def test_ending_a_stuck_server_on_windows_spares_the_updater_it_started(self):
+        """Regression: `taskkill /T` on the server also ended the updater, its child (Windows 11 VM, 2026-10-23)."""
+        with mock.patch.object(updates.subprocess, "run") as run, mock.patch.object(updates.os, "name", "nt"):
+            updates._end(4242)
+        args = run.call_args.args[0]
+        self.assertEqual(args[:3], ["taskkill", "/PID", "4242"])
+        self.assertNotIn("/T", args)
+
     def test_the_updater_uses_only_the_standard_library(self):
         import sys
 
