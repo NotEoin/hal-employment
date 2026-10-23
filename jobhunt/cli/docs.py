@@ -1,8 +1,9 @@
 """Commands for application documents: pack, letter, check, contacts.
 
-The bodies moved unchanged from `jobhunt/__main__.py`; the parser, its arguments and help stay there,
-because the voice bridge and the /jobs command parse what these commands print. File names that carry
-the person's name come from `core.naming`.
+The bodies moved from `jobhunt/__main__.py`; the parser, its arguments and help stay there, because the
+voice bridge and the /jobs command parse what these commands print. File names that carry the person's
+name come from `core.naming`. Each command reads and writes the job's numbered application folder,
+and a pack drafted before those folders existed is still found where it was.
 """
 import sys
 
@@ -11,16 +12,28 @@ from ..core import naming
 from .find import _find
 
 
+def _pack_md(job):
+    """The job's `pack.md`, in its application folder or, for an older pack, its old folder; None if none."""
+    from .. import documents
+    from ..docs import folders
+
+    folder = documents.pack_dir(job, create=False)
+    if folder is not None and (folder / folders.PACK_MD).exists():
+        return folder / folders.PACK_MD
+    legacy = folders.legacy_folder(job)
+    return legacy / folders.PACK_MD if legacy is not None and (legacy / folders.PACK_MD).exists() else None
+
+
 def cmd_pack(args):
     from .. import cv, llm, pack
     if args.cv_only:
         con = db.connect()
         for r in con.execute("SELECT * FROM jobs WHERE status = 'ready'"):
-            out_dir = pack.PACKS / pack.slug(f"{r['company']}-{r['title']}")
-            if out_dir.exists():
+            found = _pack_md(r)
+            if found is not None:
                 variant, _ = cv.tailor(f"{r['title']}\n{r['description'] or ''}")
-                cv.render(variant, out_dir)
-                print(f"  {out_dir.name}")
+                cv.render(variant, found.parent)
+                print(f"  {found.parent.name}")
         return
     if not llm.available():
         sys.exit("Ollama is not reachable; packs are drafted by the local models.")
@@ -38,13 +51,14 @@ def cmd_pack(args):
 def cmd_letter(args):
     import re as _re
 
-    from .. import letter, pack
+    from .. import letter
     con = db.connect()
     r = _find(con, args.id)
-    out_dir = pack.PACKS / pack.slug(f"{r['company']}-{r['title']}")
-    section = _re.search(r"## Cover letter\n(.*?)(?=\n## )", (out_dir / "pack.md").read_text(), _re.S)
+    found = _pack_md(r)
+    section = found and _re.search(r"## Cover letter\n(.*?)(?=\n## )", found.read_text(), _re.S)
     if not section:
         sys.exit("no cover letter in this pack")
+    out_dir = found.parent
     recipient = args.to.split("|") if args.to else [f"{r['company']} recruitment team"]
     subject = args.subject or f"Application: {r['title']}"
     # the person's name in the file comes from the `cvdocs.letter_file_name` template, never from code
@@ -56,8 +70,8 @@ def cmd_check(args):
     con = db.connect()
     rows = con.execute("SELECT * FROM jobs WHERE status = 'ready'").fetchall() if args.ready else [_find(con, args.id)]
     for r in rows:
-        pack_md = pack.PACKS / pack.slug(f"{r['company']}-{r['title']}") / "pack.md"
-        if pack_md.exists():
+        pack_md = _pack_md(r)
+        if pack_md is not None:
             pack.add_company_check(pack_md, r["company"])
             print(f"checked {r['company']}")
 

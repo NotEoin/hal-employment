@@ -9,10 +9,12 @@ type from the settings to the finished letter. The helpers here are shared by `t
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import re
 import unittest
 from collections.abc import Iterator
+from contextlib import redirect_stdout
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from unittest import mock
@@ -21,7 +23,7 @@ from support import people
 from support.stubs import cv_types
 from support.world import World
 
-from jobhunt import cv, db, documents, gpu, llm, pack, record
+from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
 from jobhunt.core import settings
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.
@@ -222,6 +224,27 @@ class Checklist(unittest.TestCase):
             job = add_job(a.con, "humanities_grad", eligibility=verdict)
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         self.assertIn(f"- ELIGIBILITY: {verdict['why']}", section(md, "Check before sending"))
+
+
+class CommandLine(unittest.TestCase):
+    def test_letter_and_check_read_the_numbered_application_folder(self):
+        """Regression: both read the old shared packs folder after packs moved into application folders."""
+        from jobhunt.cli import docs as cli_docs
+
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad")
+            pack_md = pack.build(a.con, job["id"], use_web=False)
+            made = []
+            with mock.patch.object(letter, "render", lambda body, out, *a, **k: made.append((body, out)) or out), \
+                    mock.patch.object(pack, "add_company_check", lambda md, company: made.append(md)):
+                out = io.StringIO()
+                with redirect_stdout(out):
+                    cli_docs.cmd_letter(SimpleNamespace(id=job["id"], to=None, subject=None))
+                    cli_docs.cmd_check(SimpleNamespace(id=job["id"], ready=False))
+        self.assertEqual(made[0][1].parent, pack_md.parent)
+        self.assertIn("Marnie Quillfeather", made[0][0])
+        self.assertEqual(made[1], pack_md)
+        self.assertIn("checked Riverside Heritage Trust", out.getvalue())
 
 
 if __name__ == "__main__":
