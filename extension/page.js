@@ -267,8 +267,14 @@ function halExtract() {
       } else if (kind === 'select') {
         f.options = [...el.options].filter((o, i) => !(i === 0 && !o.value) && clean(o.text) && !PLACEHOLDER.test(clean(o.text)))
           .map(o => clean(o.text));
-        const chosen = el.selectedOptions[0];
-        f.current = chosen && f.options.includes(clean(chosen.text)) ? clean(chosen.text) : '';
+        if (el.multiple) {
+          // A list that takes several answers holds them all.
+          f.multiple = true;
+          f.current = [...el.selectedOptions].map(o => clean(o.text)).filter(t => f.options.includes(t));
+        } else {
+          const chosen = el.selectedOptions[0];
+          f.current = chosen && f.options.includes(clean(chosen.text)) ? clean(chosen.text) : '';
+        }
       } else if (kind === 'combobox') {
         // Some widgets keep a plain <select> or <datalist> beside the styled one, holding every option.
         const mirror = [...box.querySelectorAll('select')].find(s => s !== el && s.options.length > 1)
@@ -353,11 +359,13 @@ function halStale() {
 // The options of an open dropdown: the list the control names, else any list opened since halStale.
 // Each is tagged with data-hal-opt so the one chosen can be pressed.
 function halOptions(hid) {
-  const el = document.querySelector(`[data-hal-id="${hid}"]`);
+  // The control may sit inside a page component (an open shadow root), where its list is too.
+  const el = halAll(`[data-hal-id="${hid}"]`)[0];
+  const home = el && el.getRootNode && el.getRootNode().getElementById ? el.getRootNode() : document;
   const ITEMS = HAL_ITEMS;
   let pool = [], named = false;
   for (const attr of ['aria-controls', 'aria-owns']) {
-    const list = el && el.getAttribute(attr) && document.getElementById(el.getAttribute(attr));
+    const list = el && el.getAttribute(attr) && home.getElementById(el.getAttribute(attr));
     if (!list) continue;
     // A list the control names is the only place its options can be.
     named = true;
@@ -382,6 +390,14 @@ function halOptions(hid) {
     if (out.length >= 400) break;
   }
   return out;
+}
+
+// The words the page shows, with those inside page components (open shadow roots), where an upload
+// widget may list the file it took.
+function halText() {
+  const parts = [document.body ? document.body.innerText : ''];
+  for (const host of halAll('*')) if (host.shadowRoot) parts.push(host.shadowRoot.textContent || '');
+  return parts.join('\n').slice(0, 80000);
 }
 
 // Reads a DuckDuckGo results page into {url, title, snippet} rows.

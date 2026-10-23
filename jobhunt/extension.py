@@ -16,8 +16,8 @@ of each command that cancels any submit the page or a press would make. There is
 command presses Enter.
 """
 import concurrent.futures
-import json
 import queue
+import re
 import threading
 import time
 import uuid
@@ -32,25 +32,31 @@ from .browser import (
     BLOCKED,
     BOT_CHECK,
     CAPTCHA,
-    CLOSED,
-    COOKIE_BUTTONS,
+    CODE_WALL,
+    FORM_FRAME,
     MAX_PRESSES,
     NEXT_BUTTON,
     SIGN_IN,
     SIGN_OUT,
     SUBMIT_BUTTON,
     SUCCESS,
+    UPLOAD_FAILED,
+    _closed,
     _is_form,
-    _signed_in_sites,
     _site,
     code_boxes,
+    note_signed_in,
+    signed_in_at,
 )
 from .config import CONFIG
 
 POLL_WAIT = 20  # seconds a poll is held open; the browser stops a worker whose request takes 30
 PATTERNS = {"apply": APPLY_BUTTON.pattern, "next": NEXT_BUTTON.pattern, "submit": SUBMIT_BUTTON.pattern,
-            "signOut": SIGN_OUT.pattern, "frames": list(ATS_FRAME), "captcha": CAPTCHA}
-FILL_WAIT = 180  # seconds a fill may take: uploads and searched lists are slow
+            "signOut": SIGN_OUT.pattern, "frames": [*ATS_FRAME, *FORM_FRAME], "captcha": CAPTCHA}
+FILL_WAIT = 180  # seconds a fill of a few fields may take: uploads and searched lists are slow
+# A dropdown takes about 15 s to open, search and pick on a slow site (L extension.py:182 hit 180 s on a form
+# of a dozen lists), so the limit grows with the fields of the fill.
+FILL_PER_FIELD_S = 20
 OLD = "old"      # the queue of a 0.4 or 0.5 helper: no key, and polls /api/ext/*
 NOT_CONNECTED = "Open Hal in the browser that has the helper"
 CONNECTED_S = 2 * POLL_WAIT  # a helper in touch this recently is connected: it polls again as each poll ends
@@ -65,6 +71,10 @@ _kept: set[str] = set()              # jobs whose carrier is written on their ap
 _told_reload: dict[str, str] = {}    # helper id -> the version it was asked to reload from
 _still_older: set[str] = set()       # helpers that reloaded and still came back older than Hal
 _old_seen = 0.0
+_last_url: dict[str, str] = {}       # job id -> the address its tab showed last, for the notes about that site
+# Bumped by `reset`: a poll still held open when everything was forgotten must not mark its helper as in touch
+# again when it ends (a stopped test server's last poll made the next test class see a helper that had gone).
+_generation = 0
 
 
 def _queue(helper_id: str) -> queue.Queue:
@@ -72,9 +82,14 @@ def _queue(helper_id: str) -> queue.Queue:
         return _queues.setdefault(helper_id, queue.Queue())
 
 
-def _touch(helper_id: str) -> bool:
-    """Notes contact from a helper; True when it was not connected before (so setup's tick can follow)."""
+def _touch(helper_id: str, generation: int | None = None) -> bool:
+    """Notes contact from a helper; True when it was not connected before (so setup's tick can follow).
+
+    With `generation`, the contact counts only when nothing was forgotten (`reset`) since it began.
+    """
     with _lock:
+        if generation is not None and generation != _generation:
+            return False
         was = _connected_locked(helper_id)
         _seen[helper_id] = time.time()
         return not was
@@ -122,6 +137,7 @@ def poll() -> dict:
     """
     global _old_seen
     _old_seen = time.time()
+    began = _generation
     _touch(OLD)
     try:
         if not _old_allowed():
@@ -129,7 +145,7 @@ def poll() -> dict:
             return {}
         return _take(OLD, POLL_WAIT)
     finally:
-        _touch(OLD)
+        _touch(OLD, began)
 
 
 def poll_helper(helper_id: str, version: str | None, protocol: int | None, wait: float | None = None) -> dict:
@@ -142,6 +158,7 @@ def poll_helper(helper_id: str, version: str | None, protocol: int | None, wait:
     from .apply import helpers
     from .core import events
 
+    began = _generation
     first = _touch(helper_id)
     con = db.connect()
     try:
@@ -169,7 +186,7 @@ def poll_helper(helper_id: str, version: str | None, protocol: int | None, wait:
     try:
         command = _take(helper_id, POLL_WAIT if wait is None else wait)
     finally:
-        _touch(helper_id)
+        _touch(helper_id, began)
     if command:
         reply["commands"] = [command]
     return reply
@@ -287,8 +304,9 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
 
 def reset() -> None:
     """Forgets every queue, carrier and helper contact (tests start each class clean)."""
-    global _old_seen
+    global _old_seen, _generation
     with _lock:
+        _generation += 1
         _queues.clear()
         _waiting.clear()
         _seen.clear()
@@ -299,26 +317,38 @@ def reset() -> None:
     _old_seen = 0.0
 
 
-def _read(job_id: str, banners: bool = True, options: bool = False) -> dict:
-    """Returns what the job's tab shows: its fields and the facts the steps below decide on."""
-    facts = _ask("read", job=job_id, patterns={
-        **PATTERNS, "banners": [p.pattern for p in COOKIE_BUTTONS] if banners else None, "options": options})
+def _read(job_id: str, banners: bool = True, options: bool = False, front: bool = True) -> dict:
+    """Returns what the job's tab shows: its fields and the facts the steps below decide on.
+
+    The tab is brought forward first (`front`), in either window setting, since a hidden tab's dropdowns
+    never open; a look that only watches (`peek`) leaves the tabs where they are.
+    """
+    words, never = browser.banner_words(browser.notes_for(_last_url.get(job_id, ""), job_id))
+    facts = _ask("read", job=job_id, front=front, patterns={
+        **PATTERNS, "banners": [p.pattern for p in words] if banners else None,
+        "bannersNever": never.pattern if never is not None and banners else None, "options": options})
     if not facts:
         # The page was swapped out while it was read, or is one the browser will not let a script into.
         raise RuntimeError("the job's tab could not be read; it may still be loading or be a browser error page")
+    _last_url[job_id] = facts["url"]
     return facts
 
 
 def _needs(facts: dict) -> str:
-    """Names what only the applicant can do on this page: "sign-in", "check", or "" for nothing."""
+    """Names what only the applicant can do on this page: "sign-in", "check", "code", or "" for nothing.
+
+    The same rules as Hal's own window (`browser._needs`): a bot check is seen in the page's words as well as
+    its title, and a page that asks only for an emailed code is a code wall.
+    """
     fields = facts["fields"]
     if _is_form(fields):
         return ""
-    if BOT_CHECK.search(facts["title"]):
+    if BOT_CHECK.search(facts["title"]) or BOT_CHECK.search(facts["text"][:400]):
         return "check"
     if facts["password"]:
-        # A registration form that also asks the usual questions is filled in, apart from its password.
-        return "" if _is_form(fields) and len(fields) > 5 else "sign-in"
+        return "sign-in"
+    if 0 < len(fields) <= 3 and CODE_WALL.search(facts["text"][:3000]):
+        return "code"
     # Sign-in pages that ask for the email address first show no password box yet.
     if 0 < len(fields) <= 2 and not facts["apply"] \
             and SIGN_IN.search(f"{facts['title']} {urlparse(facts['url']).path}"):
@@ -331,7 +361,8 @@ def _report(facts: dict, needs: str, pressed: bool) -> dict:
     text = "" if form else facts["text"]
     return {"url": facts["url"], "title": facts["title"], "fields": [] if needs else facts["fields"],
             "needs": needs, "sent": pressed and SUCCESS.search(text) is not None, "site": _site(facts["url"]),
-            "closed": not form and CLOSED.search(f"{facts['title']} {facts['headings']}") is not None,
+            "closed": not form and _closed({"title": facts["title"], "headings": [facts["headings"]],
+                                            "url": facts["url"]}, None),
             "blocked": not form and not needs and BLOCKED.search(f"{facts['title']} {facts['text'][:300]}") is not None,
             "applied": APPLIED.search(text) is not None, "captcha": facts["captcha"],
             "alerts": facts.get("alerts", []), "next": form and facts["next"] and not facts["submit"],
@@ -360,18 +391,26 @@ def _advance(job_id: str, pressed: bool = False) -> dict:
     presses it there: it stops with `needs = "apply"` for the person to press it. `pressed` says the
     person has just pressed it.
     """
+    first_done = False
     for presses in range(MAX_PRESSES + 1):
         facts = _read(job_id)
         needs = _needs(facts)
         if needs or _is_form(facts["fields"]) or presses == MAX_PRESSES:
             break
+        first = None if first_done else browser._press_first(facts, browser.notes_for(facts["url"], job_id), job_id)
+        if first is not None:
+            # A `press_first` note: that control before any Apply, once, through the same guard.
+            first_done = True
+            exact = rf"^\s*{re.escape(first['name'])}\s*$"
+            if _press(job_id, {**facts, "final": False}, "apply", pattern=exact):
+                continue
         if facts["frame"]:
             # A form inside a frame cannot be read or filled from the page around it.
             _ask("goto", job=job_id, url=facts["frame"])
             continue
         if not facts["apply"]:
             break
-        if facts["signOut"] or _site(facts["url"]) in _signed_in_sites():
+        if facts["signOut"] or signed_in_at(facts["url"]):
             needs = "apply"
             break
         if not _press(job_id, {**facts, "final": False}, "apply", pattern=APPLY_BUTTON.pattern):
@@ -382,6 +421,7 @@ def _advance(job_id: str, pressed: bool = False) -> dict:
 
 
 def open_form(job_id: str, url: str) -> dict:
+    _last_url[job_id] = url
     _ask("open", timeout=120, job=job_id, url=url, window=CONFIG.get("apply_window", "separate"))
     return _advance(job_id)
 
@@ -408,15 +448,13 @@ def type_code(job_id: str, code: str, boxes: list[str]) -> dict:
 
 def resume(job_id: str, passed: str, wall: str) -> dict:
     if passed == "sign-in":
-        # Read when used, so a test or the data move points it elsewhere.
-        signed_in = browser._live("SIGNED_IN")
-        signed_in.write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
+        note_signed_in(wall)
     return _advance(job_id, pressed=passed == "apply")
 
 
 def peek(job_id: str) -> dict:
     try:
-        facts = _read(job_id, banners=False)
+        facts = _read(job_id, banners=False, front=False)
     except RuntimeError as e:
         return {"gone": True} if "tab was closed" in str(e) else {"busy": True}
     return {"needs": _needs(facts), "form": _is_form(facts["fields"]), "url": facts["url"],
@@ -432,15 +470,21 @@ def read_here(job_id: str) -> dict:
 
 
 def fill(job_id: str, fields: list[dict], shot) -> dict:
-    """Enters the approved values; there is no picture, since the form is in the applicant's own tab."""
+    """Enters the approved values, after any `field_transform` note; there is no picture, since the form is in
+    the applicant's own tab."""
+    fields, trace = browser.with_notes(job_id, _last_url.get(job_id, ""), fields)
     wanted = [{k: f.get(k) for k in ("hid", "kind", "value", "options")} for f in fields
               if f.get("value") not in (None, "", []) and not f.get("skip")]
     paths = [f["value"] for f in wanted if f["kind"] == "file"]
-    errors = _ask("fill", timeout=FILL_WAIT, job=job_id, fields=wanted, paths=paths)["errors"]
+    out = _ask("fill", timeout=max(FILL_WAIT, FILL_PER_FIELD_S * len(wanted)), job=job_id, fields=wanted, paths=paths)
+    errors = out["errors"]
+    for hid in out.get("notTaken") or []:
+        # A file the site dropped is never reported as done.
+        errors[hid] = UPLOAD_FAILED
     facts = _read(job_id, banners=False, options=True)
     known = {f.get("sig") for f in fields}
     return {"errors": errors, "screenshot": None, "next": facts["next"] and not facts["submit"],
-            "submit": facts["submit"], "password": facts["password"],
+            "submit": facts["submit"], "password": facts["password"], "notes_used": trace,
             "new": [f for f in facts["fields"] if f.get("sig") not in known]}
 
 
@@ -467,7 +511,7 @@ def show(job_id: str) -> bool:
 
 
 def look(job_id: str, shot) -> dict:
-    facts = _read(job_id, banners=False)
+    facts = _read(job_id, banners=False, front=False)
     return {"url": facts["url"], "title": facts["title"], "screenshot": None, "text": facts["text"][:1500],
             "apply": facts["apply"], "next": facts["next"], "submit": facts["submit"], "unchecked": facts["unchecked"]}
 

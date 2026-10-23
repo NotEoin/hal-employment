@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Community Officer</title></head><body>
+<!-- A form whose Location box refuses anything but a city: "Leeds, United Kingdom" is emptied again.
+     Passed through a site note ("In \"Location\", type only the city"), not special code. -->
+<h1>Apply: Community Officer</h1>
+<form method="post" action="/sent/city-only">
+ <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+ <div><label for="loc">Location *</label><input id="loc" name="location" required><span id="loc-err" role="alert"></span></div>
+ <button type="submit">Submit application</button>
+</form>
+<script>
+const loc = document.querySelector('#loc');
+loc.addEventListener('blur', () => {
+  if (loc.value.includes(',')) {
+    loc.value = '';
+    document.querySelector('#loc-err').textContent = 'Enter a town or city only';
+  } else document.querySelector('#loc-err').textContent = '';
+});
+</script></body></html>

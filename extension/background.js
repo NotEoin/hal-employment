@@ -91,8 +91,10 @@ async function inTab(tabId, method, arg) {
 // that acts on a page, a submit the page or a press would make is cancelled and noted, as are the form's own
 // send methods, unless the submitter is the vetted Next control marked `data-hal-allow`: many multi-page
 // forms move on with a real submit. Taken away when the command ends, so the person's own Submit works.
+// Each command holds the block: two commands in one tab (a watch's read beside a fill) share it, and it goes
+// only when the last lets go, so the first to end never takes it from under the other.
 function halBlock() {
-  if (window.__halUnblock) return true;
+  if (window.__halUnblock) { window.__halHolders = (window.__halHolders || 1) + 1; return true; }
   const proto = HTMLFormElement.prototype, submit = proto.submit, request = proto.requestSubmit;
   const cancelled = [];
   const allowed = el => Boolean(el && el.hasAttribute && el.hasAttribute('data-hal-allow'));
@@ -108,11 +110,14 @@ function halBlock() {
     if (allowed(by)) return request.call(this, by);
     cancelled.push('a script on the page asked to send the form');
   };
+  window.__halHolders = 1;
   window.__halUnblock = () => {
+    if (--window.__halHolders > 0) return [];   // the last holder reports what was cancelled
     window.removeEventListener('submit', onSubmit, true);
     proto.submit = submit;
     proto.requestSubmit = request;
     delete window.__halUnblock;
+    delete window.__halHolders;
     return cancelled;
   };
   return true;
@@ -157,15 +162,17 @@ async function newTab(url, separate) {
   return made.tabs[0];
 }
 
-// The job's tab, loaded, and the one shown in Hal's window: a tab behind others there is not drawn,
-// so its dropdowns never open and its clicks never settle. Tabs in the applicant's own windows stay put.
-async function jobTab(job) {
+// The job's tab, loaded. With `front`, it is brought forward first, in Hal's window or the applicant's own
+// ("This window"): a tab behind others is not drawn, so its dropdowns never open and its clicks never settle.
+// Looks that only read (a watch every 3 s) leave the tabs as they are, so two watched jobs never flip the
+// window between their tabs, nor put a tab Hal is filling behind another mid-command.
+async function jobTab(job, front = false) {
   const tab = await tabFor(job);
   if (!tab) throw new Error("gone");
-  const own = await halWindow();
-  if (own && tab.windowId === own.id && !tab.active) await chrome.tabs.update(tab.id, { active: true });
+  if (front && !tab.active) await chrome.tabs.update(tab.id, { active: true });
   return loaded(tab.id);
 }
+const fileName = path => String(path).split(/[\\/]/).pop();
 
 function base64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -191,12 +198,12 @@ const COMMANDS = {
     await loaded(tab.id);
     return {};
   },
-  async read({ job, patterns }) {
-    const tab = await jobTab(job);
+  async read({ job, patterns, front = true }) {
+    const tab = await jobTab(job, front);
     return blocked(tab.id, () => inTab(tab.id, "read", patterns));
   },
   async press({ job, kind, pattern, name, page, guard }) {
-    const tab = await jobTab(job);
+    const tab = await jobTab(job, true);
     const out = await blocked(tab.id, async () => {
       const pressed = await inTab(tab.id, "press", { kind, pattern, name, page, guard });
       await sleep(1500);
@@ -206,7 +213,7 @@ const COMMANDS = {
     return out;
   },
   async type_code({ job, code, boxes, guard }) {
-    const tab = await jobTab(job);
+    const tab = await jobTab(job, true);
     return blocked(tab.id, () => inTab(tab.id, "typeCode", { code, boxes, guard }));
   },
   async fill({ job, fields, paths, guard }) {
@@ -217,11 +224,11 @@ const COMMANDS = {
       const where = at.v1 ? `/api/v2/helpers/file?job_id=${encodeURIComponent(job)}&path=${encodeURIComponent(path)}`
         : `/files?path=${encodeURIComponent(path)}`;
       const reply = await fetch(`${at.base}${where}`, { headers: at.v1 ? at.headers : {} });
-      if (!reply.ok) throw new Error(`could not read ${path.split("/").pop()}`);
-      files[path] = { name: path.split("/").pop(), type: reply.headers.get("Content-Type") || "application/pdf",
+      if (!reply.ok) throw new Error(`could not read ${fileName(path)}`);
+      files[path] = { name: fileName(path), type: reply.headers.get("Content-Type") || "application/pdf",
                       data: base64(await reply.arrayBuffer()) };
     }
-    const tab = await jobTab(job);
+    const tab = await jobTab(job, true);
     return blocked(tab.id, () => inTab(tab.id, "fill", { fields, files, guard }));
   },
   async mark({ job, fields, panel }) {

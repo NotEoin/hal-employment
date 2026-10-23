@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Office Assistant</title></head><body>
+<!-- A page that opens the form in a new tab a moment after it loads (`?ms=`), while Hal is not using the browser. -->
+<h1>Apply: Office Assistant</h1>
+<p>The application form opens in a new tab.</p>
+<script>
+const ms = Number(new URLSearchParams(location.search).get('ms') || 1000);
+setTimeout(() => window.open('single.html', '_blank'), ms);
+</script>
+</body></html>

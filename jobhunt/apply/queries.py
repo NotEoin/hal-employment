@@ -8,7 +8,6 @@ import logging
 import re
 import traceback
 from datetime import timedelta
-from urllib.parse import urlparse
 
 from .. import browser, db, documents, tasks
 from ..core import clock, settings
@@ -92,11 +91,9 @@ def _close_quietly(job_id: str) -> None:
 
 
 def _site(url: str) -> str:
-    """The site a page belongs to, without the employer's own part: acme.wd3.myworkdayjobs.com is myworkdayjobs.com."""
-    parts = urlparse(url).netloc.lower().split(":")[0].split(".")
-    # Second-level names such as .co.uk take a third label.
-    keep = 3 if len(parts) > 2 and parts[-2] in ("co", "ac", "org", "gov", "com") and len(parts[-1]) == 2 else 2
-    return ".".join(parts[-keep:])
+    """The site a page belongs to (`browser.site_key`): careers.acme.co.uk is acme.co.uk, and on a system that
+    hosts many employers each keeps its own, so acme.wd3.myworkdayjobs.com is not every Workday employer."""
+    return browser.site_key(url)
 
 
 def _site_of(con, job) -> str:

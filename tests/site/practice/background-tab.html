@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Events Assistant</title></head><body>
+<!-- A form opened behind the tab the person works in ("Open forms in: This window"). Its list opens only
+     while the page is on show, as a hidden tab's dropdowns never do; Hal brings the tab forward first. -->
+<h1>Apply: Events Assistant</h1>
+<form method="post" action="/sent/background-tab">
+ <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+ <div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+ <div><label id="city-l">Nearest office</label>
+  <div id="city" role="combobox" tabindex="0" aria-labelledby="city-l" aria-controls="city-list" aria-expanded="false">Select...</div>
+  <ul id="city-list" role="listbox" hidden><li role="option">Leeds</li><li role="option">London</li><li role="option">York</li></ul></div>
+ <button type="submit">Submit application</button>
+</form>
+<script>
+const box = document.querySelector('#city'), list = document.querySelector('#city-list');
+window.openedHidden = 0;
+const open = () => {
+  if (document.visibilityState !== 'visible') { window.openedHidden++; return; }
+  list.hidden = false; box.setAttribute('aria-expanded', 'true');
+};
+box.addEventListener('mousedown', open);
+box.addEventListener('keydown', e => { if (e.key === 'ArrowDown') open(); });
+list.addEventListener('click', e => {
+  const li = e.target.closest('li');
+  if (!li) return;
+  box.textContent = li.textContent; list.hidden = true; box.setAttribute('aria-expanded', 'false');
+});
+document.addEventListener('mousedown', e => { if (!box.contains(e.target) && !list.contains(e.target)) list.hidden = true; });
+</script></body></html>

@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Archive Officer</title></head><body>
+<!-- An upload widget that takes the file, empties its input and lists the file by name, as many sites do. -->
+<h1>Apply: Archive Officer</h1>
+<form method="post" action="/sent/upload-kept" enctype="multipart/form-data">
+ <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+ <div><label for="cv">CV *</label><input id="cv" name="cv" type="file" required><p id="taken"></p></div>
+ <button type="submit">Submit application</button>
+</form>
+<script>
+document.querySelector('#cv').addEventListener('change', e => {
+  const names = [...e.target.files].map(f => f.name).join(', ');
+  document.querySelector('#taken').textContent = names ? 'Uploaded: ' + names : '';
+  e.target.value = '';
+});
+</script></body></html>

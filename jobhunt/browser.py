@@ -1,6 +1,8 @@
 """Drives a real browser through job application forms with Playwright.
 
 One thread owns the browser; other threads queue work with `BROWSER.call`.
+Between calls that thread keeps Playwright serviced, so the window keeps up
+while Hal is idle (a person's own Submit there is never held up).
 A form's controls are tagged with data-hal-id attributes when read, so the
 values approved in the web interface land in the controls they were proposed
 for, and every value entered is read back from the page. Requires the
@@ -11,6 +13,13 @@ only Next is ever pressed on a form, nothing here presses Enter, and for the
 whole of each command that acts on a page a block in the page's own world
 cancels any submit the page or a press would make. The person presses Submit
 on the employer's site.
+
+Notes about job sites (`sites.notes`) drive the engine hooks
+in both engines: `open_url`, `press_first`, `cookie_button` and
+`field_transform` here (the helper reads the same notes through
+`extension.py`). With no note of a kind, each hook does what Hal did before
+notes existed. Each note used is recorded with `sites.notes.used` and
+returned as a trace line for the Form step.
 """
 import collections
 import concurrent.futures
@@ -22,7 +31,7 @@ import queue
 import re
 import threading
 from pathlib import Path
-from urllib.parse import quote_plus, urljoin, urlparse
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 from .apply import guard
 from .config import CONFIG
@@ -53,6 +62,7 @@ EXTRACT_JS = "() => {\n" + PAGE_JS + "\nreturn halExtract();\n}"
 SURVEY_JS = "() => {\n" + PAGE_JS + "\nreturn halSurvey();\n}"
 OPTIONS_JS = "(hid) => {\n" + PAGE_JS + "\nreturn halOptions(hid);\n}"
 STALE_JS = "() => {\n" + PAGE_JS + "\nreturn halStale();\n}"
+PAGE_TEXT_JS = "() => {\n" + PAGE_JS + "\nreturn halText();\n}"
 
 RESULTS_JS = "() => {\n" + PAGE_JS + "\nreturn halResults();\n}"
 # Apply controls on an advert. Ones that hand the application to another account are left alone.
@@ -84,8 +94,12 @@ CODE_WALL = re.compile(r"(verification|security|confirmation|one[- ]time) code|e
 ATS_FRAME = ("greenhouse.io", "ashbyhq.com", "lever.co", "workable.com", "smartrecruiters.com", "recruitee.com",
              "personio.", "teamtailor.com", "bamboohr.com", "jobvite.com", "icims.com", "pinpointhq.com")
 # Frames that never hold the form: human checks, analytics, chat widgets.
-NOT_FORM_FRAME = re.compile(r"recaptcha|hcaptcha|challenges\.cloudflare|googletagmanager|doubleclick|google\.com/|"
+# docs.google.com/forms is a form that employers embed, so it is the one part of google.com that is read.
+NOT_FORM_FRAME = re.compile(r"recaptcha|hcaptcha|challenges\.cloudflare|googletagmanager|doubleclick|"
+                            r"google\.com/(?<!docs\.google\.com/)|docs\.google\.com/(?!forms/)|"
                             r"facebook|intercom|hotjar|about:blank|youtube|vimeo|stripe|cookie", re.I)
+# Frames the helper opens on their own to read, since it reads the top page of a tab: ATS_FRAME and these.
+FORM_FRAME = ("docs.google.com/forms",)
 MAX_PRESSES = 6  # Apply controls followed before giving up on finding the form
 # Human checks: reCAPTCHA, hCaptcha and Cloudflare Turnstile, whose frame hides in a closed shadow root.
 CAPTCHA = ("iframe[src*='recaptcha'], iframe[src*='hcaptcha'], iframe[src*='challenges.cloudflare.com'], "
@@ -93,14 +107,17 @@ CAPTCHA = ("iframe[src*='recaptcha'], iframe[src*='hcaptcha'], iframe[src*='chal
 SEARCH = "https://duckduckgo.com/?q="
 GONE = "the form's tab was closed"
 BLOCK_RETRY_MS = 500  # a page between two addresses takes the block once it has settled
+IDLE_WAIT_S = 0.25    # how long the browser thread waits for work before it lets Playwright catch up
+PUMP_MS = 50          # how long it lets Playwright read the browser each time
 
 # Installed in the page's own world for the whole of each command that acts on a page: a submit
 # the page or a press would make is cancelled and noted, as are the form's own send methods, unless
 # the submitter is the vetted Next control marked `data-hal-allow`. Many multi-page forms move on with a
 # real submit, which is why that one control is let through. `UNBLOCK_JS` takes the block away, so the
-# person's own Submit always works, and returns what it cancelled.
+# person's own Submit always works, and returns what it cancelled. Each command holds the block: two
+# commands in one tab (a watch's read beside a fill) share it, and it goes only when the last lets go.
 BLOCK_JS = """() => {
-  if (window.__halUnblock) return true;
+  if (window.__halUnblock) { window.__halHolders = (window.__halHolders || 1) + 1; return true; }
   const proto = HTMLFormElement.prototype, submit = proto.submit, request = proto.requestSubmit;
   const cancelled = [];
   const allowed = el => Boolean(el && el.hasAttribute && el.hasAttribute('data-hal-allow'));
@@ -116,11 +133,14 @@ BLOCK_JS = """() => {
     if (allowed(by)) return request.call(this, by);
     cancelled.push('a script on the page asked to send the form');
   };
+  window.__halHolders = 1;
   window.__halUnblock = () => {
+    if (--window.__halHolders > 0) return [];   // the last holder reports what was cancelled
     window.removeEventListener('submit', onSubmit, true);
     proto.submit = submit;
     proto.requestSubmit = request;
     delete window.__halUnblock;
+    delete window.__halHolders;
     return cancelled;
   };
   return true;
@@ -166,9 +186,108 @@ def _facts(survey: dict, fields: list[dict]) -> dict:
     return {"form": form, "final": form and nxt is None, "signed_in": _signed_in(survey)}
 
 
+# Notes about job sites -------------------------------------------
+
+def notes_for(url: str, job_id: str | None = None):
+    """The notes about job sites that apply to this page (`sites.notes.for_page`), or None without them.
+
+    With no note of a kind, each hook below does what Hal did before notes existed, which is what the
+    built-in notes say; so a checkout without `jobhunt.sites.notes` behaves exactly as today.
+    """
+    try:
+        from .sites import notes
+    except ModuleNotFoundError as e:  # not in this checkout yet: only the built-in behaviour applies
+        if e.name != f"{__package__}.sites.notes":
+            raise
+        return None
+    return notes.for_page(url or "", job_id=job_id)
+
+
+def note_used(note, job_id: str | None, field: str, what: str) -> dict:
+    """Records one use of a note (`sites.notes.used`) and returns its trace line for the form."""
+    from .sites import notes
+
+    notes.used(note.id, job_id or "", ok=True, detail=what)
+    return {"note": note.id, "field": field, "what": what}
+
+
+def _first(notes, kind: str):
+    return notes.first(kind) if notes is not None else None
+
+
+def _city(value: str) -> str:
+    return value.split(",")[0].strip()
+
+
+def _uk_phone(value: str) -> str:
+    digits = re.sub(r"\D", "", value)
+    return "0" + digits[2:] if digits.startswith("44") else digits
+
+
+def transformed(value, how: str):
+    """The answer as a `field_transform` note says to type it: city_only, digits_only, uk_phone, date:FORMAT
+    or max_len:N. Raises ValueError for a transform no engine knows, so a bad note is never half applied."""
+    from datetime import datetime
+
+    text = str(value)
+    if how == "city_only":
+        return _city(text)
+    if how == "digits_only":
+        return re.sub(r"\D", "", text)
+    if how == "uk_phone":
+        return _uk_phone(text)
+    if how.startswith("date:"):
+        iso = _date(text)
+        try:
+            return datetime.strptime(iso, "%Y-%m-%d").strftime(how[len("date:"):])
+        except ValueError:
+            return text
+    if how.startswith("max_len:") and how[len("max_len:"):].isdigit():
+        return text[:int(how[len("max_len:"):])]
+    raise ValueError(f"no transform {how!r}")
+
+
+def with_notes(job_id: str, url: str, fields: list[dict]) -> tuple[list[dict], list[dict]]:
+    """The fields with each `field_transform` note applied to its answer, and the trace of what changed.
+
+    Applied on the server, before the values reach either engine, so both modes type the same thing.
+    """
+    notes = notes_for(url, job_id)
+    if notes is None:
+        return fields, []
+    out, trace = [], []
+    for f in fields:
+        value = f.get("value")
+        note = next((n for n in notes.for_field(f.get("label") or "") if n.kind == "field_transform"), None)
+        if note is None or f.get("kind") in ("file", "checkbox", "radio", "checkgroup") or value in (None, "", []):
+            out.append(f)
+            continue
+        new = transformed(value, note.act.get("transform") or "")
+        if new != value:
+            what = (f"Typed {new!r} for {f.get('label') or 'this question'}, because of the note "
+                    f"\"{note.text}\". Without it Hal would type {str(value)!r}.")
+            line = note_used(note, job_id, f.get("label") or "", what)
+            f = {**f, "value": new, "notes_used": [*(f.get("notes_used") or []), line]}
+            trace.append(line)
+        out.append(f)
+    return out, trace
+
+
 def application_url(job) -> str:
-    """Returns the page holding the application form for a job, as best it can be known."""
+    """Returns the page holding the application form for a job, as best it can be known.
+
+    An `open_url` note about the advert's site wins over the built-in rules below: `{append: "/apply"}` or
+    `{rewrite: {from, to}}`.
+    """
     url = job["url"] or ""
+    note = _first(notes_for(url, job["id"]), "open_url")
+    if note is not None:
+        act = note.act
+        if act.get("append"):
+            base = url.split("?")[0].rstrip("/")
+            return base if base.endswith(act["append"]) else base + act["append"]
+        if act.get("rewrite"):
+            return url.replace(act["rewrite"].get("from", ""), act["rewrite"].get("to", ""))
     host = urlparse(url).netloc
     base = url.split("?")[0].rstrip("/")
     if "ashbyhq.com" in host and not base.endswith("/application"):
@@ -208,12 +327,34 @@ class Browser:
         with sync_playwright() as pw:
             self._pw = pw
             while True:
-                fn, args, fut = self._work.get()
+                try:
+                    fn, args, fut = self._work.get(timeout=IDLE_WAIT_S)
+                except queue.Empty:
+                    self._pump()
+                    continue
                 try:
                     fut.set_result(fn(self, *args))
                 except Exception as e:  # noqa: BLE001 - errors are re-raised in the caller's thread
                     # A closed tab is reported as such, whichever step it interrupted.
                     fut.set_exception(TabGone() if "has been closed" in str(e) else e)
+
+    def _pump(self) -> None:
+        """Lets Playwright read the browser while no work is queued.
+
+        Playwright's sync API reads its driver only while its thread is inside a call. Left unread, the
+        driver stopped reading the browser on Windows, and a page's own form post (the person's Submit in
+        Hal's window) waited until Hal next used the browser (2026-10-23). A tab the page
+        opens is followed here too, as soon as it opens.
+        """
+        ctx = self._ctx
+        if ctx is None:
+            return
+        try:
+            pages = ctx.pages
+            if pages:
+                pages[0].wait_for_timeout(PUMP_MS)
+        except Exception:  # a window closed while idle is launched again when next used
+            pass
 
     def context(self):
         """Returns the browser context, launching it (again, if the window was closed)."""
@@ -293,12 +434,34 @@ COOKIE_BUTTONS = [
 ]
 
 
-def _dismiss_banners(page) -> None:
-    for pattern in COOKIE_BUTTONS:
-        button = page.get_by_role("button", name=pattern)
+# A button inside a form is the form's own: "I agree" there is consent the person gives, never a banner.
+IN_FORM_JS = "e => Boolean(e.closest('form'))"
+
+
+def banner_words(notes) -> tuple[list, object]:
+    """The cookie-banner buttons to try, in order, and the words never to press, after any `cookie_button` note.
+
+    `{text}` puts that button first; `{never: [..]}` keeps those words from ever being pressed.
+    """
+    patterns, never = list(COOKIE_BUTTONS), None
+    note = _first(notes, "cookie_button")
+    if note is not None:
+        if note.act.get("text"):
+            patterns.insert(0, re.compile(rf"^\s*{re.escape(note.act['text'])}\s*$", re.I))
+        if note.act.get("never"):
+            never = re.compile(r"^\s*(" + "|".join(re.escape(w) for w in note.act["never"]) + r")\s*$", re.I)
+    return patterns, never
+
+
+def _dismiss_banners(page, notes=None) -> None:
+    """Closes a cookie banner, refusing optional cookies where it can; never presses a button inside a form."""
+    patterns, never = banner_words(notes)
+    for pattern in patterns:
         try:
-            if button.count():
-                button.first.click(timeout=3_000)
+            for button in page.get_by_role("button", name=pattern).all():
+                if button.evaluate(IN_FORM_JS) or (never and never.search(button.inner_text(timeout=1_000))):
+                    continue
+                button.click(timeout=3_000)
                 page.wait_for_timeout(500)
                 return
         except Exception:  # noqa: BLE001 - a banner that will not close may not block anything
@@ -318,11 +481,43 @@ def _settle(page) -> None:
         pass
 
 
-def _site(url: str) -> str:
-    """Returns the site a page belongs to, such as reed.co.uk for secure.reed.co.uk."""
-    labels = urlparse(url).netloc.split(":")[0].split(".")
-    keep = 3 if len(labels) > 2 and labels[-2] in ("co", "com", "org", "ac", "gov") else 2
+# Application systems that host many employers on one site; each employer (tenant) has its own sign-in.
+TENANT_HOSTS = ("myworkdayjobs.com",)
+TENANT_PATHS = ("greenhouse.io",)
+
+
+def site_key(url: str) -> str:
+    """The site a page belongs to, such as reed.co.uk for secure.reed.co.uk; shared systems keep the employer.
+
+    `acme.wd3.myworkdayjobs.com` and `boards.greenhouse.io/acme` are each their own site, so signing in to one
+    Workday employer never marks every other as signed in (`sites.notes.site_key`).
+    """
+    parsed = urlparse(url)
+    host = parsed.netloc.lower().split(":")[0]
+    if any(host == t or host.endswith("." + t) for t in TENANT_HOSTS) and host.count(".") > 1:
+        return host
+    if any(host == t or host.endswith("." + t) for t in TENANT_PATHS):
+        first = next((p for p in parsed.path.split("/") if p), "")
+        slug = parse_qs(parsed.query).get("for", [""])[0] if first == "embed" else first
+        if slug:
+            return f"{host}/{slug.lower()}"
+    labels = host.split(".")
+    # Second-level names such as .co.uk take a third label.
+    keep = 3 if len(labels) > 2 and labels[-2] in ("co", "ac", "org", "gov", "com") and len(labels[-1]) == 2 else 2
     return ".".join(labels[-keep:])
+
+
+_site = site_key   # the old name, kept for callers
+
+
+def signed_in_at(url: str) -> bool:
+    """True when the person has said they signed in to this page's site (its employer, on a shared system)."""
+    return site_key(url) in _signed_in_sites()
+
+
+def note_signed_in(url: str) -> None:
+    """Remembers that the person signed in to this page's site, so Apply there is left to them."""
+    _live("SIGNED_IN").write_text(json.dumps(sorted(_signed_in_sites() | {site_key(url)})))
 
 
 def _signed_in_sites() -> set[str]:
@@ -480,7 +675,7 @@ def _needs(survey: dict, fields: list[dict]) -> str:
 
 def _signed_in(survey: dict) -> bool:
     """True when the applicant has an account session on the page's site."""
-    return _site(survey["url"]) in _signed_in_sites() or any(SIGN_OUT.search(c["name"]) for c in survey["controls"])
+    return signed_in_at(survey["url"]) or any(SIGN_OUT.search(c["name"]) for c in survey["controls"])
 
 
 def _apply_control(survey: dict) -> dict | None:
@@ -488,6 +683,19 @@ def _apply_control(survey: dict) -> dict | None:
     found = [c for c in survey["controls"] if APPLY_BUTTON.search(c["name"])]
     found.sort(key=lambda c: (c["inNav"], not any(h in c["href"] for h in ATS_FRAME)))
     return found[0] if found else None
+
+
+def _press_first(survey: dict, notes, job_id: str | None) -> dict | None:
+    """The control a `press_first` note names ("Press \"Express your interest\" before looking for the
+    form"), when the page shows it; it is pressed once, through the guard like any Apply."""
+    note = _first(notes, "press_first")
+    want = " ".join(str((note.act if note else {}).get("control") or "").split()).lower()
+    if not want:
+        return None
+    control = next((c for c in survey["controls"] if " ".join(c["name"].split()).lower() == want), None)
+    if control is not None:
+        note_used(note, job_id, "", f"Pressed \"{control['name']}\" first, because of the note \"{note.text}\".")
+    return control
 
 
 def _step_control(survey: dict, pattern) -> dict | None:
@@ -563,16 +771,20 @@ def _advance(b: Browser, job_id: str, pressed: bool = False, status: int | None 
     """
     page = b.tab(job_id)
     needs = ""
+    first_done = False
     for presses in range(MAX_PRESSES + 1):
+        notes = notes_for(page.url, job_id)
         with _guarded(page, job_id):
             _settle(page)
-            _dismiss_banners(page)
+            _dismiss_banners(page, notes)
             frame, fields = _read(page, options=False)
             survey = _survey(page.main_frame)
             needs = _needs(survey, fields)
             if needs or _is_form(fields) or presses == MAX_PRESSES or _closed(survey, status):
                 break
-            control = _apply_control(survey)
+            control = None if first_done else _press_first(survey, notes, job_id)
+            first_done = first_done or control is not None
+            control = control or _apply_control(survey)
             if control is None:
                 break
             if _signed_in(survey):
@@ -603,7 +815,7 @@ def _resume(b: Browser, job_id: str, passed: str, wall: str) -> dict:
     After "apply" the person pressed the site's Apply button; Hal follows without pressing it again.
     """
     if passed == "sign-in":
-        _live("SIGNED_IN").write_text(json.dumps(sorted(_signed_in_sites() | {_site(wall)})))
+        note_signed_in(wall)
     return _advance(b, job_id, pressed=passed == "apply")
 
 
@@ -765,10 +977,14 @@ def _fill_one(page, frame, f: dict, now: dict, value) -> None:
     if kind == "checkbox":
         _set_choice(frame, el, bool(value), not now.get("custom"))
     elif kind == "select":
-        index = _best_option(now.get("options") or [], str(value))
-        if index is None:
-            raise RuntimeError(f"no option {value!r}")
-        el.select_option(label=now["options"][index])
+        # A list that takes several answers gets every one of them, not their names joined into one.
+        labels = []
+        for wanted in (value if isinstance(value, list) else [value]):
+            index = _best_option(now.get("options") or [], str(wanted))
+            if index is None:
+                raise RuntimeError(f"no option {wanted!r}")
+            labels.append(now["options"][index])
+        el.select_option(label=labels if now.get("multiple") else labels[0])
     elif kind == "combobox":
         _pick(page, frame, el, hid, str(value), bool(now.get("typeable")))
     else:
@@ -791,11 +1007,31 @@ def _fill_one(page, frame, f: dict, now: dict, value) -> None:
         el.evaluate("e => e.blur()")
 
 
+UPLOAD_FAILED = ("the site did not take the file: its name is not on the page. "
+                 "Add it in the form yourself")
+
+
+def uploaded(path, now: dict | None, text: str) -> bool:
+    """True when the page shows the file Hal gave it: in the input, or by name where the site lists it.
+
+    Upload widgets often empty their input once they have taken the file and show its name instead; one that
+    drops the file silently shows neither, and is reported, never counted as done.
+    """
+    name = Path(str(path)).name
+    if not name:
+        return False
+    shown = str((now or {}).get("current") or "")
+    return name.lower() in shown.lower() or name.lower() in (text or "").lower()
+
+
 def _held(now: dict, value) -> bool:
-    """True when the page shows the value Hal entered in a field."""
+    """True when the page shows the value Hal entered in a field (a file is checked by `uploaded`)."""
     current, kind = now.get("current"), now["kind"]
     if kind == "file":
-        return True  # upload widgets empty their input once the file is taken
+        return bool(current)
+    if kind == "select" and now.get("multiple"):
+        wanted = value if isinstance(value, list) else [value]
+        return {str(v).lower() for v in wanted} == {str(c).lower() for c in current or []}
     if kind == "checkbox":
         return bool(current) == bool(value)
     if kind == "checkgroup":
@@ -821,8 +1057,9 @@ def _holds(now: dict, value) -> bool:
         return False
     if kind == "checkbox":
         return bool(current) == bool(value)
-    if kind == "checkgroup":
-        return {str(v).lower() for v in value} == {str(c).lower() for c in current}
+    if kind == "checkgroup" or (kind == "select" and now.get("multiple")):
+        wanted = value if isinstance(value, list) else [value]
+        return {str(v).lower() for v in wanted} == {str(c).lower() for c in current}
     return _same(current, value)
 
 
@@ -841,8 +1078,11 @@ def _fill(b: Browser, job_id: str, fields: list[dict], shot: str) -> dict:
     buttons, and `new`: questions that appeared only once others were answered.
     """
     page = b.tab(job_id)
+    fields, trace = with_notes(job_id, page.url, fields)
     with _guarded(page, job_id):
-        return _fill_page(page, job_id, fields, shot)
+        out = _fill_page(page, job_id, fields, shot)
+    out["notes_used"] = trace
+    return out
 
 
 def _fill_page(page, job_id: str, fields: list[dict], shot: str) -> dict:
@@ -869,9 +1109,13 @@ def _fill_page(page, job_id: str, fields: list[dict], shot: str) -> dict:
             errors[f["hid"]] = str(e).splitlines()[0][:200]
     page.wait_for_timeout(500)
     frame, after = _read(page)
+    text = _page_text(frame) if any(f["kind"] == "file" for f in filled) else ""
     for f in filled:
         now = _match(after, f)
-        if now is not None and not _held(now, f["value"]):
+        if f["kind"] == "file":
+            if not uploaded(f["value"], now, text):
+                errors[f["hid"]] = UPLOAD_FAILED
+        elif now is not None and not _held(now, f["value"]):
             errors[f["hid"]] = f"the form did not keep this answer (it shows {str(now.get('current'))[:60]!r})"
     known = {f.get("sig") for f in fields}
     Path(shot).parent.mkdir(parents=True, exist_ok=True)
@@ -880,6 +1124,16 @@ def _fill_page(page, job_id: str, fields: list[dict], shot: str) -> dict:
     return {"errors": errors, "screenshot": shot, "next": nxt is not None and sub is None,
             "submit": sub is not None, "new": [f for f in after if f["sig"] not in known],
             "password": _survey(frame)["password"]}
+
+
+def _page_text(frame) -> str:
+    """The words the frame shows, including those inside page components (open shadow roots)."""
+    try:
+        return frame.evaluate(PAGE_TEXT_JS)
+    except Exception as e:  # a frame mid-navigation shows no words yet
+        if "has been closed" in str(e):
+            raise
+        return ""
 
 
 def _shoot_form(page, shot: str) -> None:
@@ -1016,7 +1270,7 @@ def _read_here(b: Browser, job_id: str) -> dict:
     """Reads the form on whatever page the job's tab shows now."""
     page = b.tab(job_id)
     with _guarded(page, job_id):
-        _dismiss_banners(page)
+        _dismiss_banners(page, notes_for(page.url, job_id))
         frame, fields = _read(page)
         return _report(page, frame, fields, _survey(page.main_frame), "", False)
 
@@ -1101,6 +1355,10 @@ def open_form(job_id: str, url: str) -> dict:
 
 
 def fill(job_id: str, fields: list[dict], shot: Path) -> dict:
+    """Enters the approved values, after any `field_transform` note about the page.
+
+    The result's `notes_used` lists the trace line of each note used, for the Form step.
+    """
     return _via(_fill, job_id, fields, str(shot))
 
 

@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Library Assistant</title></head><body>
+<!-- A form whose own "I agree" button gives consent, ahead of a cookie banner whose button also matches.
+     The cookie clicker must close the banner and never press the consent inside the form. -->
+<h1>Apply: Library Assistant</h1>
+<form method="post" action="/sent/consent-in-form">
+ <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+ <div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+ <div><p>May we keep your details for future roles?</p>
+  <button type="button" id="agree" aria-pressed="false">I agree</button></div>
+ <button type="submit">Submit application</button>
+</form>
+<div id="banner" style="position:fixed;bottom:0;left:0;right:0;background:#eee;padding:12px">
+ <p>We use cookies on this site.</p><button type="button" id="cookies">Accept all cookies</button>
+</div>
+<script>
+window.consentPressed = 0;
+document.querySelector('#agree').onclick = e => { window.consentPressed++; e.target.setAttribute('aria-pressed', 'true'); };
+document.querySelector('#cookies').onclick = () => { document.querySelector('#banner').remove(); };
+</script></body></html>

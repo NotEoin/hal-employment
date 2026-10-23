@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Translator</title></head><body>
+<!-- A list that takes several answers: every chosen value must be selected, not their names joined. -->
+<h1>Apply: Translator</h1>
+<form method="post" action="/sent/multiselect">
+ <div><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+ <div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+ <div><label for="langs">Which languages do you speak?</label>
+  <select id="langs" name="languages" multiple size="5">
+   <option>English</option><option>French</option><option>German</option><option>Spanish</option><option>Welsh</option>
+  </select></div>
+ <button type="submit">Submit application</button>
+</form></body></html>

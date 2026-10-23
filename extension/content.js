@@ -12,19 +12,21 @@
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
   };
   const nameOf = el => (el.getAttribute('aria-label') || el.innerText || el.value || '').replace(/\s+/g, ' ').trim();
-  const controls = (selector, pattern) =>
-    [...document.querySelectorAll(selector)].filter(el => visible(el) && rx(pattern).test(nameOf(el)));
+  // halAll (page.js) also looks inside page components, whose controls sit in open shadow roots.
+  const controls = (selector, pattern) => halAll(selector).filter(el => visible(el) && rx(pattern).test(nameOf(el)));
   const BUTTONS = "button, [role=button], input[type=submit], input[type=button]";
   // Widgets such as react-select open on mouse-down, which a bare click() never sends.
   const tap = el => ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type =>
     el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })));
   const halAround = "[role=dialog], [aria-modal=true], dialog, form";
-  const tagged = hid => document.querySelector(`[data-hal-id="${CSS.escape(hid)}"]`);
+  const tagged = hid => halAll(`[data-hal-id="${CSS.escape(hid)}"]`)[0] || null;
 
-  // Cookie banners block clicks underneath them; refusing optional cookies is preferred.
-  async function dismissBanners(patterns) {
+  // Cookie banners block clicks underneath them; refusing optional cookies is preferred. A button inside a
+  // form is the form's own: "I agree" there is consent the person gives, never a banner to close.
+  // `never` holds the words a site note says never to press there.
+  async function dismissBanners(patterns, never) {
     for (const pattern of patterns) {
-      const button = controls(BUTTONS, pattern)[0];
+      const button = controls(BUTTONS, pattern).find(el => !el.closest('form') && !(never && rx(never).test(nameOf(el))));
       if (button) { button.click(); await sleep(500); return; }
     }
   }
@@ -66,10 +68,13 @@
   }
 
   async function read(p) {
-    if (p.banners) await dismissBanners(p.banners);
+    if (p.banners) await dismissBanners(p.banners, p.bannersNever);
     const fields = halExtract();
     if (p.options) {
-      for (const f of fields) if (f.kind === 'combobox') f.options = await comboboxOptions(tagged(f.hid));
+      // Only a list still empty is opened: one already answered needs no options, and each opening is slow.
+      for (const f of fields) {
+        if (f.kind === 'combobox' && !f.current && !(f.options || []).length) f.options = await comboboxOptions(tagged(f.hid));
+      }
     }
     const frame = [...document.querySelectorAll('iframe[src]')].find(f => p.frames.some(host => f.src.includes(host)));
     const turnstile = [...document.querySelectorAll("input[name='cf-turnstile-response']")];
@@ -263,10 +268,19 @@
     if (f.kind === 'checkbox') setChecked(el, Boolean(value), p);
     else if (f.kind === 'select') {
       const options = [...el.options];
-      const index = bestOption(options.map(o => o.text), value);
-      if (index < 0) throw new Error(`no option "${value}"`);
+      // A list that takes several answers gets every one of them.
+      const wanted = Array.isArray(value) ? value : [value];
+      const picked = wanted.map(w => {
+        const index = bestOption(options.map(o => o.text), w);
+        if (index < 0) throw new Error(`no option "${w}"`);
+        return options[index];
+      });
       el.focus();
-      setValue(el, options[index].value);
+      if (el.multiple) {
+        options.forEach(o => { o.selected = picked.includes(o); });
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      } else setValue(el, picked[0].value);
     } else if (f.kind === 'combobox') {
       await pick(el, f, value);
     } else {
@@ -279,14 +293,26 @@
     el.blur();
   }
 
+  // True when the page shows the file it was given: in the input, or by name where the site lists it. Upload
+  // widgets often empty their input once they take the file; one that drops it silently shows neither.
+  function uploaded(f, file) {
+    const name = String(file.name).toLowerCase();
+    const el = tagged(f.hid);
+    const inInput = el && el.files && [...el.files].some(x => x.name.toLowerCase() === name);
+    return Boolean(inInput) || halText().toLowerCase().includes(name);
+  }
+
   async function fill(p) {
-    const errors = {};
+    const errors = {}, notTaken = [];
     for (const f of p.fields) {
       try { await fillOne(f, p.files, p); } catch (e) { errors[f.hid] = String(e.message || e).slice(0, 200); }
       // One answer at a time, at about the pace of a quick paste, so each is taken before the next.
       await sleep(120 + Math.random() * 200);
     }
-    return { errors };
+    for (const f of p.fields) {
+      if (f.kind === 'file' && !errors[f.hid] && p.files[f.value] && !uploaded(f, p.files[f.value])) notTaken.push(f.hid);
+    }
+    return { errors, notTaken };
   }
 
   // Marking up a filled page --------------------------------------------------

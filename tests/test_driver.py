@@ -297,8 +297,9 @@ class Discarding(unittest.TestCase):
         db.set_status(self.con, "greenhouse:1", "applying", "reopened after discarding")
         self.assertEqual(server.effort_notes(self.con, server._job(self.con, "greenhouse:3")), [])
 
-    def test_a_site_is_named_without_the_employer_part(self):
-        self.assertEqual(server._site("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"), "myworkdayjobs.com")
+    def test_a_site_is_named_by_its_domain_and_a_shared_system_by_its_employer(self):
+        self.assertEqual(server._site("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"),
+                         "acme.wd3.myworkdayjobs.com")
         self.assertEqual(server._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
 
 

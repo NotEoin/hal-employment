@@ -192,6 +192,7 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
     fields = form["fields"]
     _say(job_id, "filling in the form")
     out = browser.fill(job_id, only if only is not None else fields, _shot(job_id))
+    _note_uses(form, out)
     for _ in range(FIX_ROUNDS):
         fresh = [f for f in out["new"] if f["sig"] not in {x["sig"] for x in fields}]
         retry = {hid: msg for hid, msg in out["errors"].items() if msg.startswith("no option")
@@ -204,12 +205,27 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
         autofill.ask_model(job, fields, docs, con, problems=retry)
         _checkpoint(job_id)
         out = browser.fill(job_id, fields, _shot(job_id))
+        _note_uses(form, out)
     for f in fields:
         f["error"] = out["errors"].get(f["hid"], "")
     form["final"] = not out["next"]
     form["filled"] = {"at": db.now(), "screenshot": out["screenshot"], "errors": len(out["errors"]),
                       "next": out["next"], "password": out["password"]}
     return out
+
+
+def _note_uses(form: dict, out: dict) -> None:
+    """Keeps the trace of each site note a fill used: on its field, and in the form's "Notes Hal used on this
+    site" list (`form.notes_used`), each line once."""
+    lines = out.get("notes_used") or []
+    if not lines:
+        return
+    for f in form.get("fields", []):
+        mine = [line for line in lines if line["field"] == (f.get("label") or "")]
+        if mine:
+            f["notes_used"] = mine
+    known = {line["what"] for line in form.get("notes_used") or []}
+    form["notes_used"] = [*(form.get("notes_used") or []), *(line for line in lines if line["what"] not in known)]
 
 
 def _open_points(form: dict) -> tuple[list, list, list]:
@@ -372,6 +388,7 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
     if empty:
         _say(job_id, f"filling in {len(empty)} empty answers")
         out = browser.fill(job_id, empty, _shot(job_id))
+        _note_uses(form, out)
         for f in form["fields"]:
             if f.get("sig") in by_sig:
                 f["hid"] = by_sig[f["sig"]]["hid"]
