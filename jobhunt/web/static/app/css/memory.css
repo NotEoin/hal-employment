@@ -1,1 +1,8 @@
 /* Rules for the memory pages only; the page's owner adds them here, never in app.css. */
+.mem-title { flex: 1; min-width: 0; margin: 0; }
+.mem-line { margin: 0; }
+.mem-evidence { margin: 0; padding-left: 18px; overflow-wrap: anywhere; }
+.mem-evidence a { color: inherit; }
+.mem-item { align-items: center; }
+.mem-item .grow { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .mem-cols { grid-template-columns: minmax(0, 1fr); } }
