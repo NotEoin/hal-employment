@@ -9,9 +9,10 @@ This page is for anyone using Hal. You do not need to know anything technical.
 
 ## What you need
 
-- Hal installed on your computer. If it is not yet, ask the person who set Hal up for the install file,
-  then follow [Install Hal Employment on Windows](../howto/install-on-windows.md) or
-  [Install Hal Employment on Linux](../howto/install-on-linux.md).
+- A Windows 10 or 11 computer, or a 64-bit Linux desktop, with Hal installed:
+  [on Windows](../howto/install-on-windows.md) or [on Linux](../howto/install-on-linux.md).
+- An AI for Hal to write with: a local model, if your computer has a strong graphics card, or a Claude Pro
+  or Max subscription. The setup guide helps you choose.
 - Your CV, as a PDF or Word file, if you have one. If not, Hal can build one with you.
 - About 30 minutes for the setup guide. You can stop at any time and carry on later.
 
@@ -43,17 +44,18 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    **Change something** if it is not right.
 5. **Your record.** Hal makes a folder for your certificates, references and other evidence. Press
    **Add files** to copy documents into it.
-6. **How Hal thinks.** Hal needs an AI to write. Choose **Your Claude subscription** (Claude Pro or Max) or
-   **On this computer** if your computer has a strong graphics card. For Claude, press **Install**, then
-   **Sign in**, then **Test**. Hal never sees your Claude password.
+6. **How Hal thinks.** Choose **On this computer** if your computer runs a local model through Ollama, or
+   **Your Claude subscription** (Claude Pro or Max). For Claude, press **Install**, then **Sign in**, then
+   **Test**. Hal never sees your Claude password.
 7. **Browser helper.** The helper lets Hal fill in forms in your own browser, where you are already signed
-   in. Pick your browser and follow the four steps on the screen. More help:
+   in. Pick your browser and follow the steps on the screen, or see
    [Load the browser helper](../howto/load-the-browser-helper.md).
-8. **Email** (optional). Lets Hal read replies from employers and job alerts. Hal never sends email from
-   your account, except your own daily summary to you.
+8. **Email** (optional). Lets Hal read replies from employers and job alerts from a Gmail inbox. Hal never
+   sends email from your account, except your own daily summary to you.
 9. **Phone alerts** (optional). Hal can tell you on your phone when something needs you, through the free
    ntfy app.
-10. **Updates** (optional). Hal updates itself from GitHub when you press **Update Hal**.
+10. **Updates** (optional). Hal checks GitHub for new versions and installs one only when you press
+    **Update Hal**.
 11. **All set.** Hal starts its first search. Home shows how far it has got.
 
 ## A normal day with Hal
@@ -61,46 +63,67 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
 1. Open **Home**. It lists only what needs you today: new matches worth a look, applications waiting for
    you, replies from employers.
 2. Open **Jobs**, **Matches**. Each job says why it fits you and anything that does not. Press **Save** to
-   keep a job for later, or hide it and say why, so Hal learns what you want.
+   keep a job for later, or **Not for me** and say why, so Hal learns what you want.
 3. On a job you like, press **Apply with Hal**. Hal writes the documents for this job: your CV adjusted
    for it, a cover letter, and answers to the form's questions.
 4. Read the documents. Change anything you like, or ask Hal for changes. When you are happy, press
-   **Approve and fill in the form**. The first time, Hal shows a short guide.
-5. Hal opens the employer's form in your browser and fills it in. Green answers are ones Hal is sure of;
-   amber ones need you to check them. **Why this answer?** under each one says where it came from.
+   **Approve and fill in the form**.
+5. Hal opens the employer's form in your browser and fills it in. Each answer is marked "Fine" or "Check
+   this", and **Why this answer?** under each one says where it came from.
 6. Check the form, then press **Submit** on the employer's site yourself. The application moves to
    **Sent** on the **Applications** board.
 7. When the employer replies, Hal sorts it into **Messages** and moves the application on the board.
 
-If a site asks for an account or a test Hal cannot do, Home says so, and you can
-[send the application yourself](../howto/send-an-application-yourself.md) with the documents Hal made.
+### When Hal cannot fill in a form
+
+Some sites ask for an account, a test or a form Hal cannot fill in. Open **Documents** and pick the
+application: the CV, letter and answers you approved are there, with **Download**, **Copy all** and a
+**Copy-paste details** tab for your name, email and similar boxes. Send the application on the employer's
+site, then press **I sent it myself**, so Hal moves it to Sent and watches your email for a reply.
+
+## Where Hal looks
+
+Hal searches a list of UK job sites chosen to suit your goal, from universities and charities to the
+public sector and technology. **Jobs**, **Where Hal looks** lists each one, with a switch.
+
+- **Add a job site or careers page:** paste the address of an employer's "Jobs" page. Hal reads pages on
+  Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee and Personio, pages that link a job feed,
+  and pages that carry the job details search engines read. For any other page, add each job with
+  **Add one advert**.
+- **Watch a company:** type its name, and Hal looks for its job board on the systems above.
+- **Free keys:** Adzuna and Reed need a free key each. Hal works without them and says what it skips; press
+  **Get a free key** on the site's row to add one.
+- **Email alerts:** many UK student and graduate sites send job alerts by email (RateMyPlacement, Bright
+  Network, Prospects, TARGETjobs, Milkround, Gradcracker, CharityJob, Civil Service Jobs, NHS Jobs,
+  jobs.ac.uk and others). Sign up with the address Hal reads, and each job in an alert becomes a match.
+  This is the best way to hear about internships, placement years and insight weeks.
 
 ## Where things are
 
 | In the menu | What it is for |
 | --- | --- |
 | Home | What needs you today |
-| Jobs | Matches, Saved and Hidden jobs, and Where Hal looks (the job sites Hal searches) |
+| Jobs | Matches, Saved and Hidden jobs, and Where Hal looks |
 | Applications | Every application, from Getting ready to Form filled, Sent, Interview and Offer |
 | Messages | Replies from employers and job alerts, sorted by Hal |
 | My CV | Your CV, Hal's suggestions, its type and look, checks, and every version |
 | Documents | The CVs and letters you approved, by application, ready to copy or send |
 | Your record | Your evidence: certificates, references, past work, and what Hal learned from them |
 | Activity | Everything Hal did and why, with Undo where it can be undone |
-| What Hal remembers | Suggestions Hal has from your choices, things it learned, saved answers, notes about job sites |
+| What Hal remembers | Suggestions from your choices, what Hal learned, saved answers, notes about job sites |
 | Settings | Every choice, grouped as in the setup guide, plus Is Hal working? and Updates |
 
 Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts** for the keys.
 
 ## What Hal remembers
 
-- **Waiting for you**: suggestions Hal has from your choices, for example a smaller travel distance after you
-  hide several jobs as "Too far". Nothing changes until you press **Yes, do this**. **Not now** asks again in a
+- **Waiting for you**: suggestions from your choices, for example a smaller travel distance after you hide
+  several jobs as "Too far". Nothing changes until you press **Yes, do this**. **Not now** asks again in a
   week; **Never suggest this** stops that suggestion for good.
 - **Learned**: what you said yes to, where it came from and when. Switch one off or delete it to put things
   back as they were.
-- **Notes about job sites**: what works on each site. Each note says where it came from; switch off any you
-  do not want, and share one with whoever looks after Hal.
+- **Notes about job sites**: what works on each site, and where each note came from. Switch off any you do
+  not want.
 - **Saved answers**: answers Hal reuses on forms. Each says where Hal may use it; one marked **Choose where
   to use it** is never used until you pick.
 
@@ -112,13 +135,15 @@ To stop the suggestions, open **Settings**, **Advanced**, **Suggestions from you
    fixes it.
 2. If a form went wrong on a job site, press **Something wrong here?** on the application's page and say
    what happened in your own words. Hal remembers it for that site.
-3. If you are still stuck, press **Make a help file** on the same page and send it to the person who set
-   Hal up. You see the file before it is saved, and your name, contact details and answers are taken out.
+3. If you are still stuck, open an issue on the project's GitHub page. **Make a help file** on the
+   **Is Hal working?** page makes a file you can attach: your name, contact details and answers are taken
+   out, and you read it before it is saved.
 
 | Symptom | Fix |
 | --- | --- |
 | "For your safety, Hal opens from its shortcut" | Close the page and open Hal from its shortcut. |
-| Hal does not open at all | Restart the computer and open Hal again. If it still does not open, update from the Start menu: **Update Hal Employment** ([Update Hal Employment](../howto/update-hal.md)). |
+| Hal does not open at all | Restart the computer and open Hal again. If it still does not open, update it from outside the app ([Update Hal Employment](../howto/update-hal.md)). |
 | No new jobs for days | Open **Jobs**, **Where Hal looks** and check the sites are switched on, then **Settings**, **What you're looking for**. |
+| "Hal cannot read this page by itself yet" | The careers page has no job details Hal can read. Use **Add one advert** for each job on it. |
 | Hal cannot write documents | **Settings**, **Is Hal working?** shows the AI line. With Claude, press **Sign in to Claude again** if it asks. |
 | The form does not fill in | Check the browser helper is connected (**Settings**, **Is Hal working?**), then try **Something wrong here?** on the page. |

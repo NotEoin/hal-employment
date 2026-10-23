@@ -1,8 +1,9 @@
 # Your privacy
 
 Hal Employment runs on your own computer, and everything it keeps stays there. This page says what Hal
-stores, what leaves your computer and when, and how your private answers are protected. Settings,
-**Privacy and data** shows the same list for your own settings.
+stores and where, what leaves your computer and when, and how your private answers are protected.
+Settings, **Privacy and data** shows the same list for your own settings. The technical version is
+[SECURITY.md](../../SECURITY.md).
 
 ## What stays on your computer
 
@@ -10,16 +11,30 @@ Everything Hal stores:
 
 - your jobs, applications, settings and Activity;
 - your CV, every version of it, and the files you uploaded;
-- the documents for each application, in `Documents\Hal Employment\Applications` (Windows) or
-  `~/Documents/Hal Employment/Applications` (Linux);
-- your record (certificates, references and other evidence), in the `Employment Record` folder in your
-  Documents;
+- the documents for each application;
+- your record (certificates, references and other evidence);
 - your private answers;
 - passwords and keys, such as your email app password, in Windows Credential Manager or your Linux
   desktop's keyring.
 
-Hal's own window listens only to your computer. Nothing on your network can reach it, and web pages you
-visit cannot read it.
+Hal's window listens only to your computer. Nothing on your network can reach it, and web pages you visit
+cannot read it.
+
+## Where your data lives
+
+Your data lives outside Hal's program folder, so an update never touches it.
+
+| What | Windows | Linux |
+| --- | --- | --- |
+| Program | `%LOCALAPPDATA%\Programs\Hal Employment\app` | `~/.local/opt/hal-employment/app` |
+| Your data (jobs, applications, CV, private answers, backups, logs) | `%APPDATA%\Hal Employment\data` | `~/.local/share/hal-employment` |
+| Hal's own settings files and keys | `%APPDATA%\Hal Employment\config` | `~/.config/hal-employment` |
+| Things Hal can make again | `%LOCALAPPDATA%\Hal Employment\cache` | `~/.cache/hal-employment` |
+| Your applications' files | `Documents\Hal Employment\Applications` | `~/Documents/Hal Employment/Applications` |
+| Your record | `Documents\Employment Record` | `~/Documents/Employment Record` |
+
+A copy run from a developer's own folder keeps the same data folders, and `HAL_EMPLOYMENT_HOME` points Hal
+at another one.
 
 ## What leaves your computer
 
@@ -37,9 +52,6 @@ Hal sends only what each task needs:
 If you choose **On this computer** in **How Hal thinks**, the AI runs on your own computer and nothing
 about your CV or the adverts goes to an AI service. **Never use online AI** in Settings, **Hal's brain
 (AI)** keeps it that way.
-
-Hal never presses Submit and never sends anything to an employer. You check every application and send it
-yourself.
 
 ## Your private answers
 
@@ -64,8 +76,3 @@ Settings, **Privacy and data**:
 
 A help file (Settings, **Is Hal working?**, **Make a help file**) takes out your name, contact details,
 answers and private answers, and you read it before it is saved.
-
-## If something looks wrong
-
-If you think Hal sent something it should not have, or someone else got into your Hal, tell the person who
-set Hal up. [SECURITY.md](../../SECURITY.md) has the technical details.

@@ -1,8 +1,9 @@
 # Update Hal Employment
 
-Hal looks for a new version every morning at 09:00 (Settings, Updates, "Check for updates every day") and
-tells you on Home and in Messages when one is ready. It installs only when you press **Update Hal**, and
-never while it is filling in a form.
+Hal looks for a new version every morning (Settings, Updates, "Check for updates every day") and tells you
+on Home and in Messages when one is ready. It installs only when you press **Update Hal**, and never while
+it is filling in a form. Your data is backed up first, and an update that fails puts the old version back.
+How it works inside is in [How updates work](../dev/release-and-update.md).
 
 1. Open **Settings**, **Updates**. "Version" says which version you have and whether a new one is ready.
 2. Read **What's new**, then press **Update Hal**.
@@ -23,9 +24,9 @@ If the app does not start at all, update from outside it:
 | Symptom | Fix |
 | --- | --- |
 | "Hal is filling in a form. It will update when it has finished." | Nothing: the update starts by itself when the form is done. |
+| "Hal could not reach GitHub. Check your internet connection." | Check the connection, then press **Check now**. |
 | "Hal cannot reach its updates on GitHub. Sign in to GitHub again." | Press **Sign in to GitHub again** in Settings, Updates, on the computer Hal runs on. |
-| "Your GitHub account no longer has access to Hal's files" | Ask the person who set Hal up to add you again. |
-| "Hal's files were changed by hand, so it cannot update by itself" | Ask the person who set Hal up; they can put the files back. |
-| "This update was not made by the person who set Hal up, so Hal did not install it" | Do not install it. Tell the person who set Hal up. |
+| "Hal's files were changed by hand, so it cannot update by itself" | A file in Hal's program folder was edited. In that folder, `git status` shows the edit and `git restore .` undoes it; your data is kept elsewhere. |
+| "This update was not made by the person who set Hal up, so Hal did not install it" | The new version is not signed by a key Hal trusts. Do not install it; open an issue on GitHub. |
 | "The update did not work, so Hal went back to the version you had" | Nothing was lost. Hal will not offer that version again; the next one is offered as usual. Details shows what failed. |
-| "You run Hal from your own folder. Update it with git." | This is a developer's checkout: `git pull --ff-only`, then `uv sync --frozen`, then `python -m jobhunt migrate`. |
+| "You run Hal from your own folder. Update it with git." | This is a developer's clone: `git pull --ff-only`, then `uv sync --frozen`, then `python -m jobhunt migrate`. |
