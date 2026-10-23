@@ -137,5 +137,21 @@ class StickFixes(unittest.TestCase):
         self.assertEqual(wrong, ["recieved"])
 
 
+class TypeKeywords(unittest.TestCase):
+    """Against a job, the CV type's keywords replace the old fixed list of software skills."""
+
+    def test_against_a_job_uses_the_types_keywords_and_aliases(self):
+        found = cvscore.keywords("You will need archival research and good spreadsheets.",
+                                 "Catalogued letters; archival research; Excel.",
+                                 terms=["archival research", "Excel", "NVivo"], aliases={"excel": ["spreadsheets"]})
+        self.assertEqual(sorted(found["have"]), ["archival research", "excel"])
+        self.assertEqual(found["missing"], [])
+
+    def test_without_a_type_the_classic_list_is_used(self):
+        found = cvscore.keywords("We use Python and Docker.", "Built it in Python.")
+        self.assertEqual(found["have"], ["python"])
+        self.assertEqual(found["missing"], ["docker"])
+
+
 if __name__ == "__main__":
     unittest.main()

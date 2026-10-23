@@ -442,13 +442,15 @@ def _ask(prompt_id: str, user: str) -> dict:
                         purpose=prompt_id)
 
 
-def judgement(cv_text: str) -> tuple[list[dict], str]:
-    """The AI's grade for each criterion of the recruiter's rubric, or why there is none."""
+def judgement(cv_text: str, persona: str = "") -> tuple[list[dict], str]:
+    """The AI's grade for each criterion of the recruiter's rubric, or why there is none.
+
+    `persona` names the readers the CV type is for ("a recruiter for {fits}")."""
     reason = ai.ready(purpose="cv_judge")
     if reason:
         return [], reason
     try:
-        reply = _ask("cv_judge", cv_text)
+        reply = _ask("cv_judge", f"Read it as {persona}.\n\n{cv_text}" if persona else cv_text)
     except ai.LLMUnavailable as e:
         return [], str(e)
     out = []
@@ -538,10 +540,11 @@ REQUIREMENTS_HEADING = re.compile(r"requirement|qualification|must[- ]have|about
                                   r"what we('re| are) looking for|skills|experience", re.I)
 
 
-def _canon(text: str) -> str:
+def _canon(text: str, aliases: dict[str, str] | None = None) -> str:
+    table = ALIASES if aliases is None else aliases
     text = f" {text.lower()} "
-    for alias in sorted(ALIASES, key=len, reverse=True):
-        text = re.sub(rf"(?<![\w+#.]){re.escape(alias)}(?![\w+#])", f" {ALIASES[alias]} ", text)
+    for alias in sorted(table, key=len, reverse=True):
+        text = re.sub(rf"(?<![\w+#.]){re.escape(alias)}(?![\w+#])", f" {table[alias]} ", text)
     return text
 
 
@@ -549,16 +552,22 @@ def _has(term: str, text: str) -> int:
     return len(re.findall(rf"(?<![\w+#]){re.escape(term)}(?![\w+#])", text))
 
 
-def keywords(advert: str, cv_text: str) -> dict:
-    """Which of the advert's skills the CV names, weighted by how much the advert leans on them."""
-    ad, mine = _canon(advert), _canon(cv_text)
+def keywords(advert: str, cv_text: str, terms: list[str] | None = None,
+             aliases: dict[str, list[str]] | None = None) -> dict:
+    """Which of the advert's skills the CV names, weighted by how much the advert leans on them.
+
+    `terms` and `aliases` come from the CV type's `[keywords]`; without them the old list of
+    software skills is used, for the classic screens."""
+    table = None if terms is None else {a.lower(): k.lower() for k, names in (aliases or {}).items() for a in names}
+    skills = SKILLS if terms is None else sorted({t.lower() for t in terms} | set(table.values()))
+    mine = _canon(cv_text, table)
     # Terms under a requirements heading count for more than those in the company blurb.
     lines, weight_of, boost = advert.splitlines(), {}, 1.0
     for line in lines:
         if len(line) < 60 and REQUIREMENTS_HEADING.search(line):
             boost = 1.5
-        for term in SKILLS:
-            n = _has(term, _canon(line))
+        for term in skills:
+            n = _has(term, _canon(line, table))
             if n:
                 weight_of[term] = weight_of.get(term, 0) + n * boost
     terms = sorted(weight_of, key=lambda t: -weight_of[t])[:25]
