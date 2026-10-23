@@ -1,7 +1,7 @@
 # Tests on Linux (two Pythons) and Windows for every push.
-# Ruff and the ASCII check run on lines added since the push's parent, because the code at ef53088 still has
-# findings that its later owners fix line by line. The test output is kept in tests.log so the Windows job can
-# prove its own checks ran: a skip there would hide the one place they can run.
+# Ruff and the ASCII check run on lines added since the push's parent, because older code still has
+# findings that are fixed line by line as it is edited. The test output is kept in tests.log so the Windows
+# job can prove its own checks ran: a skip there would hide the one place they can run.
 name: ci
 on: [push, pull_request]
 jobs:
@@ -14,7 +14,7 @@ jobs:
           - { os: ubuntu-24.04, python: "3.13", extras: "--extra browser --extra documents" }
           - { os: windows-2025, python: "3.13", extras: "--extra browser" }
     runs-on: ${{ matrix.os }}
-    # Windows runs the 1274 tests in about 28 minutes and Linux in about 15
+    # Windows ran 1274 tests in about 28 minutes (run 39958993847) and Linux in about 15
     timeout-minutes: 45
     # uv run would otherwise make a fresh venv on .python-version's Python, without the extras
     env: { UV_PYTHON: "${{ matrix.python }}" }
