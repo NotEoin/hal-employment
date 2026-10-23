@@ -30,7 +30,6 @@ Design notes:
 from __future__ import annotations
 
 import difflib
-import importlib
 import re
 from datetime import date
 from typing import TYPE_CHECKING
@@ -125,7 +124,6 @@ SUPPORT_WORD = 5
 SUPPORT_SHARED = 3     # content words an answer shares with a CV line or record passage it is said to use
 SUPPORT_QUOTE = 90     # characters of that line or passage quoted in the why
 CV_FACTS = "CV facts:\n"
-NOTES_MODULE = "jobhunt.sites.notes"
 
 
 START_WORDS = {"now": "Immediately", "1w": "In 1 week", "1m": "In 1 month"}
@@ -588,13 +586,8 @@ def page_notes(job, notes: NoteSet | None = None) -> NoteSet | None:
     url = _get(job, "url")
     if not url:
         return None
-    try:
-        site_notes = importlib.import_module(NOTES_MODULE)
-    except ModuleNotFoundError as e:
-        # Without `sites.notes` no note applies.
-        if e.name != NOTES_MODULE:
-            raise
-        return None
+    from .sites import notes as site_notes
+
     return site_notes.for_page(url, job_id=str(_get(job, "id") or "") or None)
 
 
@@ -623,16 +616,17 @@ def _used(note: Note) -> dict:
     return {"id": note.id, "text": note.text, "origin": note.origin}
 
 
-def _note_answer(f: dict, notes: NoteSet | None) -> bool:
+def _note_answer(f: dict, notes: NoteSet | None, source: str | None = None) -> bool:
     """Answers or skips the field as the most specific `field_answer` or `field_skip` note says; True if settled.
 
     Never called for a private question. A note whose answer the field cannot take (a choice its
-    list does not offer) is passed over, so the next source gets its turn.
+    list does not offer) is passed over, so the next source gets its turn. `source` is where Hal found the job,
+    for the built-in notes that answer "How did you hear" by job board.
     """
     if notes is None:
         return False
     label = f.get("label") or ""
-    for note in sorted((n for n in notes.for_field(label) if n.kind in ANSWER_NOTES),
+    for note in sorted((n for n in notes.for_field(label, source=source) if n.kind in ANSWER_NOTES),
                        key=lambda n: NOTE_RANK.get(n.scope_kind, len(NOTE_RANK))):
         if note.kind == "field_skip":
             f.update(skip=True, source="note: field_skip", note=note.text, notes_used=[_used(note)],
@@ -735,7 +729,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
             else:
                 f["why"] = PRIVATE_WHY
             continue
-        if _note_answer(f, notes):
+        if _note_answer(f, notes, _get(job, "source")):
             continue
         recalled = _recall_row(con, f, job)
         if recalled is not None:

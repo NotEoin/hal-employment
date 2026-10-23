@@ -15,10 +15,10 @@ from unittest import mock
 from support import legacy, people, private_answers
 from support.fake_ai import fake_ai
 from support.legacy import PROFILE
-from support.stubs import sites_notes
 
 from jobhunt import autofill, db, gmail, salary, tasks
 from jobhunt.core import paths, settings
+from jobhunt.sites import notes as site_notes
 
 # Obviously synthetic private answers, so no fixture could be read as anyone's real health.
 SYNTH_TYPE = "Synthetic condition B"
@@ -435,7 +435,7 @@ class WhyThisAnswer(unittest.TestCase):
         tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="hal-why-")))
         stack.enter_context(paths.set_override(tmp))
         stack.enter_context(mock.patch.object(autofill, "profile", lambda: dict(PROFILE)))
-        self.notes = stack.enter_context(sites_notes.installed())
+        self.notes = site_notes
         self.con = db.connect()
         stack.callback(self.con.close)
         self.stack = stack
@@ -447,8 +447,19 @@ class WhyThisAnswer(unittest.TestCase):
         return {"hid": hid, "kind": "text", "type": "text", "label": label, "required": True, **kw}
 
     def note(self, label: str, value: str, site: str = "civicmadeup.example", kind: str = "field_answer") -> str:
-        return self.notes.add("site", site, kind, {"label": label}, {"value": value},
-                              f"Answer \"{label}\" with \"{value}\" here")
+        cond, act, text = {"label": label}, {"value": value}, f"Answer \"{label}\" with \"{value}\" here"
+        if autofill.private_question({"label": label}) is None:
+            return self.notes.add("site", site, kind, cond, act, text)
+        # The store refuses a note for a private question; one already stored past it must still never apply.
+        with self.assertRaises(site_notes.NoteError):
+            self.notes.add("site", site, kind, cond, act, text)
+        note_id = f"test-private-{self.con.execute('SELECT COUNT(*) FROM site_notes').fetchone()[0]}"
+        self.con.execute("""INSERT INTO site_notes (id, scope_kind, scope_key, kind, cond_json, act_json, text, origin,
+                                                    status, private, evidence, created, updated)
+                            VALUES (?, 'site', ?, ?, ?, ?, ?, 'you', 'active', 1, '[]', ?, ?)""",
+                         (note_id, site, kind, json.dumps(cond), json.dumps(act), text, db.now(), db.now()))
+        self.con.commit()
+        return note_id
 
     def saved(self, label: str, answer: str, scope: str = "everywhere", key: str = "") -> None:
         self.con.execute("""INSERT INTO answers2 (question, label, answer, scope, scope_key, updated)
@@ -465,7 +476,9 @@ class WhyThisAnswer(unittest.TestCase):
         self.assertEqual([n["text"] for n in here["notes_used"]],
                          ['Answer "how did you hear" with "Company website" here'])
         self.assertIn("civicmadeup.example", here["why"])
-        self.assertEqual((there["value"], there["source"], there["notes_used"]), ("Adzuna", "profile: how_heard", []))
+        # elsewhere the built-in note for jobs found on Adzuna answers, as HOW_HEARD did before notes
+        self.assertEqual((there["value"], there["source"]), ("Adzuna", "note: field_answer"))
+        self.assertEqual([n["origin"] for n in there["notes_used"]], ["builtin"])
 
     def test_answers_waiting_for_a_choice_are_never_used(self):
         self.saved("Do you hold a full driving licence?", "Made-up yes", scope="review")
