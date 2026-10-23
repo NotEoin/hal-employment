@@ -58,7 +58,7 @@ else
   gate "G2 UI smoke" env HAL_TEST_BROWSER=1 PYTHONPATH=tests "$PY" -m unittest ui.test_shell
   gate "G3 Classic on the new server" env PYTHONPATH=tests "$PY" -m unittest test_classic
   [ -f scripts/dev/golden_cli.py ] && gate "G4 CLI goldens" "$PY" scripts/dev/golden_cli.py --check
-  gate "G5 privacy (guard, store, form fill)" env PYTHONPATH=tests "$PY" -m unittest test_ai_guard test_settings_private test_autofill.PrivatePaths
+  gate "G5 privacy (guard, store, form fill)" env PYTHONPATH=tests "$PY" -m unittest test_ai_guard test_settings_private test_autofill.PrivatePaths test_autofill.WhyThisAnswer test_answers_routes
   gate "G6 never Submit" env HAL_TEST_BROWSER=1 PYTHONPATH=tests "$PY" -m unittest test_never_submit test_guard
   gate "G7 settings" env PYTHONPATH=tests "$PY" -m unittest test_settings_registry
   gate "G9 action kinds" env PYTHONPATH=tests "$PY" -m unittest test_action_kinds test_runner
