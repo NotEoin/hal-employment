@@ -2,10 +2,11 @@
 """A made-up Claude Code command line for tests; it never reaches the network or a model.
 
 Covers `-p --output-format json` (system prompt from `--system-prompt-file` or `--system-prompt`, user prompt
-on stdin), `auth status`, `auth login`, `--version` and `install`. `FAKE_CLAUDE_MODE` picks the behaviour:
-ok | signed_out | limited | limited_at | free_plan | slow | garbage. Every call is appended to
+on stdin), `auth status`, `auth login`, `auth logout`, `--version` and `install`. `FAKE_CLAUDE_MODE` picks the
+behaviour: ok | signed_out | limited | limited_at | free_plan | slow | garbage. Every call is appended to
 `FAKE_CLAUDE_LOG` as one JSON line, with the system prompt file's path, whether it existed and its text.
-`FAKE_CLAUDE_STATE` is a file whose presence means "signed in" for `auth status`; `auth login` makes it.
+`FAKE_CLAUDE_STATE` is a file whose presence means "signed in" for `auth status`; `auth login` makes it and
+`auth logout` removes it.
 """
 import json
 import os
@@ -57,6 +58,12 @@ def main(args):
         if state:
             open(state, "w").close()
         print("Signed in.")
+        return 0
+    if args[:2] == ["auth", "logout"]:
+        state = os.environ.get("FAKE_CLAUDE_STATE")
+        if state and os.path.exists(state):
+            os.remove(state)
+        print("Signed out.")
         return 0
     if args[:1] == ["install"]:
         for line in ("Checking installation...", "Installing Claude Code native build...", "Claude Code installed."):

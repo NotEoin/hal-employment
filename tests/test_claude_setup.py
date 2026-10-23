@@ -227,12 +227,12 @@ class SignIn(InHome):
         self.assertIn("Sign in on \" + host() + \", the computer Hal runs on.", step_js)
 
     def test_sign_out_asks_claude_code_to_log_out(self):
-        self.fake()
-        ran = []
-        done = subprocess.CompletedProcess([], 0, "", "")
-        with mock.patch.object(claude_setup, "_run", lambda args, timeout: ran.append(args[1:]) or done):
-            claude_setup.sign_out()
-        self.assertEqual(ran, [["auth", "logout"]])
+        fake = self.fake()
+        self.assertEqual(claude_setup.account_words(claude_setup.auth_status(fresh=True)),
+                         "Signed in as robin.example@example.com (Claude Pro)")
+        claude_setup.sign_out()
+        self.assertFalse(fake.state.exists(), "the fake's sign-in is gone")
+        self.assertEqual(claude_setup.account_words(claude_setup.auth_status(fresh=True)), "Not signed in")
 
 
 class Status(InHome):
