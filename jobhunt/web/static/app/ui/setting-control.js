@@ -11,6 +11,7 @@ import { go } from "../core/router.js";
 import { openDialog } from "../core/store.js";
 import { Switch, Seg } from "./controls.js";
 import { Icon } from "./icons.js";
+import { copyText } from "./clipboard.js";
 
 export const STORED_KINDS = new Set(["text", "email", "phone", "url", "int", "bool", "choice", "seg", "multi", "tags",
   "ordered_tags", "textlist", "money", "range", "times", "hours", "date", "path"]);
@@ -130,7 +131,8 @@ export function SettingCtl({ it, value, onChange, disabled, extra = {} }) {
     case "button": return html`<button type="button" class="btn small" disabled=${off || !!extra.busy}
       onClick=${() => extra.press && extra.press(it)}>${extra.words || it.label}</button>`;
     case "danger": return html`<${TwoStep} it=${it} disabled=${off} onPress=${extra.press || (() => {})} />`;
-    case "info": return extra.words ? html`<span class="small sc-info">${extra.words}</span>` : null;
+    case "info": return extra.words ? html`<span class="small sc-info">${extra.words}</span>${extra.copy && html`<button type="button"
+      class="btn small" aria-label=${"Copy " + it.label} onClick=${() => copyText(extra.words, extra.copy)}><${Icon} n="copy" c="s" />Copy</button>`}` : null;
     case "list": return html`<ul class="small sc-list">${(extra.list || []).map(x => html`<li>${x}</li>`)}</ul>`;
     default:
       return STORED_KINDS.has(it.kind) ? html`<${TextBox} it=${it} value=${value} onChange=${onChange} disabled=${off} />` : null;

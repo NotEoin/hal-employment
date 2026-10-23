@@ -132,6 +132,7 @@ export function Settings({ arg }) {
   const g = groups.some(x => x.id === arg) ? arg : "you";
   const browsers = useBrowsers(g === "applying" || !!q);
   const sources = useApi(g === "sites" || !!q ? "/sources" : null).data;
+  const helper = useApi(g === "applying" || !!q ? "/helpers/browsers" : null).data;
 
   if (schema.error || values.error) {
     return html`<${Head} title="Settings" sub=${SUB} /><div class="card empty">${(schema.error || values.error).message}</div>`;
@@ -186,7 +187,8 @@ export function Settings({ arg }) {
       : (it.help || "").replace("{store}", (vals.store && vals.store.name) || "a protected file")),
     extra: it => ({ secrets: vals.secrets, privateSaved, press, busy,
       words: it.action === "find.rescore" ? recheckWords(offersN(offers)) : BUTTON_WORDS[it.action],
-      ...(it.key === "applying.browser" ? browsers : {}) }),
+      ...(it.key === "applying.browser" ? browsers : {}),
+      ...(it.key === "applying.helper_folder" && helper ? { words: helper.folder, copy: "Copied the folder's address" } : {}) }),
     notes: id => {
       const o = offers[id];
       if (!o) return null;

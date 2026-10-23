@@ -243,6 +243,13 @@ class SettingsPage(unittest.TestCase):
         p.page.wait_for_selector('[data-key="sites.where"] >> text=switched on')
         self.assertRegex(where.inner_text(), r"\d+ sites?, \d+ switched on\.")
 
+    def test_the_helper_folder_row_shows_the_folder_with_copy(self) -> None:
+        # the row showed only its fixed help, with no folder
+        p = self.tab("settings-applying")
+        row = self.row(p, "applying.helper_folder")
+        row.get_by_role("button", name="Copy Browser helper folder").wait_for()
+        self.assertIn(str(paths.helper_dir()), row.inner_text())
+
     def test_the_goal_group_lists_its_earlier_versions_once(self) -> None:
         # the catalogue's link row went to the page already open, above the real list
         p = self.tab("settings-goal")
@@ -250,7 +257,7 @@ class SettingsPage(unittest.TestCase):
         self.assertEqual(self.row(p, "goal.history").count(), 1)
 
     def test_no_control_sticks_out_of_its_card_in_the_laptop_window(self) -> None:
-        # Windows 11 install test: Quiet hours stuck out 10 px past its card at 1033 px
+        # Windows 11 install test (2026-10-23): Quiet hours stuck out 10 px past its card at 1033 px
         settings.set_many(SHOW_ALL)
         p = self.tab("settings", "laptop")
         out = """() => [...document.querySelectorAll('.card .setting *')].filter(e => {
