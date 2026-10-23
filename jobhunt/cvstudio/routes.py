@@ -2,8 +2,8 @@
 
 - Every edit is a new version in the store; nothing here changes a version in place.
 - A document or layout that does not fit schema 2 answers 400 with the field path (`CVError`), never 409.
-- The CV type and look names come from their own modules when they are there; without them the id is
-  shown in words, so the page never fails for a module still being built.
+- The CV type and look names come from `types.load` and `render.look`; an id neither knows (a type copy
+  that was deleted) is shown in words, so the page never fails over a name.
 """
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def summary(con) -> dict:
     return {"route": d["route"], "route_words": ROUTE_WORDS[d["route"]], "send": d["send"],
             "employers_get": line, "employers_get_sub": sub,
             "type": {"id": d["type_id"], "name": _name_of("jobhunt.cvstudio.types", "load", d["type_id"])},
-            "look": {"id": d["look_id"], "name": _name_of("jobhunt.cvstudio.looks", "load", d["look_id"])},
+            "look": {"id": d["look_id"], "name": _name_of("jobhunt.cvstudio.render", "look", d["look_id"])},
             "version": {"id": vid, "n": v["n"], "what": v["what"], "when": v["created"]},
             "baseline": baseline, "glance": _glance(con),
             "not_found": list(doc.extras.get("not_found") or []), **_profile()}

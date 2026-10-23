@@ -81,19 +81,20 @@ def looks_list(req: Request) -> list[dict]:
 
 @route("PUT", "/api/v2/cv/look")
 def choose_look(req: Request) -> dict:
-    """Chooses the look Hal's copy is printed in."""
-    from jobhunt.core import clock, events
+    """Chooses the look Hal's copy is printed in, and answers My CV's header as GET /cv does."""
+    from jobhunt.core import events
+
+    from .routes import summary
 
     look_id = str((req.body or {}).get("id") or "")
     try:
         chosen = render.look(look_id)
     except render.UnknownLook as e:
         raise BadRequest(str(e), field="id") from e
-    _store().doc()     # the document row is made on first use
-    req.con.execute("UPDATE cv_documents SET look_id = ?, updated = ? WHERE id = 'main'", (chosen.id, clock.iso()))
-    req.con.commit()
+    _store().set_look(chosen.id, con=req.con)
+    req.con.commit()  # the store joins a transaction already open on `con` rather than committing it
     events.publish("cv", look=chosen.id)
-    return {"look": chosen.public()}
+    return summary(req.con)
 
 
 @route("GET", "/api/v2/cv/versions/{version_id}/preview.html")
