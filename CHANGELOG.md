@@ -103,8 +103,84 @@ Each version has two parts. "What's new" is in plain words and is shown on the U
 - The owner's Hal add-on (only with "Use my Hal setup"): the Pipeline note, spoken urgent alerts, Hal's
   models as AI choices, a copy of each drafted pack in the Applications folder you choose, and the `/jobs`
   command written from a template that names no one.
+- My CV replaces Classic's CV screens. The line on top always says what employers get ("Hal's copy of your
+  CV, version 4", or "your original file, unchanged"), with a preview. Your CV shows the CV as Hal prints it,
+  your file, what employers get and a glance at the checks and suggestions. "How your CV is made" offers
+  "Use my CV as it is", "Help me improve it" and "Build me a fresh CV".
+- Every change to your CV is a new version that never changes. Versions lists them all: tick two to compare
+  them, use any one again, or move one to the bin, where it stays for 30 days. Saves from the classic CV
+  screen become versions too.
+- Hal keeps its own copy of your CV. Your website CV and the changes you made in Hal are imported once, as
+  versions; Hal never reads or writes your website again. An edit made after renaming an entry is now kept.
+  Anything the import could not place is listed on Home and My CV until it is back.
+- Add your CV as a PDF or Word file, or paste its text. Hal keeps your file exactly as it is and reads it into
+  sections. "Check what Hal read" shows your file beside Hal's reading; anything Hal was not sure of, or could
+  not find word for word in your file, says "Check this", and a correction is a new version. Hal says at once
+  when it cannot read a file (a picture of a CV, over 10 MB or 6 pages, an old .doc file) and what to do.
+- Eleven CV types cover any career, from humanities, technical, science, business and any-subject graduates
+  to students looking for paid internships and placement years, career changers, experienced people, school
+  leavers, academics and creative work. Hal suggests one with a reason, shows tips for each, compares your CV
+  under two types with no AI, and lets you copy a type and change it as text (a mistake is shown with its
+  line).
+- The Checks tab: a score for how job-site scanners read your CV (fixed published weights, no AI, the same
+  CV always gets the same score) with "Fix it" for symbols and headings, the checks of your CV type, a
+  recruiter's read (Hal's opinion, part of no score) and your CV against one saved job.
+- Four looks (Classic, Modern and Compact are "Safe for job sites"; Two columns "May confuse job sites"),
+  each shown as a real preview. The preview is the page Hal prints. PDFs are printed by a browser Hal
+  controls, never your own (Microsoft Edge on Windows, Playwright's Chromium on Linux, never a snap or flatpak
+  browser), and every PDF is checked. When no browser can print, Hal makes the PDF itself and says why.
+  Names with accents print in every look. Download Hal's copy as PDF, Word, plain text, JSON Resume or the
+  website's cv.json. A cover letter can be printed in the CV's look.
+- Suggestions: Hal reads your CV one section at a time against your CV type and suggests one change at a
+  time, each with why, what it is based on and its evidence. Spelling, symbols, dates, words to avoid,
+  too many entries and section order are found with no AI. Accept, Edit, Undo, Accept all (for consistency,
+  symbol and date fixes), "Leave it as it is" with your reason (and "Remember this"), and "Try another way".
+  Hal never adds a number, year or qualification it cannot find: it leaves a gap such as `[how many?]`.
+  Locked lines are never touched.
+- Adjust for each job: No, A little or More, each change undoable before you approve; off, with the reason,
+  while you send your original file. "Build me a fresh CV" asks one question at a time and writes a CV of
+  your type; module marks are optional.
+- Letters, messages, answers, interview notes and the search for who to message follow your CV type, your
+  tone, length, sign-off and "Never use" list. Every letter says what it used and what was checked, on the
+  application page too, and a letter Hal writes while filling a form is checked the same way. Ask for
+  changes on an application's documents now works. The pack's checklist no longer tells you to run a command.
+  `python -m jobhunt letter` and `check` find the pack in the numbered application folder again.
 
 ### Developer notes
+
+The CV studio (2026-10-23): the CV store, CV reading, CV types and checks, looks and printing, CV
+suggestions, and documents shaped by the CV type. They are described in
+[docs/dev/architecture.md](docs/dev/architecture.md) (CV store, CV reading, CV types and checks, looks and
+printing, CV suggestions, documents).
+
+- CV store: `cvstudio/model.py` (schema 2: stable ids, `validate`, `apply`, `diff`, `to_v1`/`from_v1`,
+  `not_found`), `cvstudio/store.py` (the 8.12 contract, versions, the 30-day bin, files by SHA-256),
+  `cvstudio/import_v1.py` (data task `cv.import_v1`, registered from `cvstudio/legacy_actions.py`),
+  `jobhunt/cv.py` over the store (`cv.SITE`, `OVERRIDES`, `BUILT_OVERRIDES` and `ORIGIN` are gone),
+  `cvstudio/routes.py`, `home.py` and `search.py`. Classic `POST /api/cv/source` runs the kind `cv.source`.
+- CV reading: `cvstudio/parse.py`, `parse_actions.py` (`cv.parse`), `parse_routes.py`, the `cv_parse`
+  prompt; made-up CVs from `tests/support/make_cv_fixtures.py` (`--check` compares).
+- CV types and checks: `cvstudio/types.py` and `cvstudio/types/*.toml`, `cvstudio/checks.py`
+  (`scanner`, `type_checks`, `for_type`, `fix`, `for_version`, `recruiter_read`), `type_routes.py`,
+  `checks_routes.py`, `checks_actions.py` (`cv.recruiter`). `cvscore.keywords` takes a type's keywords.
+- Looks and printing: `cvstudio/looks/`, `render.py`, `printer.py`, `export.py`, `look_routes.py`,
+  `cvpdf.draw_view`, `letter.render(..., look=)`; fonts in `static/app/fonts/cv/` (Source Sans 3 and Source
+  Serif 4 from fontsource 5.3.0, fetched by `scripts/dev/vendor_web.py`); `tests/goldens/scanner/`
+  (`HAL_RECORD_SCANNER=1` re-records) and the non-blocking `.github/workflows/print-compare.yml`.
+- Suggestions: `cvstudio/suggest.py`, `tailor.py` (`for_job`), `fresh.py`, `suggest_actions.py`
+  (`cv.suggest`, `cv.another`, `cv.fresh`), `suggest_routes.py` (with `GET /cv/fresh/questions` and
+  `GET /cv/adjust`), prompts `cv_suggest` and `cv_another`.
+- Documents: `cvstudio/context.py` (`build`), one letter path `pack.write_letter`,
+  `pack.read_letter_notes`, `contacts.queries`, `lead_pattern` and `hiring_titles`, `docs/write_routes.py`
+  and `docs/write_actions.py` (`docs.change`, `docs.rewrite_letter`, `docs.prep`, `docs.contacts`).
+- Joining the parts: `router.HtmlResponse` takes a `policy`, so the CV preview sends `render.POLICY` as its
+  header; `PUT /cv/look` and `PUT /cv/type` save through the store, and `PUT /cv/look` answers the `/cv`
+  header; GET `/cv`'s glance card holds the scanner score and type checks; an upload makes the file the
+  baseline; CV reading knows every built-in type's section titles; the whole-CV suggestion target maps to
+  the model's `""`; `suggest.recheck` changes only rows still pending; the runner no longer reports an
+  action that has just ended as busy in another window; the application page shows the letter's notes and
+  `docs.prepare` passes its action to `pack.build`. Every test stand-in for the CV modules is deleted, and
+  `tests/support/people.cv_type(key)` sets a person's CV type through the real store.
 
 The schedule and platform layer, identity from settings, the record and PDFs, documents, Home, Messages,
 Activity, applications, jobs and the Settings page (2026-10-23).
