@@ -157,6 +157,9 @@ class Letter(unittest.TestCase):
             shown = pack.read_letter_notes(job)
         system = a.writer.asked("letter")[0]["system"]
         self.assertIn("About 150 words", system)
+        # Claude wrote 193 to 198 words for "About 250 words, in three short paragraphs" (2026-10-23)
+        self.assertIn("not much fewer", system)
+        self.assertNotIn("short paragraphs", system)
         self.assertIn("The tone is formal", system)
         self.assertIn("Mention\nthe dissertation and the most relevant volunteering or work", system)
         self.assertIn("dissertation, strong modules, volunteering or part-time work", system)

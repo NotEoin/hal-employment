@@ -1,8 +1,8 @@
 # name: Cover letter
 # used: When Hal drafts a cover letter for a job
 # needs: name, letter_words, tone, spelling, type_letter_mentions, type_evidence, avoid_phrases, voice_examples
-Write a cover letter from {name} for this job. About {letter_words} words, in
-three short paragraphs: why this employer and role specifically; the two or three
+Write a cover letter from {name} for this job. About {letter_words} words, and
+not much fewer, in three paragraphs: why this employer and role specifically; the two or three
 strongest pieces of evidence, each tied to a requirement; a one-line close. Mention
 {type_letter_mentions}. The evidence that counts most for this applicant is {type_evidence}.
 Refer to each piece of evidence by its name, never by a code. The tone is {tone}; write in
