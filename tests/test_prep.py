@@ -8,12 +8,13 @@ from __future__ import annotations
 import contextlib
 import time
 import unittest
+from unittest import mock
 from urllib.parse import quote
 
 from support import people
 from test_pack import POLL_S, WAIT_S, add_job, as_applicant
 
-from jobhunt import pack, prep
+from jobhunt import pack, prep, record
 from jobhunt.core import runner
 
 
@@ -31,6 +32,15 @@ class Notes(unittest.TestCase):
         self.assertIn("Stage: interview", asked["user"])
         self.assertNotIn("coding practice", asked["system"] + asked["user"])
         self.assertEqual(stored["prep"], notes)
+
+    def test_with_no_employment_record_prep_is_not_told_of_an_empty_one(self):
+        # Claude read "Employment record: none" as a record lacking the bookshop job on the CV and warned the
+        # made-up humanities graduate about it (2026-10-23)
+        with as_applicant(people.HUMANITIES) as a, mock.patch.object(record, "context", lambda *q, **k: ""):
+            job = add_job(a.con, "humanities_grad", status="interview")
+            pack.build(a.con, job["id"], use_web=False)
+            prep.build(a.con, job)
+        self.assertNotIn("Employment record", a.writer.asked("prep")[0]["user"])
 
     def test_an_advert_that_names_no_test_says_so(self):
         with as_applicant(people.CHANGER) as a:

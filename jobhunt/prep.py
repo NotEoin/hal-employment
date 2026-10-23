@@ -18,11 +18,13 @@ def request(job, who: dict) -> str:
     stage = job["status"] if job["status"] in ("assessment", "interview", "offer") else "first interview"
     # Stories come from everything recorded about each job and project, not only the CV's lines.
     kept = record.context([job["title"], *(m["requirement"] for m in s["fit"])], per_query=2)
+    # with no record, "Employment record: none" read to Claude as a record that lacked a job on the CV, and
+    # the notes warned the person about it (made-up humanities run, 2026-10-23); so an empty record is left out
     return (f"Stage: {stage}\nJob: {job['title']} at {job['company']}\n"
             f"Tests the advert names: {who['test_kinds_line']}\n\n"
             f"Advert:\n{(job['description'] or '')[:ADVERT_CHARS]}\n\nFit map:\n{fit}\n"
             f"Gaps: {s['gaps']}\n\nCV facts:\n{cv.facts_text()}"
-            f"\n\nEmployment record (true; fuller than the CV):\n{kept or 'none'}")
+            + (f"\n\nEmployment record (true; fuller than the CV):\n{kept}" if kept else ""))
 
 
 def build(con, job) -> str:
