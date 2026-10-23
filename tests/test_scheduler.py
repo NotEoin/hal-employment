@@ -250,7 +250,7 @@ class Routes(unittest.TestCase):
             reply = hal.signed_in().get("/api/v2/schedule").json()
             self.assertEqual({j["id"] for j in reply["jobs"]},
                              {"find.discover", "mail.check", "notify.digest", "record.sync", "system.backup",
-                              "system.tidy"})
+                              "system.tidy", "updates.check"})
 
 
 class IsHalWorking(unittest.TestCase):
