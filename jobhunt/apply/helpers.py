@@ -223,6 +223,13 @@ def any_paired(con: sqlite3.Connection) -> bool:
     return bool(paired(con))
 
 
+def old_helper() -> dict | None:
+    """The old 0.4 or 0.5 helper, when one polled recently, for `GET /setup` `found.old_helper`; else None."""
+    from .. import extension
+
+    return {"protocol": 0} if extension.old_helper_seen() else None
+
+
 def forget(con: sqlite3.Connection, helper_id: str) -> None:
     """Forgets a helper: its key stops working at once."""
     with con:
