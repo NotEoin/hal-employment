@@ -236,6 +236,18 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   correction makes "You corrected N things Hal misread". `GET /cv/parse-report` answers an empty report before
   any CV is added, so no page meets a 404.
 
+## CV types and checks (`cvstudio/types.py`, `cvstudio/checks.py`)
+
+- Built-in types are `cvstudio/types/*.toml`; copies are rows in `cv_types`, edited as TOML, and a mistake is
+  reported with its line. Editing a built-in makes "<type> (yours)" first. `suggest(goal, doc)` picks a type by
+  career stage, subject and roles, with one sentence why. `arrange` and `outline` show a CV under a type, so
+  comparing two types needs no AI.
+- `checks.scanner` gives the scanner score with fixed weights (30/20/15/15/10/10) and no AI, from the printed
+  PDF when given one, else the document's own text. `type_checks` runs the type's checks by id (weight 0
+  switches one off). `for_version` caches results in `cv_checks` and writes `cv_versions.scanner_score`.
+  `recruiter_read` is the AI's opinion and part of no score.
+- `cvscore.keywords` takes the type's keywords and aliases; Classic keeps the old list.
+
 ## Names (`core/naming.py`)
 
 `file_name("cv" | "letter")` fills the `cvdocs.*file_name` template with `you.name`; `folder_name(n, company,
