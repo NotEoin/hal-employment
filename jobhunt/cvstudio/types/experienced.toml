@@ -1,0 +1,74 @@
+# Built-in CV type. Copy it in My CV to change it; this file stays as it is.
+id = "experienced"
+name = "Experienced"
+fits = "Several years of work"
+note = "Results-led bullets. Education kept short."
+order_words = "Profile, Experience (newest first), Education, Skills"
+length_words = "2 pages"
+pages = 2
+section_order = ["summary", "experience", "education", "skills"]
+optional_sections = ["certifications", "achievements", "volunteering", "languages", "publications"]
+tips = [
+  "Lead each job with what changed because you were there, with numbers where you have them.",
+  "Jobs from more than ten years ago can be one line each.",
+]
+
+[suggest]
+stages = ["experienced"]
+subjects = []
+roles = []
+
+[sections.summary]
+title = "Profile"
+max_words = 70
+[sections.experience]
+title = "Experience"
+max_entries = 6
+max_bullets = 4
+newest_first = true
+[sections.education]
+title = "Education"
+max_entries = 2
+show_modules = "none"
+dissertation = false
+[sections.skills]
+title = "Skills"
+style = "list"
+
+[writing]
+person = "none"
+style = "bullets"
+bullet_words = [8, 35]
+verb_first = true
+results = "where_have"
+spelling = "en-GB"
+tone = "confident"
+banned = ["passionate", "team player", "go-getter", "results-driven", "references available on request"]
+
+[checks]
+result_bullets = 3
+newest_first = 1
+profile_evidence = 1
+dates_one_format = 1
+no_personal_data = 2
+pages_within = 1
+one_spelling = 1
+entry_says_what = 1
+contact_at_top = 1
+no_first_person = 1
+
+[keywords]
+skills = ["leadership", "stakeholder management", "project management", "budgeting", "strategy",
+          "reporting", "people management", "Excel", "process improvement", "training"]
+aliases = { "people management" = ["line management", "managed a team"], excel = ["spreadsheets"] }
+
+[documents]
+evidence = ["results from recent jobs", "people and budgets managed", "certifications"]
+letter_mentions = "the most relevant result from a recent job"
+hiring_titles = ["hiring manager", "head of department", "director"]
+prep_topics = ["examples of results", "leadership questions", "a presentation"]
+special_cases = []
+
+[prompts]
+letter = ""
+cv_suggest = ""

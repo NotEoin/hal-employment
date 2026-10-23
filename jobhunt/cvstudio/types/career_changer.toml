@@ -1,0 +1,74 @@
+# Built-in CV type. Copy it in My CV to change it; this file stays as it is.
+id = "career_changer"
+name = "Career changer"
+fits = "Moving into a new field"
+note = "Skills first, each backed by examples from earlier jobs."
+order_words = "Profile, Key skills, Experience, Education"
+length_words = "Up to 2 pages"
+pages = 2
+section_order = ["summary", "skills", "experience", "education"]
+optional_sections = ["volunteering", "certifications", "projects", "achievements", "interests"]
+tips = [
+  "Pick the three to five skills the new field asks for, and back each with an example from a job you did.",
+  "Courses and certificates for the new field go near the top.",
+  "Paid internships and returner programmes are open to people changing career too, not only students.",
+]
+
+[suggest]
+stages = ["changing"]
+subjects = []
+roles = []
+
+[sections.summary]
+title = "Profile"
+max_words = 70
+[sections.skills]
+title = "Key skills"
+style = "groups"
+[sections.experience]
+title = "Experience"
+max_entries = 4
+max_bullets = 3
+newest_first = true
+[sections.education]
+title = "Education"
+max_entries = 2
+show_modules = "none"
+dissertation = false
+
+[writing]
+person = "none"
+style = "bullets"
+bullet_words = [8, 30]
+verb_first = true
+results = "where_have"
+spelling = "en-GB"
+tone = "plain"
+banned = ["passionate", "hard-working", "team player", "go-getter", "transferable skills", "references available on request"]
+
+[checks]
+profile_evidence = 2
+skills_backed = 3
+result_bullets = 2
+dates_one_format = 1
+no_personal_data = 2
+pages_within = 1
+one_spelling = 1
+entry_says_what = 1
+contact_at_top = 1
+
+[keywords]
+skills = ["project management", "stakeholder management", "customer service", "budgeting", "Excel",
+          "training", "scheduling", "reporting", "leadership", "problem solving", "communication"]
+aliases = { excel = ["spreadsheets"], "project management" = ["managed projects", "project coordination"] }
+
+[documents]
+evidence = ["skills shown in earlier jobs", "courses for the new field", "results from earlier jobs"]
+letter_mentions = "why the change, and the two skills from earlier jobs that fit this one best"
+hiring_titles = ["hiring manager", "team leader", "operations manager"]
+prep_topics = ["why you are changing career", "examples from earlier jobs", "competency questions"]
+special_cases = []
+
+[prompts]
+letter = ""
+cv_suggest = ""

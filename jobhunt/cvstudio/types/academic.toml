@@ -1,0 +1,70 @@
+# Built-in CV type. Copy it in My CV to change it; this file stays as it is.
+id = "academic"
+name = "Academic"
+fits = "Research and university jobs"
+note = "Full publication and conference lists."
+order_words = "Education, Research, Publications, Teaching, Talks"
+length_words = "As long as needed"
+pages = 0
+section_order = ["education", "research", "publications", "teaching", "talks"]
+optional_sections = ["summary", "experience", "achievements", "skills", "languages", "certifications"]
+tips = [
+  "List publications in one citation style, newest first, with your name as it appears in print.",
+  "Give your thesis title and supervisor; for teaching, the course and how many students.",
+  "Funded summer research projects and research assistant posts count as research experience.",
+]
+
+[suggest]
+stages = ["new_grad", "early", "experienced", "changing"]
+subjects = ["phd", "doctorate", "dphil"]
+roles = ["lecturer", "postdoc", "postdoctoral", "research fellow", "research associate", "phd", "professor",
+         "teaching fellow", "doctoral"]
+
+[sections.education]
+title = "Education"
+show_modules = "none"
+dissertation = true
+[sections.research]
+title = "Research"
+max_bullets = 4
+[sections.publications]
+title = "Publications"
+[sections.teaching]
+title = "Teaching"
+[sections.talks]
+title = "Talks"
+
+[writing]
+person = "none"
+style = "paragraphs"
+bullet_words = [8, 40]
+verb_first = false
+results = "rarely"
+spelling = "en-GB"
+tone = "formal"
+banned = ["passionate", "go-getter", "references available on request"]
+
+[checks]
+dissertation_shown = 2
+education_first = 1
+dates_one_format = 1
+no_personal_data = 2
+one_spelling = 1
+contact_at_top = 1
+no_first_person = 1
+
+[keywords]
+skills = ["research", "teaching", "grant writing", "publications", "supervision", "statistics",
+          "qualitative methods", "quantitative methods", "peer review", "public engagement"]
+aliases = { "grant writing" = ["funding applications", "grants"] }
+
+[documents]
+evidence = ["thesis", "publications", "teaching", "talks"]
+letter_mentions = "the thesis, the strongest publication and fit with the department's research"
+hiring_titles = ["head of department", "principal investigator", "head of school"]
+prep_topics = ["a research presentation", "teaching questions", "future research plans"]
+special_cases = []
+
+[prompts]
+letter = ""
+cv_suggest = ""
