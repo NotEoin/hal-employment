@@ -8,7 +8,7 @@ first so we can agree the shape before you write it.
 You need git, [uv](https://docs.astral.sh/uv/) and Python 3.11 or newer (uv can fetch it).
 
 ```sh
-git clone <repository URL> hal-employment && cd hal-employment
+git clone https://github.com/NotEoin/hal-employment.git && cd hal-employment
 uv sync --frozen --extra browser --extra documents   # Linux; on Windows leave out --extra documents
 uv run python -m playwright install chromium         # Hal's own browser window, printing and browser tests
 uv run python -m jobhunt install --dev               # optional: the menu entry and the command-line shim
