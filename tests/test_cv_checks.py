@@ -97,6 +97,14 @@ class TypeChecks(unittest.TestCase):
         ids = [i["id"] for i in checks.type_checks(humanities_cv(), off, profile_of(HUMANITIES))["items"]]
         self.assertNotIn("contact_at_top", ids)
 
+    def test_for_type_gives_each_weighted_check_with_whether_it_passes(self):
+        # Regression: a fresh CV called `checks.for_type`, which the checks module did not have
+        cv, t = humanities_cv(), cvtypes.load("humanities_grad")
+        with World(), as_person(HUMANITIES):
+            full = checks.type_checks(cv, t, checks.profile_now())["items"]
+            short = checks.for_type(cv, t)
+        self.assertEqual(short, [{"id": i["id"], "name": i["name"], "ok": i["ok"]} for i in full])
+
     def test_a_student_type_asks_when_you_are_free(self):
         cv = humanities_cv()
         items = {i["id"]: i for i in checks.type_checks(cv, cvtypes.load("student"), profile_of(HUMANITIES))["items"]}

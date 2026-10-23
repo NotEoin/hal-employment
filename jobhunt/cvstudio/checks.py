@@ -424,6 +424,14 @@ def type_checks(doc: Any, t: cvtypes.CVType, profile: dict, *, pages: int | None
             "total": len(items)}
 
 
+def for_type(doc: Any, t: cvtypes.CVType) -> list[dict]:
+    """`[{id, name, ok}]` for each check `t` weighs above 0, with the person's own details and spelling."""
+    from jobhunt.core import settings
+
+    found = type_checks(doc, t, profile_now(), spelling=settings.get("cvdocs.spelling"))
+    return [{"id": i["id"], "name": i["name"], "ok": i["ok"]} for i in found["items"]]
+
+
 # Fixes --------------------------------------------------------------------------------------------------
 
 def _swap_symbols(text: str) -> str:
