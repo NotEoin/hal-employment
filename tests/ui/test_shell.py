@@ -25,19 +25,10 @@ NAV_TEXTS = """() => [...document.querySelectorAll('nav.rail .nav')].map(b => {
   const words = b.textContent.replace(c ? c.textContent : '', '').trim();
   return [words, c ? c.textContent : null, !!(c && c.classList.contains('hot'))];
 })"""
-# The rail's words for each page module. A page whose file still starts with the stub comment is left out of
-# a person's own rail, so the expected rail follows whichever pages have landed.
-PAGE_FILES = {"Home": "home", "Jobs": "jobs", "Applications": "apps", "Messages": "messages", "My CV": "cv",
-              "Documents": "docs", "Your record": "record", "Activity": "activity", "What Hal remembers": "memory",
-              "Settings": "settings"}
-PAGES_DIR = Path(__file__).resolve().parents[2] / "jobhunt" / "web" / "static" / "app" / "pages"
-SETTLE_S = 10.0   # the status reply and stubPages() can land well after the heading on a loaded machine
+APP_DIR = Path(__file__).resolve().parents[2] / "jobhunt" / "web" / "static" / "app"
+STUB_MARKS = ("/* STUB:", "ui/stub.js", "This part is being built")
+SETTLE_S = 10.0   # the status reply can land well after the heading on a loaded machine
 POLL_S = 0.1
-
-
-def built(label: str) -> bool:
-    """True when the page behind a rail label is no longer a stub."""
-    return not (PAGES_DIR / f"{PAGE_FILES[label]}.js").read_text(encoding="utf-8").startswith("/* STUB:")
 
 
 def settled(read, want, seconds: float = SETTLE_S):
@@ -51,6 +42,16 @@ def settled(read, want, seconds: float = SETTLE_S):
         time.sleep(POLL_S)
         got = read()
     return got
+
+
+class NoStubs(unittest.TestCase):
+    """Gate G2: no stub left in the app."""
+
+    def test_no_file_of_the_app_is_or_uses_a_stub(self) -> None:
+        left = [f"{p.relative_to(APP_DIR).as_posix()}: {m}" for p in sorted(APP_DIR.rglob("*.js"))
+                if not p.relative_to(APP_DIR).as_posix().startswith("lib/")
+                for m in STUB_MARKS if m in p.read_text(encoding="utf-8")]
+        self.assertEqual(left, [])
 
 
 TAB_PRESSES = 12  # more than the focusable elements in the shortcuts dialog, so the focus has to wrap
@@ -209,13 +210,10 @@ class ShellTest(unittest.TestCase):
                                                      "Settings"])
         self.assertEqual(p.errors, [])
 
-    def test_pages_still_being_built_are_left_out_of_a_persons_own_rail(self) -> None:
+    def test_a_persons_own_rail_shows_every_page(self) -> None:
         srv = self.serve()
         p = self.tab(srv).open("home")
-        rail = ["Home"] + [label for label in FULL_MENU[1:-1] if built(label)] + ["Help and shortcuts"]
-        self.assertEqual(settled(lambda: [n[0] for n in p.page.evaluate(NAV_TEXTS)], rail), rail)
-        if not built("Home"):
-            self.assertIn("This part is being built.", p.page.inner_text("#main"))
+        self.assertEqual(settled(lambda: [n[0] for n in p.page.evaluate(NAV_TEXTS)], FULL_MENU), FULL_MENU)
         self.assertNotIn("classic", p.page.inner_text("#main"))
 
     def test_on_a_narrow_window_the_menu_slides_in_and_esc_closes_it(self) -> None:

@@ -1,8 +1,8 @@
 """The setup guide's "How should Hal think?" step and Settings, Hal's brain, in a real browser against a real
 server, with the made-up Claude command line, a made-up installer and no window ever opened.
 
-Needs `HAL_TEST_BROWSER=1` and Playwright. The setup guide's frame is still being built, so the step is
-drawn on its own over the app with the app's own modules, as `test_check_read` draws the CV step.
+Needs `HAL_TEST_BROWSER=1` and Playwright. The step is drawn on its own over the app, with the app's own
+modules, so the test does not walk the guide's earlier steps, as `test_check_read` draws the CV step.
 """
 from __future__ import annotations
 

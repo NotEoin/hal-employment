@@ -8,27 +8,19 @@ It reads every string literal and template text in `jobhunt/web/static/app/**/*.
 - in the browser helper's setup step, words in double quotes (the browser's own button names);
 - in "Use Hal from another computer", the terminal words that page is allowed.
 
-Lenient mode (the default for now): a page's file is reported but does not fail, so pages still being
-written are not blocked; the shell's own files always must pass. `HAL_WORDS_STRICT=1` fails on every
-file.
+Every file must pass.
 """
 from __future__ import annotations
 
-import logging
-import os
 import re
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[2] / "jobhunt" / "web" / "static" / "app"
-STRICT = os.environ.get("HAL_WORDS_STRICT") == "1"
 DETAILS = "/* details */"
 HELPER_STEP = "setup/steps/helper.js"
 REMOTE_PAGE = "settings/remote.js"
-# The shell's own files: always checked strictly.
-SHELL_FILES = ("main.js", "core/", "shell/", "ui/icons.js", "ui/controls.js", "ui/dialog.js", "ui/toasts.js",
-               "ui/open-buttons.js", "ui/stub.js", "dialogs/confirm.js", "dialogs/keys.js", "dialogs/palette.js")
 
 # (pattern, what to say instead). Matched case-insensitively on words for people.
 BANNED = [
@@ -240,11 +232,6 @@ def scan_app(root: Path = APP) -> list[tuple[str, int, str, str]]:
     return hits
 
 
-def is_shell(rel: str) -> bool:
-    """True for the files the shell owns, which are always checked strictly."""
-    return any(rel == f or (f.endswith("/") and rel.startswith(f)) for f in SHELL_FILES)
-
-
 class WordsTest(unittest.TestCase):
     """Words on screen."""
 
@@ -273,11 +260,7 @@ class WordsTest(unittest.TestCase):
 
     def test_words_on_screen_use_the_apps_vocabulary(self) -> None:
         hits = scan_app()
-        failing = [h for h in hits if STRICT or is_shell(h[0])]
-        for rel, line, text, problem in hits:
-            if (rel, line, text, problem) not in failing:
-                logging.getLogger(__name__).warning("words: %s:%d %r: %s", rel, line, text, problem)
-        self.assertEqual([f"{r}:{n} {t!r}: {p}" for r, n, t, p in failing], [])
+        self.assertEqual([f"{r}:{n} {t!r}: {p}" for r, n, t, p in hits], [])
 
 
 if __name__ == "__main__":

@@ -1,10 +1,9 @@
 /* The rail: the app's main menu, in groups, with counts.
 
-   The simple menu shows SIMPLE_MAIN and puts the rest under More. In a person's own install, pages
-   that are still being built are left out; developers see every page. */
+   The simple menu shows SIMPLE_MAIN and puts the rest under More. */
 import { html, cx, useState, useEffect, useRef } from "../core/html.js";
 import { useStore, openDialog } from "../core/store.js";
-import { go, railPage, stubPages } from "../core/router.js";
+import { go, railPage } from "../core/router.js";
 import { Icon } from "../ui/icons.js";
 
 export const NAV = [
@@ -38,24 +37,20 @@ export function Rail() {
   const s = useStore(st => ({ route: st.route, railOpen: st.railOpen, simpleNav: st.simpleNav, counts: st.counts,
                               session: st.session, busy: !!(st.status && st.status.busy) }));
   const [more, setMore] = useState(false);
-  const [stubs, setStubs] = useState(new Set());
-  const dev = !!(s.session && s.session.developer);
   const narrow = useNarrow();
   const ref = useRef(null);
-  useEffect(() => { if (!dev) stubPages().then(setStubs, () => {}); }, [dev]);
   useEffect(() => {
     if (narrow && s.railOpen && ref.current) { const b = ref.current.querySelector(".nav"); if (b) b.focus(); }
   }, [narrow, s.railOpen]);
 
   const top = railPage(s.route);
-  const shown = ([r]) => r === "home" || dev || !stubs.has(r);
   const item = ([r, label, icon]) => {
     const n = (s.counts || {})[r] || 0;
     return html`<button type="button" class=${cx("nav", top === r && "on")} aria-current=${top === r ? "page" : null}
       onClick=${() => go(r)}><${Icon} n=${icon} />${label}${n > 0 && html`<span class=${cx("count", HOT.has(r) && "hot")}>${n}</span>`}</button>`;
   };
-  const all = NAV.flatMap(([, items]) => items).filter(shown);
-  const rest = [...all.filter(i => !SIMPLE_MAIN.includes(i[0])), SETTINGS_ITEM].filter(shown);
+  const all = NAV.flatMap(([, items]) => items);
+  const rest = [...all.filter(i => !SIMPLE_MAIN.includes(i[0])), SETTINGS_ITEM];
   const restCount = rest.reduce((t, i) => t + ((s.counts || {})[i[0]] || 0), 0);
   const me = s.session && s.session.first_name;
 
@@ -69,12 +64,9 @@ export function Rail() {
         <button type="button" class="nav" aria-expanded=${more ? "true" : "false"} onClick=${() => setMore(!more)}><${Icon}
           n=${more ? "chevU" : "chevD"} />More${!more && restCount > 0 && html`<span class="count hot">${restCount}</span>`}</button>
         ${more && rest.map(item)}`
-      : NAV.map(([g, items]) => {
-        const vis = items.filter(shown);
-        return vis.length ? html`${g && html`<div class="navgroup">${g}</div>`}${vis.map(item)}` : null;
-      })}
+      : NAV.map(([g, items]) => html`${g && html`<div class="navgroup">${g}</div>`}${items.map(item)}`)}
     <div class="railfoot">
-      ${!s.simpleNav && shown(SETTINGS_ITEM) && item(SETTINGS_ITEM)}
+      ${!s.simpleNav && item(SETTINGS_ITEM)}
       <button type="button" class="nav" onClick=${() => openDialog("keys")}><${Icon} n="help" />Help and shortcuts</button>
       ${s.session && s.session.remote && html`<div class="rchip"><${Icon} n="globe" c="s" />On ${s.session.remote_host || "the computer Hal runs on"}, from this computer</div>`}
       ${me && html`<div class="me"><span class="avatar" aria-hidden="true">${initials(me)}</span><div>${me}</div></div>`}

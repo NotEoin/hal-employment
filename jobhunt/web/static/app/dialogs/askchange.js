@@ -1,5 +1,5 @@
 /* The "Ask for changes" dialog: the person's own words about the documents. Hal's
-   rewriting is `documents/change`; until that route answers, the dialog says so. */
+   rewriting is `documents/change`. */
 import { html, useState } from "../core/html.js";
 import { post } from "../core/api.js";
 import { closeDialog, toast } from "../core/store.js";
@@ -14,7 +14,7 @@ export default function AskChange({ d }) {
       await post("/applications/" + encodeURIComponent(d.app.id) + "/documents/change", { words });
       closeDialog();
       toast("Hal is making the changes. You will see each one highlighted.");
-    } catch (err) { toast(err.code === "not_found" ? "Asking for changes comes in a later update. You can edit the letter yourself for now." : err.message); }
+    } catch (err) { toast(err.message); }
   };
   return html`<${DlgHead} title="Ask for changes" sub="Say what you want in your own words." icon="edit" />
     <textarea class="input" aria-label="What to change" placeholder="For example: keep my original profile, and make the letter warmer" value=${words} onInput=${e => setWords(e.target.value)}></textarea>

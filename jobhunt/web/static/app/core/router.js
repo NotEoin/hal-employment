@@ -3,9 +3,7 @@
 
    ROUTES lists every page from the start. Pages load on first visit, so one page that fails to load
    shows an error card instead of stopping the whole app. A page module exports its component under
-   `name`; a module not built yet also exports STUB (the part it belongs to), which hides it
-   from the rail in a person's own install. The rail, the palette and deep links in pop-ups and emails
-   all use this table. */
+   `name`. The rail, the palette and deep links in pop-ups and emails all use this table. */
 import { store, openSetup } from "./store.js";
 
 export const APP_NAME = "Hal Employment";
@@ -94,9 +92,3 @@ export function loadPage(page) {
   return loaded.get(page);
 }
 
-/** Pages whose module is still a stub, as a Set of page names. */
-export async function stubPages() {
-  const names = Object.keys(ROUTES);
-  const mods = await Promise.all(names.map(p => loadPage(p).catch(() => null)));
-  return new Set(names.filter((p, i) => mods[i] && mods[i].STUB));
-}

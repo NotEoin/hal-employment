@@ -25,8 +25,8 @@ NOW = "2026-10-22T09:00:00Z"
 GOAL = {"goal.stage": "new_grad", "goal.kinds": ["graduate_job", "graduate_scheme"],
         "goal.roles": ["learning officer"], "goal.places": ["Hollybridge"], "scoring.preset": "humanities_grad",
         "scoring.min_show": 1, "goal.avoid_sectors": []}
-NOT_YET_BUILT = ("/api/v2/home",)
-# The setup guide's frame is being built beside this step, so the step is drawn on its own over the app.
+# The step is drawn on its own over the app, with the app's own modules, so the test does not walk the
+# guide's earlier steps.
 MOUNT_STEP = """async () => {
   const [{ html, render }, { Step }] = await Promise.all([import("/app/core/html.js"),
                                                          import("/app/setup/steps/goal.js")]);
@@ -69,8 +69,7 @@ class WhereHalLooks(unittest.TestCase):
         p = AppPage(self.browser, f"http://127.0.0.1:{self.hal.port}", size, scheme)
         self.addCleanup(p.close)
         p.failed = []
-        p.page.on("response", lambda r: r.status >= 400 and not r.url.split("?")[0].endswith(NOT_YET_BUILT)
-                  and p.failed.append(f"{r.status} {r.url}"))
+        p.page.on("response", lambda r: r.status >= 400 and p.failed.append(f"{r.status} {r.url}"))
         p.page.goto(self.hal.open_url())
         p.open(route)
         return p

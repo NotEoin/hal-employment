@@ -2,8 +2,8 @@
 the dialog, against a real server in a temporary home with the made-up CVs of `make_cv_fixtures.py`.
 
 Needs `HAL_TEST_BROWSER=1` and Playwright. The AI is the fake one, switched off, so the rules read the CV.
-The setup guide's frame is still being built, so the step is drawn on its own over the app, with the
-app's own modules; the dialog opens in the app's dialog host as it will from the guide.
+The step is drawn on its own over the app, with the app's own modules, so the test does not walk the guide's
+earlier steps; the dialog opens in the app's dialog host as it will from the guide.
 """
 from __future__ import annotations
 
