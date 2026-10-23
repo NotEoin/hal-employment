@@ -757,6 +757,23 @@ def _conf(raw: dict, key: str) -> float:
         return 0.0
 
 
+def _known_kind(title: str) -> str | None:
+    """The kind Hal's rules give a heading with these words, else None."""
+    key = _key(title.strip().rstrip(":").strip())
+    known = headings()
+    if key in known:
+        return known[key]
+    return next((kind for word, kind in KEYWORDS if word in key), None)
+
+
+def _without_grade(heading: str, grade: str) -> str:
+    """The qualification without the grade written after it ("BA History, 2:1"), as the rules read it."""
+    m = GRADE.search(heading) if grade else None
+    if m and _key(m.group("grade")) == _key(grade):
+        return heading[:m.start()].rstrip()
+    return heading
+
+
 def from_ai(reply: dict) -> Reading | None:
     """Schema 2 from the AI's JSON, with its unsure fields marked; None when the reply holds no sections."""
     sections = reply.get("sections") if isinstance(reply.get("sections"), list) else []
@@ -782,6 +799,9 @@ def from_ai(reply: dict) -> Reading | None:
             continue
         kind = _s(raw.get("kind")).lower()
         kind = kind if kind in SECTION_KINDS else "custom"
+        if kind == "custom":
+            # Claude called "REFERENCES" custom in one reading and additional in the next (checked 2026-10-23)
+            kind = _known_kind(_s(raw.get("title"))) or "custom"
         counts[kind] += 1
         n = counts[kind]
         sid = f"custom-{n}" if kind == "custom" else (kind if n == 1 else f"{kind}-{n}")
@@ -792,10 +812,15 @@ def from_ai(reply: dict) -> Reading | None:
         for e in raw.get("entries") or []:
             if not isinstance(e, dict):
                 continue
-            heading = _s(e.get("heading"))
+            # The same file read twice by Claude kept the grade on the heading once and gave a lone year as
+            # the end date once (checked 2026-10-23), so both are put where the rules put them; the ids match.
+            grade, start, end = _s(e.get("grade")), _s(e.get("start")), _s(e.get("end"))
+            heading = _without_grade(_s(e.get("heading")), grade) if kind == "education" else _s(e.get("heading"))
+            if end and not start and not re.fullmatch(OPEN_END, end, re.I):
+                start, end = end, ""
             eid = _entry_id(kind, heading, used)
             entry = Entry(id=eid, heading=heading, org=_s(e.get("org")), location=_s(e.get("location")),
-                          start=_s(e.get("start")), end=_s(e.get("end")), grade=_s(e.get("grade")),
+                          start=start, end=end, grade=grade,
                           meta=_s(e.get("meta")), text=_s(e.get("text")),
                           items=[_s(i) for i in e.get("items") or [] if _s(i)])
             entry.bullets = [Bullet(_bullet_id(eid, _s(b), bullets_used), _s(b)) for b in e.get("bullets") or []

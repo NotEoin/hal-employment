@@ -166,6 +166,32 @@ class Rules(unittest.TestCase):
         with self.assertRaises(LookupError):
             parse.correct(doc, "s:experience/e:ex-00000000/dates", "2024")
 
+    def test_the_ais_reading_puts_grades_lone_dates_and_references_where_the_rules_do(self):
+        # Claude, reading the made-up PDFs on 2026-10-23, kept ", 2:1" on the degree, gave a certificate's lone
+        # year as its end date and called REFERENCES custom; the same files as Word were read the rules' way.
+        for key in ("humanities", "changer"):
+            with self.subTest(person=key):
+                rules = rules_doc(key)
+                reply = json.loads(ai_reply(rules))
+                for sec in reply["sections"]:
+                    if sec["kind"] == "education":
+                        e = sec["entries"][0]
+                        e["heading"] = f"{e['heading']}, {e['grade']}"
+                    if sec["kind"] == "certifications":
+                        for e in sec["entries"]:
+                            e["start"], e["end"] = "", e["start"]
+                    if sec["kind"] == "additional":
+                        sec["kind"] = "custom"
+                read = parse.from_ai(reply).doc
+                self.assertEqual([s.kind for s in read.sections], EXPECTED[key]["kinds"])
+                self.assertEqual([e.id for s in read.sections for e in s.entries],
+                                 [e.id for s in rules.sections for e in s.entries])
+                education = next(s for s in read.sections if s.kind == "education").entries[0]
+                self.assertFalse(education.heading.endswith(education.grade))
+                for e in (e for s in read.sections if s.kind == "certifications" for e in s.entries):
+                    self.assertTrue(e.start)
+                    self.assertEqual(e.end, "")
+
 
 class Upload(unittest.TestCase):
     def setUp(self) -> None:

@@ -243,7 +243,9 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
   from Hal's own reading, then asks the AI (`cv_parse`, role checker, priority 0) and makes "Hal read your
   uploaded CV into sections" only when the AI's reading differs.
 - A field says "Check this" when its value is not in the file's normalised text, the AI's confidence is
-  under 0.6, the year has two digits, or a field a CV normally has is missing. With no AI, a `PrivateLeak` or
+  under 0.6, the year has two digits, or a field a CV normally has is missing. The AI's reading is put in
+  the rules' shape first (a grade written after the qualification goes in `grade`, a lone date in `start`, a
+  heading the rules know keeps its kind), so the same file read by rules or AI gives the same ids. With no AI, a `PrivateLeak` or
   an empty reply, Hal's own reading is kept and a step says why.
 - Report rows name one field each (`contact/<key>`, `s:<section>/e:<entry>/<field>`, `.../b:<bullet>`). A
   correction makes "You corrected N things Hal misread". `GET /cv/parse-report` answers an empty report before

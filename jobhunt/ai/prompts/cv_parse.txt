@@ -16,6 +16,8 @@ Reply with JSON only:
      "bullets": [...], "items": [...skills or languages...],
      "modules": [{"name", "mark", "year"}],
      "confidence": {"heading": 0.0 to 1.0, "org", "start", "end", "grade", "items"}}]}]}
+A grade written on the qualification's line goes in "grade", not in "heading"; a single date with
+no range goes in "start". A References heading is "additional"; use "custom" only when no kind fits.
 Copy every value exactly as the CV writes it: the same words, dates and marks. Never add,
 reword, fix or guess anything; use "" or [] where the CV is silent. Give a confidence below 0.6
 for any value you are unsure of, such as a two-digit year or a line that could be a job title or
