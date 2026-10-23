@@ -57,7 +57,7 @@ same steps with this computer's name, your user name and Copy buttons. In the co
    Windows, in Command Prompt (not PowerShell, which would change the file's bytes):
 
    ```bat
-   ssh USER@DESKTOP "~/.local/bin/hal-employment-cli remote-launcher --os windows" > %USERPROFILE%\hal-remote.cmd
+   ssh USER@DESKTOP "~/.local/bin/hal-employment-cli remote-launcher --os windows" > %USERPROFILE%\hal-remote.cmd   & rem fetch it
    %USERPROFILE%\hal-remote.cmd --install   & rem adds "Hal Employment (desktop)" to the Start menu
    ```
 
