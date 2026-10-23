@@ -152,11 +152,11 @@ def _fill(con: sqlite3.Connection, now: datetime, layout: str) -> None:
     con.execute("INSERT INTO meta (k, v) VALUES ('last_discover', ?)", (_iso(now, 5),))
 
 
-def counts(path_or_con: Path | sqlite3.Connection) -> dict[str, int]:
-    """Row counts of today's tables."""
+def counts(path_or_con: Path | sqlite3.Connection, tables: list[str] | None = None) -> dict[str, int]:
+    """Row counts of today's tables, or of the ones named."""
     con = sqlite3.connect(path_or_con) if isinstance(path_or_con, Path) else path_or_con
     try:
-        return {t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in TABLES}
+        return {t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in tables or TABLES}
     finally:
         if isinstance(path_or_con, Path):
             con.close()

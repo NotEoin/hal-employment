@@ -121,7 +121,6 @@ class Practice(unittest.TestCase):
                              "location": "London", "url": f"{self.base}/{page}", "description": "A practice job.",
                              "salary": "", "posted_at": None, "board_size": None})
         db.set_status(self.con, job_id, "ready")
-        self.con.execute("DELETE FROM answers")
         self.con.execute("DELETE FROM answers2")
         self.con.commit()
         runner.ACTIONS[job_id] = {"name": "test", "state": "running", "message": "", "at": db.now()}

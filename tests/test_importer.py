@@ -160,6 +160,10 @@ class Copying(ImportCase):
 
         con = self.new_db()
         for table, n in before.items():
+            if table == "answers":  # the old saved answers move to answers2, private ones left out
+                after = con.execute("SELECT count(*) FROM answers2").fetchone()[0]
+                self.assertEqual(after, len(old_db.ORDINARY_ANSWERS))
+                continue
             after = con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
             if table == "meta":     # migrations add their own rows
                 self.assertGreaterEqual(after, n)

@@ -53,7 +53,7 @@ WHY = "Hal found an older Hal on this computer"
 STAGING_DB = "usb-import.db"            # state/: the stick's records while they are migrated
 # The person's own records from the stick, in an order that keeps every reference to a job valid; the rest
 # (sign-ins, settings, actions, Activity, schedule) belong to this Hal and are never written over.
-COPIED_TABLES = ("jobs", "events", "emails", "applications", "answers", "answers2", "todos", "alerts", "meta")
+COPIED_TABLES = ("jobs", "events", "emails", "applications", "answers2", "todos", "alerts", "meta")
 ALREADY = "This Hal already has jobs, so the old Hal's were not copied over them."
 
 STOP_OLD = r"""

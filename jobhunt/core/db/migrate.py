@@ -7,8 +7,10 @@ Design notes:
 - Each migration runs in its own `BEGIN IMMEDIATE ... COMMIT`, statement by statement through
   `con.execute`, with `PRAGMA user_version = N` inside the same transaction. `executescript()` is never used,
   because it commits first and a failure would leave half a migration behind.
-- Migrations are additive only (CREATE, ADD COLUMN with a default, CREATE INDEX, data copies); a test reads
-  the migration files for anything destructive. File-system work belongs to data tasks (`tasks.py`).
+- Migrations are additive (CREATE, ADD COLUMN with a default, CREATE INDEX, data copies), so a newer Hal's
+  records stay readable after a rollback. The one exception is 0018, which drops the old `answers` table
+  once 0007 has copied it; a test reads the migration files for anything else destructive. File-system work
+  belongs to data tasks (`tasks.py`).
 - The lock is a file in `<data>/state/migrate.lock`, so a CLI call from the Hal tools in the middle of a
   server start waits instead of migrating twice. The user_version is read again after the lock is taken,
   because another process may have finished the work meanwhile.
@@ -35,7 +37,7 @@ from jobhunt.core import backup
 
 log = logging.getLogger(__name__)
 
-LATEST = 17                                # highest migration in this code; numbers are contiguous
+LATEST = 18                                # highest migration in this code; numbers are contiguous
 PACKAGE = "jobhunt.core.db.migrations"
 FOLDER = Path(__file__).resolve().parent / "migrations"
 FILE_NAME = re.compile(r"^(?P<number>\d{4})_(?P<name>[a-z0-9_]+)\.py$")

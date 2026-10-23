@@ -82,19 +82,18 @@ def _contact_values(con: sqlite3.Connection) -> list[tuple[str, str]]:
 
 def _answer_values(con: sqlite3.Connection) -> list[tuple[str, str]]:
     out = []
-    for table in ("answers2", "answers"):
+    try:
+        rows = con.execute("SELECT answer FROM answers2").fetchall()
+    except sqlite3.OperationalError:
+        return out   # a database from before saved answers had their own table
+    for (raw,) in rows:
         try:
-            rows = con.execute(f"SELECT answer FROM {table}").fetchall()
-        except sqlite3.OperationalError:
-            continue
-        for (raw,) in rows:
-            try:
-                value = json.loads(raw)
-            except (TypeError, ValueError):
-                value = raw
-            for one in value if isinstance(value, list) else [value]:
-                if isinstance(one, str) and len(one.strip()) >= MIN_ANSWER_CHARS:
-                    out.append((one.strip(), "[a saved answer]"))
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            value = raw
+        for one in value if isinstance(value, list) else [value]:
+            if isinstance(one, str) and len(one.strip()) >= MIN_ANSWER_CHARS:
+                out.append((one.strip(), "[a saved answer]"))
     return out
 
 

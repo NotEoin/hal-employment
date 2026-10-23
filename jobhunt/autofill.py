@@ -21,8 +21,7 @@ Design notes:
   until the person chooses). An answer about the job applied for (salary, start date, notice, office,
   relocation, how they heard) is kept for that job only, and a "why us" answer or an essay is never
   reused, so nothing typed for one employer is offered to another.
-- Only `answers2` is read and written. The old `answers` table stays untouched while Classic uses it;
-  migration 0007 copied its rows, and `answers.rescope` placed them.
+- Answers saved before they had a scope came in through migration 0007, and `answers.rescope` placed them.
 - Salary comes from the per-job research unless the person set one answer for every form
   (`you.salary_answer`).
 - No prompt names the person: `ai/prompts/form_fill.txt` and the others are filled from the settings.

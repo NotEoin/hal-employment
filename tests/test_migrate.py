@@ -21,6 +21,8 @@ from jobhunt.core.db import migrate, tasks
 ROOT = Path(__file__).resolve().parents[1]
 CHILD_TIMEOUT = 90   # seconds; a child waits up to 60 s for the lock, then migrates in well under one
 DESTRUCTIVE = re.compile(r"\b(DROP|RENAME|TRUNCATE|DELETE\s+FROM|executescript)\b", re.I)
+# The one destructive statement allowed, by file: 0018 retires the table 0007 copied into `answers2`.
+ALLOWED_DESTRUCTIVE = {"0018_old_answers.py": "DROP TABLE answers"}
 CHILD = """
 import sqlite3, sys
 from pathlib import Path
@@ -29,6 +31,11 @@ path = Path(sys.argv[1])
 con = sqlite3.connect(path, timeout=30)
 print(migrate.migrate(con, db_path=path, backup_dir=path.parent / "backups"))
 """
+
+
+def tables(con: sqlite3.Connection) -> set[str]:
+    """The names of the database's tables."""
+    return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
 
 class Folder(unittest.TestCase):
@@ -60,8 +67,9 @@ class OldDatabases(Folder):
         self.assertEqual(self.run_migrate(con), list(range(1, migrate.LATEST + 1)))
         self.assertEqual(migrate.user_version(con), migrate.LATEST)
         self.assertEqual(con.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-        after = old_db.counts(con)
-        for table in old_db.TABLES:
+        self.assertNotIn("answers", tables(con), "0018 drops the old saved answers once 0007 copied them")
+        after = old_db.counts(con, [t for t in old_db.TABLES if t != "answers"])
+        for table in after:
             if table == "meta":   # migrations add their own meta rows; the old ones stay
                 self.assertGreaterEqual(after[table], before[table])
             else:
@@ -69,7 +77,7 @@ class OldDatabases(Folder):
         self.assertEqual(con.execute("SELECT v FROM meta WHERE k = 'last_discover'").fetchone()[0][:4],
                          str(old_db.datetime.now(old_db.UTC).year))
         self.assertIn("contacts", migrate.columns(con, "applications"))
-        copies = list(self.backups.glob("jobs-v0-to-v17-*.db"))
+        copies = list(self.backups.glob(f"jobs-v0-to-v{migrate.LATEST}-*.db"))
         self.assertEqual(len(copies), 1, "one backup before the first migration")
         with contextlib.closing(sqlite3.connect(copies[0])) as copy:
             self.assertEqual(copy.execute("PRAGMA user_version").fetchone()[0], 0)
@@ -100,7 +108,7 @@ class OldDatabases(Folder):
         self.assertEqual(text, f"Hal updated its records to version {migrate.LATEST}")
         self.assertTrue(why)
         self.assertEqual(area, "system")
-        self.assertTrue(json.loads(detail)["backup"].startswith("jobs-v0-to-v17-"))
+        self.assertTrue(json.loads(detail)["backup"].startswith(f"jobs-v0-to-v{migrate.LATEST}-"))
 
     def test_the_activity_table_refuses_a_row_without_a_why(self):
         con = self.open()
@@ -117,13 +125,13 @@ class OldDatabases(Folder):
         with self.assertRaises(sqlite3.IntegrityError):
             con.execute("UPDATE applications SET number = 1 WHERE job_id = 'greenhouse:aldermoor-1'")
 
-    def test_saved_answers_wait_for_a_choice_after_migration_and_private_ones_are_not_copied(self):
+    def test_saved_answers_carry_over_waiting_for_a_choice_and_private_ones_are_not_copied(self):
         old_db.build(self.db, "L")
         con = self.open()
         self.assertEqual(con.execute("SELECT count(*) FROM answers").fetchone()[0], 22)
         self.run_migrate(con)
         rows = con.execute("SELECT label, answer, scope, scope_key, kind, source FROM answers2").fetchall()
-        self.assertEqual(sorted(r[0] for r in rows), sorted(label for label, _ in old_db.ORDINARY_ANSWERS))
+        self.assertEqual(sorted((r[0], json.loads(r[1])) for r in rows), sorted(old_db.ORDINARY_ANSWERS))
         self.assertEqual({r[2] for r in rows}, {"review"})
         self.assertEqual({(r[3], r[4], r[5]) for r in rows}, {("", "fixed", "import")})
         copied = json.dumps([r[1] for r in rows])
@@ -133,7 +141,24 @@ class OldDatabases(Folder):
                 self.assertNotIn(answer, copied)
         self.assertEqual(con.execute("SELECT v FROM meta WHERE k = 'answers2:private_not_copied'").fetchone()[0],
                          str(len(old_db.PRIVATE_ANSWERS)))
-        self.assertEqual(con.execute("SELECT count(*) FROM answers").fetchone()[0], 22, "the old table stays")
+        self.assertNotIn("answers", tables(con))
+
+    def test_the_old_answers_go_at_version_18_and_a_deleted_answer_stays_deleted(self):
+        """A database already at 17: what the person kept in `answers2` is kept as it is, and an old row they
+        deleted from it is not brought back."""
+        old_db.build(self.db, "L")
+        con = self.open()
+        up_to_17 = migrate.discover()[:17]
+        with mock.patch.object(migrate, "LATEST", 17), mock.patch.object(migrate, "discover", return_value=up_to_17):
+            self.run_migrate(con)
+        con.execute("DELETE FROM answers2 WHERE label = 'When can you start?'")
+        con.execute("UPDATE answers2 SET scope = 'everywhere' WHERE label = 'Are you willing to relocate?'")
+        con.commit()
+        kept = con.execute("SELECT * FROM answers2 ORDER BY id").fetchall()
+        self.assertEqual(self.run_migrate(con), [18])
+        self.assertEqual(con.execute("SELECT * FROM answers2 ORDER BY id").fetchall(), kept)
+        self.assertNotIn("answers", tables(con))
+        self.assertEqual(migrate.user_version(con), 18)
 
     def test_old_messages_are_marked_read_and_recent_ones_needing_attention_are_not(self):
         old_db.build(self.db, "L")
@@ -155,14 +180,17 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 18)))
-        self.assertEqual(migrate.LATEST, 17)
+        self.assertEqual(numbers, list(range(1, 19)))
+        self.assertEqual(migrate.LATEST, 18)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
-    def test_no_migration_holds_destructive_sql(self):
+    def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):
         for path in sorted(migrate.FOLDER.glob("[0-9]*.py")):
             with self.subTest(path.name):
-                self.assertIsNone(DESTRUCTIVE.search(path.read_text(encoding="utf-8")))
+                found = [line.strip() for line in path.read_text(encoding="utf-8").splitlines()
+                         if DESTRUCTIVE.search(line)]
+                allowed = ALLOWED_DESTRUCTIVE.get(path.name)
+                self.assertEqual(found, [f'con.execute("{allowed}")'] if allowed else [])
 
     def test_a_brand_new_database_is_made_without_a_backup(self):
         con = self.open()
@@ -190,7 +218,7 @@ class Runner(Folder):
             self.run_migrate(con)
         self.assertEqual(migrate.user_version(con), 4)
         self.assertNotIn("ai_usage", {r[0] for r in con.execute("SELECT name FROM sqlite_master")})
-        copy = next(self.backups.glob("jobs-v0-to-v17-*.db"))
+        copy = next(self.backups.glob(f"jobs-v0-to-v{migrate.LATEST}-*.db"))
         self.assertIn(str(copy), str(caught.exception))
         self.assertEqual(self.run_migrate(con)[0], 5, "the next start carries on from where it stopped")
 
