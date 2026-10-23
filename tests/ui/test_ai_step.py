@@ -116,6 +116,21 @@ class AiStep(unittest.TestCase):
         self.assertIn("It never uses more than 30 background checks a day", p.page.inner_text("#test-step"))
         self.clean(p)
 
+    def test_the_install_button_does_not_come_back_once_claude_is_installed(self):
+        # Windows 11 install test: between "Installing" and "Installed" the row showed Install again
+        p = self.step()
+        p.page.evaluate("""() => { window.installBack = false; let began = false;
+          new MutationObserver(() => {
+            const row = document.querySelector("#test-step [data-ai-row=install]");
+            if (!row) return;
+            if (row.textContent.includes("Installing")) began = true;
+            else if (began && row.querySelector("button")) window.installBack = true;
+          }).observe(document.getElementById("test-step"), { subtree: true, childList: true, characterData: true });
+        }""")
+        self.press(p, "install", "Install")
+        self.assertIn("Installed", self.row(p, "install", "done"))
+        self.assertFalse(p.page.evaluate("() => window.installBack"))
+
     def test_a_free_plan_is_explained_on_a_narrow_dark_screen(self):
         self.enterContext(fake_claude.on_path(self.tmp, FAKE_CLAUDE_PLAN="free"))
         p = self.step("narrow", "dark")

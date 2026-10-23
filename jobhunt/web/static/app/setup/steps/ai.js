@@ -79,7 +79,8 @@ export function ClaudeRows({ status, reload, compact, signWords = "Sign in" }) {
       const a = await follow(path, x => { const last = x.steps && x.steps[x.steps.length - 1]; if (last && x.steps.length > 1) setLine(last.text); });
       if (a.state !== "done") setFail(a.error || "That did not work. Hal kept the details in Activity.");
       else if (key === "test") { setTested(a.result); if (!a.result.ok) setFail(a.result.words); }
-    } catch (e) { setFail(e.message); } finally { setBusy(""); await reload(); }
+    // the new state is read first, so the Install button does not come back for a moment (Windows 11 install test)
+    } catch (e) { setFail(e.message); } finally { await reload(); setBusy(""); }
   };
   const button = (key, path, words) => html`<button type="button" class="btn primary small" disabled=${!!busy}
     onClick=${() => go(key, path)}>${fail ? "Try again" : words}</button>`;
