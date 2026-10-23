@@ -282,11 +282,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         for key, value in (extra or {}).items():
             self.send_header(key, value)
-        self.end_headers()
         try:
+            self.end_headers()
             self.wfile.write(body)
-        except (BrokenPipeError, ConnectionResetError):
-            pass  # the extension's browser closed while its request was held open
+        except ConnectionError:
+            pass  # the browser closed the page or a held request; Windows says ConnectionAborted (10053)
 
     def _json(self, data, code: int = 200) -> None:
         self._send(code, json.dumps(data, default=str).encode(), "application/json")

@@ -345,7 +345,10 @@ def dispatch(handler: AppHandler, method: str) -> bool:
         if method in ("POST", "PUT", "DELETE", "PATCH"):
             req.body, req.files = _read_body(handler)
         result = r.fn(req)
-        handler.reply(result)
+        try:
+            handler.reply(result)
+        except ConnectionError:
+            return True  # the browser closed the page before the reply went; not a failure to record
     except HTTPError as e:
         handler.send_json(_error_body(e), e.status)
     except Exception as e:

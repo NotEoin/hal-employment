@@ -1,4 +1,6 @@
 """API v2 routing: patterns with params, replies, the error shape, and auth per route."""
+import contextlib
+import http.client
 import unittest
 
 from support.api import HalServer
@@ -65,6 +67,20 @@ def _html(req: Request) -> router.HtmlResponse:
     return router.HtmlResponse("<p>made up</p>")
 
 
+def _page_closed(handler) -> None:
+    raise ConnectionAbortedError("the browser closed the page")   # what Windows raises (WinError 10053)
+
+
+@route("GET", f"{PREFIX}/closed")
+def _closed(req: Request) -> router.Stream:
+    return router.Stream(_page_closed)
+
+
+@route("GET", f"{PREFIX}/refused")
+def _refused(req: Request) -> None:
+    raise ConnectionRefusedError("a made-up local model is not running")
+
+
 class Routing(unittest.TestCase):
     """Handlers registered with `@route` answer through the real server."""
 
@@ -110,6 +126,22 @@ class Routing(unittest.TestCase):
             con.close()
         self.assertEqual(row["area"], "system")
         self.assertTrue(row["why"])
+
+    def test_a_page_closed_mid_reply_is_not_recorded_as_a_failure(self):
+        # regression: on Windows every closed page added "Something went wrong on a page" to Activity
+        def failures() -> int:
+            con = db.connect()
+            try:
+                return con.execute("SELECT count(*) FROM activity WHERE kind = 'system.error'").fetchone()[0]
+            finally:
+                con.close()
+        before = failures()
+        with self.assertNoLogs("jobhunt.web.router", "ERROR"), contextlib.suppress(http.client.HTTPException):
+            self.c.get(f"{PREFIX}/closed")
+        self.assertEqual(failures(), before)
+        with self.assertLogs("jobhunt.web.router", "ERROR"):
+            self.assertEqual(self.c.get(f"{PREFIX}/refused").status, 500)   # a route's own failed call still is
+        self.assertEqual(failures(), before + 1)
 
     def test_a_route_open_to_all_and_one_for_the_local_key(self):
         self.assertEqual(self.hal.client().get(f"{PREFIX}/open").json(), {"signed_in": False})

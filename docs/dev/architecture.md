@@ -103,6 +103,9 @@ A dict or list is sent as JSON and `None` as `{"ok": true}`. Errors become `{"er
 and `ValueError` 409, anything else 500 with plain words, the traceback in `logs/server.log` and an Activity
 row in area system. `local_only=True` answers 409 `remote` in a session from another computer.
 
+A browser that closes the page mid-reply is normal: any `ConnectionError` while replying (Linux
+`BrokenPipeError`, Windows `ConnectionAbortedError`, WinError 10053) is dropped without a log line or an
+Activity row.
 ## Sign-in (`web/auth.py`)
 
 - `mint_open_url(remote=, remote_host=, port=, next=)` writes a one-time token (SHA-256 only, 120 s) to

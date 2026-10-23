@@ -124,9 +124,11 @@ class AppHandler(server.Handler):
         self.send_header("X-Content-Type-Options", "nosniff")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
-        self.end_headers()
-        if self.command != "HEAD":
-            with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+        # A browser that closes the page mid-reply is normal: Linux says BrokenPipe or ConnectionReset,
+        # Windows says ConnectionAborted (WinError 10053) or ConnectionReset (10054); all are ConnectionError.
+        with contextlib.suppress(ConnectionError):
+            self.end_headers()
+            if self.command != "HEAD":
                 self.wfile.write(body)
 
     def send_json(self, data: Any, status: int = 200) -> None:
@@ -212,6 +214,8 @@ class AppHandler(server.Handler):
     def _handle(self, method: str) -> None:
         try:
             self._route(method)
+        except ConnectionError:
+            return  # the browser went away; there is no one to send the error to
         except Exception:
             log.exception("%s %s failed", method, self.path)
             with contextlib.suppress(OSError):
@@ -322,6 +326,12 @@ class AppServer(ThreadingHTTPServer):
 
     def __init__(self, port: int) -> None:
         super().__init__((BIND, port), AppHandler)
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        """A client that disconnected is not an error; anything else is logged with its traceback."""
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return
+        log.exception("a request from %s failed", client_address)
 
 
 def load_routes() -> None:
