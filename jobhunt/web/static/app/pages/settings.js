@@ -181,7 +181,7 @@ export function Settings({ arg }) {
     <${Head} title="Settings" sub=${SUB}>
       <input class="input sc-search" type="search" placeholder="Search all settings" aria-label="Search all settings" value=${q}
         onInput=${e => setQ(e.target.value)} />
-      <button type="button" class="btn" onClick=${() => openSetup(0)}>Open the setup guide</button>
+      <button type="button" class="btn" onClick=${() => openSetup(0)}>Open the setup guide again</button>
     <//>
     ${vals.restart_needed && !Object.values(offers).some(o => o.restart) && html`<div class="sc-banner"><${Note} tone="warn" icon="refresh">
       <div class="row sc-note"><span>A change you made works after Hal restarts.</span>

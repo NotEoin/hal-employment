@@ -209,6 +209,7 @@ class SettingsPage(unittest.TestCase):
         settings.set("advanced.developer_mode", True)
         for size, scheme in (("wide", "light"), ("narrow", "dark")):
             p = self.tab("settings", size, scheme)
+            self.assertEqual(p.page.locator("button:has-text('Open the setup guide again')").count(), 1)
             for group in ("you", "goal", "scoring", "applying", "privacy", "health", "advanced"):
                 with self.subTest(size=size, group=group):
                     p.go("settings-" + group)
