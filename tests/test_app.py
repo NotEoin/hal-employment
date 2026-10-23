@@ -1,5 +1,5 @@
-"""The new server (web/app.py): a browser that closes the page mid-reply is not an error, and `stop` waits for
-the requests in flight.
+"""The new server (web/app.py): a browser that closes the page mid-reply is not an error, `stop` waits for the
+requests in flight, and the health check gives a closed port only a short time.
 
 Regression: on Windows a closed page raises ConnectionAbortedError (WinError 10053), which the replies did not
 catch, so every early close printed a traceback and the handler then tried to write a 500 to the dead socket.
@@ -14,6 +14,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
@@ -135,6 +136,17 @@ class Serving(unittest.TestCase):
         self.assertGreaterEqual(time.monotonic() - started, HOLD_S / 2)
         client.join(WAIT_S)
         self.assertEqual(got, [200])
+
+    def test_a_running_server_answers_its_health_check(self):
+        self.assertTrue(app.answering(self.port))
+        self.httpd.stop()
+        self.assertFalse(app.answering(self.port))
+
+    def test_a_closed_port_is_given_only_the_short_connect_time(self):
+        # Windows takes about 2 s to refuse a loopback connection; the status line asked on every refresh
+        with mock.patch.object(app.socket, "create_connection", side_effect=TimeoutError) as connect:
+            self.assertFalse(app.answering(1))
+        self.assertEqual(connect.call_args.kwargs["timeout"], app.CONNECT_TIMEOUT_S)
 
 
 if __name__ == "__main__":

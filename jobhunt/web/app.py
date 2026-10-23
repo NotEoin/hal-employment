@@ -12,17 +12,19 @@ from __future__ import annotations
 import base64
 import contextlib
 import hashlib
+import http.client
 import json
 import logging
 import logging.handlers
 import mimetypes
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
 import time
-import urllib.request
+from http import HTTPStatus
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -46,6 +48,7 @@ LEGACY_PATHS = ("/files", "/pages")
 HEALTH_TIMEOUT_S = 2
 LISTEN_BACKLOG = 64        # waiting connections; see AppServer
 STOP_WAIT_S = 10           # an event stream ends within its wake-up time; other replies are quicker still
+CONNECT_TIMEOUT_S = 0.5    # a loopback connect to a listening port is instant; Windows needs about 2 s to refuse
 GIT_TIMEOUT_S = 5
 LOG_BYTES = 2 * 1024 * 1024        # 5 files of 2 MB
 LOG_COUNT = 5
@@ -399,12 +402,26 @@ def _hold_lock() -> Any | None:
 
 
 def answering(port: int) -> bool:
-    """True when a Hal Employment server answers /healthz on `port`."""
+    """True when a Hal Employment server answers /healthz on `port`.
+
+    The connection gets `CONNECT_TIMEOUT_S` and the answer `HEALTH_TIMEOUT_S`: Windows reports a closed port
+    only after its connection retries, so one timeout for both made every "is Hal running?" cost 2 s there.
+    """
     try:
-        with urllib.request.urlopen(f"http://{BIND}:{port}/healthz", timeout=HEALTH_TIMEOUT_S) as r:
-            return bool(json.loads(r.read()).get("ok"))
-    except (OSError, ValueError):
+        sock = socket.create_connection((BIND, port), timeout=CONNECT_TIMEOUT_S)
+    except OSError:
         return False
+    con = http.client.HTTPConnection(BIND, port, timeout=HEALTH_TIMEOUT_S)
+    try:
+        sock.settimeout(HEALTH_TIMEOUT_S)
+        con.sock = sock
+        con.request("GET", "/healthz", headers={"Host": f"{BIND}:{port}"})
+        reply = con.getresponse()
+        return reply.status == HTTPStatus.OK and bool(json.loads(reply.read()).get("ok"))
+    except (OSError, ValueError, http.client.HTTPException):
+        return False
+    finally:
+        con.close()
 
 
 def _logging(background: bool) -> None:

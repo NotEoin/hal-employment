@@ -108,6 +108,8 @@ A browser that closes the page mid-reply is normal: any `ConnectionError` while 
 Activity row. `AppServer.stop()` stops serving, ends the event streams and waits for the requests in flight,
 because each holds a database connection and Windows cannot remove an open file. The listen backlog is
 64, not socketserver's 5: Windows refuses connections past the backlog, which broke a page's first burst.
+`app.answering(port)` gives the connection 0.5 s, as Windows takes about 2 s to refuse a closed loopback port.
+
 ## Sign-in (`web/auth.py`)
 
 - `mint_open_url(remote=, remote_host=, port=, next=)` writes a one-time token (SHA-256 only, 120 s) to
