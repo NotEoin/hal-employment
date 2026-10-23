@@ -8,7 +8,7 @@
    app window is not always the helper's browser (on Windows it is Edge). In a window opened from another
    computer Hal cannot open that computer's browser, so the step shows the address to type and the pairing
    link instead. The step ticks on the `helper` event that the helper's first poll sends. */
-import { html, cx, useState, useEffect } from "../../core/html.js";
+import { html, cx, useState } from "../../core/html.js";
 import { post } from "../../core/api.js";
 import { useApi, toast } from "../../core/store.js";
 import { isRemote } from "../../core/remote.js";
@@ -49,15 +49,12 @@ export function Step() {
   const [busy, setBusy] = useState(false);
   const remote = isRemote();
   const browsers = (info.data && info.data.browsers) || [];
-  useEffect(() => {
-    if (chosen || !browsers.length) return;
-    const first = browsers.find(b => b.supported && b.found) || browsers.find(b => b.supported);
-    if (first) setChosen(first.id);
-  }, [browsers.length]);
   if (info.error) return html`<h1 class="h1">${TITLE}</h1><p class="sub">${info.error.message}</p>`;
   if (!browsers.length) return html`<h1 class="h1">${TITLE}</h1><p class="sub">Looking for your browsers...</p>`;
 
-  const b = browsers.find(x => x.id === chosen) || browsers[0];
+  // the found browser is the default from the first draw, so another browser's pictures never start loading
+  const first = browsers.find(x => x.supported && x.found) || browsers.find(x => x.supported) || browsers[0];
+  const b = browsers.find(x => x.id === chosen) || first;
   const helpers = paired.data || [];
   const connected = helpers.some(h => !h.old && h.connected && (h.browser === b.id || h.this_browser));
   const old = helpers.find(h => h.old);
