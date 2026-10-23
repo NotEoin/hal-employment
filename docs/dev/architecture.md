@@ -263,6 +263,25 @@ shims; old roles `main`, `writer`, `fast` map to `checker`, `writer`, `quick`. O
 - Keeping an uploaded Word file's own design is not built yet. The later approach: anchors from
   the parse, run-preserving replacement, refusal words, PDF only through Word or LibreOffice.
 
+## CV suggestions (`cvstudio/suggest.py`, `tailor.py`, `fresh.py`)
+
+- `suggest.py` reviews one section at a time in the type's order, then the whole CV. Spelling, symbols,
+  numeric dates, banned and never-use phrases, limits, empty sections and order need no AI; the `cv_suggest`
+  prompt may add at most one suggestion per section after them.
+- The guards run on every suggestion: the target exists and is unlocked, `before` matches the text there now,
+  numbers, years and qualifications Hal cannot find become `[how many?]`, `[when?]` or `[which?]`, no new
+  banned phrase, the fingerprint (sha1 of target, trigger id and first after) is not one the person left, and
+  the type's limits hold.
+- Accept makes a new version (`origin="improved"`, `by="you"`); Undo and Accept all are versions too. Leaving
+  a suggestion keeps the reason; "Remember this" is a `cv_preferences` row.
+- `tailor.for_job` (No, A little, More) keeps each change as a model change in `job_cvs`, and rebuilds the
+  job's CV from the base version plus the changes still on. Sending the original file forces No.
+- The whole CV is the target `cv` in a suggestion (`suggest.WHOLE_CV`) and `""` in the model
+  (`suggest.model_target`). `recheck` touches only rows still pending, so a decision made while the tab
+  reloads is kept.
+- `fresh.py` builds a CV of the chosen type from the interview answers and turns failing checks into
+  suggestions.
+
 ## Names (`core/naming.py`)
 
 `file_name("cv" | "letter")` fills the `cvdocs.*file_name` template with `you.name`; `folder_name(n, company,
