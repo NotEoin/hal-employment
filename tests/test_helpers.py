@@ -7,6 +7,7 @@ import json
 import shutil
 import tempfile
 import threading
+import time
 import tomllib
 import unittest
 from contextlib import closing
@@ -102,6 +103,25 @@ class Routing(HelperTest):
                               headers=key_headers(mine))
             t.join(WAIT_S)
             self.assertEqual(out["v"], {"shown": "real"})
+
+    def test_a_command_whose_ask_timed_out_never_reaches_the_helper(self):
+        # a timed-out ask left its command queued, so the next real one waited behind it (2026-10-23)
+        with HalServer() as hal, closing(db.connect()) as con:
+            window = hal.signed_in()
+            mine = pair(hal, window)
+            poll(hal, mine)
+            start_application(con, "test:late", session_id_of(window))
+            with self.assertRaises(RuntimeError):
+                extension._ask("show", timeout=0.2, job="test:late")
+            out = {}
+            t = threading.Thread(target=lambda: out.setdefault("v", self._ask_or_error("test:late")))
+            t.start()
+            got, deadline = [], time.monotonic() + WAIT_S
+            while not got and time.monotonic() < deadline:
+                got = answer_one(hal, mine, {"shown": "fresh"})
+            t.join(WAIT_S)
+            self.assertEqual(len(got), 1)
+            self.assertEqual(out["v"], {"shown": "fresh"})
 
     def test_pairing_works_when_the_app_window_is_another_browser(self):
         with HalServer() as hal, closing(db.connect()) as con:

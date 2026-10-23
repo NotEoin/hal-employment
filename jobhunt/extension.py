@@ -98,10 +98,21 @@ def _old_allowed() -> bool:
 
 
 def _take(helper_id: str, wait: float) -> dict:
-    try:
-        return _queue(helper_id).get(timeout=wait)
-    except queue.Empty:
-        return {}
+    """The helper's next command still waited for, within `wait` seconds; {} when none comes.
+
+    A command whose ask timed out is dropped here: handed out, it would reach the helper before the next real
+    one, which would then wait behind it until its own timeout (seen in a full run on 2026-10-23).
+    """
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            command = _queue(helper_id).get(timeout=max(0.0, deadline - time.monotonic()))
+        except queue.Empty:
+            return {}
+        with _lock:
+            live = command.get("id") in _waiting
+        if live:
+            return command
 
 
 def poll() -> dict:
