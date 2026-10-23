@@ -3,7 +3,8 @@
 `World` points every legacy module at its own folder for as long as it is open: the database, config, inbox,
 vaults, packs and private answers. The owner's data, his private answers file and the network are never
 reached, so command-line goldens and integration tests can run anywhere: company research finds nothing
-here, and `support.offline` refuses anything else that would leave the computer.
+here, and `support.offline` refuses anything else that would leave the computer. A world waits for the
+actions started inside it before it closes, because the runner outlives it and would write into the next.
 
 Timestamps are set relative to the moment the world opens, because the commands filter on "the last day"
 and "ten days without a reply".
@@ -25,6 +26,8 @@ from pathlib import Path
 from unittest import mock
 
 from jobhunt import config, cv, db, gmail, llm, pack, record, replenish, reputation, research, tasks, vault
+
+from .actions import wait_for_actions
 
 PERSON = {
     "first_name": "Robin", "last_name": "Testwell", "full_name": "Robin Testwell",
@@ -287,6 +290,7 @@ class World:
             stack.enter_context(p)
         self.con = db.connect()
         stack.callback(self.con.close)
+        stack.callback(wait_for_actions)   # first out: the actions still need the world's database
         if self.seeded:
             seed(self.con, self.now)
         return self

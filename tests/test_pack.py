@@ -23,6 +23,7 @@ from unittest import mock
 from urllib.parse import quote
 
 from support import people
+from support.actions import finished
 from support.world import World
 
 from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
@@ -189,13 +190,12 @@ class Letter(unittest.TestCase):
         self.assertEqual(letter["checked"], pack.CHECKED_CLEAN)
 
     def test_apply_with_hal_notes_the_record_passages_the_letter_used(self):
-        # Regression: docs.prepare built the pack without its action, so Activity "Used" never named them
+        # a regression: docs.prepare built the pack without its action, so Activity "Used" never named them
         from jobhunt.apply import actions
-        from jobhunt.core import runner
 
         with as_applicant(people.HUMANITIES) as a:
             job = add_job(a.con, "humanities_grad")
-            done = runner.wait(actions.start("docs.prepare", job["id"]), 30)
+            done = finished(actions.start("docs.prepare", job["id"]), WAIT_S)
             runner.flush()
             row = a.con.execute("SELECT used FROM activity WHERE action_id = ?", (done["id"],)).fetchone()
         self.assertEqual(done["state"], "done", done.get("error"))

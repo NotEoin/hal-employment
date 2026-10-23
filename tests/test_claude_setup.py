@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 from support import fake_claude
+from support.actions import wait_for_actions
 from support.api import HalServer
 
 from jobhunt import ai, db
@@ -100,7 +101,7 @@ class InHome(unittest.TestCase):
         stack.callback(store.drop_cache)
         claude_setup.forget()
         stack.callback(claude_setup.forget)
-        stack.callback(runner.idle, WAIT_S)
+        stack.callback(wait_for_actions, WAIT_S)
         self.stack = stack
 
     def fake(self, mode: str = "ok", *, signed_in: bool = True, **env) -> fake_claude.FakeClaude:

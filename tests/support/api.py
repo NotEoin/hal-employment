@@ -12,19 +12,19 @@ import http.client
 import json
 import tempfile
 import threading
-import time
 from dataclasses import dataclass
 from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from jobhunt.core import paths, runner
+from jobhunt.core import paths
 from jobhunt.core.settings import store
 from jobhunt.web import app, auth
 
+from .actions import wait_for_actions
+
 TIMEOUT_S = 10   # every request in these tests answers at once; a hang fails the test instead
-IDLE_S = 10      # the longest a test's background action may take to end once the test is over
 
 
 @dataclass
@@ -92,26 +92,6 @@ class Client:
     def post(self, path: str, body: Any = None, **kw) -> Reply:
         """POST `path` with a JSON body."""
         return self.request("POST", path, {} if body is None else body, **kw)
-
-
-def wait_for_actions(timeout: float = IDLE_S) -> None:
-    """Waits for the test's actions to end; one that outlives `timeout` is stopped and named in the failure.
-
-    Without this, a slow action only shows as a `PermissionError` when its home is removed on Windows, or as
-    "FOREIGN KEY constraint failed" when it writes its steps into the next test's database.
-    """
-    if runner.idle(timeout):
-        return
-    with runner._lock:  # the runner's own view of what is still going
-        going = [f"{live.kind.kind} ({live.subject}, {live.state}, {time.monotonic() - live.started:.1f} s: "
-                 f"{live.text!r})" for live in runner._LIVE.values()]
-        ending = sorted(runner._ENDING)
-        closing = runner._executing[0]
-    for live_id in list(runner._LIVE):
-        runner.stop(live_id)
-    runner.idle(timeout)
-    raise AssertionError(f"actions still going {timeout} s after the test: {going or 'none'}; rows still being "
-                         f"written for: {ending or 'none'}; action threads still closing: {closing}")
 
 
 class HalServer:

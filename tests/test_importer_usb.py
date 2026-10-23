@@ -8,6 +8,7 @@ from pathlib import Path
 
 import support  # noqa: F401 - must come before jobhunt
 from support import old_db
+from support.actions import wait_for_actions
 
 from jobhunt import db
 from jobhunt.core import importer, importer_usb, paths, runner, settings
@@ -85,7 +86,7 @@ class StickImport(unittest.TestCase):
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(paths.set_override(self.root / "home"))
-        stack.callback(runner.idle, 10)
+        stack.callback(wait_for_actions)
         store.drop_cache()
         stack.callback(store.drop_cache)
         paths.ensure()
