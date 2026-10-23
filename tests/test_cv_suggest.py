@@ -16,6 +16,7 @@ from support.api import HalServer
 from support.fake_ai import fake_ai
 
 from jobhunt import db
+from jobhunt.ai import prompts
 from jobhunt.core import paths, runner
 from jobhunt.core.settings import store as settings_store
 from jobhunt.cvstudio import model, store, suggest
@@ -125,6 +126,15 @@ class Reviewers(CvCase):
         with mock.patch.object(suggest, "_pending", lambda con: stale):
             suggest.recheck(self.con, out["version_id"], store.current()[1])
         self.assertEqual(suggest.listing(self.con)["reviewed"], 2)
+
+    def test_the_reviewer_is_asked_to_suggest_where_a_line_is_weak_and_to_say_why_to_you(self):
+        # with the earlier wording Claude answered {"none": true} for every section of the made-up humanities CV
+        # (2026-10-23), and its reasons spoke of "the person" rather than to them
+        text = " ".join(prompts.text("cv_suggest", con=self.con).split())
+        self.assertIn("when a bullet lists a duty without saying what came of it", text)
+        self.assertIn('Reply {"none": true} only when every line already follows the rules', text)
+        self.assertIn('The "title" and "why" speak to the CV\'s owner as "you"', text)
+        self.assertIn("en-GB is UK spelling", text)
 
     def test_look_again_stops_at_six_waiting(self):
         settings_store.drop_cache()
