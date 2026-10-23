@@ -67,7 +67,7 @@ def main(args):
         return 0
     if args[:1] == ["install"]:
         # the PATH advice is what the real Windows installer printed on the test VM (2026-10-23), arrows in ASCII
-        for line in ("Checking installation...", "Installing Claude Code native build...",
+        for line in ("Checking installation...", "Installing Claude Code native build...", "!! Setup notes:",
                      "Native installation exists but C:\\Users\\tester\\.local\\bin is not in your PATH. Add it by "
                      "opening: System Properties -> Environment Variables -> Edit User PATH -> New -> Add the path "
                      "above. Then restart your terminal.", "Claude Code installed."):

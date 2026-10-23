@@ -75,7 +75,7 @@ _TEXT_SIGNED_OUT = re.compile(r"not (logged|signed) in|logged out|signed out|/lo
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 # installer advice about PATH and terminals, which Hal handles itself: on screen it told the person to edit
 # Environment Variables (Windows 11 install test)
-_HANDLED_BY_HAL = re.compile(r"\bPATH\b|Environment Variables|\.(bash|zsh)rc")
+_HANDLED_BY_HAL = re.compile(r"\bPATH\b|Environment Variables|\.(bash|zsh)rc|^\W*Setup notes:?$")
 
 _popen: Callable[..., subprocess.Popen] = subprocess.Popen
 _open_console: Callable[[list[str], str], int] | None = None    # None: the platform layer's window
