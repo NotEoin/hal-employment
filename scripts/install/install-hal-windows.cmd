@@ -11,9 +11,9 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 # PINS-START (written by scripts/install/pins.py from pins.toml)
 $Pins = @{
-  'uv' = @{ Version = '0.8.22'; Url = 'https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip'; Sha256 = '' }
-  'git' = @{ Version = '2.51.0'; Url = 'https://github.com/git-for-windows/git/releases/download/v2.51.0.windows.1/PortableGit-2.51.0-64-bit.7z.exe'; Sha256 = '' }
-  'gh' = @{ Version = '2.79.0'; Url = 'https://github.com/cli/cli/releases/download/v2.79.0/gh_2.79.0_windows_amd64.zip'; Sha256 = '' }
+  'uv' = @{ Version = '0.8.22'; Url = 'https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip'; Sha256 = '5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12' }
+  'git' = @{ Version = '2.51.0'; Url = 'https://github.com/git-for-windows/git/releases/download/v2.51.0.windows.1/PortableGit-2.51.0-64-bit.7z.exe'; Sha256 = 'a09b275d51ed3e829128e04cf4168fb54896cf6234bb30fecb8dc96a2bd321fa' }
+  'gh' = @{ Version = '2.79.0'; Url = 'https://github.com/cli/cli/releases/download/v2.79.0/gh_2.79.0_windows_amd64.zip'; Sha256 = '0372db012e22db3d737ed592ed49b72fdcd47b46d7e9d7e75476410337bd278d' }
 }
 # PINS-END
 $MinBuild = 17763                  # Windows 10 1809

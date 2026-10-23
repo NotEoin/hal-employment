@@ -11,10 +11,10 @@ HAL_REPO="https://github.com/OWNER/REPO.git"
 # PINS-START (written by scripts/install/pins.py from pins.toml)
 UV_VERSION="0.8.22"
 UV_URL="https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-unknown-linux-gnu.tar.gz"
-UV_SHA256=""
+UV_SHA256="741ff1f5742c5a4a25d2f829e8395355e43f7a5ae2ebc6368e9ae2df0efb69cf"
 GH_VERSION="2.79.0"
 GH_URL="https://github.com/cli/cli/releases/download/v2.79.0/gh_2.79.0_linux_amd64.tar.gz"
-GH_SHA256=""
+GH_SHA256="e7af0c72a607c0528fda1989f7c8e3be85e67d321889002af0e2938ad9c8fb68"
 # PINS-END
 
 slug="${HAL_REPO#https://github.com/}"

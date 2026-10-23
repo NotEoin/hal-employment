@@ -9,24 +9,24 @@
 [uv.windows]
 version = "0.8.22"
 url = "https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip"
-sha256 = ""
+sha256 = "5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12"
 
 [uv.linux]
 version = "0.8.22"
 url = "https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-unknown-linux-gnu.tar.gz"
-sha256 = ""
+sha256 = "741ff1f5742c5a4a25d2f829e8395355e43f7a5ae2ebc6368e9ae2df0efb69cf"
 
 [git.windows]
 version = "2.51.0"
 url = "https://github.com/git-for-windows/git/releases/download/v2.51.0.windows.1/PortableGit-2.51.0-64-bit.7z.exe"
-sha256 = ""
+sha256 = "a09b275d51ed3e829128e04cf4168fb54896cf6234bb30fecb8dc96a2bd321fa"
 
 [gh.windows]
 version = "2.79.0"
 url = "https://github.com/cli/cli/releases/download/v2.79.0/gh_2.79.0_windows_amd64.zip"
-sha256 = ""
+sha256 = "0372db012e22db3d737ed592ed49b72fdcd47b46d7e9d7e75476410337bd278d"
 
 [gh.linux]
 version = "2.79.0"
 url = "https://github.com/cli/cli/releases/download/v2.79.0/gh_2.79.0_linux_amd64.tar.gz"
-sha256 = ""
+sha256 = "e7af0c72a607c0528fda1989f7c8e3be85e67d321889002af0e2938ad9c8fb68"
