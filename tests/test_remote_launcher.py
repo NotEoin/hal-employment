@@ -19,12 +19,13 @@ import sys
 import tempfile
 import time
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.api import HalServer
 
+from jobhunt.core import paths
 from jobhunt.remote import launcher
 
 HOST, USER = "deskbox", "sam"
@@ -173,6 +174,30 @@ class Filled(unittest.TestCase):
         for os_name in ("linux", "windows"):
             text = launcher.render(os_name, host=HOST, user=USER, port=8737).decode("ascii")
             self.assertNotRegex(text, r"\.local/bin/hal-employment(?!-cli)")
+
+    def test_a_windows_code_folder_with_a_drive_letter_is_called_through_its_venv(self):
+        # regression: CI 2026-10-23, D:\a\hal-employment\hal-employment was refused as "a space or symbol"
+        # and the launcher pointed at .venv/bin/python, which Windows does not have
+        runner_folder = PureWindowsPath(r"D:\a\hal-employment\hal-employment")
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(paths, "platform_name", return_value="windows"), \
+                mock.patch.object(paths, "code_dir", return_value=runner_folder):
+            command = launcher.hal_command(Path(tmp))
+            self.assertEqual(command, "D:/a/hal-employment/hal-employment/.venv/Scripts/python.exe -m jobhunt")
+        for os_name in ("linux", "windows"):
+            self.assertIn(command.encode(), launcher.render(os_name, host=HOST, user=USER, port=8737, hal=command))
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(paths, "platform_name", return_value="windows"), \
+                mock.patch.object(paths, "code_dir", return_value=PureWindowsPath(r"C:\Users\Sam Smith\hal")), \
+                self.assertRaises(ValueError):
+            launcher.hal_command(Path(tmp))
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(paths, "platform_name", return_value="linux"), \
+                mock.patch.object(paths, "code_dir", return_value=PurePosixPath("/home/sam/hal-employment")):
+            self.assertEqual(launcher.hal_command(Path(tmp)), "/home/sam/hal-employment/.venv/bin/python -m jobhunt")
+        for hal in ("/home/sam/a:b -m jobhunt", "D:/hal & calc -m jobhunt"):
+            with self.subTest(hal=hal), self.assertRaises(ValueError):
+                launcher.render("windows", host=HOST, user=USER, port=8737, hal=hal)
 
     @unittest.skipIf(os.name == "nt", "bash -n checks the Linux and Mac launcher, which runs only there")
     def test_the_shell_launcher_is_valid_bash(self):

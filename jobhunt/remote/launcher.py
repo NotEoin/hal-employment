@@ -9,7 +9,8 @@ Design decisions, each with its reason:
   script runs them through a shell on the laptop; anything else is refused with words.
 - The launcher calls the `hal-employment-cli` shim by full path (non-interactive SSH shells may lack
   `~/.local/bin` on PATH), never `~/.local/bin/hal-employment`, which on the owner's desktop is Hal's own
-  command and ignores its arguments. Without the shim it calls the code folder's Python directly.
+  command and ignores its arguments. Without the shim it calls the code folder's Python directly: the
+  venv's `bin/python`, or `Scripts/python.exe` on Windows, whose drive letter (`D:/...`) is allowed.
 - The `.cmd` is written with CRLF endings whatever the template's endings: it is generated, not checked
   out, so `.gitattributes` does not cover it, and cmd.exe misreads labels in LF-only batch files.
 """
@@ -27,7 +28,7 @@ TEMPLATES = {"linux": "hal-remote.sh", "mac": "hal-remote.sh", "windows": "hal-r
 FILE_NAMES = {"linux": "hal-remote.sh", "mac": "hal-remote.sh", "windows": "hal-remote.cmd"}
 HOST_OK = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
 USER_OK = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._-]{0,31}$")
-COMMAND_OK = re.compile(r"^[A-Za-z0-9._/~ -]+$")
+COMMAND_OK = re.compile(r"^(?:[A-Za-z]:)?[A-Za-z0-9._/~ -]+$")   # a drive letter only at the start: D:/hal
 PLACEHOLDERS = {
     "sh": {'HOST="USER@DESKTOP"; PORT=8737': 'HOST="{login}"; PORT={port}',
            "HAL='~/.local/bin/hal-employment-cli'": "HAL='{hal}'"},
@@ -56,7 +57,8 @@ def hal_command(home: Path | None = None) -> str:
     home = home or Path.home()
     if (home / ".local" / "bin" / "hal-employment-cli").exists():
         return SHIM
-    python = paths.code_dir() / ".venv" / "bin" / "python"
+    venv = ("Scripts", "python.exe") if paths.platform_name() == "windows" else ("bin", "python")
+    python = paths.code_dir() / ".venv" / venv[0] / venv[1]
     command = f"{python.as_posix()} -m jobhunt"
     if not COMMAND_OK.match(command) or " " in python.as_posix():
         raise ValueError("Hal's folder has a space or symbol in its name, so the launcher cannot call it. "
