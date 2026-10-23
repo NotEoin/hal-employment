@@ -1,9 +1,9 @@
-"""Fetch the new app's vendored web files: Preact, its hooks, htm, the fonts and axe-core for tests.
+"""Fetch the new app's vendored web files: Preact, its hooks, htm, the fonts, the CV fonts and axe-core.
 
 Every file comes from an npm registry tarball whose SHA-256 is pinned below, so a changed upload
 can never slip in. The script writes `jobhunt/web/static/app/lib/`, `jobhunt/web/static/app/fonts/`
-and `tests/vendor/axe.min.js`, and is run by hand only when a pin changes; the results are committed,
-so nothing needs Node, npm or the network at runtime or in CI.
+(the CV fonts in its `cv/` folder) and `tests/vendor/axe.min.js`, and is run by hand only when a pin
+changes; the results are committed, so nothing needs Node, npm or the network at runtime or in CI.
 
 Non-ASCII characters in vendored JavaScript (axe-core has four, all inside string literals) are
 rewritten as `\\u` escapes (four hex digits), which mean the same in JavaScript and keep every committed text file
@@ -49,9 +49,12 @@ class Package:
         return f"{REGISTRY}/{self.name}/-/{self.tarball}"
 
 
-def _fonts(stem: str, weights: tuple[int, ...]) -> dict[str, Path]:
-    return {f"package/files/{stem}-{subset}-{w}-normal.woff2": APP / "fonts" / f"{stem}-{subset}-{w}.woff2"
+def _fonts(stem: str, weights: tuple[int, ...], folder: Path = APP / "fonts") -> dict[str, Path]:
+    return {f"package/files/{stem}-{subset}-{w}-normal.woff2": folder / f"{stem}-{subset}-{w}.woff2"
             for w in weights for subset in ("latin", "latin-ext")}
+
+
+CV_FONTS = APP / "fonts" / "cv"   # printed CVs and letters; bold text uses the 600 weight
 
 
 PACKAGES = (
@@ -69,12 +72,21 @@ PACKAGES = (
     Package("@fontsource/ibm-plex-mono", "5.3.0",
             "60d3c0cfa549cb06fcb8867ee83f994d78e212abfac3bef3275436acb5c4d029",
             _fonts("ibm-plex-mono", (400, 500))),
+    Package("@fontsource/source-sans-3", "5.3.0",
+            "f8a0e1b603f5c85a468946a51af4a761d726c28baf79200aafb8736fe9e7d7a7",
+            _fonts("source-sans-3", (400, 600), CV_FONTS)),
+    Package("@fontsource/source-serif-4", "5.3.0",
+            "8e80168e17a799995fb6cae53f2bde848d6f9ca4e5d282b297b5d40c86d4d545",
+            _fonts("source-serif-4", (400, 600), CV_FONTS)),
     Package("axe-core", "4.10.3", "0f2b4d7dcdf7d1219df8d1959ad68e565f51d14c3f0d88bb71cd59abeb956292",
             {"package/axe.min.js": ROOT / "tests" / "vendor" / "axe.min.js"}),
 )
 LIB_LICENCES = ("preact", "htm")
 FONT_LICENCES = ("@fontsource/atkinson-hyperlegible-next", "@fontsource/schibsted-grotesk",
                  "@fontsource/ibm-plex-mono")
+CV_FONT_LICENCES = ("@fontsource/source-sans-3", "@fontsource/source-serif-4")
+CV_FONT_INTRO = ("The fonts in this folder are under the SIL Open Font License 1.1. They print CVs and letters.\n"
+                 "Only the latin and latin-ext subsets of the weights CVs use are kept, so the folder stays small.\n")
 
 
 class PinMismatch(RuntimeError):
@@ -153,6 +165,8 @@ def main(argv: list[str] | None = None) -> int:
     (APP / "fonts" / "OFL.txt").write_text(
         licence_file(FONT_LICENCES, texts, "The fonts in this folder are under the SIL Open Font License 1.1.\n"),
         encoding="ascii", newline="\n")
+    (CV_FONTS / "OFL.txt").write_text(licence_file(CV_FONT_LICENCES, texts, CV_FONT_INTRO),
+                                      encoding="ascii", newline="\n")
     return 0
 
 
