@@ -1,6 +1,6 @@
 """Settings group "Applying": how Hal fills forms. Hal never presses Submit.
 
-`applying.max_steps` and `applying.page_timeout` show in the Advanced group, as few people need them.
+`applying.max_steps` and `applying.page_timeout` show in the Advanced group.
 """
 
 from __future__ import annotations
@@ -12,10 +12,10 @@ BROWSERS = choices(
     ("opera", "Opera"), ("chrome", "Google Chrome"), ("edge", "Microsoft Edge"), ("brave", "Brave"),
     ("vivaldi", "Vivaldi"), ("chromium", "Chromium"), ("firefox", "Firefox (not supported yet)"))
 UNSUPPORTED_BROWSERS = ("firefox",)  # the helper is a Chromium extension; Firefox needs its own build
-FILL_TIMEOUT = 600   # seconds per page; L extension.py:182 allowed 180, too short for long forms
+FILL_TIMEOUT = 600   # seconds per page; the old limit of 180 was too short for long forms
 MAX_FIX_ROUNDS = 4
 MAX_WATCH_HOURS = 12
-# The boards of L server.py:39-40, copied rather than imported so reading the catalogue loads no apply code.
+# The job boards the old server listed, copied rather than imported so reading the catalogue loads no apply code.
 AGGREGATORS = ("indeed.", "adzuna.", "reed.co", "linkedin.", "glassdoor.", "totaljobs.", "ziprecruiter.",
                "cv-library.", "monster.", "jooble.", "talent.com", "simplyhired.", "jobrapido.", "whatjobs.")
 

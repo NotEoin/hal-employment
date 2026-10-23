@@ -6,7 +6,7 @@ classifies it once the settings exist). Rows whose label asks a private question
 guaranteed interview schemes, caring for someone) are not copied: they stay in the old table, which no AI
 path reads, and only their count is kept, in `meta`.
 
-The label patterns are a frozen copy of L autofill.py:33-49, so a later change to the live classifier
+The label patterns are a frozen copy of the old classifier's patterns, so a later change to the live classifier
 (`autofill.private_question`) never changes what this migration did. They match more widely than the live
 classifier where in doubt: a private answer left uncopied costs one retype, a copied one could leak.
 """
@@ -36,7 +36,7 @@ ADJUST = re.compile(r"reasonable (adjustment|accommodation)|adjustments?\b|acces
                     r"additional (support|needs|requirements)|extra time|support (you )?(need|require)", re.I)
 CARER = re.compile(r"\bcarers?\b|caring|look(s|ing)? after|care for (someone|anyone|another|a |an |family|relatives?|"
                    r"children|dependants?)|unpaid care|provide care", re.I)
-# About the employer's networks or news, not the applicant (L autofill.py:46).
+# About the employer's networks or news, not the applicant.
 NOT_ASKED = re.compile(r"hear (more )?about|information about|network|newsletter", re.I)
 PRIVATE_SKIPPED = "answers2:private_not_copied"
 

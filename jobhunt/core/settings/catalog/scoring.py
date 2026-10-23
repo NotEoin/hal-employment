@@ -1,8 +1,8 @@
 """Settings group "How Hal picks jobs": the points each rule gives.
 
-The six weights people change most (first_place, role_title, entry_level, fresh, pay_under, years_required) are
+The six weights shown first (first_place, role_title, entry_level, fresh, pay_under, years_required) are
 in the open; the rest are under "Show more". The defaults are the technical-graduate preset, which
-reproduces today's scores.
+reproduces the scores of the first version.
 """
 
 from __future__ import annotations

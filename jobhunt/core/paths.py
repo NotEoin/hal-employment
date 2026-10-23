@@ -253,7 +253,7 @@ def is_legacy_layout() -> bool:
 
 
 def data_dir() -> Path:
-    """The data folder, in the resolution order above."""
+    """The data folder, in the resolution order of the module header."""
     home = _guarded()
     if home is not None:
         return home / "data"

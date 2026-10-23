@@ -5,9 +5,9 @@ from __future__ import annotations
 from jobhunt.core.settings.catalog._shared import choices, safe
 from jobhunt.core.settings.registry import Setting, register
 
-FOLLOW_UP_DAYS = 10     # L vault.py:15
-DIGEST_NEW_MIN = 55     # L digest.py:15
-DIGEST_REVIEW_MIN = 60  # L digest.py:27
+FOLLOW_UP_DAYS = 10     # days before Hal suggests a follow-up
+DIGEST_NEW_MIN = 55     # lowest score that counts as new in the summary
+DIGEST_REVIEW_MIN = 60  # lowest score that counts as worth a review
 
 register(
     Setting("notify.desktop", "bool", True, "Pop-ups on this computer", order=10,

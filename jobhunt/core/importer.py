@@ -71,9 +71,9 @@ INCOMPLETE = "import.incomplete"
 REPORT = ("import", "report.json")
 LOCKED_SUFFIX = ".imported-"
 RESCORE_TASK, RESCORE_AFTER = "find.rescore_all", 6
-KINDS = ["graduate_job", "graduate_scheme", "internship", "fixed_term"]   # the kinds the old tool searched for
+KINDS = ["graduate_job", "graduate_scheme", "internship", "fixed_term"]   # the owner confirms these
 SECRET_FILES = {"gmail-app-password": "email.app_password", "adzuna": "sites.adzuna_key", "reed": "sites.reed_key"}
-# hal.conf key -> (setting, the config.toml key that wins over it, as in L llm.py:41-48)
+# hal.conf key -> (setting, the config.toml key that wins over it, as the old llm module did)
 HAL_CONF_MODELS = {"HAL_MODEL": ("ai.model.checker", "main_model"),
                    "HAL_WRITER_MODEL": ("ai.model.writer", "writer_model"),
                    "HAL_FAST_MODEL": ("ai.model.quick", "fast_model"),
@@ -275,7 +275,7 @@ def _literal_assignments(path: Path) -> dict[str, Any]:
 
 
 def _hal_conf(path: Path) -> dict[str, str]:
-    """`HAL_*=value` lines of hal.conf, as L llm.py:29-38 read them."""
+    """`HAL_*=value` lines of hal.conf, as the old llm module read them."""
     conf = {}
     if path.is_file():
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -288,7 +288,7 @@ def _hal_conf(path: Path) -> dict[str, str]:
 def exclusions(text: str) -> tuple[list[str], list[str]]:
     """(avoid_employers lines with `# Section` headings, training providers) from excluded-companies.txt.
 
-    A section whose heading mentions training or train-and-place lists training providers (L score.py:62-72);
+    A section whose heading mentions training or train-and-place lists training providers;
     its entries go to `goal.training_providers` instead of the list of employers to avoid.
     """
     avoid, training, section = [], [], ""
@@ -313,7 +313,7 @@ def new_topic() -> str:
 
 
 def _store(name: str):
-    """The secrets or private answers store, looked up when used (stand-ins replace them in tests)."""
+    """The secrets or private store, looked up when used (stand-ins replace them in tests)."""
     try:
         return importlib.import_module(f"jobhunt.core.settings.{name}")
     except ImportError as e:
@@ -884,7 +884,7 @@ def _seal(job: _Run, data: Path) -> None:
 
 
 def undo(*, force: bool = False, system: System | None = None) -> Report:
-    """Puts the old layout back (`--undo`): the old copy writable and in place, the marker aside."""
+    """Puts the old layout back: the old copy writable and in place, the marker aside."""
     system = system or System()
     report = Report(say=system.say)
     target, _ = target_dirs()

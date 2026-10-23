@@ -1,6 +1,6 @@
 """Settings group "Updates": git-based updates and the browser helper's version.
 
-There is no "Update key" row: updates come by git, so the GitHub sign-in row takes its place.
+Updates come by git, so the sign-in row is a GitHub sign-in.
 """
 
 from __future__ import annotations

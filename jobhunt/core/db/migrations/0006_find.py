@@ -19,7 +19,7 @@ COLUMNS = (
     ("jobs", "eligibility", "TEXT"),                          # JSON {requires, years: [..], quote, eligible, why}
     ("jobs", "hidden_rule", "TEXT"),                          # rule id that hid it; NULL when shown
     ("jobs", "screen_state", "TEXT"),                         # unscreened | eligible | out | error
-    # (replaces the "screened eligible/out" text in score_notes, L screen.py:38-41)
+    # (replaces the "screened eligible/out" text in score_notes)
     ("jobs", "screen_why", "TEXT"),
     ("jobs", "closes_at", "TEXT"),
     ("jobs", "saved_at", "TEXT"),

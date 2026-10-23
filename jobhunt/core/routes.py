@@ -52,7 +52,7 @@ def first_name() -> str:
 
 @route("GET", "/api/v2/session")
 def session(req: Request) -> dict:
-    """Who and where: the session, read by the app shell before anything else."""
+    """Who and where: the shape the app shell reads, read by the app shell before anything else."""
     remote = req.remote
     here = not remote
     developer = bool(_setting("advanced.developer_mode", paths.is_developer_checkout()))

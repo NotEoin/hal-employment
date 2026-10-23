@@ -10,7 +10,7 @@ Design decisions, each with its reason:
 - Each platform takes its outside world (command runner, registry reader, file checks, home folder) as
   constructor arguments, so tests drive the real code with fakes and never touch systemd, the registry or
   a real browser.
-- The app window and PDF printing never depend on the person's browser: on Windows they use
+- The app window and PDF printing never depend on the person's browser : on Windows they use
   Microsoft Edge, which is always there; on Linux the window uses the first Chromium-family browser found,
   else a tab in the default browser.
 - Firefox is found and listed, marked as not supported yet, because the browser helper is a Chromium

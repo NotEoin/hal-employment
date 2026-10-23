@@ -38,7 +38,7 @@ BY = ("you", "setup", "import", "learned", "hal")
 # Only the person decides these; Hal may suggest, never write.
 PERSON_ONLY = ("goal.", "scoring.", "cvdocs.")
 GOAL_PREFIXES = ("goal.", "scoring.")       # what a goal version holds (migration 0006)
-OPEN_STATUSES = ("new", "shortlisted", "ready")   # the jobs a re-check covers
+OPEN_STATUSES = ("new", "shortlisted", "ready")   # the jobs a re-check covers (Matches)
 REMOTE_DISABLED = "Change this on the computer Hal runs on."
 WHY = {
     "you": "You changed this setting.",
@@ -62,7 +62,7 @@ class SetResult:
     activity_id: int | None
 
     def as_dict(self) -> dict:
-        """The shape the settings API answers."""
+        """The API shape of a setting."""
         return {"key": self.key, "value": self.value, "display": self.display, "restart": self.restart,
                 "rescore_count": self.rescore_count, "goal_version": self.goal_version,
                 "activity_id": self.activity_id}

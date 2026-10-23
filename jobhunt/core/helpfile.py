@@ -1,4 +1,4 @@
-"""The help file: what someone helping the person needs, with the person taken out (`/help-file`).
+"""The help file: what someone helping the person needs, with the person taken out.
 
 It holds the versions, the "Is Hal working?" checks, recent Activity and the last failed actions, so a
 helper can see what went wrong without asking. Before anything is written, every line passes `scrub()`:

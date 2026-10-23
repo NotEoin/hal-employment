@@ -21,7 +21,7 @@ register(
             order=60),
     Setting("sites.detail_fetch", "bool", True, "Read the full advert for promising jobs", advanced=True, order=70),
     Setting("sites.threads", "int", 12, "Sites searched at once", min=1, max=MAX_THREADS, advanced=True, order=80),
-    # Empty sends no address at all: the old http.py sent the owner's email to every site (L http.py:7).
+    # Empty sends no address at all: the old http.py sent the owner's email to every site.
     Setting("sites.contact", "email", "", "Contact address sent to job sites", advanced=True, order=90,
             help="Some sites like to know who to contact about heavy use. Leave empty to send none."),
 )

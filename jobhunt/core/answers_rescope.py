@@ -2,14 +2,14 @@
 
 Migration 0007 copies today's global saved answers into `answers2` with scope `review`, because which ones
 are safe to reuse depends on the person's own profile, which is only in settings once an importer has run.
-This task classifies those rows against the live `you.*` values: answers that are the same for
-every job become `everywhere`, answers worked out per job or per site stay `review` as `derived`, essays and
-"why us" answers become `never` (kept only as voice examples), and anything that names the employer or
-disagrees with the profile waits for the person's choice.
+This task classifies those rows against the live `you.*` values: answers that are the same for every job
+become `everywhere`, answers worked out per job or per site stay `review` as `derived`, essays and "why us"
+answers become `never` (kept only as voice examples), and anything that names the employer or disagrees with
+the profile waits for the person's choice.
 
 Design notes:
-- The label rules are a frozen copy of L autofill.py:117-152 (RULES, label patterns only), 160
-  (ABOUT_THIS_JOB), 384-387 (WHY, FIT) and 64 (the essay length), so a later change to the live form filler
+- The label rules are a frozen copy of the old form filler's label patterns (RULES, ABOUT_THIS_JOB,
+  WHY, FIT) and essay length, so a later change to the live form filler
   never changes what this one-off task did.
 - Only rows still in scope `review` with source `import` are touched, so a choice the person already made,
   or a row Hal learned later, is never overwritten, and running the task twice changes nothing.
@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 NAME = "answers.rescope"
 AFTER = 7                  # migration 0007 makes `answers2`
 TITLE = "Sorted your saved answers by where they apply"
-ESSAY_CHARS = 400          # L autofill.py:64: a longer answer is an essay for one employer
+ESSAY_CHARS = 400          # a longer answer is an essay for one employer
 
 # (label pattern, profile key) in L RULES order; the first match names the key, as the old filler decided.
 RULES: tuple[tuple[str, str], ...] = (
@@ -73,8 +73,8 @@ WHY = re.compile(r"why (do you want|are you (interested|applying)|this (role|com
                  r"what (interests|excites|attracts) you|motivat", re.I)
 FIT = re.compile(r"why (are you|would you be) (a good|the right|suited)|what makes you|tell us about yourself|"
                  r"relevant experience|why should we", re.I)
-INTEREST = re.compile(r"\binterest(ed)? in\b", re.I)    # `why|interest(ed)? in|motivat`
-EMPLOYER = re.compile(r"\bthe employer\b", re.I)          # L autofill.py:167-175 puts this for an employer's name
+INTEREST = re.compile(r"\binterest(ed)? in\b", re.I)    # as the old classifier's `why|interest(ed)? in|motivat`
+EMPLOYER = re.compile(r"\bthe employer\b", re.I)          # the old form filler put this for an employer's name
 SOON = re.compile(r"immediate|asap|\bnow\b|straight away|right away|at once|no notice", re.I)
 YES = ("yes", "y", "true")
 NO = ("no", "n", "false")
@@ -124,7 +124,7 @@ def matches_profile(key: str, answer: Any, profile: dict[str, Any]) -> bool:
 
 
 def classify(label: str, answer: Any, profile: dict[str, Any]) -> tuple[str, str]:
-    """(scope, kind) for one saved answer: the same for every job, one site's, one job's, or never reused."""
+    """(scope, kind) for one saved answer, by the rules in this file."""
     key = label_key(label)
     if key in DERIVED:
         return "review", "derived"

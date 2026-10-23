@@ -1,7 +1,7 @@
 """Settings group "What you're looking for": the goal.
 
 Every stored row here is part of the goal, so a change writes a goal version, and most change scores.
-Defaults that depend on the career stage come from the stage's preset.
+Defaults that depend on the career stage follow the table below.
 """
 
 from __future__ import annotations

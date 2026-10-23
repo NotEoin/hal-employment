@@ -1,7 +1,7 @@
 """Migration 0010: messages can be read and archived.
 
 Today opening a message never marks it read, so every one is unread. This marks emails read, except the
-kinds that need the person's attention (L gmail.py:41) from the last 3 days, and marks alerts older than
+kinds that need the person's attention from the last 3 days, and marks alerts older than
 7 days read, so Home starts with what is new rather than with every message ever received.
 """
 
@@ -22,7 +22,7 @@ COLUMNS = (
     ("todos", "area", "TEXT"),                                # for Home grouping
 )
 
-ATTENTION = ("assessment", "interview", "offer", "human")   # L gmail.py:41
+ATTENTION = ("assessment", "interview", "offer", "human")   # the kinds the old mail reader treated as needing attention
 EMAIL_DAYS = 3
 ALERT_DAYS = 7
 

@@ -1,4 +1,4 @@
-"""Migration 0001: today's schema (L db.py:25-115), plus `applications.contacts` (L db.py:138-142).
+"""Migration 0001: today's schema, plus `applications.contacts`.
 
 On a database made by today's Hal (tables present, user_version 0) it adds only what is missing, so the
 owner's database and the stick's both reach version 1 unchanged. The statements are a frozen copy: later

@@ -1,7 +1,7 @@
 """Hal's eye as a Windows icon file, drawn with the standard library for the Windows shortcuts.
 
 Windows shortcuts cannot show the app's `icon.svg`, and without an icon they show `pythonw.exe`'s Python
-logo, which the person does not know as Hal (Windows 11 install test, 2026-10-23). The
+logo, which the person does not know as Hal (seen on a fresh Windows 11 install, 2026-10-23). The
 file is drawn at install time, so no picture file is kept in the repository and the eye always matches
 `jobhunt/web/static/app/icon.svg`: a dark ring around a radial gradient of gold, red and near black.
 

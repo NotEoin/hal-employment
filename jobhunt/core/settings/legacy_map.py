@@ -1,7 +1,7 @@
-"""Where each old config key lives now, as data.
+"""Where each old config key lives now: as data.
 
 The config shim (`jobhunt/config.py`) answers `CONFIG.get(old_key)` from live settings through this map,
-and both importers (the old checkout, a USB stick install) use it to carry old values over. Old keys are
+and both importers (the owner's repo, the USB stick) use it to carry old values over. Old keys are
 written as they appear in the old files: top-level keys bare (`alert_score`), table keys with their table
 (`applicant.city`, `claude.main_model`), environment variables as `env:NAME`.
 

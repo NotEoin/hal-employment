@@ -1,4 +1,4 @@
-"""The status line's words: what Hal is doing now, or when it works next (`/status`).
+"""The status line's words: what Hal is doing now, or when it works next.
 
 The most urgent action wins: one waiting for the person first, then the lowest priority number (0 is
 something the person just asked for), then the newest. The rest comes from other areas when they are

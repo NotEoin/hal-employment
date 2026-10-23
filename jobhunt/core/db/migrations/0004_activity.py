@@ -8,7 +8,7 @@ SCHEMA = """
 CREATE TABLE actions (
   id TEXT PRIMARY KEY,                 -- uuid4 hex
   kind TEXT NOT NULL,                  -- "apply.fill", "cv.suggest" ...
-  subject TEXT,                        -- job id, or a pseudo subject "_cv", "_mail", "_search" (L server.py:1336-1369)
+  subject TEXT,                        -- job id, or a pseudo subject "_cv", "_mail", "_search"
   job_id TEXT REFERENCES jobs(id),
   state TEXT NOT NULL,                 -- queued | running | waiting_for_you | done | error | stopped | interrupted
   priority INTEGER NOT NULL DEFAULT 1, -- 0 you just asked, 1 a job you chose, 2 background
@@ -28,7 +28,7 @@ CREATE TABLE activity (
   id INTEGER PRIMARY KEY, at TEXT NOT NULL,
   area TEXT NOT NULL,                  -- find | documents | applying | email | learning | settings | cv | system
   kind TEXT NOT NULL,                  -- action kind or event kind ("setting.changed")
-  icon TEXT, tone TEXT,                -- the row's icon and tone (hal, info, good, warn, bad, why)
+  icon TEXT, tone TEXT,                -- the icons and tones (hal, info, good, warn, bad, why)
   text TEXT NOT NULL,                  -- one line, plain words
   why TEXT NOT NULL CHECK (length(why) > 0),
   used TEXT,                           -- JSON [{kind, label, ref}]: what Hal used to decide

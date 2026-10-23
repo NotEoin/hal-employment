@@ -1,4 +1,4 @@
-"""A USB stick install, copied into this Hal and retired.
+"""The USB stick install, copied into this Hal and retired.
 
 Run by the Windows bootstrap when `%USERPROFILE%\\HalEmployment\\data\\jobs.db` exists, by
 `python -m jobhunt import --from-usb-install PATH`, or from setup ("We found an older Hal on this computer").
@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 
 SECRET_FILES = {"gmail-app-password": "email.app_password", "adzuna": "sites.adzuna_key", "reed": "sites.reed_key"}
 OLD_JOBS = {"discover": "find.discover", "mail": "mail.check", "digest": "notify.digest"}   # U schedule.json keys
-FIXED = {"ai.provider": "claude_cli", "scoring.preset": "humanities_grad"}
+FIXED = {"ai.provider": "claude_cli", "scoring.preset": "humanities_grad"}   # the preset a stick install always used
 STARTUP_LINK = "Hal Employment (background).lnk"          # U setup.ps1:566-574
 DESKTOP_LINK = "Hal Employment.lnk"
 OLD_SUFFIX = ".old-"

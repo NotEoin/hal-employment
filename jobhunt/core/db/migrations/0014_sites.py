@@ -10,7 +10,7 @@ CREATE TABLE sites (
   kind TEXT NOT NULL,                  -- site | tenant | ats
   ats TEXT, name TEXT,
   account TEXT NOT NULL DEFAULT 'unknown',   -- unknown | none | needed | signed_in
-  effort INTEGER NOT NULL DEFAULT 0,   -- "too much effort" remembered (L server.py:1048-1067)
+  effort INTEGER NOT NULL DEFAULT 0,   -- "too much effort" remembered
   uses INTEGER NOT NULL DEFAULT 0, wins INTEGER NOT NULL DEFAULT 0, fails INTEGER NOT NULL DEFAULT 0,
   first_seen TEXT, last_seen TEXT);
 CREATE TABLE site_notes (

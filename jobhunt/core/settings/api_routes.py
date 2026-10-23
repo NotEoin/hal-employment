@@ -1,4 +1,5 @@
-"""API v2 routes for the Settings page: the schema, values, changes and resets, secrets and private answers.
+"""API v2 routes for the Settings page: the schema, values, changes and resets, secrets and private answers
+("Settings, secrets, private answers").
 
 Design notes:
 - No reply ever carries a secret or a private answer: secrets come back as "saved", "not saved" or

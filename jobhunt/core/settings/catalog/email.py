@@ -9,7 +9,7 @@ PROVIDER_HELP = "Gmail for now. Outlook and Hotmail need a Microsoft sign-in, wh
 # The settings page fills in where the password is kept (Windows Credential Manager, your desktop keyring).
 PASSWORD_HELP = ("Kept in {store}. Hal reads your email but never sends from it, except your own daily "
                  "summary.")
-FIRST_SYNC_DAYS = 400   # L gmail.py:35; reaches back over a whole graduate recruitment season
+FIRST_SYNC_DAYS = 400   # reaches back over a whole graduate recruitment season
 
 
 def _supported(value):

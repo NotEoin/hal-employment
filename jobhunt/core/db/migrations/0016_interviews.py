@@ -1,4 +1,4 @@
-"""Migration 0016: interviews (Interview step) and examples."""
+"""Migration 0016: interviews (Interview step), and examples."""
 
 from jobhunt.core.db.migrate import run_sql
 

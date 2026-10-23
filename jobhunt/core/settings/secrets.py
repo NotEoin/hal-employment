@@ -265,7 +265,7 @@ def _record(name: str, verb: str) -> None:
                        why="You changed a key or password in Settings.")
 
 
-# --- the contract ---------------------------------------------------------------------------------------
+# --- the contract --------------------------------------------------------------------------
 
 def put(name: str, value: str) -> str:
     """Saves a secret and reads it back; returns "keyring" or "file". The person is acting, so it may unlock."""

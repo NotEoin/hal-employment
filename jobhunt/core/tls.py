@@ -3,7 +3,7 @@
 On Windows, Python's `ssl` trusts only the root certificates already copied into the computer's store, and
 a fresh Windows copies most of them in only when Windows itself first checks a site that needs one (its
 automatic root update). So on a new laptop every job site, ntfy and Gmail failed with
-`CERTIFICATE_VERIFY_FAILED` until Edge happened to visit them (Windows 11 install test,
+`CERTIFICATE_VERIFY_FAILED` until Edge happened to visit them (seen on a fresh Windows 11 install,
 2026-10-23). `truststore` makes Python ask Windows to check each certificate, which fetches a missing root
 the same way Edge does and keeps any root the person's antivirus or employer added.
 
