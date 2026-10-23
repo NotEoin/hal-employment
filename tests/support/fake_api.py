@@ -174,6 +174,23 @@ MADE_UP_PAGES = {
     "/privacy": {"where": {"data": "", "config": "", "documents": "", "record": ""}, "can_open": True,
                  "leaves": [], "stored": []},
     "/goal/versions": [],
+    # Your goal and Where Hal looks, in the shapes of `goal_routes.goal`, `starters` and `registry.listing`
+    "/goal": {"values": {"goal.stage": "graduate", "goal.study_status": "finished", "goal.study_end": "",
+                         "goal.kinds": ["graduate_job"], "goal.roles": ["museum assistant"], "goal.places": ["Leeds"],
+                         "goal.pattern": "any", "goal.min_pay": 22000},
+              "rows": [["Roles", "Museum assistant"], ["Places", "Leeds"]], "version": 1, "mode": "steady"},
+    "/goal/starters": [{"id": "heritage", "name": "Museums, archives and heritage",
+                        "roles": ["museum assistant", "archive assistant"], "interests": ["collections"], "avoid": []}],
+    "/sources": {"sources": [
+        {"id": "adzuna", "name": "Adzuna", "kind": "aggregator", "kind_label": "Job search site", "area": "",
+         "on": True, "last": "2026-10-23T07:00:00Z", "seen": 120, "kept": 9, "ok": True, "error": None,
+         "missed": None, "added_by": "builtin", "removable": False, "fix": None},
+        {"id": "reed", "name": "Reed", "kind": "aggregator", "kind_label": "Job search site", "area": "", "on": True,
+         "last": None, "seen": 0, "kept": 0, "ok": False, "error": None,
+         "missed": "Reed has no key, so Hal skips it.", "added_by": "builtin", "removable": False,
+         "fix": {"label": "Get a free key", "route": "settings-sites", "secret": "sites.reed_key",
+                 "steps": ["Make a free account.", "Copy the key into Hal."], "url": "https://example.org/key"}}],
+        "missed": ["Reed has no key, so Hal skips it."], "times": ["07:00", "13:00"]},
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
@@ -237,6 +254,13 @@ MADE_UP_PAGES = {
                                      "reason": None, "op": "replace", "can_accept_all": True, "ai": False,
                                      "result_version_id": None}]},
     "/cv/adjust": {"level": "little", "setting": "little", "pick_first": False, "forced_no": ""},
+}
+# Made-up replies for POST routes a page calls as it draws (the goal step asks what Hal understood).
+MADE_UP_POSTS = {
+    "/api/v2/goal/quiz": {"understood": {"stage": "graduate", "study_status": "finished", "study_end": "",
+                                         "kinds": ["graduate_job"], "roles": ["museum assistant"], "avoid": [],
+                                         "interests": [], "places": ["Leeds"], "pattern": "any", "min_pay": 22000},
+                          "rows": [["Roles", "Museum assistant"], ["Places", "Leeds"]]},
 }
 # The page a CV preview iframe shows (the real server sends the printed page; every version and look get this).
 MADE_UP_PREVIEW = (b'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>CV</title></head>'
@@ -360,6 +384,8 @@ class Handler(BaseHTTPRequestHandler):
         self.server.state.posts.append((self.path, body))
         if self.server.state.session is None:
             self._error(401, "signed_out", "Open Hal Employment from its shortcut.")
+        elif self.command == "POST" and self.path.split("?")[0] in MADE_UP_POSTS:
+            self._json(MADE_UP_POSTS[self.path.split("?")[0]])
         else:
             self._json({"ok": True})
 
