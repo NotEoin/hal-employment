@@ -314,9 +314,10 @@ def _choose(options: list[str], value: str, preferred: list) -> str | None:
 def _fit(f: dict, value, preferred: list) -> object | None:
     """Shapes a known answer to the field's kind, or returns None when the field cannot take it."""
     kind, options = f["kind"], f.get("options") or []
-    if kind in ("select", "radio", "combobox") and options:
+    several = kind == "checkgroup" or (kind == "select" and f.get("multiple"))
+    if kind in ("select", "radio", "combobox") and options and not several:
         return _choose(options, value if not isinstance(value, list) else value[0], preferred)
-    if kind == "checkgroup":
+    if several:
         wanted = value if isinstance(value, list) else [value]
         chosen = [c for c in (_choose(options, w, preferred) for w in wanted) if c]
         return chosen or None

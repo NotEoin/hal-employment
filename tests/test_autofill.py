@@ -549,6 +549,13 @@ class WhyThisAnswer(unittest.TestCase):
                          [("No", "private: carer"), ("Two weeks", "note: field_answer"),
                           ("Yes", "your earlier answer")])
 
+    def test_a_list_that_takes_several_answers_gets_every_answer(self):
+        """Regression: a list answer was cut to its first item, so a multi-select got one language."""
+        langs = {"hid": "l", "kind": "select", "label": "Languages", "multiple": True,
+                 "options": ["English", "French", "Welsh"]}
+        self.assertEqual(autofill._fit(langs, ["French", "Welsh"], []), ["French", "Welsh"])
+        self.assertEqual(autofill._fit({**langs, "multiple": False}, ["French", "Welsh"], []), "French")
+
     def test_a_skip_note_leaves_the_field_alone_and_says_so(self):
         self.note("referral code", "", kind="field_skip")
         f = autofill.propose(self.job, [self.field("r", "Referral code")], {}, {}, self.con)[0]
