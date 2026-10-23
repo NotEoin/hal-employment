@@ -16,6 +16,7 @@ COMPANIES_HOUSE = "https://find-and-update.company-information.service.gov.uk/se
 CONCERN = re.compile(r"controvers|criticism|lawsuit|litigation|legal (issues|action)|scandal|investigation|"
                      r"fine[sd]?\b|working conditions|labou?r (practices|issues|dispute)|allegation|"
                      r"regulatory|data breach|privacy (concerns|issues)|safety|sanction|fraud|misconduct", re.I)
+LEGAL_WORDS = r"\b(ltd|limited|plc|group|holdings|uk|the)\b"   # words a registration adds to a trading name
 BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 
 
@@ -27,8 +28,7 @@ def wikipedia(company: str) -> dict:
     """Returns the matching article, its summary, and any section headings that suggest concerns."""
     hits = _wiki({"action": "query", "list": "search", "srsearch": f"{company} company", "srlimit": 3})
     hits = hits.get("query", {}).get("search", [])
-    key = re.sub(r"[^a-z0-9]", "", company.lower())[:6]
-    article = next((h["title"] for h in hits if key and key in re.sub(r"[^a-z0-9]", "", h["title"].lower())), None)
+    article = next((h["title"] for h in hits if names(company, h["title"])), None)
     if not article:
         return {}
     sections = _wiki({"action": "parse", "page": article, "prop": "sections"}).get("parse", {}).get("sections", [])
@@ -57,8 +57,20 @@ def companies_house(company: str) -> list[str]:
 
 
 def _key(name: str) -> str:
-    name = re.sub(r"\b(ltd|limited|plc|group|holdings|uk|the)\b", "", name.lower())
-    return re.sub(r"[^a-z0-9]", "", name)[:12]
+    # the whole name: a 12-letter key matched "Riverside Heritage Joinery" for "Riverside Heritage Trust"
+    # (made-up employer, 2026-10-23)
+    return "".join(_name_words(name))
+
+
+def _name_words(name: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", re.sub(LEGAL_WORDS, " ", name.lower()))
+
+
+def names(company: str, title: str) -> bool:
+    """True when an article title holds every word of the company's name (legal words aside)."""
+    # a 6-letter key matched "Riverside Cemetery (Denver)" for "Riverside Heritage Trust" (2026-10-23)
+    wanted, held = _name_words(company), set(_name_words(title))
+    return bool(wanted) and all(w in held for w in wanted)
 
 
 def check(company: str) -> tuple[list[str], str]:
