@@ -21,8 +21,6 @@ INDEX = DOCS / "README.md"
 README = ROOT / "README.md"
 CI = ROOT / ".github" / "workflows"
 HELP_TIMEOUT_S = 60      # `python -m jobhunt <cmd> --help` imports the command modules; a second or two is usual
-# Docs the index names that are not written yet.
-ARRIVING = {"dev/site-notes.md"}
 # Root documents every reader may need; the index links each of them too.
 ROOT_DOCS = ("README.md", "CHANGELOG.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "LICENSE")
 
@@ -123,8 +121,7 @@ class TheIndex(unittest.TestCase):
                 self.assertTrue(what and what != "---", "each row says what the document is")
 
     def test_every_row_of_the_index_points_at_a_file(self):
-        gone = [t for t in index_targets() if t not in ARRIVING
-                and not (DOCS / t).exists() and not (ROOT / t).exists()]
+        gone = [t for t in index_targets() if not (DOCS / t).exists() and not (ROOT / t).exists()]
         self.assertEqual(gone, [])
 
     def test_the_index_links_the_root_documents(self):
@@ -143,8 +140,6 @@ class TheIndex(unittest.TestCase):
                         continue
                     rel = target.split("#", 1)[0]
                     if (page.parent / rel).exists():
-                        continue
-                    if page == INDEX and (DOCS / rel).resolve().relative_to(DOCS.resolve()).as_posix() in ARRIVING:
                         continue
                     broken.append(f"{page.relative_to(ROOT).as_posix()}: {target}")
         self.assertEqual(broken, [])
