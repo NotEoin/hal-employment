@@ -73,6 +73,9 @@ PLANS = {"pro": "Claude Pro", "max": "Claude Max", "team": "Claude Team", "enter
 _FREE = re.compile(r"\bfree\b", re.I)
 _TEXT_SIGNED_OUT = re.compile(r"not (logged|signed) in|logged out|signed out|/login|please (log|sign) in", re.I)
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+# installer advice about PATH and terminals, which Hal handles itself: on screen it told the person to edit
+# Environment Variables (Windows 11 install test)
+_HANDLED_BY_HAL = re.compile(r"\bPATH\b|Environment Variables|restart your (terminal|shell)|\.(bash|zsh)rc")
 
 _popen: Callable[..., subprocess.Popen] = subprocess.Popen
 _open_console: Callable[[list[str], str], int] | None = None    # None: the platform layer's window
@@ -248,7 +251,11 @@ def add_to_user_path(folder: Path) -> bool:
 
 
 def _step_text(line: str) -> str:
+    """An installer line as a step, or "" for a blank line or advice Hal follows itself (logged instead)."""
     text = _ANSI.sub("", line).strip()
+    if _HANDLED_BY_HAL.search(text):
+        log.info("Claude's installer said: %s", text)
+        return ""
     return text[:STEP_CHARS - 3] + "..." if len(text) > STEP_CHARS else text
 
 
