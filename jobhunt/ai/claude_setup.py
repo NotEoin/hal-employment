@@ -73,9 +73,9 @@ PLANS = {"pro": "Claude Pro", "max": "Claude Max", "team": "Claude Team", "enter
 _FREE = re.compile(r"\bfree\b", re.I)
 _TEXT_SIGNED_OUT = re.compile(r"not (logged|signed) in|logged out|signed out|/login|please (log|sign) in", re.I)
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
-# installer advice about PATH and terminals, which Hal handles itself: on screen it told the person to edit
-# Environment Variables (Windows 11 install test)
-_HANDLED_BY_HAL = re.compile(r"\bPATH\b|Environment Variables|\.(bash|zsh)rc|^\W*Setup notes:?$")
+# installer advice about PATH and commands to type, which Hal handles itself: on screen it told the person to
+# edit Environment Variables and to type `claude --help` (Windows 11 install test)
+_HANDLED_BY_HAL = re.compile(r"\bPATH\b|Environment Variables|\.(bash|zsh)rc|^\W*Setup notes:?$|claude --help")
 
 _popen: Callable[..., subprocess.Popen] = subprocess.Popen
 _open_console: Callable[[list[str], str], int] | None = None    # None: the platform layer's window

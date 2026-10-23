@@ -139,7 +139,8 @@ class Install(InHome):
         self.assertIn("Added Claude to your programs list", steps)
         self.assertFalse([s for s in steps if "%" in s])
         # Windows 11 install test: the installer's own advice to edit Environment Variables reached the step list
-        self.assertFalse([s for s in steps if "PATH" in s or "Environment Variables" in s or "Setup notes" in s], steps)
+        self.assertFalse([s for s in steps if "PATH" in s or "Environment Variables" in s or "Setup notes" in s
+                          or "--help" in s], steps)
 
     def test_linux_installs_with_anthropics_script_for_this_person_only(self):
         installer = FakeInstaller(self.tmp)

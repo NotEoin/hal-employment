@@ -70,7 +70,7 @@ def main(args):
         for line in ("Checking installation...", "Installing Claude Code native build...", "!! Setup notes:",
                      "Native installation exists but C:\\Users\\tester\\.local\\bin is not in your PATH. Add it by "
                      "opening: System Properties -> Environment Variables -> Edit User PATH -> New -> Add the path "
-                     "above. Then restart your terminal.", "Claude Code installed."):
+                     "above. Then restart your terminal.", "Next: Run claude --help to get started", "Claude Code installed."):
             print(line, flush=True)
         return 0
     stdin = sys.stdin.read()
