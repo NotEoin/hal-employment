@@ -11,7 +11,6 @@ Each version has two parts. "What's new" is in plain words and is shown on the U
   Stop), search or jump with Ctrl K, and the list of shortcuts with `?`.
 - Light and dark looks, a simple menu (five items and More), and a screen that says to open Hal from its
   shortcut when the window is not signed in.
-- Pages that are still being built say so, and are left out of the menu.
 - Hal Employment opens through its shortcut with a one-time link, and each window is signed in. A web page
   in any browser cannot read or change anything in Hal.
 - The classic screens are still there, at `/classic/`.
@@ -256,8 +255,56 @@ Each version has two parts. "What's new" is in plain words and is shown on the U
   are, What Hal remembers, what to do when something goes wrong) and "Your privacy". SECURITY.md,
   THIRD_PARTY_NOTICES.md and LICENSE ("private software, licensed to named collaborators for personal use;
   not for redistribution") are added.
+- Windows: Hal's searches, phone alerts and email reach their websites on a new laptop. Hal now asks Windows to
+  check each website's certificate, as Edge does. The phone alerts QR code shows again.
+- Setting up the browser helper: the first button copies the extensions page's address and opens your
+  browser, ready for you to paste it, and the folder step says how to paste the folder.
+- Windows: the shortcuts show Hal's eye, and the install window is called "Installing Hal Employment".
+- Home's "new matches" counts only the jobs Matches shows.
+- Installing Claude no longer shows Claude's own advice about PATH, which Hal follows by itself, and the
+  Install button no longer comes back for a moment once Claude is in.
+- Update Hal works on a new install: Hal stops, installs the new version and starts again, and Settings then
+  says Hal is up to date. A failed update stops the new version before it goes back.
+- Windows: the remote launcher works from an ordinary Hal folder (`C:\Users\...\hal-employment`) when Hal's
+  command is not installed; it was refused as "a space or symbol in its name".
+- The setup guide's CV step keeps the way to start you chose, even when you chose before the page had
+  finished loading.
+- Words: the line at the top says "Next job search at 13:30"; one of a thing reads in the singular ("1 answer
+  needs you", "1 change", "Where your application is"); a window from another computer asks "Is <computer>
+  asleep?"; Copy says "Copied" only when the browser took the words. Help has "How applying with Hal works",
+  the first-application guide again. Each thing has one name ("Open the setup guide", "Roles you want",
+  "Settings, You").
+- My CV: Your file has "Replace", and the upload when you have not added a file yet.
+- Your record: when the AI cannot answer, the passage is shown as "From your record", with the reason.
+- Settings: App password says where it is kept; Where Hal looks counts your sites; Browser helper folder shows
+  the folder with Copy; lists of choices and the goal history use plain words; Earlier versions of your goal
+  shows once; a button found by search opens its group; in a window from another computer, rows name the
+  computer Hal runs on. No setting sticks out of its card in a laptop-sized window.
+- The CV preview shows the focus ring when you Tab to it, and Is Hal working? wraps long folder paths on a
+  narrow screen.
 
 ### Developer notes
+
+Final pass (2026-10-23): a first install on a fresh Windows 11 computer, the Windows test fixes, and the
+words, accessibility and polish of every page.
+
+- Windows install: `jobhunt/core/tls.py`, with `truststore` for Windows in `pyproject.toml` and `uv.lock`; the install
+  files carry their pinned SHA-256 checksums; `platform.open_browser_window()`, and
+  `POST /helpers/open-extensions-page` returns `address`; tests have the `laptop` page size (1033 x 690, Hal's
+  Edge window on a 1280 x 800 screen); the server makes `config/local-api-key` at start, `GET /api/v2/version`
+  takes the local key (`session_or_local`), and on Windows the updater ends a stuck server with `taskkill /F`
+  without `/T`.
+- Windows tests: an action still going 10 s after a `HalServer` test is stopped fails the test by name (enter the
+  fakes a request may use before `HalServer`, so they come out after the server stops); browser pages report
+  console errors with their address, and a page that never draws names the requests that got no answer; the
+  Linux install scripts are parsed with Git for Windows' bash on Windows.
+- Gates: G2 runs `ui.test_shell.NoStubs` (no `/* STUB:`, `ui/stub.js` or "This part is being built" in
+  the app); `ui/stub.js` and `router.stubPages()` are gone. The words test is strict (no `HAL_WORDS_STRICT`).
+  `LEGACY_ALLOWED` is empty, so any `CONFIG` read outside `jobhunt/config.py` fails G7.
+- Code: `ui/clipboard.js` `copyText()` for every Copy; `Upload` takes `fresh` (start at the drop zone);
+  `core/status.py` `NEXT_WORDS`; `parse.SHOWN_PREFIX`, and `describe()` words a `multi` value by its labels;
+  `/settings/schema` rows carry `remote`, and `advanced.port` is `remote="label"`; the classic
+  `server.Handler` drops a `ConnectionError`; `tests/support/ui.py` has the one `real_app()`.
 
 Notes about job sites, engine fixes, form answers with their why, learning, and the documentation
 (2026-10-23). How these parts work is in

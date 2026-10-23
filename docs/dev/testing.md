@@ -41,12 +41,12 @@ with a key cannot use Windows' data protection (DPAPI), so the secrets tests fai
 | Gate | Command | What it proves |
 | --- | --- | --- |
 | G1 | `python -m unittest discover tests` | Every unit and integration test passes |
-| G2 | `tests/ui/test_shell.py` (browser) | Every route of the new app draws at both sizes with no errors, axe clean |
+| G2 | `tests/ui/test_shell.py` (browser) | Every route of the new app draws at both sizes with no errors, axe clean; no stub is left in the app (`NoStubs`, no browser needed) |
 | G3 | `tests/test_classic.py` | Classic works through the new server |
 | G4 | `python scripts/dev/golden_cli.py --check` | The command line prints what it printed at ef53088 |
 | G5 | `tests/test_ai_guard.py`, `tests/test_settings_private.py`, `tests/test_autofill.py` `PrivatePaths` and `WhyThisAnswer`, `tests/test_answers_routes.py` | Private answers never reach the AI and show only as saved; the guard blocks a canary; a private answer's why says only that it is private, and the Saved answers tab never lists one; end to end |
 | G6 | `tests/test_never_submit.py`, `tests/test_guard.py` (browser) | Hal never presses Submit: practice forms count posts on the server, in both modes; static checks; the only email is your own summary |
-| G7 | `tests/test_settings_registry.py` | Every setting read is registered; `CONFIG` is read only where `LEGACY_ALLOWED` lists it; Hal never sets goal, scoring or CV keys |
+| G7 | `tests/test_settings_registry.py` | Every setting read is registered; `CONFIG` is never read outside the shim (`LEGACY_ALLOWED` is empty); Hal never sets goal, scoring or CV keys |
 | G8 | `check_ascii.py`, `check_ruff.py`, `check_personal.py` | Added lines are ASCII and ruff-clean; no personal string |
 | G9 | `tests/test_action_kinds.py`, `tests/test_runner.py` | Every action kind, run from its example, ends done with a step and an Activity row with a why; actions survive a restart |
 | G10 | `tests/test_migrate.py`, `tests/test_backup.py` | Old databases migrate with counts kept and a backup made |

@@ -82,8 +82,8 @@ changes; `on_change(prefix, fn)` subscribes and returns an unsubscribe function.
 - **Config shim** (`jobhunt/config.py`): `CONFIG` is a read-only mapping over live settings. The
   checkout's `config.toml` is read only in the legacy layout. Renamed values read back in the old words
   (`helper` reads as `extension`); `signed_in_apply` is always `[]`; `ntfy_topic` comes from the secrets.
-- **Gate G7** (`tests/test_settings_registry.py`): every key read is registered, and `CONFIG` is read only
-  where `LEGACY_ALLOWED` lists it. An owner who converts a module removes its entries; a stale entry fails.
+- **Gate G7** (`tests/test_settings_registry.py`): every key read is registered, and `CONFIG` is never read
+  outside the shim: `LEGACY_ALLOWED` is empty, so a new read fails.
 
 ## Discovery (`core/plugins.py`)
 
@@ -530,8 +530,8 @@ Conventions for page and dialog owners:
   `JobPage`, `Apps`, `AppPage`, `Messages`, `CvStudio`, `Docs`, `Record`, `Activity`, `Memory`,
   `Settings`); it gets the route's arg as `arg` (already decoded). Its first heading is `Head` (or an
   `h1`), which gets focus on each route change.
-- When a stub is replaced, delete both the `/* STUB: ... */` line and `export const STUB`; the rail
-  then shows the page in a person's own install.
+- No stub may be left: G2's `NoStubs` fails on `/* STUB:`, `ui/stub.js` or "This part is being built" in
+  any file of the app. Copy goes through `ui/clipboard.js` `copyText()`.
 - A dialog is `dialogs/<kind>.js` with a default export; set `.wide`, `.drawer` or `.label` on the
   component as needed and start it with `DlgHead`. Open it with `openDialog(kind, props)`; props arrive as
   `d`. `ask({title, text, yes, no, danger})` returns a promise of true or false.
