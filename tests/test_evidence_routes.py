@@ -137,7 +137,11 @@ class RecordRoutes(unittest.TestCase):
         other = self.hal.home / "Elsewhere"
         other.mkdir()
         self.assertEqual(c.post("/api/v2/record/folder", {"path": str(other)}).status, 200)
-        del record.VAULT     # the setting decides again, as it does outside the tests
+        # the setting decides again, as it does outside the tests; put back before setUp's patch ends, which
+        # failed when this module ran alone (no other module had set record.VAULT)
+        saved = record.VAULT
+        del record.VAULT
+        self.addCleanup(setattr, record, "VAULT", saved)
         self.assertEqual(Path(record._live("VAULT")), other.resolve())
 
 
