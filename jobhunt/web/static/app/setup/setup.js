@@ -8,7 +8,7 @@
    Every change is saved as it happens: the steps save their own fields, and the frame tells the server
    which step is open, so closing the window halfway and opening the guide again carries on at the same
    step. Opening the guide at its first step resumes where the person left it, unless the guide was
-   already finished (then "Open the setup guide again" starts at Welcome). */
+   already finished (then "Open the setup guide" starts at Welcome). */
 import { html, cx, useState, useEffect, useRef } from "../core/html.js";
 import { get, post, put } from "../core/api.js";
 import { store, useStore, closeSetup, toast, invalidate } from "../core/store.js";

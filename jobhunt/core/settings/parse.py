@@ -92,14 +92,17 @@ def money(raw: Any) -> int:
     return yearly
 
 
+SHOWN_PREFIX = "Hal reads this as "   # the field's own note; history lines leave it out
+
+
 def show_money(value: Any) -> str:
     """Words for a yearly pay: "Hal reads this as 22,000 pounds a year" ("about" when it was converted)."""
     if not value:
         return "No lowest pay: Hal shows jobs whatever they pay."
     if value % PAY_ROUNDING:
         shown = round(value / PAY_ROUNDING) * PAY_ROUNDING
-        return f"Hal reads this as about {shown:,} pounds a year"
-    return f"Hal reads this as {value:,} pounds a year"
+        return f"{SHOWN_PREFIX}about {shown:,} pounds a year"
+    return f"{SHOWN_PREFIX}{value:,} pounds a year"
 
 
 def miles(raw: Any) -> int:
@@ -338,6 +341,9 @@ def describe(setting: Setting, value: Any) -> str:
         return next((words for v, words in setting.choices if v == value), str(value))
     if setting.kind == "bool":
         return "On" if value else "Off"
+    if setting.kind == "multi" and isinstance(value, list):
+        words = dict(setting.choices)
+        return ", ".join(words.get(v, str(v)) for v in value)
     if isinstance(value, list):
         return ", ".join(str(v) for v in value) if setting.kind != "times" else " and ".join(value)
     return "" if value is None else str(value)

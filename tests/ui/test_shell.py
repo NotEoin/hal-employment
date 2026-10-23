@@ -168,6 +168,21 @@ class ShellTest(unittest.TestCase):
         self.assertEqual(p.focused(), "button:Help and shortcuts")
         self.assertEqual(p.errors, [])
 
+    def test_help_opens_the_first_application_guide_again(self) -> None:
+        # the guide said "It is also in Help." while Help had only the shortcuts
+        srv = self.serve()
+        p = self.tab(srv).open("home")
+        pg = p.page
+        pg.keyboard.press("?")
+        help_box = pg.get_by_role("dialog", name="Help and shortcuts")
+        help_box.get_by_role("button", name="How applying with Hal works").click()
+        guide = pg.get_by_role("dialog", name="Your first application with Hal")
+        guide.wait_for()
+        guide.get_by_role("button", name="Got it", exact=True).click()
+        self.assertEqual(pg.get_by_role("dialog").count(), 0)
+        self.assertEqual(srv.state.posts, [], "with no application, Got it approves nothing")
+        self.assertEqual(p.errors, [])
+
     def test_the_rail_matches_the_mock_groups_and_the_simple_menu(self) -> None:
         srv = self.serve(session=made_up_session(developer=True))
         p = self.tab(srv).open("home")

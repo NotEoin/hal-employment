@@ -10,9 +10,11 @@ import { html, cx, useState } from "../core/html.js";
 import { put, del, run } from "../core/api.js";
 import { useApi, useStore, load, openDialog, openSetup, setTheme, setSimpleNav, toast } from "../core/store.js";
 import { go, route } from "../core/router.js";
+import { host, isRemote, onlyThere } from "../core/remote.js";
 import { Head, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { SettingCtl } from "../ui/setting-control.js";
+import { plural } from "../core/format.js";
 import { HealthPanel } from "../settings/health.js";
 import { PrivacyPanel } from "../settings/privacy.js";
 import { PromptsPanel } from "../settings/prompts.js";
@@ -25,7 +27,7 @@ const SUB = "Everything Hal does can be changed here. Most changes save straight
 const SHOWN_WORDS = new Set(["money", "times", "hours"]);  // kinds whose typed value the server rewords
 const OTHER_PANELS = { ai: AiPanel, updates: UpdatesPanel };
 // Info rows a panel draws with their words, so the group leaves out their empty catalogue rows.
-const DRAWN_BY_PANEL = { ai: AI_PANEL_KEYS, updates: UPDATES_PANEL_KEYS };
+const DRAWN_BY_PANEL = { ai: AI_PANEL_KEYS, updates: UPDATES_PANEL_KEYS, goal: new Set(["goal.history"]) };
 // The model rows' choices depend on the AI in use, so they come from GET /ai/models, not the catalogue.
 const MODEL_ROLES = { "ai.model.writer": "writer", "ai.model.checker": "checker", "ai.model.quick": "quick" };
 
@@ -36,7 +38,7 @@ function withModels(it, models, value) {
   const all = names.includes(value) || !value ? names : [value, ...names];
   return { ...it, choices: all.map(n => [n, n]) };
 }
-// Buttons whose action has an API path; the rest belong to panels or to areas still being built.
+// Buttons whose action has an API path; a panel draws the rest, so a search sends them to their group.
 const BUTTON_PATHS = { "find.rescore": "/jobs/rescore", "ai.test": "/ai/test", "system.pause": "/status/pause",
   "system.quit": "/system/quit" };
 const BUTTON_WORDS = { "ai.test": "Test now" };
@@ -80,9 +82,10 @@ function Row({ it, ctx }) {
   }
   return html`<div class="setting" data-key=${it.key}><div class="sc-text">
       <div class="lab">${it.label}${changed && html`<span class="changed">Changed</span>`}</div>
-      ${it.help && html`<div class="small sub">${it.help}</div>`}
+      ${ctx.help(it) && html`<div class="small sub">${ctx.help(it)}</div>`}
       ${words && html`<div class="small sub">${words}</div>`}
-      ${it.disabled_why && html`<div class="small sub">${it.disabled_why}</div>`}
+      ${it.disabled_why && html`<div class="small sub">${onlyThere()}</div>`}
+      ${it.remote === "label" && isRemote() && html`<div class="small sub">On ${host()}</div>`}
       ${err[it.key] && html`<div class="small sc-err" role="alert">${err[it.key]}</div>`}</div>
     <div class="ctl"><${SettingCtl} it=${it} value=${value} onChange=${v => save(it, v)} extra=${ctx.extra(it)} />
       ${changed && !it.disabled_why && html`<button type="button" class="btn quiet small" aria-label=${"Reset " + it.label}
@@ -128,6 +131,7 @@ export function Settings({ arg }) {
   const groups = (schema.data && schema.data.groups) || [];
   const g = groups.some(x => x.id === arg) ? arg : "you";
   const browsers = useBrowsers(g === "applying" || !!q);
+  const sources = useApi(g === "sites" || !!q ? "/sources" : null).data;
 
   if (schema.error || values.error) {
     return html`<${Head} title="Settings" sub=${SUB} /><div class="card empty">${(schema.error || values.error).message}</div>`;
@@ -171,12 +175,15 @@ export function Settings({ arg }) {
   const press = async it => {
     const path = BUTTON_PATHS[it.action];
     if (it.action === "find.rescore") { recheck(); return; }
-    if (!path) { toast("This part is being built."); return; }
+    if (!path) { setQ(""); go(route("settings", groupOf(groups, it.key))); return; }
     try { await run(path, {}); toast(it.label + ": done."); } catch (e) { toast(e.message); }
   };
   const recheckWords = n => (n == null ? "Re-check every open job" : "Re-check " + n + (n === 1 ? " job" : " jobs"));
   const ctx = {
     vals, err, save, reset,
+    help: it => (it.key === "sites.where" && sources ? plural(sources.sources.length, "site") + ", "
+      + sources.sources.filter(x => x.on).length + " switched on."
+      : (it.help || "").replace("{store}", (vals.store && vals.store.name) || "a protected file")),
     extra: it => ({ secrets: vals.secrets, privateSaved, press, busy,
       words: it.action === "find.rescore" ? recheckWords(offersN(offers)) : BUTTON_WORDS[it.action],
       ...(it.key === "applying.browser" ? browsers : {}) }),
@@ -197,7 +204,7 @@ export function Settings({ arg }) {
     <${Head} title="Settings" sub=${SUB}>
       <input class="input sc-search" type="search" placeholder="Search all settings" aria-label="Search all settings" value=${q}
         onInput=${e => setQ(e.target.value)} />
-      <button type="button" class="btn" onClick=${() => openSetup(0)}>Open the setup guide again</button>
+      <button type="button" class="btn" onClick=${() => openSetup(0)}>Open the setup guide</button>
     <//>
     ${vals.restart_needed && !Object.values(offers).some(o => o.restart) && html`<div class="sc-banner"><${Note} tone="warn" icon="refresh">
       <div class="row sc-note"><span>A change you made works after Hal restarts.</span>

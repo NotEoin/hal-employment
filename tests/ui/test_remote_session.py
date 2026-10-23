@@ -77,6 +77,15 @@ class RemoteWindow(unittest.TestCase):
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])
 
+    def test_rows_only_hal_s_computer_can_change_name_that_computer(self) -> None:
+        # "Change this on <host>, the computer Hal runs on" and "On <host>"; the host was left out
+        p = self.page("settings-advanced")
+        p.page.wait_for_selector('[data-group="advanced"]')
+        p.page.get_by_role("button", name="Show more").first.click()
+        self.assertIn(f"On {DESK}", p.page.inner_text("[data-key='advanced.port']"))
+        self.assertIn(f"Change this on {DESK}, the computer Hal runs on.",
+                      p.page.inner_text("[data-key='advanced.pause']"))
+
     def test_signing_this_window_out_shows_the_launcher_words(self) -> None:
         p = self.page("settings-remote")
         p.page.click("[data-key='remote.sessions'] button:has-text('Sign out')")

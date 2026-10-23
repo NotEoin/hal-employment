@@ -10,7 +10,7 @@ MAX_THREADS = 16
 
 register(
     Setting("sites.where", "link", None, "Where Hal looks", to="jobs-where", order=10,
-            help="N sites, M switched on."),
+            help="The job sites Hal searches, and which are switched on."),
     Setting("sites.max_age_days", "choice", 21, "Ignore adverts older than", rescore=True,
             choices=same(7, 14, 21, 45, unit="days"), order=20),
     Setting("sites.check_open", "bool", True, "Check an advert is still open before showing it", order=30),

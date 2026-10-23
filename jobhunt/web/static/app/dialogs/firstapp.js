@@ -1,5 +1,6 @@
 /* The "Your first application with Hal" guide, shown once before the first form opens.
-   "Got it, open the form" approves the documents; the server remembers the guide was seen. */
+   "Got it, open the form" approves the documents; the server remembers the guide was seen. Help opens it again
+   with no application, and then the button only closes it. */
 import { html } from "../core/html.js";
 import { closeDialog } from "../core/store.js";
 import { DlgHead } from "../ui/dialog.js";
@@ -13,5 +14,5 @@ export default function FirstApp({ d }) {
       <li><b>Hal fills in the form</b> and outlines each answer: green when it is sure, amber when you should check.</li>
       <li><b>You check the answers</b> here or on the site, then <b>press Submit on the site yourself</b>. Hal never presses it.</li>
     </ol>
-    <footer><button type="button" class="btn primary" onClick=${() => { closeDialog(); if (d.app) approve(d.app, d.edits || {}); }}>Got it, open the form</button></footer>`;
+    <footer><button type="button" class="btn primary" onClick=${() => { closeDialog(); if (d.app) approve(d.app, d.edits || {}); }}>${d.app ? "Got it, open the form" : "Got it"}</button></footer>`;
 }

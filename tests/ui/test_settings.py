@@ -223,11 +223,51 @@ class SettingsPage(unittest.TestCase):
         p.page.wait_for_selector("[role=dialog] >> text=Hal stops for about a minute")
         self.assertNotIn("being built", p.page.inner_text("body"))
 
+    def test_a_panel_button_found_by_search_opens_its_group(self) -> None:
+        # a search drew panel buttons as plain rows, and pressing one said "This part is being built."
+        p = self.tab("settings-you")
+        p.page.get_by_label("Search all settings").fill("Get help")
+        self.row(p, "health.help").get_by_role("button", name="Get help").click()
+        p.page.wait_for_url("**/#settings-health")
+        p.page.wait_for_selector('[data-group="health"]')
+        self.assertNotIn("being built", p.page.inner_text("body"))
+
+    def test_rows_show_real_words_not_placeholders(self) -> None:
+        # the App password said "Kept in {store}." and Where Hal looks said "N sites, M switched on."
+        p = self.tab("settings-email")
+        password = self.row(p, "email.app_password").inner_text()
+        self.assertIn("Kept in ", password)
+        self.assertNotIn("{store}", password)
+        p.go("settings-sites")
+        where = self.row(p, "sites.where")
+        p.page.wait_for_selector('[data-key="sites.where"] >> text=switched on')
+        self.assertRegex(where.inner_text(), r"\d+ sites?, \d+ switched on\.")
+
+    def test_the_goal_group_lists_its_earlier_versions_once(self) -> None:
+        # the catalogue's link row went to the page already open, above the real list
+        p = self.tab("settings-goal")
+        p.page.wait_for_selector('[data-group="goal"] #goal-history')
+        self.assertEqual(self.row(p, "goal.history").count(), 1)
+
+    def test_no_control_sticks_out_of_its_card_in_the_laptop_window(self) -> None:
+        # Windows 11 install test: Quiet hours stuck out 10 px past its card at 1033 px
+        settings.set_many(SHOW_ALL)
+        p = self.tab("settings", "laptop")
+        out = """() => [...document.querySelectorAll('.card .setting *')].filter(e => {
+          const card = e.closest('.card').getBoundingClientRect(), r = e.getBoundingClientRect();
+          return r.width > 0 && r.right > card.right + 0.5; }).map(e => e.closest('[data-key]').dataset.key)"""
+        for group in [g["id"] for g in self.client.get("/api/v2/settings/schema").json()["groups"]]:
+            with self.subTest(group=group):
+                p.go("settings-" + group)
+                p.page.wait_for_selector(f'[data-group="{group}"]')
+                self.show_more(p)
+                self.assertEqual(sorted(set(p.page.evaluate(out))), [])
+
     def test_the_page_draws_cleanly_at_both_sizes(self) -> None:
         settings.set("advanced.developer_mode", True)
         for size, scheme in (("wide", "light"), ("narrow", "dark")):
             p = self.tab("settings", size, scheme)
-            self.assertEqual(p.page.locator("button:has-text('Open the setup guide again')").count(), 1)
+            self.assertEqual(p.page.locator("button:has-text('Open the setup guide')").count(), 1)
             for group in ("you", "goal", "scoring", "applying", "privacy", "health", "advanced"):
                 with self.subTest(size=size, group=group):
                     p.go("settings-" + group)

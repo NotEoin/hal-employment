@@ -186,17 +186,20 @@ def _guard_by(key: str, by: str) -> None:
 def _write(con: sqlite3.Connection, key: str, value: Any, *, by: str, session_id: str | None) -> tuple:
     """Stores one checked value inside the caller's transaction; returns what `SetResult` needs."""
     from .. import clock
+    from . import parse
 
     item = setting(key)
     default = _default(item)
     words = display(key, value)
+    # "Hal reads this as ..." is the field's own note; a history line says "Lowest pay ... changed to 22,000 ..."
+    said = words.removeprefix(parse.SHOWN_PREFIX)
     at = clock.iso()
 
     def activity(old: Any) -> store.Activity:
-        return store.Activity(text=f"{item.label}: {words}" if words else f"{item.label}: cleared", why=WHY[by],
+        return store.Activity(text=f"{item.label}: {said}" if words else f"{item.label}: cleared", why=WHY[by],
                               undo={"type": "setting", "key": key, "value": old}, changed={"setting": key})
 
-    goal = (f"{item.label} changed to {words or 'nothing'}", _goal_data) if item.goal else None
+    goal = (f"{item.label} changed to {said or 'nothing'}", _goal_data) if item.goal else None
     written = store.change_in(con, key, value, default=default, by=by, kind=item.kind, session_id=session_id,
                               at=at, activity=activity, goal=goal)
     return item, written, words
@@ -325,7 +328,7 @@ def schema(*, developer: bool, remote: bool, platform: str | None = None) -> lis
                           "choices": [list(c) for c in item.choices], "min": item.min, "max": item.max,
                           "unit": item.unit, "restart": item.restart, "rescore": item.rescore,
                           "advanced": item.advanced, "visible_if": item.visible_if, "to": item.to,
-                          "action": item.action, "disabled_why": disabled})
+                          "action": item.action, "remote": item.remote, "disabled_why": disabled})
         if items:
             out.append({"id": gid, "name": name, "icon": icon, "items": items})
     return out

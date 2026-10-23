@@ -167,11 +167,17 @@ class Store(unittest.TestCase):
         self.assertEqual(result.value, 24000)
         self.assertIsNotNone(result.goal_version)
         summary, data = self.rows(f"SELECT summary, data FROM goal_versions WHERE id = {result.goal_version}")[0]
-        self.assertIn("Lowest pay you will consider", summary)
+        # the summary once read "changed to Hal reads this as 24,000 pounds a year"
+        self.assertEqual(summary, "Lowest pay you will consider changed to 24,000 pounds a year")
         data = json.loads(data)
         self.assertEqual(data["goal.min_pay"], 24000)
         self.assertIn("scoring.base", data)
         self.assertIsNone(settings.set("you.city", "Lindenford").goal_version)
+
+    def test_a_list_of_choices_is_worded_with_its_labels_not_its_codes(self):
+        # Reset and the goal history said "graduate_job, internship" (a code word is never shown on screen)
+        settings.set("goal.kinds", ["graduate_job", "internship"])
+        self.assertEqual(settings.display("goal.kinds"), "Graduate and entry-level jobs, Paid internships")
 
     def test_hal_never_changes_the_goal_scoring_or_cv_by_itself(self):
         for key, value in (("goal.min_pay", 30000), ("scoring.base", 30), ("cvdocs.tailor", "no")):

@@ -11,7 +11,7 @@ import { toast, invalidate } from "../../core/store.js";
 import { Icon } from "../../ui/icons.js";
 import { Seg } from "../../ui/controls.js";
 
-const STAGES = [["student", "Student"], ["new_grad", "New graduate"], ["early", "Early career"],
+const STAGES = [["student", "Student"], ["new_grad", "New graduate"], ["early", "Early career (1 to 3 years)"],
   ["experienced", "Experienced"], ["changing", "Changing career"], ["school_leaver", "School leaver"]];
 const STUDY = [["at_uni", "Yes, at university or college"], ["finished", "No, I have finished"],
   ["none", "I did not go to university"]];
@@ -92,9 +92,9 @@ export function Step() {
       ${starters.length > 0 && html`<div class="setting"><div><div class="lab">Start from a career area</div><div class="small sub">One press fills in example roles. Change them below.</div></div>
         <div class="ctl" role="group" aria-label="Career areas">${starters.map(s => html`<button type="button" class=${cx("pick", a.starter === s.id && "on")}
           aria-pressed=${a.starter === s.id ? "true" : "false"} onClick=${() => start(s)}>${s.name}</button>`)}</div></div>`}
-      <div class="setting"><div class="lab">Kinds of work</div><div class="ctl">
+      <div class="setting"><div class="lab">Roles you want</div><div class="ctl">
         ${a.roles.map(r => html`<button type="button" class="pick on" aria-pressed="true" aria-label=${"Remove " + r} onClick=${() => set({ roles: a.roles.filter(x => x !== r) })}>${r} <${Icon} n="x" c="s" /></button>`)}
-        <input class="input" style="width:200px" placeholder="Add a kind of work" aria-label="Add a kind of work" value=${newRole}
+        <input class="input" style="width:200px" placeholder="Add a role" aria-label="Add a role" value=${newRole}
           onInput=${e => setNewRole(e.target.value)} onKeyDown=${e => { if (e.key === "Enter") addRole(); }} />
         <button type="button" class="btn small" disabled=${!newRole.trim()} onClick=${addRole}>Add</button>${err("roles")}</div></div>
       <div class="setting"><div class="lab">Places</div><div class="ctl"><input class="input" style="width:260px;max-width:100%" aria-label="Places"
