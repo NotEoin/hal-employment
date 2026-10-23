@@ -8,14 +8,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from support.stubs import cv_early_contracts
+from support.people import HUMANITIES, as_person
 
-cv_early_contracts.install()
-
-from jobhunt import db  # noqa: E402 - the CV stand-ins go in before any jobhunt.cvstudio import
-from jobhunt.core import paths  # noqa: E402
-from jobhunt.core.settings import store as settings_store  # noqa: E402
-from jobhunt.cvstudio import checks, fresh, model, store, types  # noqa: E402
+from jobhunt import db
+from jobhunt.core import paths
+from jobhunt.core.settings import store as settings_store
+from jobhunt.cvstudio import checks, fresh, model, store, types
 
 NO_MARKS = {
     "education": [{"qualification": "BA (Hons) History and Imaginary Studies", "org": "University of Nowhere Fen",
@@ -40,6 +38,7 @@ class FreshCv(unittest.TestCase):
         stack.enter_context(paths.set_override(tmp / "home"))
         settings_store.drop_cache()
         self.addCleanup(settings_store.drop_cache)
+        stack.enter_context(as_person(HUMANITIES))   # a fresh CV's contact line comes from the person's details
 
     def test_a_humanities_graduate_with_no_marks_gets_a_fresh_cv_that_passes_its_checks(self):
         out = fresh.make(NO_MARKS, "humanities_grad")

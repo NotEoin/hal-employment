@@ -6,15 +6,11 @@ from __future__ import annotations
 import json
 import unittest
 
-from support.stubs import cv_early_contracts
+from support.fake_ai import fake_ai
+from test_cv_suggest import PROFILE, TABLE, CvCase
 
-cv_early_contracts.install()
-
-from support.fake_ai import fake_ai  # noqa: E402 - the CV stand-ins go in before any jobhunt.cvstudio import
-from test_cv_suggest import PROFILE, TABLE, CvCase  # noqa: E402
-
-from jobhunt.core import settings  # noqa: E402
-from jobhunt.cvstudio import store, suggest, tailor  # noqa: E402
+from jobhunt.core import settings
+from jobhunt.cvstudio import store, suggest, tailor
 
 JOB = {"id": "job-archive-1", "title": "Archive Assistant", "company": "Fenmoor Heritage Trust",
        "requirements": ["Confident with Excel and NVivo for survey data", "Experience of archives"]}

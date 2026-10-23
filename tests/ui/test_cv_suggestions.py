@@ -1,24 +1,20 @@
 """The Suggestions tab, the Adjust for each job card and a job's change list in a real browser, against a real
 server in a temporary home holding a made-up CV.
 
-Needs `HAL_TEST_BROWSER=1` and Playwright. My CV itself may not be there yet, so these parts are drawn
-into the app's main area on their own, from their modules, the way the page will draw them.
+Needs `HAL_TEST_BROWSER=1` and Playwright. The parts are drawn into the app's main area on their own, from
+their modules, the way My CV draws them (the page itself is drawn by `ui.test_cv_page` and the shell smoke).
 """
 from __future__ import annotations
 
 import contextlib
 import unittest
 
-from support.stubs import cv_early_contracts
+from support.api import HalServer
+from support.ui import AppPage, chromium, skip_unless_browser
+from test_cv_suggest import made_up_cv
 
-cv_early_contracts.install()
-
-from support.api import HalServer  # noqa: E402 - the CV stand-ins go in before any jobhunt.cvstudio import
-from support.ui import AppPage, chromium, skip_unless_browser  # noqa: E402
-from test_cv_suggest import made_up_cv  # noqa: E402
-
-from jobhunt import db  # noqa: E402
-from jobhunt.cvstudio import store, suggest  # noqa: E402
+from jobhunt import db
+from jobhunt.cvstudio import store, suggest
 
 FAILED_LOAD = "Failed to load resource"
 # Draws a component from its module into a new box at the end of the main area.
@@ -52,6 +48,7 @@ class SuggestionsTab(unittest.TestCase):
     def setUp(self) -> None:
         self.hal = self.enterContext(HalServer())
         store.new_version(made_up_cv(), origin="imported", what="Your made-up CV", by="baseline")
+        store.set_type("humanities_grad")   # the store starts on the technical type; this CV is a history one
         con = db.connect()
         try:
             suggest.look_again(con)
