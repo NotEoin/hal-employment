@@ -1,9 +1,10 @@
 """Hal's instructions to the AI name no one: each person is described by their settings.
 
-Every prompt is rendered for each of the three made-up people of `support.people`. A rendered prompt may
-hold no unfilled placeholder, no pronoun for the applicant, no other person's name, and none of the
-person's LEAKS words: the words of other careers that must not reach their prompts (for example, the
-humanities graduate's list holds "software engineer"). The fixtures themselves are checked to be made up.
+Every prompt is rendered for each of the three made-up people of `support.people`, with their own CV type.
+A rendered prompt may hold no unfilled placeholder, no pronoun for the applicant, no other person's name,
+and none of the person's LEAKS words: the words of other careers that must not reach their prompts (for
+example, the humanities graduate's list holds "software engineer"). The fixtures themselves are
+checked to be made up.
 """
 import re
 import unittest
@@ -39,7 +40,8 @@ class Neutral(unittest.TestCase):
     def test_prompts_name_no_one_and_take_the_person_from_the_profile(self):
         for person in people.PEOPLE:
             others = [p for p in people.PEOPLE if p is not person]
-            with people.as_person(person):
+            # each person's prompts are filled from their own CV type; the store's starting type is the technical one
+            with people.as_person(person), people.cv_type(person.key):
                 texts = rendered(person)
             self.assertIn(person.you["name"], texts["letter"])
             self.assertIn(person.you["preferred_name"], texts["prep"])
