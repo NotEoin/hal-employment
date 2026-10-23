@@ -1,1 +1,9 @@
 /* Rules for the setup pages only; the page's owner adds them here, never in app.css. */
+.qr-img { display: block; width: 150px; height: 150px; padding: 8px; background: #fff; border-radius: 8px; flex: none; }
+.setup .steps-list { margin: 14px 0; padding-left: 22px; display: grid; gap: 10px; }
+.setup .steps-list .input { max-width: 100%; }
+.setup .two-step { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--surface); font-size: 13.5px; }
+.setup .two-step .on { color: var(--good); font-weight: 700; }
+.setup .welcome-title { font-size: 36px; margin-top: 16px; }
+@media (max-width: 860px) { .setup .welcome-title { font-size: 28px; } }

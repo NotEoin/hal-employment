@@ -119,6 +119,14 @@ MADE_UP_JOB = {"id": "demo:1", "title": "Museum Assistant", "org": "Riverside Tr
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
 MADE_UP_PAGES = {
+    # The setup guide
+    "/setup": {"step": "welcome", "done": False, "finished": False, "found": {"usb_install": None, "old_helper": None},
+               "steps": [{"id": i, "name": n, "sub": "", "optional": i in ("email", "phone", "updates"),
+                          "state": "todo"}
+                         for i, n in (("welcome", "Welcome"), ("cv", "Your CV"), ("about", "About you"),
+                                      ("goal", "What you're looking for"), ("record", "Your record"),
+                                      ("ai", "How Hal thinks"), ("helper", "Browser helper"), ("email", "Email"),
+                                      ("phone", "Phone alerts"), ("updates", "Updates"), ("done", "All set"))]},
     # Documents, Messages and Activity
     "/documents": {"apps": [{"id": 1, "number": 1, "job_id": "demo:1", "title": "Museum Assistant",
                              "org": "Riverside Trust", "column": "ready", "column_title": "Getting ready",
