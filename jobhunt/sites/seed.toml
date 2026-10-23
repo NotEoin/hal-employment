@@ -2,7 +2,7 @@
 # engines; as a note the person can read it, switch it off or reword it. Ids are stable: a person's switch
 # or wording is a `site_notes` row naming the id, so an update may improve a note here without undoing it.
 #
-# Fields: id, kind (a note kind), scope (global | ats | site | tenant | job), key (the scope's
+# Fields: id, kind (see `KINDS` in `notes.py`), scope (global | ats | site | tenant | job), key (the scope's
 # key: an application system such as "workday", or a site), text (plain words shown everywhere), cond (when
 # it applies) and act (what Hal does). Patterns are regular expressions matched without regard to case.
 # `tests/test_site_notes.py` checks that these notes give exactly what the engines did before notes.

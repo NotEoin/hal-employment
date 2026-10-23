@@ -1,4 +1,4 @@
-"""The "Notes about job sites" tab (`GET /sites`): one card per site.
+"""The "Notes about job sites" tab: one card per site.
 
 Cards come in this order: the sites Hal has visited or holds notes for, newest visit first; then one card per
 application system with notes of its own ("All Workday sites"); then "Every site" for the global notes.

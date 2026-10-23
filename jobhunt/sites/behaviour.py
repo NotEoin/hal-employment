@@ -4,7 +4,7 @@ Each function here takes a `NoteSet` and answers one question an engine asks at 
 holds the form, which words mark a closed advert, how long to wait, which frames to read, what to type
 into a date box. With only the built-in notes active each answer is exactly what the engines had written
 into them before notes existed; `tests/test_site_notes.py` proves that against the old constants, so each
-engine hook can move onto these functions without changing what Hal does.
+hook can move onto these functions without changing what Hal does.
 
 A note can only add to the Submit words of `apply/guard.py`, never take one away: submit words only ever
 stop Hal.
