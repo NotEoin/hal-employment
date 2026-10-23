@@ -1,7 +1,7 @@
 """The one-time import of today's CV into the CV store: data task `cv.import_v1`.
 
 - The owner's CV is the importer's copy of the website's `cv.json` (`data/import/cv/site-cv.json`) with
-  `cv-overrides.json` laid over it. A stick install's is `cv-built.json["cv"]` with `cv-built-overrides.json`.
+  `cv-overrides.json` laid over it. A USB-stick install's is `cv-built.json["cv"]` with `cv-built-overrides.json`.
   After this Hal keeps its own copy and never reads the website again.
 - Overrides are matched to entries by the name rule of the old code (`NAMED_BY`) one last time, against the
   entry's original name, so an edit made after a rename is kept (the old code dropped it). Every version
@@ -9,7 +9,7 @@
 - Versions: 1 the CV as it came; then each `cv-overrides.before-*.json` snapshot, oldest first; then the CV
   with today's overrides, which is put in use.
 - The check: every string of the printable CV must be found in the imported document. What is not is
-  listed in the report and in the last version's `extras["not_found"]`, which should stay empty.
+  listed in the report and in the last version's `extras["not_found"]`, and a clean import leaves that list empty.
 - Running it again does nothing once a CV has been imported, so the server can start it every time.
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 NAME = "cv.import_v1"
 AFTER = 11                      # migration 0011 made the CV store
 TITLE = "Moved your CV into Hal's own copy"
-NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}   # L cv.py:39
+NAMED_BY = {"education": "qualification", "projects": "name", "experience": "role"}   # the rule the old `cv.py` used
 PAIRS = ("skills", "additional")
 SNAPSHOTS = "cv-overrides.before-*.json"
 OWNER = {"site": "site-cv.json", "overrides": "cv-overrides.json", "type": "technical_grad",

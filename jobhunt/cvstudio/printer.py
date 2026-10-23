@@ -88,7 +88,7 @@ def printers(plat: Any = None, *, playwright: bool | None = None) -> tuple[list[
 
 
 def headless_args(exe: Path, profile_dir: Path, pdf: Path, page: Path) -> list[str]:
-    """The headless print command for Edge or Chromium."""
+    """The headless print command."""
     return [str(exe), "--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
             f"--user-data-dir={profile_dir}", "--no-pdf-header-footer", f"--print-to-pdf={pdf}", page.as_uri()]
 

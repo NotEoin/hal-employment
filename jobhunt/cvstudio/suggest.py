@@ -59,7 +59,7 @@ DECIDED = "You already decided on this suggestion."
 REVIEW_ORDER = ("summary", ("experience", "volunteering"), "projects", "skills", "interests")
 REVIEW_FIRST = ("summary", "education")
 
-# US spellings Hal turns into UK ones when `cvdocs.spelling` is en-GB (the list of L cvscore.py:38-40).
+# US spellings Hal turns into UK ones when `cvdocs.spelling` is en-GB (the same list `cvscore.py` uses).
 US_TO_UK = (
     (r"organiz", "organis"), (r"analyz", "analys"), (r"optimiz", "optimis"), (r"prioritiz", "prioritis"),
     (r"summariz", "summaris"), (r"recogniz", "recognis"), (r"visualiz", "visualis"), (r"customiz", "customis"),
@@ -108,7 +108,7 @@ def fingerprint(target: str, trigger_id: str, after: str) -> str:
     return hashlib.sha1(f"{target}\n{trigger_id}\n{norm}".encode()).hexdigest()
 
 
-# -- contracts, imported when used so this module loads without them ----------------------------
+# -- the CV model and CV types, imported when used so this module loads before they land -------------------------
 
 def _model():
     from jobhunt.cvstudio import model

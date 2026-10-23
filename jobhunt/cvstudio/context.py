@@ -39,7 +39,7 @@ SPECIAL_CASES = {
 SPELLING_WORDS = {"en-GB": "UK English", "en-US": "US English"}
 TONE_WORDS = {"plain": "plain and direct", "formal": "formal", "warm": "warm", "confident": "confident"}
 SOMEONE = "the applicant"   # what a prompt calls the person before they have given a name
-VOICE_MAX = 4               # rewritten answers used as voice examples; more crowd out the facts
+VOICE_MAX = 4               # rewritten answers used as voice examples
 VOICE_CHARS = 400           # each example is cut to this, so the examples never crowd out the facts
 # Kinds of test an advert may name, for the prep notes.
 TEST_KINDS = {

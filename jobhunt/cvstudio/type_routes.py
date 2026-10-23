@@ -1,11 +1,11 @@
 """CV type routes of My CV, Type and look.
 
 - The CV's type is `cv_documents.type_id`. Choosing one makes a `type_change` version, so the change shows
-  in Versions and can be undone by using the version before it, and starts the suggestions (
-  `cv.suggest`) when that action exists.
+  in Versions and can be undone by using the version before it, and starts the suggestions (the
+  `cv.suggest` action) when that action exists.
 - Built-in types are never saved over: the Writing card and "Copy this type to change it" both work on a
   copy, and the answer says so in words the page shows as they are.
-- Comparing two types renders nothing new: it answers the two outlines and the preview addresses.
+- Comparing two types renders nothing new: it answers the two outlines and the preview addresses the printer serves.
 """
 from __future__ import annotations
 

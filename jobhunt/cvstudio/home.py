@@ -1,4 +1,4 @@
-"""What My CV puts on Home (`needs`): text the one-time import could not place in Hal's copy.
+"""What My CV puts on Home: text the one-time import could not place in Hal's copy.
 
 The import of today's CV checks that every piece of text arrived; when some did not, the person
 should look before Hal sends that CV anywhere, so it is a need until a later version holds the text.

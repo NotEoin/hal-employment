@@ -1,6 +1,6 @@
 """Reads PDFs with pypdfium2: their text, pages, type size, how full the last page is, and page pictures.
 
-Why not poppler: poppler (`pdftotext`, `pdfinfo`, `pdftoppm`) was a separate program to install, and on
+Poppler (`pdftotext`, `pdfinfo`, `pdftoppm`) was a separate program to install, and on
 Windows a 43 MB bundle under the GPL. pypdfium2 ships as a wheel, so the CV checks, the page pictures and
 the record's scans work wherever Hal installs. Poppler stays a developer reference only
 (`scripts/dev/compare_pdf_readers.py`).

@@ -437,7 +437,7 @@ def _ask(prompt_id: str, user: str) -> dict:
 def judgement(cv_text: str, persona: str = "") -> tuple[list[dict], str]:
     """The AI's grade for each criterion of the recruiter's rubric, or why there is none.
 
-    `persona` names the readers the CV type is for ("a recruiter for {fits}")."""
+    `persona` names the readers the CV type is for ("a recruiter for {fits}"")."""
     reason = ai.ready(purpose="cv_judge")
     if reason:
         return [], reason

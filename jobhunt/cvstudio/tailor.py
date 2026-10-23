@@ -1,8 +1,8 @@
-"""Adjusting Hal's copy of the CV for one job ("Adjust for each job").
+"""Adjusting Hal's copy of the CV for one job.
 
 - No: the current version as it is.
 - A little: entries in the sections that may move (projects, skill groups and the like) are reordered by
-  how many of the job's words they share, generalising L cv.py:211-235, plus one AI change to the profile
+  how many of the job's words they share, plus one AI change to the profile
   line, which must name its evidence.
 - More: also up to three bullets rewritten by the AI, through the same guards as every suggestion.
 

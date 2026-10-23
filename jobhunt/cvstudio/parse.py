@@ -42,8 +42,8 @@ from .model import KINDS, Bullet, CVDoc, Entry, Module, Section
 
 log = logging.getLogger(__name__)
 
-MAX_BYTES = 10 * 1024 * 1024    # 10 MB
-MAX_PAGES = 6                   # 6 pages
+MAX_BYTES = 10 * 1024 * 1024    # a CV is a few pages; a bigger file is not one
+MAX_PAGES = 6                   # a CV is a few pages; a longer file is not one
 MAX_UNZIPPED = 50 * 1024 * 1024  # a Word file's text part above this is not a CV (and may be a zip bomb)
 LOW_CONFIDENCE = 0.6            # an AI confidence below this marks the field "Check this"
 LARGE_TYPE = 1.15               # a line this much larger than the body text may be a heading

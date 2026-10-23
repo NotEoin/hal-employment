@@ -1,7 +1,7 @@
 """Routes of My CV's Checks tab.
 
 - GET answers from the `cv_checks` cache, so it stays fast; the printed PDF joins the scanner score once
-  the printer keeps one per version and look (without one the document's own text is read).
+  the printer keeps one per version and look (until then the document's own text is read).
 - "Against a job" needs no AI on this page: the type's keywords found in the advert, and the job's
   requirements Hal already worked out (`job_requirements`), each with the CV's evidence or a note.
 - "Fix it" and "Does not matter" change only what they name; a fix is a new version made by the person.

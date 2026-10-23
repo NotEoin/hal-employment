@@ -36,7 +36,7 @@ PREFIX = {"summary": "su", "education": "ed", "experience": "ex", "volunteering"
           "additional": "ad", "custom": "cu"}
 ID_HEX = 8                     # characters of sha1 in an entry id
 
-# Today's cv.json (cv-docs.md 1): its sections, their titles in the PDF (L cvpdf.py:16) and its order.
+# Today's cv.json (cv-docs.md 1): its sections, their titles in the PDF and its order.
 V1_SECTIONS = ("education", "projects", "experience", "skills", "additional")
 V1_ORDER = V1_SECTIONS
 V1_TITLES = {"summary": "Profile", "education": "Education", "projects": "Projects", "experience": "Experience",
@@ -769,7 +769,7 @@ def _norm(text: str) -> str:
 
 
 def not_found(v1_printable: dict, doc: CVDoc) -> list[str]:
-    """The strings of a printable `cv.json` that the document does not hold anywhere (the check)."""
+    """The strings of a printable `cv.json` that the document does not hold anywhere."""
     have = [_norm(x) for x in string_leaves(to_dict(doc))]
     have += [_norm(x) for x in string_leaves(to_v1(doc, {"contact": doc.contact_snapshot}))]
     pool = set(have)

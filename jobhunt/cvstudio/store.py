@@ -1,4 +1,4 @@
-"""The CV store: Hal's copy of the person's CV as numbered versions that never change (migration 0011).
+"""The CV store: Hal's copy of the person's CV as numbered versions that never change.
 
 - One document per install, `cv_documents` row "main", made on first use. Its first version comes from the
   import of today's CV (`import_v1`) when there is one to import, else a short starter CV made from the
@@ -33,8 +33,8 @@ from jobhunt.cvstudio.model import CVDoc, CVError
 log = logging.getLogger(__name__)
 
 DOC_ID = "main"
-BIN_DAYS = 30                      # cv_versions.binned: purged after 30 days
-DEFAULT_TYPE = "technical_grad"    # the type of the CV the old tool built
+BIN_DAYS = 30                      # `cv_versions.binned`: purged after 30 days
+DEFAULT_TYPE = "technical_grad"    # the recipe used until a CV type is chosen
 DEFAULT_LOOK = "classic"
 ROUTES = {"as_is": "original", "improve": "hal_copy", "fresh": "hal_copy"}   # route -> what employers get
 SENDS = ("original", "hal_copy")
@@ -440,7 +440,7 @@ def set_baseline_file(file_id: str, con: sqlite3.Connection | None = None) -> No
 
 
 def set_type(type_id: str, con: sqlite3.Connection | None = None) -> None:
-    """Records the CV type in use (the type routes check the id and make the type_change version)."""
+    """Records the CV type in use (the caller checks the id and makes the `type_change` version)."""
     with _conn(con) as c:
         doc(c)
         with _writing(c):
@@ -448,7 +448,7 @@ def set_type(type_id: str, con: sqlite3.Connection | None = None) -> None:
 
 
 def set_look(look_id: str, con: sqlite3.Connection | None = None) -> None:
-    """Records the look in use (the look routes check the id)."""
+    """Records the look in use (the caller checks the id)."""
     with _conn(con) as c:
         doc(c)
         with _writing(c):

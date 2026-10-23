@@ -563,7 +563,7 @@ def recruiter_read(cv_text: str, t: cvtypes.CVType) -> dict:
 
 PROFILE_KEYS = ("name", "email", "phone", "city")
 LINK_KEYS = ("linkedin", "website", "github")
-TWO_COLUMN_LOOKS = ("two",)      # the looks that print in two columns, which scanners read out of order
+TWO_COLUMN_LOOKS = ("two",)      # the looks that print two columns
 
 
 def profile_now() -> dict:
