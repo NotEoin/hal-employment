@@ -171,6 +171,14 @@ class Updating(UpdaterCase):
         self.assertIn(self.repos.first[:7], backups[0].name)
         self.assertTrue(updates.can_go_back())
 
+    def test_after_an_update_hal_no_longer_offers_the_version_it_installed(self):
+        """Regression: Settings still offered "Update Hal (2 changes)" after the update (VM, 2026-10-23)."""
+        new = self.repos.commit({"README.md": "Hal 2\n"}, "docs: new words")
+        updates.write_check({"available": True, "state": "ok", "newest": new, "behind": 1})
+        self.assertEqual(updates.update(self.world())["state"], "updated")
+        self.assertFalse(updates.last_check()["available"])
+        self.assertEqual(updates.last_check()["newest"], new)
+
     def test_nothing_new_says_hal_is_up_to_date(self):
         w = self.world()
         self.assertEqual(updates.update(w)["words"], "Hal is up to date.")

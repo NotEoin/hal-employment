@@ -728,6 +728,9 @@ def _update(world: World) -> dict:
                                                   "backup": str(backup) if backup else "",
                                                   "from_version": old_version, "to_version": new_version})
     words = UPDATED.format(old=old_version, new=new_version)
+    # the check before the update still says it is ready, which Settings and Home would keep offering
+    write_check({"available": False, "state": "ok", "words": UP_TO_DATE, "commit": new, "newest": new,
+                 "behind": 0, "whats_new": []})
     write_status({"state": "updated", "words": words, "from": head, "to": new, "from_version": old_version,
                   "to_version": new_version, "whats_new": news, "signed": checked, "recorded": False,
                   "held": ""})
