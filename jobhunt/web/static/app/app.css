@@ -299,6 +299,7 @@ input[type="range"] { accent-color: var(--primary); width: 180px; max-width: 100
 /* paper: CVs, letters, employer pages */
 .docwrap { container-type: inline-size; width: 100%; }
 .doc { background: var(--doc-bg); color: var(--doc-ink); aspect-ratio: 210 / 297; width: 100%; border-radius: 3px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 10px 30px rgba(0, 0, 0, 0.1); padding: 7.5% 8%; font-family: "Atkinson Hyperlegible Next", Arial, sans-serif; font-size: clamp(6px, 1.75cqw, 12.5px); line-height: 1.42; overflow: hidden; position: relative; }
+.doc.focused { outline: 3px solid var(--focus); outline-offset: 2px; }
 .doc h1 { font-family: "Schibsted Grotesk", Arial, sans-serif; font-size: 2.15em; margin: 0; line-height: 1.1; color: var(--doc-ink); }
 .doc .contact { color: var(--doc-muted); margin: 0.3em 0 0.2em; }
 .doc .sec { font-family: "Schibsted Grotesk", Arial, sans-serif; font-size: 0.98em; letter-spacing: 0.09em; text-transform: uppercase; border-bottom: 1px solid var(--doc-line); margin: 1.15em 0 0.45em; padding-bottom: 0.15em; font-weight: 700; }

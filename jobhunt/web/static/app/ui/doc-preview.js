@@ -32,11 +32,28 @@ export function DocPreview({ src, versionId, look, type, hl = [], label = "CV pr
     return () => ro.disconnect();
   }, []);
   useEffect(() => on(ev => { if (ev.type === "cv") setRev(r => r + 1); }), []);
+  const frame = useRef(null);
+  // Chromium neither fires focus on an iframe nor matches :focus or :focus-within when Tab moves into it, so
+  // the ring follows the window's blur and focus instead (checked in headless Chromium, 2026-10-23). The class
+  // is set on the box at once, then checked again once focus has settled.
+  useEffect(() => {
+    if (thumb) return undefined;
+    const sync = () => { if (box.current) box.current.classList.toggle("focused", document.activeElement === frame.current); };
+    const check = () => { sync(); setTimeout(sync, 0); };
+    window.addEventListener("blur", check);
+    window.addEventListener("focus", check);
+    document.addEventListener("focusin", check);
+    return () => {
+      window.removeEventListener("blur", check);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("focusin", check);
+    };
+  }, [thumb]);
   const url = src || previewUrl({ versionId, look, type, hl, rev });
   const style = `border:0;position:absolute;top:0;left:0;width:${PAGE_W}px;height:${PAGE_H}px;background:#fff;`
     + `transform:scale(${scale});transform-origin:0 0;${thumb ? "pointer-events:none;" : ""}`;
   return html`<div class="docwrap"><div ref=${box} class="doc" style="padding:0;overflow:hidden">
-    <iframe src=${url} title=${label} sandbox="allow-same-origin" tabindex=${thumb ? "-1" : undefined}
+    <iframe ref=${frame} src=${url} title=${label} sandbox="allow-same-origin" tabindex=${thumb ? "-1" : undefined}
       scrolling=${thumb ? "no" : undefined} style=${style}></iframe>
   </div></div>`;
 }
