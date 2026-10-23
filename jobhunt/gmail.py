@@ -45,6 +45,7 @@ PASSWORD_FILE = Path("~/.config/jobhunt/gmail-app-password").expanduser()
 PASSWORD_SECRET = "email.app_password"
 IMAP_TIMEOUT = 60   # seconds; a stalled IMAP connection must not hold the email check for ever
 FIRST_SYNC_DAYS = 400
+REFINE_TIMEOUT_S = 90   # the fast model answers one email well inside this; past it the rules stand
 
 # Application status each kind moves a job to, and how far along that is.
 STATUS_FOR = {"applied": "applied", "confirmed": "applied", "assessment": "assessment",
@@ -241,7 +242,7 @@ def refine(sender, subject, body, kind, company, role):
     """Ask the local model when the rules are unsure. Rules win if it's down."""
     try:
         out = llm.chat_json(prompts.text("email_refine"), f"From: {sender}\nSubject: {subject}\n\n{body[:3000]}",
-                            role="fast", timeout=90)
+                            role="fast", timeout=REFINE_TIMEOUT_S, purpose="email_refine")
     except llm.LLMUnavailable:
         return kind, company, role
     k = out.get("kind")

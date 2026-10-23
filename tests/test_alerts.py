@@ -12,6 +12,7 @@ from unittest import mock
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 from support.api import HalServer
+from support.fake_ai import fake_ai
 
 from jobhunt import db, gmail
 from jobhunt.core import settings
@@ -107,6 +108,15 @@ class Alerts(unittest.TestCase):
         settings.set("email.alert_senders", ["alerts@madeupboard.example"], by="you")
         self.assertIsNone(gmail.alert_sender("mail.prospects.ac.uk"))
         self.assertEqual(gmail.alert_sender("Board <alerts@madeupboard.example>"), "alerts@madeupboard.example")
+
+    def test_an_unsure_email_asks_the_ai_under_its_own_purpose(self):
+        # c2-open: AI calls name their purpose, so the allowance and Activity can say what each was for
+        reply = '{"kind": "interview", "company": "Harbour and Finch", "role": "Marketing Assistant"}'
+        with fake_ai(default=reply) as fake:
+            kind, company, role = gmail.refine("Ana Pellow <ana@harbourfinch.example>", "Next steps",
+                                               "Could you do a call on Tuesday?", "human", None, None)
+        self.assertEqual((kind, company, role), ("interview", "Harbour and Finch", "Marketing Assistant"))
+        self.assertEqual([r.purpose for r in fake.log], ["email_refine"])
 
 
 if __name__ == "__main__":
