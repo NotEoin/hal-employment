@@ -1,0 +1,226 @@
+# Built-in notes about job sites. Each one is a page trick that used to be written into the
+# engines; as a note the person can read it, switch it off or reword it. Ids are stable: a person's switch
+# or wording is a `site_notes` row naming the id, so an update may improve a note here without undoing it.
+#
+# Fields: id, kind (a note kind), scope (global | ats | site | tenant | job), key (the scope's
+# key: an application system such as "workday", or a site), text (plain words shown everywhere), cond (when
+# it applies) and act (what Hal does). Patterns are regular expressions matched without regard to case.
+# `tests/test_site_notes.py` checks that these notes give exactly what the engines did before notes.
+
+# Addresses ------------------------------------------------------------------------------------------------
+
+[[note]]
+id = "ashby-application"
+kind = "open_url"
+scope = "ats"
+key = "ashby"
+text = "Open the application form directly, not the advert page"
+act = { append = "/application" }
+
+[[note]]
+id = "lever-apply"
+kind = "open_url"
+scope = "ats"
+key = "lever"
+text = "Open the application form directly, not the advert page"
+act = { append = "/apply" }
+
+[[note]]
+id = "greenhouse-embed"
+kind = "open_url"
+scope = "global"
+text = "On an employer's own careers page, open the Greenhouse form directly"
+cond = { url_matches = 'gh_jid=\d+', not_host_contains = "greenhouse.io", job_id_prefix = "greenhouse:" }
+act = { rewrite = { from = 'gh_jid=(\d+)', to = 'https://job-boards.greenhouse.io/embed/job_app?for={board}&token=\1' }, board = "greenhouse" }
+
+# Holding pages and closed adverts -------------------------------------------------------------------------
+
+[[note]]
+id = "adzuna-holding-page"
+kind = "wait_redirect"
+scope = "global"
+text = "Wait for the job board to pass you to the employer"
+cond = { host_contains = "adzuna.", url_contains = "/land/" }
+act = { host = "adzuna.", until = "host_changes", max_s = 15 }
+
+[[note]]
+id = "greenhouse-closed"
+kind = "buttons"
+scope = "ats"
+key = "greenhouse"
+text = "An address ending in error=true means the advert has closed"
+act = { closed_url = ["error=true"] }
+
+# Lists, frames and banners --------------------------------------------------------------------------------
+
+[[note]]
+id = "workable-no-escape"
+kind = "widget"
+scope = "global"
+text = "Close dropdown lists by clicking the form, never with Escape (Escape closed Workable's form)"
+act = { no_escape = true }
+
+[[note]]
+id = "ats-form-frames"
+kind = "form_frame"
+scope = "global"
+text = "Employers often show the form of their application system inside a box on their own page"
+act = { host_contains = ["greenhouse.io", "ashbyhq.com", "lever.co", "workable.com", "smartrecruiters.com", "recruitee.com", "personio.", "teamtailor.com", "bamboohr.com", "jobvite.com", "icims.com", "pinpointhq.com"] }
+
+[[note]]
+id = "not-form-frames"
+kind = "ignore_frame"
+scope = "global"
+text = "Boxes for human checks, adverts, chat and videos never hold the form (Google Forms do)"
+act = { pattern = '''recaptcha|hcaptcha|challenges\.cloudflare|googletagmanager|doubleclick|google\.com/|facebook|intercom|hotjar|about:blank|youtube|vimeo|stripe|cookie''', except = ["docs.google.com/forms"] }
+
+[[note]]
+id = "cookie-buttons"
+kind = "cookie_button"
+scope = "global"
+text = "Close cookie banners by refusing optional cookies, and accept them only when there is no other way"
+act = { patterns = ['''^\s*(reject all|reject( all)? (optional|non-essential)( cookies)?|decline( all)?( cookies)?|(use |allow )?(only )?(strictly )?(necessary|essential)( cookies)?( only)?|deny( all)?|continue without accepting)\s*$''', '''^\s*(accept( all)?( cookies)?|allow all( cookies)?|i agree|agree|got it|ok|okay)\s*$'''] }
+
+# The words pages use ----------------------------------------------------------------------------------------
+# Next and Submit words stay in `apply/guard.py`, which every press goes through; a note can only add to
+# them, and Submit words only ever stop Hal.
+
+[[note]]
+id = "page-words"
+kind = "buttons"
+scope = "global"
+text = "The usual words for Apply buttons, thanks pages, closed adverts, human checks and emailed codes"
+
+[note.act]
+apply = '''^\s*((easy|quick|1[- ]click) )?apply\b(?!.{0,40}\b(linkedin|indeed|seek|xing|filters?|later|coupon|code)\b).{0,40}$|^\s*(start|begin|continue|complete|resume) (your |my |the )?application\s*$|^\s*i'?m interested\s*$'''
+success = '''thank(s| you)[^.]{0,60}(appl|submi|interest)|application (has been |was |is )?(successfully )?(received|submitted|sent|complete)|we('ve| have) (received|got) your application|successfully (submitted|applied)|your application is (in|on its way)'''
+applied = '''you(('ve| have) already| have|'ve)? applied (for|to) this (job|role|position|vacancy)'''
+closed = '''(no longer|not) (available|accepting applications|open|exists?|active|live)|not available anymore|(job|position|vacancy|role|posting|advert|page) (you requested )?(has |was |is )?(been )?(filled|expired|closed|removed|not found|unavailable)|(job|position|vacancy|page) not found|applications? (are|is|have|has) (now )?closed|\b404\b'''
+bot_check = '''just a moment|verify (that )?you are (a )?human|human verification|are you a robot|attention required|pardon our interruption|checking your browser|security check'''
+blocked = '''^blocked\b|access denied|request could not be satisfied|403 forbidden|unusual (traffic|activity)|request blocked'''
+code_wall = '''(verification|security|confirmation|one[- ]time) code|enter the code|code (we|was) sent'''
+
+# Typing answers ---------------------------------------------------------------------------------------------
+
+[[note]]
+id = "date-formats"
+kind = "field_transform"
+scope = "global"
+text = "Date boxes take a date as year-month-day; Hal reads your dates in the usual UK ways"
+cond = { field_kind = "date" }
+act = { transform = "date:%Y-%m-%d", read = ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %B %Y", "%d %b %Y", "%B %Y", "%b %Y", "%m/%Y"] }
+
+[[note]]
+id = "list-search"
+kind = "field_transform"
+scope = "global"
+text = "In a long list, search for the whole answer, then each part before a comma, then the first word"
+cond = { field_kind = "combobox" }
+act = { search = ["whole", "comma_parts", "first_word"] }
+
+[[note]]
+id = "timing"
+kind = "timing"
+scope = "global"
+text = "Give each page 45 seconds to open, wait up to 15 seconds for it to settle, and follow at most 6 Apply buttons"
+act = { page_timeout_s = 45, settle_s = 15, max_presses = 6, fill_timeout_s = 180 }
+
+# Job boards -------------------------------------------------------------------------------------------------
+
+[[note]]
+id = "job-boards"
+kind = "note"
+scope = "global"
+text = "This is a job board that shows other employers' adverts: when it asks for a human check, Hal looks for the employer's own page"
+cond = { host_contains_any = ["indeed.", "adzuna.", "reed.co", "linkedin.", "glassdoor.", "totaljobs.", "ziprecruiter.", "cv-library.", "monster.", "jooble.", "talent.com", "simplyhired.", "jobrapido.", "whatjobs."] }
+act = { job_board = true }
+
+# "How did you hear about this job?", by where Hal found it --------------------------------------------------
+
+[[note]]
+id = "how-heard"
+kind = "field_answer"
+scope = "global"
+text = "Answer \"How did you hear about this job?\" with \"Company careers page\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$" }
+act = { value = "Company careers page" }
+
+[[note]]
+id = "how-heard-80k"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from 80,000 Hours, answer \"How did you hear\" with \"80,000 Hours job board\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "80k" }
+act = { value = "80,000 Hours job board" }
+
+[[note]]
+id = "how-heard-hn"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from Hacker News, answer \"How did you hear\" with \"Hacker News\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "hn" }
+act = { value = "Hacker News" }
+
+[[note]]
+id = "how-heard-indeed"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from Indeed, answer \"How did you hear\" with \"Indeed\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "indeed" }
+act = { value = "Indeed" }
+
+[[note]]
+id = "how-heard-adzuna"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from Adzuna, answer \"How did you hear\" with \"Adzuna\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "adzuna" }
+act = { value = "Adzuna" }
+
+[[note]]
+id = "how-heard-reed"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from Reed, answer \"How did you hear\" with \"Reed\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "reed" }
+act = { value = "Reed" }
+
+[[note]]
+id = "how-heard-workable-search"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from Workable's job board, answer \"How did you hear\" with \"Workable job board\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "workable-search" }
+act = { value = "Workable job board" }
+
+[[note]]
+id = "how-heard-ktp"
+kind = "field_answer"
+scope = "global"
+text = "For KTP jobs, answer \"How did you hear\" with \"KTP website\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "ktp" }
+act = { value = "KTP website" }
+
+[[note]]
+id = "how-heard-jobsacuk"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from jobs.ac.uk, answer \"How did you hear\" with \"jobs.ac.uk\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "jobsacuk" }
+act = { value = "jobs.ac.uk" }
+
+[[note]]
+id = "how-heard-yc"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from Y Combinator, answer \"How did you hear\" with \"Y Combinator (Work at a Startup)\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "yc" }
+act = { value = "Y Combinator (Work at a Startup)" }
+
+[[note]]
+id = "how-heard-linkedin"
+kind = "field_answer"
+scope = "global"
+text = "For jobs from LinkedIn, answer \"How did you hear\" with \"LinkedIn\""
+cond = { label = "how did you (hear|find|learn)|where did you (hear|find|see|learn)|referr?al source|^source$", source = "linkedin" }
+act = { value = "LinkedIn" }
