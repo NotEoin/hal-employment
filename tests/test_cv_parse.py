@@ -123,7 +123,7 @@ class Rules(unittest.TestCase):
         self.assertTrue(values["you.education.dissertation"].startswith("Bridges and ballots"))
 
     def test_every_cv_types_section_titles_are_read_as_headings(self):
-        # "every CV type's section titles"; "Selected work" and "Strengths" were read as plain lines
+        # "every CV type's section titles": "Selected work" and "Strengths" were read as plain lines
         from jobhunt.cvstudio import types
 
         for type_id in types.builtin_ids():
@@ -246,7 +246,7 @@ class Upload(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(store.file_bytes(row["id"])).hexdigest(), sha)
 
     def test_an_uploaded_file_can_be_sent_as_your_original(self):
-        # Regression: an upload kept the file but never made it the baseline, so "send my original" refused
+        # an upload kept the file but never made it the baseline, so "send my original" refused
         name, data = fixture("technical", "pdf")
         self.read(name, data)
         first = self.versions()[-1]

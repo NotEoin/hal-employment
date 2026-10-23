@@ -1,4 +1,4 @@
-"""Tests of the migration series and its runner (gate G10).
+"""Tests of the migration series and its runner.
 
 Every database here is made up: the old shapes come from `support.old_db`, in a temporary folder.
 """

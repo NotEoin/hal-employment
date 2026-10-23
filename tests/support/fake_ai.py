@@ -1,7 +1,6 @@
 """The fake AI for tests: `FakeBackend` from `jobhunt.ai.fake`, and `fake_ai()` to put one in place.
 
-Until the AI layer provides `jobhunt.ai.use`, `fake_ai()` only hands the backend over, because no code
-calls the new interface yet; afterwards it installs the backend for the block. Every request the code makes
+`fake_ai()` installs the backend for the block. Every request the code makes
 is in `backend.log`, so a test can check what reached the AI (gate G5).
 """
 from __future__ import annotations

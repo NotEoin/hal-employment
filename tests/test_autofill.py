@@ -1,8 +1,8 @@
 """Answering form questions: facts from the profile, private answers, salaries and codes.
 
-Moved by class from tests/test_apply.py. Private answers come from the private answers store (
-`settings.private`, saved by `support.private_answers`), never from the profile, so the
-health tests save them there. `PrivatePaths` holds the rules for private questions: a private question
+Moved by class from tests/test_apply.py. Private answers come from the private answers store
+(`settings.private`, saved by `support.private_answers`), never from the profile, so the health tests save
+them there. `PrivatePaths` holds the rules for private answers: a private question
 never reaches the AI, is never guessed and is never remembered. The applicant is made up.
 """
 import contextlib

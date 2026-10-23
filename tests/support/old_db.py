@@ -15,7 +15,7 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-# The tables of L db.py:25-115, written out here so the fixture never changes when db.py does.
+# The old database's tables, written out here so the fixture never changes when the code does.
 _TABLES = """
 CREATE TABLE jobs (
     id TEXT PRIMARY KEY, source TEXT NOT NULL, company TEXT NOT NULL, title TEXT NOT NULL, location TEXT,
@@ -96,7 +96,7 @@ EXPECTED_NUMBERS = {"lever:birchwell-2": 1, "greenhouse:aldermoor-1": 2, "greenh
 
 
 def _iso(now: datetime, hours: float) -> str:
-    """Today's Hal writes +00:00 timestamps (L db.py:118-119)."""
+    """Today's Hal writes +00:00 timestamps."""
     return (now - timedelta(hours=hours)).isoformat(timespec="seconds")
 
 

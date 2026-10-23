@@ -105,7 +105,7 @@ class Routing(HelperTest):
             self.assertEqual(out["v"], {"shown": "real"})
 
     def test_a_command_whose_ask_timed_out_never_reaches_the_helper(self):
-        # a timed-out ask left its command queued, so the next real one waited behind it (2026-10-23)
+        # a timed-out ask left its command queued, so the next real one waited behind it
         with HalServer() as hal, closing(db.connect()) as con:
             window = hal.signed_in()
             mine = pair(hal, window)
@@ -246,7 +246,7 @@ class Browsers(unittest.TestCase):
         with HalServer() as hal, mock.patch("jobhunt.core.platform.current", return_value=fake), \
                 mock.patch("jobhunt.web.auth.server_port", return_value=hal.port):   # the port Hal is set to use
             window = hal.signed_in()
-            # Windows 11 install test: a browser drops opera://extensions given on its command line and shows a new
+            # a browser drops opera://extensions given on its command line and shows a new
             # tab, so Hal opens a window and the page pastes the address it gets back
             page = window.post("/api/v2/helpers/open-extensions-page", {"browser": "opera"})
             self.assertEqual((page.status, page.json()["address"]), (200, "opera://extensions"))

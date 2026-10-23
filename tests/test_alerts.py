@@ -110,7 +110,7 @@ class Alerts(unittest.TestCase):
         self.assertEqual(gmail.alert_sender("Board <alerts@madeupboard.example>"), "alerts@madeupboard.example")
 
     def test_an_unsure_email_asks_the_ai_under_its_own_purpose(self):
-        # c2-open: AI calls name their purpose, so the allowance and Activity can say what each was for
+        # AI calls name their purpose, so the allowance and Activity can say what each was for
         reply = '{"kind": "interview", "company": "Harbour and Finch", "role": "Marketing Assistant"}'
         with fake_ai(default=reply) as fake:
             kind, company, role = gmail.refine("Ana Pellow <ana@harbourfinch.example>", "Next steps",

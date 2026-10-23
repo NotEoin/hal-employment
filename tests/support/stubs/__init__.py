@@ -1,1 +1,1 @@
-"""Stand-ins for modules that are not built yet, installed only while the real ones are missing."""
+"""Stand-ins for contracts that a module does not provide yet."""

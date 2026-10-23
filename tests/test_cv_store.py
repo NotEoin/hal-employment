@@ -294,7 +294,7 @@ class Routes(unittest.TestCase):
         self.assertEqual(self.c.post(f"/api/v2/cv/versions/{saved['version_id']}/restore").json(), {"ok": True})
 
     def test_at_a_glance_shows_the_scanner_score_and_the_types_checks(self):
-        # Regression: the glance card stayed empty and the type showed as its id once the type checks were in
+        # the glance card stayed empty and the type showed as its id once the checks were in
         cv = self.c.get("/api/v2/cv").json()
         checked = self.c.get("/api/v2/cv/checks").json()
         self.assertEqual(cv["type"]["name"], "Technical graduate")

@@ -6,7 +6,7 @@ the shell calls with made-up data, plus a made-up reply for each built page's ow
 (`MADE_UP_PAGES`), so the shell's route test draws every page without a 404. Stdlib only, bound to
 127.0.0.1 on a free port; nothing here reads the person's data or Hal's database.
 
-The real server replaces this for the pages' own tests; the shell's tests keep using it.
+The real server is used for the pages' own tests; the shell's tests use this one.
 """
 from __future__ import annotations
 
@@ -283,7 +283,7 @@ MADE_UP_POSTS = {
                                          "interests": [], "places": ["Leeds"], "pattern": "any", "min_pay": 22000},
                           "rows": [["Roles", "Museum assistant"], ["Places", "Leeds"]]},
 }
-# The page a CV preview iframe shows (the real server sends the printed page; every version and look get this).
+# The page a CV preview iframe shows (the real server serves the printed page; any version and look get this one).
 MADE_UP_PREVIEW = (b'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>CV</title></head>'
                    b"<body><main><h1>Robin Example</h1><p>A made-up profile.</p></main></body></html>")
 PREVIEW_POLICY = "default-src 'none'; style-src 'unsafe-inline'"

@@ -112,14 +112,14 @@ class Reviewers(CvCase):
             self.assertFalse(s["ai"])
 
     def test_accepting_the_order_suggestion_reorders_the_sections(self):
-        # Regression: the whole-CV target "cv" is not a CV model target, so the Order suggestion never appeared
+        # the whole-CV target "cv" is not a CV model target, so the Order suggestion never appeared
         suggest.look_again(self.con)
         suggest.accept(self.con, self.one("Order")["id"])
         self.assertEqual([s.id for s in store.current()[1].sections],
                          ["summary", "education", "volunteering", "experience", "skills", "interests"])
 
     def test_a_suggestion_accepted_while_the_tab_reloads_stays_accepted(self):
-        # Regression: the store's "cv" event reloads the tab mid-Accept all; its recheck superseded the accepted rows
+        # the store's "cv" event reloads the tab mid-Accept all; its recheck superseded the accepted rows
         suggest.look_again(self.con)
         stale = suggest._pending(self.con)
         out = suggest.accept_kind(self.con, "Consistency")
@@ -128,7 +128,7 @@ class Reviewers(CvCase):
         self.assertEqual(suggest.listing(self.con)["reviewed"], 2)
 
     def test_the_reviewer_is_asked_to_suggest_where_a_line_is_weak_and_to_say_why_to_you(self):
-        # with the earlier wording Claude answered {"none": true} for every section of the made-up humanities CV
+        # with an earlier wording Claude answered {"none": true} for every section of the made-up humanities CV
         # (2026-10-23), and its reasons spoke of "the person" rather than to them
         text = " ".join(prompts.text("cv_suggest", con=self.con).split())
         self.assertIn("when a bullet lists a duty without saying what came of it", text)

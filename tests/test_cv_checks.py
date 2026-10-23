@@ -98,7 +98,7 @@ class TypeChecks(unittest.TestCase):
         self.assertNotIn("contact_at_top", ids)
 
     def test_for_type_gives_each_weighted_check_with_whether_it_passes(self):
-        # Regression: a fresh CV called `checks.for_type`, which the checks module did not have
+        # the fresh CV called `checks.for_type`, which the checks module did not have
         cv, t = humanities_cv(), cvtypes.load("humanities_grad")
         with World(), as_person(HUMANITIES):
             full = checks.type_checks(cv, t, checks.profile_now())["items"]

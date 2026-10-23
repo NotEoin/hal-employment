@@ -1,6 +1,6 @@
 """Undo in Activity for a setting change: the row the settings store writes can be undone from Activity.
 
-Regression: neither the settings store nor the runner registered the "setting" undo handler, so Undo on a
+Regression: neither the settings nor the history module registered the "setting" undo handler, so Undo on a setting's
 setting's Activity row answered "Hal cannot undo this kind of change yet."
 """
 import unittest

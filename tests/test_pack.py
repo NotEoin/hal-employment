@@ -177,7 +177,7 @@ class Letter(unittest.TestCase):
         self.assertEqual(shown["checked"], pack.CHECKED_CLEAN)
 
     def test_the_application_page_shows_what_the_letter_used_and_what_was_checked(self):
-        # Regression: the page's letter Tone, Evidence and Checked were always empty
+        # the page's letter Tone, Evidence and Checked were always empty
         from jobhunt.apply import queries
 
         with as_applicant(people.HUMANITIES) as a:
@@ -238,7 +238,7 @@ class Letter(unittest.TestCase):
 
 
     def test_with_no_employment_record_no_request_mentions_one(self):
-        # Real-model run (2026-10-23): "Employment record: none" in the fit, letter and verify requests read to Claude as
+        # "Employment record: none" in the fit, letter and verify requests read to Claude as
         # a record that lacked a job on the CV; prep already leaves it out
         writer = FakeWriter()
         with as_applicant(people.HUMANITIES, writer) as a, mock.patch.object(record, "context", lambda *q, **k: ""):

@@ -79,7 +79,7 @@ class WindowsBrowsers(unittest.TestCase):
         self.assertEqual(cmds.started, [[EDGE, "--app=http://127.0.0.1:24321/open?t=made-up"]])
 
     def test_a_new_browser_window_is_opened_without_an_address(self):
-        # Windows 11 install test: Edge dropped edge://extensions from its command line and showed a new tab
+        # Edge dropped edge://extensions from its command line and showed a new tab
         cmds = Commands()
         win = windows({OPERA, EDGE}, {}, cmds)
         win.open_browser_window(win.browsers()[0])

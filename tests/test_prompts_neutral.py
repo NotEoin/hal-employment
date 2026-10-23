@@ -2,8 +2,8 @@
 
 Every prompt is rendered for each of the three made-up people of `support.people`, with their own CV type.
 A rendered prompt may hold no unfilled placeholder, no pronoun for the applicant, no other person's name,
-and none of the person's LEAKS words: the words of other careers that must not reach their prompts (for
-example, the humanities graduate's list holds "software engineer"). The fixtures themselves are
+and none of the person's LEAKS words: the words of other careers that must not reach their prompts
+(the humanities graduate's list holds "software engineer"). The fixtures themselves are
 checked to be made up.
 """
 import re

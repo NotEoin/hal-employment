@@ -482,7 +482,7 @@ class Commands(ImportCase):
 class RealStores(ImportCase):
     """The import on the real stores, checked end to end.
 
-    Regression for two breaks found on the real stores: the private store refuses an old carer answer that is not
+    Regression for two breaks: the private store refuses an old carer answer that is not one of
     one of its choices, which stopped the whole import; and saving a secret writes a history row through
     `db.connect()`, which before the seal opened and migrated the old database in place, then left the new
     folder non-empty so the seal failed.

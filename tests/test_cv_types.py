@@ -17,7 +17,7 @@ from jobhunt.cvstudio import model, store
 from jobhunt.cvstudio import types as cvtypes
 
 B, E, M, S = model.Bullet, model.Entry, model.Module, model.Section
-# The fields every career needs a type for (and the owner's wish that any career is covered).
+# The fields every career needs a type for, so that any career is covered.
 CAREERS = ("humanities_grad", "stem_grad", "technical_grad", "business_grad", "creative", "general_grad",
            "student", "career_changer", "experienced", "school_leaver", "academic")
 FOR_STARTERS = ("humanities_grad", "stem_grad", "technical_grad", "business_grad", "general_grad", "student")

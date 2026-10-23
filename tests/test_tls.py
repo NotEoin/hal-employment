@@ -1,6 +1,6 @@
 """Hal trusts the certificates Windows trusts (`jobhunt/core/tls.py`).
 
-Windows 11 install test, 2026-10-23: on a fresh Windows 11 every job site failed with CERTIFICATE_VERIFY_FAILED,
+On a fresh Windows 11 every job site failed with CERTIFICATE_VERIFY_FAILED,
 so Hal's first search found nothing. These tests hold the fix: Windows processes hand certificate checks
 to Windows through `truststore`, and every `python -m jobhunt` command does so before it starts.
 """

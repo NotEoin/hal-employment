@@ -42,7 +42,7 @@ class SiteKeys(unittest.TestCase):
 
     def test_each_workday_employer_has_its_own_sign_in_state(self):
         """Regression: signing in to one Workday employer marked every Workday employer signed in, so Hal left
-        Apply to the person on all of them (L browser.py:238-242)."""
+        Apply to the person on all of them."""
         acme = "https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/London/Graduate_R1"
         zenith = "https://zenith.wd5.myworkdayjobs.com/External/job/Leeds/Analyst_R2"
         browser.note_signed_in(acme)
@@ -73,7 +73,7 @@ class SiteKeys(unittest.TestCase):
         self.assertIn("docs.google.com/forms", extension.PATTERNS["frames"])
 
     def test_the_fill_limit_grows_with_the_number_of_fields(self):
-        """Regression: a form of a dozen slow lists hit the helper's fixed 180 s fill limit (L extension.py:182)."""
+        """Regression: a form of a dozen slow lists hit the helper's fixed 180 s fill limit."""
         asked = []
 
         def ask(cmd, timeout=90, **args):
@@ -102,7 +102,7 @@ class SiteKeys(unittest.TestCase):
         self.assertEqual(out["errors"], {"h3": browser.UPLOAD_FAILED})
 
     def test_the_helper_sees_code_walls_bot_checks_and_closed_adverts_as_hals_window_does(self):
-        """Regression: the helper judged walls by the page title alone (L extension.py:85-107)."""
+        """Regression: the helper judged walls by the page title alone."""
         page = {"url": "https://jobs.example.org/apply/1", "title": "Apply", "headings": "", "password": False,
                 "apply": False, "fields": [{"kind": "text", "label": "Code", "form": 0}], "text": ""}
         code = {**page, "text": "Enter the code we sent to your email address."}
@@ -244,7 +244,7 @@ class Fixes:
         return browser.fill(job_id, fields, Path(self.tmp.name) / "shots" / "fix.png")
 
     def test_a_failed_upload_is_never_reported_as_done(self):
-        """Regression: a file field was always counted as held (L browser.py:692-713), so a CV the site dropped
+        """Regression: a file field was always counted as held, so a CV the site dropped
         was reported as uploaded."""
         job_id, found = self.opened("upload", "upload-check.html")
         fields = self.answers(found, {"First name": "Ada", "Last name": "Lovelace", "Email": "ada@example.org",
@@ -265,7 +265,7 @@ class Fixes:
         self.assertEqual(self.site.sent(), 0)
 
     def test_the_cookie_clicker_never_presses_a_consent_box_in_the_form(self):
-        """Regression: "I agree" was pressed wherever it was, the form's own consent too (L browser.py:204-222)."""
+        """Regression: "I agree" was pressed wherever it was, the form's own consent too."""
         job_id, found = self.opened("consent", "consent-in-form.html")
         self.assertTrue(found["fields"])
         page = "consent-in-form.html"
@@ -274,7 +274,7 @@ class Fixes:
         self.assertEqual(self.site.sent(), 0)
 
     def test_a_list_that_takes_several_answers_gets_every_one(self):
-        """Regression: a multi-select list got its answers' names joined into one value (L browser.py:672-673)."""
+        """Regression: a multi-select list got its answers' names joined into one value."""
         job_id, found = self.opened("multi", "multiselect.html")
         langs = next(f for f in found["fields"] if f["label"].startswith("Which languages"))
         self.assertTrue(langs.get("multiple"))
@@ -311,7 +311,7 @@ class Fixes:
         self.assertEqual(self.site.sent(), 0)
 
     def test_a_google_form_in_a_frame_is_read(self):
-        """Regression: every google.com/ frame was passed over, Google Forms too (L browser.py:69)."""
+        """Regression: every google.com/ frame was passed over, Google Forms too."""
         _job_id, found = self.opened("gform", "gform.html")
         labels = [f["label"] for f in found["fields"]]
         self.assertEqual(labels[:3], ["First name", "Last name", "Email"])

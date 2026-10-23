@@ -136,7 +136,7 @@ class Exports(unittest.TestCase):
             self.assertEqual([x["chosen"] for x in looks], [True, False, False, False])
             chosen = client.request("PUT", "/api/v2/cv/look", {"id": "compact"})
             self.assertEqual(chosen.status, 200)
-            # Regression: the reply is My CV's header, and the look shows by name, not by id
+            # the reply is My CV's header, and the look shows by name, not by id
             self.assertEqual(chosen.json()["look"], {"id": "compact", "name": "Compact"})
             self.assertEqual(client.get("/api/v2/cv").json()["look"]["name"], "Compact")
             self.assertEqual(store.doc()["look_id"], "compact")

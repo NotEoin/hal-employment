@@ -1,5 +1,5 @@
 """Activity: every row has a why, private answers never reach it, the page groups by day, Undo works
-through its handler, and the routes answer in the shapes the pages read.
+through its handler, and the routes answer in their documented shapes.
 """
 import json
 import sqlite3

@@ -44,7 +44,7 @@ class Shim(unittest.TestCase):
         self.addCleanup(setattr, config, "_file_cache", None)
 
     def test_the_board_list_comes_from_the_imported_copy(self):
-        # the checkout's boards.toml is gone; the import left a copy in the data folder
+        # the checkout's boards.toml is deleted; the import left a copy in the data folder
         imported = paths.data_dir() / "import" / "boards.toml"
         imported.parent.mkdir(parents=True, exist_ok=True)
         imported.write_text('[[board]]\nname = "Made-up Board"\nats = "greenhouse"\nslug = "madeup"\n')

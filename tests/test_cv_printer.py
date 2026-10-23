@@ -199,7 +199,7 @@ class Printing(unittest.TestCase):
 
 
 def platform_printer() -> str:
-    """The printer Hal uses on this computer: Edge on Windows, Playwright's Chromium elsewhere."""
+    """The printer for this computer: Edge on Windows, Playwright's Chromium elsewhere."""
     return "edge" if sys.platform == "win32" else "playwright"
 
 

@@ -21,7 +21,7 @@ def setUpModule():
     patcher.start()
     unittest.addModuleCleanup(patcher.stop)
 
-# Every documented setting key (rows that list several keys at once are expanded in the catalogue).
+# Every key of the catalogue (rows that list several keys at once are expanded in the catalogue).
 SPEC_KEYS = (
     "addon.applications_mirror", "addon.enabled", "addon.hal_root", "addon.jobs_command", "addon.pipeline_note",
     "addon.respect_off", "addon.speak_command", "addon.vault",
@@ -113,7 +113,7 @@ MOCK_GROUPS = (
     ("advanced", "Advanced", ("Hal's instructions to the AI", "Most form pages Hal moves through",
                               "Give up on a slow page after")),
 )
-# Groups added to the Settings page's design: after Updates, and last.
+# Groups the owner's answers add to the design: after Updates, and last.
 ADDED_GROUPS = {"remote": "updates", "addon": "advanced"}
 # Ranges whose ends the Settings page shows: key -> (min, max, default).
 MOCK_RANGES = {"goal.max_distance": (5, 60), "scoring.w.first_place": (0, 20), "scoring.w.role_title": (0, 20),
@@ -179,7 +179,7 @@ class Catalogue(unittest.TestCase):
             parse.check(s, "Always")
 
     def test_forms_can_open_in_this_window(self):
-        """The choice waited for the helper to bring a form's tab forward before reading it (proved by
+        """The choice waited for the helper to bring a form's tab forward before reading it. Proved by
         `test_engine_fixes.WithTheHelper.test_this_window_brings_the_tab_forward_before_reading`)."""
         s = REGISTRY["applying.window"]
         self.assertEqual([c[0] for c in s.choices], ["separate", "this"])

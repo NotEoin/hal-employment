@@ -1,4 +1,4 @@
-"""A USB stick install, copied in and retired, with a made-up stick folder and fakes for Windows."""
+"""The USB stick install, copied in and retired, with a made-up stick folder and fakes for Windows."""
 import contextlib
 import hashlib
 import json

@@ -1,4 +1,4 @@
-"""The private-answer guard: a saved free-text private answer never leaves in a prompt (gate G5)."""
+"""The private-answer guard: a saved free-text private answer never leaves in a prompt."""
 import contextlib
 import json
 import tempfile

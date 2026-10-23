@@ -175,7 +175,7 @@ class Store(unittest.TestCase):
         self.assertIsNone(settings.set("you.city", "Lindenford").goal_version)
 
     def test_a_list_of_choices_is_worded_with_its_labels_not_its_codes(self):
-        # Reset and the goal history said "graduate_job, internship" (a code word is never shown on screen)
+        # Reset and the goal history said "graduate_job, internship" (bare code words are banned on screen)
         settings.set("goal.kinds", ["graduate_job", "internship"])
         self.assertEqual(settings.display("goal.kinds"), "Graduate and entry-level jobs, Paid internships")
 

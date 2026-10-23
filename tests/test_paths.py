@@ -133,7 +133,7 @@ class Guard(unittest.TestCase):
                 self.assertTrue(paths.data_dir().is_relative_to(account))
 
     def test_importing_support_gives_a_run_with_no_variables_a_temporary_home(self):
-        # Regression: a suite run by hand with no variables failed at import instead of using a temp home
+        # a suite run by hand with no variables failed at import instead of using a temp home
         script = ("import os, sys; sys.path.insert(0, 'tests'); import support; from jobhunt.core import paths; "
                   "print(os.environ['HAL_TEST_MODE'], paths.data_dir().parent == paths.home_override())")
         done = self.run_python(["-c", script], REPO)
@@ -156,7 +156,7 @@ class Guard(unittest.TestCase):
 
 
 class Layout(unittest.TestCase):
-    """The folder resolution order, run against a made-up checkout and made-up platform folders."""
+    """The resolution order of the paths, run against a made-up checkout and made-up platform folders."""
 
     def setUp(self):
         root = temp_dir(self)

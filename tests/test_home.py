@@ -67,7 +67,7 @@ class Home(unittest.TestCase):
                          ["Getting ready", "Form filled", "Sent", "Interview", "Offer", "Closed"])
 
     def test_this_weeks_new_matches_count_only_jobs_matches_and_saved_show(self):
-        # Windows 11 install test (2026-10-23): Home said "255 new matches" while Matches showed none, as the goal
+        # Home said "255 new matches" while Matches showed none, as the goal
         # hid every job the first search found
         from jobhunt import stats
         from jobhunt.find import routes as find_routes

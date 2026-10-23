@@ -1,4 +1,4 @@
-"""The status line (`/status`): the most urgent action wins, with its step, its Why? and Stop; idle,
+"""The status line: the most urgent action wins, with its step, its Why? and Stop; idle,
 it says when Hal works next and whether it is paused.
 """
 import sys

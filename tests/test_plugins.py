@@ -24,7 +24,7 @@ class Discovery(unittest.TestCase):
         self.assertEqual(names, ["jobhunt.core.settings.api_routes", "jobhunt.find.goal_routes", "jobhunt.find.routes"])
 
     def test_migrations_and_commands_are_never_loaded_as_area_modules(self):
-        # Regression: migration 0003_settings.py matched the settings kind and would have been imported
+        # migration 0003_settings.py matched the settings kind and would have been imported
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for rel in ("core/db/migrations/0003_settings.py", "cli/settings.py", "find/settings.py",

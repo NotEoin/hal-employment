@@ -91,7 +91,7 @@ class Windows(InstallCase):
         self.assertTrue(entry["UninstallString"].endswith("-m jobhunt install --remove"))
 
     def test_the_shortcuts_show_hals_eye_not_the_python_logo(self):
-        # Windows 11 install test (2026-10-23): with no icon set, the desktop shortcut showed pythonw.exe's logo
+        # with no icon set, the desktop shortcut showed pythonw.exe's logo
         self.installer("windows").windows([])
         ico = self.root / "Hal Employment" / "tools" / install.ICON_FILE
         self.assertEqual(self.platform.icons, {"Hal Employment.lnk": f"{ico},0",

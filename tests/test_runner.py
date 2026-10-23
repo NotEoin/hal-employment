@@ -153,7 +153,7 @@ class Runner(unittest.TestCase):
         self.assertIsNone(runner.running_for("demo:1"))
 
     def test_an_action_that_just_ended_does_not_hold_its_subject(self):
-        # Regression: two quick CV type changes; the first cv.suggest had ended but its last row write was still
+        # two quick CV type changes; the first cv.suggest had ended but its last row write was still
         # queued, so the next start said "Hal is busy ... in another window"
         held, holding = [], threading.Event()
         put = runner._WRITER.put

@@ -139,7 +139,7 @@ class Install(InHome):
         self.assertIn("Installing Claude Code native build...", steps)
         self.assertIn("Added Claude to your programs list", steps)
         self.assertFalse([s for s in steps if "%" in s])
-        # Windows 11 install test: the installer's own advice to edit Environment Variables reached the step list
+        # the installer's own advice to edit Environment Variables reached the step list
         self.assertFalse([s for s in steps if "PATH" in s or "Environment Variables" in s or "Setup notes" in s
                           or "--help" in s], steps)
 

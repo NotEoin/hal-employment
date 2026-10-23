@@ -43,7 +43,7 @@ BROWSER_TESTS = os.environ.get("HAL_TEST_BROWSER") == "1"
 
 
 class StaticChecks(unittest.TestCase):
-    """The code holds no way to press Submit or Enter (guard 2)."""
+    """The code holds no way to press Submit or Enter."""
 
     # Each with why it is forbidden. Executor calls such as POOL.submit( are allowed by name.
     FORBIDDEN: ClassVar[dict[str, str]] = {
@@ -89,7 +89,7 @@ class StaticChecks(unittest.TestCase):
 
 
 class Email(unittest.TestCase):
-    """The only email Hal sends is the person's own daily summary, to the person (guard 4)."""
+    """The only email Hal sends is the person's own daily summary, to the person."""
 
     SENDS = re.compile(r"\bsmtplib\b|\.send_message\(|\.sendmail\(")
 

@@ -3,7 +3,7 @@
 `TODAYS_GOAL` stands in for the owner's imported goal in the compatibility test: a technical new graduate
 whose first place is the invented town of Northby and whose second is London, who wants an office, avoids
 every built-in sector and has the old skill weights. `TODAYS_SCORES` are the scores and notes the code at
-ef53088 gave the world's made-up jobs (tests/goldens/score.json as first recorded), with the old first
+ef53088 gave the world's made-up jobs (tests/goldens/score.json), with the old first
 place written as Northby, so no real home area is named here.
 
 `advert()` makes one made-up advert with sensible defaults, so each test states only what it is about.
@@ -14,7 +14,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Iterator
 
-# The old skill weights (L score.py:135-146), as `scoring.skills` lines.
+# The old skill weights, as `scoring.skills` lines.
 OLD_SKILLS = [
     r"re:\bpython\b = 3", r"re:\bpytorch\b = 3", r"re:\bnumpy\b = 2", r"re:\bmachine learning\b = 2",
     r"re:\bcomputer vision\b = 3", r"re:\b(llm|rag|retrieval)\b = 3", r"re:\bmcp\b = 2",
