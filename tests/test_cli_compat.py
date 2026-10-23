@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -34,6 +35,9 @@ class CommandLine(unittest.TestCase):
     def test_cli_output_matches_the_goldens_recorded_before_any_change(self):
         self.compare([c for c in cli.CASES if not c.name.startswith("help")])
 
+    # argparse changed its option layout in 3.13 ("-m, --min MIN"); the help goldens are 3.13's, and no caller
+    # parses help text (G4)
+    @unittest.skipIf(sys.version_info < (3, 13), "the help goldens hold Python 3.13's argparse layout")
     def test_help_of_every_existing_command_is_unchanged(self):
         self.compare([c for c in cli.CASES if c.name.startswith("help")])
 
