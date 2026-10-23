@@ -57,7 +57,8 @@ JOB_ROWS = [
     ("fernhill-grad", "greenhouse", "Fernhill Analytics", "Graduate Software Engineer", "London", GRAD,
      "32,000 - 36,000 GBP", "new", 3),
     ("tidewater-grad", "lever", "Tidewater Systems", "Junior Software Developer", "Leeds", GRAD, None, "new", 5),
-    ("brackenridge-data", "hn", "Brackenridge Labs", "Junior Data Analyst", "Remote (UK)", DATA, None, "new", 30),
+    # under 24 hours: at 30 the digest golden changed with the time of day (the digest counts since yesterday)
+    ("brackenridge-data", "hn", "Brackenridge Labs", "Junior Data Analyst", "Remote (UK)", DATA, None, "new", 20),
     ("quillon-intern", "greenhouse", "Quillon Health", "Graduate Software Engineering Internship", "London",
      INTERN, "2,200 GBP a month", "new", 4),
     ("marrowby-placement", "lever", "Marrowby Retail", "Software Placement Year 2027", "London", PLACEMENT,
