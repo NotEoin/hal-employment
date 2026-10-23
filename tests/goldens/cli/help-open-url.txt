@@ -1,0 +1,10 @@
+$ jobhunt open-url --help
+usage: jobhunt open-url [-h] [--remote] [--local-port LOCAL_PORT] [--host-label HOST_LABEL]
+
+options:
+  -h, --help            show this help message and exit
+  --remote              the link is for a window on another computer
+  --local-port LOCAL_PORT
+                        the port the other computer's tunnel listens on
+  --host-label HOST_LABEL
+                        this computer's name as the other computer shows it

@@ -1,0 +1,11 @@
+$ jobhunt remote-launcher --help
+usage: jobhunt remote-launcher [-h] --os {linux,mac,windows} [--host HOST] [--user USER]
+                               [--port PORT]
+
+options:
+  -h, --help            show this help message and exit
+  --os {linux,mac,windows}
+                        the other computer's system
+  --host HOST           this computer's name on your network (default: its host name)
+  --user USER           your user name on this computer (default: this account)
+  --port PORT           the port Hal listens on here (default: its setting)

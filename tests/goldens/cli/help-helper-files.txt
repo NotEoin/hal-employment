@@ -1,0 +1,6 @@
+$ jobhunt helper-files --help
+usage: jobhunt helper-files [-h] [--tar]
+
+options:
+  -h, --help  show this help message and exit
+  --tar       write them to stdout as a tar
