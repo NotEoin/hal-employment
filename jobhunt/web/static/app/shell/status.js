@@ -74,7 +74,7 @@ export function Status() {
   let body;
   if (s.offline) {
     body = html`<div class="what"><span class="eye sm" aria-hidden="true"></span><span><b>Hal is not answering.</b>
-      ${remote ? " Is the desktop asleep?" : " It may be restarting."}</span></div>
+      ${remote ? " Is " + (s.session.remote_host || "the computer Hal runs on") + " asleep?" : " It may be restarting."}</span></div>
       <button type="button" class="btn small" onClick=${retryNow}><${Icon} n="refresh" c="s" /> Retry</button>`;
   } else if (s.reconnecting) {
     body = html`<div class="what"><span class="eye sm" aria-hidden="true"></span><span><b>Reconnecting to Hal...</b></span></div>`;

@@ -14,6 +14,7 @@
 import { html, cx, useState } from "../../core/html.js";
 import { post } from "../../core/api.js";
 import { useApi, useStore, toast } from "../../core/store.js";
+import { copyText } from "../../ui/clipboard.js";
 import { isRemote } from "../../core/remote.js";
 import { Icon } from "../../ui/icons.js";
 
@@ -21,11 +22,7 @@ const PICTURE_W = 360;
 const PICTURE_H = 200;
 const TITLE = "Add Hal's helper to your browser";
 
-/** Puts text on the clipboard and says so; true when it worked. */
-async function copy(text, what) {
-  try { await navigator.clipboard.writeText(text); toast(what); return true; }
-  catch (err) { toast("Hal could not reach the clipboard. Select the words and copy them yourself."); return false; }
-}
+const copy = copyText;
 
 function Picture({ step }) {
   return html`<img class="helper-pic" src=${step.picture} alt=${step.text} width=${PICTURE_W} height=${PICTURE_H}

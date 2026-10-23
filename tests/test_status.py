@@ -73,9 +73,11 @@ class StatusLine(unittest.TestCase):
 
     def test_idle_it_says_when_hal_works_next_and_whether_it_is_paused(self):
         scheduler = types.ModuleType("jobhunt.core.scheduler")
-        scheduler.next_runs = lambda: [{"id": "find.discover", "label": "Job search", "at": "2026-10-22T12:30:00Z"},
-                                       {"id": "mail.check", "label": "Email check", "at": "2026-10-22T11:45:00Z"},
-                                       {"id": "notify.digest", "label": "Daily summary", "at": "2026-10-22T17:00:00Z"}]
+        # the schedule's labels are verbs, and the line once read "Next search for jobs at 12:30"
+        scheduler.next_runs = lambda: [
+            {"id": "find.discover", "label": "Search for jobs", "at": "2026-10-22T12:30:00Z"},
+            {"id": "mail.check", "label": "Check email", "at": "2026-10-22T11:45:00Z"},
+            {"id": "notify.digest", "label": "Send the daily summary", "at": "2026-10-22T17:00:00Z"}]
         scheduler.paused = lambda: True
         with mock.patch.dict(sys.modules, {"jobhunt.core.scheduler": scheduler}), \
              mock.patch.object(status, "_optional", from_modules):

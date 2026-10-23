@@ -8,6 +8,7 @@
 import { html, useState } from "../core/html.js";
 import { del } from "../core/api.js";
 import { useApi, toast } from "../core/store.js";
+import { copyText } from "../ui/clipboard.js";
 import { dayWords, clock } from "../core/format.js";
 import { isRemote, popUpState, askForPopUps } from "../core/remote.js";
 import { Note } from "../ui/controls.js";
@@ -24,10 +25,7 @@ function serverWords(s) {
   return ["warn", "Not installed yet: see step 1"];
 }
 
-async function copy(text) {
-  try { await navigator.clipboard.writeText(text); toast("Copied"); }
-  catch (err) { toast("Hal could not reach the clipboard. Select the words and copy them yourself."); }
-}
+const copy = text => copyText(text);
 
 function Steps({ steps }) {
   return html`<ol class="sc-list">${steps.map(s => html`<li key=${s.n} style="margin-bottom:10px">

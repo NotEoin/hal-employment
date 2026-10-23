@@ -49,12 +49,12 @@ function Week({ w }) {
   return html`<section class="card" aria-labelledby="week-h">
     <h2 class="h2" id="week-h">This week</h2>
     <div class="stats">
-      <div class="stat"><b>${w.matches}</b><span>new matches</span></div>
-      <div class="stat"><b>${w.sent}</b><span>applications sent</span></div>
+      <div class="stat"><b>${w.matches}</b><span>${w.matches === 1 ? "new match" : "new matches"}</span></div>
+      <div class="stat"><b>${w.sent}</b><span>${w.sent === 1 ? "application sent" : "applications sent"}</span></div>
       <div class="stat"><b>${w.replies}</b><span>${w.replies === 1 ? "reply" : "replies"}</span></div>
       <div class="stat"><b>${w.interviews}</b><span>${w.interviews === 1 ? "interview" : "interviews"}</span></div>
     </div>
-    ${total > 0 && html`<p class="small sub" style="margin:14px 0 6px">Where your ${total} applications are</p>
+    ${total > 0 && html`<p class="small sub" style="margin:14px 0 6px">${total === 1 ? "Where your application is" : "Where your " + total + " applications are"}</p>
       <div class="pipe" role="img" aria-label=${words}>${pipe.map(p => html`<i style=${"width:" + (100 * p.n / total) + "%;background:"
         + PIPE_COLOURS[p.key]}></i>`)}</div>
       <div class="row small sub" style="margin-top:8px;gap:6px 16px">${pipe.map(p => html`<span><span class="dot" style=${"background:"

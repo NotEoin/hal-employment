@@ -17,6 +17,10 @@ log = logging.getLogger(__name__)
 
 NEXT_SHOWN = 2
 PAUSED_META = "schedule:paused"
+# The schedule's labels are verbs ("Search for jobs"); the line reads "Next job search at 13:30"
+NEXT_WORDS = {"find.discover": "job search", "mail.check": "email check", "notify.digest": "daily summary",
+              "record.sync": "read of your record folder", "system.backup": "backup", "system.tidy": "tidy-up",
+              "learn.patterns": "look for patterns", "updates.check": "check for updates"}
 
 
 def _optional(module: str, name: str) -> Any | None:
@@ -59,8 +63,8 @@ def _paused(con: sqlite3.Connection) -> bool:
 
 def _next(con: sqlite3.Connection) -> list[dict]:
     runs = _call("jobhunt.core.scheduler", "next_runs", default=[]) or []
-    return [{"what": r.get("label", "").lower() or r.get("id", ""), "at": r.get("at")} for r in runs[:NEXT_SHOWN]
-            if r.get("at")]
+    return [{"what": NEXT_WORDS.get(r.get("id", "")) or r.get("label", "").lower() or r.get("id", ""),
+             "at": r.get("at")} for r in runs[:NEXT_SHOWN] if r.get("at")]
 
 
 def status(con: sqlite3.Connection) -> dict:

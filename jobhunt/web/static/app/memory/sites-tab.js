@@ -7,6 +7,7 @@
 import { html, useState } from "../core/html.js";
 import { put, del, get } from "../core/api.js";
 import { useApi, mutate, openDialog, toast } from "../core/store.js";
+import { copyText } from "../ui/clipboard.js";
 import { Switch, Chip, Empty } from "../ui/controls.js";
 import { ask } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
@@ -22,11 +23,7 @@ export function seenWords(iso) {
   return days <= 0 ? "Today" : days === 1 ? "Yesterday" : DAY.format(d);
 }
 
-/** Puts words on the clipboard and says so. */
-async function copy(text, said) {
-  try { await navigator.clipboard.writeText(text); toast(said); }
-  catch (err) { toast("Hal could not reach the clipboard. Select the words and copy them yourself."); }
-}
+const copy = copyText;
 
 function tone(n) {
   return n.origin === "you" ? "info" : n.origin === "builtin" ? "" : "why";

@@ -237,6 +237,10 @@ def _form_counts(form: dict | None) -> tuple[int, int, int]:
     return len(filled), len(fields), sum(1 for m in marks if m["state"] != "ok")
 
 
+def _need_words(to_check: int) -> str:
+    return "1 answer needs you" if to_check == 1 else f"{to_check} answers need you"
+
+
 def _card_words(con, r, col: str) -> tuple[str, str, str]:
     """(next, tone, note) for one card on the board, in the board's own words."""
     app = _app(con, r["id"])
@@ -251,8 +255,7 @@ def _card_words(con, r, col: str) -> tuple[str, str, str]:
         filled, total, to_check = _form_counts(form)
         note = f"{filled} of {total} filled" if total else ""
         if to_check:
-            need = "1 answer needs you" if to_check == 1 else f"{to_check} answers need you"
-            return need, "warn", note
+            return _need_words(to_check), "warn", note
         return "Check it, then press Submit on the site yourself", "info", note
     row = _app_row(con, r["id"])
     if col == "sent":
@@ -331,7 +334,7 @@ def _steps(con, job_id: str, col: str | None, app: dict, row) -> tuple[int, list
     _, total, to_check = _form_counts(app["form"])
     notes = [
         "Approved" if step > 1 else ("Hal is writing" if _busy(job_id) and col == "ready" else "Waiting for you"),
-        ("Filled" if step > 2 else (f"{to_check} answer{'s' if to_check != 1 else ''} need you" if to_check
+        ("Filled" if step > 2 else (_need_words(to_check) if to_check
                                     else "Filled" if total else "Hal is filling it in")) if step >= 2
         else "Starts after you approve",
         (f"Sent {_day(row['sent_at'])}" if row is not None and row["sent_at"] else "Sent") if step >= 3 else "",

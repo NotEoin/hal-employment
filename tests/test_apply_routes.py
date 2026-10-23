@@ -291,6 +291,15 @@ class Providers(unittest.TestCase):
         self.assertEqual([i["urgency"] for i in items], sorted(i["urgency"] for i in items))
         self.assertEqual(items[0], check)
 
+    def test_the_form_step_says_one_answer_needs_you_in_the_singular(self):
+        # the step tab said "1 answer need you" while the board card said "1 answer needs you"
+        from jobhunt.apply import queries
+
+        form = {"fields": [{"hid": "a", "label": "Why us?", "kind": "textarea", "value": "", "required": True}],
+                "final": False, "filled": {"at": "x"}, "state": "needs"}
+        _, steps = queries._steps(self.con, job_id("wexford-ready"), "form", {"form": form}, None)
+        self.assertEqual(steps[1]["note"], "1 answer needs you")
+
     def test_search_finds_an_application_by_employer_and_leaves_out_other_jobs(self):
         from jobhunt.apply import search
 

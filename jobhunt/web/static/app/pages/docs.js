@@ -3,6 +3,7 @@
    opened from another computer gets them too; "Open the folder" shows only where folders can open. */
 import { html, cx, useState, useEffect } from "../core/html.js";
 import { useApi, toast } from "../core/store.js";
+import { copyText } from "../ui/clipboard.js";
 import { get, post } from "../core/api.js";
 import { go } from "../core/router.js";
 import { Icon } from "../ui/icons.js";
@@ -13,11 +14,6 @@ const ICONS = { cv_pdf: "file", cv_docx: "file", letter_pdf: "file", letter_txt:
   message_txt: "mail", advert_html: "globe", prep_md: "book" };
 const COPY_WORDS = { answers_md: "Copy all", message_txt: "Copy", letter_pdf: "Copy text", letter_txt: "Copy text" };
 
-/** Puts text on the clipboard and says so. */
-export async function copyText(text, what = "Copied") {
-  try { await navigator.clipboard.writeText(text); toast(what); }
-  catch (err) { toast("Hal could not reach the clipboard. Select the words and copy them yourself."); }
-}
 
 function approvedWords(at) {
   if (!at) return "Not approved yet.";

@@ -7,6 +7,8 @@ import { toast, openDialog, invalidate } from "../core/store.js";
 import { go } from "../core/router.js";
 import { Tabs } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
+import { copyText } from "../ui/clipboard.js";
+import { plural } from "../core/format.js";
 
 const appPath = a => "/applications/" + encodeURIComponent(a.id);
 
@@ -20,9 +22,7 @@ export async function approve(a, edits = {}) {
   } catch (err) { toast(err.message); }
 }
 
-function copy(text) {
-  try { navigator.clipboard.writeText(text); toast("Copied"); } catch (err) { toast("Select the words and copy them yourself."); }
-}
+const copy = text => copyText(text);
 
 async function stop(a) {
   try { await post("/actions/" + encodeURIComponent(a.action_id) + "/stop"); toast("Hal stopped. Nothing was sent and no form was opened."); }
@@ -64,10 +64,10 @@ export function DocsStep({ a, reload }) {
       <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div></div>
       <button type="button" class="btn primary" onClick=${onApprove}>Approve and fill in the form</button>
       <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button></div>
-    <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", changes.filter(c => c.on).length + " changes"],
+    <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
     ${tab === "cv" && html`<div class="stack s">
-      <p class="sub" style="margin:0">${changes.length ? "Hal changed " + changes.length + " things from your CV for this job." : "Hal used your main CV as it is for this job."}</p>
+      <p class="sub" style="margin:0">${changes.length ? "Hal changed " + plural(changes.length, "thing") + " from your CV for this job." : "Hal used your main CV as it is for this job."}</p>
       ${changes.map(c => html`<article class=${cx("sugg", !c.on && "done")}><div class="row tight"><span class="chip info">${c.kind}</span><span class="small sub">${c.where}</span><span class="sp"></span>
         ${c.on ? html`<button type="button" class="btn quiet small" onClick=${() => toggle(c, false)}><${Icon} n="undo" c="s" />Undo</button>`
           : html`<span class="small sub">Undone: your CV's version is used</span><button type="button" class="btn quiet small" onClick=${() => toggle(c, true)}>Redo</button>`}</div>
