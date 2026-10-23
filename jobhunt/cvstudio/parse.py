@@ -12,6 +12,8 @@ field. Design decisions, each with its reason:
   per line), so no extra library is needed on Windows. Each line keeps its paragraph index
   and a hash of its text, for an in-place Word editor later.
 - A PDF with no text layer is refused with words that say what to do instead; there is no OCR for CVs.
+- Headings are the common ones (`HEADINGS`) plus every built-in CV type's own section titles, so a CV
+  written to a type's outline is read back into the same sections.
 - Ids are made the way schema 2 makes them (`<prefix>-` + sha1(kind + heading)[:8]), so reading the same
   file twice gives the same ids and later edits find their entries.
 - Rows of the "Check what Hal read" report have a path that names one field
@@ -21,6 +23,7 @@ field. Design decisions, each with its reason:
 from __future__ import annotations
 
 import copy
+import functools
 import hashlib
 import io
 import logging
@@ -34,7 +37,8 @@ from xml.etree import ElementTree
 
 from ..ai import prompts
 from . import pdfread
-from .model import Bullet, CVDoc, Entry, Module, Section
+from . import types as cvtypes
+from .model import KINDS, Bullet, CVDoc, Entry, Module, Section
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +110,24 @@ HEADINGS = {
     "talks": "talks", "presentations": "talks", "portfolio": "portfolio", "references": "additional",
     "additional information": "additional", "additional": "additional", "other information": "additional",
 }
+
+
+def _key(text: str) -> str:
+    return re.sub(r"\s+", " ", text.replace("&", "and")).lower()
+
+
+@functools.cache
+def headings() -> dict[str, str]:
+    """`HEADINGS` plus every built-in CV type's own section titles, as heading words -> kind."""
+    found = dict(HEADINGS)
+    for type_id in cvtypes.builtin_ids():
+        for kind, part in cvtypes.load(type_id).sections.items():
+            title = part.get("title") if isinstance(part, dict) else None
+            if kind in KINDS and title:
+                found.setdefault(_key(title), kind)
+    return found
+
+
 # For headings Hal does not know word for word: the first keyword found decides the kind.
 KEYWORDS = (("volunteer", "volunteering"), ("voluntary", "volunteering"), ("educat", "education"),
             ("qualification", "education"), ("employ", "experience"), ("experience", "experience"),
@@ -408,9 +430,10 @@ def heading_kind(line: Line, body_size: float | None) -> str | None:
     words = text.split()
     if not words or len(words) > HEADING_WORDS or "\t" in text or any(ch.isdigit() for ch in text):
         return None
-    key = re.sub(r"\s+", " ", text.replace("&", "and")).lower()
-    if key in HEADINGS:
-        return HEADINGS[key]
+    key = _key(text)
+    known = headings()
+    if key in known:
+        return known[key]
     letters = [ch for ch in text if ch.isalpha()]
     caps = bool(letters) and all(ch.isupper() for ch in letters) and len(letters) > 2
     styled = line.style.startswith("heading")

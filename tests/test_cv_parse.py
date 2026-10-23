@@ -21,7 +21,7 @@ from jobhunt import db
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.core import paths, runner, settings
 from jobhunt.cvstudio import parse, store
-from jobhunt.cvstudio.model import to_json
+from jobhunt.cvstudio.model import KINDS, to_json
 
 WAIT_S = 20
 NO_AI = {"cv_parse": LLMUnavailable("The made-up AI is switched off.")}
@@ -121,6 +121,16 @@ class Rules(unittest.TestCase):
         self.assertEqual(values["you.education.grade"], "2:1")
         self.assertEqual(values["you.education.start_year"], "2023")
         self.assertTrue(values["you.education.dissertation"].startswith("Bridges and ballots"))
+
+    def test_every_cv_types_section_titles_are_read_as_headings(self):
+        # "every CV type's section titles"; "Selected work" and "Strengths" were read as plain lines
+        from jobhunt.cvstudio import types
+
+        for type_id in types.builtin_ids():
+            for kind, part in types.load(type_id).sections.items():
+                if kind in KINDS and part.get("title"):
+                    with self.subTest(type=type_id, title=part["title"]):
+                        self.assertEqual(parse.heading_kind(parse.Line(text=part["title"]), None), kind)
 
     def test_marks_in_a_technical_cv_become_modules(self):
         edu = next(s for s in rules_doc("technical", "docx").sections if s.kind == "education")
