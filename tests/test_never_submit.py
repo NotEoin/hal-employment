@@ -217,7 +217,15 @@ class Flows:
         driver.stop_watching()   # the test takes each look at the tab itself, so no watch races it
         self.on_page(job_id, "code.html", lambda tab: tab.click("#send"))
         seen = {}
-        self.assertTrue(server._watch_step(self.con, job_id, seen))
+        # a look while the helper cannot read the tab yet ("busy") changes nothing; the watch looks again, as here
+        deadline = time.monotonic() + WAIT_S
+        while True:
+            self.assertTrue(server._watch_step(self.con, job_id, seen))
+            if seen.get("code"):
+                break
+            if time.monotonic() > deadline:
+                self.fail("the helper never showed Hal the code box")
+            time.sleep(POLL_S)
         self.assertEqual(self.on_page(job_id, "code.html", lambda tab: tab.input_value("#code")), "A1b2C3d4")
         self.assertEqual(self.site.sent(), 0)
         self.on_page(job_id, "code.html", lambda tab: tab.click("#send"))
