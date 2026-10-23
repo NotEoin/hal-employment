@@ -26,6 +26,16 @@ const SHOWN_WORDS = new Set(["money", "times", "hours"]);  // kinds whose typed 
 const OTHER_PANELS = { ai: AiPanel, updates: UpdatesPanel };
 // Info rows a panel draws with their words, so the group leaves out their empty catalogue rows.
 const DRAWN_BY_PANEL = { ai: AI_PANEL_KEYS };
+// The model rows' choices depend on the AI in use, so they come from GET /ai/models, not the catalogue.
+const MODEL_ROLES = { "ai.model.writer": "writer", "ai.model.checker": "checker", "ai.model.quick": "quick" };
+
+/** A model row with the AI's own model names as its choices; the saved name stays one of them. */
+function withModels(it, models, value) {
+  const names = models && models[MODEL_ROLES[it.key]];
+  if (!names || !names.length) return it;
+  const all = names.includes(value) || !value ? names : [value, ...names];
+  return { ...it, choices: all.map(n => [n, n]) };
+}
 // Buttons whose action has an API path; the rest belong to panels or to areas still being built.
 const BUTTON_PATHS = { "find.rescore": "/jobs/rescore", "ai.test": "/ai/test", "system.pause": "/status/pause",
   "system.quit": "/system/quit" };
@@ -82,7 +92,10 @@ function Row({ it, ctx }) {
 function Group({ gr, ctx, searching }) {
   const [more, setMore] = useState(false);
   const drawn = !searching && DRAWN_BY_PANEL[gr.id];
-  const shown = gr.items.filter(it => visibleIf(it.visible_if, ctx.vals.values) && !(drawn && drawn.has(it.key)));
+  const models = useApi(gr.items.some(it => MODEL_ROLES[it.key]) ? "/ai/models" : null,
+    { on: [ev => ev.type === "setting" && (ev.keys || []).includes("ai.provider")] }).data;
+  const shown = gr.items.filter(it => visibleIf(it.visible_if, ctx.vals.values) && !(drawn && drawn.has(it.key)))
+    .map(it => MODEL_ROLES[it.key] ? withModels(it, models, ctx.vals.values[it.key]) : it);
   const plain = searching ? shown : shown.filter(it => !it.advanced);
   const hidden = searching ? [] : shown.filter(it => it.advanced);
   const Other = OTHER_PANELS[gr.id];
