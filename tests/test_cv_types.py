@@ -10,14 +10,11 @@ import unittest
 from support.api import HalServer
 from support.fake_ai import fake_ai
 from support.people import CHANGER, HUMANITIES, TECHNICAL, as_person
-from support.stubs import cv_model, cv_store
 from support.world import World
 
-model = cv_model.install()
-store = cv_store.install()
-
-from jobhunt import db  # noqa: E402 - after the same-wave stubs are in place
-from jobhunt.cvstudio import types as cvtypes  # noqa: E402
+from jobhunt import db
+from jobhunt.cvstudio import model, store
+from jobhunt.cvstudio import types as cvtypes
 
 B, E, M, S = model.Bullet, model.Entry, model.Module, model.Section
 # The fields every career needs a type for (and the owner's wish that any career is covered).

@@ -10,16 +10,12 @@ import unittest
 from support.api import HalServer
 from support.fake_ai import fake_ai
 from support.people import HUMANITIES, as_person
-from support.stubs import cv_model, cv_store
 from support.world import World
 from test_cv_types import humanities_cv, profile_of
 
-model = cv_model.install()
-store = cv_store.install()
-
-from jobhunt.core import runner  # noqa: E402 - after the same-wave stubs are in place
-from jobhunt.cvstudio import checks, checks_actions  # noqa: E402
-from jobhunt.cvstudio import types as cvtypes  # noqa: E402
+from jobhunt.core import runner
+from jobhunt.cvstudio import checks, checks_actions, model, store
+from jobhunt.cvstudio import types as cvtypes
 
 STAR = chr(0x2605)      # a symbol icon fonts and some CV makers put in skills lines
 ARROW = chr(0x2192)

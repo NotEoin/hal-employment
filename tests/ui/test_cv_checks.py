@@ -1,9 +1,9 @@
 """My CV's Checks tab, type picker and Writing card in a real browser, against a real server in a temporary
 home with a made-up CV.
 
-Needs `HAL_TEST_BROWSER=1` and Playwright. Without the My CV page, each part is drawn on its own: the
-test imports the part's module into the signed-in app and renders it below the shell, the same component
-the page will compose.
+Needs `HAL_TEST_BROWSER=1` and Playwright. Each part is drawn on its own: the test imports the part's module
+into the signed-in app and renders it below the shell, the same component My CV composes (the page itself
+is drawn by `ui.test_cv_page` and the shell smoke).
 """
 from __future__ import annotations
 
@@ -12,14 +12,11 @@ import unittest
 
 from support.api import HalServer
 from support.people import HUMANITIES, as_person
-from support.stubs import cv_model, cv_store
 from support.ui import AppPage, chromium, skip_unless_browser
 from test_cv_types import humanities_cv
 
-model = cv_model.install()
-store = cv_store.install()
-
-from jobhunt import db  # noqa: E402 - after the same-wave stubs are in place
+from jobhunt import db
+from jobhunt.cvstudio import store
 
 STAR = chr(0x2605)
 FAILED_LOAD = "Failed to load resource"
