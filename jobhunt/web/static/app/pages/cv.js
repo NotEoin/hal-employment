@@ -30,8 +30,7 @@ export function CvStudio({ arg }) {
       <button type="button" class="btn" onClick=${() => openDialog("route")}>Change how your CV is made</button>
     <//>
     ${error && html`<${Note} icon="warn" tone="warn">${error.message}<//>`}
-    ${cv && html`<div class="note lock cv-employers"><${Icon} n="file" /><div style="flex:1;min-width:0"><b>${cv.employers_get}</b>
-      <span class="sub">${cv.employers_get_sub}</span></div>
+    ${cv && html`<div class="note lock cv-employers"><${Icon} n="file" /><div style="flex:1;min-width:0"><b>${cv.employers_get}</b> <span class="sub">${cv.employers_get_sub}</span></div>
       <button type="button" class="btn small" onClick=${() => setT("cv")}>Change</button></div>`}
     <${Tabs} label="My CV" value=${t} onChange=${setT} tabs=${[["cv", "Your CV", ""], ["sugg", "Suggestions", pending || ""],
       ["style", "Type and look", ""], ["checks", "Checks", ""], ["versions", "Versions", shown || ""]]} />

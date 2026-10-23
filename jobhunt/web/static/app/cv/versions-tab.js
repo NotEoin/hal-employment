@@ -43,7 +43,7 @@ export function VersionsTab({ cv }) {
     <div class="card"><div class="row" style="margin-bottom:6px"><p class="sub" style="margin:0;flex:1;min-width:200px">Every change makes a new version. Tick two to compare them.</p>
       <button type="button" class="btn small" disabled=${pick.length !== 2} onClick=${compare}>${pick.length === 2 ? "Compare " + pick.map(x => byId[x].n).join(" and ") : "Compare"}</button></div>
     ${versions.map(v => html`<div class="li" key=${v.id} style="align-items:center"><input type="checkbox" checked=${pick.includes(v.id)} aria-label=${"Pick version " + v.n} onChange=${() => flip(v.id)} />
-      <div class="grow"><b>Version ${v.n}</b> ${v.current && html`<${Chip} tone="good">In use<//>`} ${v.baseline && html`<${Chip}><${Icon} n="lock" c="s" />Your file<//>`} ${v.binned && html`<${Chip} tone="warn">In the bin<//>`}
+      <div class="grow"><b>Version ${v.n}</b> ${v.current && html`<${Chip} tone="good">In use<//>`} ${v.baseline && html`<${Chip}><${Icon} n="lock" c="s" />${cv && cv.baseline ? "Your file" : "First version"}<//>`} ${v.binned && html`<${Chip} tone="warn">In the bin<//>`}
         <div class="small sub">${v.what}. ${dayWords(v.when)} ${clock(v.when)}.</div></div>
       ${v.binned ? html`<button type="button" class="btn small" onClick=${() => act(() => post("/cv/versions/" + encodeURIComponent(v.id) + "/restore"), "Version " + v.n + " is out of the bin")}>Take out of the bin</button>`
         : !v.current && html`<button type="button" class="btn small" onClick=${() => act(() => post("/cv/versions/" + encodeURIComponent(v.id) + "/use"), "Version " + v.n + " is now in use. Version " + (inUse ? inUse.n : "") + " is kept.")}>Use this version</button>
