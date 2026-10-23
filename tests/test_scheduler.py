@@ -21,13 +21,11 @@ MORNING = datetime(2026, 10, 22, 10, 0, tzinfo=UTC)     # a Thursday; the comput
 
 
 def setUpModule():
-    os.environ["TZ"] = "UTC"
-    time.tzset()
+    os.environ[clock.ENV_TZ] = "UTC"
 
 
 def tearDownModule():
-    os.environ.pop("TZ", None)
-    time.tzset()
+    os.environ.pop(clock.ENV_TZ, None)
 
 
 class Launches:

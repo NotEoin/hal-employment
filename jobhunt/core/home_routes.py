@@ -43,7 +43,7 @@ def _due_words(due: str | None) -> str:
         when = datetime.fromisoformat(due[:10]).date()
     except ValueError:
         return ""
-    days = (when - clock.now_utc().astimezone().date()).days
+    days = (when - clock.local_day()).days
     if days < 0:
         return "Overdue"
     if days == 0:
@@ -140,7 +140,7 @@ def home(con: sqlite3.Connection) -> dict:
     from ..mail import messages
 
     runner.flush()
-    now = clock.now_utc().astimezone()
+    now = clock.local()
     area_needs, sections = _providers(con)
     needs = sorted(own_needs(con) + area_needs, key=lambda n: (n.get("urgency", URGENCY["todo"]), n.get("title", "")))
     new_matches = sections.get("new_matches") or []

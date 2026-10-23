@@ -26,8 +26,8 @@ SENDER_NAME = re.compile(r'^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$')
 
 def when_words(at: str, now: datetime | None = None) -> str:
     """"11:05" today, "Mon" within the week, else "14 Oct"."""
-    t = clock.parse(at).astimezone()
-    now = (now or clock.now_utc()).astimezone()
+    t = clock.local(clock.parse(at))
+    now = clock.local(now)
     if t.date() == now.date():
         return t.strftime("%H:%M")
     if now.date() - t.date() <= timedelta(days=WEEK_DAYS):

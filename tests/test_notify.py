@@ -2,7 +2,6 @@
 without ever prompting, and only the Hal add-on speaks urgent alerts.
 """
 import os
-import time
 import unittest
 from datetime import UTC, datetime
 from unittest import mock
@@ -12,7 +11,7 @@ from test_runner import fresh_home
 
 from jobhunt import notify
 from jobhunt.addons import hal
-from jobhunt.core import settings
+from jobhunt.core import clock, settings
 from jobhunt.core.settings import secrets
 
 NOON = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
@@ -20,13 +19,11 @@ LATE = datetime(2026, 10, 22, 23, 30, tzinfo=UTC)
 
 
 def setUpModule():
-    os.environ["TZ"] = "UTC"
-    time.tzset()
+    os.environ[clock.ENV_TZ] = "UTC"
 
 
 def tearDownModule():
-    os.environ.pop("TZ", None)
-    time.tzset()
+    os.environ.pop(clock.ENV_TZ, None)
 
 
 class Alerts(unittest.TestCase):

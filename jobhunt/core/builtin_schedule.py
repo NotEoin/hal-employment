@@ -38,15 +38,15 @@ def _hm(text: str) -> tuple[int, int]:
 
 def daily(times: Iterable[str], after: datetime, *, days: Callable[[datetime], bool] = lambda d: True) -> datetime:
     """The first of `times` (local "HH:MM") strictly after `after`, on a day `days` allows; in UTC."""
-    # a naive local time given to astimezone() takes that day's own offset, so a clock change is honoured
-    local = after.astimezone().replace(tzinfo=None)
+    # each slot is a naive local time made aware on its own day, so a clock change is honoured
+    local = clock.local(after).replace(tzinfo=None)
     slots = sorted(_hm(t) for t in times)
     for offset in range(DAYS_AHEAD):
         day = local + timedelta(days=offset)
         if not days(day):
             continue
         for hour, minute in slots:
-            at = day.replace(hour=hour, minute=minute, second=0, microsecond=0).astimezone()
+            at = clock.from_local(day.replace(hour=hour, minute=minute, second=0, microsecond=0))
             if at > after:
                 return at.astimezone(UTC)
     raise ValueError(f"no slot in {DAYS_AHEAD} days for {list(times)}")
@@ -64,7 +64,7 @@ def every(minutes: int, after: datetime, hours: Iterable[str] | None = None) -> 
     if not hours:
         return nxt
     start, end = (_hm(h) for h in hours)
-    local = nxt.astimezone()
+    local = clock.local(nxt)
     if _inside((local.hour, local.minute), start, end):
         return nxt
     return daily([f"{start[0]:02d}:{start[1]:02d}"], after)

@@ -235,7 +235,7 @@ def tick(now: datetime | None = None) -> list[str]:
                     _save(con, job.id, next_run=_iso(job.next_after(now)), state="skipped", detail=reason)
                     con.commit()
                     continue
-                why = job.why.format(time=due.astimezone().strftime("%H:%M"), n=_settings_get("schedule.mail_every"))
+                why = job.why.format(time=clock.local(due).strftime("%H:%M"), n=_settings_get("schedule.mail_every"))
                 try:
                     action_id = _launch(job, why=why)
                 except RuntimeError as e:   # one of this kind is already running

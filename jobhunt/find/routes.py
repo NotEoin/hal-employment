@@ -424,7 +424,7 @@ def apply(req: Request) -> dict:
     if "docs.prepare" not in runner.load_kinds():
         raise Conflict("Applying from this page arrives with the new Applications page. Use the classic "
                        "screens under Settings, Advanced until then.")
-    at = clock.now_utc().astimezone()
+    at = clock.local()
     action_id = _start(req, "docs.prepare", job_id=row["id"], params={"job_id": row["id"]},
                        why=f"You pressed Apply with Hal at {at:%H:%M}. Documents come first.")
     return {"application_id": row["id"], "action_id": action_id}

@@ -34,7 +34,7 @@ def quiet_now(now=None) -> bool:
     hours = _get("notify.quiet_hours")
     if not hours or len(hours) != 2:
         return False
-    local = (now or clock.now_utc()).astimezone()
+    local = clock.local(now)
     at, start, end = local.hour * 60 + local.minute, _minutes(hours[0]), _minutes(hours[1])
     return start <= at < end if start <= end else (at >= start or at < end)
 

@@ -75,7 +75,7 @@ def bad(text: str, fix: Fix | None = None) -> CheckResult:
 # ---------------------------------------------------------------------------------------------- the core's checks
 
 def _clock_words(iso_text: str) -> str:
-    at = clock.parse(iso_text).astimezone()
+    at = clock.local(clock.parse(iso_text))
     today = clock.local_day()
     return f"{at:%H:%M}" if at.date() == today else f"{at:%A} at {at:%H:%M}"
 

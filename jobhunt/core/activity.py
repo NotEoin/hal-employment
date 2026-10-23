@@ -211,7 +211,7 @@ def ai_words(ai: dict | None) -> tuple[str, str]:
 
 def day_words(at: str, today: Any = None) -> str:
     """"Today", "Yesterday", else "Thursday 22 October", in the person's own time zone."""
-    day = clock.parse(at).astimezone().date()
+    day = clock.local_day(clock.parse(at))
     today = today or clock.local_day()
     if day == today:
         return "Today"
@@ -230,7 +230,7 @@ def item(row: sqlite3.Row | dict) -> dict:
     took_ms = r.get("took_ms")
     if running and took_ms is None:
         took_ms = int((clock.now_utc() - clock.parse(r["at"])).total_seconds() * 1000)
-    return {"id": r["id"], "t": clock.parse(r["at"]).astimezone().strftime("%H:%M"), "day": day_words(r["at"]),
+    return {"id": r["id"], "t": clock.local(clock.parse(r["at"])).strftime("%H:%M"), "day": day_words(r["at"]),
             "at": r["at"], "area": r["area"], "area_label": AREA_LABELS.get(r["area"], r["area"].title()),
             "kind": r["kind"], "icon": r.get("icon") or "hal", "tone": r.get("tone") or "", "text": r["text"],
             "running": running, "why": r["why"],
