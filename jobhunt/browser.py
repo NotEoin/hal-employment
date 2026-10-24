@@ -14,7 +14,7 @@ whole of each command that acts on a page a block in the page's own world
 cancels any submit the page or a press would make. The person presses Submit
 on the employer's site.
 
-Notes about job sites drive the hooks of spec
+Notes about job sites drive the hooks
 in both engines: `open_url`, `press_first`, `cookie_button` and
 `field_transform` here (the helper reads the same notes through
 `extension.py`). With no note of a kind, each hook does what Hal did before
