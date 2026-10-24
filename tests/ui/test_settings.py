@@ -217,8 +217,8 @@ class SettingsPage(unittest.TestCase):
         self.assertNotIn("SYNTH-PRIVATE", p.page.content())
 
     def test_a_user_install_sees_each_updates_row_once_and_update_hal_opens_its_dialog(self) -> None:
-        # Windows 11 install test (2026-10-23): the catalogue's rows came first with an empty Version and an Update
-        # Hal button that only said "This part is being built", above the real panel
+        # seen on a fresh Windows 11 install (2026-10-23): the catalogue's rows came first with an empty
+        # Version and an Update Hal button that only said "This part is being built", above the real panel
         from jobhunt.core import updates
 
         updates.write_install(updates.Install(kind="user", code=str(paths.code_dir())))
@@ -227,12 +227,23 @@ class SettingsPage(unittest.TestCase):
         p = self.tab("settings-updates")
         group = p.page.locator('[data-group="updates"]')
         group.locator('[data-key="updates.apply"] button').wait_for()
-        for key in ("updates.version", "updates.github", "updates.apply", "updates.auto_check"):
+        for key in ("updates.version", "updates.apply", "updates.auto_check"):
             self.assertEqual(group.locator(f'[data-key="{key}"]').count(), 1, key)
+        self.assertEqual(group.locator('[data-key="updates.github"]').count(), 0, "no sign-in row unless refused")
         self.assertIn("2.0.1 is ready", group.locator('[data-key="updates.version"]').inner_text())
         group.locator('[data-key="updates.apply"] button').click()
         p.page.wait_for_selector("[role=dialog] >> text=Hal stops for about a minute")
         self.assertNotIn("being built", p.page.inner_text("body"))
+
+    def test_the_github_sign_in_row_shows_only_when_github_refused_the_check(self) -> None:
+        from jobhunt.core import updates
+
+        updates.write_install(updates.Install(kind="user", code=str(paths.code_dir())))
+        updates.write_check({"state": "sign_in", "words": updates.SIGN_IN_AGAIN})
+        p = self.tab("settings-updates")
+        row = p.page.locator('[data-group="updates"] [data-key="updates.github"]')
+        row.wait_for()
+        self.assertIn("GitHub asked for a sign-in", row.inner_text())
 
     def test_a_panel_button_found_by_search_opens_its_group(self) -> None:
         # a search drew panel buttons as plain rows, and pressing one said "This part is being built."
