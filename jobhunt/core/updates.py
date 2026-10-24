@@ -9,9 +9,9 @@ Design decisions, each with its reason:
 - Everything outside this process (git, uv, the migration, stopping and starting the server, asking it
   which commit it runs) goes through one `World` object, so the tests drive the real steps against local
   bare repositories with a fake uv and a fake server.
-- Only the owner's commits reach friends: every commit in `HEAD..origin/main` is checked with
+- Only the maintainer's commits reach users: every commit in `HEAD..origin/main` is checked with
   `git verify-commit` against the `allowed_signers` of the commit already installed, so a push cannot bring
-  its own key. While that file holds no key (the owner has not set up signing yet), updates install
+  its own key. While that file holds no key (the project has not published a signing key yet), updates install
   unchecked and `signing()` says so in plain words; from the first commit that adds a key, every later
   commit must verify.
 - A failed commit is held (`state/update-status.json` `held`, mirrored into the `updates.held_commit`
@@ -56,11 +56,11 @@ REMOTE, BRANCH = "origin", "main"
 BIND = "127.0.0.1"
 DEFAULT_PORT = 8737
 GIT_TIMEOUT_S = 60
-FETCH_TIMEOUT_S = 120
-SYNC_TIMEOUT_S = 15 * 60
+FETCH_TIMEOUT_S = 120                  # a fetch that has not finished in two minutes is stuck
+SYNC_TIMEOUT_S = 15 * 60               # a first sync downloads packages, so it gets a long time
 MIGRATE_TIMEOUT_S = 10 * 60
-STOP_WAIT_S = 30
-HEALTH_WAIT_S = 90
+STOP_WAIT_S = 30                       # how long Hal gets to stop before it is ended
+HEALTH_WAIT_S = 90                     # how long the new server gets to report the new commit
 HTTP_TIMEOUT_S = 5
 POLL_S = 0.5
 WHATS_NEW_MAX = 20
@@ -68,23 +68,25 @@ SHORT = 7
 PYTHON = "3.13"
 VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.M)
 
-# Words on screen; OWNER is filled from scripts/install/repo.toml.
+# Words on screen.
 DEVELOPER = "You run Hal from your own folder. Update it with git."
-CHANGED_BY_HAND = "Hal's files were changed by hand, so it cannot update by itself. Ask the person who set Hal up."
+CHANGED_BY_HAND = ("Hal's files were changed by hand, so it cannot update by itself. "
+                   "Undo the changes in Hal's program folder.")
 FILLING = "Hal is filling in a form. It will update when it has finished."
 BUSY = "Hal is already updating."
 NO_NETWORK = "Hal could not reach GitHub. Check your internet connection."
-SIGN_IN_AGAIN = "Hal cannot reach its updates on GitHub. Sign in to GitHub again."
-NO_ACCESS = "Your GitHub account no longer has access to Hal's files. Ask {owner} to add you again."
+SIGN_IN_AGAIN = "GitHub asked for a sign-in. Sign in to GitHub, then check again."
+NOT_FOUND = "GitHub could not find Hal's files. The project may have moved: look for its page on GitHub."
 UP_TO_DATE = "Hal is up to date."
-NOT_OWNER = "This update was not made by the person who set Hal up, so Hal did not install it. Ask them."
-NEEDS_OWNER = "This update needs the person who set Hal up."
+NOT_SIGNED = "This update is not signed by Hal's maintainer, so Hal did not install it."
+DIVERGED = ("Your copy of Hal has changes that this update does not build on, so Hal did not install it. "
+            "Install Hal again from GitHub.")
 WENT_BACK = "The update did not work, so Hal went back to the version you had. Nothing was lost."
 UPDATED = "Updated Hal from {old} to {new}"
 WENT_BACK_BY_HAND = "Went back to Hal {version}"
 NOTHING_TO_GO_BACK_TO = "There is no earlier version to go back to."
-UNCHECKED = "Updates are not yet checked for the owner's signature: they have not set up signing."
-CHECKED = "Every update is checked: it must be signed by the person who set Hal up."
+UNCHECKED = "Updates are not signature-checked yet: the project has not published a signing key."
+CHECKED = "Every update is checked: it must be signed by Hal's maintainer."
 GO_BACK_WARNING = "Changes you made since the update, such as new applications, will be lost."
 
 
@@ -114,7 +116,7 @@ class Install:
 
     @property
     def developer(self) -> bool:
-        """True for any checkout the bootstrap did not make, such as the owner's."""
+        """True for any checkout the bootstrap did not make, such as a developer's."""
         return self.kind != "user"
 
     @property
@@ -257,18 +259,6 @@ def _locked() -> Iterator[None]:
         yield
     finally:
         handle.close()
-
-
-def repo_owner() -> str:
-    """The GitHub account that owns Hal's files, from `scripts/install/repo.toml`, for the words."""
-    import tomllib
-
-    file = paths.code_dir() / "scripts" / "install" / "repo.toml"
-    try:
-        data = tomllib.loads(file.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return "the person who set Hal up"
-    return str(data.get("owner_name") or str(data.get("slug", "")).split("/")[0] or "the person who set Hal up")
 
 
 # ---------------------------------------------------------------------------------------------- the outside world
@@ -509,7 +499,7 @@ def fetch(world: World) -> None:
                               "terminal prompts disabled", "invalid credentials")):
         raise UpdateError(SIGN_IN_AGAIN, done.stderr.strip(), state="sign_in")
     if "not found" in err or "404" in err:
-        raise UpdateError(NO_ACCESS.format(owner=repo_owner()), done.stderr.strip())
+        raise UpdateError(NOT_FOUND, done.stderr.strip())
     raise UpdateError(NO_NETWORK, done.stderr.strip())
 
 
@@ -542,7 +532,7 @@ def has_keys(text: str) -> bool:
 
 
 def signing(world: World | None = None) -> dict:
-    """{checked, words}: whether updates are checked for the owner's signature on this install."""
+    """{checked, words}: whether updates are checked for the maintainer's signature on this install."""
     if world is None:
         text = _file_text(paths.code_dir() / Path(SIGNERS))
     else:
@@ -581,7 +571,7 @@ def verify(world: World, commits: list[str]) -> bool:
     """Checks the SSH signature of every new commit (`rev-list` order, newest first), oldest first.
 
     Returns True when every commit was checked, False when some installed unchecked because the file they
-    are checked against holds no key yet (the owner has not set up signing); raises `UpdateError(NOT_OWNER)`
+    are checked against holds no key yet (the project has not published a signing key); raises `UpdateError(NOT_SIGNED)`
     naming the first commit that fails.
     """
     new, files, every = set(commits), {}, True
@@ -598,11 +588,11 @@ def verify(world: World, commits: list[str]) -> bool:
             done = world.git("-c", "gpg.format=ssh", "-c", f"gpg.ssh.allowedSignersFile={files[text].as_posix()}",
                              *_ssh_keygen(world), "verify-commit", sha, check=False)
             if done.returncode != 0:
-                raise UpdateError(NOT_OWNER, f"{sha[:SHORT]}: {done.stderr.strip()[-500:]}", state="not_owner")
+                raise UpdateError(NOT_SIGNED, f"{sha[:SHORT]}: {done.stderr.strip()[-500:]}", state="not_signed")
     finally:
         shutil.rmtree(folder, ignore_errors=True)
     if not every:
-        world.say("Some commits were not checked for a signature: the owner has not set up signing yet.")
+        world.say("Some commits were not checked for a signature: the project has not published a signing key yet.")
     return every
 
 
@@ -694,7 +684,7 @@ def _update(world: World) -> dict:
         world.say(UP_TO_DATE)
         return status()
     if world.git("merge-base", "--is-ancestor", "HEAD", f"{REMOTE}/{BRANCH}", check=False).returncode != 0:
-        raise UpdateError(NEEDS_OWNER, f"{head[:SHORT]} is not behind {new[:SHORT]}", state="refused")
+        raise UpdateError(DIVERGED, f"{head[:SHORT]} is not behind {new[:SHORT]}", state="refused")
     checked = verify(world, commits)
     old_version, new_version = version_at(world, head), version_at(world, new)
     news = whats_new(world, head, new)

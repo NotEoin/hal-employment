@@ -1,6 +1,6 @@
 """The updater: pull, sync, migrate, restart, roll back, hold, go back, refuse; against local bare repos.
 
-Every test builds an "origin" bare repository, an owner's working clone that pushes to it, and the installed
+Every test builds an "origin" bare repository, a maintainer's working clone that pushes to it, and the installed
 clone the updater works on. uv, the migration and the server are fakes on `FakeWorld`; git is real.
 """
 import ast
@@ -265,7 +265,7 @@ class Updating(UpdaterCase):
         w = self.world()
         result = updates.update(w)
         self.assertEqual(result["words"], "Hal's files were changed by hand, so it cannot update by itself. "
-                                          "Ask the person who set Hal up.")
+                                          "Undo the changes in Hal's program folder.")
         self.assertEqual(w.calls, [])
 
     def test_a_file_the_person_added_does_not_stop_an_update(self):
@@ -280,7 +280,7 @@ class Updating(UpdaterCase):
         git(self.repos.app, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "local")
         self.repos.commit({"README.md": "Hal 2\n"}, "docs: new words")
         w = self.world()
-        self.assertEqual(updates.update(w)["words"], "This update needs the person who set Hal up.")
+        self.assertEqual(updates.update(w)["words"], updates.DIVERGED)
         self.assertEqual(w.calls, [])
 
     def test_background_fetches_never_prompt_for_a_sign_in(self):
@@ -308,12 +308,12 @@ class Updating(UpdaterCase):
         with mock.patch.object(w, "git", return_value=failed):
             with self.assertRaises(updates.UpdateError) as e:
                 updates.fetch(w)
-        self.assertIn("no longer has access to Hal's files", e.exception.words)
+        self.assertEqual(e.exception.words, updates.NOT_FOUND)
         refused = subprocess.CompletedProcess([], 128, "", "fatal: Authentication failed for 'https://github.com/'")
         with mock.patch.object(w, "git", return_value=refused):
             with self.assertRaises(updates.UpdateError) as e:
                 updates.fetch(w)
-        self.assertEqual(e.exception.words, "Hal cannot reach its updates on GitHub. Sign in to GitHub again.")
+        self.assertEqual(e.exception.words, "GitHub asked for a sign-in. Sign in to GitHub, then check again.")
 
 
 @unittest.skipUnless(shutil.which("ssh-keygen"), "ssh-keygen is needed to make SSH commit signatures")
@@ -340,8 +340,7 @@ class Signatures(UpdaterCase):
         self.repos.commit({"README.md": "Hal 2\n"}, "docs: an unsigned change")
         w = self.world()
         result = updates.update(w)
-        self.assertEqual(result["words"], "This update was not made by the person who set Hal up, so Hal did "
-                                          "not install it. Ask them.")
+        self.assertEqual(result["words"], updates.NOT_SIGNED)
         self.assertEqual(self.repos.head(), installed)
         self.assertEqual(w.calls, [])
 
@@ -351,7 +350,7 @@ class Signatures(UpdaterCase):
         other, line = self.key("stranger")
         self.repos.commit({"scripts/install/allowed_signers": NO_KEY + line}, "build: someone else's key", key=other)
         self.repos.commit({"README.md": "Hal 2\n"}, "docs: signed by the stranger", key=other)
-        self.assertEqual(updates.update(self.world())["state"], "not_owner")
+        self.assertEqual(updates.update(self.world())["state"], "not_signed")
         self.assertEqual(self.repos.head(), installed)
 
     def test_every_commit_signed_by_the_owner_installs(self):
@@ -363,7 +362,7 @@ class Signatures(UpdaterCase):
         self.assertTrue(result["signed"])
         self.assertEqual(self.repos.head(), new)
         self.assertEqual(updates.signing(self.world())["words"],
-                         "Every update is checked: it must be signed by the person who set Hal up.")
+                         "Every update is checked: it must be signed by Hal's maintainer.")
 
     def test_once_a_key_is_committed_every_later_commit_in_the_same_update_must_verify(self):
         # an install with no key yet would otherwise take the key commit and an unsigned one after it
@@ -371,7 +370,7 @@ class Signatures(UpdaterCase):
         installed = self.repos.head()
         self.repos.commit({"scripts/install/allowed_signers": NO_KEY + line}, "build: the owner's signing key", key=key)
         self.repos.commit({"README.md": "Hal 2\n"}, "docs: an unsigned change after the key")
-        self.assertEqual(updates.update(self.world())["state"], "not_owner")
+        self.assertEqual(updates.update(self.world())["state"], "not_signed")
         self.assertEqual(self.repos.head(), installed)
 
     def test_signed_commits_after_a_new_key_install_in_the_same_update(self):
@@ -388,14 +387,14 @@ class Signatures(UpdaterCase):
         self.repos.commit({"README.md": "Hal 2\n"}, "docs: an unsigned change")
         with self.assertRaises(updates.UpdateError) as e:
             updates.check_and_keep(self.world())
-        self.assertEqual(e.exception.state, "not_owner")
+        self.assertEqual(e.exception.state, "not_signed")
         self.assertFalse(updates.last_check()["available"])
 
     def test_updates_install_unchecked_while_allowed_signers_holds_no_key(self):
         self.repos.commit({"README.md": "Hal 2\n"}, "docs: unsigned while signing is not set up")
         w = self.world()
         self.assertEqual(updates.signing(w)["words"],
-                         "Updates are not yet checked for the owner's signature: they have not set up signing.")
+                         "Updates are not signature-checked yet: the project has not published a signing key.")
         result = updates.update(w)
         self.assertEqual(result["state"], "updated")
         self.assertFalse(result["signed"])

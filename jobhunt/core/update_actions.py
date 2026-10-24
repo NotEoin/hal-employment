@@ -66,7 +66,7 @@ def check(ctx: runner.Ctx, interactive: bool = False) -> dict:
 
 
 def sign_in(ctx: runner.Ctx) -> dict:
-    """"Sign in to GitHub again": a fetch that may open Git Credential Manager's sign-in window."""
+    """"Sign in to GitHub": a fetch that may open Git Credential Manager's sign-in window."""
     ctx.step("Opening GitHub's sign-in")
     inst = updates.read_install()
     if inst.developer:

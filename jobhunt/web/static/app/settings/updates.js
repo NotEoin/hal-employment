@@ -1,11 +1,11 @@
 /* Settings, Updates: the version, Check now, the GitHub sign-in, Update Hal,
-   What's new, Go back to the previous version, and whether updates are checked for the owner's signature.
+   What's new, Go back to the previous version, and whether updates are checked for the maintainer's signature.
 
    Everything comes from GET /updates. Update Hal opens the update dialog, which starts the updater and waits
    for Hal to come back. In a window from another computer, signing in to GitHub happens on the computer
    Hal runs on; Update Hal and Go back still work. `PANEL_KEYS` names the catalogue rows this
    panel draws itself, so the page leaves them out: drawn twice, the catalogue's copies came first with an
-   empty Version and an Update Hal button that did nothing (Windows 11 install test). The daily check stays a
+   empty Version and an Update Hal button that did nothing. The daily check stays a
    catalogue row. */
 import { html, useState } from "../core/html.js";
 import { post, run } from "../core/api.js";
@@ -76,17 +76,16 @@ export function UpdatesPanel() {
     try { await post("/updates/rollback", { confirm: true }); openDialog("update", { goingBack: true }); } catch (e) { toast(e.message); }
   };
   const last = u.last_result;
-  const github = signedOut ? "Hal cannot reach its updates on GitHub. Sign in to GitHub again."
-    : "Hal uses the sign-in you made when you installed it.";
+  const github = "GitHub asked for a sign-in. Sign in to GitHub, then check again.";
   return html`
     <${Row} k="updates.version" label="Version" sub=${versionWords(u)}>
       ${!u.developer && html`<button type="button" class="btn small" disabled=${!!busy} onClick=${checkNow}>${busy === "check" ? CHECKING : "Check now"}</button>`}<//>
     ${u.developer ? html`<${Row} k="updates.developer" label="Updates" sub=${u.blocked_by}>
         ${u.commit && html`<span class="small sub sc-info">${/* details */ "git commit " + u.commit.slice(0, 7)}</span>`}<//>`
-      : html`<${Row} k="updates.github" label="GitHub sign-in" sub=${github}>
-        ${signedOut && (can("sign_in_here")
-          ? html`<button type="button" class="btn small primary" disabled=${!!busy} onClick=${signIn}>Sign in to GitHub again</button>`
-          : html`<span class="small sub">Do this on ${host()}</span>`)}<//>`}
+      : signedOut && html`<${Row} k="updates.github" label="GitHub sign-in" sub=${github}>
+        ${can("sign_in_here")
+          ? html`<button type="button" class="btn small primary" disabled=${!!busy} onClick=${signIn}>Sign in to GitHub</button>`
+          : html`<span class="small sub">Do this on ${host()}</span>`}<//>`}
     ${u.available && !u.developer && html`<${Row} k="updates.apply" label="Update Hal"
         sub=${u.blocked_by || "Updates install only when you press Update Hal, and never while Hal is filling in a form."}>
         <button type="button" class="btn small primary" disabled=${!!u.blocked_by} onClick=${() => openDialog("update", { u })}>${"Update Hal (" + changes(u.behind) + ")"}</button><//>`}

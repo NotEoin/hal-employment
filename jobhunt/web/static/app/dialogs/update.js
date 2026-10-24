@@ -12,7 +12,7 @@ import { DlgHead } from "../ui/dialog.js";
 
 const POLL_MS = 3000;
 const GIVE_UP_MS = 5 * 60 * 1000;      // uv sync may take minutes on a slow connection
-const ENDED = new Set(["updated", "failed", "went_back", "refused", "not_owner", "waiting", "sign_in", "up_to_date"]);
+const ENDED = new Set(["updated", "failed", "went_back", "refused", "not_signed", "waiting", "sign_in", "up_to_date"]);
 
 /** Update Hal, with What's new first. */
 export default function UpdateDlg({ d }) {

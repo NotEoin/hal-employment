@@ -1,14 +1,14 @@
 /* Setup guide step 10: Updates.
 
-   Hal updates itself from GitHub with the sign-in made at install, so this step only explains that and
-   offers "Check for updates now", or "Sign in to GitHub" when the last check found the sign-in missing. A
+   Hal updates itself from GitHub, which needs no account for a public project, so this step only explains
+   that and offers "Check for updates now", or "Sign in to GitHub" only when GitHub refused the last check. A
    developer's own checkout is updated with git, and the step says so. */
 import { html, useState } from "../../core/html.js";
 import { run } from "../../core/api.js";
 import { useApi, load } from "../../core/store.js";
 import { can, host } from "../../core/remote.js";
 
-export const ABOUT = "Hal updates itself from GitHub, using the sign-in you made when you installed it. Updates install only when you press Update Hal, and never while Hal is filling in a form.";
+export const ABOUT = "Hal updates itself from GitHub and needs no account for that. Updates install only when you press Update Hal, and never while Hal is filling in a form.";
 
 /** The step's body. */
 export function Step() {

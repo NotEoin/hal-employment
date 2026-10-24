@@ -170,7 +170,7 @@ def auth_state(req: Request) -> dict:
 
 @route("POST", "/api/v2/updates/sign-in", local_only=True)
 def sign_in(req: Request) -> dict:
-    """"Sign in to GitHub again" (on the computer Hal runs on only)."""
+    """"Sign in to GitHub" (on the computer Hal runs on only)."""
     runner.flush()
     return {"action_id": runner.start("updates.sign_in", why="You pressed Sign in again", priority=0)}
 

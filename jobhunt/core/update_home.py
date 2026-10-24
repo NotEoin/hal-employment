@@ -1,4 +1,4 @@
-"""Home's update items: "An update is ready" after the daily check, and "Sign in to GitHub again".
+"""Home's update items: "An update is ready" after the daily check, and "Sign in to GitHub" when GitHub refuses.
 
 Read from the last check's result in `state/update-check.json`, so Home never runs git. A held commit (one
 that failed to install) is never offered again.
@@ -19,7 +19,7 @@ def needs(con: sqlite3.Connection) -> list[dict]:
     if not check:
         return []
     if check.get("state") == "sign_in":
-        return [{"id": "updates.sign_in", "icon": "download", "tone": "warn", "title": "Sign in to GitHub again",
+        return [{"id": "updates.sign_in", "icon": "download", "tone": "warn", "title": "Sign in to GitHub",
                  "detail": updates.SIGN_IN_AGAIN, "due": None,
                  "act": {"label": "Open Updates", "route": "settings-updates"}, "urgency": SIGN_IN_URGENCY}]
     if check.get("available") and check.get("newest") != updates.held_commit():

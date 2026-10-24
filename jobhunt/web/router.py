@@ -2,7 +2,7 @@
 
 A handler takes a `Request` and returns a dict or list (sent as JSON), None (`{"ok": true}`) or one of the
 response types below. Errors become `{"error": {"code", "message", "field", "fix"}}` with the status of
-the error; an unexpected error is logged with its traceback and recorded in Activity, and the person sees
+its code; an unexpected error is logged with its traceback and recorded in Activity, and the person sees
 plain words only. Handlers never do slow work: anything that may take over a second starts an action.
 """
 from __future__ import annotations
@@ -83,13 +83,6 @@ class NotHere(Conflict):
     """Only on the computer Hal runs on (409, code "remote")."""
 
     code = "remote"
-
-
-class Gone(HTTPError):
-    """No longer offered (410)."""
-
-    status = 410
-    code = "gone"
 
 
 @dataclass
@@ -302,7 +295,7 @@ def _error_body(e: HTTPError) -> dict:
 
 
 def _as_http_error(e: Exception) -> HTTPError | None:
-    """Today's mapping of plain exceptions (L server.py:1161-1181), plus `SettingError` as a field problem."""
+    """Today's mapping of plain exceptions, plus `SettingError` as a field problem."""
     key = getattr(e, "key", None)
     if isinstance(e, ValueError) and type(e).__name__ == "SettingError" and key:
         return BadRequest(str(e), field=key)
