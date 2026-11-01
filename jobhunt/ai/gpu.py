@@ -7,12 +7,20 @@ and remote servers never wait for this computer's card.
 
 Background calls wait until the card is free (up to `BACKGROUND_WAIT_S`, the scheduler's own job limit);
 calls the person is waiting for wait up to `FOREGROUND_WAIT_S`, then fail with words and a Retry.
+
+When the `gpu_light` client is installed, a local call also holds a gpu-light claim (class `interactive` for a
+call the person waits for, `batch` for background work) so the card scheduler can make room. Without it, or in a
+test run, the nvidia-smi gate above is all there is.
 """
 from __future__ import annotations
 
+import contextlib
+import importlib
 import logging
+import os
 import subprocess
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 from .base import LLMUnavailable
@@ -26,6 +34,8 @@ FOREGROUND_WAIT_S = 60          # a request the person is waiting for gives up a
 BACKGROUND_WAIT_S = 3600        # a scheduled job runs at most an hour
 POLL_S = 5
 BACKGROUND = 2
+CLAIM_NAME = "hal-employment"
+CLAIM_VRAM_MIB = 8000           # a mid-size local model; gpu-light only uses it to plan room
 
 waiting: str | None = None      # the status line while a background call waits; None when nothing waits
 
@@ -96,6 +106,37 @@ def wait(priority: int) -> None:
             time.sleep(min(POLL_S, max(0.0, deadline - time.monotonic())))
     finally:
         waiting = None
+
+
+@contextlib.contextmanager
+def claim(priority: int) -> Iterator[None]:
+    """Holds a gpu-light claim for one local call when the client is installed; otherwise does nothing.
+
+    A claim that cannot be made (no daemon, a timeout) is logged and the call goes on, since the
+    nvidia-smi gate has already run and an unreachable scheduler must not stop the person's work.
+    """
+    if os.environ.get("HAL_TEST_MODE") == "1" and not os.environ.get("HAL_TEST_REAL_GPU_LIGHT"):
+        yield
+        return
+    try:
+        client = importlib.import_module("gpu_light")
+    except ImportError:
+        yield
+        return
+    background = priority >= BACKGROUND
+    limit = BACKGROUND_WAIT_S if background else FOREGROUND_WAIT_S
+    try:
+        held = client.claim(CLAIM_NAME, cls="batch" if background else "interactive",
+                            vram_mib=CLAIM_VRAM_MIB, wait=True, timeout=limit)
+        held.__enter__()
+    except Exception as e:
+        log.warning("no gpu-light claim, going on without one: %s", e)
+        yield
+        return
+    try:
+        yield
+    finally:
+        held.__exit__(None, None, None)
 
 
 def busy() -> str | None:

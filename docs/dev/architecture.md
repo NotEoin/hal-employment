@@ -291,9 +291,13 @@ comes from their settings.
 5. One `ai_usage` row of sizes only.
 
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks
-the OpenAI format) and `ai/claude_cli.py` (Claude Code on the person's own subscription: prompt on stdin,
-system prompt in a file deleted after the call, tools off). The default is the local model on Linux when
-Ollama answers, else Claude. `ai.provider` is stored once, at the first server start or first AI call, and
+the OpenAI format), `ai/hal_gateway.py` (the Hal suite's model gateway: the same format plus the owner token
+read from `ai.hal_token_file` at each call) and `ai/claude_cli.py` (Claude Code on the person's own subscription: prompt on stdin,
+system prompt in a file deleted after the call, tools off). The default is Hal's gateway when it answers
+with the stored token, else the local model on Linux when Ollama answers, else Claude. With Hal chosen a
+down gateway is an error in words, never a call to Claude. Local calls also hold a gpu-light claim
+(`ai/gpu.py`, `claim`: `interactive` for a call the person waits for, `batch` for background work) when the
+`gpu_light` client is installed; the gateway makes its own claims, so `hal` never claims twice. `ai.provider` is stored once, at the first server start or first AI call, and
 never changes by itself, because which AI sees the person's data is their choice. In a test run the
 backend is a made-up AI that is never ready. One classifier, `autofill.private_question(field)`, keeps
 private questions out of every AI request.

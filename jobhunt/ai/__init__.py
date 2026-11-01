@@ -212,7 +212,8 @@ def chat(system: str, user: str, *, role: str = "checker", json_out: bool = Fals
     if be.local_gpu and gpu.gate_on():
         gpu.wait(req.priority)
     model = model_for(be, req.role)
-    with _turns.turn(req.priority, int(settings.get("ai.parallel")), req.timeout):
+    with _turns.turn(req.priority, int(settings.get("ai.parallel")), req.timeout), \
+            (gpu.claim(req.priority) if be.local_gpu else contextlib.nullcontext()):
         try:
             result = be.chat(req, model)
         except LLMUnavailable as e:
