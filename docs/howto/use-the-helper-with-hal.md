@@ -35,6 +35,13 @@ the gateway's address and token from two settings, so nothing else is needed.
    python -m jobhunt settings set ai.hal_token_file ~/.config/hal/gateway-token   # the token file
    ```
 
+6. Optional: let Hal's jobs pack read your queue. Point it at this checkout in Hal's config file.
+
+   ```toml
+   [jobs]
+   jobhunt_root = "/path/to/employment-helper"   # the folder that holds the jobhunt package
+   ```
+
 The gateway claims the graphics card itself, through gpu-light when that is installed, so Hal Employment
 does not claim it a second time. To let Hal Employment fall back to Claude, pick **Claude subscription**
 yourself; it never switches by itself.
@@ -44,4 +51,5 @@ yourself; it never switches by itself.
 | "Hal's gateway does not answer at ..." | Set `tcp = true` under `[gateway]`, restart the gateway, then run `hal-gateway status`. |
 | "Hal's gateway token was not found" | Run `hal-gateway token issue --name hal-employment` and save the secret as one line in the token file. |
 | "Hal's gateway did not accept the token" | The token was rotated or revoked. Save the new one in the token file; no restart is needed. |
+| "jobhunt_root is not set" from a Hal jobs tool | Add `jobhunt_root` under `[jobs]` as in step 6. |
 | AI mode still says "On its own" | Pick **Hal's local model** in Settings, or run the `settings set ai.provider hal` command above. |
