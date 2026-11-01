@@ -26,7 +26,7 @@ def _pack_md(job):
 
 
 def cmd_pack(args):
-    from .. import cv, llm, pack
+    from .. import ai, cv, llm, pack
     if args.cv_only:
         con = db.connect()
         for r in con.execute("SELECT * FROM jobs WHERE status = 'ready'"):
@@ -37,7 +37,8 @@ def cmd_pack(args):
                 print(f"  {found.parent.name}")
         return
     if not llm.available():
-        sys.exit("Ollama is not reachable; packs are drafted by the local models.")
+        why = ai.backend().status().why or "the AI is not ready"
+        sys.exit(f"Packs need the AI: {why}")
     con = db.connect()
     if args.shortlisted:
         ids = [r["id"] for r in con.execute(
