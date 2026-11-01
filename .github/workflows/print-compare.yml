@@ -26,7 +26,7 @@ jobs:
         shell: bash
         env: { HAL_TEST_MODE: "1", PYTHONIOENCODING: "utf-8" }
         run: |
-          export HAL_EMPLOYMENT_HOME="$RUNNER_TEMP/old-home"
+          export HAL_EMPLOYMENT_HOME="$RUNNER_TEMP/employment-home"
           uv run python - <<'PY'
           import json, sys, tempfile
           from pathlib import Path
