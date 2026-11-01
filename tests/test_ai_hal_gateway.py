@@ -3,6 +3,7 @@ import http.server
 import json
 import threading
 import unittest
+import urllib.request
 from typing import ClassVar
 from unittest import mock
 
@@ -23,6 +24,7 @@ TOKEN = "made-up-token"
 class _Gateway(http.server.BaseHTTPRequestHandler):
     seen: ClassVar[list] = []
     remote_reply: ClassVar[bool] = False
+    redirect: ClassVar[bool] = False
 
     def log_message(self, *args):
         pass
@@ -44,9 +46,16 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
-        if self._allowed():
-            self._send(200, {"data": [{"id": "made-up-online", "owned_by": "remote:cloud.example.invalid"},
-                                      {"id": "made-up-model", "owned_by": "ollama"}]})
+        if not self._allowed():
+            return
+        if type(self).redirect:
+            self.send_response(302)
+            self.send_header("Location", "/elsewhere")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self._send(200, {"data": [{"id": "made-up-online", "owned_by": "remote:cloud.example.invalid"},
+                                  {"id": "made-up-model", "owned_by": "ollama"}]})
 
     def do_POST(self):
         self.rfile.read(int(self.headers["Content-Length"]))
@@ -59,6 +68,7 @@ class Gateway(InHome):
         super().setUp()
         _Gateway.seen = []
         _Gateway.remote_reply = False
+        _Gateway.redirect = False
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Gateway)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.addCleanup(self.httpd.server_close)
@@ -97,6 +107,27 @@ class Gateway(InHome):
             GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5),
                                                       "made-up-model")
         self.assertIn("online model", str(caught.exception))
+
+    def test_the_token_is_never_sent_off_this_computer(self):
+        # any address in `ai.hal_url` got the owner token, so a wrong or planted address could collect it
+        be = GatewayBackend("http://192.0.2.10:8741/v1", self.token)
+        with mock.patch("urllib.request.OpenerDirector.open", side_effect=AssertionError("sent")):
+            self.assertIn("on this computer", be.status().why)
+            with self.assertRaises(LLMUnavailable):
+                be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+            self.assertFalse(gateway_answers("http://192.0.2.10:8741/v1", self.token))
+
+    def test_a_redirect_is_not_followed_with_the_token(self):
+        _Gateway.redirect = True
+        self.assertIn("302", GatewayBackend(self.url, self.token).status().why)
+        self.assertNotIn("/elsewhere", [path for path, _ in _Gateway.seen])
+
+    def test_a_proxy_from_the_environment_never_sees_the_token(self):
+        dead_proxy = {"http_proxy": "http://127.0.0.1:9", "HTTP_PROXY": "http://127.0.0.1:9", "no_proxy": "",
+                      "NO_PROXY": ""}
+        # urllib's shared opener reads the proxy variables once, so a fresh one is made under them
+        with mock.patch.dict("os.environ", dead_proxy), mock.patch.object(urllib.request, "_opener", None):
+            self.assertTrue(GatewayBackend(self.url, self.token).status().ready)
 
     def test_a_rotated_token_is_used_without_a_restart(self):
         be = GatewayBackend(self.url, self.token)

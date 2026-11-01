@@ -29,6 +29,8 @@ the gateway's address and token from two settings, so nothing else is needed.
 
 4. Open **Settings**. The line **AI mode** says "With Hal: the local model, through Hal's gateway".
 5. Optional: if the gateway or token are somewhere else, change them under **Settings**, **Advanced**.
+   The address must be on this computer (`127.0.0.1` or `localhost`); for a gateway on another computer,
+   use an SSH tunnel to a local port. Hal never sends the token anywhere else.
 
    ```bash
    python -m jobhunt settings set ai.hal_url http://127.0.0.1:8741/v1   # the gateway address
@@ -50,6 +52,7 @@ yourself; it never switches by itself.
 | Symptom | Fix |
 | --- | --- |
 | "Hal's gateway does not answer at ..." | Set `tcp = true` under `[gateway]`, restart the gateway, then run `hal-gateway status`. |
+| "Hal's gateway must be on this computer" | Set `ai.hal_url` to a `127.0.0.1` address, through an SSH tunnel if the gateway runs elsewhere. |
 | "Hal's gateway token was not found" | Run `hal-gateway token issue --name hal-employment` and save the secret as one line in the token file. |
 | "Hal's gateway did not accept the token" | The token was rotated or revoked. Save the new one in the token file; no restart is needed. |
 | "... is an online model behind Hal's gateway" | Choose a local model under **Settings**, **Hal's brain**, or clear the model setting so Hal picks one. |

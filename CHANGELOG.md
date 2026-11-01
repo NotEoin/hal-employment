@@ -10,7 +10,7 @@ Hal Employment is now an app with its own window, for any career, on Windows and
 
 - **Two AI modes.** On its own, Hal uses Claude Code or a model on this computer. With Hal installed and
   its gateway answering, Hal uses Hal's local model and never falls back to Claude by itself, nor to an
-  online model the gateway fronts. Local calls
+  online model the gateway fronts. The gateway address must be on this computer, so the token stays here. Local calls
   hold a gpu-light claim when it is installed. Settings shows the mode. New setting keys: `ai.provider`
   accepts `hal`, plus `ai.hal_url` and `ai.hal_token_file`; saved settings keep working unchanged.
 - **A new app.** A menu down the left, a line at the top that says what Hal is doing (with Why? and Stop),

@@ -67,7 +67,8 @@ Nothing is kept inside Hal's program folder, so an update never touches the data
 - Update checks, to GitHub.
 - With Hal's local model chosen: the same text goes to Hal's gateway on this computer (`127.0.0.1`), with
   the gateway token read from a file only you can read. It is never sent to Claude, even when the gateway
-  is down.
+  is down. The token only goes to a loopback address, never through a proxy and never on to a redirect,
+  and Hal refuses any online model the gateway fronts.
 - With the Claude subscription chosen: the advert, the CV and the evidence Hal picked, to Claude, through
   the person's own Claude Code sign-in. With a local model the AI runs on the computer, and "Never use
   online AI" keeps it so.

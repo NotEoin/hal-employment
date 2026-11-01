@@ -6,8 +6,9 @@ GPU claims and loads or unloads models itself, so this backend never asks gpu-li
 
 The gateway wants a bearer token on every request but `/health`. The owner token is one line in
 `ai.hal_token_file` (default `~/.config/hal/gateway-token`, mode 0600), read at each call so a rotated token
-is picked up without a restart. An address that is not on this computer or the home network still counts as
-online, so `ai.local_only` refuses it just as for any other server.
+is picked up without a restart. The gateway only listens on loopback (another computer reaches it through
+an SSH tunnel, which is loopback again), so the token is only ever sent to a loopback address, straight
+there: never through a proxy from the environment and never on to where a redirect points.
 
 The gateway can also front an online model (a backend with `allow_remote = true`; it lists such models as
 `owned_by: "remote:<host>"` and marks each reply with `X-Hal-Remote`). Hal mode promises a local model and
@@ -23,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from .base import ChatRequest, ChatResult, LLMUnavailable, Status
-from .openai_compat import STATUS_TIMEOUT_S, OpenAICompatBackend
+from .openai_compat import STATUS_TIMEOUT_S, OpenAICompatBackend, classify
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,14 @@ PROBE_TIMEOUT_S = 2        # setup waits on this; a running gateway answers in m
 UNAUTHORIZED = (401, 403)
 REMOTE_HEADER = "X-Hal-Remote"      # set by the gateway on every reply from an online backend
 REMOTE_OWNER = "remote:"            # the `owned_by` prefix of an online backend's models in /models
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+        return None     # urllib then raises the 3xx as an HTTPError instead of resending the token elsewhere
+
+
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
 
 
 def read_token(path: str | Path) -> str | None:
@@ -53,6 +62,7 @@ class GatewayBackend(OpenAICompatBackend):
     def __init__(self, url: str, token_file: str | Path) -> None:
         super().__init__(url, None)
         self.token_file = token_file
+        self.loopback = classify(self.url)[1]     # (online, local_gpu): only loopback gives local_gpu
         self.local_gpu = False
 
     @property
@@ -64,7 +74,10 @@ class GatewayBackend(OpenAICompatBackend):
         """Ignores the parent's assignment: the token always comes from the file."""
 
     def _open(self, req: urllib.request.Request, timeout: float) -> Any:
-        reply = super()._open(req, timeout)
+        if not self.loopback:
+            raise LLMUnavailable(f"Hal's gateway must be on this computer, not at {self.url}, so the token "
+                                 "stays here.")
+        reply = _OPENER.open(req, timeout=timeout)
         host = reply.headers.get(REMOTE_HEADER)
         if host:
             reply.close()
@@ -99,6 +112,9 @@ class GatewayBackend(OpenAICompatBackend):
 
     def status(self) -> Status:
         """Ready when the gateway lists its models; says what to fix when it is down or the token is wrong."""
+        if not self.loopback:
+            return Status(ready=False, why=f"Hal's gateway must be on this computer, not at {self.url}.",
+                          fix="Set the gateway address to http://127.0.0.1:8741/v1, through an SSH tunnel if needed")
         if self.key is None:
             return Status(ready=False, why=f"Hal's gateway token was not found in {self.token_file}.",
                           fix="Make one with hal-gateway token issue --name hal-employment")
