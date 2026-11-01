@@ -51,7 +51,7 @@ Hal sends only what each task needs:
 
 If you choose **On this computer** in **How Hal thinks**, the AI runs on your own computer and nothing
 about your CV or the adverts goes to an AI service. **Never use online AI** in Settings, **Hal's brain
-(AI)** keeps it that way.
+(AI)** keeps it that way. If you choose **Hal's local model**, the AI is the one in Hal's gateway on this computer, and nothing goes to Claude.
 
 ## Your private answers
 

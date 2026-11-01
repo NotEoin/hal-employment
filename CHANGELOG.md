@@ -8,6 +8,10 @@ What changed in each version, in plain words.
 
 Hal Employment is now an app with its own window, for any career, on Windows and Linux.
 
+- **Two AI modes.** On its own, Hal uses Claude Code or a model on this computer. With Hal installed and
+  its gateway answering, Hal uses Hal's local model and never falls back to Claude by itself. Local calls
+  hold a gpu-light claim when it is installed. Settings shows the mode. New setting keys: `ai.provider`
+  accepts `hal`, plus `ai.hal_url` and `ai.hal_token_file`; saved settings keep working unchanged.
 - **A new app.** A menu down the left, a line at the top that says what Hal is doing (with Why? and Stop),
   search or jump with Ctrl K, light and dark looks, and a simple menu of five items. Hal opens from
   its shortcut with a one-time link, so a web page in any browser cannot read or change anything in it.

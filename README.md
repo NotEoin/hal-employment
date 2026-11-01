@@ -82,6 +82,13 @@ queue, to-dos and application status), and with "Use my Hal setup" on, Hal Emplo
 note into the Hal vault, speaks urgent alerts in Hal's voice, offers Hal's local models as AI choices and
 can pause with `hal off`.
 
+Two AI modes, chosen with little setup. On its own (the default when Hal is not installed) Hal Employment
+uses Claude Code or a model on this computer. With Hal, it uses Hal's local model through Hal's gateway
+when the gateway answers (or after `python -m jobhunt settings set ai.provider hal`), and never falls back
+to Claude unless you pick Claude yourself. Settings shows which mode is in force. See
+[use the helper with Hal](docs/howto/use-the-helper-with-hal.md) and
+[use the helper on its own](docs/howto/use-the-helper-on-its-own.md).
+
 - [Hal](https://github.com/NotEoin/Hal): the local assistant and its long-term memory.
 - [hal-voice](https://github.com/NotEoin/hal-voice): talk to Hal out loud.
 - hal-ecosystem (the installer and map), hal-hub (finds extensions and runs their tools) and hal-jobs: the
@@ -128,7 +135,7 @@ Activity with Undo. The choices that matter most:
 
 | Setting | Choices | Default |
 | --- | --- | --- |
-| How Hal thinks | This computer (Ollama), Another local server (OpenAI format), Claude subscription | This computer on Linux when Ollama answers, else Claude |
+| How Hal thinks | Hal's local model (the gateway), This computer (Ollama), Another local server (OpenAI format), Claude subscription | Hal's local model when Hal's gateway answers; else This computer on Linux when Ollama answers, else Claude |
 | Never use online AI | On or off | Off |
 | What you're looking for | Career stage, kinds of role, roles, places, working pattern, lowest pay | Set in the setup guide |
 | Browser Hal fills forms in | Opera, Google Chrome, Microsoft Edge, Brave or Vivaldi | The first one Hal finds |

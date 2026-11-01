@@ -18,6 +18,8 @@ documents explain how Hal works and how to change it.
 | [Install Hal Employment on Linux](howto/install-on-linux.md) | The install script and its GitHub sign-in |
 | [Update Hal Employment](howto/update-hal.md) | Update Hal, go back to the version before, and update when the app will not start |
 | [Load the browser helper](howto/load-the-browser-helper.md) | Add Hal's helper to Opera, Google Chrome, Microsoft Edge, Brave or Vivaldi, and connect it |
+| [Use the helper with Hal](howto/use-the-helper-with-hal.md) | Use Hal's local model through its gateway, and never Claude |
+| [Use the helper on its own](howto/use-the-helper-on-its-own.md) | Pick Claude, the model on this computer or another local server |
 | [Use Hal from another computer](howto/use-hal-from-another-computer.md) | Run Hal on a desktop and use it from a laptop over SSH |
 
 ## For developers
