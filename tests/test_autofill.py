@@ -74,15 +74,15 @@ class Answers(unittest.TestCase):
         """No "open to discussion": a range in words, a number in a number box, and the band holding it in a list."""
         autofill.profile = lambda: {**PROFILE, "salary": ""}
         saved = salary.expect
-        salary.expect = lambda job, con=None: {"figure": 38000, "text": "£36,000 to £40,000",
-                                               "basis": "ITJobsWatch median for graduate software engineer in London: £38,000"}
+        salary.expect = lambda job, con=None: {"figure": 38000, "text": "\u00a336,000 to \u00a340,000",
+                                               "basis": "ITJobsWatch median for graduate software engineer in London: \u00a338,000"}
         self.addCleanup(setattr, salary, "expect", saved)
         words = self.propose(label="What are your salary expectations?")
-        self.assertEqual((words["value"], words["source"]), ("£36,000 to £40,000", "profile: salary"))
+        self.assertEqual((words["value"], words["source"]), ("\u00a336,000 to \u00a340,000", "profile: salary"))
         self.assertIn("ITJobsWatch median", words["note"])
         self.assertEqual(self.propose(type="number", label="Salary expectations")["value"], "38000")
-        listed = self.propose(kind="select", label="Expected salary", options=["£25,000 - £34,999", "£35,000 - £44,999"])
-        self.assertEqual(listed["value"], "£35,000 - £44,999")
+        listed = self.propose(kind="select", label="Expected salary", options=["\u00a325,000 - \u00a334,999", "\u00a335,000 - \u00a344,999"])
+        self.assertEqual(listed["value"], "\u00a335,000 - \u00a344,999")
 
     def health(self):
         self.private({"disability": "Yes", "disability_type": SYNTH_TYPE, "guaranteed_interview": "Yes",

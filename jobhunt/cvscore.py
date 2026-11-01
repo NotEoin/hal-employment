@@ -34,7 +34,7 @@ PHONE = re.compile(r"(\+44\s?7\d{3}|\(?07\d{3}\)?)\s?\d{3}\s?\d{3}")
 PRIVATE = re.compile(r"\b(date of birth|d\.o\.b|dob|born on|age:|marital status|married|religion|"
                      r"national insurance|ni number|passport number|driving licence number)\b", re.I)
 MODULE_CODE = re.compile(r"\b[A-Z]{3,4}\d{3,4}\b")
-ODD_CHAR = re.compile("[ﬀ-ﬆ-�]|\\(cid:\\d+\\)")
+ODD_CHAR = re.compile("[\ufb00-\ufb06\ue000-\uf8ff\ufffd]|\\(cid:\\d+\\)")
 
 
 def pdf_text(pdf: Path, layout: bool = False) -> str:

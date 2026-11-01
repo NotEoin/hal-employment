@@ -401,13 +401,13 @@
     const docs = { cv: 'CV', letter: 'Cover letter' };
     const minimised = root.querySelector('.p.min') !== null;
     root.innerHTML = `<style>${PANEL}</style><div class="p ${minimised ? 'min' : ''}">
-      <div class="h"><b></b><button data-min title="Minimise">${minimised ? '+' : '–'}</button></div>
+      <div class="h"><b></b><button data-min title="Minimise">${minimised ? '+' : '\u2013'}</button></div>
       <div class="counts">${counts.map(([k, n, t]) => `<span class="c ${k}">${n} ${t}</span>`).join('')}</div>
       <div class="msg"></div><ul></ul>
       <div class="f"><button class="main" data-fill title="Fill whatever on this page is still empty">Fill empty fields</button>
         ${p.panel.docs.map(d => `<button data-doc="${d}">${docs[d] || d}</button>`).join('')}
         <button data-open>Open in Hal</button></div></div>`;
-    root.querySelector('b').textContent = `Hal${p.panel.step > 1 ? ` · step ${p.panel.step}` : ''} · ${p.panel.company}`;
+    root.querySelector('b').textContent = `Hal${p.panel.step > 1 ? ` \u00b7 step ${p.panel.step}` : ''} \u00b7 ${p.panel.company}`;
     root.querySelector('.msg').textContent = left.length
       ? `Nothing is sent until you press ${p.panel.final ? 'Submit' : 'Next'}.`
       : `All answered. Press ${p.panel.final ? 'Submit' : 'Next'} when you are happy.`;
@@ -431,7 +431,7 @@
     }
     root.querySelector('[data-min]').onclick = () => {
       root.querySelector('.p').classList.toggle('min');
-      root.querySelector('[data-min]').textContent = root.querySelector('.p.min') ? '+' : '–';
+      root.querySelector('[data-min]').textContent = root.querySelector('.p.min') ? '+' : '\u2013';
     };
     root.querySelector('[data-fill]').onclick = () => ask({ cmd: 'fill' });
     root.querySelector('[data-open]').onclick = () => ask({ cmd: 'open' });

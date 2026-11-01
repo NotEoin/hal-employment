@@ -231,7 +231,7 @@ const COMMANDS = {
     const out = await inTab(tab.id, "mark", { fields, panel });
     const left = fields.filter(f => f.state !== "ok").length;
     await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: left ? "#d4a72c" : "#2da44e" });
-    await chrome.action.setBadgeText({ tabId: tab.id, text: left ? String(left) : "✓" });
+    await chrome.action.setBadgeText({ tabId: tab.id, text: left ? String(left) : "\u2713" });
     return out;
   },
   async show({ job }) {

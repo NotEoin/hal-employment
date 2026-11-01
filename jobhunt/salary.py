@@ -31,7 +31,7 @@ from .research import BROWSER_UA
 TECHNICAL_PRESET = "technical_grad"   # the only preset whose jobs ITJobsWatch describes
 
 ITJW = "https://www.itjobswatch.co.uk/jobs/{place}/{phrase}.do"
-ENOUGH = 10  # salaries behind a median before it is trusted; four "junior" adverts at £60k+ once set one
+ENOUGH = 10  # salaries behind a median before it is trusted; four "junior" adverts at GBP 60k+ once set one
 FEW = 4  # below this a median is noise, not used even as a last resort
 ANNUAL = (15_000, 150_000)  # outside this a figure is a day rate, a bonus or a typo, not a junior salary
 RECENT_DAYS = 180
@@ -56,8 +56,8 @@ JUNIOR = re.compile(r"junior|graduate|entry|trainee|associate|\bgrad\b|early car
 SENIOR = re.compile(r"senior|\bsr\b|lead|principal|staff|head of|manager|director|architect|mid[- ]level|"
                     r"\b(ii|iii|iv)\b|apprentice", re.I)
 NUMBER = r"(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?(k)?"
-# "£30k", "GBP 40,000-60,000", "£30-35k": the second figure of a range often has no currency mark.
-MONEY = re.compile(rf"(?:£|GBP)\s?{NUMBER}(?:\s?(?:-|–|to)\s?(?:£|GBP)?\s?{NUMBER})?", re.I)
+# "GBP 30k", "GBP 40,000-60,000", "GBP 30-35k": the second figure of a range often has no currency mark.
+MONEY = re.compile(rf"(?:\u00a3|GBP)\s?{NUMBER}(?:\s?(?:-|\u2013|to)\s?(?:\u00a3|GBP)?\s?{NUMBER})?", re.I)
 
 _PAGES: dict = {}
 
@@ -74,7 +74,7 @@ def figures(text: str) -> list[int]:
     """Annual salaries in pounds named in a text; day rates, hourly rates and other currencies are not."""
     out = []
     for m in MONEY.finditer(text or ""):
-        thousands = bool(m.group(2) or m.group(4))  # "£30-35k": the k covers both
+        thousands = bool(m.group(2) or m.group(4))  # "GBP 30-35k": the k covers both
         for number, k in ((m.group(1), m.group(2)), (m.group(3), m.group(4))):
             if number:
                 n = float(number.replace(",", "")) * (1000 if k or (thousands and float(number.replace(",", "")) < 1000) else 1)
@@ -101,7 +101,7 @@ def adverts(con, job, name: str) -> list[int]:
     since = (datetime.now(timezone.utc) - timedelta(days=RECENT_DAYS)).isoformat()
     seen, mids = set(), []
     for r in con.execute("""SELECT id, source, company, title, location, salary, description FROM jobs
-                            WHERE (salary LIKE '%GBP%' OR salary LIKE '%£%') AND first_seen >= ?""",
+                            WHERE (salary LIKE '%GBP%' OR salary LIKE '%\u00a3%') AND first_seen >= ?""",
                          (since,)).fetchall():
         title = r["title"] or ""
         if r["id"] == job["id"] or not JUNIOR.search(title) or SENIOR.search(title):
@@ -112,7 +112,7 @@ def adverts(con, job, name: str) -> list[int]:
             continue
         span = advertised(r) if r["salary"] else None
         if not span or span[1] > 2 * span[0]:
-            continue  # "£25,000 to £78,000" says nothing about the level
+            continue  # "GBP 25,000 to GBP 78,000" says nothing about the level
         key = ((r["company"] or "").lower(), title.lower())
         if key not in seen:
             seen.add(key)
@@ -126,9 +126,9 @@ def parse_itjobswatch(page: str, london: bool) -> tuple[int, int] | None:
     quotes = re.search(r"Number of salaries quoted (\d[\d,]*)", text)
     # The table's first column is the six months to date; outside London the page's own
     # "UK excluding London" row is the one that fits.
-    row = r"Median annual salary \(50 th Percentile\) £([\d,]+)" if london else \
-        r"UK excluding London median annual salary £([\d,]+)"
-    median = re.search(row, text) or re.search(r"Median annual salary \(50 th Percentile\) £([\d,]+)", text)
+    row = r"Median annual salary \(50 th Percentile\) \u00a3([\d,]+)" if london else \
+        r"UK excluding London median annual salary \u00a3([\d,]+)"
+    median = re.search(row, text) or re.search(r"Median annual salary \(50 th Percentile\) \u00a3([\d,]+)", text)
     if not (quotes and median):
         return None
     return int(median.group(1).replace(",", "")), int(quotes.group(1).replace(",", ""))
@@ -160,13 +160,13 @@ def _sources(con, job, name: str, phrases: list[str], london: bool, where: str) 
             break
     if best:
         phrase, (median, quotes) = best
-        out.append((median, quotes, f"ITJobsWatch median for {phrase} in {where}: £{median:,} "
+        out.append((median, quotes, f"ITJobsWatch median for {phrase} in {where}: \u00a3{median:,} "
                                     f"({quotes} salaries, last 6 months)"))
     mids = adverts(con, job, name)
     if mids:
         median = int(statistics.median(mids))
         out.append((median, len(mids), f"{len(mids)} similar junior {name} adverts Hal has seen in {where}: "
-                                       f"median £{median:,}"))
+                                       f"median \u00a3{median:,}"))
     return out
 
 
@@ -211,7 +211,7 @@ def expect(job, con=None) -> dict:
         floor = _floor()
         if span:
             low, high = span
-            basis.insert(0, f"the advert states £{low:,}" + (f" to £{high:,}" if high != low else ""))
+            basis.insert(0, f"the advert states \u00a3{low:,}" + (f" to \u00a3{high:,}" if high != low else ""))
             figure = _round(min(max(market, low), high), 500) if market else _round((low + high) / 2, 500)
             bottom, top = max(low, _round(figure * 0.95)), min(high, _round(figure * 1.05))
         elif market:
@@ -224,7 +224,7 @@ def expect(job, con=None) -> dict:
                          else "no salary data found and no lowest pay set; check this")
         if figure < floor and not span:
             basis.append(f"below your \u00a3{floor:,} floor")
-        text = f"£{figure:,}" if top <= bottom else f"£{bottom:,} to £{top:,}"
+        text = f"\u00a3{figure:,}" if top <= bottom else f"\u00a3{bottom:,} to \u00a3{top:,}"
         return {"figure": figure, "text": text, "basis": "; ".join(basis)}
     finally:
         if own:
@@ -232,7 +232,7 @@ def expect(job, con=None) -> dict:
 
 
 def band(options: list[str], figure: int) -> str | None:
-    """The option of a salary list whose band holds `figure`: "£30,000 - £34,999", "35k+", "Up to £25,000"."""
+    """The option of a salary list whose band holds `figure`: "GBP 30,000 - 34,999", "35k+", "Up to 25,000"."""
     for opt in options:
         found = figures(opt)
         if not found:

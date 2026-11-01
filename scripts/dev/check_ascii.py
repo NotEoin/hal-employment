@@ -26,11 +26,7 @@ EXEMPT_PREFIXES = ("jobhunt/web/static/app/lib/", "jobhunt/web/static/app/fonts/
 EXEMPT_SUFFIXES = (".woff2", ".woff", ".ttf", ".otf", ".png", ".jpg", ".pdf", ".ico")
 EXEMPT_FILES = {"uv.lock"}
 # Files with non-ASCII text that has not been cleaned up yet; each line is fixed when it is next edited.
-LEGACY = {
-    "extension/background.js", "extension/content.js", "jobhunt/adopt.py", "jobhunt/autofill.py",
-    "jobhunt/browser.py", "jobhunt/cvscore.py", "jobhunt/salary.py", "tests/test_salary.py",
-    "tests/test_autofill.py",
-}
+LEGACY: set[str] = set()  # the clean-up is done; a file that must keep non-ASCII text goes here
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 

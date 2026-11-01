@@ -78,7 +78,7 @@ def _guess(page: dict) -> tuple[str, str]:
     """Names the employer and the job from the page alone, for when the model cannot run."""
     company = (page.get("site") or "").strip() or _from_address(page["url"])
     heading = (page.get("heading") or "").strip()
-    title = heading if 3 <= len(heading) <= 120 else re.split(r"\s+[-|–—]\s+|\s+at\s+", page.get("title") or "")[0]
+    title = heading if 3 <= len(heading) <= 120 else re.split(r"\s+[-|\u2013\u2014]\s+|\s+at\s+", page.get("title") or "")[0]
     return company, title.strip() or "Application"
 
 
