@@ -30,7 +30,8 @@ the gateway's address and token from two settings, so nothing else is needed.
 4. Open **Settings**. The line **AI mode** says "With Hal: the local model, through Hal's gateway".
 5. Optional: if the gateway or token are somewhere else, change them under **Settings**, **Advanced**.
    The address must be on this computer (`127.0.0.1` or `localhost`); for a gateway on another computer,
-   use an SSH tunnel to a local port. Hal never sends the token anywhere else.
+   use an SSH tunnel to a local port. Hal never sends the token anywhere else. Both settings can only be
+   changed on this computer, not from a paired laptop.
 
    ```bash
    python -m jobhunt settings set ai.hal_url http://127.0.0.1:8741/v1   # the gateway address

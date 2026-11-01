@@ -258,6 +258,13 @@ class Routes(unittest.TestCase):
         reply = remote.request("PUT", "/api/v2/settings/record.folder", {"value": "/made-up/record"})
         self.assertEqual(reply.status, 409)
 
+    def test_the_gateway_token_file_and_address_change_only_on_this_computer(self):
+        # a signed-in laptop could point the token file at any file here and read its first line back
+        remote = self.hal.signed_in(remote=True, remote_host="desktop")
+        for key, value in (("ai.hal_token_file", "/made-up/any-file"), ("ai.hal_url", "http://127.0.0.1:1/v1")):
+            self.assertEqual(remote.request("PUT", f"/api/v2/settings/{key}", {"value": value}).status, 409, key)
+        self.assertEqual(settings.get("ai.hal_token_file"), "~/.config/hal/gateway-token")
+
     def test_an_unknown_setting_is_not_found(self):
         self.assertEqual(self.client.request("PUT", "/api/v2/settings/goal.nothing", {"value": 1}).status, 404)
 

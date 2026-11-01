@@ -77,10 +77,11 @@ register(
     Setting("ai.model.embed", "text", "nomic-embed-text", "For searching your record by meaning", advanced=True,
             visible_if="ai.provider == 'local'", order=60),
     Setting("ai.ollama_url", "url", OLLAMA_URL, "Address of the AI on this computer", advanced=True, order=70),
+    # where the owner token is read from and sent to: only someone at this computer may change either
     Setting("ai.hal_url", "url", "http://127.0.0.1:8741/v1", "Address of Hal's model gateway", advanced=True,
-            visible_if="ai.provider == 'hal'", order=75),
+            visible_if="ai.provider == 'hal'", remote="local_only", order=75),
     Setting("ai.hal_token_file", "text", "~/.config/hal/gateway-token", "File holding Hal's gateway token",
-            advanced=True, visible_if="ai.provider == 'hal'", order=76),
+            advanced=True, visible_if="ai.provider == 'hal'", remote="local_only", order=76),
     Setting("ai.openai_url", "url", "http://localhost:8000/v1", "Address of the other local server", advanced=True,
             visible_if="ai.provider == 'openai_compat'", order=80),
     Setting("ai.openai_key", "secret", None, "Key for the other local server", secret_name="ai.openai_key",
