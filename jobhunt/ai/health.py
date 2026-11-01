@@ -15,7 +15,7 @@ from . import budget, claude_setup
 
 SETUP_ROUTE = "setup-ai"
 NAMES = {"claude_cli": "AI (Claude subscription)", "local": "AI (on this computer)",
-         "openai_compat": "AI (another local server)"}
+         "openai_compat": "AI (another local server)", "hal": "AI (Hal's local model)"}
 
 
 def chosen() -> str:
@@ -25,6 +25,17 @@ def chosen() -> str:
     from . import provider
 
     return store.stored(provider.KEY) or settings.setting(provider.KEY).default
+
+
+MODE_WORDS = {"hal": "With Hal: the local model, through Hal's gateway",
+              "local": "On its own: the AI on this computer",
+              "openai_compat": "On its own: another local server",
+              "claude_cli": "On its own: your Claude subscription (Claude Code)"}
+
+
+def mode_words(name: str) -> str:
+    """One line for Settings saying which AI mode is in force."""
+    return MODE_WORDS.get(name, name)
 
 
 def last_answer_ms(provider_name: str) -> int | None:

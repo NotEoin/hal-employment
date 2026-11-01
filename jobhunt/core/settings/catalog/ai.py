@@ -10,6 +10,7 @@ model name means "the first local model" (writer and checker) or "the smallest" 
 
 from __future__ import annotations
 
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -38,8 +39,19 @@ def ollama_answers(url: str = OLLAMA_URL, timeout: float = OLLAMA_PROBE_TIMEOUT)
         return False
 
 
+def hal_answers(get) -> bool:
+    """True when Hal's gateway answers with the stored token; never true in a test run, so no test meets a live Hal."""
+    from jobhunt.ai.hal_gateway import DEFAULT_TOKEN_FILE, DEFAULT_URL, gateway_answers
+
+    if os.environ.get("HAL_TEST_MODE") == "1" and not os.environ.get("HAL_TEST_REAL_AI"):
+        return False
+    return gateway_answers(safe(get, "ai.hal_url") or DEFAULT_URL, safe(get, "ai.hal_token_file") or DEFAULT_TOKEN_FILE)
+
+
 def suggested_provider(get) -> str:
-    """Windows: Claude; Linux: this computer when Ollama answers, else Claude."""
+    """Hal when its gateway answers; else Claude on Windows; on Linux this computer if Ollama answers, else Claude."""
+    if hal_answers(get):
+        return "hal"
     if sys.platform == "win32":
         return "claude_cli"
     return "local" if ollama_answers(safe(get, "ai.ollama_url") or OLLAMA_URL) else "claude_cli"
@@ -52,7 +64,7 @@ def _model(claude: str):
 register(
     Setting("ai.provider", "seg", "claude_cli", "How Hal thinks", help=PROVIDER_HELP, order=10,
             default_fn=suggested_provider, choices=choices(
-                ("local", "This computer"), ("claude_cli", "Claude subscription"),
+                ("hal", "Hal's local model"), ("local", "This computer"), ("claude_cli", "Claude subscription"),
                 ("openai_compat", "Another local server"))),
     Setting("ai.claude_account", "info", None, "Claude account", remote="local_only",
             visible_if="ai.provider == 'claude_cli'", order=20),
@@ -65,6 +77,10 @@ register(
     Setting("ai.model.embed", "text", "nomic-embed-text", "For searching your record by meaning", advanced=True,
             visible_if="ai.provider == 'local'", order=60),
     Setting("ai.ollama_url", "url", OLLAMA_URL, "Address of the AI on this computer", advanced=True, order=70),
+    Setting("ai.hal_url", "url", "http://127.0.0.1:8741/v1", "Address of Hal's model gateway", advanced=True,
+            visible_if="ai.provider == 'hal'", order=75),
+    Setting("ai.hal_token_file", "text", "~/.config/hal/gateway-token", "File holding Hal's gateway token",
+            advanced=True, visible_if="ai.provider == 'hal'", order=76),
     Setting("ai.openai_url", "url", "http://localhost:8000/v1", "Address of the other local server", advanced=True,
             visible_if="ai.provider == 'openai_compat'", order=80),
     Setting("ai.openai_key", "secret", None, "Key for the other local server", secret_name="ai.openai_key",
@@ -76,7 +92,7 @@ register(
     Setting("ai.keep_free", "hours", None, "Keep Claude free for me during", order=120,
             help="Hal does no background AI work in these hours."),
     Setting("ai.local_only", "bool", False, "Never use online AI", order=130,
-            help="Keeps everything on this computer. Needs \"This computer\"."),
+            help="Keeps everything on this computer. Needs \"Hal's local model\" or \"This computer\"."),
     Setting("ai.parallel", "int", 2, "AI calls at once", advanced=True, min=1, max=MAX_PARALLEL, order=140,
             default_fn=lambda get: 1 if uses_local_ai(get) else 2),
     Setting("ai.timeout", "int", AI_TIMEOUT, "Seconds to wait for an answer", advanced=True, min=10, order=150),

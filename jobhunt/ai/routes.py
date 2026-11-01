@@ -11,7 +11,7 @@ from typing import Any
 
 from ..core import clock, runner
 from ..web.router import Conflict, Request, route
-from . import ai_actions, budget, claude_setup
+from . import ai_actions, budget, claude_setup, health
 from .base import LLMUnavailable
 
 CLAUDE_MODELS = {"writer": ["opus", "sonnet", "haiku"], "checker": ["opus", "sonnet", "haiku"],
@@ -39,6 +39,14 @@ def _host(req: Request) -> str | None:
     return (req.session.remote_host if req.session else None) or "the computer Hal runs on"
 
 
+def _hal_available(name: str) -> bool:
+    """True when Hal's model gateway answers, so setup can offer it; false without probing when it is in use."""
+    from ..core import settings
+    from ..core.settings.catalog.ai import hal_answers
+
+    return name == "hal" or hal_answers(settings.get)
+
+
 def claude_status(fresh: bool = False) -> dict:
     """Claude Code's part of the status: installed, version, signed in, account words, plan and why not."""
     acct = claude_setup.auth_status(fresh=fresh)
@@ -60,7 +68,7 @@ def claude_status(fresh: bool = False) -> dict:
 @route("GET", "/api/v2/ai/status", slow=True)
 def status(req: Request) -> dict:
     """Is the AI ready: {provider, installed, version, signed_in, account, plan_ok, ready, why, fix,
-    used_today, background_today, cap, limited_until, allowance, remote_host}."""
+    used_today, background_today, cap, limited_until, allowance, remote_host, mode, hal_available}."""
     from .. import ai
 
     name = _provider()
@@ -78,7 +86,7 @@ def status(req: Request) -> dict:
         out["why"] = budget.limit_words(clock.parse(t["limited_until"]))
     out.update(used_today=t["calls"], background_today=t["background"], cap=t["cap"],
                limited_until=t["limited_until"], allowance=budget.words(name) if name == "claude_cli" else "",
-               remote_host=_host(req))
+               remote_host=_host(req), mode=health.mode_words(name), hal_available=_hal_available(name))
     return out
 
 

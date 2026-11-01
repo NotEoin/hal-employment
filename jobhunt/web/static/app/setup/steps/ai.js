@@ -134,6 +134,9 @@ export function Step() {
       <${Choice} id="local" on=${provider === "local"} icon="lock" title="On this computer" pick=${pick}
         chip=${r ? (claudeFits ? "Too slow here" : where) : ""} tone=${claudeFits ? "warn" : "good"} text=${localText} />
     </div>
+    ${(provider === "hal" || (st && st.hal_available)) && html`<div class="row" style="margin-top:10px">${provider === "hal"
+      ? html`<span class="small sub">Hal uses its own AI on this computer, through the Hal gateway. Nothing goes to Claude.</span>`
+      : html`<button type="button" class="btn quiet small" onClick=${() => pick("hal")}>Use Hal's own AI (Hal is installed)</button>`}</div>`}
     <div class="row" style="margin-top:10px">${provider === "openai_compat"
       ? html`<span class="small sub">Hal uses another local server. Its address is in Settings, Hal's brain.</span>`
       : html`<button type="button" class="btn quiet small" onClick=${() => pick("openai_compat")}>Use another local server instead</button>`}</div>

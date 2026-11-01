@@ -29,6 +29,8 @@ export function AiPanel() {
     catch (e) { toast(e.message); } finally { setBusy(false); reload(); }
   };
   return html`<div data-ai-panel>
+    <div class="setting" data-key="ai.mode.now"><div class="sc-text"><div class="lab">AI mode</div>
+      <div class="small sub sc-info" data-mode>${st.mode}</div></div></div>
     ${claude && html`<div class="setting" data-key="ai.claude_account.now"><div class="sc-text"><div class="lab">Claude account</div>
         <div class="small sub sc-info" data-account>${st.account}</div>
         ${isRemote() && html`<div class="small sub">${remoteSignInWords()}</div>`}</div>

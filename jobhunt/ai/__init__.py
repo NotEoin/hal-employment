@@ -87,6 +87,10 @@ def _build(name: str) -> Backend:
         from .openai_compat import OpenAICompatBackend
 
         return OpenAICompatBackend(settings.get("ai.openai_url"), _openai_key())
+    if name == "hal":
+        from .hal_gateway import GatewayBackend
+
+        return GatewayBackend(settings.get("ai.hal_url"), settings.get("ai.hal_token_file"))
     if name == "claude_cli":
         from .claude_cli import ClaudeCLIBackend
 

@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 Get = Callable[[str], Any]
-LOCAL_PROVIDERS = ("local", "openai_compat")
+LOCAL_PROVIDERS = ("local", "openai_compat", "hal")
 
 
 def choices(*pairs: tuple[Any, str]) -> tuple[tuple[Any, str], ...]:
