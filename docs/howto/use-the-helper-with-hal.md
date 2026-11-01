@@ -43,7 +43,8 @@ the gateway's address and token from two settings, so nothing else is needed.
    ```
 
 The gateway claims the graphics card itself, through gpu-light when that is installed, so Hal Employment
-does not claim it a second time. To let Hal Employment fall back to Claude, pick **Claude subscription**
+does not claim it a second time. If the gateway also fronts an online model (`allow_remote = true`),
+Hal Employment does not list that model and refuses to use it, so your data stays on this computer. To let Hal Employment fall back to Claude, pick **Claude subscription**
 yourself; it never switches by itself.
 
 | Symptom | Fix |
@@ -51,5 +52,6 @@ yourself; it never switches by itself.
 | "Hal's gateway does not answer at ..." | Set `tcp = true` under `[gateway]`, restart the gateway, then run `hal-gateway status`. |
 | "Hal's gateway token was not found" | Run `hal-gateway token issue --name hal-employment` and save the secret as one line in the token file. |
 | "Hal's gateway did not accept the token" | The token was rotated or revoked. Save the new one in the token file; no restart is needed. |
+| "... is an online model behind Hal's gateway" | Choose a local model under **Settings**, **Hal's brain**, or clear the model setting so Hal picks one. |
 | "jobhunt_root is not set" from a Hal jobs tool | Add `jobhunt_root` under `[jobs]` as in step 6. |
 | AI mode still says "On its own" | Pick **Hal's local model** in Settings, or run the `settings set ai.provider hal` command above. |

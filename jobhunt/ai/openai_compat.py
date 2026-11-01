@@ -14,6 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Any
 
 from .base import ChatRequest, ChatResult, LLMUnavailable, Status
 
@@ -57,6 +58,9 @@ class OpenAICompatBackend:
         self.key = key
         self.online, self.local_gpu = classify(self.url)
 
+    def _open(self, req: urllib.request.Request, timeout: float) -> Any:
+        return urllib.request.urlopen(req, timeout=timeout)
+
     def _request(self, method: str, path: str, payload: dict | None, timeout: float) -> dict:
         headers = {"Content-Type": "application/json"}
         if self.key:
@@ -64,7 +68,7 @@ class OpenAICompatBackend:
         data = json.dumps(payload).encode() if payload is not None else None
         req = urllib.request.Request(f"{self.url}{path}", data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as reply:
+            with self._open(req, timeout) as reply:
                 return json.loads(reply.read())
         except TimeoutError as e:
             raise LLMUnavailable(f"The local server did not answer within {int(timeout)} seconds.",

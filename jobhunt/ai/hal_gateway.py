@@ -8,14 +8,21 @@ The gateway wants a bearer token on every request but `/health`. The owner token
 `ai.hal_token_file` (default `~/.config/hal/gateway-token`, mode 0600), read at each call so a rotated token
 is picked up without a restart. An address that is not on this computer or the home network still counts as
 online, so `ai.local_only` refuses it just as for any other server.
+
+The gateway can also front an online model (a backend with `allow_remote = true`; it lists such models as
+`owned_by: "remote:<host>"` and marks each reply with `X-Hal-Remote`). Hal mode promises a local model and
+never Claude, so this backend leaves those models out of its list, refuses to ask one by name, and refuses
+any reply that still carries the header.
 """
 from __future__ import annotations
 
 import logging
 import urllib.error
+import urllib.request
 from pathlib import Path
+from typing import Any
 
-from .base import LLMUnavailable, Status
+from .base import ChatRequest, ChatResult, LLMUnavailable, Status
 from .openai_compat import STATUS_TIMEOUT_S, OpenAICompatBackend
 
 log = logging.getLogger(__name__)
@@ -24,6 +31,8 @@ DEFAULT_URL = "http://127.0.0.1:8741/v1"        # the gateway's loopback listene
 DEFAULT_TOKEN_FILE = "~/.config/hal/gateway-token"
 PROBE_TIMEOUT_S = 2        # setup waits on this; a running gateway answers in milliseconds
 UNAUTHORIZED = (401, 403)
+REMOTE_HEADER = "X-Hal-Remote"      # set by the gateway on every reply from an online backend
+REMOTE_OWNER = "remote:"            # the `owned_by` prefix of an online backend's models in /models
 
 
 def read_token(path: str | Path) -> str | None:
@@ -53,6 +62,40 @@ class GatewayBackend(OpenAICompatBackend):
     @key.setter
     def key(self, value: str | None) -> None:
         """Ignores the parent's assignment: the token always comes from the file."""
+
+    def _open(self, req: urllib.request.Request, timeout: float) -> Any:
+        reply = super()._open(req, timeout)
+        host = reply.headers.get(REMOTE_HEADER)
+        if host:
+            reply.close()
+            raise LLMUnavailable(f"Hal's gateway sent this to an online model at {host}; Hal mode only uses "
+                                 "the local model.", kind="local_only")
+        return reply
+
+    def _listed(self) -> list[dict]:
+        out = self._request("GET", "/models", None, STATUS_TIMEOUT_S)
+        return [m for m in out.get("data", []) if isinstance(m, dict) and m.get("id")]
+
+    def _remote(self, entry: dict) -> bool:
+        return str(entry.get("owned_by", "")).startswith(REMOTE_OWNER)
+
+    def models(self) -> list[str]:
+        """The gateway's local models; online models it fronts are left out, and empty when it does not answer."""
+        try:
+            return [m["id"] for m in self._listed() if not self._remote(m)]
+        except (LLMUnavailable, urllib.error.HTTPError):
+            return []
+
+    def chat(self, req: ChatRequest, model: str) -> ChatResult:
+        """Asks `model` through the gateway; refuses before sending when the gateway lists it as online."""
+        try:
+            remote = {m["id"] for m in self._listed() if self._remote(m)}
+        except urllib.error.HTTPError as e:
+            raise LLMUnavailable(f"Hal's gateway refused the request ({e.code}).") from e
+        if model in remote:
+            raise LLMUnavailable(f"{model} is an online model behind Hal's gateway; Hal mode only uses the local "
+                                 "model. Choose a local one in Settings, Hal's brain.", kind="local_only")
+        return super().chat(req, model)
 
     def status(self) -> Status:
         """Ready when the gateway lists its models; says what to fix when it is down or the token is wrong."""

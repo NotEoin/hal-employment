@@ -22,6 +22,7 @@ TOKEN = "made-up-token"
 
 class _Gateway(http.server.BaseHTTPRequestHandler):
     seen: ClassVar[list] = []
+    remote_reply: ClassVar[bool] = False
 
     def log_message(self, *args):
         pass
@@ -29,6 +30,8 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
     def _send(self, code: int, body: dict) -> None:
         data = json.dumps(body).encode()
         self.send_response(code)
+        if type(self).remote_reply:
+            self.send_header("X-Hal-Remote", "cloud.example.invalid")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -42,7 +45,8 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self._allowed():
-            self._send(200, {"data": [{"id": "made-up-model"}]})
+            self._send(200, {"data": [{"id": "made-up-online", "owned_by": "remote:cloud.example.invalid"},
+                                      {"id": "made-up-model", "owned_by": "ollama"}]})
 
     def do_POST(self):
         self.rfile.read(int(self.headers["Content-Length"]))
@@ -54,6 +58,7 @@ class Gateway(InHome):
     def setUp(self):
         super().setUp()
         _Gateway.seen = []
+        _Gateway.remote_reply = False
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Gateway)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.addCleanup(self.httpd.server_close)
@@ -72,6 +77,26 @@ class Gateway(InHome):
         out = be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
         self.assertEqual(out.text, "made-up answer")
         self.assertEqual(_Gateway.seen[-1], ("/v1/chat/completions", f"Bearer {TOKEN}"))
+
+    def test_online_models_behind_the_gateway_are_never_offered(self):
+        be = GatewayBackend(self.url, self.token)
+        self.assertEqual(be.models(), ["made-up-model"])
+        self.assertEqual(be.default_model("writer"), "made-up-model")
+
+    def test_an_online_model_is_refused_before_the_prompt_leaves(self):
+        # Hal mode sent the prompt to whatever model was named, including an online one the gateway fronts
+        be = GatewayBackend(self.url, self.token)
+        with self.assertRaises(LLMUnavailable) as caught:
+            be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-online")
+        self.assertEqual(caught.exception.kind, "local_only")
+        self.assertNotIn("/v1/chat/completions", [path for path, _ in _Gateway.seen])
+
+    def test_a_reply_from_an_online_backend_is_refused(self):
+        _Gateway.remote_reply = True
+        with self.assertRaises(LLMUnavailable) as caught:
+            GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5),
+                                                      "made-up-model")
+        self.assertIn("online model", str(caught.exception))
 
     def test_a_rotated_token_is_used_without_a_restart(self):
         be = GatewayBackend(self.url, self.token)
