@@ -11,13 +11,13 @@ the gateway's address and token from two settings, so nothing else is needed.
    tcp = true        # off by default; the address is then 127.0.0.1:8741
    ```
 
-2. Check that the gateway answers and that you have its token. Setup uses the token in
-   `~/.config/hal/gateway-token` (one line); put a token from `hal-gateway token issue` there if your
-   Hal keeps it elsewhere.
+2. Check that the gateway answers, then mint a client token for Hal Employment. Hal prints it once.
+   Save it as one line in `~/.config/hal/gateway-token`, which is where Hal Employment looks first.
 
    ```bash
-   hal-gateway status          # the gateway is up
-   hal-gateway token show      # the token Hal Employment will send
+   hal-gateway status                              # the gateway is up
+   hal-gateway token issue --name hal-employment   # copy the secret now
+   umask 077 && printf '%s\n' '<the secret>' > ~/.config/hal/gateway-token   # mode 0600, one line
    ```
 
 3. Choose Hal's model. Either open **Settings**, **How Hal thinks**, **Hal's local model**, or run one
@@ -42,6 +42,6 @@ yourself; it never switches by itself.
 | Symptom | Fix |
 | --- | --- |
 | "Hal's gateway does not answer at ..." | Set `tcp = true` under `[gateway]`, restart the gateway, then run `hal-gateway status`. |
-| "Hal's gateway token was not found" | Run `hal-gateway token show` and save the token as one line in the token file. |
+| "Hal's gateway token was not found" | Run `hal-gateway token issue --name hal-employment` and save the secret as one line in the token file. |
 | "Hal's gateway did not accept the token" | The token was rotated or revoked. Save the new one in the token file; no restart is needed. |
 | AI mode still says "On its own" | Pick **Hal's local model** in Settings, or run the `settings set ai.provider hal` command above. |

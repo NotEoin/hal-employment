@@ -58,7 +58,7 @@ class GatewayBackend(OpenAICompatBackend):
         """Ready when the gateway lists its models; says what to fix when it is down or the token is wrong."""
         if self.key is None:
             return Status(ready=False, why=f"Hal's gateway token was not found in {self.token_file}.",
-                          fix="Show the token with hal-gateway token show")
+                          fix="Make one with hal-gateway token issue --name hal-employment")
         try:
             self._request("GET", "/models", None, STATUS_TIMEOUT_S)
         except urllib.error.HTTPError as e:
