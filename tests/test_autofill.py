@@ -75,13 +75,15 @@ class Answers(unittest.TestCase):
         autofill.profile = lambda: {**PROFILE, "salary": ""}
         saved = salary.expect
         salary.expect = lambda job, con=None: {"figure": 38000, "text": "\u00a336,000 to \u00a340,000",
-                                               "basis": "ITJobsWatch median for graduate software engineer in London: \u00a338,000"}
+                                               "basis": "ITJobsWatch median for graduate software engineer "
+                                                        "in London: \u00a338,000"}
         self.addCleanup(setattr, salary, "expect", saved)
         words = self.propose(label="What are your salary expectations?")
         self.assertEqual((words["value"], words["source"]), ("\u00a336,000 to \u00a340,000", "profile: salary"))
         self.assertIn("ITJobsWatch median", words["note"])
         self.assertEqual(self.propose(type="number", label="Salary expectations")["value"], "38000")
-        listed = self.propose(kind="select", label="Expected salary", options=["\u00a325,000 - \u00a334,999", "\u00a335,000 - \u00a344,999"])
+        bands = ["\u00a325,000 - \u00a334,999", "\u00a335,000 - \u00a344,999"]
+        listed = self.propose(kind="select", label="Expected salary", options=bands)
         self.assertEqual(listed["value"], "\u00a335,000 - \u00a344,999")
 
     def health(self):

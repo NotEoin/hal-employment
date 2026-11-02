@@ -46,13 +46,15 @@ class Salary(unittest.TestCase):
         self.assertEqual(salary.figures("GBP 40,000-60,000"), [40000, 60000])
         self.assertEqual(salary.figures("\u00a330-35k plus bonus"), [30000, 35000])
         self.assertEqual(salary.figures("\u00a328,000 to \u00a332,000 per annum"), [28000, 32000])
-        self.assertEqual(salary.figures("GBP 385-395") + salary.figures("$80K \u2013 $120K") + salary.figures("\u00a3450 per day"), [])
+        unsalaried = ("GBP 385-395", "$80K \u2013 $120K", "\u00a3450 per day")
+        self.assertEqual([n for text in unsalaried for n in salary.figures(text)], [])
 
     def test_an_adzuna_estimate_is_not_an_advertised_salary(self):
         """Adzuna writes its prediction as one exact figure; no employer advertises \u00a353,622."""
         self.assertIsNone(salary.advertised(job(pay="GBP 53,622-53,622", source="adzuna")))
         self.assertEqual(salary.advertised(job(pay="GBP 35,000-35,000", source="adzuna")), (35000, 35000))
-        self.assertEqual(salary.advertised(job(description="Salary: \u00a332k - \u00a336k depending on experience")), (32000, 36000))
+        described = job(description="Salary: \u00a332k - \u00a336k depending on experience")
+        self.assertEqual(salary.advertised(described), (32000, 36000))
 
     def test_the_six_month_median_is_read_from_an_itjobswatch_page(self):
         page = PAGE.format(quotes=12, median="50,000")
