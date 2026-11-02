@@ -77,7 +77,7 @@ class SettingsPage(unittest.TestCase):
                       if (s.stored or s.kind in ("secret", "private")) and s.group_id != registry.INTERNAL_GROUP}
         here = paths.platform_name()     # the page shows the rows for the computer the server runs on
         seen = set()
-        for provider in ("openai_compat", "local"):     # rows for each kind of AI show only with it chosen
+        for provider in ("openai_compat", "local", "hal"):     # rows for each kind of AI show only with it chosen
             settings.set_many({**SHOW_ALL, "ai.provider": provider})
             groups = self.client.get("/api/v2/settings/schema").json()["groups"]
             p = self.tab()
@@ -97,6 +97,21 @@ class SettingsPage(unittest.TestCase):
             self.assertEqual([e for e in p.errors if not e.startswith(MISSING_ROUTE)], [])
         shown_here = {k for k in changeable if registry.REGISTRY[k].platforms in ((), (here,))}
         self.assertEqual(shown_here - seen, set(), "registered settings with no control on the page")
+
+    def test_the_gateway_settings_are_locked_with_a_reason_in_a_paired_remote_session(self) -> None:
+        settings.set_many({"ai.provider": "hal", "advanced.developer_mode": True})
+        p = AppPage(self.browser, f"http://127.0.0.1:{self.hal.port}", "wide", "light")
+        self.addCleanup(p.close)
+        p.page.goto(self.hal.open_url(next="/#settings-ai", remote=True, remote_host="desktop"))
+        p.settle()
+        p.page.wait_for_selector('[data-group="ai"] .setting')
+        self.show_more(p)
+        for key in ("ai.hal_url", "ai.hal_token_file"):
+            with self.subTest(key=key):
+                row = self.row(p, key)
+                row.wait_for(state="attached")
+                self.assertEqual(row.locator("input:not([disabled])").count(), 0, "editable from a remote session")
+                self.assertIn("the computer Hal runs on", row.inner_text())
 
     def test_each_kind_of_control_saves_its_value(self) -> None:
         p = self.tab("settings-you")
