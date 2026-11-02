@@ -28,7 +28,7 @@ class Private(unittest.TestCase):
     """Each test in a fresh temporary home."""
 
     def setUp(self):
-        tmp = tempfile.TemporaryDirectory(prefix="hal-private-")
+        tmp = tempfile.TemporaryDirectory(prefix="settings-private-")
         self.addCleanup(tmp.cleanup)
         override = paths.set_override(Path(tmp.name))
         override.__enter__()
