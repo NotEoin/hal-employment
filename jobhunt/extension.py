@@ -378,6 +378,7 @@ def _advance(job_id: str, pressed: bool = False) -> dict:
 
 
 def open_form(job_id: str, url: str) -> dict:
+    """Opens the application form in the applicant's own tab."""
     _last_url[job_id] = url
     from .core import settings
 
@@ -406,12 +407,14 @@ def type_code(job_id: str, code: str, boxes: list[str]) -> dict:
 
 
 def resume(job_id: str, passed: str, wall: str) -> dict:
+    """Continues after the person passed a sign-in or other wall by hand."""
     if passed == "sign-in":
         note_signed_in(wall)
     return _advance(job_id, pressed=passed == "apply")
 
 
 def peek(job_id: str) -> dict:
+    """Reads the page without changing it."""
     try:
         facts = _read(job_id, banners=False, front=False)
     except RuntimeError as e:
@@ -425,6 +428,7 @@ def peek(job_id: str) -> dict:
 
 
 def read_here(job_id: str) -> dict:
+    """Reads the form on the page the tab is on."""
     return _report(_read(job_id, options=True), "", False)
 
 
@@ -462,13 +466,16 @@ def next_step(job_id: str) -> dict:
 
 
 def mark(job_id: str, fields: list[dict], panel: dict) -> None:
+    """Outlines the filled answers in the applicant's tab."""
     _ask("mark", job=job_id, fields=fields, panel=panel)
 
 
 def show(job_id: str) -> bool:
+    """Brings a job's tab to the front."""
     return _ask("show", job=job_id)["shown"]
 
 
 def search(queries: list[str], pause: float = 0) -> tuple[list[list[dict]], bool]:
+    """Runs searches in the applicant's browser and returns the result pages and whether a site refused."""
     out = _ask("search", timeout=60 + (pause + 20) * len(queries), queries=queries, pause=pause)
     return out["pages"], out["refused"]

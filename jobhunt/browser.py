@@ -310,7 +310,7 @@ class Browser:
                     continue
                 try:
                     fut.set_result(fn(self, *args))
-                except Exception as e:  # noqa: BLE001 - errors are re-raised in the caller's thread
+                except Exception as e:  # errors are re-raised in the caller's thread
                     # A closed tab is reported as such, whichever step it interrupted.
                     fut.set_exception(TabGone() if "has been closed" in str(e) else e)
 
@@ -338,7 +338,7 @@ class Browser:
             try:
                 self._ctx.pages  # noqa: B018 - raises once the browser has gone
                 return self._ctx
-            except Exception:  # noqa: BLE001
+            except Exception:  # the browser is gone for any reason; the next call starts a new one
                 self._ctx = None
         _live("PROFILE").mkdir(parents=True, exist_ok=True)
         headless = mode() == "headless"
@@ -385,7 +385,7 @@ class Browser:
         for page in self.pages.pop(job_id, []):
             try:
                 page.close()
-            except Exception:  # noqa: BLE001 - already closed
+            except Exception:  # already closed
                 pass
 
 
@@ -440,7 +440,7 @@ def _dismiss_banners(page, notes=None) -> None:
                 button.click(timeout=3_000)
                 page.wait_for_timeout(500)
                 return
-        except Exception:  # noqa: BLE001 - a banner that will not close may not block anything
+        except Exception:  # a banner that will not close may not block anything
             pass
 
 
@@ -449,11 +449,11 @@ def _settle(page) -> None:
         # Adzuna links show a holding page that hands over to the advertiser a few seconds later.
         try:
             page.wait_for_url(lambda u: "adzuna." not in urlparse(u).netloc, timeout=15_000)
-        except Exception:  # noqa: BLE001 - some adverts are hosted on Adzuna itself
+        except Exception:  # some adverts are hosted on Adzuna itself
             pass
     try:
         page.wait_for_load_state("networkidle", timeout=15_000)
-    except Exception:  # noqa: BLE001 - some pages poll forever; the DOM is ready regardless
+    except Exception:  # some pages poll forever; the DOM is ready regardless
         pass
 
 
@@ -504,7 +504,7 @@ def _extract(page) -> tuple[object, list[dict]]:
     for frame in _frames(page):
         try:
             fields = frame.evaluate(EXTRACT_JS)
-        except Exception:  # noqa: BLE001 - a frame that has gone, or that the site forbids reading
+        except Exception:  # a frame that has gone, or that the site forbids reading
             if frame is page.main_frame:
                 raise
             continue
@@ -528,7 +528,7 @@ def _read(page, options: bool = True) -> tuple[object, list[dict]]:
     """Reads the form, opening each dropdown that keeps its options out of the page."""
     try:
         frame, fields = _extract(page)
-    except Exception as e:  # noqa: BLE001 - the page moved to another address mid-read
+    except Exception as e:  # the page moved to another address mid-read
         if "has been closed" in str(e):
             raise
         page.wait_for_timeout(1_500)
@@ -544,7 +544,7 @@ def _read(page, options: bool = True) -> tuple[object, list[dict]]:
 def _survey(frame) -> dict:
     try:
         return frame.evaluate(SURVEY_JS)
-    except Exception as e:  # noqa: BLE001 - mid-navigation; an empty survey is retried by the caller's loop
+    except Exception as e:  # mid-navigation; an empty survey is retried by the caller's loop
         if "has been closed" in str(e):
             raise
         return {"url": frame.url, "title": "", "controls": [], "headings": [], "text": "", "alerts": [],
@@ -571,7 +571,7 @@ def _close_list(page, box) -> None:
         box.evaluate("e => e.blur()")
         if page.locator("[data-hal-opt]:visible").count() and not box.evaluate(PRESS_AROUND_JS):
             box.press("Escape")
-    except Exception:  # noqa: BLE001 - nothing was open
+    except Exception:  # nothing was open
         pass
 
 
@@ -579,10 +579,10 @@ def _open_list(box) -> None:
     """Opens a dropdown: by a click, or from the keyboard when a styled layer lies over the control."""
     try:
         box.click(timeout=1_500)
-    except Exception:  # noqa: BLE001
+    except Exception:  # a covered control: the next try forces the click
         try:
             box.click(timeout=1_500, force=True)
-        except Exception:  # noqa: BLE001
+        except Exception:  # still covered: fall back to the keyboard
             box.focus(timeout=1_500)
             box.press("ArrowDown")
 
@@ -611,7 +611,7 @@ def _combobox_options(page, frame, hid: str) -> list[str]:
             options = _listed(page, frame, hid, waits=2)
         _close_list(page, box)
         return options
-    except Exception:  # noqa: BLE001 - an option list that will not open is filled by typing
+    except Exception:  # an option list that will not open is filled by typing
         return []
 
 
@@ -715,7 +715,7 @@ def _press(page, frame, control: dict, facts: dict, kind: str, job_id: str | Non
     target = frame.locator(f"[data-hal-nav='{control['id']}']").first
     try:
         target.click(timeout=5_000)
-    except Exception:  # noqa: BLE001 - usually a pop-up lying over the control
+    except Exception:  # usually a pop-up lying over the control
         if control["href"].startswith("http"):
             page.goto(control["href"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
         else:
@@ -815,7 +815,7 @@ def _peek(b: Browser, job_id: str) -> dict:
                 # A password box still empty, on a form Hal has filled in around it.
                 "password": frame.evaluate("() => [...document.querySelectorAll('input[type=password]')]"
                                            ".some(e => e.offsetWidth > 0 && !e.value)")}
-    except Exception:  # noqa: BLE001 - the page is between two addresses
+    except Exception:  # the page is between two addresses
         return {"busy": True}
 
 
@@ -889,10 +889,10 @@ def _set_choice(frame, el, want: bool, native: bool) -> None:
         return
     try:
         el.set_checked(want, timeout=3_000)
-    except Exception:  # noqa: BLE001 - a styled control: its label takes the click instead
+    except Exception:  # a styled control: its label takes the click instead
         try:
             el.evaluate("e => (e.labels && e.labels[0] ? e.labels[0] : e.parentElement).click()")
-        except Exception:  # noqa: BLE001
+        except Exception:  # the label click is a second try; the state is checked below
             pass
         if el.is_checked() != want:
             el.set_checked(want, force=True, timeout=3_000)
@@ -929,12 +929,12 @@ def _fill_one(page, frame, f: dict, now: dict, value) -> None:
         # The site reads the file before the form is ready to go on.
         try:
             page.wait_for_load_state("networkidle", timeout=8_000)
-        except Exception:  # noqa: BLE001
+        except Exception:  # a page that never goes quiet still has its file; carry on
             pass
         return
     try:
         el.scroll_into_view_if_needed(timeout=2_000)
-    except Exception:  # noqa: BLE001 - a control that cannot scroll is filled where it is
+    except Exception:  # a control that cannot scroll is filled where it is
         pass
     if kind == "checkbox":
         _set_choice(frame, el, bool(value), not now.get("custom"))
@@ -962,7 +962,7 @@ def _fill_one(page, frame, f: dict, now: dict, value) -> None:
         else:
             try:
                 el.fill(text, timeout=5_000)
-            except Exception:  # noqa: BLE001 - a masked input takes keystrokes, not a pasted value
+            except Exception:  # a masked input takes keystrokes, not a pasted value
                 el.click(timeout=3_000)
                 el.press("ControlOrMeta+a")
                 el.press_sequentially(text, delay=15)
@@ -1063,7 +1063,7 @@ def _fill_page(page, job_id: str, fields: list[dict], shot: str) -> dict:
         try:
             _fill_one(page, frame, f, now, value)
             filled.append(f)
-        except Exception as e:  # noqa: BLE001 - report the field and carry on with the rest
+        except Exception as e:  # report the field and carry on with the rest
             if "has been closed" in str(e):
                 raise
             if isinstance(e, guard.WouldSubmit):
@@ -1102,7 +1102,7 @@ def _shoot_form(page, shot: str) -> None:
     """Screenshots the whole page with the form on it."""
     try:
         page.screenshot(path=shot, full_page=True)
-    except Exception as e:  # noqa: BLE001 - a page taller than the browser allows falls back to what is on screen
+    except Exception as e:  # a page taller than the browser allows falls back to what is on screen
         if "has been closed" in str(e):
             raise
         page.screenshot(path=shot)
@@ -1255,7 +1255,7 @@ def _search(b: Browser, queries: list[str], pause: float) -> tuple[list[list[dic
             page.goto(SEARCH + quote_plus(query), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
             try:
                 page.wait_for_selector("article[data-testid='result']", timeout=10_000)
-            except Exception:  # noqa: BLE001 - no results, or the engine's bot check
+            except Exception:  # no results, or the engine's bot check
                 refused = "anomaly" in page.content()
                 if refused:
                     break
@@ -1302,6 +1302,7 @@ def _via(task, *args):
 
 
 def open_form(job_id: str, url: str) -> dict:
+    """Opens the application form for a job."""
     return _via(_open_form, job_id, url)
 
 
@@ -1314,10 +1315,12 @@ def fill(job_id: str, fields: list[dict], shot: Path) -> dict:
 
 
 def read_here(job_id: str) -> dict:
+    """Reads the form on the page the browser is on."""
     return _via(_read_here, job_id)
 
 
 def resume(job_id: str, passed: str, wall: str) -> dict:
+    """Continues after the person passed a sign-in or other wall by hand."""
     return _via(_resume, job_id, passed, wall)
 
 
@@ -1327,22 +1330,27 @@ def type_code(job_id: str, code: str, boxes: list[str]) -> dict:
 
 
 def press_control(job_id: str, name: str) -> dict:
+    """Presses a control by name; raises `guard.WouldSubmit` when it could send the application."""
     return _via(_press_control, job_id, name)
 
 
 def peek(job_id: str) -> dict:
+    """Reads the page without changing it."""
     return _via(_peek, job_id)
 
 
 def next_step(job_id: str) -> dict:
+    """Moves to the form's next step."""
     return _via(_next_step, job_id)
 
 
 def search(queries: list[str], pause: float = 0) -> tuple[list[list[dict]], bool]:
+    """Runs searches in the browser and returns the result pages and whether a site refused."""
     return _via(_search, queries, pause)
 
 
 def show(job_id: str) -> bool:
+    """Brings a job's tab or window to the front."""
     return _via(_show, job_id)
 
 
@@ -1354,5 +1362,6 @@ def mark(job_id: str, fields: list[dict], panel: dict) -> None:
 
 
 def close(job_id: str) -> None:
+    """Closes a job's tab or window."""
     if mode() != "extension":
         BROWSER.call(_close, job_id)

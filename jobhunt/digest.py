@@ -15,6 +15,7 @@ from .vault import actions
 
 
 def build(con) -> tuple[str, str]:
+    """Returns the digest subject and body for today."""
     today = date.today().isoformat()
     acts = actions(con)
     new = con.execute("""SELECT company, title, location, score, score_notes, url FROM jobs

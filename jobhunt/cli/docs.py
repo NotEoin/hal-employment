@@ -26,6 +26,7 @@ def _pack_md(job):
 
 
 def cmd_pack(args):
+    """Handles `jobhunt pack`: drafts the CV and cover letter for a job."""
     from .. import ai, cv, llm, pack
     if args.cv_only:
         con = db.connect()
@@ -51,6 +52,7 @@ def cmd_pack(args):
 
 
 def cmd_letter(args):
+    """Handles `jobhunt letter`: drafts a cover letter."""
     import re as _re
 
     from .. import letter
@@ -69,6 +71,7 @@ def cmd_letter(args):
 
 
 def cmd_check(args):
+    """Handles `jobhunt check`: checks the documents of ready jobs."""
     from .. import pack
     with closing(db.connect()) as con:
         rows = con.execute("SELECT * FROM jobs WHERE status = 'ready'").fetchall() if args.ready else [_find(con, args.id)]
@@ -80,6 +83,7 @@ def cmd_check(args):
 
 
 def cmd_contacts(args):
+    """Handles `jobhunt contacts`: finds people to contact for a job."""
     from .. import contacts
     con = db.connect()
     found = contacts.find(con, _find(con, args.id))

@@ -13,6 +13,7 @@ from ..http import get, get_json
 
 
 def strip_html(s: str | None) -> str:
+    """Returns the plain text of an HTML fragment."""
     if not s:
         return ""
     s = html.unescape(s)                       # Greenhouse double-encodes
@@ -38,6 +39,7 @@ def _job(source, company, ext_id, title, location, url, description, salary=None
 
 
 def greenhouse(slug: str, name: str):
+    """Returns an employer's jobs from its Greenhouse board."""
     data = get_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true")
     jobs = [
         _job("greenhouse", name, j["id"], j["title"],
@@ -69,14 +71,17 @@ def _lever(host: str, slug: str, name: str):
 
 
 def lever(slug: str, name: str):
+    """Returns an employer's jobs from its Lever board."""
     return _lever("api.lever.co", slug, name)
 
 
 def lever_eu(slug: str, name: str):
+    """Returns an employer's jobs from its Lever board in the EU region."""
     return _lever("api.eu.lever.co", slug, name)
 
 
 def ashby(slug: str, name: str):
+    """Returns an employer's jobs from its Ashby board."""
     data = get_json(f"https://api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true")
     jobs = []
     for j in data.get("jobs", []):
@@ -93,6 +98,7 @@ def ashby(slug: str, name: str):
 
 
 def workable(slug: str, name: str):
+    """Returns an employer's jobs from its Workable board."""
     data = get_json(f"https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true", retries=3)
     jobs = []
     for j in data.get("jobs", []):
@@ -129,6 +135,7 @@ def smartrecruiters(slug: str, name: str):
 
 
 def smartrecruiters_detail(job: dict) -> str:
+    """Returns the advert text of one SmartRecruiters job."""
     slug, ext = job["url"].rstrip("/").split("/")[-2:]
     d = get_json(f"https://api.smartrecruiters.com/v1/companies/{slug}/postings/{ext}")
     sections = (d.get("jobAd") or {}).get("sections") or {}
@@ -137,6 +144,7 @@ def smartrecruiters_detail(job: dict) -> str:
 
 
 def recruitee(slug: str, name: str):
+    """Returns an employer's jobs from its Recruitee board."""
     data = get_json(f"https://{slug}.recruitee.com/api/offers/")
     jobs = []
     for j in data.get("offers", []):
@@ -153,6 +161,7 @@ def recruitee(slug: str, name: str):
 
 
 def personio(slug: str, name: str):
+    """Returns an employer's jobs from its Personio feed."""
     root = ET.fromstring(get(f"https://{slug}.jobs.personio.de/xml?language=en"))
     jobs = []
     for p in root.iter("position"):

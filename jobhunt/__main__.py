@@ -71,6 +71,7 @@ from .core import tls  # noqa: E402 - after the venv trampoline
 
 
 def main():
+    """Parses the command line and runs the chosen `jobhunt` command."""
     tls.use_system_trust()
     p = argparse.ArgumentParser(prog="jobhunt", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)

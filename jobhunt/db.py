@@ -43,10 +43,12 @@ def now() -> str:
 
 
 def json_text(value) -> str:
+    """Returns a value as JSON text for a database column."""
     return json.dumps(value)
 
 
 def json_value(text: str):
+    """Returns the value stored as JSON text."""
     return json.loads(text)
 
 
@@ -115,6 +117,7 @@ def mark_gone(con: sqlite3.Connection, source: str, company: str, seen_ids: set[
 
 
 def set_status(con: sqlite3.Connection, job_id: str, status: str, detail: str = "", at: str | None = None) -> None:
+    """Sets a job's status and logs the change; raises ValueError for an unknown status."""
     if status not in STATUSES:
         raise ValueError(f"unknown status {status!r}; one of {', '.join(STATUSES)}")
     con.execute("UPDATE jobs SET status=? WHERE id=?", (status, job_id))

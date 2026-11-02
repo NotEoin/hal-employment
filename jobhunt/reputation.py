@@ -78,7 +78,7 @@ def check(company: str) -> tuple[list[str], str]:
     flags, lines = [], ["## Company check", ""]
     try:
         wiki = wikipedia(company)
-    except Exception:  # noqa: BLE001 - an unavailable lookup is reported, not fatal
+    except Exception:  # an unavailable lookup is reported, not fatal
         wiki = None
     if wiki is None:
         lines.append("- Wikipedia: lookup failed")
@@ -91,7 +91,7 @@ def check(company: str) -> tuple[list[str], str]:
             flags.append(f"company check: Wikipedia sections on {', '.join(wiki['concerns'][:4])}")
     try:
         registered = companies_house(company)
-    except Exception:  # noqa: BLE001
+    except Exception:  # a failed registry lookup leaves the company check without it
         registered = None
     if registered is None:
         lines.append("- Companies House: lookup failed")

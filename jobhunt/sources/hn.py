@@ -28,6 +28,7 @@ def _text(h: str) -> str:
 
 
 def fetch():
+    """Returns the jobs posted in the latest "Who is hiring" thread."""
     hits = get_json(SEARCH)["hits"]
     story = next(h for h in hits if h["title"].startswith("Ask HN: Who is hiring?"))
     thread = get_json(f"https://hn.algolia.com/api/v1/items/{story['objectID']}")

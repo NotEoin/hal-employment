@@ -141,6 +141,7 @@ def _base(ch):
 
 
 def measure(text, font, size, tracking=0.0):
+    """Returns the width of a text in points for a font and size."""
     table = WIDTHS[font]
     total = 0.0
     for ch in text:
@@ -208,6 +209,7 @@ def wrap(text, width, size):
 
 
 def esc(text):
+    """Escapes a string for a PDF text operator."""
     return text.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
 
 
@@ -225,6 +227,7 @@ def text_op(s, x, y, font, size, ink=BODY_INK, tracking=0.0):
 
 # ------------------------------------------------------------- document
 class Doc:
+    """A page-by-page PDF drawing surface with a cursor that moves down the page."""
     def __init__(self):
         self.pages = []
         self.ops = []
@@ -246,16 +249,19 @@ class Doc:
         return False
 
     def finish(self):
+        """Closes the last page and returns the pages."""
         self.pages.append(self.ops)
         return self.pages
 
     # -- primitives ------------------------------------------------------
     def text(self, s, x, y, font, size, ink=BODY_INK, tracking=0.0):
+        """Draws one line of text at a position."""
         if not s:
             return
         self.ops.append(text_op(s, x, y, font, size, ink, tracking))
 
     def rule(self, x, y, width, ink=RULE, thickness=0.5):
+        """Draws a horizontal rule."""
         self.ops.append(
             f"{ink:.3f} G {thickness} w {x:.2f} {y:.2f} m {x + width:.2f} {y:.2f} l S"
         )
@@ -291,6 +297,7 @@ class Doc:
 
     # -- blocks ----------------------------------------------------------
     def paragraph(self, text, x=ML, width=CW, size=BODY_SIZE, lead=BODY_LEAD, gap=0.0):
+        """Draws wrapped text, starting a new page when it does not fit."""
         lines = wrap(text, width, size)
         self.need(len(lines) * lead)
         for line in lines:
@@ -300,12 +307,14 @@ class Doc:
         self.y -= gap
 
     def height_of(self, text, width, size=BODY_SIZE, lead=BODY_LEAD):
+        """Returns the height a wrapped paragraph needs."""
         return len(wrap(text, width, size)) * lead
 
     def section(self, title):
         # reserving only the heading lets one strand at the foot of a page
         # with its first entry overleaf. Derived, not hand-counted, so it
         # cannot go stale the next time the typography is tightened.
+        """Draws a section heading."""
         self.need(26 + HEAD_SIZE + 3 + META_SIZE + 4 + 1 + BODY_LEAD)
         self.y -= 11
         self.text(title.upper() + " ", ML, self.y, F_BOLD, SECTION_SIZE, INK, tracking=1.5)
@@ -314,11 +323,13 @@ class Doc:
         self.y -= 9
 
     def heading(self, text, size=HEAD_SIZE):
+        """Draws a heading line."""
         self.y -= size
         self.text(text + " ", ML, self.y, F_BOLD, size, INK)
         self.y -= 3
 
     def meta(self, text):
+        """Draws a small line of detail under a heading."""
         self.y -= META_SIZE
         self.text(text + " ", ML, self.y, F_REG, META_SIZE, META_INK)
         self.y -= 4

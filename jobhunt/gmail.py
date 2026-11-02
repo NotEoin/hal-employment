@@ -121,6 +121,10 @@ def password() -> str | None:
 
 
 def classify(sender: str, rcpt: str, subject: str, body: str) -> str:
+    """Returns the kind of an email.
+
+    One of `alert`, `confirmed`, `applied`, `interview`, `offer`, `rejected`, `human`, `admin` or `other`.
+    """
     s = f"{subject}\n{body[:4000]}"
     own = address()
     if own and own in sender.lower():
@@ -206,6 +210,7 @@ def _first(patterns, *texts):
 
 
 def company_of(sender: str, rcpt: str, subject: str, body: str, kind: str) -> str | None:
+    """Returns the employer an email is about, or None."""
     if kind == "applied":
         found = _first(COMPANY_PATTERNS[3:], body[:300])
         if found:
@@ -235,6 +240,7 @@ def company_of(sender: str, rcpt: str, subject: str, body: str, kind: str) -> st
 
 
 def role_of(subject: str, body: str) -> str | None:
+    """Returns the job title an email is about, or None."""
     return _first(ROLE_PATTERNS, subject, body[:1500])
 
 
@@ -253,6 +259,7 @@ def refine(sender, subject, body, kind, company, role):
 
 
 def norm(company: str | None) -> str:
+    """Returns a company name lower-cased, without suffixes such as `ltd`."""
     c = (company or "").lower()
     c = re.sub(r"\.(com|io|ai|co\.uk|co)\b", "", c)
     c = re.sub(r"\b(ltd|limited|inc|plc|llc|group|technologies|technology|tech|data|uk|holdings|"
@@ -268,6 +275,7 @@ def _similar(a: str | None, b: str | None) -> float:
 
 
 def match_job(con, company: str | None, role: str | None, kind: str) -> str | None:
+    """Returns the id of the saved job that matches the company and role, or None."""
     if not company:
         return None
     key = norm(company)

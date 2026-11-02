@@ -40,6 +40,7 @@ def _plan(source: dict | None, goal) -> tuple[list[str], int, int]:
 
 
 def adzuna(source: dict | None = None, goal=None):
+    """Returns jobs from Adzuna; empty without a saved key."""
     creds = _key("adzuna")  # "<app_id>:<app_key>"
     if not creds:
         return []
@@ -72,6 +73,7 @@ def _reed(path: str, key: str):
 
 
 def reed(source: dict | None = None, goal=None):
+    """Returns jobs from Reed; empty without a saved key."""
     key = _key("reed")
     if not key:
         return []

@@ -8,6 +8,7 @@ import textwrap
 
 
 def cmd_record(args):
+    """Handles `jobhunt record`: searches or asks questions about your record."""
     from .. import record
     query = " ".join(args.text)
     if args.op in ("search", "ask") and not query:

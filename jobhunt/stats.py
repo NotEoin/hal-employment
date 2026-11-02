@@ -50,7 +50,9 @@ def summary(con) -> dict:
         row["heard"] += j["status"] in REPLIES
         row["rejected"] += j["status"] == "rejected"
     statuses = Counter(j["status"] for j in jobs.values())
-    one = lambda sql: con.execute(sql).fetchone()[0]  # noqa: E731
+    def one(sql: str):
+        return con.execute(sql).fetchone()[0]
+
     return {
         "today": days[today], "last7": last7,
         "previous7": sum(days[today - timedelta(d)] for d in range(7, 14)),

@@ -98,26 +98,46 @@ class Platform(Protocol):
 
     name: str
 
-    def open_path(self, path: Path) -> None: ...
-    def notify(self, title: str, body: str, *, urgent: bool = False) -> None: ...
-    def start_at_login(self, on: bool) -> str: ...
-    def start_at_login_state(self) -> bool | None: ...
-    def browsers(self) -> list[Browser]: ...
-    def open_in_browser(self, browser: Browser, url: str) -> None: ...
-    def open_browser_window(self, browser: Browser) -> None: ...
-    def open_app_window(self, url: str) -> None: ...
-    def run_hidden(self, args: list[str], **kw) -> subprocess.CompletedProcess: ...
-    def popen_hidden(self, args: list[str], **kw) -> subprocess.Popen: ...
-    def kill_tree(self, proc: subprocess.Popen) -> None: ...
-    def spawn_detached(self, args: list[str], *, unit: str | None = None) -> int: ...
-    def open_console(self, args: list[str], title: str) -> int: ...
-    def machine(self) -> dict: ...
-    def service(self) -> str: ...
-    def restart_server(self) -> None: ...
-    def documents_folder(self) -> Path: ...
-    def retire_legacy_timers(self, dry_run: bool = False) -> list[str]: ...
-    def restore_legacy_timers(self) -> list[str]: ...
-    def legacy_timers_enabled(self) -> list[str]: ...
+    def open_path(self, path: Path) -> None:
+        """Opens a file or folder with the default application."""
+    def notify(self, title: str, body: str, *, urgent: bool = False) -> None:
+        """Shows a desktop notification."""
+    def start_at_login(self, on: bool) -> str:
+        """Turns start at login on or off and returns a one-line result."""
+    def start_at_login_state(self) -> bool | None:
+        """Returns whether start at login is on, or None when it cannot be told."""
+    def browsers(self) -> list[Browser]:
+        """Returns the browsers installed on this computer."""
+    def open_in_browser(self, browser: Browser, url: str) -> None:
+        """Opens a page in a given browser."""
+    def open_browser_window(self, browser: Browser) -> None:
+        """Opens a new window of a given browser."""
+    def open_app_window(self, url: str) -> None:
+        """Opens a page in a window without browser controls."""
+    def run_hidden(self, args: list[str], **kw) -> subprocess.CompletedProcess:
+        """Runs a command without showing a console window."""
+    def popen_hidden(self, args: list[str], **kw) -> subprocess.Popen:
+        """Starts a command without showing a console window."""
+    def kill_tree(self, proc: subprocess.Popen) -> None:
+        """Stops a process and everything it started."""
+    def spawn_detached(self, args: list[str], *, unit: str | None = None) -> int:
+        """Starts a command that outlives this process and returns its pid."""
+    def open_console(self, args: list[str], title: str) -> int:
+        """Runs a command in a visible console and returns its exit code."""
+    def machine(self) -> dict:
+        """Returns `memory_gb`, `gpu` and `cpus`, for Settings and the AI choice."""
+    def service(self) -> str:
+        """Returns how the server runs: `hal-unit`, `app-unit` or `none`."""
+    def restart_server(self) -> None:
+        """Restarts the Hal server."""
+    def documents_folder(self) -> Path:
+        """Returns the user's Documents folder."""
+    def retire_legacy_timers(self, dry_run: bool = False) -> list[str]:
+        """Turns off the timers of earlier versions and returns their names."""
+    def restore_legacy_timers(self) -> list[str]:
+        """Turns the earlier versions' timers back on and returns their names."""
+    def legacy_timers_enabled(self) -> list[str]:
+        """Returns the names of the earlier versions' timers that are on."""
 
 
 @functools.cache

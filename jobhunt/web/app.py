@@ -169,21 +169,27 @@ class AppHandler(BaseHTTPRequestHandler):
     # methods
 
     def do_GET(self):
+        """Handles a GET request."""
         self._handle("GET")
 
     def do_HEAD(self):
+        """Handles a HEAD request like a GET."""
         self._handle("GET")
 
     def do_POST(self):
+        """Handles a POST request."""
         self._handle("POST")
 
     def do_PUT(self):
+        """Handles a PUT request."""
         self._handle("PUT")
 
     def do_DELETE(self):
+        """Handles a DELETE request."""
         self._handle("DELETE")
 
     def do_PATCH(self):
+        """Handles a PATCH request."""
         self._handle("PATCH")
 
     # checks

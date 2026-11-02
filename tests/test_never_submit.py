@@ -83,7 +83,9 @@ class StaticChecks(unittest.TestCase):
                   "el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))", "browser.submit(job_id)"]
         let_through = ["POOL.submit(wrapper)", "pool.submit(fn)", "proto.requestSubmit = function (by) {",
                        "box.press('ArrowDown')"]
-        hit = lambda line: any(re.search(p, line) for p in self.FORBIDDEN)  # noqa: E731
+        def hit(line):
+            return any(re.search(p, line) for p in self.FORBIDDEN)
+
         self.assertEqual([line for line in caught if not hit(line)], [])
         self.assertEqual([line for line in let_through if hit(line)], [])
 

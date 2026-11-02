@@ -35,6 +35,7 @@ def _searches(source: dict | None, goal) -> list[str]:
 
 
 def fetch(source: dict | None = None, goal=None):
+    """Returns academic jobs for the goal's searches and places."""
     jobs = {}
     for keywords in _searches(source, goal):
         for place in places():
@@ -60,6 +61,7 @@ def fetch(source: dict | None = None, goal=None):
 
 
 def detail(job: dict) -> str:
+    """Returns the advert text of one job."""
     page = get(job["url"], headers=BROWSER, timeout=30)
     body = re.search(r'id="job-description"[^>]*>(.*?)</section>', page, re.S) or \
         re.search(r'class="j-advert__details"[^>]*>(.*)', page, re.S)

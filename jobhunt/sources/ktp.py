@@ -20,6 +20,7 @@ def _page_text(url: str) -> str:
 
 
 def fetch():
+    """Returns the posts of the Knowledge Transfer Partnerships job feed."""
     jobs = []
     for j in get_json(API):
         title = html.unescape(j["title"]["rendered"]).strip()

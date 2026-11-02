@@ -8,6 +8,7 @@ from ..notify import notify
 
 
 def cmd_mail(args):
+    """Handles `jobhunt mail`: reads recent job emails."""
     from .. import gmail
     con = db.connect()
     attention = gmail.sync(con, args.days)
@@ -24,12 +25,14 @@ def cmd_mail(args):
 
 
 def cmd_digest(args):
+    """Handles `jobhunt digest`: sends or speaks the daily digest."""
     from .. import digest
     con = db.connect()
     print(digest.spoken(con) if args.spoken else digest.send(con, args.dry_run))
 
 
 def cmd_todo(args):
+    """Handles `jobhunt todo`: lists, adds or finishes to-dos."""
     con = db.connect()
     if args.op == "add":
         db.add_todo(con, "task", " ".join(args.rest))
@@ -47,6 +50,7 @@ def cmd_todo(args):
 
 
 def cmd_inbox(args):
+    """Handles `jobhunt inbox`: lists the emails Hal has read."""
     con = db.connect()
     where = "kind = ?" if args.kind else "kind NOT IN ('alert', 'admin', 'other')"
     rows = con.execute(f"SELECT * FROM emails WHERE {where} ORDER BY date DESC LIMIT ?",

@@ -82,6 +82,7 @@ CLICHES = re.compile(
 
 
 def slug(text: str) -> str:
+    """Returns a file-name-safe form of a text."""
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60]
 
 

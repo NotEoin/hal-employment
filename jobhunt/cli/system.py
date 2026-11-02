@@ -17,6 +17,7 @@ SERVE_UNIT = "hal-employment-serve"   # the transient unit a server started by `
 
 
 def cmd_serve(args):
+    """Handles `jobhunt serve`: runs the web server."""
     from ..web import app
 
     code = app.serve(args.port, args.open, getattr(args, "background", False))
@@ -25,6 +26,7 @@ def cmd_serve(args):
 
 
 def cmd_vault(args):
+    """Handles `jobhunt vault`: writes the pipeline note into the Hal vault."""
     from .. import vault
     print(vault.write(db.connect()) or f"vault not found: {vault.VAULT}")
 

@@ -697,6 +697,7 @@ def _type_code(con, job, boxes: list[str]) -> bool:
 
 
 def act_draft_rest(con, job_id: str) -> str:
+    """Drafts answers for the form fields that are still empty and returns a summary."""
     job = _job(con, job_id)
     form = _app(con, job_id)["form"]
     answered, waiting = autofill.ask_model(job, form["fields"], documents.load(con, job), con)

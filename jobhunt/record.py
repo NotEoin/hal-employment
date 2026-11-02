@@ -88,6 +88,7 @@ give provide describe tell us""".split())
 
 
 class RecordUnavailable(Exception):
+    """Raised when the record cannot be read or searched."""
     pass
 
 

@@ -84,6 +84,7 @@ class GatewayBackend(OpenAICompatBackend):
 
     @property
     def key(self) -> str | None:  # type: ignore[override]  # the parent stores a plain attribute; here it is live
+        """Returns the gateway token, read from the token file on each use."""
         return read_token(self.token_file)
 
     @key.setter

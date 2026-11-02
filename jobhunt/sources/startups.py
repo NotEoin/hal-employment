@@ -31,6 +31,7 @@ def _page_props(url: str) -> dict:
 
 
 def yc():
+    """Returns the jobs listed on the Y Combinator job pages."""
     jobs = {}
     for url in YC_PAGES:
         for j in _page_props(url).get("jobPostings", []):

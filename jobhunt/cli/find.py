@@ -40,6 +40,7 @@ def _fetch(source, goal):
 
 
 def cmd_discover(args):
+    """Handles `jobhunt discover`: searches the enabled sources for new jobs."""
     con = db.connect()
     goal = goal_mod.current()
     sources = registry.enabled(con)
@@ -137,6 +138,7 @@ def _resolve_watched(con, sources):
 
 
 def cmd_add(args):
+    """Handles `jobhunt add`: adds a job from its page address."""
     from .. import research
     con = db.connect()
     text = research.page_text(args.url, limit=20000)
@@ -151,6 +153,7 @@ def cmd_add(args):
 
 
 def cmd_screen(args):
+    """Handles `jobhunt screen`: screens jobs above a minimum score."""
     from .. import screen
     con = db.connect()
     for job_id, ok, reason in screen.screen(con, args.min, args.n):
@@ -158,6 +161,7 @@ def cmd_screen(args):
 
 
 def cmd_queue(args):
+    """Handles `jobhunt queue`: lists the jobs ready to apply to."""
     from .. import replenish
     con = db.connect()
     rows = con.execute("""SELECT * FROM jobs WHERE status = 'ready' AND active = 1
@@ -168,6 +172,7 @@ def cmd_queue(args):
 
 
 def cmd_rescore(args):
+    """Handles `jobhunt rescore`: scores every job again."""
     con = db.connect()
     print(f"rescored {rules.rescore_all(con)}")
 
@@ -180,6 +185,7 @@ def _find(con, ref):
 
 
 def cmd_list(args):
+    """Handles `jobhunt list`: lists jobs by status and score."""
     con = db.connect()
     # Applications found via email have no score, so only filter on score
     # when asked to, or when browsing unreviewed postings.
@@ -206,6 +212,7 @@ def cmd_list(args):
 
 
 def cmd_show(args):
+    """Handles `jobhunt show`: prints one job."""
     con = db.connect()
     r = _find(con, args.id)
     print(f"{r['title']}\n{r['company']} | {r['location']} | {r['salary'] or 'salary n/a'}")
@@ -220,6 +227,7 @@ def cmd_show(args):
 
 
 def cmd_set(args):
+    """Handles `jobhunt set`: changes a job's status."""
     con = db.connect()
     r = _find(con, args.id)
     db.set_status(con, r["id"], args.status, " ".join(args.note))
@@ -228,6 +236,7 @@ def cmd_set(args):
 
 
 def cmd_note(args):
+    """Handles `jobhunt note`: adds a note to a job."""
     con = db.connect()
     r = _find(con, args.id)
     db.log(con, r["id"], "note", " ".join(args.text))
@@ -235,6 +244,7 @@ def cmd_note(args):
 
 
 def cmd_stats(args):
+    """Handles `jobhunt stats`: counts jobs by status."""
     con = db.connect()
     for r in con.execute("SELECT status, COUNT(*) n FROM jobs WHERE status != 'new' OR score > 0 GROUP BY status ORDER BY n DESC"):
         print(f"{r['status']:12} {r['n']}")
@@ -254,6 +264,7 @@ def _names(raw):
 
 
 def cmd_probe(args):
+    """Handles `jobhunt probe`: looks for employers' job boards not yet in the sources."""
     con = db.connect()
     registry.sync(con)
     known = {(r["config"].get("ats"), r["config"].get("slug")) for r in registry.enabled(con)}
