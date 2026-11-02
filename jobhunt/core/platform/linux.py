@@ -42,6 +42,7 @@ from . import (
     Browser,
     found,
     render,
+    wsl2,
 )
 
 log = logging.getLogger(__name__)
@@ -227,7 +228,8 @@ class LinuxPlatform:
             if self._which(term):
                 extra = ["--title", title] if term == "gnome-terminal" else []
                 return self._start([term, *extra, flag, *args])
-        raise RuntimeError("No terminal program was found. Install one, such as GNOME Terminal or xterm.")
+        advice = wsl2.NO_TERMINAL_ADVICE if wsl2.is_wsl2() else ""
+        raise RuntimeError(f"No terminal program was found. Install one, such as GNOME Terminal or xterm.{advice}")
 
     def machine(self) -> dict:
         """{memory_gb, gpu, cpus} for Settings and the AI choice."""
@@ -266,6 +268,9 @@ class LinuxPlatform:
             return MANAGED_BY_HAL
         if not self._which("systemctl"):
             return NO_SYSTEMD
+        # on WSL2 `systemctl` exists but fails until systemd is PID 1, so "enabled" would be untrue
+        if wsl2.is_wsl2() and not wsl2.systemd_running():
+            return NO_SYSTEMD + wsl2.NO_SYSTEMD_ADVICE
         unit = self.units_dir / APP_UNIT
         if on:
             unit.parent.mkdir(parents=True, exist_ok=True)

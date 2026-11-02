@@ -21,3 +21,10 @@ if not os.environ.get("HAL_EMPLOYMENT_HOME", "").strip():
     os.environ["HAL_EMPLOYMENT_HOME"] = _home
     atexit.register(shutil.rmtree, _home, ignore_errors=True)
 offline.install()
+# Tests see plain Linux unless one fakes WSL2, so a run inside WSL2 behaves like any other (see platform/wsl2.py)
+if not os.environ.get("HAL_EMPLOYMENT_OSRELEASE"):
+    _release = os.path.join(tempfile.mkdtemp(prefix="hal-tests-"), "osrelease")
+    with open(_release, "w", encoding="ascii") as _file:
+        _file.write("6.8.0-generic\n")
+    os.environ["HAL_EMPLOYMENT_OSRELEASE"] = _release
+    atexit.register(shutil.rmtree, os.path.dirname(_release), ignore_errors=True)

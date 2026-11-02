@@ -14,6 +14,9 @@ Hal Employment is now an app with its own window, for any career, on Windows and
   hold a gpu-light claim when it is installed. Settings shows the mode. New setting keys: `ai.provider`
   accepts `hal`, plus `ai.hal_url` and `ai.hal_token_file`; saved settings keep working unchanged.
   Hal's mode warns when the gateway token file can be read by group or others.
+- **Runs in WSL2.** The Linux install works inside WSL2 on Windows 11 ([steps](docs/howto/run-on-windows-with-wsl2.md)). Start at login says
+  to turn systemd on instead of claiming it is enabled, the Claude sign-in names the terminal to install,
+  and the local-model wait ignores programs `nvidia-smi` cannot name. Not yet run on a Windows PC.
 - **A new app.** A menu down the left, a line at the top that says what Hal is doing (with Why? and Stop),
   search or jump with Ctrl K, light and dark looks, and a simple menu of five items. Hal opens from
   its shortcut with a one-time link, so a web page in any browser cannot read or change anything in it.

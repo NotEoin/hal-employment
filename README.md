@@ -69,7 +69,8 @@ edits no core file. [docs/dev/architecture.md](docs/dev/architecture.md) has the
 
 **It runs on Windows and Linux.** CI runs the full suite, browser tests included, on Linux with Python 3.11
 and 3.13 and on Windows with Python 3.13. A platform layer holds what differs between the two (windows,
-pop-ups, start at login, finding browsers), and tests drive it with fakes.
+pop-ups, start at login, finding browsers), and tests drive it with fakes. The Linux install also runs
+inside WSL2 on Windows ([steps](docs/howto/run-on-windows-with-wsl2.md)).
 
 ![My CV: the scanner score with fixed weights and the checks of the CV type](docs/images/cv-checks.png)
 

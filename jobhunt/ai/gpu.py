@@ -23,6 +23,7 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
+from ..core.platform import wsl2
 from .base import LLMUnavailable
 
 log = logging.getLogger(__name__)
@@ -60,11 +61,14 @@ def holders() -> list[tuple[str, int]]:
         return []
     ignore = _ignored()
     found = []
+    on_wsl2 = wsl2.is_wsl2()
     for line in out.strip().splitlines():
         try:
             pid, path, mib = (x.strip() for x in line.split(",", 2))
         except ValueError:
             continue
+        if on_wsl2 and path in wsl2.UNNAMED_PROCESS:
+            continue    # a Windows process has no name here, so it cannot be told apart from Hal's own
         try:
             # The command line names the program; the process path is often only "python".
             cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="ignore")

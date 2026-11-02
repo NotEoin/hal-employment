@@ -16,6 +16,7 @@ documents explain how Hal works and how to change it.
 | --- | --- |
 | [Install Hal Employment on Windows](howto/install-on-windows.md) | The install file and the download warnings, with no admin rights |
 | [Install Hal Employment on Linux](howto/install-on-linux.md) | The install script and its GitHub sign-in |
+| [Run Hal Employment in WSL2 on Windows](howto/run-on-windows-with-wsl2.md) | The Linux install inside WSL2: systemd, a terminal, the window and the GPU |
 | [Update Hal Employment](howto/update-hal.md) | Update Hal, go back to the version before, and update when the app will not start |
 | [Load the browser helper](howto/load-the-browser-helper.md) | Add Hal's helper to Opera, Google Chrome, Microsoft Edge, Brave or Vivaldi, and connect it |
 | [Use the helper with Hal](howto/use-the-helper-with-hal.md) | Use Hal's local model through its gateway, and never Claude |
