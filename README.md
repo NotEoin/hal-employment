@@ -91,7 +91,7 @@ to Claude unless you pick Claude yourself. Settings shows which mode is in force
 
 - [Hal](https://github.com/NotEoin/Hal): the local assistant and its long-term memory.
 - [hal-voice](https://github.com/NotEoin/hal-voice): talk to Hal out loud.
-- hal-ecosystem (the installer and map), hal-hub (finds extensions and runs their tools) and hal-jobs: the
+- hal-hub (finds extensions and runs their tools) and hal-jobs: the
   ecosystem repositories are published together.
 
 ## Install

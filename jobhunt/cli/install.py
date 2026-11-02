@@ -6,7 +6,7 @@ The bootstraps run `install --windows` or `install --linux` after `uv sync`; the
 Design decisions, each with its reason:
 
 - `install` never writes over a file or symlink it did not make, and refuses outright to replace a symlink
-  into hal-ecosystem: on the owner's desktop `~/.local/bin/hal-employment` is Hal's own command, so the
+  into hal-ecosystem (Hal's predecessor): `~/.local/bin/hal-employment` can be Hal's own command, so the
   shim is `hal-employment-cli` and every file this writes carries `MARK`.
 - On Windows the install record names the bundled PortableGit's `git.exe` by full path, whatever git is on
   PATH, so the updater always runs the version that carries Git Credential Manager.
