@@ -6,7 +6,8 @@ GPU claims and loads or unloads models itself, so this backend never asks gpu-li
 
 The gateway wants a bearer token on every request but `/health`. The owner token is one line in
 `ai.hal_token_file` (default `~/.config/hal/gateway-token`, mode 0600), read at each call so a rotated token
-is picked up without a restart. The gateway only listens on loopback (another computer reaches it through
+is picked up without a restart. `status()` warns, but still works, when group or others can access the file.
+The gateway only listens on loopback (another computer reaches it through
 an SSH tunnel, which is loopback again), so the token is only ever sent to a loopback address, straight
 there: never through a proxy from the environment and never on to where a redirect points.
 
@@ -18,6 +19,7 @@ any reply that still carries the header.
 from __future__ import annotations
 
 import logging
+import stat
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -36,6 +38,9 @@ REMOTE_HEADER = "X-Hal-Remote"      # set by the gateway on every reply from an 
 REMOTE_OWNER = "remote:"            # the `owned_by` prefix of an online backend's models in /models
 
 
+LOOSE_MODE = stat.S_IRWXG | stat.S_IRWXO     # any group or world permission on a token file is too much
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args: Any, **kwargs: Any) -> None:
         return None     # urllib then raises the 3xx as an HTTPError instead of resending the token elsewhere
@@ -52,6 +57,18 @@ def read_token(path: str | Path) -> str | None:
         return None
     lines = text.strip().splitlines()
     return lines[0].strip() or None if lines else None
+
+
+def loose_mode_warning(path: str | Path) -> str | None:
+    """Words to warn with when group or others can access the token file at `path`, else None."""
+    try:
+        mode = Path(path).expanduser().stat().st_mode
+    except OSError:
+        return None
+    if not mode & LOOSE_MODE:
+        return None
+    return (f"Hal's gateway token file {path} can be read by other users on this computer "
+            f"(mode {stat.S_IMODE(mode):04o}).")
 
 
 class GatewayBackend(OpenAICompatBackend):
@@ -128,6 +145,11 @@ class GatewayBackend(OpenAICompatBackend):
         except LLMUnavailable:
             return Status(ready=False, why=f"Hal's gateway does not answer at {self.url}.",
                           fix="Start Hal's gateway with hal-gateway serve, with [gateway] tcp = true")
+        warning = loose_mode_warning(self.token_file)
+        if warning:
+            log.warning("%s Set its mode to 600.", warning)
+            return Status(ready=True, why=warning, fix=f"Run chmod 600 on {self.token_file}",
+                          detail={"warning": warning})
         return Status(ready=True)
 
     def embed(self, texts: list[str], model: str) -> list[list[float]]:

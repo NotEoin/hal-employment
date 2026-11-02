@@ -13,6 +13,7 @@ Hal Employment is now an app with its own window, for any career, on Windows and
   online model the gateway fronts. The gateway address must be on this computer, so the token stays here. Local calls
   hold a gpu-light claim when it is installed. Settings shows the mode. New setting keys: `ai.provider`
   accepts `hal`, plus `ai.hal_url` and `ai.hal_token_file`; saved settings keep working unchanged.
+  Hal's mode warns when the gateway token file can be read by group or others.
 - **A new app.** A menu down the left, a line at the top that says what Hal is doing (with Why? and Stop),
   search or jump with Ctrl K, light and dark looks, and a simple menu of five items. Hal opens from
   its shortcut with a one-time link, so a web page in any browser cannot read or change anything in it.

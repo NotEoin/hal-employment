@@ -55,6 +55,7 @@ yourself; it never switches by itself.
 | "Hal's gateway does not answer at ..." | Set `tcp = true` under `[gateway]`, restart the gateway, then run `hal-gateway status`. |
 | "Hal's gateway must be on this computer" | Set `ai.hal_url` to a `127.0.0.1` address, through an SSH tunnel if the gateway runs elsewhere. |
 | "Hal's gateway token was not found" | Run `hal-gateway token issue --name hal-employment` and save the secret as one line in the token file. |
+| "can be read by other users" on the AI status | The token file is open to group or others. Run `chmod 600 ~/.config/hal/gateway-token`; Hal keeps working meanwhile. |
 | "Hal's gateway did not accept the token" | The token was rotated or revoked. Save the new one in the token file; no restart is needed. |
 | "... is an online model behind Hal's gateway" | Choose a local model under **Settings**, **Hal's brain**, or clear the model setting so Hal picks one. |
 | "jobhunt_root is not set" from a Hal jobs tool | Add `jobhunt_root` under `[jobs]` as in step 6. |

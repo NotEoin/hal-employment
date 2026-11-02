@@ -13,7 +13,7 @@ from test_ai_backends import InHome
 from jobhunt import ai
 from jobhunt.ai import provider
 from jobhunt.ai.base import LLMUnavailable
-from jobhunt.ai.hal_gateway import GatewayBackend, gateway_answers, read_token
+from jobhunt.ai.hal_gateway import GatewayBackend, gateway_answers, loose_mode_warning, read_token
 from jobhunt.core import settings
 from jobhunt.core.settings import store
 from jobhunt.core.settings.catalog import ai as ai_catalog
@@ -81,6 +81,17 @@ class Gateway(InHome):
         self.token.write_text(f"  {TOKEN}  \nignored\n", encoding="utf-8")
         self.assertEqual(read_token(self.token), TOKEN)
         self.assertIsNone(read_token(self.tmp / "missing"))
+
+    def test_a_token_file_open_to_group_or_others_is_warned_about(self):
+        be = GatewayBackend(self.url, self.token)
+        for mode, warned in ((0o600, False), (0o400, False), (0o640, True), (0o604, True)):
+            with self.subTest(mode=oct(mode)):
+                self.token.chmod(mode)
+                self.assertEqual(loose_mode_warning(self.token) is not None, warned)
+                status = be.status()
+                self.assertTrue(status.ready, "a loose mode only warns")
+                self.assertEqual("warning" in status.detail, warned)
+        self.assertIsNone(loose_mode_warning(self.tmp / "missing"))
 
     def test_a_chat_carries_the_bearer_token_and_asks_the_gateway(self):
         be = GatewayBackend(self.url, self.token)
