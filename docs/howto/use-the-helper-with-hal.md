@@ -42,7 +42,7 @@ the gateway's address and token from two settings, so nothing else is needed.
 
    ```toml
    [jobs]
-   jobhunt_root = "/path/to/employment-helper"   # the folder that holds the jobhunt package
+   jobhunt_root = "/path/to/hal-employment"   # the folder that holds the jobhunt package
    ```
 
 The gateway claims the graphics card itself, through gpu-light when that is installed, so Hal Employment
