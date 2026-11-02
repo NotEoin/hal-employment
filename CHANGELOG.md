@@ -8,6 +8,7 @@ What changed in each version, in plain words.
 
 Hal Employment is now an app with its own window, for any career, on Windows and Linux.
 
+- **Shorter README.** It now lists requirements, install, run and test, and points to the docs for the design.
 - **Two AI modes.** On its own, Hal uses Claude Code or a model on this computer. With Hal installed and
   its gateway answering, Hal uses Hal's local model and never falls back to Claude by itself, nor to an
   online model the gateway fronts. The gateway address must be on this computer, so the token stays here. Local calls

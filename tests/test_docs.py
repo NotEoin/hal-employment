@@ -186,7 +186,7 @@ class TheReadme(unittest.TestCase):
 
     def test_the_readme_says_what_hal_is_and_how_to_install_use_and_develop_it(self):
         headings = [h.lower() for h in re.findall(r"^## (.+)$", self.body, re.M)]
-        for word in ("why it exists", "install", "use", "configuration", "development", "licence"):
+        for word in ("requirements", "install", "run", "configuration", "test", "licence"):
             with self.subTest(word):
                 self.assertTrue(any(word in h for h in headings), f"a heading about {word}")
         intro = self.body.split("\n## ", 1)[0]
