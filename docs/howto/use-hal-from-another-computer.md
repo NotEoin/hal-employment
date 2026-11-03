@@ -63,6 +63,12 @@ same steps with this computer's name, your user name and Copy buttons. In the co
 
    Settings on the desktop also offers both launchers as downloads. If the desktop has no
    `~/.local/bin/hal-employment-cli` yet, the steps in Settings call Hal's own Python instead.
+   A desktop that runs Hal Employment from a git checkout, or through Hal, has no such command until
+   you make it once, in that checkout on the desktop:
+
+   ```sh
+   .venv/bin/python -m jobhunt install --dev   # makes ~/.local/bin/hal-employment-cli and a menu entry
+   ```
 
 ## Every time
 
@@ -91,4 +97,6 @@ same steps with this computer's name, your user name and Copy buttons. In the co
 | "Could not copy the browser helper" | The connection dropped while copying. Open the launcher again; Hal itself still opens. |
 | The browser helper says it is older than Hal | Open the launcher again: it copies the desktop's new helper, then reload the helper in the browser. |
 | Windows asks for the key's passphrase three times | Use a key without a passphrase on this laptop, or switch on the "OpenSSH Authentication Agent" service. |
+| `bash: ~/.local/bin/hal-employment-cli: No such file or directory` when fetching the launcher | The desktop runs Hal Employment from a checkout or through Hal. Run the `install --dev` line in step 5 on the desktop. |
+| The small window closes at once | Fetch the launcher again (step 5): launchers made before 2026-11-03 closed as soon as the tunnel started. A launcher that fails now stays open and says why. |
 | Hal opens on another port number | Something on the laptop already uses that port; the launcher picked the next free one. Nothing to fix. |
