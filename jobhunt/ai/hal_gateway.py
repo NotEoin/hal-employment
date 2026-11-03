@@ -19,6 +19,7 @@ any reply that still carries the header.
 from __future__ import annotations
 
 import logging
+import os
 import stat
 import urllib.error
 import urllib.request
@@ -39,6 +40,7 @@ REMOTE_OWNER = "remote:"            # the `owned_by` prefix of an online backend
 
 
 LOOSE_MODE = stat.S_IRWXG | stat.S_IRWXO     # any group or world permission on a token file is too much
+POSIX_MODES = os.name != "nt"  # Windows reports every file as 0666 or 0444; access there is set by ACLs
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -60,7 +62,12 @@ def read_token(path: str | Path) -> str | None:
 
 
 def loose_mode_warning(path: str | Path) -> str | None:
-    """Words to warn with when group or others can access the token file at `path`, else None."""
+    """Words to warn with when group or others can access the token file at `path`, else None.
+
+    Always None on Windows, whose modes say nothing about other users.
+    """
+    if not POSIX_MODES:
+        return None
     try:
         mode = Path(path).expanduser().stat().st_mode
     except OSError:

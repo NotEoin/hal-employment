@@ -1,6 +1,7 @@
 """Hal's local model: the gateway backend, its token file, detection and the never-silently-Claude rule."""
 import http.server
 import json
+import os
 import threading
 import unittest
 import urllib.request
@@ -82,6 +83,7 @@ class Gateway(InHome):
         self.assertEqual(read_token(self.token), TOKEN)
         self.assertIsNone(read_token(self.tmp / "missing"))
 
+    @unittest.skipIf(os.name == "nt", "file modes are POSIX only")
     def test_a_token_file_open_to_group_or_others_is_warned_about(self):
         be = GatewayBackend(self.url, self.token)
         for mode, warned in ((0o600, False), (0o400, False), (0o640, True), (0o604, True)):
@@ -92,6 +94,12 @@ class Gateway(InHome):
                 self.assertTrue(status.ready, "a loose mode only warns")
                 self.assertEqual("warning" in status.detail, warned)
         self.assertIsNone(loose_mode_warning(self.tmp / "missing"))
+
+    def test_windows_never_warns_about_a_token_files_mode(self):
+        """Regression: Windows reports every file as 0666, so every Windows user got the warning."""
+        self.token.chmod(0o644)
+        with mock.patch("jobhunt.ai.hal_gateway.POSIX_MODES", False):
+            self.assertIsNone(loose_mode_warning(self.token))
 
     def test_a_chat_carries_the_bearer_token_and_asks_the_gateway(self):
         be = GatewayBackend(self.url, self.token)

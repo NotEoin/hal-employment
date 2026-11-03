@@ -8,6 +8,8 @@ What changed in each version, in plain words.
 
 Hal Employment is now an app with its own window, for any career, on Windows and Linux.
 
+- **No false token warning on Windows.** Windows has no Unix file modes, so Hal no longer warns there that
+  the gateway token file is readable by other users.
 - **Shorter README.** It now lists requirements, install, run and test, and points to the docs for the design.
 - **Two AI modes.** On its own, Hal uses Claude Code or a model on this computer. With Hal installed and
   its gateway answering, Hal uses Hal's local model and never falls back to Claude by itself, nor to an
