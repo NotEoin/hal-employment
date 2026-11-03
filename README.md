@@ -13,6 +13,13 @@ doesn't sound like you, and press Submit yourself. Hal never presses Submit and 
 anything to an employer; the tests fill practice forms whose servers count every post, and the
 count must stay at zero.
 
+Every draft is built from your record: an "Employment Record" folder in your Documents (it opens as
+an Obsidian vault too) where you keep your CV, certificates, references and the full story of each
+job. Each time Hal writes, it searches the record for the passages that fit that application
+(retrieval-augmented generation, or RAG) and treats them as the source of truth. So the drafts are
+only as good as what you put in. A sparse record gives Hal little to work with; the more you add,
+the better each tailored draft gets.
+
 ![Home: what needs you today, new matches and your goal](docs/images/home.png)
 
 It is Python 3.11+ with a standard-library HTTP server and SQLite, a Preact front end with no build
