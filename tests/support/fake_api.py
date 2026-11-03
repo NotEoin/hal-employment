@@ -44,7 +44,7 @@ def csp_header(index_html: str) -> str:
 
 def made_up_session(**over: Any) -> dict:
     """A /session reply for a made-up person on their own computer."""
-    s = {"remote": False, "remote_host": None, "developer": False, "version": "2.0.0.dev0", "platform": "linux",
+    s = {"remote": False, "remote_host": None, "developer": False, "version": "2.0.0", "platform": "linux",
          "setup_done": True, "first_name": "Robin", "simple_menu": False, "theme": "system",
          "install_id": "0f1e2d3c-0000-4000-8000-000000000000",
          "caps": {"open_folder": True, "window_mode": True, "sign_in_here": True, "start_at_login": True}}

@@ -2,7 +2,7 @@
 
 What changed in each version, in plain words.
 
-## 2.0.0 (in progress)
+## 2.0.0 (2026-11-03)
 
 ### What's new
 
