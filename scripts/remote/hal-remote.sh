@@ -10,9 +10,12 @@ HOST="USER@DESKTOP"; PORT=8737
 HAL='~/.local/bin/hal-employment-cli'
 NAME="Hal Employment (desktop)"
 CTL="$HOME/.ssh/hal-employment-%C"
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=3
-          -o ControlMaster=auto -o "ControlPath=$CTL" -o ControlPersist=60)
+# ssh keeps the first value it is given for an option, so the tunnel and the other calls get separate lists
+SSH_BASE=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=3
+          -o "ControlPath=$CTL")
+SSH_OPTS=("${SSH_BASE[@]}" -o ControlMaster=auto)
 HEALTH_TRIES=80   # 80 x 0.25 s: the tunnel gets 20 s to carry Hal's first answer
+MASTER_TRIES=240  # 240 x 0.25 s: a minute to log in (a passphrase is typed here) before the other calls go alone
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
 install_entry() {
@@ -46,12 +49,34 @@ open_app() {
   xdg-open "$url" >/dev/null 2>&1 &
 }
 
+# a menu launch closes the window when this script ends, so a failure waits for Enter to stay readable
+fail() {
+  echo "$1" >&2
+  if [ -t 0 ]; then read -r -p "Press Enter to close this window. " _; fi
+  exit 1
+}
+
 if [ "${1:-}" = "--install" ]; then install_entry; exit 0; fi
 
 [ -d "$HOME/.ssh" ] || mkdir -m 700 "$HOME/.ssh"
 LOCAL_PORT="${HAL_LOCAL_PORT:-$PORT}"
 # pick the next free local port when this one is taken
 while (exec 3<>"/dev/tcp/127.0.0.1/${LOCAL_PORT}") 2>/dev/null; do LOCAL_PORT=$((LOCAL_PORT + 1)); done
+
+# The tunnel is the control master, so this window lives exactly as long as the tunnel. An `ssh -N -L`
+# that joins an existing master hands its forward over and exits at once, which closed the window as soon
+# as it opened (checked with OpenSSH 10.2, 2026-11-03).
+ssh "${SSH_BASE[@]}" -o ControlMaster=yes -o ControlPersist=no -o ExitOnForwardFailure=yes \
+  -N -L "127.0.0.1:${LOCAL_PORT}:127.0.0.1:${PORT}" "$HOST" &
+TUNNEL=$!
+cleanup() { kill "$TUNNEL" 2>/dev/null; }
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
+for _ in $(seq 1 "$MASTER_TRIES"); do
+  kill -0 "$TUNNEL" 2>/dev/null || fail "Could not connect to $HOST. Is the desktop on and awake, and does your SSH key log in?"
+  ssh "${SSH_BASE[@]}" -O check "$HOST" 2>/dev/null && break
+  sleep 0.25
+done
 
 # refresh the helper files when the desktop's version changed (a visible folder, so any browser can load it)
 HELPER_DIR="$HOME/Hal Employment/Browser helper"
@@ -63,15 +88,8 @@ else
   echo "Could not copy the browser helper" >&2
 fi
 
-ssh "${SSH_OPTS[@]}" -o ExitOnForwardFailure=yes -N -L "127.0.0.1:${LOCAL_PORT}:127.0.0.1:${PORT}" "$HOST" &
-TUNNEL=$!
-# the forward lives in the control connection, so closing that ends the tunnel too
-cleanup() { kill "$TUNNEL" 2>/dev/null; ssh -o "ControlPath=$CTL" -O exit "$HOST" 2>/dev/null; }
-trap cleanup EXIT
-trap 'exit 130' INT TERM HUP
-
 URL="$(ssh "${SSH_OPTS[@]}" "$HOST" "$HAL open-url --remote --local-port ${LOCAL_PORT}")" \
-  || { echo "Hal is not answering on $HOST. Is the desktop on and awake?" >&2; exit 1; }
+  || fail "Hal is not answering on $HOST. Is the desktop on and awake?"
 for _ in $(seq 1 "$HEALTH_TRIES"); do
   curl -fs "http://127.0.0.1:${LOCAL_PORT}/healthz" >/dev/null && break
   sleep 0.25
@@ -79,3 +97,4 @@ done
 open_app "$URL"
 echo "Hal is open. Close this window when you have finished."
 wait "$TUNNEL"
+fail "The connection to $HOST ended."

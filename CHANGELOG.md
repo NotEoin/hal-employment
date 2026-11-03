@@ -2,6 +2,14 @@
 
 What changed in each version, in plain words.
 
+## Unreleased
+
+### Fixed
+
+- **The laptop launcher stays open.** "Hal Employment (desktop)" closed its window as soon as the tunnel
+  started, which ended the tunnel too. Fetch the launcher again (step 5 of the how-to). A launcher that
+  cannot connect now keeps its window open and says why.
+
 ## 2.0.0 (2026-11-03)
 
 ### What's new

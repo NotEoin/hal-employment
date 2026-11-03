@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.request
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
@@ -31,16 +32,24 @@ from jobhunt.remote import launcher
 HOST, USER = "deskbox", "sam"
 RUN_WAIT_S = 60          # the launcher's own waits add up to well under this
 POLL_S = 0.1
+STAYS_OPEN_S = 1.0       # long enough for a launcher that is about to close to have closed
 CRLF = b"\r\n"
 
 FAKE_SSH = r'''#!{python}
-"""A stand-in for OpenSSH: forwards -L on 127.0.0.1, or runs the command in the made-up desktop home."""
-import os, socket, subprocess, sys, threading
+"""A stand-in for OpenSSH: forwards -L on 127.0.0.1, or runs the command in the made-up desktop home.
+
+Like OpenSSH, a call that finds a live control master hands its -L to the master and exits at once, and
+`-O check` and `-O exit` act on that master. The control socket is a file holding the master's pid.
+"""
+import atexit, os, signal, socket, subprocess, sys, threading, time
 
 args = sys.argv[1:]
-with open(os.environ["FAKE_SSH_LOG"], "a", encoding="utf-8") as log:
-    log.write(" ".join(args) + "\n")
+SERVE = args[:1] == ["--serve"]  # a forward handed to the master: lives until the master ends
+if not SERVE:
+    with open(os.environ["FAKE_SSH_LOG"], "a", encoding="utf-8") as log:
+        log.write(" ".join(args) + "\n")
 forward = control = None
+opts = {{}}
 i = 0
 while i < len(args) and args[i].startswith("-"):
     if args[i] in ("-o", "-L", "-O", "-p", "-i"):
@@ -48,14 +57,36 @@ while i < len(args) and args[i].startswith("-"):
             forward = args[i + 1]
         if args[i] == "-O":
             control = args[i + 1]
+        if args[i] == "-o":
+            key, _, value = args[i + 1].partition("=")
+            opts.setdefault(key, value)  # ssh keeps the first value given
         i += 2
     else:
         i += 1
 rest = args[i:]
-if control:
-    sys.exit(0)
-if forward:
-    lhost, lport, rhost, rport = forward.split(":")
+ctl = opts.get("ControlPath", "").replace("%C", "fake") or None
+
+
+def master_pid():
+    try:
+        pid = int(open(ctl).read())
+        os.kill(pid, 0)
+        return pid
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def serve(spec, master=None):
+    if master:
+        def watch():
+            while True:
+                try:
+                    os.kill(master, 0)
+                except OSError:
+                    os._exit(0)
+                time.sleep(0.1)
+        threading.Thread(target=watch, daemon=True).start()
+    lhost, lport, rhost, rport = spec.split(":")
     srv = socket.socket()
     try:
         srv.bind((lhost, int(lport)))
@@ -84,6 +115,33 @@ if forward:
         u = socket.create_connection((rhost, int(rport)))
         threading.Thread(target=pipe, args=(c, u), daemon=True).start()
         threading.Thread(target=pipe, args=(u, c), daemon=True).start()
+
+
+if SERVE:
+    serve(args[1], int(args[2]))
+if control:
+    pid = master_pid() if ctl else None
+    if control == "exit" and pid:
+        os.kill(pid, signal.SIGTERM)
+    sys.exit(0 if pid else 255)
+mode = opts.get("ControlMaster", "no")
+if ctl and master_pid() and mode != "yes":
+    if forward:  # the master takes the forward over; this client is done
+        subprocess.Popen([sys.executable, __file__, "--serve", forward, str(master_pid())])
+        sys.exit(0)
+elif ctl and mode in ("yes", "auto"):
+    persist = opts.get("ControlPersist", "no")
+    if forward or persist == "no":
+        with open(ctl, "w") as f:
+            f.write(str(os.getpid()))
+        atexit.register(lambda: os.path.exists(ctl) and os.remove(ctl))
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    else:  # ControlPersist: a background master outlives this call
+        holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True)
+        with open(ctl, "w") as f:
+            f.write(str(holder.pid))
+if forward:
+    serve(forward)
 env = dict(os.environ, HOME=os.environ["FAKE_SSH_DESKTOP_HOME"])
 sys.exit(subprocess.run(["bash", "-c", " ".join(rest[1:])], env=env).returncode)
 '''
@@ -241,7 +299,15 @@ class EndToEnd(unittest.TestCase):
                 if time.monotonic() > deadline:
                     self.fail("the fake browser was never opened")
                 time.sleep(POLL_S)
-            return json.loads(self.browser_log.read_text(encoding="utf-8"))
+            seen = json.loads(self.browser_log.read_text(encoding="utf-8"))
+            # regression: the tunnel joined the helper call's control master and exited at once, so the
+            # window closed as soon as Hal opened and took the tunnel with it
+            time.sleep(STAYS_OPEN_S)
+            self.assertIsNone(proc.poll(), "the launcher's window closed while Hal was open")
+            port = urlport(seen["url"])
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=RUN_WAIT_S) as r:
+                self.assertEqual(r.status, 200)
+            return seen
         finally:
             with contextlib.suppress(ProcessLookupError):
                 os.killpg(proc.pid, signal.SIGTERM)
@@ -265,7 +331,8 @@ class EndToEnd(unittest.TestCase):
         tunnel = [c for c in calls if " -N " in f" {c} "]
         self.assertEqual(len(tunnel), 1)
         self.assertIn(f"-L 127.0.0.1:{local}:127.0.0.1:{self.hal.port}", tunnel[0])
-        for option in ("StrictHostKeyChecking=accept-new", "ExitOnForwardFailure=yes", "ServerAliveInterval=15"):
+        for option in ("StrictHostKeyChecking=accept-new", "ExitOnForwardFailure=yes", "ServerAliveInterval=15",
+                       "ControlMaster=yes", "ControlPersist=no"):
             self.assertIn(option, tunnel[0])
         self.assertTrue(all(c.rstrip().endswith(f"{USER}@{HOST}") or f"{USER}@{HOST} " in c for c in calls))
 
