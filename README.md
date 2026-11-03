@@ -1,18 +1,33 @@
 # Hal Employment
 
-> *Let Hal do the job hunting and the form filling. You press Submit.*
+> *Spend less time on application forms, and more on the parts only you can write.*
 
-Hal Employment is a job search assistant that runs on your own computer. It finds UK graduate jobs
-and internships that suit you, says why each one fits, writes the CV and cover letter, and fills in
-the employer's form in your browser. Then it stops: Hal never presses Submit, Send or a final
-Apply, and never sends anything to an employer. The tests fill practice forms whose servers count
-every post, and the count must stay at zero.
+Applying for jobs means typing the same details into a new form every time. Hal Employment takes
+care of that side of it. It runs on your own computer, looks for UK graduate jobs and internships
+that fit what you want, and tells you why it picked each one. When you apply, it drafts a CV for
+that job, a cover letter and answers to the form's questions, and fills them into the employer's
+form in your browser.
+
+The drafts are a starting point, not a finished application. Read them, rewrite anything that
+doesn't sound like you, and press Submit yourself. Hal never presses Submit and never sends
+anything to an employer; the tests fill practice forms whose servers count every post, and the
+count must stay at zero.
 
 ![Home: what needs you today, new matches and your goal](docs/images/home.png)
 
 It is Python 3.11+ with a standard-library HTTP server and SQLite, a Preact front end with no build
 step, Playwright and a Manifest V3 browser extension for forms, and a local model through Ollama
 with your own Claude subscription as the fallback.
+
+## Your data stays with you
+
+An application holds a lot about you: contact details, education, work history, sometimes health
+or background. Most paid application tools and online AI services get all of that when you use them.
+Hal Employment is free, and it is meant to run on a local model through Ollama, so your details
+stay between you and the employer you apply to. Claude is only a fallback: turn on **Never
+use online AI** in Settings and nothing is sent to an AI service at all. That is the recommended
+setup. [docs/user/privacy.md](docs/user/privacy.md) lists what is stored and what leaves
+your computer.
 
 ## What it does
 
@@ -22,8 +37,8 @@ with your own Claude subscription as the fallback.
   scores each job against your own goal, showing every point.
 - Explains everything. Every score, hidden job, suggestion and form answer has a "Why?". Activity keeps
   everything Hal did and why, with Undo.
-- Writes the documents. A CV adjusted for each job, a cover letter and answers to the form's questions,
-  in your CV type's style. Hal never adds a number, date or qualification it cannot find in your CV or
+- Drafts the documents. A CV adjusted for each job, a cover letter and answers to the form's questions,
+  in your CV type's style, for you to edit. Hal never adds a number, date or qualification it cannot find in your CV or
   record; it leaves a gap such as `[how many?]` for you to fill.
 - Fills in the form, then hands over. A browser helper fills the form in your own browser, where you
   are already signed in. Each answer is marked "Fine" or "Check this", and on the last page Hal hands the
