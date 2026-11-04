@@ -619,15 +619,92 @@ def save(con, job_id: str, scored: Scored, *, goal_version: int | None = None, p
          json.dumps(elig) if elig else None, goal_version, preset, clock.iso(), job_id))
 
 
-def score_and_save(con, job: dict, goal: Goal | None = None, weights: Weights | None = None) -> int:
-    """Scores one job under the live goal, stores the result and returns the score; the caller commits."""
+def score_and_save(con, job: dict, goal: Goal | None = None, weights: Weights | None = None, *,
+                   settle: bool = True) -> int:
+    """Scores one job under the live goal, stores the result and returns the score; the caller commits.
+
+    The score returned is 0 when the job turns out to be a repost of one shown or applied for already.
+    `settle=False` leaves reposts to the caller, which settles them all at once (`rescore_all`).
+    """
     from jobhunt.find.goal import current
 
     goal = goal or current()
     w = weights or current_weights()
     scored = score(job, goal, w)
     save(con, job["id"], scored, goal_version=goal.version or None, preset=w.preset)
+    if settle and settle_reposts(con, job, goal, w) == job["id"]:
+        return 0
     return scored.score
+
+
+REPOST = "repost"
+# An application already under way, sent or saved: its reposts are never shown beside it.
+IN_HAND = ("applying", "applied", "assessment", "interview", "offer")
+
+
+def repost_key(job) -> tuple[str, str, str]:
+    """What makes two adverts one job: the employer, the title and the place, ignoring case and spacing."""
+    def flat(text):
+        return " ".join((text or "").lower().split())
+    return company_key(job["company"]), flat(job["title"]), flat(job["location"])
+
+
+def settle_reposts_of(con, job_id: str) -> None:
+    """Settles the reposts of one job under the live goal, after it was queued or saved; the caller commits."""
+    from jobhunt.find.goal import current
+
+    row = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if row is not None:
+        settle_reposts(con, dict(row), current(), current_weights())
+
+
+def settle_reposts(con, job, goal: Goal, w: Weights) -> str | None:
+    """Shows one advert of a job listed more than once and hides the rest as reposts; the caller commits.
+
+    Agencies post the same advert again each day under a new id (Reed, 2026-11-04: 11 copies of one trainee
+    role in each of two cities), and each copy was a new match. The one kept is the copy already applied
+    for or saved, else the newest listing, whose link is the likeliest still to work. Returns the id of
+    `job` when it was hidden, else None.
+    """
+    key = repost_key(job)
+    rows = con.execute("SELECT * FROM jobs WHERE lower(replace(title, ' ', '')) = ? AND active = 1 "
+                       "AND source != 'email'", (key[1].replace(" ", ""),)).fetchall()
+    group = [dict(r) for r in rows if repost_key(r) == key]
+    return job["id"] if job["id"] in _settle_group(con, group, goal, w) else None
+
+
+def settle_all_reposts(con, goal: Goal, w: Weights) -> int:
+    """Settles every job's reposts in one pass; returns how many copies are hidden. The caller commits."""
+    groups: dict[tuple, list[dict]] = {}
+    for r in con.execute("SELECT * FROM jobs WHERE active = 1 AND source != 'email'"):
+        groups.setdefault(repost_key(r), []).append(dict(r))
+    return sum(len(_settle_group(con, g, goal, w)) for g in groups.values())
+
+
+def _settle_group(con, group: list[dict], goal: Goal, w: Weights) -> set[str]:
+    """Hides all but one copy of one job (see `settle_reposts`); returns the ids hidden."""
+    from jobhunt.find.feedback import OPEN_STATUSES
+
+    if len(group) < 2:
+        return set()
+    in_hand = [r for r in group if r["status"] in IN_HAND or r["saved_at"]]
+    shown = [r for r in group if r["status"] in OPEN_STATUSES and not r["saved_at"]
+             and r["hidden_rule"] in (None, REPOST)]
+    keeper = in_hand[0] if in_hand else max(shown, key=lambda r: (r["first_seen"] or "", r["id"]), default=None)
+    hidden = set()
+    for r in shown:
+        if keeper is not None and r["id"] == keeper["id"]:
+            if r["hidden_rule"] == REPOST:   # the copy it stood behind went: show this one again
+                save(con, r["id"], score(r, goal, w), goal_version=goal.version or None, preset=w.preset)
+            continue
+        label = ("Already in your applications" if in_hand else "Listed again; Hal shows the newest listing")
+        con.execute("DELETE FROM job_reasons WHERE job_id = ? AND rule = ?", (r["id"], REPOST))
+        con.execute("""INSERT INTO job_reasons (job_id, rule, stage, points, hide, label, note, quote, data)
+                       VALUES (?, ?, 'filter', 0, 1, ?, 'repost', '', ?)""",
+                    (r["id"], REPOST, label, json.dumps({"same_as": keeper["id"]})))
+        con.execute("UPDATE jobs SET hidden_rule = ?, score = 0 WHERE id = ?", (REPOST, r["id"]))
+        hidden.add(r["id"])
+    return hidden
 
 
 def rescore_all(con, step=None, *, every: int = 500) -> int:
@@ -641,8 +718,9 @@ def rescore_all(con, step=None, *, every: int = 500) -> int:
     # applications found in email have no advert to score
     rows = con.execute("SELECT * FROM jobs WHERE source != 'email'").fetchall()
     for n, row in enumerate(rows, 1):
-        score_and_save(con, dict(row), goal, w)
+        score_and_save(con, dict(row), goal, w, settle=False)
         if step is not None and n % every == 0:
             step(n, len(rows))
+    settle_all_reposts(con, goal, w)
     con.commit()
     return len(rows)

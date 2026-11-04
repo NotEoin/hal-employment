@@ -30,6 +30,9 @@ What changed in each version, in plain words.
 - **Lists keep up.** Jobs and Applications refresh when Hal finishes a re-check, a search or documents,
   "Show more jobs" and opened Hidden groups refresh too, and a new application appears on the board
   without reloading the page. A job you apply for leaves Matches at once, even while Hal is busy with others.
+- **An advert listed again shows once.** Agencies repost the same advert each day under a new id, and each
+  copy was a new match. Hal now shows one copy of a job with the same employer, title and place: the one
+  you applied for or saved, else the newest. The rest are under Hidden, "Listed more than once".
 - **Cover letters are made.** Apply with Hal now makes the cover letter PDF with the CV; before, it was
   made only when you edited or approved the documents.
 - **CV changes show their new wording, and Undo works.** Each change said only "(changed)", and Undo was

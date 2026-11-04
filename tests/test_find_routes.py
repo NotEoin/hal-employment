@@ -234,6 +234,41 @@ class JobsApi(unittest.TestCase):
         board = self.get("/api/v2/applications")
         self.assertIn(self.grad, [i["id"] for i in board["columns"][0]["items"]])
 
+    def test_an_advert_listed_again_under_a_new_id_shows_once(self):
+        # an agency reposted one trainee advert daily on Reed: testers saw it many times in Matches
+        older = add(self.con, "repost-1", "Trainee Archive Assistant", GRAD_TEXT, company="Fernvale Agency Ltd")
+        self.con.execute("UPDATE jobs SET first_seen = '2026-10-20T07:00:00Z' WHERE id = ?", (older,))
+        newer = add(self.con, "repost-2", "Trainee  Archive Assistant", GRAD_TEXT, company="Fernvale Agency")
+        rules.score_and_save(self.con, dict(self.con.execute("SELECT * FROM jobs WHERE id = ?", (older,)).fetchone()))
+        self.con.commit()
+        shown = self.matches()
+        self.assertIn(newer, shown, "the newest listing is the one shown")
+        self.assertNotIn(older, shown)
+        hidden = {g["rule"]: g for g in self.get("/api/v2/jobs/hidden")["groups"]}
+        self.assertEqual(hidden["repost"]["n"], 1)
+
+    def test_queueing_one_copy_takes_its_reposts_out_of_matches(self):
+        older = add(self.con, "repost-a", "Trainee Archive Assistant", GRAD_TEXT, company="Fernvale Agency")
+        self.con.execute("UPDATE jobs SET first_seen = '2026-10-20T07:00:00Z' WHERE id = ?", (older,))
+        self.con.commit()
+        newer = add(self.con, "repost-b", "Trainee Archive Assistant", GRAD_TEXT, company="Fernvale Agency")
+        with mock.patch.object(runner, "start", return_value="a1"):
+            self.post(self.path(newer, "/apply"))
+        self.assertFalse({older, newer} & set(self.matches()))
+        reason = self.get(self.path(older))["hidden"]
+        self.assertEqual(reason["label"], "Already in your applications")
+
+    def test_the_same_title_in_another_place_is_another_job(self):
+        here = add(self.con, "place-1", "Trainee Archive Assistant", GRAD_TEXT, company="Fernvale Agency")
+        job = advert("Trainee Archive Assistant", GRAD_TEXT, id="test:place-2", company="Fernvale Agency",
+                     location="Saltmarsh", url="https://jobs.example.org/place-2", posted_at=None)
+        db.upsert(self.con, job)
+        row = self.con.execute("SELECT * FROM jobs WHERE id = ?", (job["id"],)).fetchone()
+        rules.score_and_save(self.con, dict(row))
+        self.con.commit()
+        row = self.con.execute("SELECT hidden_rule FROM jobs WHERE id = ?", (here,)).fetchone()
+        self.assertNotEqual(row["hidden_rule"], "repost")
+
     def test_an_advert_can_be_added_by_its_address(self):
         with mock.patch.object(job_actions, "_fetch", return_value=ADVERT_PAGE):
             started = self.post("/api/v2/jobs/add-advert", {"url": "https://careers.example.org/archivist"})

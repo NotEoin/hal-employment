@@ -50,7 +50,7 @@ GOAL = "settings-goal"
 # Hidden groups whose rule ids vary by job ("avoid_role" says which role) get one heading.
 GROUP_WORDS = {"avoid_role": "Roles you avoid", "role_title": "Not one of the roles you want",
                "years_required": "Asks for more experience than you have",
-               "off_field": "Outside your field",
+               "off_field": "Outside your field", "repost": "Listed more than once",
                "pay_far_under": "Pay well under your lowest", "screen_out": "Hal's AI check said it does not fit",
                "pattern": "A working pattern you did not choose"}
 FIXES = {"excluded_employer": ("Edit employers to avoid", GOAL), "training_scheme": ("Change this", GOAL),
@@ -437,6 +437,7 @@ def apply(req: Request) -> dict:
     row = _row(req.con, req.params["job_id"])
     if row["status"] in OPEN:
         db.set_status(req.con, row["id"], "applying", "chosen from the queue")
+        rules.settle_reposts_of(req.con, row["id"])    # its copies leave Matches with it
         req.con.commit()
     at = clock.local()
     action_id = _start(req, "docs.prepare", job_id=row["id"], params={"job_id": row["id"]},
