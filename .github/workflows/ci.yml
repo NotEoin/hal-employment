@@ -93,7 +93,10 @@ jobs:
         # /mnt/d has no Unix permissions, and the suite checks file modes
         shell: wsl-bash {0}
         run: |
-          src="$(wslpath -u "$GITHUB_WORKSPACE" 2>/dev/null || printf %s "$GITHUB_WORKSPACE")"
+          # WSLENV's /p already makes the path a WSL one (/mnt/d/a/...), and wslpath on that made
+          # /mnt/d/mnt/d/a/... (run 41633262148); it converts only a path that arrived as Windows wrote it
+          src="$GITHUB_WORKSPACE"
+          [ -d "$src" ] || src="$(wslpath -u "$src")"
           rm -rf "$HOME/hal-employment"
           cp -r "$src" "$HOME/hal-employment"
 
