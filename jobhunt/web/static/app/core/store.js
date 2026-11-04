@@ -127,10 +127,10 @@ export function closeDialog() {
 }
 
 let toastSeq = 0;
-/** Shows a short message; with `undo` (a function) it carries an Undo button. */
-export function toast(text, undo) {
+/** Shows a short message; with `undo` (a function) it carries a button, named `label` (Undo by default). */
+export function toast(text, undo, label = "Undo") {
   const id = ++toastSeq;
-  store.set(s => ({ toasts: [...s.toasts, { id, text, undo }] }));
+  store.set(s => ({ toasts: [...s.toasts, { id, text, undo, label }] }));
   setTimeout(() => dismissToast(id), undo ? TOAST_UNDO_MS : TOAST_MS);
   return id;
 }

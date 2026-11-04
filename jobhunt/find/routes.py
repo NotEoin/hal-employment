@@ -433,7 +433,8 @@ def apply(req: Request) -> dict:
     at = clock.local()
     action_id = _start(req, "docs.prepare", job_id=row["id"], params={"job_id": row["id"]},
                        why=f"You pressed Apply with Hal at {at:%H:%M}. Documents come first.")
-    return {"application_id": row["id"], "action_id": action_id}
+    return {"application_id": row["id"], "action_id": action_id,
+            "open": settings.get("applying.on_apply") == "open"}
 
 
 @route("POST", "/api/v2/jobs/{job_id}/save")

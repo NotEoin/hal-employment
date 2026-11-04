@@ -8,6 +8,9 @@ What changed in each version, in plain words.
 
 - **Choose several career areas.** The goal step's career areas are now toggles: press every area you are
   interested in, such as Heritage and museums and Creative and media, and their example roles are joined.
+- **Queue jobs, then approve them together.** A new setting, "When you press Apply with Hal", starts as "Add
+  it to Applications and stay here": choose several jobs while Hal writes their documents, then press
+  **Approve all** on the Applications board. Choose "Open the application" for the old behaviour.
 - **See the documents themselves.** The Documents step shows the CV and cover letter PDFs Hal will upload
   beside the CV changes and the letter text.
 

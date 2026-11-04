@@ -16,14 +16,20 @@ export function refreshJobs() { invalidate("/jobs*"); invalidate("/home"); }
 /** The API path of one job ("/jobs/greenhouse%3A1"). */
 export const jobPath = id => "/jobs/" + encodeURIComponent(id);
 
-/** Apply with Hal: documents come first, and no form is opened until the person approves them. */
+/** Apply with Hal: documents come first, and no form is opened until the person approves them. The setting
+    "When you press Apply with Hal" says whether the application opens or the person stays to choose more. */
 export async function applyJob(j) {
   try {
     const r = await post(jobPath(j.id) + "/apply");
     refreshJobs();
     invalidate("/applications*");
-    toast("Added to Applications. Hal starts with your CV and letter; it opens no form until you approve them.");
-    go(r && r.application_id ? route("app", r.application_id) : "apps");
+    if (r && r.open) {
+      toast("Added to Applications. Hal starts with your CV and letter; it opens no form until you approve them.");
+      go(r.application_id ? route("app", r.application_id) : "apps");
+      return;
+    }
+    toast("Added to Applications. Hal is writing the documents for " + j.title + " while you choose more.",
+      () => go(r && r.application_id ? route("app", r.application_id) : "apps"), "Open it");
   } catch (err) { toast(err.message); }
 }
 

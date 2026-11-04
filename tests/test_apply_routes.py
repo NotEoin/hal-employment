@@ -128,6 +128,25 @@ class Routes(unittest.TestCase):
         self.assertEqual(page["docs"]["letter"]["text"], "A made-up letter.")
         self.assertFalse(page["first_time"])
 
+    def test_approve_all_starts_every_ready_form_and_leaves_the_rest(self):
+        # testers asked to queue several jobs, as the older tool did, then apply to them together
+        self.start_applying("sorrel-ready", "wexford-ready")
+        ready = {job_id("sorrel-ready"), job_id("wexford-ready")}
+        with mock.patch.object(queries, "_has_documents", lambda job: job["id"] in ready):
+            board = self.c.get("/api/v2/applications").json()
+            shown = {i["id"]: i["approvable"] for c in board["columns"] for i in c["items"]}
+            self.assertTrue(shown[job_id("sorrel-ready")])
+            self.assertFalse(shown[job_id("ambleside-applied")])
+            r = self.c.post("/api/v2/applications/approve-ready",
+                            {"ids": [job_id("sorrel-ready"), job_id("wexford-ready"), job_id("ambleside-applied")]})
+        self.assertEqual(r.status, 200, r.text)
+        out = r.json()
+        self.assertEqual(set(out["started"]), ready)
+        self.assertEqual(out["skipped"], [job_id("ambleside-applied")])
+        for action_id in out["started"].values():
+            self.assertEqual(self.wait(action_id)["kind"], "apply.fill")
+        self.assertEqual(self.c.post("/api/v2/applications/approve-ready", {"ids": []}).status, 400)
+
     def test_editing_documents_after_the_form_is_filled_marks_the_form_out_of_date(self):
         self.start_applying("sorrel-ready")
         self.put_app("sorrel-ready", stage="filled", form='{"filled": {"at": "x"}, "fields": []}')

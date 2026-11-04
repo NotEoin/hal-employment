@@ -210,6 +210,11 @@ def _closed_why(con, r) -> str:
     return f"{words} ({detail})" if detail else words
 
 
+def _has_documents(job) -> bool:
+    """True when Hal has made this application's CV, so its documents can be approved."""
+    return "cv" in documents.files(job)
+
+
 def board(con) -> dict:
     """The Applications board: its columns, each card's next step, and the Closed list."""
     columns = {key: [] for key, _, _ in COLUMNS}
@@ -224,8 +229,10 @@ def board(con) -> dict:
                            "why": _closed_why(con, r)})
             continue
         nxt, tone, note = _card_words(con, r, col)
+        busy = _busy(r["id"])
         columns[col].append({"id": r["id"], "number": r["number"], "org": r["company"], "title": r["title"],
-                             "next": nxt, "tone": tone, "note": note, "hal_busy": _busy(r["id"])})
+                             "next": nxt, "tone": tone, "note": note, "hal_busy": busy,
+                             "approvable": col == "ready" and not busy and _has_documents(r)})
     for col in IN_PROGRESS:
         order = in_progress_ids(con)
         columns[col].sort(key=lambda c: order.index(c["id"]) if c["id"] in order else len(order))

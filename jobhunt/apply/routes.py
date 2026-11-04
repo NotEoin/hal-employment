@@ -37,6 +37,26 @@ def board(req: Request) -> dict:
     return queries.board(req.con)
 
 
+@route("POST", PREFIX + "/approve-ready")
+def approve_ready(req: Request) -> dict:
+    """Approves the documents of every application named in `ids` and starts filling each form.
+
+    Only applications the board shows as ready to approve are taken; any other id is left out and listed.
+    """
+    ids = _body(req).get("ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+        raise BadRequest("Send the applications to approve.", field="ids")
+    ready = {c["id"] for col in queries.board(req.con)["columns"] for c in col["items"] if c.get("approvable")}
+    started, skipped = {}, []
+    for ref in ids:
+        job_id = queries.resolve(req.con, ref)
+        if job_id not in ready:
+            skipped.append(ref)
+            continue
+        started[job_id] = actions.approve_documents(req.con, job_id, {}, **_who(req))
+    return {"started": started, "skipped": skipped}
+
+
 @route("GET", PREFIX + "/{app_id}")
 def application(req: Request) -> dict:
     """One application and its four steps."""
