@@ -74,7 +74,8 @@ function JobList({ tab }) {
     const el = document.querySelectorAll(".joblist .job .title")[n];
     if (el) { el.focus(); el.scrollIntoView({ block: "nearest" }); }
   };
-  const act = fn => { const l = live.current; const j = l.list[l.sel >= 0 ? l.sel : 0]; if (j) fn(j); };
+  // a job that left the list (queued, saved, hidden) can leave the choice past its end: keep it inside
+  const act = fn => { const l = live.current; const j = l.list[Math.min(Math.max(l.sel, 0), l.list.length - 1)]; if (j) fn(j); };
   useKeys({ j: () => pick(1), k: () => pick(-1), a: () => act(applyJob), s: () => act(saveJob), n: () => act(notForMe) }, []);
   const loadMore = () => setLimit(list.length + PAGE);
   if (error) return html`<div class="card empty">${error.message}</div>`;

@@ -20,6 +20,7 @@ import json
 import sqlite3
 from datetime import date
 
+from jobhunt import db
 from jobhunt.core import clock, runner, settings
 from jobhunt.find import feedback, job_actions, kinds, rules
 from jobhunt.find import goal as goal_mod
@@ -428,8 +429,15 @@ def _start(req: Request, kind: str, **kw) -> str:
 
 @route("POST", "/api/v2/jobs/{job_id}/apply")
 def apply(req: Request) -> dict:
-    """Apply with Hal: documents come first; no form is opened until the person approves them."""
+    """Apply with Hal: documents come first; no form is opened until the person approves them.
+
+    The job leaves Matches here rather than when its action starts, because with several jobs queued the
+    action waits for a free thread, and the list reloaded before the job had moved (testers, 2026-11-04).
+    """
     row = _row(req.con, req.params["job_id"])
+    if row["status"] in OPEN:
+        db.set_status(req.con, row["id"], "applying", "chosen from the queue")
+        req.con.commit()
     at = clock.local()
     action_id = _start(req, "docs.prepare", job_id=row["id"], params={"job_id": row["id"]},
                        why=f"You pressed Apply with Hal at {at:%H:%M}. Documents come first.")

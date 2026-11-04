@@ -231,6 +231,16 @@ class JobsApi(unittest.TestCase):
             store.drop_cache()
             self.assertTrue(self.post(self.path(self.grad, "/apply"))["open"])
 
+    def test_a_job_leaves_matches_as_soon_as_it_is_queued(self):
+        # testers saw a queued job stay in Matches: it moved only when its action got a thread
+        self.assertIn(self.grad, self.matches())
+        with mock.patch.object(runner, "start", return_value="a1"):     # the action has not started
+            reply = self.post(self.path(self.grad, "/apply"))
+        self.assertEqual(reply["application_id"], self.grad)
+        self.assertNotIn(self.grad, self.matches())
+        board = self.get("/api/v2/applications")
+        self.assertIn(self.grad, [i["id"] for i in board["columns"][0]["items"]])
+
     def test_an_advert_can_be_added_by_its_address(self):
         with mock.patch.object(job_actions, "_fetch", return_value=ADVERT_PAGE):
             started = self.post("/api/v2/jobs/add-advert", {"url": "https://careers.example.org/archivist"})
