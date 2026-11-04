@@ -1,7 +1,9 @@
 /* The app's state: one small store for what the shell shows, and one cache of server data keyed by API path.
 
    Server data is never copied into the store. Pages read it with useApi(path), and the event stream
-   (core/events.js) marks paths stale so every page showing them reloads. Per-viewer conveniences (theme,
+   (core/events.js) marks paths stale so every page showing them reloads. A page that mounts on data
+   already cached shows it at once and fetches it again quietly, because a path nobody showed when its
+   event came was kept as it was (testers saw a new application missing from the board until reload). Per-viewer conveniences (theme,
    simple menu) may live in localStorage; every access is wrapped because a private window or blocked
    site data makes it throw. */
 import { useState, useEffect, useRef } from "./html.js";
@@ -55,12 +57,11 @@ function entry(path) {
 
 function tell(e) { e.subs.forEach(f => f()); }
 
-/** Fetches `path` again and tells every component that shows it. */
-export function load(path) {
+/** Fetches `path` again and tells every component that shows it; `quiet` keeps the data shown as not loading. */
+export function load(path, { quiet = false } = {}) {
   const e = entry(path);
   const seq = ++e.seq;
-  e.loading = true;
-  tell(e);
+  if (!quiet) { e.loading = true; tell(e); }
   return get(path).then(
     data => { if (seq === e.seq) { e.data = data; e.error = null; e.loading = false; tell(e); } return data; },
     err => { if (seq === e.seq) { e.error = err; e.loading = false; tell(e); } throw err; });
@@ -101,6 +102,7 @@ export function useApi(path, { on = [] } = {}) {
     const sub = () => force(x => x + 1);
     e.subs.add(sub);
     if (e.data === undefined && !e.loading) load(path).catch(() => {});
+    else if (!e.loading) load(path, { quiet: true }).catch(() => {});
     const ws = on.map(pred => ({ pred, reload: () => load(path).catch(() => {}) }));
     ws.forEach(w => watchers.add(w));
     return () => { e.subs.delete(sub); ws.forEach(w => watchers.delete(w)); };

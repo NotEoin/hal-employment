@@ -209,6 +209,21 @@ class JobsApi(unittest.TestCase):
         self.assertEqual(self.matches("?place=Elsewhere"), [])
         self.assertEqual(self.c.get("/api/v2/jobs?sort=sideways").status, 400)
 
+    def test_a_longer_list_comes_whole_in_one_reply(self):
+        # "Show more" kept old pages, so a job hidden or applied for on them stayed until a reload
+        from jobhunt.find import routes
+
+        add(self.con, "cheap", "Graduate Archive Assistant", GRAD_TEXT.replace("25,000", "22,000"))
+        with mock.patch.object(routes, "PAGE", 1):
+            first = self.get("/api/v2/jobs?sort=pay")
+            self.assertEqual(len(first["jobs"]), 1)
+            self.assertEqual(first["cursor"], "1")
+            whole = self.get("/api/v2/jobs?sort=pay&limit=2")
+        self.assertEqual([j["id"] for j in whole["jobs"]][:1], [j["id"] for j in first["jobs"]])
+        self.assertEqual(len(whole["jobs"]), len(self.matches()))
+        self.assertEqual(self.c.get("/api/v2/jobs?limit=0").status, 400)
+        self.assertEqual(self.c.get(f"/api/v2/jobs?limit={routes.MAX_LIMIT + 1}").status, 400)
+
     def test_an_advert_can_be_added_by_its_address(self):
         with mock.patch.object(job_actions, "_fetch", return_value=ADVERT_PAGE):
             started = self.post("/api/v2/jobs/add-advert", {"url": "https://careers.example.org/archivist"})

@@ -21,6 +21,7 @@ export async function applyJob(j) {
   try {
     const r = await post(jobPath(j.id) + "/apply");
     refreshJobs();
+    invalidate("/applications*");
     toast("Added to Applications. Hal starts with your CV and letter; it opens no form until you approve them.");
     go(r && r.application_id ? route("app", r.application_id) : "apps");
   } catch (err) { toast(err.message); }

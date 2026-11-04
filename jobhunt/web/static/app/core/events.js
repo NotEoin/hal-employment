@@ -19,10 +19,15 @@ let started = false;
 /** Listens to every event; returns a function that stops listening. */
 export function on(fn) { handlers.add(fn); return () => handlers.delete(fn); }
 
+const FINAL = ["done", "error", "stopped", "interrupted"];   // core/runner.py FINAL
+
 /** The API paths each event type makes stale. */
 export function stalePaths(ev) {
   const id = ev.id != null ? encodeURIComponent(ev.id) : null;
   switch (ev.type) {
+    // A finished action may have changed jobs or applications without its own event (a re-check after a
+    // goal change, a search, documents drafted), so the lists that show them are fetched again.
+    case "action": return FINAL.includes(ev.state) ? ["/jobs*", "/applications*", "/documents*", "/home"] : [];
     case "job": return ["/jobs", id && "/jobs/" + id, "/home"].filter(Boolean);
     case "application": return ["/applications", id && "/applications/" + id, "/home", "/documents*"].filter(Boolean);
     case "activity": return ["/activity*", "/home"];

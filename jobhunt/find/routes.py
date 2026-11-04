@@ -26,6 +26,7 @@ from jobhunt.find import goal as goal_mod
 from jobhunt.web.router import BadRequest, NotFound, Request, route
 
 PAGE = 50                   # jobs per page of a list; the page asks for more as the person scrolls
+MAX_LIMIT = 500             # most jobs one list request returns, however far the person has scrolled
 EXAMPLES = 2                # example jobs named under each Hidden group
 NEW_DAYS = 2                # a job found in the last two days carries "New"
 TOP_POINTS = 3              # point chips on a card
@@ -235,7 +236,11 @@ def counts(con: sqlite3.Connection) -> dict:
 
 @route("GET", "/api/v2/jobs")
 def jobs(req: Request) -> dict:
-    """Matches or Saved, sorted and filtered, a page at a time."""
+    """Matches or Saved, sorted and filtered, a page at a time.
+
+    `limit` asks for more than one page in one reply, so a list the person has scrolled through can be
+    fetched again whole when a job changes, rather than keeping pages that no longer hold.
+    """
     tab = req.query.get("tab") or "matches"
     if tab not in ("matches", "saved"):
         raise BadRequest("tab is matches or saved.", field="tab")
@@ -243,16 +248,19 @@ def jobs(req: Request) -> dict:
     if sort not in SORTS:
         raise BadRequest(f"sort is one of {', '.join(SORTS)}.", field="sort")
     offset = _int(req.query.get("cursor"), "cursor")
+    limit = _int(req.query.get("limit"), "limit", PAGE)
+    if not 1 <= limit <= MAX_LIMIT:
+        raise BadRequest(f"limit is between 1 and {MAX_LIMIT}.", field="limit")
     where, args = _filters(*_shown_where(tab), req.query)
     rows = req.con.execute(f"SELECT j.* FROM jobs j WHERE {where} ORDER BY {SORTS[sort]} LIMIT ? OFFSET ?",
-                           [*args, PAGE + 1, offset]).fetchall()
+                           [*args, limit + 1, offset]).fetchall()
     goal = goal_mod.current()
     places = [p.name for p in goal.places] or sorted({
         (r[0] or "").split(",")[0].strip() for r in req.con.execute(
             f"SELECT j.location FROM jobs j WHERE {_shown_where(tab)[0]} LIMIT 200", _shown_where(tab)[1])} - {""})[:6]
-    return {"jobs": cards(req.con, rows[:PAGE]), "counts": counts(req.con),
+    return {"jobs": cards(req.con, rows[:limit]), "counts": counts(req.con),
             "filters": {"places": places, "patterns": list(PATTERNS), "kinds": kind_filter(req.con, goal)},
-            "cursor": str(offset + PAGE) if len(rows) > PAGE else None}
+            "cursor": str(offset + limit) if len(rows) > limit else None}
 
 
 def _fix(rule: str) -> dict | None:

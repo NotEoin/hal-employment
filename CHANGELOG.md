@@ -21,6 +21,9 @@ What changed in each version, in plain words.
   data engineering and similar) are hidden as "Outside your field" unless one of your roles names them.
 - **The right scoring for a new graduate.** A new graduate who types non-technical roles is no longer scored
   with the programmers' preset, and "Here is what I understood" names the starting point.
+- **Lists keep up.** Jobs and Applications refresh when Hal finishes a re-check, a search or documents,
+  "Show more jobs" and opened Hidden groups refresh too, and a new application appears on the board
+  without reloading the page.
 - **The laptop launcher stays open.** "Hal Employment (desktop)" closed its window as soon as the tunnel
   started, which ended the tunnel too. Fetch the launcher again (step 5 of the how-to). A launcher that
   cannot connect now keeps its window open and says why.
