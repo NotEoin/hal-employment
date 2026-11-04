@@ -144,6 +144,15 @@ class SiteKeys(unittest.TestCase):
         self.assertEqual(asked[0][0], "open")
         self.assertIs(asked[0][1]["front"], False)
 
+    def test_an_upload_that_appears_later_does_not_get_a_second_cv(self):
+        """Regression (testers, 2026-11-04): after an Ashby form rebuilt itself, its new upload box was taken for
+        the CV's on its own, so the CV went in twice."""
+        placed = [{"hid": "h1", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf"}]
+        guessed = [{"hid": "h9", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf",
+                    "note": "taken to be the CV upload; check this"}]
+        self.assertTrue(driver._one_cv(placed, [dict(guessed[0])])[0]["skip"])
+        self.assertEqual(driver._one_cv([], [dict(guessed[0])])[0]["value"], "/made/up/cv.pdf")
+
     def test_the_tab_is_brought_forward_for_work_but_never_for_a_watch(self):
         """Regression: every command, a watch's look every 3 s too, made the job's tab the active one, so two
         watched jobs flipped Hal's window between their tabs."""
@@ -354,6 +363,22 @@ class Fixes:
         board's job search ("Job Types", "Industry") as the application."""
         _job_id, found = self.opened("one-form", "one-form-board.html")
         self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email", "Phone"])
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_answers_survive_a_form_that_rebuilds_itself_after_the_cv_is_uploaded(self):
+        """Regression (testers, 2026-11-04): an Ashby form read the uploaded CV and built itself again, and ten of
+        Hal's answers were lost "no longer on the page"."""
+        page = "rebuilds-on-upload.html"
+        job_id, found = self.opened("rebuild", page)
+        fields = self.answers(found, {"CV": str(self.cv), "First name": "Ada", "Last name": "Lovelace",
+                                      "Email": "ada@example.org"})
+        for f in fields:
+            f["source"] = "documents: CV" if f["kind"] == "file" else "profile"
+        out = driver._fill_uploads_first(job_id, fields)
+        self.assertEqual(out["errors"], {})
+        shown = self.on_page(job_id, page, lambda tab: (tab.evaluate("() => window.rebuilds"), tab.input_value("#fn"),
+                                                        tab.input_value("#ln"), tab.input_value("#em")))
+        self.assertEqual(shown, (1, "Ada", "Lovelace", "ada@example.org"))
         self.assertEqual(self.site.sent(), 0)
 
     def test_with_pop_ups_left_alone_in_preferences_hal_closes_none(self):

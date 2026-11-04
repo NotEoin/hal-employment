@@ -195,7 +195,7 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
     fields = form["fields"]
     notes = browser.notes_for(form.get("url") or "", job_id)
     _say(job_id, "filling in the form")
-    out = browser.fill(job_id, only if only is not None else fields, _shot(job_id))
+    out = _fill_uploads_first(job_id, only if only is not None else fields)
     _note_uses(form, out)
     for _ in range(FIX_ROUNDS):
         fresh = [f for f in out["new"] if f["sig"] not in {x["sig"] for x in fields}]
@@ -205,7 +205,8 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
             break
         if fresh:
             _say(job_id, f"answering {len(fresh)} more questions the form has just shown")
-            fields.extend(autofill.propose(job, fresh, docs, documents.files(job), con, notes=notes))
+            fields.extend(_one_cv(fields, autofill.propose(job, fresh, docs, documents.files(job), con,
+                                                          notes=notes)))
         autofill.ask_model(job, fields, docs, con, problems=retry, notes=notes)
         _checkpoint(job_id)
         out = browser.fill(job_id, fields, _shot(job_id))
@@ -217,6 +218,50 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
     form["filled"] = {"at": db.now(), "screenshot": out["screenshot"], "errors": len(out["errors"]),
                       "next": out["next"], "password": out["password"]}
     return out
+
+
+UPLOAD_SETTLE_LOOKS = 5   # reads of a page after an upload, until its questions stop changing
+UPLOAD_SETTLE_S = 2       # seconds between those reads; a CV is read and the form rebuilt within a few
+
+
+def _fill_uploads_first(job_id: str, todo: list[dict]) -> dict:
+    """Fills a page's uploads, waits for the page to settle, then fills the rest into the page as it is then.
+
+    Some forms read an uploaded CV and build themselves again, and what Hal had typed was lost: Ashby left ten
+    answers "no longer on the page" (testers, 2026-11-04). After the uploads, the rest are matched to the new
+    boxes by their signature. A page with no uploads, or only uploads, is filled in one go as before.
+    """
+    uploads = [f for f in todo if f["kind"] == "file" and f.get("value") and not f.get("skip")]
+    rest = [f for f in todo if f not in uploads]
+    if not uploads or not rest:
+        return browser.fill(job_id, todo, _shot(job_id))
+    first = browser.fill(job_id, uploads, _shot(job_id))
+    seen: set[str] = set()
+    for _ in range(UPLOAD_SETTLE_LOOKS):
+        time.sleep(UPLOAD_SETTLE_S)
+        _checkpoint(job_id)
+        now = browser.read_here(job_id)["fields"]
+        sigs = {f["sig"] for f in now}
+        if sigs == seen:
+            break
+        seen = sigs
+    hids = {f["sig"]: f["hid"] for f in now}
+    for f in rest:
+        f["hid"] = hids.get(f["sig"], f["hid"])
+    out = browser.fill(job_id, rest, _shot(job_id))
+    out["errors"] = {**first["errors"], **out["errors"]}
+    out["notes_used"] = [*(first.get("notes_used") or []), *(out.get("notes_used") or [])]
+    return out
+
+
+def _one_cv(fields: list[dict], fresh: list[dict]) -> list[dict]:
+    """Leaves a new upload alone when the form already has its CV: one that appeared after a form rebuilt
+    itself was taken for the CV upload on its own (Ashby, testers 2026-11-04)."""
+    has_cv = any(f["kind"] == "file" and f.get("source") == "documents: CV" and not f.get("skip") for f in fields)
+    for f in fresh:
+        if has_cv and f["kind"] == "file" and f.get("source") == "documents: CV" and f.get("note"):
+            f.update(value=None, skip=True, source="skipped", note="not a CV or cover letter upload")
+    return fresh
 
 
 def _note_uses(form: dict, out: dict) -> None:

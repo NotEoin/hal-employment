@@ -73,6 +73,9 @@ What changed in each version, in plain words.
   its job-alert box as the application. Hal now tells them apart by the part of the page they sit in.
 - **"Applications closed" closes the job.** A banner saying applications had closed was not read as a
   closed advert.
+- **Answers survive a form that rebuilds itself.** A form that read the uploaded CV and built itself again
+  (as Ashby's does) lost Hal's answers, which came back as "no longer on the page". Hal now uploads first,
+  waits for the form to settle, then fills in the rest, and puts the CV in only once.
 - **The CV goes in the right upload.** A form that named its cover letter and certificate uploads but not the
   CV's got no CV, since Hal took "cover" to mean the CV's upload was named too. The CV now goes in the
   first upload named for no other document, and Hal knows the German words for CV and cover letter.

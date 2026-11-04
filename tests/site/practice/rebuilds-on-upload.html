@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Junior Developer</title></head><body>
+<!-- A form that reads an uploaded CV and builds itself again, as Ashby's does (2026-11-04): a moment after the
+     CV is chosen, every box is replaced by a new one, with the first name filled from the "CV" and the CV's
+     file name shown beside its box, as Ashby shows it. Answers typed before the rebuild are lost with the old
+     boxes. -->
+<h1>Apply: Junior Developer</h1>
+<form id="apply" method="post" action="/sent/rebuilds-on-upload"></form>
+<script>
+const build = (parsed, file) => {
+  document.getElementById('apply').innerHTML =
+    '<div><label for="cv">CV *</label><input id="cv" name="cv" type="file" required>'
+    + (file ? '<span class="uploaded">' + file + '</span>' : '') + '</div>'
+    + '<div><label for="fn">First name *</label><input id="fn" name="first_name" required value="' + (parsed || '') + '"></div>'
+    + '<div><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>'
+    + '<div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>'
+    + '<button type="submit">Submit application</button>';
+  document.getElementById('cv').addEventListener('change', e => {
+    window.rebuilds = (window.rebuilds || 0) + 1;
+    const name = e.target.files[0] ? e.target.files[0].name : '';
+    setTimeout(() => build('Parsed', name), 700);
+  });
+};
+build('');
+</script>
+</body></html>
