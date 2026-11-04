@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Graduate Analyst Job in York</title>
+<style>
+ .capture { position: absolute; z-index: 50; background: #fff; padding: 12px; box-shadow: 0 4px 12px #0004; }
+ .capture[hidden] { display: none; }
+</style></head><body>
+<!-- A job board's advert that asks for job alerts when Apply is pressed, as Adzuna's does (2026-11-04): "Apply for
+     this job" opens a box under it, placed absolutely (not fixed) and with no role or modal class, asking for an
+     email address for similar jobs. The board's link to the employer is the box's "No thanks, take me to the job";
+     pressing Apply again only opens the box again. Leaving through that link is kept in sessionStorage. -->
+<h1>Graduate Analyst</h1>
+<p>Made-up Analytics Ltd is hiring a graduate analyst in York.</p>
+<div style="position: relative">
+ <a id="apply" href="#">Apply for this job</a>
+ <div class="capture" hidden>
+  <p>Receive similar jobs by email</p>
+  <form action="/alerts" method="post"><input name="email" type="email" placeholder="your.email@example.org">
+   <button type="submit">Create alert</button>
+   <a id="skip" href="single.html">No thanks, take me to the job</a></form>
+  <p>By creating an alert, you agree to our terms.</p>
+ </div>
+</div>
+<script>
+document.getElementById('apply').addEventListener('click', e => {
+  e.preventDefault();
+  document.querySelector('.capture').hidden = false;
+});
+document.getElementById('skip').addEventListener('click', () => sessionStorage.setItem('popupClosed', '1'));
+</script>
+</body></html>

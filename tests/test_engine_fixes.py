@@ -358,6 +358,15 @@ class Fixes:
                                       lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')")), "1")
         self.assertEqual((self.site.sent(), self.site.posts["/alerts"]), (0, 0))
 
+    def test_a_job_alert_box_opened_by_apply_is_left_by_its_link_to_the_job(self):
+        """Regression (testers, 2026-11-04): Adzuna's Apply opened a job-alert box placed absolutely under it, and
+        Hal said "no Apply button recognised" instead of following "No thanks, take me to the job"."""
+        job_id, found = self.opened("capture", "apply-capture.html")
+        self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email", "Phone"])
+        self.assertEqual(self.on_page(job_id, "single.html",
+                                      lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')")), "1")
+        self.assertEqual((self.site.sent(), self.site.posts["/alerts"]), (0, 0))
+
     def test_a_boards_search_and_alerts_in_its_one_page_form_are_passed_on_the_way_to_the_form(self):
         """Regression (testers, 2026-11-04): on ProductionBase, whose whole page is one form, Hal filled the
         board's job search ("Job Types", "Industry") as the application."""

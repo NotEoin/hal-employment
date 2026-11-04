@@ -380,15 +380,18 @@ function halSurvey() {
 function halPopup() {
   const clean = halClean, visible = halVisible;
   const ASKS = /job alert|email alert|similar (new )?jobs|jobs like this|newsletter|subscribe|sign up for|stay (up to date|in the loop)|don.t miss|never miss|get (the )?latest|notifications|download (our|the) app|get the app|jobs by email|join our talent/i;
-  const CLOSE = /^(close|close (this )?(dialog|modal|pop-?up|window)|dismiss|no,? thanks?( you)?|not now|maybe later|skip|continue browsing|continue without .*|\u00d7|\u2715|\u2716|x)$/i;
+  const CLOSE = /^(close|close (this )?(dialog|modal|pop-?up|window)|dismiss|no,? thanks?( you)?(,? .{0,40})?|not now|maybe later|skip|continue browsing|continue without .*|\u00d7|\u2715|\u2716|x)$/i;
   const LAYER = '[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]';
   const nameOf = el => clean(el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || '');
   const sends = el => el.closest('form') && (el.type === 'submit' || (el.tagName === 'BUTTON' && !el.getAttribute('type')));
   const closeClass = el => typeof el.className === 'string' && /(^|[\s_-])close([\s_-]|$)/i.test(el.className);
   const closer = el => visible(el) && !sends(el) && (CLOSE.test(nameOf(el)) || closeClass(el));
+  // a box raised over the page, as Adzuna's job-alert box under its Apply button is (absolute, z-index 50)
+  const RAISED_Z = 10;
+  const raised = n => { const s = getComputedStyle(n); return s.position === 'absolute' && +s.zIndex >= RAISED_Z; };
   const layerOf = el => {
     for (let n = el; n && n !== document.body; n = n.parentElement) {
-      if (n.matches(LAYER) || getComputedStyle(n).position === 'fixed') return n;
+      if (n.matches(LAYER) || getComputedStyle(n).position === 'fixed' || raised(n)) return n;
     }
     return null;
   };

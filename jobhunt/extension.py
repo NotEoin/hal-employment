@@ -59,6 +59,7 @@ FILL_WAIT = 180  # seconds a fill of a few fields may take: uploads and searched
 FILL_PER_FIELD_S = 20
 NOT_CONNECTED = "Open Hal in the browser that has the helper"
 CONNECTED_S = 2 * POLL_WAIT  # a helper in touch this recently is connected: it polls again as each poll ends
+READ_AGAIN_S = 2  # a pop-up's own link to the job (Adzuna's "No thanks, take me to the job") leaves the page
 
 _lock = threading.Lock()
 _queues: dict[str, queue.Queue] = {}
@@ -283,10 +284,15 @@ def _read(job_id: str, banners: bool = True, options: bool = False, front: bool 
     never open; a look that only watches (`peek`) leaves the tabs where they are.
     """
     words, never = browser.banner_words(browser.notes_for(_last_url.get(job_id, ""), job_id))
-    facts = _ask("read", job=job_id, front=front, patterns={
+    patterns = {
         **PATTERNS, "banners": [p.pattern for p in words] if banners else None,
         "popups": banners and bool(settings.get("applying.close_popups")),
-        "bannersNever": never.pattern if never is not None and banners else None, "options": options})
+        "bannersNever": never.pattern if never is not None and banners else None, "options": options}
+    facts = _ask("read", job=job_id, front=front, patterns=patterns)
+    if not facts and patterns["popups"]:
+        # Closing a pop-up can follow its link away mid-read; the page it leads to is read instead.
+        time.sleep(READ_AGAIN_S)
+        facts = _ask("read", job=job_id, front=front, patterns={**patterns, "popups": False})
     if not facts:
         # The page was swapped out while it was read, or is one the browser will not let a script into.
         raise RuntimeError("the job's tab could not be read; it may still be loading or be a browser error page")

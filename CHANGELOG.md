@@ -68,6 +68,9 @@ What changed in each version, in plain words.
   pop-up lay over the page. Hal now leaves a site's search and job-alert boxes alone, closes pop-ups that
   ask for job alerts, newsletters or an app, however the site builds them, and presses Apply to reach the
   employer's form.
+- **A job-alert box opened by Apply is passed.** On Adzuna, Apply opened a box under it asking for an email
+  address for similar jobs, and Hal said "No Apply button recognised". Hal now presses its "No thanks, take me
+  to the job" link, which leads on to the employer.
 - **A board's own search and job alerts are left alone in a page-wide form.** On a board whose whole page
   is one form (as ProductionBase builds it), Hal filled the board's job search ("Job Types", "Industry") and
   its job-alert box as the application. Hal now tells them apart by the part of the page they sit in.
