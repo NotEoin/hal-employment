@@ -70,9 +70,13 @@ def _prepare_example(world: Any) -> dict:
 
 @runner.action("docs.prepare", area="documents", label="Writing your documents for {title} at {company}",
                why="You pressed Apply with Hal at {time}. Documents come first.", priority=1,
-               example=_prepare_example)
+               resumable=True, example=_prepare_example)
 def prepare(ctx, job_id: str, time: str = "") -> dict:
-    """Moves a job to Getting ready and makes its documents; nothing is opened or sent."""
+    """Moves a job to Getting ready and makes its documents; nothing is opened or sent.
+
+    Resumable: a restart part way through starts it again by itself, since a queue of jobs left every one
+    stalled under Getting ready after a restart (testers, 2026-11-04). Starting again only rewrites the drafts.
+    """
     from .. import pack
 
     job = _job(ctx.con, job_id)

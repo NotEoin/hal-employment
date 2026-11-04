@@ -24,6 +24,8 @@ What changed in each version, in plain words.
 - **Queueing many jobs keeps the page clear.** Each **Add to queue** showed its own message, and twenty of
   them covered the job list. They now join into one ("Added 20 jobs to Getting ready"), and at most three
   messages show at once.
+- **Queued documents carry on after a restart.** Restarting Hal while it wrote documents for queued jobs
+  left them all stopped under Getting ready; Hal now starts them again by itself.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,
