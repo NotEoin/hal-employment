@@ -50,7 +50,10 @@ log = logging.getLogger(__name__)
 ACTIVE = ("queued", "running", "waiting_for_you")
 FINAL = ("done", "error", "stopped", "interrupted")
 CARRY_ON_FROM = ("interrupted", "stopped", "error")
-USER_THREADS = 4             # priorities 0 and 1
+# Priority 0 has threads of its own: a button pressed while a hundred queued jobs had their documents
+# written waited behind all of them (testers, 2026-11-04).
+NOW_THREADS = 2              # priority 0, what the person just asked for
+USER_THREADS = 4             # priority 1
 BACKGROUND_THREADS = 2       # priority 2
 JOB_THREADS = 6              # the driver's actions mostly wait on the browser or the model
 IDLE_POLL_S = 0.5            # `idle()` looks again this often even unwoken, so a missed wake-up costs little
@@ -89,6 +92,7 @@ _FNS: dict[str, Callable[..., Any]] = {}
 ACTIONS: dict[str, dict] = {}
 # The driver's actions and short jobs such as closing a tab quietly run here, beside the two pools of `start`.
 POOL = ThreadPoolExecutor(max_workers=JOB_THREADS, thread_name_prefix="action")
+_NOW = ThreadPoolExecutor(max_workers=NOW_THREADS, thread_name_prefix="action-now")
 _USER = ThreadPoolExecutor(max_workers=USER_THREADS, thread_name_prefix="action-user")
 _BACKGROUND = ThreadPoolExecutor(max_workers=BACKGROUND_THREADS, thread_name_prefix="action-bg")
 _PRIORITY: contextvars.ContextVar[int] = contextvars.ContextVar("hal_action_priority", default=0)
@@ -744,7 +748,7 @@ def start(kind: str, *, subject: str | None = None, job_id: str | None = None, p
     subject = subject if subject is not None else job_id
     live = _begin(k, subject=subject, job_id=job_id, params=params, why=why, priority=priority, replace=replace,
                   session_id=session_id, helper_id=helper_id, remote=remote)
-    pool = _BACKGROUND if live.priority == 2 else _USER
+    pool = (_NOW, _USER, _BACKGROUND)[live.priority]
     pool.submit(_execute, live, _bound(k, params), params.get("_carry_on_from"))
     return live.id
 

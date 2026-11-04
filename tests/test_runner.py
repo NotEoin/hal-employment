@@ -214,6 +214,18 @@ class Runner(unittest.TestCase):
         self.assertEqual(seen, [(2, 2), (0, 0)])
         self.assertEqual(runner.current_priority(), 0)
 
+    def test_what_the_person_just_asked_for_never_waits_behind_queued_jobs(self):
+        """Regression (testers, 2026-11-04): "Fill it in again" waited behind a hundred queued jobs' documents."""
+        release, done = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        self.kinds.add("test.queued_job", lambda ctx: release.wait(WAIT_S) and "done")
+        self.kinds.add("test.pressed", lambda ctx: done.set() or "done", priority=0)
+        for n in range(runner.USER_THREADS + 2):
+            runner.start("test.queued_job", subject=f"job-{n}")
+        runner.start("test.pressed", subject="pressed")
+        self.assertTrue(done.wait(WAIT_S), "the pressed action waited for the queue")
+        release.set()
+
     def test_ai_calls_inside_an_action_add_up_on_its_row(self):
         def ask_twice(ctx):
             runner.note_ai(provider="ollama", model="small-model", role="quick", ms=120)

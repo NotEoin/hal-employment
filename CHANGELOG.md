@@ -31,6 +31,9 @@ What changed in each version, in plain words.
   missing documents** on the board starts Hal on all of them again.
 - **An open page picks up an update.** A page left open while Hal was updated or restarted kept its old
   screens. It now reloads itself once Hal is back, or, while you are typing, offers **Reload**.
+- **Buttons work at once while Hal is busy.** With jobs queued, **Fill it in again**, **Fill in from this
+  page**, approving one application and the Form step's other buttons waited until every queued job's
+  documents were written. What you press now starts straight away.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,

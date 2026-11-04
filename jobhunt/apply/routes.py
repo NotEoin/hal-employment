@@ -10,6 +10,7 @@ from ..web.router import BadRequest, NotHere, Request, route
 from . import actions, queries
 
 PREFIX = "/api/v2/applications"
+NOW = 0   # runner priority for a button the person just pressed on one application and is watching
 TAB_CLOSED = "The form's tab is closed. Press \"Fill it in again\" to open it."
 
 
@@ -88,7 +89,7 @@ def application(req: Request) -> dict:
 def approve(req: Request) -> dict:
     """Approve and fill in the form."""
     who = _who(req)
-    return {"action_id": actions.approve_documents(req.con, _id(req), _body(req), **who)}
+    return {"action_id": actions.approve_documents(req.con, _id(req), _body(req), **who, priority=NOW)}
 
 
 @route("PUT", PREFIX + "/{app_id}/documents")
@@ -129,7 +130,7 @@ def fill(req: Request) -> dict:
     """Fill it in again: from the advert (`fresh`), or from the page the job's tab shows now (`here`)."""
     body = _body(req)
     params = {"fresh": bool(body.get("fresh")), "here": bool(body.get("here"))}
-    return {"action_id": actions.start("apply.fill", _id(req), params=params, **_who(req))}
+    return {"action_id": actions.start("apply.fill", _id(req), params=params, **_who(req), priority=NOW)}
 
 
 @route("POST", PREFIX + "/{app_id}/form/edits")

@@ -190,6 +190,9 @@ class Routes(unittest.TestCase):
             r = self.c.post(self.url("sorrel-ready", "/form/fill"), {"here": True})
             self.wait(r.json()["action_id"])
         self.assertEqual(asked, [(True, False)])
+        # a button the person pressed never waits behind queued jobs (testers, 2026-11-04)
+        priority = self.con.execute("SELECT priority FROM actions WHERE id = ?", (r.json()["action_id"],)).fetchone()
+        self.assertEqual(priority[0], 0)
 
     def test_documents_a_restart_stopped_are_shown_and_made_again_together(self):
         # testers: after a restart, queued jobs sat under Getting ready saying "Check and approve documents" with

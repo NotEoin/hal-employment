@@ -165,10 +165,14 @@ def match_tab(ctx, page: dict) -> dict:
 
 
 def start(kind: str, job_id: str, *, params: dict | None = None, why: str | None = None,
-          session_id: str | None = None, helper_id: str | None = None, remote: bool = False) -> str:
-    """Starts one of the kinds above for a job, in place of anything Hal is doing for it; returns its id."""
+          session_id: str | None = None, helper_id: str | None = None, remote: bool = False,
+          priority: int | None = None) -> str:
+    """Starts one of the kinds above for a job, in place of anything Hal is doing for it; returns its id.
+
+    `priority` 0 is for a button the person just pressed and is watching; it never waits behind queued jobs.
+    """
     return runner.start(kind, job_id=job_id, params={"job_id": job_id, **(params or {})}, why=why, replace=True,
-                        session_id=session_id, helper_id=helper_id, remote=remote)
+                        session_id=session_id, helper_id=helper_id, remote=remote, priority=priority)
 
 
 # ----------------------------------------------------------------------------------------- workflow rules
@@ -197,7 +201,7 @@ def _merge_edits(docs: dict, body: dict) -> dict:
 
 
 def approve_documents(con, job_id: str, body: dict | None = None, *, session_id: str | None = None,
-                      helper_id: str | None = None, remote: bool = False) -> str:
+                      helper_id: str | None = None, remote: bool = False, priority: int | None = None) -> str:
     """Approve and fill in the form: keeps the edits, fixes where the form is filled, moves the application to
     the Form step and starts `apply.fill`."""
     job = _job(con, job_id)
@@ -214,7 +218,7 @@ def approve_documents(con, job_id: str, body: dict | None = None, *, session_id:
     if not settings.get("setup.first_app_seen"):
         settings.set("setup.first_app_seen", True, by="you", session_id=session_id)
     return start("apply.fill", job_id, why=f"You approved the documents for {job['title']}",
-                 session_id=session_id, helper_id=helper_id, remote=remote)
+                 session_id=session_id, helper_id=helper_id, remote=remote, priority=priority)
 
 
 def reopen_documents(con, job_id: str) -> None:
