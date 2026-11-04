@@ -40,8 +40,9 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    [Your privacy](privacy.md).
 4. **What you're looking for.** Your career stage, whether you are studying now, and the kinds of role you
    want: graduate jobs, graduate schemes, paid internships, placement years, insight weeks and spring
-   weeks, apprenticeships, part-time or fixed-term work. Hal then says "Here is what I understood"; press
-   **Change something** if it is not right.
+   weeks, apprenticeships, part-time or fixed-term work. Press every career area you are interested in, such
+   as **Heritage and museums** and **Creative and media**; each fills in example roles you can change. Hal
+   then says "Here is what I understood"; press **Change something** if it is not right.
 5. **Your record.** Hal makes a folder for your certificates, references and other evidence. Press
    **Add files** to copy documents into it.
 6. **How Hal thinks.** Choose **On this computer** if your computer runs a local model through Ollama, or

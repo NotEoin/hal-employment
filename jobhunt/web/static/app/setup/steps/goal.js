@@ -1,7 +1,8 @@
 /* Setup guide step 4: What are you looking for?
 
    The quick questions start from the goal as it is now, so running the step again never wipes a change
-   made in Settings. A career area is a one-press starting point for the roles. Each change asks POST
+   made in Settings. Career areas are toggles: each one pressed adds its example roles, and pressing it again
+   takes back the roles no other chosen area gives. Each change asks POST
    /goal/quiz, which uses no AI and saves nothing, and shows "Here is what I understood"; the person
    corrects any line above it, and only "Yes, save this" writes the goal, as one change with its own
    version. The chat with Hal is not offered: it is not built yet. */
@@ -44,7 +45,7 @@ export function Step() {
     get("/goal").then(g => {
       const v = g.values;
       setA({ stage: v["goal.stage"], study_status: v["goal.study_status"], study_end: v["goal.study_end"] || "",
-        kinds: v["goal.kinds"] || [], roles: v["goal.roles"] || [], starter: "", places: (v["goal.places"] || []).join(", "),
+        kinds: v["goal.kinds"] || [], roles: v["goal.roles"] || [], starters: [], places: (v["goal.places"] || []).join(", "),
         pattern: v["goal.pattern"], min_pay: v["goal.min_pay"] ? String(v["goal.min_pay"]) : "" });
     }).catch(err => toast(err.message));
     get("/goal/starters").then(setStarters).catch(() => setStarters([]));
@@ -64,7 +65,14 @@ export function Step() {
   }, [a]);
   if (!a) return html`<h1 class="h1">What are you looking for?</h1><p class="sub">Loading your goal...</p>`;
   const set = patch => { setA({ ...a, ...patch }); setSaved(false); };
-  const start = s => set({ starter: a.starter === s.id ? "" : s.id, roles: a.starter === s.id ? a.roles : s.roles });
+  const toggleArea = s => {
+    if (!a.starters.includes(s.id)) {
+      set({ starters: [...a.starters, s.id], roles: [...a.roles, ...s.roles.filter(r => !a.roles.includes(r))] });
+      return;
+    }
+    const others = starters.filter(o => o.id !== s.id && a.starters.includes(o.id)).flatMap(o => o.roles);
+    set({ starters: a.starters.filter(x => x !== s.id), roles: a.roles.filter(r => !s.roles.includes(r) || others.includes(r)) });
+  };
   const addRole = () => { const r = newRole.trim(); if (r && !a.roles.includes(r)) set({ roles: [...a.roles, r] }); setNewRole(""); };
   const save = async () => {
     try {
@@ -89,9 +97,9 @@ export function Step() {
           onInput=${e => set({ study_end: e.target.value })} />${err("study_end")}</div></div>`}
       <div class="setting"><div><div class="lab">Kinds of role</div><div class="small sub">Unpaid roles stay hidden unless you show them in Settings.</div></div>
         <${Picks} label="Kinds of role" options=${KINDS} chosen=${a.kinds} onToggle=${v => set({ kinds: toggled(a.kinds, v) })} />${err("kinds")}</div>
-      ${starters.length > 0 && html`<div class="setting"><div><div class="lab">Start from a career area</div><div class="small sub">One press fills in example roles. Change them below.</div></div>
-        <div class="ctl" role="group" aria-label="Career areas">${starters.map(s => html`<button type="button" class=${cx("pick", a.starter === s.id && "on")}
-          aria-pressed=${a.starter === s.id ? "true" : "false"} onClick=${() => start(s)}>${s.name}</button>`)}</div></div>`}
+      ${starters.length > 0 && html`<div class="setting"><div><div class="lab">Career areas you are interested in</div><div class="small sub">Choose as many as you like. Each fills in example roles; change them below.</div></div>
+        <${Picks} label="Career areas" options=${starters.map(s => [s.id, s.name])} chosen=${a.starters}
+          onToggle=${id => toggleArea(starters.find(s => s.id === id))} />${err("starters")}</div>`}
       <div class="setting"><div class="lab">Roles you want</div><div class="ctl">
         ${a.roles.map(r => html`<button type="button" class="pick on" aria-pressed="true" aria-label=${"Remove " + r} onClick=${() => set({ roles: a.roles.filter(x => x !== r) })}>${r} <${Icon} n="x" c="s" /></button>`)}
         <input class="input" style="width:200px" placeholder="Add a role" aria-label="Add a role" value=${newRole}

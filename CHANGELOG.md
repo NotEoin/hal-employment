@@ -4,6 +4,11 @@ What changed in each version, in plain words.
 
 ## Unreleased
 
+### What's new
+
+- **Choose several career areas.** The goal step's career areas are now toggles: press every area you are
+  interested in, such as Heritage and museums and Creative and media, and their example roles are joined.
+
 ### Fixed
 
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
@@ -14,6 +19,8 @@ What changed in each version, in plain words.
   bare "!"; it now says to press it on an employer's application page.
 - **Fewer wrong jobs for humanities graduates.** Specialist technical titles (software, machine learning,
   data engineering and similar) are hidden as "Outside your field" unless one of your roles names them.
+- **The right scoring for a new graduate.** A new graduate who types non-technical roles is no longer scored
+  with the programmers' preset, and "Here is what I understood" names the starting point.
 - **The laptop launcher stays open.** "Hal Employment (desktop)" closed its window as soon as the tunnel
   started, which ended the tunnel too. Fetch the launcher again (step 5 of the how-to). A launcher that
   cannot connect now keeps its window open and says why.
