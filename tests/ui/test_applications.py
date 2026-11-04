@@ -58,7 +58,7 @@ class ApplicationsTest(unittest.TestCase):
         p.page.wait_for_selector("h1:text('Museum Assistant')")
         self.assertEqual(p.errors, [])
 
-    def test_approving_shows_the_first_application_guide_then_starts_the_form(self) -> None:
+    def test_approving_shows_the_first_application_guide_then_the_form_step(self) -> None:
         state = apps_state()
         state.pages[APP_PATH].update(step=1, column="ready", form=None)
         state.pages[APP_PATH]["docs"]["state"] = "ready"
@@ -72,7 +72,9 @@ class ApplicationsTest(unittest.TestCase):
         self.assertIn("press Submit on the site yourself", dialog.inner_text())
         self.assertEqual([path for path, _ in state.posts], [])
         p.page.click("text=Got it, open the form")
-        p.page.wait_for_selector("h1:text('Applications')")
+        # The page stays on the application and shows its Form step; it went back to the board (testers, 2026-11-04).
+        p.page.wait_for_selector("[role=tab][aria-selected=true]:has-text('Form')")
+        self.assertEqual(p.page.locator("h1").inner_text(), "Museum Assistant")
         self.assertEqual([path for path, _ in state.posts], ["/api/v2/applications/demo%3A1/documents/approve"])
         self.assertEqual(p.errors, [])
 

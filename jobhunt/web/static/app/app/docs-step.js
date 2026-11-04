@@ -16,13 +16,14 @@ import { plural } from "../core/format.js";
 
 const appPath = a => "/applications/" + encodeURIComponent(a.id);
 
-/** Approve and fill in the form: starts the form, then shows the board. */
-export async function approve(a, edits = {}) {
+/** Approve and fill in the form: starts the form, then calls `then`, which shows the Form step. The page
+    stays on this application, so the person watches the form being filled rather than the board. */
+export async function approve(a, edits = {}, then = null) {
   try {
     await post(appPath(a) + "/documents/approve", edits);
     invalidate("/applications*");
     toast("Approved. Hal is opening the form on the employer's site.");
-    go("apps");
+    if (then) then();
   } catch (err) { toast(err.message); }
 }
 
@@ -49,7 +50,7 @@ function Writing({ a }) {
 }
 
 /** The Documents step. */
-export function DocsStep({ a, reload }) {
+export function DocsStep({ a, reload, onApproved }) {
   const d = a.docs;
   const [tab, setTab] = useState("cv");
   const [letter, setLetter] = useState(d.letter.text);
@@ -63,7 +64,7 @@ export function DocsStep({ a, reload }) {
       <button type="button" class="btn small" onClick=${() => go("docs-" + (a.number || ""))}>Open in Documents</button></div></section>`;
   }
   const edits = { letter, message, answers };
-  const onApprove = () => (a.first_time ? openDialog("firstapp", { app: a, edits }) : approve(a, edits));
+  const onApprove = () => (a.first_time ? openDialog("firstapp", { app: a, edits, then: onApproved }) : approve(a, edits, onApproved));
   const toggle = async (c, on) => {
     try { await post(appPath(a) + "/documents/changes/" + encodeURIComponent(c.id), { on }); reload(); }
     catch (err) { toast(err.message); }

@@ -44,6 +44,10 @@ export function FormStep({ a, reload }) {
   const f = a.form;
   const [open, setOpen] = useState(null);
   const [edits, setEdits] = useState({});
+  if (!f && a.step >= 2) {
+    return html`<section class="card"><div class="row"><span class="eye busy" aria-hidden="true"></span><h2 class="h2" style="margin:0">Hal is opening the form on the employer's site</h2></div>
+      <p class="sub" style="margin-top:8px">When Hal has filled it in, its answers appear here to check.</p></section>`;
+  }
   if (!f) return html`<section class="card empty">The form starts after you approve the documents. Hal will open it in your browser and fill it in.</section>`;
   const path = "/applications/" + encodeURIComponent(a.id);
   const act = async (rest, body, said) => {

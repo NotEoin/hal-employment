@@ -190,14 +190,17 @@ def _merge_edits(docs: dict, body: dict) -> dict:
 
 def approve_documents(con, job_id: str, body: dict | None = None, *, session_id: str | None = None,
                       helper_id: str | None = None, remote: bool = False) -> str:
-    """Approve and fill in the form: keeps the edits, fixes where the form is filled, starts `apply.fill`."""
+    """Approve and fill in the form: keeps the edits, fixes where the form is filled, moves the application to
+    the Form step and starts `apply.fill`."""
     job = _job(con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "chosen from the queue")
     now = db.now()
     docs = {**_merge_edits(documents.load(con, job), body or {}), "approved": now}
     documents.save(con, job, docs)
-    _set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id)
+    # The Form step starts now, not when the page has loaded: the application page follows it at once.
+    stage = {} if _app(con, job_id)["stage"] in ("form", "filled") else {"stage": "form"}
+    _set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id, **stage)
     db.log(con, job_id, "note", "documents approved")
     con.commit()
     if not settings.get("setup.first_app_seen"):

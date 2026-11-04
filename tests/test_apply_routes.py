@@ -14,7 +14,7 @@ from support.api import HalServer
 from support.world import World, job_id
 
 from jobhunt import browser, db, documents
-from jobhunt.apply import driver, helpers, queries
+from jobhunt.apply import actions, driver, helpers, queries
 from jobhunt.core import naming, paths, runner
 
 WAIT_S = 10.0
@@ -140,6 +140,15 @@ class Routes(unittest.TestCase):
         self.assertIsNotNone(page["docs"]["approved_at"])
         self.assertEqual(page["docs"]["letter"]["text"], "A made-up letter.")
         self.assertFalse(page["first_time"])
+
+    def test_an_approved_application_is_on_the_form_step_before_the_form_opens(self):
+        # testers: approving went back to the board, and the application stayed on Documents until the page loaded
+        self.start_applying("sorrel-ready")
+        with mock.patch.object(actions, "start", lambda *a, **k: "held"):
+            r = self.c.post(self.url("sorrel-ready", "/documents/approve"), {})
+        self.assertEqual(r.status, 200, r.text)
+        page = self.c.get(self.url("sorrel-ready")).json()
+        self.assertEqual((page["step"], page["column"], page["form"]), (2, "form", None))
 
     def test_approve_all_starts_every_ready_form_and_leaves_the_rest(self):
         # testers asked to queue several jobs, as the older tool did, then apply to them together

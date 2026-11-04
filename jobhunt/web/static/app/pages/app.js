@@ -49,7 +49,7 @@ export function AppPage({ arg }) {
       aria-selected=${shown === k + 1 ? "true" : "false"} class=${cx("step", s.state === "done" && "done", s.state === "now" && "now", shown === k + 1 && "view")}
       onClick=${() => setView(k + 1)}><span class="num">${s.state === "done" ? html`<${Icon} n="check" c="s" />` : k + 1}</span>
       <span><b>${s.name}</b><small>${s.note || "Not yet"}</small></span></button>`)}</div>
-    ${shown === 1 && html`<${DocsStep} a=${a} reload=${reload} />`}
+    ${shown === 1 && html`<${DocsStep} a=${a} reload=${reload} onApproved=${() => { setView(2); reload(); }} />`}
     ${shown === 2 && html`<${FormStep} a=${a} reload=${reload} />`}
     ${shown === 3 && html`<${SentStep} a=${a} />`}
     ${shown === 4 && html`<${InterviewStep} a=${a} />`}`;

@@ -21,6 +21,8 @@ What changed in each version, in plain words.
   browser holding your sign-ins and the browser helper.
 - **Application forms open as tabs you can see.** "Open forms in" now starts as "This window"; a separate
   window opened behind yours, so it looked as if no tab had opened.
+- **Approving stays on the application.** **Approve and fill in the form** went back to the Applications
+  board; the application now moves on to its Form step, where Hal's answers appear as it fills the form.
 - **The helper's button says what it is for.** Pressed on Hal's own page or on a browser page, it showed a
   bare "!"; it now says to press it on an employer's application page.
 - **Fewer wrong jobs for humanities graduates.** Specialist technical titles (software, machine learning,
