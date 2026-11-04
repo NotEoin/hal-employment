@@ -35,17 +35,10 @@ install_entry() {
   fi
 }
 
+# Hal opens in the default browser, where the person's browser helper is.
 open_app() {
-  local url="$1" b app
-  if [ "$(uname -s)" = "Darwin" ]; then
-    for app in "Google Chrome" "Microsoft Edge" "Brave Browser" "Opera" "Vivaldi" "Chromium"; do
-      if [ -d "/Applications/$app.app" ]; then open -na "$app" --args --app="$url"; return; fi
-    done
-    open "$url"; return
-  fi
-  for b in chromium chromium-browser google-chrome brave-browser microsoft-edge opera vivaldi; do
-    if command -v "$b" >/dev/null 2>&1; then "$b" --app="$url" >/dev/null 2>&1 & return; fi
-  done
+  local url="$1"
+  if [ "$(uname -s)" = "Darwin" ]; then open "$url"; return; fi
   xdg-open "$url" >/dev/null 2>&1 &
 }
 

@@ -29,8 +29,8 @@ curl.exe -fs "http://127.0.0.1:%LPORT%/healthz" >nul 2>&1 && goto open
 set /a TRIES+=1
 if %TRIES% lss 20 timeout /t 1 /nobreak >nul& goto wait
 :open
-rem msedge is not on PATH: App Paths work only through start
-start "" msedge --app="%URL%"
+rem the default browser, where the person's browser helper is
+start "" "%URL%"
 echo Hal is open. Close this window when you have finished.
 pause
 :end

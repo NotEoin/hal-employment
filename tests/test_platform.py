@@ -72,11 +72,14 @@ class WindowsBrowsers(unittest.TestCase):
         registry = {("HKCU", rf"{APP_PATHS}\opera.exe"): r"C:\Old\opera.exe"}
         self.assertEqual(windows({OPERA}, registry).browsers()[0].exe, Path(OPERA))
 
-    def test_the_app_window_is_edge_on_windows(self):
+    def test_hal_opens_in_the_default_browser_on_windows_not_an_edge_app_window(self):
+        # testers on Windows found Hal in an Edge window apart from the browser they use (2026-11-03)
         cmds = Commands()
         win = windows({OPERA, EDGE}, {}, cmds)
-        win.open_app_window("http://127.0.0.1:24321/open?t=made-up")
-        self.assertEqual(cmds.started, [[EDGE, "--app=http://127.0.0.1:24321/open?t=made-up"]])
+        with mock.patch("webbrowser.open") as tab:
+            win.open_in_default_browser("http://127.0.0.1:24321/open?t=made-up")
+        tab.assert_called_once_with("http://127.0.0.1:24321/open?t=made-up")
+        self.assertEqual(cmds.started, [])
 
     def test_a_new_browser_window_is_opened_without_an_address(self):
         # Edge dropped edge://extensions from its command line and showed a new tab
@@ -117,13 +120,14 @@ class LinuxBrowsers(unittest.TestCase):
                          [str(Path("/usr/bin/flatpak")), "run", "com.opera.Opera", "https://example.org"])
         self.assertFalse(found["firefox"].supported)
 
-    def test_the_app_window_is_the_first_chromium_browser_else_a_tab(self):
+    def test_hal_opens_in_the_default_browser_not_a_chromium_app_window(self):
+        # testers on Ubuntu found Hal in a snap Chromium window apart from their default browser (2026-11-03)
         cmds = Commands()
-        lin = self.linux({"firefox": "/usr/bin/firefox", "vivaldi-stable": "/usr/bin/vivaldi-stable"}, cmds)
-        lin.open_app_window("http://127.0.0.1:24321/open?t=made-up")
-        self.assertEqual(cmds.started, [[str(Path("/usr/bin/vivaldi-stable")), "--app=http://127.0.0.1:24321/open?t=made-up"]])
+        lin = self.linux({"xdg-open": "/usr/bin/xdg-open", "chromium": "/snap/bin/chromium"}, cmds)
+        lin.open_in_default_browser("http://127.0.0.1:24321/open?t=made-up")
+        self.assertEqual(cmds.started, [["xdg-open", "http://127.0.0.1:24321/open?t=made-up"]])
         with mock.patch("webbrowser.open") as tab:
-            self.linux({"firefox": "/usr/bin/firefox"}).open_app_window("http://127.0.0.1:24321/")
+            self.linux({"chromium": "/snap/bin/chromium"}).open_in_default_browser("http://127.0.0.1:24321/")
         tab.assert_called_once_with("http://127.0.0.1:24321/")
 
 
@@ -238,8 +242,8 @@ class Open(unittest.TestCase):
         argv = self.plat.spawn_detached.call_args.args[0]
         self.assertEqual(argv[1:], ["-m", "jobhunt", "serve", "--background", "--port", "24321"])
         self.assertEqual(self.plat.spawn_detached.call_args.kwargs, {"unit": system.SERVE_UNIT})
-        self.plat.open_app_window.assert_called_once()
-        self.assertIn("http://127.0.0.1:24321/open?t=", self.plat.open_app_window.call_args.args[0])
+        self.plat.open_in_default_browser.assert_called_once()
+        self.assertIn("http://127.0.0.1:24321/open?t=", self.plat.open_in_default_browser.call_args.args[0])
 
     def test_open_leaves_a_running_hal_alone_and_opens_the_app_even_in_developer_mode(self):
         settings.set("advanced.developer_mode", True)
@@ -248,7 +252,7 @@ class Open(unittest.TestCase):
             system.cmd_open(self.args)
         self.plat.spawn_detached.assert_not_called()
         self.assertIsNone(mint.call_args.kwargs["next"])
-        self.plat.open_app_window.assert_called_once_with("http://127.0.0.1:24321/open?t=x")
+        self.plat.open_in_default_browser.assert_called_once_with("http://127.0.0.1:24321/open?t=x")
 
 
 if __name__ == "__main__":

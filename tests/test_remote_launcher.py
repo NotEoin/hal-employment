@@ -2,7 +2,7 @@
 
 The end-to-end tests run the real Linux launcher against a real Hal server in a temporary home. A fake
 `ssh` stands in for OpenSSH: it forwards the tunnel's port on 127.0.0.1 and runs the desktop's commands in a
-made-up desktop home whose `~/.local/bin/hal-employment-cli` is the shim. A fake `chromium` opens the link
+made-up desktop home whose `~/.local/bin/hal-employment-cli` is the shim. A fake `xdg-open` opens the link
 the launcher got and records what Hal answered. No real SSH, browser or account is used.
 """
 from __future__ import annotations
@@ -147,11 +147,11 @@ sys.exit(subprocess.run(["bash", "-c", " ".join(rest[1:])], env=env).returncode)
 '''
 
 FAKE_BROWSER = r'''#!{python}
-"""A stand-in for a Chromium browser: opens the --app link and records what Hal answered."""
+"""A stand-in for xdg-open and the default browser: opens the link and records what Hal answered."""
 import http.client, json, os, sys
 from urllib.parse import urlparse
 
-url = urlparse(next(a for a in sys.argv[1:] if a.startswith("--app="))[len("--app="):])
+url = urlparse(sys.argv[-1])
 con = http.client.HTTPConnection(url.hostname, url.port, timeout=10)
 con.request("GET", url.path + "?" + url.query, headers={{"Host": url.netloc}})
 r = con.getresponse(); r.read()
@@ -276,7 +276,7 @@ class EndToEnd(unittest.TestCase):
         self.laptop.mkdir()
         _script(desktop / ".local" / "bin" / "hal-employment-cli", SHIM.format(python=sys.executable))
         _script(fakes / "ssh", FAKE_SSH.format(python=sys.executable))
-        _script(fakes / "chromium", FAKE_BROWSER.format(python=sys.executable))
+        _script(fakes / "xdg-open", FAKE_BROWSER.format(python=sys.executable))
         self.ssh_log, self.browser_log = tmp / "ssh.log", tmp / "browser.json"
         self.script = self.laptop / "hal-remote.sh"
         self.script.write_bytes(launcher.render("linux", host=HOST, user=USER, port=self.hal.port))

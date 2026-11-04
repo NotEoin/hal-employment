@@ -5,8 +5,8 @@ Design decisions, each with its reason:
 - Browsers are found from the registry's App Paths (per user, then per machine) and then from the usual
   install folders. Opera installs per user under `%LOCALAPPDATA%\\Programs\\Opera` and often has no App
   Paths entry, so that folder is always looked at.
-- The app window is Microsoft Edge with `--app=`, whatever browser the person uses, because Edge is
-  always present on Windows 10 and 11.
+- Hal opens in the person's default browser, where their sign-ins and the browser helper already are.
+  Microsoft Edge is used only for printing, because it is always present on Windows 10 and 11.
 - Toasts go through PowerShell's WinRT bridge, and say where to look in their words ("Open Hal: ..."),
   because clicking a toast does nothing yet.
 - The registry reader, the file check and the command runner are constructor arguments, so the Linux
@@ -19,6 +19,7 @@ import logging
 import os
 import subprocess
 import sys
+import webbrowser
 from collections.abc import Callable
 from pathlib import Path, PureWindowsPath
 
@@ -202,9 +203,9 @@ class WindowsPlatform:
         """Microsoft Edge's program, which every Windows 10 and 11 has."""
         return self._find("edge") or EDGE_FALLBACK
 
-    def open_app_window(self, url: str) -> None:
-        """Hal's window: always Microsoft Edge with `--app=`."""
-        self._start([self.edge(), f"--app={url}"])
+    def open_in_default_browser(self, url: str) -> None:
+        """Opens `url` in the person's default browser, as a tab beside their own."""
+        webbrowser.open(url)
 
     # ------------------------------------------------------------------------------------- children
 

@@ -47,7 +47,7 @@ as verified or unverified.
    bash ~/Downloads/install-hal-linux.sh   # about 5 minutes; safe to run again
    ```
 
-5. Open Hal. WSLg shows its app window if a Chromium-family browser is installed in the distro.
+5. Open Hal. It opens in the distro's default browser through WSLg, if one is installed.
    Otherwise open the one-time link it prints in a Windows browser; Windows reaches WSL2 on `localhost`.
 
    ```bash

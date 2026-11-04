@@ -439,8 +439,9 @@ runs: tests use `tests/support/fake_claude/`.
 `platform.current()` is everything Hal asks of the computer: opening files and windows, pop-ups, start at
 login, finding browsers, hidden or detached children. No other module tests `os.name`. `linux.py` and
 `windows.py` take their outside world (command runner, registry reader, file checks, home) as constructor
-arguments, so tests drive the real code with fakes. The app window and PDF printing never depend on the
-person's browser: Microsoft Edge on Windows; on Linux the first Chromium-family browser, else a tab.
+arguments, so tests drive the real code with fakes. Hal opens in the person's default browser
+(`open_in_default_browser`), where their browser helper is. PDF printing never depends on that browser:
+Microsoft Edge on Windows; on Linux Playwright's Chromium.
 
 ## Health, Home and search providers
 

@@ -6,6 +6,8 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
+  browser holding your sign-ins and the browser helper.
 - **The laptop launcher stays open.** "Hal Employment (desktop)" closed its window as soon as the tunnel
   started, which ended the tunnel too. Fetch the launcher again (step 5 of the how-to). A launcher that
   cannot connect now keeps its window open and says why.
