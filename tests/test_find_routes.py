@@ -224,13 +224,6 @@ class JobsApi(unittest.TestCase):
         self.assertEqual(self.c.get("/api/v2/jobs?limit=0").status, 400)
         self.assertEqual(self.c.get(f"/api/v2/jobs?limit={routes.MAX_LIMIT + 1}").status, 400)
 
-    def test_apply_says_whether_to_open_the_application_by_the_setting(self):
-        with mock.patch.object(runner, "start", return_value="a1"):
-            self.assertFalse(self.post(self.path(self.grad, "/apply"))["open"], "queueing is the default")
-            settings.set("applying.on_apply", "open", by="you")
-            store.drop_cache()
-            self.assertTrue(self.post(self.path(self.grad, "/apply"))["open"])
-
     def test_a_job_leaves_matches_as_soon_as_it_is_queued(self):
         # testers saw a queued job stay in Matches: it moved only when its action got a thread
         self.assertIn(self.grad, self.matches())

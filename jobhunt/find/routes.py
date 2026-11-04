@@ -429,7 +429,7 @@ def _start(req: Request, kind: str, **kw) -> str:
 
 @route("POST", "/api/v2/jobs/{job_id}/apply")
 def apply(req: Request) -> dict:
-    """Apply with Hal: documents come first; no form is opened until the person approves them.
+    """Apply with Hal, or Add to queue: documents come first; no form is opened until the person approves them.
 
     The job leaves Matches here rather than when its action starts, because with several jobs queued the
     action waits for a free thread, and the list reloaded before the job had moved (testers, 2026-11-04).
@@ -441,8 +441,7 @@ def apply(req: Request) -> dict:
     at = clock.local()
     action_id = _start(req, "docs.prepare", job_id=row["id"], params={"job_id": row["id"]},
                        why=f"You pressed Apply with Hal at {at:%H:%M}. Documents come first.")
-    return {"application_id": row["id"], "action_id": action_id,
-            "open": settings.get("applying.on_apply") == "open"}
+    return {"application_id": row["id"], "action_id": action_id}
 
 
 @route("POST", "/api/v2/jobs/{job_id}/save")

@@ -1,5 +1,5 @@
-/* One job in a list, and the three things a person does with a job from anywhere:
-   Apply with Hal, Save and Not for me. Home's new matches and the Jobs page draw the same card.
+/* One job in a list, and the four things a person does with a job from anywhere:
+   Apply with Hal, Add to queue, Save and Not for me. Home's new matches and the Jobs page draw the same card.
 
    After each press the jobs lists are reloaded at once rather than waiting for the server's event, so the
    card moves (Saved, Hidden, Applications) as soon as the server has answered. */
@@ -16,20 +16,28 @@ export function refreshJobs() { invalidate("/jobs*"); invalidate("/home"); }
 /** The API path of one job ("/jobs/greenhouse%3A1"). */
 export const jobPath = id => "/jobs/" + encodeURIComponent(id);
 
-/** Apply with Hal: documents come first, and no form is opened until the person approves them. The setting
-    "When you press Apply with Hal" says whether the application opens or the person stays to choose more. */
+/** Starts the job's documents; the job moves from Matches to Getting ready at once. */
+async function startApplication(j) {
+  const r = await post(jobPath(j.id) + "/apply");
+  refreshJobs();
+  invalidate("/applications*");
+  return r && r.application_id ? route("app", r.application_id) : "apps";
+}
+
+/** Apply with Hal: opens the application. Documents come first; no form is opened until they are approved. */
 export async function applyJob(j) {
   try {
-    const r = await post(jobPath(j.id) + "/apply");
-    refreshJobs();
-    invalidate("/applications*");
-    if (r && r.open) {
-      toast("Added to Applications. Hal starts with your CV and letter; it opens no form until you approve them.");
-      go(r.application_id ? route("app", r.application_id) : "apps");
-      return;
-    }
-    toast("Added to Applications. Hal is writing the documents for " + j.title + " while you choose more.",
-      () => go(r && r.application_id ? route("app", r.application_id) : "apps"), "Open it");
+    const to = await startApplication(j);
+    toast("Added to Applications. Hal starts with your CV and letter; it opens no form until you approve them.");
+    go(to);
+  } catch (err) { toast(err.message); }
+}
+
+/** Add to queue: Hal writes the documents while the person stays to choose more, then approves them together. */
+export async function queueJob(j) {
+  try {
+    const to = await startApplication(j);
+    toast("Added to Getting ready. Hal is writing the documents for " + j.title + ".", () => go(to), "Open it");
   } catch (err) { toast(err.message); }
 }
 
@@ -72,6 +80,7 @@ export function JobCard({ j, compact, sel, why }) {
     </div>
     <div class="acts">
       <button type="button" class="btn primary small" onClick=${() => applyJob(j)}>Apply with Hal</button>
+      <button type="button" class="btn small" onClick=${() => queueJob(j)}><${Icon} n="plus" c="s" />Add to queue</button>
       <button type="button" class="btn small" aria-pressed=${j.saved ? "true" : "false"} onClick=${() => saveJob(j)}><${Icon}
         n="star" c="s" />${j.saved ? "Saved" : "Save"}</button>
       <button type="button" class="btn quiet small" onClick=${() => notForMe(j)}>Not for me</button>

@@ -122,15 +122,17 @@ class JobsPages(unittest.TestCase):
         p.page.keyboard.press("Escape")
         p.page.wait_for_selector('[role="dialog"]', state="detached")
 
-        # by default Apply with Hal queues the job and the person stays to choose more
-        p.page.keyboard.press("a")
-        p.page.wait_for_selector(".toast:has-text('while you choose more')")
+        # Add to queue: the person stays, and the job leaves the list at once
+        queued = p.page.inner_text(".job.sel .title")
+        p.page.keyboard.press("q")
+        p.page.wait_for_selector(".toast:has-text('Added to Getting ready')")
+        p.page.wait_for_function("t => ![...document.querySelectorAll('.joblist .job .title')]"
+                                 ".some(e => e.textContent === t)", arg=queued)
         self.assertIn("#jobs", p.page.url)
         self.assertTrue(runner.idle(ACTION_WAIT_S))
         self.assertEqual(len(started), 1)
 
-        settings.set("applying.on_apply", "open", by="you")
-        store.drop_cache()
+        # Apply with Hal: the application opens
         p.page.keyboard.press("a")
         p.page.wait_for_url("**#app-*")
         # the page moves on when the action is queued; the action itself runs on a pool thread

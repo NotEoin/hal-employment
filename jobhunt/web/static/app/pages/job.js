@@ -11,7 +11,7 @@ import { useKeys } from "../core/keys.js";
 import { shortDay } from "../core/format.js";
 import { Icon } from "../ui/icons.js";
 import { Head, Score, Chip, Note } from "../ui/controls.js";
-import { applyJob, saveJob, notForMe, refreshJobs, jobPath } from "../ui/job-card.js";
+import { applyJob, queueJob, saveJob, notForMe, refreshJobs, jobPath } from "../ui/job-card.js";
 
 const STATE_WORDS = { met: "Met", part: "Partly met", miss: "Missing", off: "Does not matter to you" };
 const STATE_ICON = { met: "check", part: "warn", miss: "x", off: "eye" };
@@ -74,7 +74,7 @@ export function JobPage({ arg }) {
     asked.add(arg);
     post(path + "/requirements").catch(() => { /* already being checked, or nothing to check */ });
   }, [data && data.job && data.job.id]);
-  useKeys({ a: () => j && applyJob(j), s: () => j && saveJob(j), n: () => j && notForMe(j) }, [j && j.id, j && j.saved]);
+  useKeys({ a: () => j && applyJob(j), q: () => j && queueJob(j), s: () => j && saveJob(j), n: () => j && notForMe(j) }, [j && j.id, j && j.saved]);
   const checkAgain = async () => {
     try { await post(path + "/check"); toast("Hal is checking this job again. Watch it in Activity."); }
     catch (err) { toast(err.message); }
@@ -87,6 +87,7 @@ export function JobPage({ arg }) {
     ${back}
     <${Head} title=${j.title} sub=${subLine(j)}>
       <button type="button" class="btn primary" onClick=${() => applyJob(j)}>Apply with Hal</button>
+      <button type="button" class="btn" onClick=${() => queueJob(j)}><${Icon} n="plus" c="s" />Add to queue</button>
       <button type="button" class="btn" aria-pressed=${j.saved ? "true" : "false"} onClick=${() => saveJob(j)}><${Icon} n="star" c="s" />${j.saved ? "Saved" : "Save"}</button>
       ${!data.hidden && html`<button type="button" class="btn quiet" onClick=${() => notForMe(j)}>Not for me</button>`}
     <//>

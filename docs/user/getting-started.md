@@ -66,7 +66,9 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
 2. Open **Jobs**, **Matches**. Each job says why it fits you and anything that does not. Press **Save** to
    keep a job for later, or **Not for me** and say why, so Hal learns what you want.
 3. On a job you like, press **Apply with Hal**. Hal writes the documents for this job: your CV adjusted
-   for it, a cover letter, and answers to the form's questions.
+   for it, a cover letter, and answers to the form's questions. To choose several jobs first, press
+   **Add to queue** on each instead (or Q): they wait under **Getting ready** on the **Applications**
+   board while Hal writes, and **Approve all** there approves them together.
 4. Read the documents. Change anything you like, or ask Hal for changes. When you are happy, press
    **Approve and fill in the form**.
 5. Hal opens the employer's form in your browser and fills it in. Each answer is marked "Fine" or "Check

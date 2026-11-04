@@ -1,7 +1,5 @@
-"""Settings group "Applying": what Apply with Hal does, and how Hal fills forms. Hal never presses Submit.
+"""Settings group "Applying": how Hal fills forms. Hal never presses Submit.
 
-`applying.on_apply` starts as "queue", as the older tool worked: pressing Apply with Hal on several jobs lets
-Hal write their documents side by side while the person keeps choosing, then the board approves them together.
 `applying.window` starts as "this": with Hal open in the person's own browser, a form opens as a tab they can
 see, where a separate window opened behind theirs looked to testers as if no tab had opened (2026-11-03).
 
@@ -40,10 +38,6 @@ def _supported(value):
 
 
 register(
-    Setting("applying.on_apply", "seg", "queue", "When you press Apply with Hal", order=5,
-            choices=choices(("queue", "Add it to Applications and stay here"), ("open", "Open the application")),
-            help="Stay here to choose several jobs while Hal writes their documents, then approve them together "
-                 "on the Applications board."),
     Setting("applying.browser", "choice", "", "Browser Hal fills forms in", choices=BROWSERS, order=10,
             default_fn=_first_browser, validate=_supported,
             help="The browsers Hal found on this computer are marked (found)."),

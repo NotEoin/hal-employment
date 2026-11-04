@@ -6,7 +6,7 @@
    never sees it. Hidden lists each reason with its jobs and a way to change it: where one value would do
    (add a kind of role, show unpaid roles) the button changes it here and offers a re-check of every job.
 
-   J and K move the choice down and up the list; A, S and N act on the chosen job. */
+   J and K move the choice down and up the list; A, Q, S and N act on the chosen job. */
 import { html, cx, useState, useEffect, useRef, useLayoutEffect } from "../core/html.js";
 import { get, post, put, run } from "../core/api.js";
 import { go } from "../core/router.js";
@@ -15,7 +15,7 @@ import { useKeys } from "../core/keys.js";
 import { plural } from "../core/format.js";
 import { Icon } from "../ui/icons.js";
 import { Head, Tabs, Note } from "../ui/controls.js";
-import { JobCard, applyJob, saveJob, notForMe, refreshJobs, jobPath } from "../ui/job-card.js";
+import { JobCard, applyJob, queueJob, saveJob, notForMe, refreshJobs, jobPath } from "../ui/job-card.js";
 import { Sources } from "../jobs/where.js";
 
 const TABS = ["matches", "saved", "hidden", "where"];
@@ -43,7 +43,7 @@ function Picks({ label, options, value, onChange }) {
     onClick=${() => onChange(value === v ? "" : v)}>${words}</button>`)}</div>`;
 }
 
-/** Matches or Saved, with the sort, the filters and the J K A S N keys. */
+/** Matches or Saved, with the sort, the filters and the J K A Q S N keys. */
 function JobList({ tab }) {
   const [sort, setSort] = useState("best");
   const [where, setWhere] = useState({ place: "", pattern: "" });
@@ -76,7 +76,7 @@ function JobList({ tab }) {
   };
   // a job that left the list (queued, saved, hidden) can leave the choice past its end: keep it inside
   const act = fn => { const l = live.current; const j = l.list[Math.min(Math.max(l.sel, 0), l.list.length - 1)]; if (j) fn(j); };
-  useKeys({ j: () => pick(1), k: () => pick(-1), a: () => act(applyJob), s: () => act(saveJob), n: () => act(notForMe) }, []);
+  useKeys({ j: () => pick(1), k: () => pick(-1), a: () => act(applyJob), q: () => act(queueJob), s: () => act(saveJob), n: () => act(notForMe) }, []);
   const loadMore = () => setLimit(list.length + PAGE);
   if (error) return html`<div class="card empty">${error.message}</div>`;
   if (!data) return html`<div class="card empty">Loading jobs...</div>`;
