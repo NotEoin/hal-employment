@@ -346,6 +346,36 @@ function halSurvey() {
   };
 }
 
+// Pop-ups that ask for something other than the application, such as a job-alert or newsletter sign-up, lie
+// over the advert and catch its clicks (Adzuna's, 2026-11-04). Closes the first one on show with its own
+// close control, or with Escape when it has none, and returns what it pressed, or '' when nothing was in the
+// way. A pop-up that could hold the application (an upload, or three or more boxes) is never closed, and a
+// button that would send a form inside the pop-up is never the one pressed.
+function halPopup() {
+  const clean = halClean, visible = halVisible;
+  const ASKS = /job alert|similar (new )?jobs|jobs like this|newsletter|subscribe|sign up for|stay (up to date|in the loop)|don.t miss|never miss|get (the )?latest|notifications|download (our|the) app|get the app|jobs by email|join our talent/i;
+  const CLOSE = /^(close|close (this )?(dialog|modal|pop-?up|window)|dismiss|no,? thanks?( you)?|not now|maybe later|skip|continue browsing|continue without .*|\u00d7|\u2715|\u2716|x)$/i;
+  const nameOf = el => clean(el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || '');
+  const sends = el => el.closest('form') && (el.type === 'submit' || (el.tagName === 'BUTTON' && !el.getAttribute('type')));
+  const closeClass = el => typeof el.className === 'string' && /(^|[\s_-])close([\s_-]|$)/i.test(el.className);
+  const boxes = halAll('[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open], [class*="modal" i], '
+      + '[class*="popup" i], [class*="pop-up" i], [class*="overlay" i], [id*="modal" i], [id*="popup" i]')
+    .filter(el => visible(el) && (el.matches('[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]')
+      || ['fixed', 'absolute', 'sticky'].includes(getComputedStyle(el).position)));
+  for (const box of boxes) {
+    if (box.querySelector('input[type=file]')) continue;
+    const inputs = [...box.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select')]
+      .filter(visible);
+    if (inputs.length >= 3 || !ASKS.test(clean(box.innerText).slice(0, 1500))) continue;
+    const close = [...box.querySelectorAll('button, [role=button], a, [aria-label], [title]')]
+      .filter(el => visible(el) && !sends(el)).find(el => CLOSE.test(nameOf(el)) || closeClass(el));
+    if (close) { close.click(); return nameOf(close) || 'close'; }
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    return 'Escape';
+  }
+  return '';
+}
+
 const HAL_ITEMS = '[role=option], [class*="__option"], [id*="-option-"], [role=menuitemradio], [role=menuitem], li[data-value]';
 
 // Marks the list items on show before a dropdown is opened, so a list left open by

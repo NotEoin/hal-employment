@@ -288,6 +288,7 @@ def _read(job_id: str, banners: bool = True, options: bool = False, front: bool 
         # The page was swapped out while it was read, or is one the browser will not let a script into.
         raise RuntimeError("the job's tab could not be read; it may still be loading or be a browser error page")
     _last_url[job_id] = facts["url"]
+    facts["fields"] = browser.application_fields(facts["fields"])
     return facts
 
 

@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Graduate Analyst Job in Leeds</title>
+<style>
+ #alert-popup { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center;
+                justify-content: center; z-index: 1000; }
+ #alert-popup .box { background: #fff; padding: 24px; width: 420px; }
+</style></head><body>
+<!-- A job board's advert, as Adzuna lays one out (2026-11-04): the board's own job search with three boxes in
+     one form, a job-alert box beside the advert, and a job-alert pop-up over the page that holds back clicks
+     under it until it is closed. None of them is the application; "Apply for this job" leads to it. Closing
+     the pop-up is kept in the tab's sessionStorage, so a test can see it from the form's page. -->
+<form id="search" action="/search" method="get">
+ <label for="q">What?</label><input id="q" name="q" value="Graduate Analyst">
+ <label for="w">Where?</label><input id="w" name="w" value="Leeds">
+ <label for="s">Salaries</label><select id="s" name="s"><option>Any</option><option>Analyst Jobs in Leeds</option></select>
+ <button type="submit">Search</button>
+</form>
+<h1>Graduate Analyst</h1>
+<p>Made-up Analytics Ltd is hiring a graduate analyst in Leeds.</p>
+<a id="apply" href="single.html">Apply for this job</a>
+<form id="alert-inline" action="/alerts" method="post">
+ <label for="ae">Receive similar jobs by email</label><input id="ae" name="email" type="email">
+ <button type="submit">Create alert</button>
+</form>
+<script>
+{
+  const pop = document.createElement('div');
+  pop.id = 'alert-popup';
+  pop.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="pt">'
+    + '<button type="button" class="close" aria-label="Close">&times;</button>'
+    + '<h2 id="pt">Don\'t miss out</h2><p>Leave us your email address and we\'ll send you similar new jobs.</p>'
+    + '<form action="/alerts" method="post"><input id="pe" name="email" type="email" placeholder="Your email">'
+    + '<button type="submit">Send me jobs</button></form></div>';
+  document.body.appendChild(pop);
+  pop.querySelector('.close').addEventListener('click', () => { sessionStorage.setItem('popupClosed', '1'); pop.remove(); });
+  document.getElementById('apply').addEventListener('click', e => {
+    if (document.getElementById('alert-popup')) e.preventDefault();
+  });
+}
+</script>
+</body></html>

@@ -310,6 +310,15 @@ class Fixes:
         self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email"])
         self.assertEqual(self.site.sent(), 0)
 
+    def test_a_job_boards_search_alerts_and_pop_up_are_passed_on_the_way_to_the_form(self):
+        """Regression (testers, 2026-11-04): on an Adzuna advert Hal filled the board's job search and its
+        job-alert box as the application, under a job-alert pop-up, and never pressed Apply."""
+        job_id, found = self.opened("board", "board-advert.html")
+        self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email", "Phone"])
+        self.assertEqual(self.on_page(job_id, "single.html",
+                                      lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')")), "1")
+        self.assertEqual((self.site.sent(), self.site.posts["/alerts"]), (0, 0))
+
     def test_a_google_form_in_a_frame_is_read(self):
         """Regression: every google.com/ frame was passed over, Google Forms too."""
         _job_id, found = self.opened("gform", "gform.html")

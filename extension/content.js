@@ -15,6 +15,7 @@
   // halAll (page.js) also looks inside page components, whose controls sit in open shadow roots.
   const controls = (selector, pattern) => halAll(selector).filter(el => visible(el) && rx(pattern).test(nameOf(el)));
   const BUTTONS = "button, [role=button], input[type=submit], input[type=button]";
+  const POPUP_GONE_MS = 400;  // a closed pop-up fades out before the page under it takes clicks
   // Widgets such as react-select open on mouse-down, which a bare click() never sends.
   const tap = el => ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type =>
     el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })));
@@ -68,7 +69,10 @@
   }
 
   async function read(p) {
-    if (p.banners) await dismissBanners(p.banners, p.bannersNever);
+    if (p.banners) {
+      await dismissBanners(p.banners, p.bannersNever);
+      if (halPopup()) await sleep(POPUP_GONE_MS);
+    }
     const fields = halExtract();
     if (p.options) {
       // Only a list still empty is opened: one already answered needs no options, and each opening is slow.

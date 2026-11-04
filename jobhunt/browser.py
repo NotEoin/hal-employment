@@ -64,6 +64,8 @@ STALE_JS = "() => {\n" + PAGE_JS + "\nreturn halStale();\n}"
 PAGE_TEXT_JS = "() => {\n" + PAGE_JS + "\nreturn halText();\n}"
 
 RESULTS_JS = "() => {\n" + PAGE_JS + "\nreturn halResults();\n}"
+POPUP_JS = "() => {\n" + PAGE_JS + "\nreturn halPopup();\n}"
+POPUP_GONE_MS = 400  # a closed pop-up fades out before the page under it takes clicks
 # Apply controls on an advert. Ones that hand the application to another account are left alone.
 APPLY_BUTTON = re.compile(
     r"^\s*((easy|quick|1[- ]click) )?apply\b(?!.{0,40}\b(linkedin|indeed|seek|xing|filters?|later|coupon|code)\b).{0,40}$|"
@@ -392,6 +394,26 @@ class Browser:
 BROWSER = Browser()
 
 
+# A job board's own job search and its job-alert sign-up sit beside the advert, and are never the application:
+# Adzuna's "What?", "Where?", "Salaries" and "Receive similar jobs by email" were filled as the form (testers,
+# 2026-11-04). The search words match whole labels only, so a form's own "Where are you based?" stays.
+SITE_SEARCH = re.compile(r"^\s*((what|where)\s*\??|keywords?|search( for)?( jobs)?|job title,? (skills|keywords).*|"
+                         r"salaries|distance|radius|sort( by)?|date posted)\s*$", re.I)
+JOB_ALERT = re.compile(r"job alerts?|similar (new )?(jobs|roles|vacancies)|jobs like this|newsletter|"
+                       r"(send|email) me (new |similar |more )?(jobs|roles|vacancies)|new jobs by email", re.I)
+
+
+def not_the_application(field: dict) -> bool:
+    """True for a box that belongs to the site rather than the application: its job search or job alerts."""
+    label = field.get("label") or ""
+    return bool(SITE_SEARCH.search(label) or JOB_ALERT.search(f"{label} {field.get('help') or ''}"))
+
+
+def application_fields(fields: list[dict]) -> list[dict]:
+    """The fields of a page that could be the application's, without the site's search and job-alert boxes."""
+    return [f for f in fields if not not_the_application(f)]
+
+
 def _is_form(fields: list[dict]) -> bool:
     """True when the fields look like an application form rather than a search box or banner."""
     if any(f["kind"] == "file" for f in fields):
@@ -430,7 +452,17 @@ def banner_words(notes) -> tuple[list, object]:
 
 
 def _dismiss_banners(page, notes=None) -> None:
-    """Closes a cookie banner, refusing optional cookies where it can; never presses a button inside a form."""
+    """Closes a cookie banner, refusing optional cookies where it can, then a job-alert or similar pop-up
+    (`halPopup` in page.js); never presses a button inside a form."""
+    _cookie_banner(page, notes)
+    try:
+        if page.main_frame.evaluate(POPUP_JS):
+            page.wait_for_timeout(POPUP_GONE_MS)
+    except Exception:  # the page moved on mid-look; the next read looks again
+        pass
+
+
+def _cookie_banner(page, notes=None) -> None:
     patterns, never = banner_words(notes)
     for pattern in patterns:
         try:
@@ -503,7 +535,7 @@ def _extract(page) -> tuple[object, list[dict]]:
     best = (page.main_frame, [])
     for frame in _frames(page):
         try:
-            fields = frame.evaluate(EXTRACT_JS)
+            fields = application_fields(frame.evaluate(EXTRACT_JS))
         except Exception:  # a frame that has gone, or that the site forbids reading
             if frame is page.main_frame:
                 raise
