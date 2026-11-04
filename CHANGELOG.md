@@ -12,6 +12,8 @@ What changed in each version, in plain words.
   window opened behind yours, so it looked as if no tab had opened.
 - **The helper's button says what it is for.** Pressed on Hal's own page or on a browser page, it showed a
   bare "!"; it now says to press it on an employer's application page.
+- **Fewer wrong jobs for humanities graduates.** Specialist technical titles (software, machine learning,
+  data engineering and similar) are hidden as "Outside your field" unless one of your roles names them.
 - **The laptop launcher stays open.** "Hal Employment (desktop)" closed its window as soon as the tunnel
   started, which ended the tunnel too. Fetch the launcher again (step 5 of the how-to). A launcher that
   cannot connect now keeps its window open and says why.

@@ -9,6 +9,15 @@ skill_cap = 0
 interest_cap = 18
 roles = []
 avoid_roles = []
+# Specialist technical titles a humanities search never wants, hidden unless one of the person's roles names
+# them: the shared boards (80,000 Hours above all) carry many such adverts, and they scored as fair matches.
+off_field = [
+  "re:software (engineer|engineering|developer)|(front|back)[- ]?end|full[- ]?stack|devops|site reliability",
+  "re:(web|app|mobile|game|ios|android|python|java|\\.net) developer|programmer|firmware|embedded",
+  "re:machine learning|ml engineer|ai engineer|deep learning|computer vision|data (scientist|engineer)",
+  "re:(electrical|electronic|mechanical|civil|chemical|structural|aerospace|hardware) engineer",
+  "re:quant(itative)? (analyst|researcher|developer|trader)",
+]
 interests = []
 skills = []
 

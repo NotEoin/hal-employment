@@ -157,6 +157,7 @@ class Weights:
     interests: tuple[str, ...]
     skills: tuple[tuple[str, int], ...]
     kinds: tuple[str, ...] = field(default=())
+    off_field: tuple[str, ...] = field(default=())
 
     def __getitem__(self, name: str) -> int:
         return int(self.w.get(name, 0))
@@ -220,7 +221,8 @@ def weights_from(preset_id: str, changed: dict | None = None) -> Weights:
         skill_cap=int(changed.get("scoring.skill_cap", raw.get("skill_cap", 0))),
         interest_cap=int(changed.get("scoring.interest_cap", raw.get("interest_cap", 0))),
         roles=tuple(raw.get("roles", [])), avoid_roles=tuple(raw.get("avoid_roles", [])),
-        interests=tuple(raw.get("interests", [])), skills=parse_skills(skills), kinds=tuple(raw.get("kinds", [])))
+        interests=tuple(raw.get("interests", [])), skills=parse_skills(skills), kinds=tuple(raw.get("kinds", [])),
+        off_field=tuple(raw.get("off_field", [])))
 
 
 _memo: dict[str, Weights] = {}
@@ -247,6 +249,7 @@ class _Compiled:
     places: list[tuple[object, re.Pattern | None]]
     roles: re.Pattern | None
     avoid: re.Pattern | None
+    off_field: re.Pattern | None
     interests: list[tuple[str, re.Pattern]]
     skills: list[tuple[re.Pattern, int]]
     ok_places: re.Pattern | None
@@ -257,7 +260,8 @@ _compiled: dict[tuple, _Compiled] = {}
 
 def compiled(goal: Goal, w: Weights) -> _Compiled:
     """The goal's and preset's word lists as patterns, made once per goal and weights."""
-    key = (goal, w.preset, json.dumps(w.w, sort_keys=True), w.roles, w.avoid_roles, w.interests, w.skills)
+    key = (goal, w.preset, json.dumps(w.w, sort_keys=True), w.roles, w.avoid_roles, w.off_field, w.interests,
+           w.skills)
     found = _compiled.get(key)
     if found is not None:
         return found
@@ -268,7 +272,7 @@ def compiled(goal: Goal, w: Weights) -> _Compiled:
     interests = goal.interests or w.interests
     found = _Compiled(
         places=places, roles=phrase_rx(goal.roles or w.roles),
-        avoid=phrase_rx(tuple(goal.avoid_roles) + tuple(w.avoid_roles)),
+        avoid=phrase_rx(tuple(goal.avoid_roles) + tuple(w.avoid_roles)), off_field=phrase_rx(w.off_field),
         interests=[(i, re.compile(rf"\b{re.escape(i.lower())}\b", re.I)) for i in interests if i.strip()],
         skills=[(re.compile(p, re.I), pts) for p, pts in w.skills],
         ok_places=re.compile("|".join(ok), re.I) if ok else None)
@@ -396,6 +400,9 @@ def score(job: dict, goal: Goal | None = None, weights: Weights | None = None) -
         elif avoided:
             hide("avoid_role", "filter", f"Roles you avoid: {avoided.group(0).lower()}",
                  f"role to avoid: {avoided.group(0).lower()}", avoided.group(0))
+        elif (off := c.off_field.search(title) if c.off_field is not None else None) and not wanted:
+            hide("off_field", "filter", f"Outside your field: {off.group(0).lower()}",
+                 f"outside your field: {off.group(0).lower()}", off.group(0))
         elif c.roles is not None and not w.role_filter:
             if wanted:
                 role_points = Reason("role_title", "points", w["role_title"],

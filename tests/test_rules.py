@@ -34,6 +34,32 @@ def run(job: dict, values: dict, preset: str = "humanities_grad", **more) -> rul
         return rules.score(job, make_goal(values, **more), rules.weights_from(preset))
 
 
+class OutsideYourField(unittest.TestCase):
+    """A humanities search hides specialist technical titles unless the person's own roles name them."""
+
+    ML = "Join our research team building machine learning systems. Graduates welcome. \u00a335,000."
+
+    def test_a_machine_learning_engineer_is_hidden_from_a_humanities_graduate(self):
+        # testers saw "Machine Learning Engineer" in a humanities graduate's matches (2026-11-03)
+        scored = run(advert("Graduate Machine Learning Engineer", self.ML), GRADUATE,
+                     **{"goal.roles": ["museum assistant", "archivist"]})
+        self.assertEqual(scored.hidden.rule, "off_field")
+        self.assertEqual(scored.hidden.label, "Outside your field: machine learning")
+
+    def test_a_humanities_graduate_with_no_roles_also_has_it_hidden(self):
+        scored = run(advert("Junior Software Developer", self.ML), GRADUATE)
+        self.assertEqual(scored.hidden.rule, "off_field")
+
+    def test_a_role_the_person_wants_is_never_hidden_as_outside_their_field(self):
+        scored = run(advert("Data Engineer (Graduate)", self.ML), GRADUATE, **{"goal.roles": ["data engineer"]})
+        self.assertIsNone(scored.hidden)
+
+    def test_humanities_roles_with_technical_sounding_words_stay(self):
+        for title in ("Learning Developer", "Digital Archivist", "Curriculum Developer"):
+            with self.subTest(title=title):
+                self.assertIsNone(run(advert(title, "A graduate role in our museum."), GRADUATE).hidden)
+
+
 class Internships(unittest.TestCase):
     """Internships are first-class when the goal includes them."""
 

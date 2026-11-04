@@ -48,12 +48,13 @@ GOAL = "settings-goal"
 # Hidden groups whose rule ids vary by job ("avoid_role" says which role) get one heading.
 GROUP_WORDS = {"avoid_role": "Roles you avoid", "role_title": "Not one of the roles you want",
                "years_required": "Asks for more experience than you have",
+               "off_field": "Outside your field",
                "pay_far_under": "Pay well under your lowest", "screen_out": "Hal's AI check said it does not fit",
                "pattern": "A working pattern you did not choose"}
 FIXES = {"excluded_employer": ("Edit employers to avoid", GOAL), "training_scheme": ("Change this", GOAL),
          "clearance": ("Change this", GOAL), "too_far": ("Change your places", GOAL),
          "pattern": ("Change your working pattern", GOAL), "avoid_role": ("Edit roles to avoid", GOAL),
-         "role_title": ("Change the roles you want", GOAL),
+         "role_title": ("Change the roles you want", GOAL), "off_field": ("Add it to the roles you want", GOAL),
          "students_only": ("Check when your course ends", GOAL), "grad_year": ("Check your finishing year", GOAL),
          "years_required": ("Change your career stage", GOAL),
          "experience_required": ("Change your career stage", GOAL),
