@@ -71,7 +71,7 @@
   async function read(p) {
     if (p.banners) {
       await dismissBanners(p.banners, p.bannersNever);
-      if (halPopup()) await sleep(POPUP_GONE_MS);
+      if (p.popups !== false && halPopup()) await sleep(POPUP_GONE_MS);
     }
     const fields = halExtract();
     if (p.options) {

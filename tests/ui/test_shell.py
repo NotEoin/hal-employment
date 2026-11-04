@@ -267,6 +267,19 @@ class ShellTest(unittest.TestCase):
         p.page.wait_for_function("() => window.__before === undefined", timeout=RECONNECT_MS)
         self.assertEqual(p.errors, [])
 
+    def test_with_reloading_off_in_preferences_an_update_only_offers_reload(self) -> None:
+        srv = self.serve()
+        srv.state.pages["/settings"]["values"]["updates.reload_pages"] = False
+        p = self.tab(srv).open("home")
+        p.page.evaluate("() => { window.__before = 1; }")
+        srv.state.code = {**srv.state.code, "commit": "made-up-2"}
+        srv.state.stopping.set()
+        p.page.wait_for_timeout(STREAM_DROP_MS)
+        srv.state.stopping.clear()
+        p.page.wait_for_selector(".toast:has-text('Hal was updated')", timeout=RECONNECT_MS)
+        self.assertEqual(p.page.evaluate("() => window.__before"), 1)
+        self.assertEqual(p.errors, [])
+
     def test_unknown_routes_go_home(self) -> None:
         srv = self.serve()
         p = self.tab(srv).open("nowhere-at-all")

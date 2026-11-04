@@ -127,6 +127,12 @@ public sector and technology. **Jobs**, **Where Hal looks** lists each one, with
 | What Hal remembers | Suggestions from your choices, what Hal learned, saved answers, notes about job sites |
 | Settings | Every choice, grouped as in the setup guide, plus Is Hal working? and Updates |
 
+**Settings**, **Preferences** holds the choices about how Hal behaves while you work: whether forms open in
+a separate window or beside Hal, whether Hal brings that window to the front, closes job-alert pop-ups,
+keeps answers a site has already filled in, presses Next for you, how long it waits for you to sign in,
+checks an advert is still open before writing, and reloads its page after an update. Each starts as Hal
+behaved before it could be changed.
+
 Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts** for the keys.
 
 ## What Hal remembers

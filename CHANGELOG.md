@@ -19,6 +19,10 @@ What changed in each version, in plain words.
   an approved application back to its Documents step, to edit and approve them again. When Hal is stuck
   before the form, open it yourself in Hal's browser window and press **Fill in from this page**.
 
+- **Preferences.** A new Settings section gathers how Hal behaves while you work: where forms open, whether
+  their window comes to the front, closing job-alert pop-ups, keeping a site's own answers, pressing Next,
+  how long to wait for you, checking adverts before writing, and reloading after an update.
+
 ### Fixed
 
 - **Queueing many jobs keeps the page clear.** Each **Add to queue** showed its own message, and twenty of
@@ -47,6 +51,8 @@ What changed in each version, in plain words.
   a code the site had set to +44 as a required question for you.
 - **"This window" opens forms beside Hal.** With "Open forms in: This window", a form opened wherever the
   browser last had focus. It now opens next to the Hal tab you used last, in that tab's tab group.
+- **"Wait for you to sign in" is used.** The setting was shown but never read, and Hal always waited
+  15 minutes.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,

@@ -455,6 +455,10 @@ def _dismiss_banners(page, notes=None) -> None:
     """Closes a cookie banner, refusing optional cookies where it can, then a job-alert or similar pop-up
     (`halPopup` in page.js); never presses a button inside a form."""
     _cookie_banner(page, notes)
+    from .core import settings
+
+    if not settings.get("applying.close_popups"):
+        return
     try:
         if page.main_frame.evaluate(POPUP_JS):
             page.wait_for_timeout(POPUP_GONE_MS)

@@ -9,6 +9,7 @@
    page left open across an update kept the old screens, which disagreed with the new server (testers,
    2026-11-04), so it reloads itself, or offers Reload while the person is typing so nothing is lost. */
 import { store, invalidate, reloadAll, notifyApi, toast } from "./store.js";
+import { get } from "./api.js";
 
 const STREAM_URL = "/api/v2/events";
 const TYPES = ["status", "action", "step", "activity", "job", "application", "message", "alert", "setting", "cv",
@@ -61,11 +62,19 @@ async function runningCode() {
   } catch (err) { return undefined; }
 }
 
-/** Reloads a page whose code Hal has replaced; while the person types it only offers to. */
-function newCode(code) {
+/** True unless Preferences, "Reload Hal's page when Hal is updated", is off. */
+async function reloadAllowed() {
+  try { return (await get("/settings")).values["updates.reload_pages"] !== false; }
+  catch (err) { return true; }   // the setting cannot be read: the page behaves as it did before the row existed
+}
+
+/** Reloads a page whose code Hal has replaced; while the person types, or with the preference off, it only
+    offers to. */
+async function newCode(code) {
   if (!loadedCode || !code || code === loadedCode) return;
   const at = document.activeElement;
-  if (at && at.matches && at.matches("input, textarea, select, [contenteditable], [contenteditable=true]")) {
+  const typing = at && at.matches && at.matches("input, textarea, select, [contenteditable], [contenteditable=true]");
+  if (typing || !(await reloadAllowed())) {
     toast("Hal was updated. Reload the page to use the new version.", () => location.reload(), "Reload");
   } else {
     location.reload();

@@ -249,8 +249,9 @@ processes, once a second. Payloads carry ids, never private data.
   (`{note, field, what}`) is kept on the field and in `form["notes_used"]`, which the Form step lists.
 - An upload is checked by finding the file's name in the input or on the page; a dropped file is
   `UPLOAD_FAILED`, never done. The cookie clicker never presses inside a form. Multi-select lists get every
-  value. Google Forms frames are read. With "Open forms in: This window", the helper brings the tab forward
-  before each read, fill and press; watches (`peek`, `look`) never switch tabs.
+  value. Google Forms frames are read. With "Open forms in: This window" (Preferences), the helper opens the
+  tab beside Hal's, in its tab group, and brings it forward before each read, fill and press; watches
+  (`peek`, `look`) never switch tabs.
 - `Browser._run` services Playwright while its queue is empty, so a tab the page opens is followed at once
   and a person's own Submit in Hal's window is not held until Hal's next call. The page-world submit block
   counts its holders, so two commands in one tab never lift each other's block.

@@ -159,9 +159,10 @@ async function halTab() {
 }
 
 // A form's new tab. Hal's window comes to the front with it: opened behind the applicant's window, it
-// looked as if no form had opened (testers, 2026-11-03). "This window" puts it beside Hal's page and in that
+// looked as if no form had opened (testers, 2026-11-03); `front` false (Preferences) leaves it behind. "This
+// window" puts it beside Hal's page and in that
 // page's tab group, as the setting says; it opened wherever the browser last had focus (testers, 2026-11-04).
-async function newTab(url, separate) {
+async function newTab(url, separate, front = true) {
   if (!separate) {
     const hal = await halTab();
     if (!hal) return chrome.tabs.create({ url, active: false });
@@ -175,10 +176,10 @@ async function newTab(url, separate) {
   const own = await halWindow();
   if (own) {
     const tab = await chrome.tabs.create({ url, windowId: own.id, active: true });
-    await chrome.windows.update(own.id, { focused: true });
+    if (front) await chrome.windows.update(own.id, { focused: true });
     return tab;
   }
-  const made = await chrome.windows.create({ url, focused: true, type: "normal" });
+  const made = await chrome.windows.create({ url, focused: front, type: "normal" });
   await chrome.storage.session.set({ halWindow: made.id });
   return made.tabs[0];
 }
@@ -203,11 +204,11 @@ function base64(buffer) {
 }
 
 const COMMANDS = {
-  async open({ job, url, window = "separate" }) {
+  async open({ job, url, window = "separate", front = true }) {
     let tab = await tabFor(job);
     if (tab) await chrome.tabs.update(tab.id, { url });
     else {
-      tab = await newTab(url, window === "separate");
+      tab = await newTab(url, window === "separate", front);
       await withJobs(jobs => { jobs[job] = [tab.id]; });
     }
     await loaded(tab.id);

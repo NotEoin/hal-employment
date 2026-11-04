@@ -245,6 +245,41 @@ class Routes(unittest.TestCase):
         row = self.con.execute("SELECT status, open_state FROM jobs WHERE id = ?", (job_id("sorrel-ready"),)).fetchone()
         self.assertEqual((row["status"], row["open_state"]), ("closed", "closed"))
 
+    def test_hal_waits_for_you_as_long_as_preferences_say(self):
+        # testers: "Wait for you to sign in ... for up to" was shown but never read; Hal always waited 15 minutes
+        from jobhunt.core import settings
+
+        settings.set("applying.wait_minutes", 5, by="you")
+        self.addCleanup(settings.reset, "applying.wait_minutes")
+        self.start_applying("sorrel-ready")
+        job = self.con.execute("SELECT * FROM jobs WHERE id = ?", (job_id("sorrel-ready"),)).fetchone()
+        clock = iter([0, 5 * 60 + 1])
+        looks = []
+        found = {"needs": "sign-in", "sent": False, "url": "https://jobs.example.org/sign-in",
+                 "site": "jobs.example.org"}
+        with mock.patch.object(driver.time, "time", lambda: next(clock)), \
+                mock.patch.object(driver.time, "sleep", lambda s: None), \
+                mock.patch.object(driver, "_checkpoint", lambda job: None), \
+                mock.patch.object(browser, "show", lambda job: True), \
+                mock.patch.object(browser, "peek", lambda job: looks.append(job) or {"needs": "sign-in"}):
+            with self.assertRaisesRegex(RuntimeError, "gave up waiting"):
+                driver._past_walls(self.con, job, found)
+        self.assertEqual(looks, [])
+
+    def test_preferences_can_turn_off_the_advert_check_before_writing(self):
+        from jobhunt import pack
+        from jobhunt.core import settings
+        from jobhunt.find import closed_check
+
+        settings.set("cvdocs.check_open", False, by="you")
+        self.addCleanup(settings.reset, "cvdocs.check_open")
+        self.start_applying("sorrel-ready")
+        checked = []
+        with mock.patch.object(closed_check, "check", lambda job: checked.append(job) or "closed"), \
+                mock.patch.object(pack, "build", lambda *a, **k: None):
+            self.wait(self.c.post(self.url("sorrel-ready", "/documents/redo")).json()["action_id"])
+        self.assertEqual(checked, [])
+
     def test_approve_all_starts_every_ready_form_and_leaves_the_rest(self):
         # testers asked to queue several jobs, as the older tool did, then apply to them together
         self.start_applying("sorrel-ready", "wexford-ready")

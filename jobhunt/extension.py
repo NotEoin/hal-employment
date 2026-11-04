@@ -47,6 +47,7 @@ from .browser import (
     note_signed_in,
     signed_in_at,
 )
+from .core import settings
 
 POLL_WAIT = 20  # seconds a poll is held open; the browser stops a worker whose request takes 30
 PATTERNS = {"apply": APPLY_BUTTON.pattern, "next": NEXT_BUTTON.pattern, "submit": SUBMIT_BUTTON.pattern,
@@ -283,6 +284,7 @@ def _read(job_id: str, banners: bool = True, options: bool = False, front: bool 
     words, never = browser.banner_words(browser.notes_for(_last_url.get(job_id, ""), job_id))
     facts = _ask("read", job=job_id, front=front, patterns={
         **PATTERNS, "banners": [p.pattern for p in words] if banners else None,
+        "popups": banners and bool(settings.get("applying.close_popups")),
         "bannersNever": never.pattern if never is not None and banners else None, "options": options})
     if not facts:
         # The page was swapped out while it was read, or is one the browser will not let a script into.
@@ -382,9 +384,9 @@ def _advance(job_id: str, pressed: bool = False) -> dict:
 def open_form(job_id: str, url: str) -> dict:
     """Opens the application form in the applicant's own tab."""
     _last_url[job_id] = url
-    from .core import settings
 
-    _ask("open", timeout=120, job=job_id, url=url, window=settings.get("applying.window"))
+    _ask("open", timeout=120, job=job_id, url=url, window=settings.get("applying.window"),
+         front=bool(settings.get("applying.bring_forward")))
     return _advance(job_id)
 
 

@@ -41,6 +41,7 @@ REMOTE = ("ok", "label", "local_only")
 GROUPS: list[tuple[str, str, str]] = [
     ("you", "You", "user"),
     ("goal", "What you're looking for", "target"),
+    ("prefs", "Preferences", "sliders"),
     ("sites", "Job sites", "globe"),
     ("scoring", "How Hal picks jobs", "sliders"),
     ("cvdocs", "CV and documents", "file"),

@@ -84,7 +84,7 @@ def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
         db.set_status(ctx.con, job_id, "applying", "chosen from the queue")
         ctx.con.commit()
     ctx.step("Reading the advert")
-    if open_check and _advert_closed(ctx.con, job):
+    if open_check and settings.get("cvdocs.check_open") and _advert_closed(ctx.con, job):
         ctx.step("The advert has closed, so Hal wrote nothing for it")
         return {"job_id": job_id, "closed": True}
     if not documents.summary(job)["has_pack"]:

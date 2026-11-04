@@ -122,6 +122,18 @@ class SiteKeys(unittest.TestCase):
         self.assertTrue(browser._closed(survey, 200))
         self.assertFalse(browser._closed({**survey, "text": "Apply now. " * 80 + banner["text"]}, 200))
 
+    def test_a_form_opens_behind_when_preferences_say_not_to_bring_it_forward(self):
+        from jobhunt.core import settings
+
+        settings.set("applying.bring_forward", False, by="you")
+        self.addCleanup(settings.reset, "applying.bring_forward")
+        asked = []
+        with mock.patch.object(extension, "_ask", lambda cmd, **k: asked.append((cmd, k)) or {}), \
+                mock.patch.object(extension, "_advance", lambda job_id: {}):
+            extension.open_form("test:behind", "https://jobs.example.org/apply/1")
+        self.assertEqual(asked[0][0], "open")
+        self.assertIs(asked[0][1]["front"], False)
+
     def test_the_tab_is_brought_forward_for_work_but_never_for_a_watch(self):
         """Regression: every command, a watch's look every 3 s too, made the job's tab the active one, so two
         watched jobs flipped Hal's window between their tabs."""
@@ -326,6 +338,18 @@ class Fixes:
         self.assertEqual(self.on_page(job_id, "single.html",
                                       lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')")), "1")
         self.assertEqual((self.site.sent(), self.site.posts["/alerts"]), (0, 0))
+
+    def test_with_pop_ups_left_alone_in_preferences_hal_closes_none(self):
+        from jobhunt.core import settings
+
+        settings.set("applying.close_popups", False, by="you")
+        self.addCleanup(settings.reset, "applying.close_popups")
+        job_id, _found = self.opened("board-off", "board-advert.html")
+        page = "board-advert.html"
+        # Hal's own window may follow the Apply link's address past the pop-up; either way Hal never closed it.
+        closed = self.on_page(job_id, page, lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')"))
+        self.assertIsNone(closed)
+        self.assertEqual(self.site.posts["/alerts"], 0)
 
     def test_a_google_form_in_a_frame_is_read(self):
         """Regression: every google.com/ frame was passed over, Google Forms too."""
