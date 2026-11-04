@@ -43,7 +43,8 @@
   // dialog is closed by a press on that, which is outside the list but still inside the form.
   function closeList(el) {
     el.blur();
-    if (!document.querySelector('[data-hal-opt]')) return;
+    // A list showing "No results" has no options but is still open, and may hide the rest of the form (Ashby's).
+    if (!document.querySelector('[data-hal-opt]') && el.getAttribute('aria-expanded') !== 'true') return;
     const around = el.closest(halAround);
     if (around) tap(around);
     else el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));

@@ -30,9 +30,14 @@ function halExtract() {
   const textOf = ids => clean(byId(ids).map(e => e.innerText).join(' '));
   const GENERIC = /^(select|select\.\.\.|choose|search|type to search|toggle( flyout)?|open|clear|remove|required|optional|please select.*|select an option|select one|--+)$/i;
   const UPLOAD = /^(attach|attach files?|choose files?|upload( files?| a file)?|browse|select files?|drop.*|no file chosen|or drag and drop.*)$/i;
+  // An open list may hide the rest of the form from screen readers, marking what it hides data-aria-hidden as the
+  // aria-hidden library does (Ashby's location list, 2026-11-04); that is still the form, unless a dialog is open.
+  const listOpen = Boolean(document.querySelector('[aria-expanded=true]:is([role=combobox], [aria-haspopup=listbox])'))
+    && !halAll('[aria-modal=true], dialog[open]').some(visible);
+  const HIDDEN = listOpen ? '[aria-hidden=true]:not([data-aria-hidden])' : '[aria-hidden=true]';
   const HELPER = 'option, select, button, script, style, svg, [role=option], [role=listbox], [role=alert], '
     + '[class*="error" i], [class*="invalid" i], [class*="counter" i], [class*="placeholder" i], '
-    + '[class*="single-value" i], [class*="singleValue"], [class*="multi-value" i], [aria-hidden=true]';
+    + '[class*="single-value" i], [class*="singleValue"], [class*="multi-value" i], ' + HIDDEN;
 
   // Language pickers and site searches sit in the page's own furniture, not in the form.
   const CHROME = 'header, nav, footer, [role=banner], [role=navigation], [role=contentinfo]';
@@ -54,7 +59,7 @@ function halExtract() {
     const shown = visible(el) || (choice
       && ((el.labels && el.labels[0] && visible(el.labels[0])) || (el.parentElement && visible(el.parentElement))));
     if (type !== 'file' && !shown) continue;
-    if (el.closest('[aria-hidden=true]') && type !== 'file') continue;
+    if (el.closest(HIDDEN) && type !== 'file') continue;
     if (el.closest('[role=search]') || (el.closest(CHROME) && !el.form)) continue;
     add(el, { type, combo, native: true });
   }
@@ -62,7 +67,7 @@ function halExtract() {
   for (const el of halAll('[role=combobox], button[aria-haspopup=listbox], [role=radio], [role=checkbox], '
       + '[role=switch], [role=textbox], [contenteditable=true], [contenteditable=""]')) {
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !visible(el)) continue;
-    if (el.closest('[aria-hidden=true], [role=search]') || el.getAttribute('aria-disabled') === 'true') continue;
+    if (el.closest(HIDDEN + ', [role=search]') || el.getAttribute('aria-disabled') === 'true') continue;
     if (el.closest(CHROME)) continue;
     if (el.querySelector('input:not([type=hidden]), textarea, select')) continue;
     const role = el.getAttribute('role') || (el.isContentEditable ? 'textbox' : 'combobox');

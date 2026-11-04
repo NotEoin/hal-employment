@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Apply: Junior Analyst</title>
+<style>
+ .field { margin: 12px 0; }
+ #places { border: 1px solid #888; margin: 0; padding: 4px; list-style: none; }
+ #places[hidden] { display: none; }
+</style></head><body>
+<!-- A form whose searched list hides the rest of the form while it is open, as Ashby's does (2026-11-04): the
+     page marks every other question aria-hidden, and data-aria-hidden as the aria-hidden library does, until
+     the list closes. The list closes on Escape or a click outside it, not when the box loses focus, so a pick
+     that found nothing ("No results") left it open and the form hidden. -->
+<h1>Apply: Junior Analyst</h1>
+<form id="apply" method="post" action="/sent/hides-while-listed">
+ <div class="field"><label for="fn">First name *</label><input id="fn" name="first_name" required></div>
+ <div class="field"><label for="ln">Last name *</label><input id="ln" name="last_name" required></div>
+ <div class="field" id="where"><label id="where-label">Where are you currently located? *</label>
+  <input id="loc" role="combobox" aria-labelledby="where-label" aria-expanded="false" aria-controls="places"
+         aria-autocomplete="list" placeholder="Start typing...">
+  <ul id="places" role="listbox" hidden></ul></div>
+ <div class="field"><fieldset><legend>Do you need sponsorship? *</legend>
+  <label><input type="radio" name="sponsor" value="yes">Yes</label>
+  <label><input type="radio" name="sponsor" value="no">No</label></fieldset></div>
+ <button type="submit">Submit application</button>
+</form>
+<script>
+{
+  const PLACES = ['London, Greater London, England, United Kingdom', 'Leeds, West Yorkshire, England, United Kingdom'];
+  const loc = document.getElementById('loc'), list = document.getElementById('places');
+  const others = () => [...document.querySelectorAll('.field')].filter(f => f.id !== 'where');
+  const show = () => {
+    const q = loc.value.trim().toLowerCase();
+    const hits = PLACES.filter(p => q && p.toLowerCase().includes(q));
+    list.innerHTML = hits.length ? hits.map(p => '<li role="option">' + p + '</li>').join('') : '<li>No results</li>';
+    list.hidden = false;
+    loc.setAttribute('aria-expanded', 'true');
+    others().forEach(f => { f.setAttribute('aria-hidden', 'true'); f.setAttribute('data-aria-hidden', 'true'); });
+  };
+  const hide = () => {
+    list.hidden = true;
+    loc.setAttribute('aria-expanded', 'false');
+    others().forEach(f => { f.removeAttribute('aria-hidden'); f.removeAttribute('data-aria-hidden'); });
+  };
+  loc.addEventListener('focus', show);
+  loc.addEventListener('input', show);
+  loc.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+  list.addEventListener('mousedown', e => e.preventDefault());
+  list.addEventListener('click', e => {
+    if (e.target.getAttribute('role') === 'option') { loc.value = e.target.innerText; hide(); }
+  });
+  document.addEventListener('mousedown', e => { if (!document.getElementById('where').contains(e.target)) hide(); });
+}
+</script>
+</body></html>

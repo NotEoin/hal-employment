@@ -74,6 +74,10 @@ What changed in each version, in plain words.
 - **A job-alert box opened by Apply is passed.** On Adzuna, Apply opened a box under it asking for an email
   address for similar jobs, and Hal said "No Apply button recognised". Hal now presses its "No thanks, take me
   to the job" link, which leads on to the employer.
+- **An open dropdown no longer hides the form from Hal.** When a searched list found nothing, Hal left it open on
+  "No results", and some forms (Ashby's) hide every other question while a list is open. Hal then saw three
+  questions, took the page for a new one and filled the whole form again. Hal now closes the list, and reads
+  the whole form even while a list is open.
 - **A board's own search and job alerts are left alone in a page-wide form.** On a board whose whole page
   is one form (as ProductionBase builds it), Hal filled the board's job search ("Job Types", "Industry") and
   its job-alert box as the application. Hal now tells them apart by the part of the page they sit in.

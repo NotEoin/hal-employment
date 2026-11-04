@@ -612,7 +612,9 @@ def _close_list(page, box) -> None:
     """
     try:
         box.evaluate("e => e.blur()")
-        if page.locator("[data-hal-opt]:visible").count() and not box.evaluate(PRESS_AROUND_JS):
+        # A list showing "No results" has no options but is still open, and may hide the rest of the form (Ashby's).
+        still_open = box.get_attribute("aria-expanded") == "true"
+        if (page.locator("[data-hal-opt]:visible").count() or still_open) and not box.evaluate(PRESS_AROUND_JS):
             box.press("Escape")
     except Exception:  # nothing was open
         pass

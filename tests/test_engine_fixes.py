@@ -367,6 +367,21 @@ class Fixes:
                                       lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')")), "1")
         self.assertEqual((self.site.sent(), self.site.posts["/alerts"]), (0, 0))
 
+    def test_a_list_that_found_nothing_is_closed_and_an_open_one_hides_no_questions(self):
+        """Regression (testers, 2026-11-04): an Ashby location list left open on "No results" hid the rest of the
+        form, so Hal read three questions, took the page for a new one and filled the whole form again."""
+        page = "hides-while-listed.html"
+        job_id, found = self.opened("listed", page)
+        everything = ["First name", "Last name", "Where are you currently located?", "Do you need sponsorship?"]
+        self.assertEqual([f["label"] for f in found["fields"]], everything)
+        out = browser.fill(job_id, self.answers(found, {"Where are you": "Atlantis"}), driver._shot(job_id))
+        self.assertTrue(next(iter(out["errors"].values())).startswith("no option"), out["errors"])
+        self.assertEqual(self.on_page(job_id, page, lambda tab: tab.get_attribute("#loc", "aria-expanded")), "false")
+        # The person opens the list themselves while Hal looks.
+        self.on_page(job_id, page, lambda tab: tab.focus("#loc"))
+        self.assertEqual([f["label"] for f in browser.read_here(job_id)["fields"]], everything)
+        self.assertEqual(self.site.sent(), 0)
+
     def test_a_boards_search_and_alerts_in_its_one_page_form_are_passed_on_the_way_to_the_form(self):
         """Regression (testers, 2026-11-04): on ProductionBase, whose whole page is one form, Hal filled the
         board's job search ("Job Types", "Industry") as the application."""
