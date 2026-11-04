@@ -115,6 +115,21 @@ class InYourBrowser(PairedHelper, Practice):
         self.assertEqual({w for url, w in tabs if "ext-window" in url}, {own})
         self.assertGreater(len({w for _, w in tabs}), 1)
 
+    def test_this_window_opens_the_form_beside_hals_page_in_its_tab_group(self):
+        """Regression (testers, 2026-11-04): "This window" opened the form wherever the browser last had focus,
+        outside the tab group the person kept Hal's page in."""
+        settings.set("applying.window", "this", by="you")
+        self.addCleanup(settings.reset, "applying.window")
+        self.on_helper(lambda: self.ctx.new_page().goto(f"http://127.0.0.1:{self.port}/healthz"))
+        hal = self.in_worker("""async base => {
+            const [t] = (await chrome.tabs.query({})).filter(t => t.url.startsWith(base));
+            const group = await chrome.tabs.group({ tabIds: [t.id] });
+            return { id: t.id, group, window: t.windowId }; }""", f"http://127.0.0.1:{self.port}/")
+        driver.act_auto(self.con, self.job("ext-beside", "form.html?beside"))
+        tab = self.in_worker("""() => chrome.tabs.query({}).then(ts => ts.filter(t => t.url.includes('beside'))
+            .map(t => ({ group: t.groupId, window: t.windowId, opener: t.openerTabId })))""")
+        self.assertEqual(tab, [{"group": hal["group"], "window": hal["window"], "opener": hal["id"]}])
+
     def test_fills_the_first_page_and_leaves_what_it_cannot_answer(self):
         job_id = self.job("ext-fill", "form.html")
         said = driver.act_auto(self.con, job_id)

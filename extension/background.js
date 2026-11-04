@@ -149,10 +149,29 @@ async function halWindow() {
   return null;
 }
 
+// The Hal page the person used last, which a "This window" form opens beside; null when none is open.
+async function halTab() {
+  const at = await link();
+  if (!at) return null;
+  const tabs = (await chrome.tabs.query({})).filter(t => (t.url || "").startsWith(at.base + "/"));
+  tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  return tabs[0] || null;
+}
+
 // A form's new tab. Hal's window comes to the front with it: opened behind the applicant's window, it
-// looked as if no form had opened (testers, 2026-11-03).
+// looked as if no form had opened (testers, 2026-11-03). "This window" puts it beside Hal's page and in that
+// page's tab group, as the setting says; it opened wherever the browser last had focus (testers, 2026-11-04).
 async function newTab(url, separate) {
-  if (!separate) return chrome.tabs.create({ url, active: false });
+  if (!separate) {
+    const hal = await halTab();
+    if (!hal) return chrome.tabs.create({ url, active: false });
+    const tab = await chrome.tabs.create({ url, active: false, windowId: hal.windowId, index: hal.index + 1,
+                                           openerTabId: hal.id });
+    if (hal.groupId !== undefined && hal.groupId !== -1) {
+      await chrome.tabs.group({ groupId: hal.groupId, tabIds: [tab.id] }).catch(() => {});  // a group closed meanwhile
+    }
+    return tab;
+  }
   const own = await halWindow();
   if (own) {
     const tab = await chrome.tabs.create({ url, windowId: own.id, active: true });

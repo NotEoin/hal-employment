@@ -45,6 +45,8 @@ What changed in each version, in plain words.
 - **Fewer questions left for you.** Hal answers a phone's dialling code ("Country code") from your country,
   and keeps what a site has already filled in when Hal has no answer of its own, where before it counted
   a code the site had set to +44 as a required question for you.
+- **"This window" opens forms beside Hal.** With "Open forms in: This window", a form opened wherever the
+  browser last had focus. It now opens next to the Hal tab you used last, in that tab's tab group.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,
