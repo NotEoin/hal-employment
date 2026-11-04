@@ -19,8 +19,10 @@ What changed in each version, in plain words.
 
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
-- **Application forms open as tabs you can see.** "Open forms in" now starts as "This window"; a separate
-  window opened behind yours, so it looked as if no tab had opened.
+- **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,
+  and every form after it goes into that window until you close it. The window used to open behind
+  yours, so it looked as if no form had opened. "Open forms in: This window" in Settings still opens
+  them as tabs beside Hal's.
 - **Approving stays on the application.** **Approve and fill in the form** went back to the Applications
   board; the application now moves on to its Form step, where Hal's answers appear as it fills the form.
 - **The helper's button says what it is for.** Pressed on Hal's own page or on a browser page, it showed a

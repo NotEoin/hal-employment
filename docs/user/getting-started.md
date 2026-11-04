@@ -71,9 +71,9 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    board while Hal writes, and **Approve all** there approves them together.
 4. Read the documents. Change anything you like, or ask Hal for changes. When you are happy, press
    **Approve and fill in the form**.
-5. Hal opens the employer's form in your browser and fills it in, and the application moves on to its
-   **Form** step. Each answer is marked "Fine" or "Check this", and **Why this answer?** under each one
-   says where it came from.
+5. Hal opens the employer's form in a new window of your browser and fills it in, and the application
+   moves on to its **Form** step. Later forms open in that same window until you close it. Each answer is
+   marked "Fine" or "Check this", and **Why this answer?** under each one says where it came from.
 6. Check the form, then press **Submit** on the employer's site yourself. The application moves to
    **Sent** on the **Applications** board.
 7. When the employer replies, Hal sorts it into **Messages** and moves the application on the board.

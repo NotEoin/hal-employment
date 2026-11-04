@@ -103,9 +103,10 @@ class InYourBrowser(PairedHelper, Practice):
         opening.join()
 
     def test_applications_open_together_in_a_window_of_their_own(self):
-        """apply_window = "separate": job tabs share one window, apart from the one the applicant works in."""
-        settings.set("applying.window", "separate", by="you")
-        self.addCleanup(settings.reset, "applying.window")
+        """By default job tabs share one window of Hal's, apart from the one the applicant works in.
+
+        The test browser reports every window as focused, so bringing the window forward is not checked here."""
+        settings.reset("applying.window")
         for name in ("ext-window-1", "ext-window-2"):
             driver.act_auto(self.con, self.job(name, f"form.html?{name}"))
         tabs = self.in_worker("() => chrome.tabs.query({}).then(ts => ts.map(t => [t.url, t.windowId]))")

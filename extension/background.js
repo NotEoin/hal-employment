@@ -139,7 +139,8 @@ async function blocked(tabId, work) {
 }
 
 // Hal's own window, holding every application tab when the helper asks for one ("separate"),
-// so they never crowd the window the applicant is working in. Made again if it was closed.
+// so they never crowd the window the applicant is working in. Its id lasts as long as the browser runs, so
+// every form until then goes into the same window; it is made again if it was closed.
 async function halWindow() {
   const { halWindow: id } = await chrome.storage.session.get("halWindow");
   if (id != null) {
@@ -148,12 +149,17 @@ async function halWindow() {
   return null;
 }
 
+// A form's new tab. Hal's window comes to the front with it: opened behind the applicant's window, it
+// looked as if no form had opened (testers, 2026-11-03).
 async function newTab(url, separate) {
-  const own = separate ? await halWindow() : null;
-  if (own) return chrome.tabs.create({ url, windowId: own.id, active: true });
   if (!separate) return chrome.tabs.create({ url, active: false });
-  // Opened behind the applicant's window; some window managers bring it forward anyway.
-  const made = await chrome.windows.create({ url, focused: false, type: "normal" });
+  const own = await halWindow();
+  if (own) {
+    const tab = await chrome.tabs.create({ url, windowId: own.id, active: true });
+    await chrome.windows.update(own.id, { focused: true });
+    return tab;
+  }
+  const made = await chrome.windows.create({ url, focused: true, type: "normal" });
   await chrome.storage.session.set({ halWindow: made.id });
   return made.tabs[0];
 }
