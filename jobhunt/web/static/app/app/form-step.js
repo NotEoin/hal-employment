@@ -12,7 +12,8 @@ import { ShowFormButton } from "../ui/open-buttons.js";
 import { HelperView } from "./helper-view.js";
 
 const SRC_LOOK = { profile: ["info", "user"], cv: ["info", "file"], record: ["info", "book"], saved: ["why", "bookmark"],
-                   note: ["why", "globe"], hal: ["hal", "spark"], private: ["", "lock"], you: ["good", "user"] };
+                   note: ["why", "globe"], hal: ["hal", "spark"], private: ["", "lock"], you: ["good", "user"],
+                   site: ["info", "globe"] };
 export const PRIVATE_WHY = "From your private answers. These are never shown to the AI or saved in logs.";
 const ORIGIN_WORDS = { you: "You told Hal.", builtin: "Built into Hal.", learned: "Hal learned this from you.",
                        hal: "Hal suggested this." };

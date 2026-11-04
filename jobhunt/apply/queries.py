@@ -373,7 +373,7 @@ def _fields(form: dict | None) -> list[dict]:
 # The engines' field sources ("profile: diversity", "documents: CV", ...) by their first word, as the API's
 # Field.src, and the chip words, where a site note reads "Site rule".
 SOURCE_OF = {"profile": "profile", "documents": "cv", "cv": "cv", "record": "record", "your": "saved",
-             "saved": "saved", "note": "note", "hal": "hal", "private": "private", "you": "you"}
+             "saved": "saved", "note": "note", "hal": "hal", "private": "private", "you": "you", "site": "site"}
 PRIVATE_SHOWN = "Filled in from your private answers"
 
 
@@ -383,12 +383,13 @@ def source_of(source: str | None) -> str:
     return SOURCE_OF.get(first, "hal")
 
 SOURCE_WORDS = {"profile": "Your profile", "cv": "Your CV", "record": "Your record", "saved": "Saved answer",
-                "note": "Site note", "hal": "Written by Hal", "private": "Private answer", "you": "Your answer"}
+                "note": "Site note", "hal": "Written by Hal", "private": "Private answer", "you": "Your answer",
+                "site": "Filled in by the site"}
 SOURCE_WHY = {"profile": "From your profile (Settings, You).", "cv": "From your CV.", "record": "From your record.",
               "saved": "An answer you gave on an earlier form.", "note": "From a note about this job site.",
               "hal": "Written for this job by Hal. Please read it.",
               "private": "From your private answers. These are never shown to the AI or saved in logs.",
-              "you": "You typed this."}
+              "you": "You typed this.", "site": "The site had already filled this in, and Hal left it as it was."}
 
 
 def _letter_notes(job, docs: dict) -> dict:

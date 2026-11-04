@@ -42,6 +42,9 @@ What changed in each version, in plain words.
 - **Closed adverts are found before documents are written.** Hal now checks a queued advert is still open
   before writing for it, and closes the job if it is not. Some boards refuse that check; their closed
   adverts are found when Hal opens the form.
+- **Fewer questions left for you.** Hal answers a phone's dialling code ("Country code") from your country,
+  and keeps what a site has already filled in when Hal has no answer of its own, where before it counted
+  a code the site had set to +44 as a required question for you.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,

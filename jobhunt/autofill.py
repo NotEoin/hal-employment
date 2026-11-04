@@ -108,7 +108,8 @@ PROFILE_WORDS = {
     "sponsorship": "your right to work in the UK", "right_to_work": "your right to work in the UK",
     "notice": "your notice period", "start": "when you can start", "office": "whether you can work in an office",
     "relocate": "whether you would move for a job", "postcode": "your postcode", "address1": "your address",
-    "country": "your country", "city": "your town or city", "location": "where you are based",
+    "country": "your country", "phone_code": "your phone's dialling code", "city": "your town or city",
+    "location": "where you are based",
     "nationality": "your nationality", "university": "your university", "degree": "your degree",
     "grade": "your grade", "grad_year": "when your course ends or ended", "salary": "the salary answer you set",
 }
@@ -153,6 +154,7 @@ def profile() -> dict:
         "email": (you.get("you.email") or "").strip().lower(), "phone": (you.get("you.phone") or "").strip(),
         **links,
         "city": you.get("you.city") or "", "country": you.get("you.country") or "United Kingdom",
+        "phone_code": _dial_code(you.get("you.phone") or "", you.get("you.country") or "United Kingdom"),
         "location": you.get("you.location_line") or "",
         "right_to_work": _yes(work != "need_sponsorship"), "sponsorship": _yes(work == "need_sponsorship"),
         "work_status": (you.get("you.work_status") or "").strip() or WORK_WORDS.get(work, ""),
@@ -226,6 +228,10 @@ RULES = [
     (r"\blast name|surname|family name", "last_name", []),
     (r"^(full )?(legal )?name\b|^your name$|full name", "full_name", []),
     (r"e-?mail", "email", []),
+    # Before the phone rule: "Phone country code" asks for the dialling code, not the number (Totaljobs,
+    # testers 2026-11-04).
+    (r"country code|dial(l)?ing code|calling code|(phone|mobile|telephone) (country )?(code|prefix)|"
+     r"international (code|prefix)", "phone_code", []),
     (r"phone|mobile|telephone", "phone", []),
     (r"linkedin", "linkedin", []),
     (r"github", "github", []),
@@ -420,6 +426,19 @@ def _carer(f: dict, prof: dict | None = None) -> bool:
     return True
 
 
+# Dialling codes by country, for a form that asks for the code apart from the number; a number written with
+# its code ("+353 ...") says it itself.
+DIAL_CODES = {"united kingdom": "+44", "uk": "+44", "great britain": "+44", "ireland": "+353", "united states": "+1",
+              "france": "+33", "germany": "+49", "spain": "+34", "italy": "+39", "netherlands": "+31",
+              "india": "+91", "canada": "+1", "australia": "+61"}
+
+
+def _dial_code(phone: str, country: str) -> str:
+    """The dialling code for the person's phone: from the number when it has one, else from their country."""
+    written = re.match(r"\s*(\+\d{1,3})[\s-]", phone)
+    return written.group(1) if written else DIAL_CODES.get(country.strip().lower(), "")
+
+
 def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
     label = f.get("label") or ""
     section = f.get("section") or ""
@@ -447,6 +466,9 @@ def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
                 worded = _choose(f["options"], prof["work_status"], [])
                 if worded:
                     return ([worded] if f["kind"] == "checkgroup" else worded, f"profile: {key}")
+        elif key == "phone_code":
+            # "+44" as a whole code, in "+44" or "United Kingdom (+44)", never inside "+441".
+            preferred = [re.compile(rf"(^|[^\d+]){re.escape(str(value))}(?!\d)")]
         elif key in ("notice", "start") and SOON.search(str(value)):
             preferred = [SOON]
         if key == "salary" and prof.get("salary_figure"):
@@ -825,6 +847,26 @@ def by_you(f: dict, value, note: str = "") -> dict:
     """Marks a field as answered by the person, so its words and "Why this answer?" say so; returns it."""
     f.update(value=value, source="you", note=note, skip=False, why=YOU_WHY, notes_used=[])
     return f
+
+
+SITE_WHY = "The site had already filled this in, and Hal left it as it was."
+
+
+def keep_site_answers(fields: list[dict]) -> list[dict]:
+    """Keeps what the site already filled in where Hal has no answer of its own.
+
+    A dialling code the site set to "+44" was counted as a required question Hal could not answer (Totaljobs,
+    testers 2026-11-04). Tick boxes and uploads are left out: an unticked box is no answer, and a file the
+    site holds is not one Hal can check. A question Hal left for the person on purpose, such as a private one,
+    carries a note and stays theirs.
+    """
+    for f in fields:
+        current = f.get("current")
+        if f.get("value") in (None, "", []) and not f.get("skip") and not f.get("note") \
+                and f["kind"] not in ("file", "checkbox") and current not in (None, "", [], False) \
+                and f.get("type") != "password":
+            f.update(value=current, source="site: already filled", why=SITE_WHY, note="")
+    return fields
 
 
 def mark_written(fields: list[dict]) -> list[dict]:

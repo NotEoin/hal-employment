@@ -168,6 +168,7 @@ def _answer(con, job, found: dict, step: int, done: list) -> dict:
         if mine is not None and f["kind"] != "file":
             autofill.by_you(f, mine)
     _answered, waiting = autofill.ask_model(job, fields, docs, con, notes=notes)
+    autofill.keep_site_answers(fields)
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": fields,
             "model": waiting or "", "filled": None, "submit": None, "step": step, "done": done,
             "final": not found["next"], "state": "working", "message": "", "press": ""}

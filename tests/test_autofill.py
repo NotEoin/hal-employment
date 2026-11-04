@@ -194,6 +194,29 @@ class Answers(unittest.TestCase):
         out = autofill.propose(self.job, uploads, {}, files)
         self.assertEqual([f["value"] for f in out], ["/made/up/letter.pdf", None, "/made/up/cv.pdf"])
 
+    def test_a_dialling_code_is_answered_from_the_country_not_the_phone_number(self):
+        """Regression (testers, 2026-11-04): a required "Country code" list was left empty on Totaljobs."""
+        autofill.profile = lambda: {**PROFILE, "phone_code": autofill._dial_code("07700 900000", "United Kingdom")}
+        f = self.propose(kind="select", label="Country code", options=["+1", "+353", "+44", "+441"])
+        self.assertEqual((f["value"], f["source"]), ("+44", "profile: phone_code"))
+        named = self.propose(kind="select", label="Phone country code",
+                             options=["Ireland (+353)", "United Kingdom (+44)", "Guernsey (+441)"])
+        self.assertEqual(named["value"], "United Kingdom (+44)")
+        self.assertEqual(autofill._dial_code("+353 87 123 4567", "United Kingdom"), "+353")
+
+    def test_what_the_site_already_filled_is_kept_when_hal_has_no_answer(self):
+        """Regression (testers, 2026-11-04): a code the site had set to "+44" was counted as a required
+        question Hal could not answer."""
+        fields = [{"hid": "h0", "kind": "select", "label": "Made-up list", "required": True, "value": None,
+                   "current": "Option B", "note": ""},
+                  {"hid": "h1", "kind": "radio", "label": "A private question", "required": True, "value": None,
+                   "current": "No", "note": "answer this yourself"},
+                  {"hid": "h2", "kind": "checkbox", "label": "Send me news", "value": None, "current": False,
+                   "note": ""}]
+        kept = autofill.keep_site_answers(fields)
+        self.assertEqual([(f["value"], f.get("source")) for f in kept],
+                         [("Option B", "site: already filled"), (None, None), (None, None)])
+
     def test_the_source_is_matched_to_the_nearest_kind_the_list_offers(self):
         f = self.propose(kind="select", label="How did you hear about us?",
                          options=["Company website", "Job board", "A friend"])
