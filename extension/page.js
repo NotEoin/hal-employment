@@ -351,24 +351,34 @@ function halSurvey() {
 // close control, or with Escape when it has none, and returns what it pressed, or '' when nothing was in the
 // way. A pop-up that could hold the application (an upload, or three or more boxes) is never closed, and a
 // button that would send a form inside the pop-up is never the one pressed.
+// A pop-up is found by its role or class, or from a close control upward to the fixed layer it sits in:
+// Adzuna's pop-up library names its layers "mfp-wrap" and "mfp-container", with no role and no word a class
+// match would know (2026-11-04).
 function halPopup() {
   const clean = halClean, visible = halVisible;
-  const ASKS = /job alert|similar (new )?jobs|jobs like this|newsletter|subscribe|sign up for|stay (up to date|in the loop)|don.t miss|never miss|get (the )?latest|notifications|download (our|the) app|get the app|jobs by email|join our talent/i;
+  const ASKS = /job alert|email alert|similar (new )?jobs|jobs like this|newsletter|subscribe|sign up for|stay (up to date|in the loop)|don.t miss|never miss|get (the )?latest|notifications|download (our|the) app|get the app|jobs by email|join our talent/i;
   const CLOSE = /^(close|close (this )?(dialog|modal|pop-?up|window)|dismiss|no,? thanks?( you)?|not now|maybe later|skip|continue browsing|continue without .*|\u00d7|\u2715|\u2716|x)$/i;
+  const LAYER = '[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]';
   const nameOf = el => clean(el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || '');
   const sends = el => el.closest('form') && (el.type === 'submit' || (el.tagName === 'BUTTON' && !el.getAttribute('type')));
   const closeClass = el => typeof el.className === 'string' && /(^|[\s_-])close([\s_-]|$)/i.test(el.className);
-  const boxes = halAll('[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open], [class*="modal" i], '
-      + '[class*="popup" i], [class*="pop-up" i], [class*="overlay" i], [id*="modal" i], [id*="popup" i]')
-    .filter(el => visible(el) && (el.matches('[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]')
-      || ['fixed', 'absolute', 'sticky'].includes(getComputedStyle(el).position)));
-  for (const box of boxes) {
+  const closer = el => visible(el) && !sends(el) && (CLOSE.test(nameOf(el)) || closeClass(el));
+  const layerOf = el => {
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      if (n.matches(LAYER) || getComputedStyle(n).position === 'fixed') return n;
+    }
+    return null;
+  };
+  const named = halAll(LAYER + ', [class*="modal" i], [class*="popup" i], [class*="pop-up" i], [class*="overlay" i], '
+      + '[id*="modal" i], [id*="popup" i]')
+    .filter(el => visible(el) && (el.matches(LAYER) || ['fixed', 'absolute', 'sticky'].includes(getComputedStyle(el).position)));
+  const found = halAll('button, [role=button], a, [aria-label], [title]').filter(closer).map(layerOf).filter(Boolean);
+  for (const box of new Set([...named, ...found])) {
     if (box.querySelector('input[type=file]')) continue;
     const inputs = [...box.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select')]
       .filter(visible);
     if (inputs.length >= 3 || !ASKS.test(clean(box.innerText).slice(0, 1500))) continue;
-    const close = [...box.querySelectorAll('button, [role=button], a, [aria-label], [title]')]
-      .filter(el => visible(el) && !sends(el)).find(el => CLOSE.test(nameOf(el)) || closeClass(el));
+    const close = [...box.querySelectorAll('button, [role=button], a, [aria-label], [title]')].find(closer);
     if (close) { close.click(); return nameOf(close) || 'close'; }
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
     return 'Escape';

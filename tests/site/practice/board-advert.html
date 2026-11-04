@@ -1,13 +1,15 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Graduate Analyst Job in Leeds</title>
 <style>
- #alert-popup { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center;
-                justify-content: center; z-index: 1000; }
- #alert-popup .box { background: #fff; padding: 24px; width: 420px; }
+ .mfp-wrap { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: 1000; }
+ .mfp-container { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+ .ea { background: #fff; padding: 24px; width: 420px; }
 </style></head><body>
 <!-- A job board's advert, as Adzuna lays one out (2026-11-04): the board's own job search with three boxes in
      one form, a job-alert box beside the advert, and a job-alert pop-up over the page that holds back clicks
-     under it until it is closed. None of them is the application; "Apply for this job" leads to it. Closing
-     the pop-up is kept in the tab's sessionStorage, so a test can see it from the form's page. -->
+     under it until it is closed. None of them is the application; "Apply for this job" leads to it. The pop-up
+     is built as Adzuna's pop-up library builds it: no role, and layers named "mfp-wrap" and "mfp-container",
+     closed by a "No, thanks" link. Closing it is kept in the tab's sessionStorage, so a test can see it from
+     the form's page. -->
 <form id="search" action="/search" method="get">
  <label for="q">What?</label><input id="q" name="q" value="Graduate Analyst">
  <label for="w">Where?</label><input id="w" name="w" value="Leeds">
@@ -24,16 +26,21 @@
 <script>
 {
   const pop = document.createElement('div');
-  pop.id = 'alert-popup';
-  pop.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="pt">'
-    + '<button type="button" class="close" aria-label="Close">&times;</button>'
-    + '<h2 id="pt">Don\'t miss out</h2><p>Leave us your email address and we\'ll send you similar new jobs.</p>'
-    + '<form action="/alerts" method="post"><input id="pe" name="email" type="email" placeholder="Your email">'
-    + '<button type="submit">Send me jobs</button></form></div>';
+  pop.className = 'mfp-wrap';
+  pop.innerHTML = '<div class="mfp-container"><div class="ea"><h2>Graduate Analyst jobs in Leeds</h2>'
+    + '<p>Leave us your email address and we\'ll send you similar new jobs.</p>'
+    + '<form action="/alerts" method="post"><input id="pe" name="email" type="email" placeholder="your.name@example.org">'
+    + '<button type="submit">Create email alert</button></form>'
+    + '<a href="#" class="ea_close">No, thanks</a></div></div>';
   document.body.appendChild(pop);
-  pop.querySelector('.close').addEventListener('click', () => { sessionStorage.setItem('popupClosed', '1'); pop.remove(); });
+  pop.querySelector('.ea_close').addEventListener('click', e => {
+    e.preventDefault();
+    sessionStorage.setItem('popupClosed', '1');
+    pop.remove();
+  });
+  window.alertPopup = pop;
   document.getElementById('apply').addEventListener('click', e => {
-    if (document.getElementById('alert-popup')) e.preventDefault();
+    if (window.alertPopup.isConnected) e.preventDefault();
   });
 }
 </script>
