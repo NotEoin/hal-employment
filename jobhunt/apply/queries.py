@@ -7,6 +7,7 @@ import logging
 import re
 import traceback
 from datetime import timedelta
+from pathlib import Path
 from urllib.parse import quote
 
 from .. import browser, db, documents, tasks
@@ -419,8 +420,18 @@ def _running_for(job_id: str) -> dict | None:
 
 
 def _file_url(path: str | None) -> str | None:
-    """The `/files` address of a stored file, with the path encoded so "+", "#" and "&" survive."""
-    return f"/files?path={quote(path)}" if path else None
+    """The `/files` address of a stored file, with the path encoded so "+", "#" and "&" survive.
+
+    The file's change time rides along (`m`, ignored by the server), so a preview shows the new PDF as soon
+    as an Undo or an edit makes it again, rather than the browser's copy of the old one.
+    """
+    if not path:
+        return None
+    try:
+        made = Path(path).stat().st_mtime_ns
+    except OSError:
+        made = 0
+    return f"/files?path={quote(path)}&m={made}"
 
 
 def form_words(form: dict) -> str:

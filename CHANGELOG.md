@@ -8,6 +8,8 @@ What changed in each version, in plain words.
 
 - **Choose several career areas.** The goal step's career areas are now toggles: press every area you are
   interested in, such as Heritage and museums and Creative and media, and their example roles are joined.
+- **See the documents themselves.** The Documents step shows the CV and cover letter PDFs Hal will upload
+  beside the CV changes and the letter text.
 
 ### Fixed
 
