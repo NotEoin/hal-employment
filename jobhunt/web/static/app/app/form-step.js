@@ -82,7 +82,7 @@ export function FormStep({ a, reload, onReopen }) {
       <section class="card">
         <div class="row" style="margin-bottom:6px"><h2 class="h2" style="margin:0">Answers</h2><span class="sp"></span>
           <span class="chip good">${f.fields.filter(x => x.ok).length} fine</span><span class="chip warn">${f.to_check} to check</span></div>
-        ${!f.fields.length && html`<p class="small sub">${STUCK}</p>`}
+        ${!f.fields.length && !a.action_id && html`<p class="small sub">${STUCK}</p>`}
         ${fields.map((x, k) => { const look = SRC_LOOK[x.src] || SRC_LOOK.hal; return html`<div class="field-row" data-hid=${x.hid}>
           <div class="q">${x.q}</div>
           <span class=${cx("flag", x.ok ? "ok" : "check")}><${Icon} n=${x.ok ? "check" : "warn"} c="s" />${x.ok ? "Fine" : "Check this"}</span>

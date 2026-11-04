@@ -179,6 +179,18 @@ class Routes(unittest.TestCase):
         card = next(i for c in board["columns"] for i in c["items"] if i["id"] == job_id("sorrel-ready"))
         self.assertEqual(card["tone"], "warn")
 
+    def test_while_hal_works_on_a_form_the_page_says_what_it_is_doing(self):
+        # testers: the Form step showed an empty banner and the stuck hint while Hal was working (2026-11-04)
+        self.start_applying("sorrel-ready")
+        self.put_app("sorrel-ready", stage="form", form='{"state": "working", "fields": [], "url": ""}')
+        key = job_id("sorrel-ready")
+        with mock.patch.object(queries, "_busy", lambda job: job == key), \
+                mock.patch.object(queries, "_running_for", lambda job: {"id": "made-up-fill"}), \
+                mock.patch.dict(queries.ACTIONS, {key: {"message": "Answering 7 questions", "state": "running"}}):
+            page = self.c.get(self.url("sorrel-ready")).json()
+        self.assertEqual(page["action_id"], "made-up-fill")
+        self.assertEqual(page["form"]["words"], "Hal is working on the form: answering 7 questions.")
+
     def test_fill_in_from_this_page_reads_the_tab_without_opening_the_advert(self):
         self.start_applying("sorrel-ready")
         asked = []

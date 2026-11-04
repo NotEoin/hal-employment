@@ -94,6 +94,18 @@ class ApplicationsTest(unittest.TestCase):
         self.assertEqual(state.posts[0][1], {"here": True})
         self.assertEqual(p.errors, [])
 
+    def test_while_hal_works_the_form_step_shows_no_stuck_hint_and_no_submit_words(self) -> None:
+        state = apps_state()
+        state.pages[APP_PATH].update(action_id="a1")
+        state.pages[APP_PATH]["form"].update(fields=[], filled=0, total=0, to_check=0, state="working",
+                                             words="Hal is working on the form: answering 7 questions.")
+        p = self.tab(self.serve(state)).open(APP)
+        p.page.wait_for_selector("text=Hal is working on the form: answering 7 questions.")
+        self.assertEqual(p.page.locator("text=If Hal is stuck before the form").count(), 0)
+        self.assertIn("Working on the form.", p.page.locator(".halpanel").inner_text())
+        self.assertNotIn("Submit", p.page.locator(".halpanel").inner_text())
+        self.assertEqual(p.errors, [])
+
     def test_the_form_step_marks_each_answer_and_i_sent_it_myself_moves_it_on(self) -> None:
         state = apps_state()
         srv = self.serve(state)

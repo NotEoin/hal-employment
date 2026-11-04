@@ -448,6 +448,10 @@ def application(con, ref: str) -> dict:
         if why:
             out["form"].update(state="stopped", words=STOPPED.format(why=why))
             out["steps"][1]["note"] = "Hal stopped"
+        elif held and form.get("state") == "working":
+            # While Hal works, the page says what it is doing rather than nothing (testers, 2026-11-04).
+            doing = (ACTIONS.get(job_id) or {}).get("message") or "opening the form"
+            out["form"].update(words=f"Hal is working on the form: {doing[0].lower()}{doing[1:]}.".replace("..", "."))
     if step >= 3 and row is not None:
         timeline = []
         if row["sent_at"]:

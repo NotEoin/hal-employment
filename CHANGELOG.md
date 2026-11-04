@@ -34,6 +34,9 @@ What changed in each version, in plain words.
 - **Buttons work at once while Hal is busy.** With jobs queued, **Fill it in again**, **Fill in from this
   page**, approving one application and the Form step's other buttons waited until every queued job's
   documents were written. What you press now starts straight away.
+- **The Form step says what Hal is doing.** While Hal worked on a form, the step showed an empty banner, the
+  hint for when Hal is stuck, and "Press Submit yourself" with nothing filled. It now says what Hal is
+  doing, such as "answering 7 questions", and keeps the hint for when Hal has stopped.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,

@@ -4,6 +4,13 @@ import { html, cx } from "../core/html.js";
 
 const SHOWN = 4;  // a few answers, the ones to check first
 
+/** What Hal's panel says: nothing about Submit until there is something filled to check. */
+function panelWords(f, a) {
+  if (!f.total) return a && a.action_id ? "Working on the form." : "Nothing filled yet.";
+  return f.filled + " of " + f.total + " filled." + (f.to_check ? " Check the " + f.to_check + " in amber, then press Submit yourself."
+    : " Press Submit yourself.");
+}
+
 /** The picture of the form. */
 export function HelperView({ a }) {
   const f = (a && a.form) || { fields: [], site: "", words: "" };
@@ -13,6 +20,6 @@ export function HelperView({ a }) {
     <div class="pg"><h4>${a ? a.job.title : ""}: application</h4>
       ${fields.map(x => html`<div class=${cx("ff", !x.ok && "amber")}><label>${x.q}</label>${x.a}</div>`)}
       <div class="halpanel"><div style="display:flex;gap:6px;align-items:center"><span class="eye sm"></span><b>Hal</b></div>
-        <div style="margin-top:6px">${f.filled} of ${f.total} filled.${f.to_check ? " Check the " + f.to_check + " in amber, then press Submit yourself." : " Press Submit yourself."}</div></div>
+        <div style="margin-top:6px">${panelWords(f, a)}</div></div>
     </div></div>`;
 }
