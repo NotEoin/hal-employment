@@ -189,7 +189,7 @@ class Versions(HelperTest):
     def test_the_version_hal_wants_is_the_manifests(self):
         manifest = json.loads((ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(helpers.wanted_version(), manifest["version"])
-        self.assertEqual(manifest["version"], "1.0.6")
+        self.assertEqual(manifest["version"], "1.0.7")
         self.assertIn("never presses Submit", manifest["description"])
         self.assertEqual(manifest["content_scripts"][0]["js"], ["pair.js"])
         self.assertEqual(set(manifest["content_scripts"][0]["matches"]), {"http://127.0.0.1/*", "http://localhost/*"})

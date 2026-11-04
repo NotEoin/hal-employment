@@ -128,6 +128,9 @@ class SiteKeys(unittest.TestCase):
         survey = {"title": "Jobs", "headings": [], "url": banner["url"], "text": banner["text"], "controls": []}
         self.assertTrue(browser._closed(survey, 200))
         self.assertFalse(browser._closed({**survey, "text": "Apply now. " * 80 + banner["text"]}, 200))
+        for said in ("Applications Closed", "Applications for this position have now closed."):
+            self.assertTrue(browser._closed({**survey, "text": said}, 200), said)
+        self.assertFalse(browser._closed({**survey, "text": "Applications close on 30 November."}, 200))
 
     def test_a_form_opens_behind_when_preferences_say_not_to_bring_it_forward(self):
         from jobhunt.core import settings
@@ -345,6 +348,13 @@ class Fixes:
         self.assertEqual(self.on_page(job_id, "single.html",
                                       lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')")), "1")
         self.assertEqual((self.site.sent(), self.site.posts["/alerts"]), (0, 0))
+
+    def test_a_boards_search_and_alerts_in_its_one_page_form_are_passed_on_the_way_to_the_form(self):
+        """Regression (testers, 2026-11-04): on ProductionBase, whose whole page is one form, Hal filled the
+        board's job search ("Job Types", "Industry") as the application."""
+        _job_id, found = self.opened("one-form", "one-form-board.html")
+        self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email", "Phone"])
+        self.assertEqual(self.site.sent(), 0)
 
     def test_with_pop_ups_left_alone_in_preferences_hal_closes_none(self):
         from jobhunt.core import settings

@@ -207,6 +207,27 @@ function halExtract() {
     return found;
   };
 
+  // The site's own job search or job-alert sign-up, which no label says: "search" or "alert", or "" for neither.
+  // ProductionBase wraps its whole page in one form, so the search's boxes sat in the same form as everything
+  // else, labelled "Job Types" and "Industry" (testers, 2026-11-04). Names are matched narrowly, so an
+  // application's own searchable dropdown ("select__search") is never taken for the site's search.
+  const SEARCH_NAME = /job.?search|search.?(box|bar|form|section|panel|area|field|input|query)|site.?search|searchkeyword/i;
+  const ALERT_WORDS = /job alerts?|alerts? (direct )?to your inbox|similar (new )?jobs|newsletter|jobs by email/i;
+  const siteBox = el => {
+    const form = el.form;
+    if (el.closest('[role=search]') || SEARCH_NAME.test(`${el.name} ${el.id}`)
+        || (form && /search/i.test(form.getAttribute('action') || '') && !/apply|application/i.test(form.getAttribute('action') || ''))) {
+      return 'search';
+    }
+    for (let n = el.parentElement, depth = 0; n && depth < 5 && !STOP.test(n.tagName); n = n.parentElement, depth++) {
+      if (SEARCH_NAME.test(`${typeof n.className === 'string' ? n.className : ''} ${n.id}`)) return 'search';
+      const text = n.innerText || '';
+      const boxes = n.querySelectorAll('input:not([type=hidden]):not([type=submit]), textarea, select').length;
+      if (text.length < 400 && boxes <= 3 && ALERT_WORDS.test(text)) return 'alert';
+    }
+    return '';
+  };
+
   const fields = [];
   for (const g of groups) {
     const lead = g.lead, el = lead.el, box = boxOf(g);
@@ -299,6 +320,8 @@ function halExtract() {
     const problem = errorIn(box, el);
     if (problem || el.getAttribute('aria-invalid') === 'true') f.invalid = problem || 'marked invalid';
     f.form = el.form ? [...document.forms].indexOf(el.form) : -1;
+    const site = siteBox(el);
+    if (site) f.site_box = site;
     const section = sectionOf(el, f.label);
     if (section) f.section = section;
     f.sig = [f.kind, f.name || '', f.label.slice(0, 120)].join('|');

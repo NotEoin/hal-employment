@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hal Employment",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Lets Hal read and fill job application forms in your tabs: ones it opens, or one you hand it. Hal never presses Submit.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnnAe8g9gmYv/dNRjqg3hf1AU8SJGdo/ETcoHZdA8kJo2b4BcoxKRx+a7a8WkASBrjghXKSpRxRWbPoE21X83EpSz7CRqCcy3MCqp5VnZUe9jzwNQyuxEX/i6KkNElTToLnzxUq1kCW6Ey2JqNNHZJCGA7TxXlkCm068dFE3L6oSiuBKI74XKABtLJ0hRW87oyzO/NOC6qcOZKLuwMd/JRoiHxiDkVcCuOUgNkwTVLBcGOLfuRLEAK5CHLYZ0lQgTSROO/VqoSY2aY/T+toIsrxofmO7XEtDKScx1CA2M4AU+9U7u6ZUOFE8FarW7pq6hHq1UhcLq1sMf0Ytq9DO77QIDAQAB",
   "permissions": [

@@ -83,7 +83,11 @@ SIGN_OUT = re.compile(r"^\s*(sign|log) ?out\s*$", re.I)
 CLOSED = re.compile(r"(no longer|not) (available|accepting applications|open|exists?|active|live)|not available anymore|"
                     r"(job|position|vacancy|role|posting|advert|page) (you requested )?(has |was |is )?"
                     r"(been )?(filled|expired|closed|removed|not found|unavailable)|"
-                    r"(job|position|vacancy|page) not found|applications? (are|is|have|has) (now )?closed|\b404\b", re.I)
+                    r"(job|position|vacancy|page) not found|applications? (are|is|have|has) (now )?closed|\b404\b|"
+                    # "Applications Closed", "Applications for this position have now closed" (ProductionBase,
+                    # testers 2026-11-04)
+                    r"\bapplications? closed\b|applications? for this (position|role|job|vacancy) (have|has) "
+                    r"(now )?closed", re.I)
 BOT_CHECK = re.compile(r"just a moment|verify (that )?you are (a )?human|human verification|are you a robot|"
                        r"attention required|pardon our interruption|checking your browser|security check", re.I)
 # Pages that refuse the browser outright, with no check to pass.
@@ -404,7 +408,10 @@ JOB_ALERT = re.compile(r"job alerts?|similar (new )?(jobs|roles|vacancies)|jobs 
 
 
 def not_the_application(field: dict) -> bool:
-    """True for a box that belongs to the site rather than the application: its job search or job alerts."""
+    """True for a box that belongs to the site rather than the application: its job search or job alerts, by
+    its words, or by where it sits on the page (`site_box`, from page.js)."""
+    if field.get("site_box"):
+        return True
     label = field.get("label") or ""
     return bool(SITE_SEARCH.search(label) or JOB_ALERT.search(f"{label} {field.get('help') or ''}"))
 

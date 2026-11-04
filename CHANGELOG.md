@@ -68,6 +68,11 @@ What changed in each version, in plain words.
   pop-up lay over the page. Hal now leaves a site's search and job-alert boxes alone, closes pop-ups that
   ask for job alerts, newsletters or an app, however the site builds them, and presses Apply to reach the
   employer's form.
+- **A board's own search and job alerts are left alone in a page-wide form.** On a board whose whole page
+  is one form (as ProductionBase builds it), Hal filled the board's job search ("Job Types", "Industry") and
+  its job-alert box as the application. Hal now tells them apart by the part of the page they sit in.
+- **"Applications closed" closes the job.** A banner saying applications had closed was not read as a
+  closed advert.
 - **The CV goes in the right upload.** A form that named its cover letter and certificate uploads but not the
   CV's got no CV, since Hal took "cover" to mean the CV's upload was named too. The CV now goes in the
   first upload named for no other document, and Hal knows the German words for CV and cover letter.
