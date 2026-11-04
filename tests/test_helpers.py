@@ -29,7 +29,7 @@ SUPPORTED = ("opera", "chrome", "edge", "brave", "vivaldi")
 WAIT_S = 5
 
 
-def poll(hal, paired, version="1.0.0"):
+def poll(hal, paired, version=None):
     """One poll from a paired helper; returns its reply."""
     return hal.client().post("/api/v2/helpers/poll", {"helper_id": paired["helper_id"], "version": version,
                                                       "protocol": 1}, headers=key_headers(paired)).json()
@@ -189,7 +189,7 @@ class Versions(HelperTest):
     def test_the_version_hal_wants_is_the_manifests(self):
         manifest = json.loads((ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(helpers.wanted_version(), manifest["version"])
-        self.assertEqual(manifest["version"], "1.0.0")
+        self.assertEqual(manifest["version"], "1.0.1")
         self.assertIn("never presses Submit", manifest["description"])
         self.assertEqual(manifest["content_scripts"][0]["js"], ["pair.js"])
         self.assertEqual(set(manifest["content_scripts"][0]["matches"]), {"http://127.0.0.1/*", "http://localhost/*"})

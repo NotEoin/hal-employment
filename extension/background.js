@@ -318,6 +318,21 @@ async function handTab(tab) {
     await chrome.action.setTitle({ tabId: tab.id, title });
   };
   try {
+    // The button pressed on Hal's own page, or on a browser page no extension may read, used to end in a bare
+    // "!" (testers, 2026-11-03); each now says what the button is for.
+    const hal = await link();
+    if (!hal) {
+      await say("!", "Hal's helper is not connected yet. In Hal, open Settings, then Browser helper, and press Connect.");
+      return;
+    }
+    if (!/^https?:/.test(tab.url || "")) {
+      await say("!", "Hal cannot read this browser page. Press this button on an employer's application page.");
+      return;
+    }
+    if (new URL(tab.url).origin === hal.base) {
+      await say("", "This is Hal itself. Press Apply with Hal on a job, or press this button on an employer's application page.");
+      return;
+    }
     await say("...", "Hal is filling this application");
     const [read] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({
       url: location.href, title: document.title,
