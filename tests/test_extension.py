@@ -25,7 +25,7 @@ from support.practice_site import HelperBrowser
 
 from jobhunt import db, extension
 from jobhunt.apply import driver, helpers
-from jobhunt.core import runner
+from jobhunt.core import runner, settings
 from jobhunt.web import auth
 
 # unittest runs these for this module: no salary research, and no private answers.
@@ -104,6 +104,8 @@ class InYourBrowser(PairedHelper, Practice):
 
     def test_applications_open_together_in_a_window_of_their_own(self):
         """apply_window = "separate": job tabs share one window, apart from the one the applicant works in."""
+        settings.set("applying.window", "separate", by="you")
+        self.addCleanup(settings.reset, "applying.window")
         for name in ("ext-window-1", "ext-window-2"):
             driver.act_auto(self.con, self.job(name, f"form.html?{name}"))
         tabs = self.in_worker("() => chrome.tabs.query({}).then(ts => ts.map(t => [t.url, t.windowId]))")

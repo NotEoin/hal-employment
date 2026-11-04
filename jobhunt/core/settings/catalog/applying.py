@@ -1,5 +1,8 @@
 """Settings group "Applying": how Hal fills forms. Hal never presses Submit.
 
+`applying.window` starts as "this": with Hal open in the person's own browser, a form opens as a tab they can
+see, where a separate window opened behind theirs looked to testers as if no tab had opened (2026-11-03).
+
 `applying.max_steps` and `applying.page_timeout` show in the Advanced group.
 """
 
@@ -42,9 +45,10 @@ register(
             remote="local_only", order=20, choices=choices(
                 ("helper", "In your browser, with the helper"), ("window", "In Hal's own window"),
                 ("headless", "In a hidden window (for tests)"))),
-    Setting("applying.window", "seg", "separate", "Open forms in", order=30,
+    Setting("applying.window", "seg", "this", "Open forms in", order=30,
             choices=choices(("separate", "A separate window"), ("this", "This window")),
-            help="\"This window\" opens each form as a tab beside yours, brought forward while Hal fills it in."),
+            help="\"This window\" opens each form as a tab beside Hal's, brought forward while Hal fills it in. "
+                 "\"A separate window\" keeps them in a window of their own, behind yours."),
     Setting("applying.press_next", "bool", True, "Press Next on pages with nothing for you to check", order=40),
     Setting("applying.wait_minutes", "choice", 15, "Wait for you to sign in or pass a check for up to", order=50,
             choices=same(5, 15, 30, unit="minutes")),
