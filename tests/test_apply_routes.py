@@ -109,6 +109,19 @@ class Routes(unittest.TestCase):
         self.assertIn("It needs a car", closed[job_id("tidewater-grad")])
         self.assertEqual(self.c.post(self.url("cobalt-interview", "/discard"), {"reason": "bored"}).status, 400)
 
+    def test_discarding_skips_copies_in_the_same_place_only(self):
+        # discarding the Newcastle copies of an agency's advert also took its London listing out of Matches
+        here, there = "lever:copy-here", "lever:copy-there"
+        for copy, place in ((here, "London"), (there, "Manchester")):
+            self.con.execute("INSERT INTO jobs (id, source, company, title, location, url, description, status, "
+                             "first_seen, last_seen) SELECT ?, source, company, title, ?, url, description, 'new', "
+                             "first_seen, last_seen FROM jobs WHERE id = ?", (copy, place, job_id("sorrel-ready")))
+        self.con.commit()
+        self.start_applying("sorrel-ready")
+        self.assertEqual(self.c.post(self.url("sorrel-ready", "/discard"), {"reason": "not_interested"}).status, 200)
+        status = dict(self.con.execute("SELECT id, status FROM jobs").fetchall())
+        self.assertEqual((status[here], status[there]), ("skipped", "new"))
+
     def test_restore_takes_a_discarded_job_back_to_matches(self):
         self.start_applying("sorrel-ready")
         self.c.post(self.url("sorrel-ready", "/discard"), {"reason": "not_interested"})

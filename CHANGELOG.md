@@ -33,6 +33,8 @@ What changed in each version, in plain words.
 - **An advert listed again shows once.** Agencies repost the same advert each day under a new id, and each
   copy was a new match. Hal now shows one copy of a job with the same employer, title and place: the one
   you applied for or saved, else the newest. The rest are under Hidden, "Listed more than once".
+  Discarding an application now skips only its copies in the same place, so the same role in another city
+  stays in Matches.
 - **Cover letters are made.** Apply with Hal now makes the cover letter PDF with the CV; before, it was
   made only when you edited or approved the documents.
 - **CV changes show their new wording, and Undo works.** Each change said only "(changed)", and Undo was

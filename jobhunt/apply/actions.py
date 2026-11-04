@@ -234,6 +234,8 @@ def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") 
 
     Hal stops at once and its tab closes when the browser is free; the documents stay. "Too much effort"
     is remembered against the site, and the same advert listed twice does not come back into the queue.
+    "The same advert" is the repost rule's (`rules.repost_key`): employer, title and place, so discarding a
+    role in one city leaves the same role in another (testers, 2026-11-04).
     """
     if reason not in DISCARD_REASONS:
         raise ValueError(f"Choose why: one of {', '.join(DISCARD_REASONS)}.")
@@ -256,10 +258,14 @@ def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") 
                     (job_id, db.now()))
     con.execute("UPDATE applications SET closed_reason = ?, closed_detail = ?, updated = ? WHERE job_id = ?",
                 (reason, words or None, db.now(), job_id))
-    for d in con.execute("""SELECT id FROM jobs WHERE id != ? AND status IN ('new','shortlisted','ready')
-                            AND lower(company) = lower(?) AND lower(title) = lower(?)""",
-                         (job_id, job["company"], job["title"])).fetchall():
-        db.set_status(con, d["id"], "skipped", "duplicate of a discarded job")
+    from ..find import rules
+
+    key = rules.repost_key(job)
+    for d in con.execute("""SELECT id, company, title, location FROM jobs WHERE id != ?
+                            AND status IN ('new','shortlisted','ready') AND lower(company) = lower(?)""",
+                         (job_id, job["company"])).fetchall():
+        if rules.repost_key(d) == key:
+            db.set_status(con, d["id"], "skipped", "duplicate of a discarded job")
     con.commit()
 
 
