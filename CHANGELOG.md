@@ -24,6 +24,8 @@ What changed in each version, in plain words.
 - **Lists keep up.** Jobs and Applications refresh when Hal finishes a re-check, a search or documents,
   "Show more jobs" and opened Hidden groups refresh too, and a new application appears on the board
   without reloading the page.
+- **Cover letters are made.** Apply with Hal now makes the cover letter PDF with the CV; before, it was
+  made only when you edited or approved the documents.
 - **The laptop launcher stays open.** "Hal Employment (desktop)" closed its window as soon as the tunnel
   started, which ended the tunnel too. Fetch the launcher again (step 5 of the how-to). A launcher that
   cannot connect now keeps its window open and says why.

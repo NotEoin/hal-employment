@@ -83,7 +83,13 @@ def prepare(ctx, job_id: str, time: str = "") -> dict:
     if not documents.summary(job)["has_pack"]:
         ctx.step("Writing your CV and cover letter for this job")
         pack.build(ctx.con, job_id, ctx=ctx)   # the record passages the letter used go under Activity "Used"
-    ctx.step("Your documents are ready for you to check")
+    # The pack drafts the letter's words only; without this the folder held no cover letter until the person
+    # saved an edit or approved (testers found none, 2026-11-03), and the page had no letter to show.
+    ctx.step("Making the PDFs of your CV and cover letter")
+    made = documents.render(job, documents.load(ctx.con, job))
+    ctx.step("Your documents are ready for you to check" if "letter" in made else
+             "Hal drafted no cover letter for this job; write one on the Cover letter tab, or check that Hal's AI "
+             "is working in Settings")
     return {"job_id": job_id}
 
 

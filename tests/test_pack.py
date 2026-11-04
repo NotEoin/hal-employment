@@ -202,6 +202,18 @@ class Letter(unittest.TestCase):
         self.assertIn({"kind": "record", "label": "Volunteering/guide.md > Role", "ref": ""},
                       json.loads(row["used"] or "[]"))
 
+    def test_apply_with_hal_makes_the_cover_letter_pdf_before_approval(self):
+        # testers found no cover letter in the application folder: only approving or editing made its PDF
+        from jobhunt import documents
+        from jobhunt.apply import actions
+
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad")
+            done = finished(actions.start("docs.prepare", job["id"]), WAIT_S)
+            made = documents.files(job, a.con)
+        self.assertEqual(done["state"], "done", done.get("error"))
+        self.assertEqual(set(made), {"cv", "letter"})
+
     def test_your_own_rewritten_answers_shape_the_voice_but_never_a_private_one(self):
         with as_applicant(people.HUMANITIES) as a:
             for label, answer in (("Why do you want to work in heritage?", "Old maps made me curious early on."),
