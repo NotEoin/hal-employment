@@ -127,16 +127,29 @@ export function closeDialog() {
 }
 
 let toastSeq = 0;
-/** Shows a short message; with `undo` (a function) it carries a button, named `label` (Undo by default). */
-export function toast(text, undo, label = "Undo") {
-  const id = ++toastSeq;
-  store.set(s => ({ toasts: [...s.toasts, { id, text, undo, label }] }));
-  setTimeout(() => dismissToast(id), undo ? TOAST_UNDO_MS : TOAST_MS);
+const toastTimers = new Map();
+/** Shows a short message; with `undo` (a function) it carries a button, named `label` (Undo by default).
+
+    With `group`, a toast of the same group already on show is replaced rather than stacked, and `text` may be a
+    function of how many times the group has been raised: queueing twenty jobs filled the window with twenty
+    toasts (testers, 2026-11-04). */
+export function toast(text, undo, label = "Undo", group = null) {
+  const had = group ? store.s.toasts.find(t => t.group === group) : null;
+  const n = had ? had.n + 1 : 1;
+  const id = had ? had.id : ++toastSeq;
+  const said = typeof text === "function" ? text(n) : text;
+  const made = { id, text: said, undo, label, group, n };
+  store.set(s => ({ toasts: had ? s.toasts.map(t => (t.id === id ? made : t)) : [...s.toasts, made] }));
+  clearTimeout(toastTimers.get(id));
+  toastTimers.set(id, setTimeout(() => dismissToast(id), undo ? TOAST_UNDO_MS : TOAST_MS));
   return id;
 }
 
 /** Removes one toast. */
-export function dismissToast(id) { store.set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })); }
+export function dismissToast(id) {
+  toastTimers.delete(id);
+  store.set(s => ({ toasts: s.toasts.filter(t => t.id !== id) }));
+}
 
 /* ---- per-viewer conveniences ---- */
 

@@ -36,8 +36,10 @@ export async function applyJob(j) {
 /** Add to queue: Hal writes the documents while the person stays to choose more, then approves them together. */
 export async function queueJob(j) {
   try {
-    const to = await startApplication(j);
-    toast("Added to Getting ready. Hal is writing the documents for " + j.title + ".", () => go(to), "Open it");
+    await startApplication(j);
+    toast(n => (n === 1 ? "Added to Getting ready. Hal is writing the documents for " + j.title + "."
+      : "Added " + n + " jobs to Getting ready. Hal writes their documents one after another."),
+    () => go("apps"), "Open the queue", "queued");
   } catch (err) { toast(err.message); }
 }
 
