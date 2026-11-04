@@ -65,13 +65,13 @@ def _example(name: str | None, owner: Any = driver, **extra: Any):
 def _prepare_example(world: Any) -> dict:
     from .. import pack
 
-    return _example("build", pack, time="10:00")(world)
+    return _example("build", pack, time="10:00", open_check=False)(world)
 
 
 @runner.action("docs.prepare", area="documents", label="Writing your documents for {title} at {company}",
                why="You pressed Apply with Hal at {time}. Documents come first.", priority=1,
                resumable=True, example=_prepare_example)
-def prepare(ctx, job_id: str, time: str = "") -> dict:
+def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
     """Moves a job to Getting ready and makes its documents; nothing is opened or sent.
 
     Resumable: a restart part way through starts it again by itself, since a queue of jobs left every one
@@ -84,6 +84,9 @@ def prepare(ctx, job_id: str, time: str = "") -> dict:
         db.set_status(ctx.con, job_id, "applying", "chosen from the queue")
         ctx.con.commit()
     ctx.step("Reading the advert")
+    if open_check and _advert_closed(ctx.con, job):
+        ctx.step("The advert has closed, so Hal wrote nothing for it")
+        return {"job_id": job_id, "closed": True}
     if not documents.summary(job)["has_pack"]:
         ctx.step("Writing your CV and cover letter for this job")
         pack.build(ctx.con, job_id, ctx=ctx)   # the record passages the letter used go under Activity "Used"
@@ -95,6 +98,25 @@ def prepare(ctx, job_id: str, time: str = "") -> dict:
              "Hal drafted no cover letter for this job; write one on the Cover letter tab, or check that Hal's AI "
              "is working in Settings")
     return {"job_id": job_id}
+
+
+def _advert_closed(con, job) -> bool:
+    """Checks the advert is still open before Hal writes for it; a closed one closes the job.
+
+    Queued adverts had often closed since they were found, and writing for them took minutes of the graphics
+    card each (testers, 2026-11-04). One fetch, as the check before a job first shows in Matches; a page that
+    cannot be read (some boards refuse plain fetches) counts as open, and the form step finds out later.
+    """
+    from ..core import clock
+    from ..find import closed_check
+
+    if closed_check.check(dict(job)) != "closed":
+        return False
+    db.set_status(con, job["id"], "closed", "the advert had closed before Hal wrote the documents")
+    con.execute("UPDATE jobs SET open_state = 'closed', open_checked_at = ? WHERE id = ?", (clock.iso(), job["id"]))
+    db.alert(con, "info", f"No longer open: {job['company']}", job["title"], job["id"])
+    con.commit()
+    return True
 
 
 @runner.action("apply.fill", area="applying", label="Filling in the form for {title} at {company}",

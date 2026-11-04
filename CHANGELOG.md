@@ -39,6 +39,9 @@ What changed in each version, in plain words.
   doing, such as "answering 7 questions", and keeps the hint for when Hal has stopped.
 - **A job board's "no longer available" banner closes the job.** Hal looked for that only in a page's title
   and headings, so an advert taken down with a banner (as Adzuna shows it) was reported as "no form found".
+- **Closed adverts are found before documents are written.** Hal now checks a queued advert is still open
+  before writing for it, and closes the job if it is not. Some boards refuse that check; their closed
+  adverts are found when Hal opens the form.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,

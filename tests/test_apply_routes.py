@@ -229,6 +229,22 @@ class Routes(unittest.TestCase):
         self.assertEqual(started, [("docs.prepare", job_id("sorrel-ready"))])
         self.assertEqual(r.json()["skipped"], [job_id("wexford-ready")])
 
+    def test_a_closed_advert_closes_the_job_before_hal_writes_for_it(self):
+        # testers: queued adverts that had closed took minutes of the graphics card each (2026-11-04)
+        from jobhunt import pack
+        from jobhunt.find import closed_check
+
+        self.start_applying("sorrel-ready")
+        built = []
+        with mock.patch.object(closed_check, "check", lambda job: "closed"), \
+                mock.patch.object(pack, "build", lambda *a, **k: built.append(a)):
+            r = self.c.post(self.url("sorrel-ready", "/documents/redo"))
+            done = self.wait(r.json()["action_id"])
+        self.assertEqual(done["state"], "done")
+        self.assertEqual(built, [])
+        row = self.con.execute("SELECT status, open_state FROM jobs WHERE id = ?", (job_id("sorrel-ready"),)).fetchone()
+        self.assertEqual((row["status"], row["open_state"]), ("closed", "closed"))
+
     def test_approve_all_starts_every_ready_form_and_leaves_the_rest(self):
         # testers asked to queue several jobs, as the older tool did, then apply to them together
         self.start_applying("sorrel-ready", "wexford-ready")
