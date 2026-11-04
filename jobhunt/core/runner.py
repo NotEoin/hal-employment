@@ -51,8 +51,9 @@ ACTIVE = ("queued", "running", "waiting_for_you")
 FINAL = ("done", "error", "stopped", "interrupted")
 CARRY_ON_FROM = ("interrupted", "stopped", "error")
 # Priority 0 has threads of its own: a button pressed while a hundred queued jobs had their documents
-# written waited behind all of them (testers, 2026-11-04).
-NOW_THREADS = 2              # priority 0, what the person just asked for
+# written waited behind all of them (testers, 2026-11-04). A form waiting for the person to sign in or press
+# Apply holds its thread for up to 15 minutes while doing almost nothing, so there are enough for several.
+NOW_THREADS = 6              # priority 0, what the person just asked for
 USER_THREADS = 4             # priority 1
 BACKGROUND_THREADS = 2       # priority 2
 JOB_THREADS = 6              # the driver's actions mostly wait on the browser or the model
