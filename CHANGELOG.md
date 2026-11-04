@@ -78,6 +78,9 @@ What changed in each version, in plain words.
   "No results", and some forms (Ashby's) hide every other question while a list is open. Hal then saw three
   questions, took the page for a new one and filled the whole form again. Hal now closes the list, and reads
   the whole form even while a list is open.
+- **Follow-up questions are left alone when they do not apply.** An optional "If you answered yes to the above,
+  ..." after a "No", or "If you selected other, please specify" after another choice, was answered with
+  filler such as "A" or "N/A". Hal now leaves it empty.
 - **A board's own search and job alerts are left alone in a page-wide form.** On a board whose whole page
   is one form (as ProductionBase builds it), Hal filled the board's job search ("Job Types", "Industry") and
   its job-alert box as the application. Hal now tells them apart by the part of the page they sit in.

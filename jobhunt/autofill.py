@@ -29,6 +29,7 @@ Design notes:
 from __future__ import annotations
 
 import difflib
+import itertools
 import re
 from datetime import date
 from typing import TYPE_CHECKING
@@ -794,7 +795,33 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
             if drafted:
                 f.update(value=drafted, source="documents: drafted answer",
                          why="From the answers you approved with this job's documents.")
+    _skip_follow_ups(fields)
     return mark_written(fields)
+
+
+# "If yes, please give details", "If you selected other to the above, please specify": a question about the answer
+# to the one before it.
+FOLLOW_UP = re.compile(r"^\s*if\s+(?:you\s+(?:have\s+)?(?:answered|selected|chose|chosen|ticked|said|picked)\s+)?"
+                       r"[\"']?(yes|no|other)\b", re.I)
+FOLLOW_UP_WHY = "It asks about a different answer to the question before it, so Hal leaves it empty."
+
+
+def _skip_follow_ups(fields: list[dict]) -> None:
+    """Leaves an optional follow-up empty when the answer just before it is not the one it asks about.
+
+    The model filled "If you answered yes to the above, confirm your visa" with "A" after a "No" (Ashby, testers
+    2026-11-04). A follow-up whose question went unanswered is left to the model as before.
+    """
+    for before, f in itertools.pairwise(fields):
+        m = FOLLOW_UP.match(f.get("label") or "")
+        given = before.get("value")
+        if not m or f.get("required") or f.get("value") not in (None, "", []) or given in (None, "", []):
+            continue
+        if before["kind"] not in ("radio", "select", "combobox", "checkbox"):
+            continue
+        said = ("yes" if given else "no") if isinstance(given, bool) else str(given).strip().lower()
+        if not said.startswith(m.group(1).lower()):
+            f.update(skip=True, source="skipped", note="", why=FOLLOW_UP_WHY)
 
 
 CV_UPLOAD = re.compile(r"resume|r\u00e9sum\u00e9|\bcv\b|curriculum vitae|lebenslauf", re.I)

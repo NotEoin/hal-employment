@@ -204,6 +204,22 @@ class Answers(unittest.TestCase):
         self.assertEqual(named["value"], "United Kingdom (+44)")
         self.assertEqual(autofill._dial_code("+353 87 123 4567", "United Kingdom"), "+353")
 
+    def test_an_optional_follow_up_to_a_different_answer_is_left_empty(self):
+        """Regression (testers, 2026-11-04): after "No" to sponsorship, the model answered "If you answered yes to
+        the above, confirm your visa" with "A"."""
+        fields = [{"hid": "h0", "kind": "radio", "label": "Do you need sponsorship?", "options": ["Yes", "No"],
+                   "required": True},
+                  {"hid": "h1", "kind": "text", "label": "If  you answered yes to the above, confirm your visa",
+                   "required": False},
+                  {"hid": "h2", "kind": "radio", "label": "Do you hold a made-up licence?", "options": ["Yes", "No"],
+                   "required": True},
+                  {"hid": "h3", "kind": "text", "label": "If yes, please give details", "required": False},
+                  {"hid": "h4", "kind": "text", "label": "If you selected other, please specify", "required": False}]
+        out = [{**f, "value": v} for f, v in zip(fields, ["No", None, "Yes", None, None], strict=True)]
+        autofill._skip_follow_ups(out)
+        self.assertEqual([f.get("skip", False) for f in out], [False, True, False, False, False])
+        self.assertEqual(out[1]["why"], autofill.FOLLOW_UP_WHY)
+
     def test_what_the_site_already_filled_is_kept_when_hal_has_no_answer(self):
         """Regression (testers, 2026-11-04): a code the site had set to "+44" was counted as a required
         question Hal could not answer."""
