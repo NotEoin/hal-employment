@@ -150,6 +150,19 @@ class Routes(unittest.TestCase):
         page = self.c.get(self.url("sorrel-ready")).json()
         self.assertEqual((page["step"], page["column"], page["form"]), (2, "form", None))
 
+    def test_change_the_documents_takes_an_approved_application_back_to_approve_again(self):
+        # testers asked for a way back from the form to edit and approve the documents again (2026-11-04)
+        self.start_applying("sorrel-ready")
+        with mock.patch.object(actions, "start", lambda *a, **k: "held"):
+            self.c.post(self.url("sorrel-ready", "/documents/approve"), {"letter": "A made-up letter."})
+            self.assertEqual(self.c.post(self.url("sorrel-ready", "/documents/reopen")).status, 200)
+            page = self.c.get(self.url("sorrel-ready")).json()
+            self.assertEqual((page["step"], page["docs"]["state"], page["docs"]["approved_at"]), (1, "ready", None))
+            self.assertEqual(page["docs"]["letter"]["text"], "A made-up letter.")
+            self.c.post(self.url("sorrel-ready", "/documents/approve"), {"letter": "A changed letter."})
+        self.assertEqual(self.c.get(self.url("sorrel-ready")).json()["step"], 2)
+        self.assertEqual(self.c.post(self.url("ambleside-applied", "/documents/reopen")).status, 400)
+
     def test_a_form_hal_stopped_on_says_why_rather_than_that_hal_is_filling_it(self):
         # testers: a failed run left "Hal is filling it in" on the page for a day (2026-11-04)
         self.start_applying("sorrel-ready")
@@ -164,6 +177,18 @@ class Routes(unittest.TestCase):
         board = self.c.get("/api/v2/applications").json()
         card = next(i for c in board["columns"] for i in c["items"] if i["id"] == job_id("sorrel-ready"))
         self.assertEqual(card["tone"], "warn")
+
+    def test_fill_in_from_this_page_reads_the_tab_without_opening_the_advert(self):
+        self.start_applying("sorrel-ready")
+        asked = []
+        def act_auto(con, job_id, here, fresh):
+            asked.append((here, fresh))
+            return "ok"
+
+        with mock.patch.object(driver, "act_auto", act_auto):
+            r = self.c.post(self.url("sorrel-ready", "/form/fill"), {"here": True})
+            self.wait(r.json()["action_id"])
+        self.assertEqual(asked, [(True, False)])
 
     def test_approve_all_starts_every_ready_form_and_leaves_the_rest(self):
         # testers asked to queue several jobs, as the older tool did, then apply to them together

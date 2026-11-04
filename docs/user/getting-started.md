@@ -78,6 +78,16 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    **Sent** on the **Applications** board.
 7. When the employer replies, Hal sorts it into **Messages** and moves the application on the board.
 
+### When Hal gets stuck before the form
+
+If Hal stops on the advert or a page before the form, open the form yourself in Hal's browser window: press
+Apply on the site, close any pop-up, and sign in if it asks. Then press **Fill in from this page** on the
+application's Form step, and Hal fills the form from the page your tab shows.
+
+To change documents you have already approved, press **Change the documents** on the Form step. Hal stops
+filling, and the application goes back to its Documents step; approve them again and Hal fills the form
+with the changed documents.
+
 ### When Hal cannot fill in a form
 
 Some sites ask for an account, a test or a form Hal cannot fill in. Open **Documents** and pick the

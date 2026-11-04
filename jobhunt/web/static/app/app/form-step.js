@@ -17,6 +17,12 @@ export const PRIVATE_WHY = "From your private answers. These are never shown to 
 const ORIGIN_WORDS = { you: "You told Hal.", builtin: "Built into Hal.", learned: "Hal learned this from you.",
                        hal: "Hal suggested this." };
 
+// When Hal could not get to the form, the person gets there in Hal's window and Hal starts from that page.
+const STUCK = "No answers yet. If Hal is stuck before the form, open the form yourself in Hal's browser window "
+  + "(press Apply on the site, close any pop-up, sign in if it asks), then press \"Fill in from this page\".";
+const HERE_BUTTON = act => html`<button type="button" class="btn" onClick=${() => act("/form/fill", { here: true },
+  "Hal is filling in the page your tab shows")}>Fill in from this page</button>`;
+
 const sentence = t => (/[.!?]$/.test(t) ? t : t + ".");
 
 /** The notes Hal used on this form: the form's own list, then each field's, once each. */
@@ -39,21 +45,30 @@ function WhyLine({ x }) {
   return html`<div class="whyline">${x.why}${traces.map(t => html`<div class="small" style="margin-top:4px">${t}</div>`)}</div>`;
 }
 
-/** The Form step. */
-export function FormStep({ a, reload }) {
+/** The Form step. `onReopen` shows the Documents step once "Change the documents" has taken them back. */
+export function FormStep({ a, reload, onReopen }) {
   const f = a.form;
   const [open, setOpen] = useState(null);
   const [edits, setEdits] = useState({});
-  if (!f && a.step >= 2) {
-    return html`<section class="card"><div class="row"><span class="eye busy" aria-hidden="true"></span><h2 class="h2" style="margin:0">Hal is opening the form on the employer's site</h2></div>
-      <p class="sub" style="margin-top:8px">When Hal has filled it in, its answers appear here to check.</p></section>`;
-  }
-  if (!f) return html`<section class="card empty">The form starts after you approve the documents. Hal will open it in your browser and fill it in.</section>`;
   const path = "/applications/" + encodeURIComponent(a.id);
   const act = async (rest, body, said) => {
     try { await post(path + rest, body); toast(said); invalidate("/applications*"); if (reload) reload(); }
     catch (err) { toast(err.message); }
   };
+  const reopen = async () => {
+    try {
+      await post(path + "/documents/reopen", {});
+      toast("Hal stopped. Change the documents, then approve them again.");
+      invalidate("/applications*");
+      if (onReopen) onReopen();
+    } catch (err) { toast(err.message); }
+  };
+  if (!f && a.step >= 2) {
+    return html`<section class="card"><div class="row"><span class="eye busy" aria-hidden="true"></span><h2 class="h2" style="margin:0">Hal is opening the form on the employer's site</h2></div>
+      <p class="sub" style="margin-top:8px">When Hal has filled it in, its answers appear here to check.</p>
+      <div class="row" style="margin-top:12px">${HERE_BUTTON(act)}<button type="button" class="btn quiet" onClick=${reopen}>Change the documents</button></div></section>`;
+  }
+  if (!f) return html`<section class="card empty">The form starts after you approve the documents. Hal will open it in your browser and fill it in.</section>`;
   const fields = [...f.fields].sort((x, y) => (x.ok ? 1 : 0) - (y.ok ? 1 : 0));
   const changed = Object.entries(edits).map(([hid, value]) => ({ hid, value }));
   const warn = f.to_check > 0;
@@ -67,6 +82,7 @@ export function FormStep({ a, reload }) {
       <section class="card">
         <div class="row" style="margin-bottom:6px"><h2 class="h2" style="margin:0">Answers</h2><span class="sp"></span>
           <span class="chip good">${f.fields.filter(x => x.ok).length} fine</span><span class="chip warn">${f.to_check} to check</span></div>
+        ${!f.fields.length && html`<p class="small sub">${STUCK}</p>`}
         ${fields.map((x, k) => { const look = SRC_LOOK[x.src] || SRC_LOOK.hal; return html`<div class="field-row" data-hid=${x.hid}>
           <div class="q">${x.q}</div>
           <span class=${cx("flag", x.ok ? "ok" : "check")}><${Icon} n=${x.ok ? "check" : "warn"} c="s" />${x.ok ? "Fine" : "Check this"}</span>
@@ -81,6 +97,8 @@ export function FormStep({ a, reload }) {
           <button type="button" class="btn" disabled=${!changed.length} onClick=${() => act("/form/edits", { edits: changed }, "Hal is putting your changes into the form")}>Put my changes in the form</button>
           ${!f.last_page && html`<button type="button" class="btn" onClick=${() => act("/form/next", {}, "Hal is carrying on to the next page")}>Carry on to the next page</button>`}
           <button type="button" class="btn quiet" onClick=${() => act("/form/fill", { fresh: true }, "Hal is filling the form again from the start")}>Fill it in again</button>
+          ${HERE_BUTTON(act)}
+          <button type="button" class="btn quiet" onClick=${reopen}>Change the documents</button>
           <button type="button" class="btn quiet" onClick=${() => act("/form/draft-rest", {}, "Hal is answering the rest")}>Ask Hal to answer the rest</button>
           <button type="button" class="btn quiet" onClick=${() => act("/sent", {}, "Moved to Sent. Hal will watch your email for a reply.")}>I sent it myself</button></div>
       </section>

@@ -93,11 +93,22 @@ def redo(req: Request) -> dict:
     return {"action_id": actions.start("docs.prepare", _id(req), **_who(req))}
 
 
+@route("POST", PREFIX + "/{app_id}/documents/reopen")
+def reopen(req: Request) -> dict:
+    """Change the documents: back to the Documents step, to approve them again."""
+    try:
+        actions.reopen_documents(req.con, _id(req))
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    return {"ok": True}
+
+
 @route("POST", PREFIX + "/{app_id}/form/fill")
 def fill(req: Request) -> dict:
-    """Fill it in again."""
-    fresh = bool(_body(req).get("fresh"))
-    return {"action_id": actions.start("apply.fill", _id(req), params={"fresh": fresh}, **_who(req))}
+    """Fill it in again: from the advert (`fresh`), or from the page the job's tab shows now (`here`)."""
+    body = _body(req)
+    params = {"fresh": bool(body.get("fresh")), "here": bool(body.get("here"))}
+    return {"action_id": actions.start("apply.fill", _id(req), params=params, **_who(req))}
 
 
 @route("POST", PREFIX + "/{app_id}/form/edits")

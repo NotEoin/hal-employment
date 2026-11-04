@@ -95,10 +95,14 @@ def prepare(ctx, job_id: str, time: str = "") -> dict:
 
 @runner.action("apply.fill", area="applying", label="Filling in the form for {title} at {company}",
                why="You approved the documents for {title}", priority=1, example=_example("act_auto"))
-def fill(ctx, job_id: str, fresh: bool = False) -> str:
-    """Opens the employer's form and fills it, stopping where a person must check; never presses Submit."""
-    ctx.step("Opening the employer's form")
-    return driver.act_auto(ctx.con, job_id, False, bool(fresh))
+def fill(ctx, job_id: str, fresh: bool = False, here: bool = False) -> str:
+    """Opens the employer's form and fills it, stopping where a person must check; never presses Submit.
+
+    With `here`, Hal fills the page the job's tab shows from its first step, pressing nothing to get there:
+    the person found the form when Hal could not.
+    """
+    ctx.step("Reading the page you are on" if here else "Opening the employer's form")
+    return driver.act_auto(ctx.con, job_id, bool(here), bool(fresh))
 
 
 @runner.action("apply.apply_edits", area="applying", label="Putting your changes in the form for {title}",
@@ -207,6 +211,24 @@ def approve_documents(con, job_id: str, body: dict | None = None, *, session_id:
         settings.set("setup.first_app_seen", True, by="you", session_id=session_id)
     return start("apply.fill", job_id, why=f"You approved the documents for {job['title']}",
                  session_id=session_id, helper_id=helper_id, remote=remote)
+
+
+def reopen_documents(con, job_id: str) -> None:
+    """Takes an approved application back to its Documents step, to change the documents and approve them again.
+
+    Hal stops filling. The employer's tab stays open, so approving again fills the form on show there with
+    the changed documents.
+    """
+    job = _job(con, job_id)
+    if job["status"] != "applying":
+        raise ValueError("Only an application in progress can go back to its documents.")
+    runner.stop_action(job_id)
+    docs = documents.load(con, job)
+    docs.pop("approved", None)
+    documents.save(con, job, docs)
+    _set_app(con, job_id, stage="documents", approved_at=None)
+    db.log(con, job_id, "note", "documents reopened to change them")
+    con.commit()
 
 
 def save_documents(con, job_id: str, body: dict) -> dict:

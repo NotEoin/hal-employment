@@ -15,6 +15,10 @@ What changed in each version, in plain words.
 - **See the documents themselves.** The Documents step shows the CV and cover letter PDFs Hal will upload
   beside the CV changes and the letter text.
 
+- **Change the documents, or start the form from your tab.** **Change the documents** on the Form step takes
+  an approved application back to its Documents step, to edit and approve them again. When Hal is stuck
+  before the form, open it yourself in Hal's browser window and press **Fill in from this page**.
+
 ### Fixed
 
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the

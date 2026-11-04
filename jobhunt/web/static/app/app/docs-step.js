@@ -27,6 +27,16 @@ export async function approve(a, edits = {}, then = null) {
   } catch (err) { toast(err.message); }
 }
 
+/** Change the documents: Hal stops filling and the documents can be edited and approved again. */
+async function reopen(a, reload) {
+  try {
+    await post(appPath(a) + "/documents/reopen", {});
+    toast("Hal stopped. Change the documents, then approve them again.");
+    invalidate("/applications*");
+    if (reload) reload();
+  } catch (err) { toast(err.message); }
+}
+
 const copy = text => copyText(text);
 
 /** The PDF Hal will upload, drawn in the page; nothing when there is no file yet. */
@@ -61,6 +71,7 @@ export function DocsStep({ a, reload, onApproved }) {
     return html`<section class="card"><div class="row"><div class="ic good"><${Icon} n="check" /></div><div class="grow" style="flex:1">
       <b>You approved these documents${d.approved_at ? " on " + new Date(d.approved_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}.</b>
       <div class="small sub">Cover letter of ${d.letter.words} words.</div></div>
+      ${a.column === "form" && html`<button type="button" class="btn small" onClick=${() => reopen(a, reload)}>Change the documents</button>`}
       <button type="button" class="btn small" onClick=${() => go("docs-" + (a.number || ""))}>Open in Documents</button></div></section>`;
   }
   const edits = { letter, message, answers };

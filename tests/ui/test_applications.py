@@ -78,6 +78,22 @@ class ApplicationsTest(unittest.TestCase):
         self.assertEqual([path for path, _ in state.posts], ["/api/v2/applications/demo%3A1/documents/approve"])
         self.assertEqual(p.errors, [])
 
+    def test_the_form_step_fills_from_the_tab_or_goes_back_to_change_the_documents(self) -> None:
+        # testers: when Hal was stuck before the form there was no way to start it from the right page, and no
+        # way back to change approved documents (2026-11-04)
+        state = apps_state()
+        srv = self.serve(state)
+        p = self.tab(srv).open(APP)
+        p.page.wait_for_selector(".field-row")
+        p.page.click("text=Fill in from this page")
+        p.page.wait_for_selector("text=Hal is filling in the page your tab shows")
+        p.page.click("text=Change the documents")
+        p.page.wait_for_selector("[role=tab][aria-selected=true]:has-text('Documents')")
+        self.assertEqual([path for path, _ in state.posts],
+                         ["/api/v2/applications/demo%3A1/form/fill", "/api/v2/applications/demo%3A1/documents/reopen"])
+        self.assertEqual(state.posts[0][1], {"here": True})
+        self.assertEqual(p.errors, [])
+
     def test_the_form_step_marks_each_answer_and_i_sent_it_myself_moves_it_on(self) -> None:
         state = apps_state()
         srv = self.serve(state)
