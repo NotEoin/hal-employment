@@ -53,6 +53,8 @@ What changed in each version, in plain words.
   browser last had focus. It now opens next to the Hal tab you used last, in that tab's tab group.
 - **"Wait for you to sign in" is used.** The setting was shown but never read, and Hal always waited
   15 minutes.
+- **A code split into boxes is a code.** A page asking for an emailed code one digit a box (six boxes, as
+  Oracle shows it) was taken for the form's last page. Hal now waits for the code and types it in.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,

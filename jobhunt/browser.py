@@ -657,6 +657,8 @@ def _needs(survey: dict, fields: list[dict]) -> str:
     form = _is_form(fields)
     if BOT_CHECK.search(survey["title"]) or (not form and BOT_CHECK.search(survey["text"][:400])):
         return "check"
+    if only_code_boxes(fields, survey["text"][:3000]):
+        return "code"
     if survey["password"]:
         # A registration form that also asks the usual questions is filled in, apart from its password.
         return "" if form and len(fields) > 5 else "sign-in"
@@ -1239,9 +1241,22 @@ CODE_FIELD = re.compile(r"\bcode\b|\botp\b|one[- ]time|passcode|verification", r
 NOT_CODE_TYPES = ("email", "date", "url", "search")
 
 
+CODE_DIGIT_BOXES = 4   # a code split into one box a digit has at least this many boxes
+
+
+def only_code_boxes(fields: list[dict], text: str) -> bool:
+    """True when every box on the page is for an emailed code, however many there are: Oracle's six boxes, one
+    a digit, counted as a form, and Hal said "press Submit" on a page that wanted a code (testers, 2026-11-04).
+    The page must say a code was sent, or split it a digit a box; a lone "Code" box may be a discount code."""
+    if not fields or not all(f["kind"] == "text" and f.get("type") not in NOT_CODE_TYPES
+                             and CODE_FIELD.search(f.get("label") or "") for f in fields):
+        return False
+    return len(fields) >= CODE_DIGIT_BOXES or CODE_WALL.search(text or "") is not None
+
+
 def code_boxes(fields: list[dict], text: str) -> list[str]:
     """The tags of the empty boxes a page asks the emailed code in, or [] when it asks for none."""
-    if not CODE_WALL.search(text or ""):
+    if not CODE_WALL.search(text or "") and not only_code_boxes(fields, text):
         return []
     return [f["hid"] for f in fields if f["kind"] == "text" and not f.get("current")
             and f.get("type") not in NOT_CODE_TYPES and CODE_FIELD.search(f.get("label") or "")]

@@ -110,6 +110,13 @@ class SiteKeys(unittest.TestCase):
         self.assertEqual(extension._needs(code), "code")
         self.assertEqual(extension._needs(check), "check")
         self.assertEqual(extension._needs(page), "")
+        # six boxes, one a digit, are still a page asking for a code (Oracle, testers 2026-11-04)
+        digits = [{"kind": "text", "label": f"Enter verification code digit {n} of six.", "form": 0, "hid": f"h{n}"}
+                  for n in range(1, 7)]
+        self.assertEqual(extension._needs({**page, "fields": digits}), "code")
+        survey = {"title": "Apply", "headings": [], "password": False, "text": "", "url": page["url"], "controls": []}
+        self.assertEqual(browser._needs(survey, digits), "code")
+        self.assertEqual(browser.code_boxes(digits, ""), [f"h{n}" for n in range(1, 7)])
         closed = {**page, "fields": [], "url": "https://boards.greenhouse.io/fernvale/jobs/1?error=true",
                   "captcha": False, "next": False, "submit": False, "unchecked": False}
         self.assertTrue(extension._report(closed, "", False)["closed"])

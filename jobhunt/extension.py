@@ -45,6 +45,7 @@ from .browser import (
     _site,
     code_boxes,
     note_signed_in,
+    only_code_boxes,
     signed_in_at,
 )
 from .core import settings
@@ -301,6 +302,8 @@ def _needs(facts: dict) -> str:
     its title, and a page that asks only for an emailed code is a code wall.
     """
     fields = facts["fields"]
+    if only_code_boxes(fields, facts["text"][:3000]):
+        return "code"
     if _is_form(fields):
         return ""
     if BOT_CHECK.search(facts["title"]) or BOT_CHECK.search(facts["text"][:400]):
