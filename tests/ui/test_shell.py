@@ -57,6 +57,10 @@ class NoStubs(unittest.TestCase):
 TAB_PRESSES = 12  # more than the focusable elements in the shortcuts dialog, so the focus has to wrap
 
 
+STREAM_DROP_MS = 1500   # longer than the fake stream's 1 s ping, so every open stream ends
+RECONNECT_MS = 15000    # the event client waits 3 s, then 6 s, before it connects again
+
+
 @skip_unless_browser
 class ShellTest(unittest.TestCase):
     """The shell in a real browser."""
@@ -233,6 +237,35 @@ class ShellTest(unittest.TestCase):
         self.assertEqual(p.page.locator("nav.rail").count(), 0)
         self.assertEqual(p.serious_axe(), [])
         self.assertEqual([e for e in p.errors if "401" not in e], [])
+
+    def test_a_page_left_open_across_an_update_reloads_or_offers_to(self) -> None:
+        # testers: an open page kept its old screens after Hal was updated and restarted (2026-11-04)
+        srv = self.serve()
+        p = self.tab(srv).open("home")
+        p.page.wait_for_function("() => navigator.locks !== undefined")
+        p.page.evaluate("() => { window.__before = 1; }")
+
+        def restart(commit: str) -> None:
+            """The stream drops as a restart drops it, and comes back running `commit`."""
+            srv.state.code = {**srv.state.code, "commit": commit}
+            srv.state.stopping.set()
+            p.page.wait_for_timeout(STREAM_DROP_MS)
+            srv.state.stopping.clear()
+
+        restart("made-up-1")   # the same code: the page stays as it is
+        p.page.wait_for_timeout(RECONNECT_MS)
+        self.assertEqual(p.page.evaluate("() => window.__before"), 1)
+
+        p.page.evaluate("""() => { const box = document.createElement('input'); box.id = 'typing';
+                                   document.querySelector('#main').append(box); box.focus(); }""")
+        restart("made-up-2")
+        p.page.wait_for_selector(".toast:has-text('Hal was updated')", timeout=RECONNECT_MS)
+        self.assertEqual(p.page.evaluate("() => window.__before"), 1, "nothing typed is lost")
+
+        p.page.evaluate("() => document.activeElement.blur()")
+        restart("made-up-3")
+        p.page.wait_for_function("() => window.__before === undefined", timeout=RECONNECT_MS)
+        self.assertEqual(p.errors, [])
 
     def test_unknown_routes_go_home(self) -> None:
         srv = self.serve()

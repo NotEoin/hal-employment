@@ -3,7 +3,11 @@
    The tab holding the "hal-events-leader" Web Lock opens the EventSource and passes each event to the
    other tabs over a BroadcastChannel, so the server's four-streams-per-window cap is never reached by
    opening tabs. Each event marks the cached API paths it affects as stale (core/store.js). Without Web
-   Locks every tab opens its own stream. */
+   Locks every tab opens its own stream.
+
+   After the stream comes back, the code Hal runs is compared with the code this page loaded (/healthz). A
+   page left open across an update kept the old screens, which disagreed with the new server (testers,
+   2026-11-04), so it reloads itself, or offers Reload while the person is typing so nothing is lost. */
 import { store, invalidate, reloadAll, notifyApi, toast } from "./store.js";
 
 const STREAM_URL = "/api/v2/events";
@@ -13,6 +17,7 @@ const BACKOFF_S = [3, 6, 12, 30];  // then 30 s for good
 const OFFLINE_AFTER_MS = 20000;    // the status line gives up "Reconnecting" for "not answering" after this
 
 const handlers = new Set();
+let loadedCode;   // the code this page was loaded with, from /healthz; undefined until known
 let bc = null;
 let started = false;
 
@@ -48,8 +53,29 @@ function showPopUp(title, body) {
   }
 }
 
+/** The version and commit Hal runs now; undefined when Hal cannot be asked. */
+async function runningCode() {
+  try {
+    const h = await (await fetch("/healthz", { cache: "no-store" })).json();
+    return h.version + "+" + (h.commit || "");
+  } catch (err) { return undefined; }
+}
+
+/** Reloads a page whose code Hal has replaced; while the person types it only offers to. */
+function newCode(code) {
+  if (!loadedCode || !code || code === loadedCode) return;
+  const at = document.activeElement;
+  if (at && at.matches && at.matches("input, textarea, select, [contenteditable], [contenteditable=true]")) {
+    toast("Hal was updated. Reload the page to use the new version.", () => location.reload(), "Reload");
+  } else {
+    location.reload();
+  }
+}
+
 function deliver(ev) {
-  if (ev.type === "connection") {
+  if (ev.type === "code") {
+    newCode(ev.code);
+  } else if (ev.type === "connection") {
     store.set({ reconnecting: !ev.ok && !ev.offline, offline: !!ev.offline });
   } else if (ev.type === "resync") {
     reloadAll();
@@ -77,6 +103,7 @@ function connect(attempt = 0, downSince = null) {
   let offlineTimer = null;
   const parse = (type, e) => { try { return { type, ...JSON.parse(e.data || "{}") }; } catch (err) { return { type }; } };
   es.onopen = () => {
+    if (attempt > 0) runningCode().then(code => code && share({ type: "code", code }));
     attempt = 0;
     downSince = null;
     clearTimeout(offlineTimer);
@@ -103,6 +130,7 @@ function connect(attempt = 0, downSince = null) {
 export function startEvents() {
   if (started) return;
   started = true;
+  runningCode().then(code => { loadedCode = code; });
   if (typeof BroadcastChannel !== "undefined") {
     bc = new BroadcastChannel("hal-events");
     bc.onmessage = e => deliver(e.data);
