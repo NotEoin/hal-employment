@@ -113,6 +113,14 @@ class SiteKeys(unittest.TestCase):
         closed = {**page, "fields": [], "url": "https://boards.greenhouse.io/fernvale/jobs/1?error=true",
                   "captcha": False, "next": False, "submit": False, "unchecked": False}
         self.assertTrue(extension._report(closed, "", False)["closed"])
+        # a board's banner at the top of the page, not in a heading (Adzuna, testers 2026-11-04)
+        banner = {**closed, "url": "https://jobs.example.org/jobs/1",
+                  "text": "What? Where? Search Unfortunately, this job is no longer available. Popular jobs"}
+        self.assertTrue(extension._report(banner, "", False)["closed"])
+        self.assertFalse(extension._report({**banner, "apply": True}, "", False)["closed"])
+        survey = {"title": "Jobs", "headings": [], "url": banner["url"], "text": banner["text"], "controls": []}
+        self.assertTrue(browser._closed(survey, 200))
+        self.assertFalse(browser._closed({**survey, "text": "Apply now. " * 80 + banner["text"]}, 200))
 
     def test_the_tab_is_brought_forward_for_work_but_never_for_a_watch(self):
         """Regression: every command, a watch's look every 3 s too, made the job's tab the active one, so two

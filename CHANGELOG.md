@@ -37,6 +37,8 @@ What changed in each version, in plain words.
 - **The Form step says what Hal is doing.** While Hal worked on a form, the step showed an empty banner, the
   hint for when Hal is stuck, and "Press Submit yourself" with nothing filled. It now says what Hal is
   doing, such as "answering 7 questions", and keeps the hint for when Hal has stopped.
+- **A job board's "no longer available" banner closes the job.** Hal looked for that only in a page's title
+  and headings, so an advert taken down with a banner (as Adzuna shows it) was reported as "no form found".
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,

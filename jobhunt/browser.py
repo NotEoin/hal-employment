@@ -713,10 +713,20 @@ def _buttons(page, frame) -> tuple[dict | None, dict | None, object]:
     return None, None, frame
 
 
+CLOSED_TEXT = 600   # characters at the top of a page where a board's "no longer available" banner sits
+
+
 def _closed(survey: dict, status: int | None) -> bool:
+    """True when the advert has been taken down: said in its title or headings, by a 404 or 410, or in a
+    banner at the top of a page that has no Apply control. Adzuna says "Unfortunately, this job is no longer
+    available" in a banner, not a heading, and Hal reported no form instead (testers, 2026-11-04)."""
     head = f"{survey['title']} {' '.join(survey['headings'][:4])}"
-    return CLOSED.search(head) is not None or status in (404, 410) \
-        or ("greenhouse.io" in survey["url"] and "error=true" in survey["url"])
+    if CLOSED.search(head) is not None or status in (404, 410) \
+            or ("greenhouse.io" in survey["url"] and "error=true" in survey["url"]):
+        return True
+    has_apply = survey["apply"] if "apply" in survey else any(
+        APPLY_BUTTON.search(c["name"]) for c in survey.get("controls", []))
+    return not has_apply and CLOSED.search(survey.get("text", "")[:CLOSED_TEXT]) is not None
 
 
 def _report(page, frame, fields: list[dict], survey: dict, needs: str, pressed: bool,
