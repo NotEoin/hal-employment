@@ -220,19 +220,21 @@ class Reloading(PairedHelper, Practice):
                 self.developer_mode()
                 helper_id = self.pair_in(self.window())
                 # git brings a newer helper: the folder changes, and the server now wants that version
+                shipped = helpers.version_key(helpers.wanted_version())
+                newer = ".".join(map(str, (*shipped[:-1], shipped[-1] + 1)))
                 manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
-                manifest["version"] = "1.0.1"
+                manifest["version"] = newer
                 (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-                with mock.patch.object(helpers, "wanted_version", return_value="1.0.1"):
+                with mock.patch.object(helpers, "wanted_version", return_value=newer):
                     deadline = time.monotonic() + CONNECT_WAIT_S
                     version = None
                     while time.monotonic() < deadline:
                         with closing(db.connect()) as con:
                             version = helpers.row(con, helper_id)["version"]
-                        if version == "1.0.1":
+                        if version == newer:
                             break
                         time.sleep(STEP_S)
-                    self.assertEqual(version, "1.0.1")
+                    self.assertEqual(version, newer)
                     self.assertFalse(extension.still_older(helper_id))
             finally:
                 self.close_browser()
