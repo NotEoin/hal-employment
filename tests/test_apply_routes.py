@@ -150,6 +150,21 @@ class Routes(unittest.TestCase):
         page = self.c.get(self.url("sorrel-ready")).json()
         self.assertEqual((page["step"], page["column"], page["form"]), (2, "form", None))
 
+    def test_a_form_hal_stopped_on_says_why_rather_than_that_hal_is_filling_it(self):
+        # testers: a failed run left "Hal is filling it in" on the page for a day (2026-11-04)
+        self.start_applying("sorrel-ready")
+        self.put_app("sorrel-ready", stage="form", form='{"state": "working", "fields": [], "url": ""}')
+        self.con.execute("""INSERT INTO actions (id, kind, subject, job_id, state, error, created)
+                            VALUES ('made-up-run', 'apply.fill', ?, ?, 'error', 'the made-up site would not load',
+                                    ?)""", (job_id("sorrel-ready"), job_id("sorrel-ready"), db.now()))
+        self.con.commit()
+        page = self.c.get(self.url("sorrel-ready")).json()
+        self.assertEqual((page["form"]["state"], page["steps"][1]["note"]), ("stopped", "Hal stopped"))
+        self.assertIn("the made-up site would not load", page["form"]["words"])
+        board = self.c.get("/api/v2/applications").json()
+        card = next(i for c in board["columns"] for i in c["items"] if i["id"] == job_id("sorrel-ready"))
+        self.assertEqual(card["tone"], "warn")
+
     def test_approve_all_starts_every_ready_form_and_leaves_the_rest(self):
         # testers asked to queue several jobs, as the older tool did, then apply to them together
         self.start_applying("sorrel-ready", "wexford-ready")

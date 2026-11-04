@@ -172,6 +172,30 @@ def _need_words(to_check: int) -> str:
     return "1 answer needs you" if to_check == 1 else f"{to_check} answers need you"
 
 
+STOPPED_WORDS = {"interrupted": "Hal was restarted part way through", "stopped": "you stopped it"}
+STOPPED = ("Hal stopped before the form was filled: {why}. Press \"Fill it in again\", or open the form yourself "
+           "in Hal's browser window and press \"Fill in from this page\".")
+
+
+def _stopped_why(con, job_id: str, form: dict | None) -> str | None:
+    """Why Hal is no longer working on a form it left unfinished; None while it works, or once it finished.
+
+    A run that failed or was cut off left the form saying Hal was filling it, or waiting for the person and
+    carrying on afterwards, long after Hal had stopped (testers, 2026-11-04).
+    """
+    if not form or form.get("state") not in ("working", "needs"):
+        return None
+    if con.execute(f"SELECT 1 FROM actions WHERE job_id = ? AND state IN ({','.join('?' * len(ACTIVE))})",
+                   (job_id, *ACTIVE)).fetchone():
+        return None
+    last = con.execute("""SELECT state, error FROM actions WHERE job_id = ? AND kind LIKE 'apply.%'
+                          ORDER BY created DESC LIMIT 1""", (job_id,)).fetchone()
+    if last is None or last["state"] == "done":
+        return None
+    why = (last["error"] or STOPPED_WORDS.get(last["state"], "")).strip().rstrip(".")
+    return why or "Hal did not finish"
+
+
 def _card_words(con, r, col: str) -> tuple[str, str, str]:
     """(next, tone, note) for one card on the board, in the board's own words."""
     app = _app(con, r["id"])
@@ -183,6 +207,9 @@ def _card_words(con, r, col: str) -> tuple[str, str, str]:
     if col == "form":
         if _busy(r["id"]):
             return "Hal is filling in the form", "hal", ACTIONS[r["id"]].get("message") or ""
+        why = _stopped_why(con, r["id"], form)
+        if why:
+            return "Hal stopped: fill it in again, or from your tab", "warn", why
         filled, total, to_check = _form_counts(form)
         note = f"{filled} of {total} filled" if total else ""
         if to_check:
@@ -397,6 +424,10 @@ def application(con, ref: str) -> dict:
                        "last_page": bool(form.get("final")),
                        "handed_over": bool(row is not None and row["handed_over_at"]),
                        "words": form_words(form)}
+        why = _stopped_why(con, job_id, form)
+        if why:
+            out["form"].update(state="stopped", words=STOPPED.format(why=why))
+            out["steps"][1]["note"] = "Hal stopped"
     if step >= 3 and row is not None:
         timeline = []
         if row["sent_at"]:
@@ -455,4 +486,4 @@ def driver_marks(form: dict) -> list[dict]:
     return _marks(form)
 
 
-from ..core.runner import ACTIONS, _checkpoint  # noqa: E402 - imported last; runner imports this module
+from ..core.runner import ACTIONS, ACTIVE, _checkpoint  # noqa: E402 - imported last; runner imports this module
