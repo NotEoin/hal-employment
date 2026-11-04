@@ -26,6 +26,9 @@ What changed in each version, in plain words.
   messages show at once.
 - **Queued documents carry on after a restart.** Restarting Hal while it wrote documents for queued jobs
   left them all stopped under Getting ready; Hal now starts them again by itself.
+- **Getting ready says when documents were not made.** A job whose documents stopped part way said "Check
+  and approve documents" with nothing to check. It now says the documents were not made, and **Make the
+  missing documents** on the board starts Hal on all of them again.
 - **Hal opens in your default browser.** It opened in a separate Chromium or Edge app window, apart from the
   browser holding your sign-ins and the browser helper.
 - **Application forms open in a window of Hal's own, in front.** The first form opens a new browser window,

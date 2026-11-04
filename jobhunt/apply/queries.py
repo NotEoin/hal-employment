@@ -185,8 +185,7 @@ def _stopped_why(con, job_id: str, form: dict | None) -> str | None:
     """
     if not form or form.get("state") not in ("working", "needs"):
         return None
-    if con.execute(f"SELECT 1 FROM actions WHERE job_id = ? AND state IN ({','.join('?' * len(ACTIVE))})",
-                   (job_id, *ACTIVE)).fetchone():
+    if _queued(con, job_id):
         return None
     last = con.execute("""SELECT state, error FROM actions WHERE job_id = ? AND kind LIKE 'apply.%'
                           ORDER BY created DESC LIMIT 1""", (job_id,)).fetchone()
@@ -203,6 +202,10 @@ def _card_words(con, r, col: str) -> tuple[str, str, str]:
     if col == "ready":
         if _busy(r["id"]):
             return "Hal is writing your documents", "hal", ACTIONS[r["id"]].get("message") or ""
+        if not _has_documents(r):
+            if _queued(con, r["id"]):
+                return "Waiting for Hal to write your documents", "hal", ""
+            return "Documents not made: make them again", "warn", _prepare_stopped(con, r["id"])
         return "Check and approve documents", "info", ""
     if col == "form":
         if _busy(r["id"]):
@@ -237,6 +240,21 @@ def _closed_why(con, r) -> str:
     return f"{words} ({detail})" if detail else words
 
 
+def _queued(con, job_id: str) -> bool:
+    """True when an action for this job is waiting its turn or under way."""
+    return con.execute(f"SELECT 1 FROM actions WHERE job_id = ? AND state IN ({','.join('?' * len(ACTIVE))})",
+                       (job_id, *ACTIVE)).fetchone() is not None
+
+
+def _prepare_stopped(con, job_id: str) -> str:
+    """Why the job's documents were last left unmade, in a few words; "" when Hal never began them."""
+    last = con.execute("""SELECT state, error FROM actions WHERE job_id = ? AND kind = 'docs.prepare'
+                          ORDER BY created DESC LIMIT 1""", (job_id,)).fetchone()
+    if last is None or last["state"] == "done":
+        return ""
+    return (last["error"] or STOPPED_WORDS.get(last["state"], "")).strip()
+
+
 def _has_documents(job) -> bool:
     """True when Hal has made this application's CV, so its documents can be approved."""
     return "cv" in documents.files(job)
@@ -259,7 +277,9 @@ def board(con) -> dict:
         busy = _busy(r["id"])
         columns[col].append({"id": r["id"], "number": r["number"], "org": r["company"], "title": r["title"],
                              "next": nxt, "tone": tone, "note": note, "hal_busy": busy,
-                             "approvable": col == "ready" and not busy and _has_documents(r)})
+                             "approvable": col == "ready" and not busy and _has_documents(r),
+                             "remakeable": col == "ready" and not busy and not _has_documents(r)
+                             and not _queued(con, r["id"])})
     for col in IN_PROGRESS:
         order = in_progress_ids(con)
         columns[col].sort(key=lambda c: order.index(c["id"]) if c["id"] in order else len(order))

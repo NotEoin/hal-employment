@@ -1,7 +1,8 @@
 /* The Applications board: every application by step, Board or List, and the Closed list.
    The columns and their help words come from GET /applications, so the board and the server never
    disagree about where an application stands. When two or more applications wait for approval, "Approve
-   all" approves their documents together and Hal starts every form; it still never presses Submit. */
+   all" approves their documents together and Hal starts every form; it still never presses Submit. "Make the
+   missing documents" starts Hal again on every application whose documents stopped before they were made. */
 import { html, cx, useState } from "../core/html.js";
 import { post } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
@@ -11,6 +12,7 @@ import { Head, Seg, Empty } from "../ui/controls.js";
 
 const REFRESH_ON = [ev => ev.type === "action" || ev.type === "activity"];
 const approvable = c => c.items.filter(a => a.approvable);
+const remakeable = c => c.items.filter(a => a.remakeable);
 
 /** One card on the board. */
 function Card({ a }) {
@@ -34,6 +36,16 @@ async function approveAll(items) {
   } catch (err) { toast(err.message); }
 }
 
+/** Starts Hal writing again every set of documents that stopped before it was made. */
+async function remakeAll(items) {
+  try {
+    const r = await post("/applications/remake-missing", { ids: items.map(a => a.id) });
+    invalidate("/applications*");
+    const n = Object.keys(r.started || {}).length;
+    toast("Hal is writing the documents for " + n + (n === 1 ? " application" : " applications") + " again.");
+  } catch (err) { toast(err.message); }
+}
+
 /** The Applications page. */
 export function Apps() {
   const { data, error } = useApi("/applications", { on: REFRESH_ON });
@@ -50,6 +62,8 @@ export function Apps() {
         <p class="small sub" style="margin:0 4px">${c.help}</p>
         ${approvable(c).length > 1 && html`<button type="button" class="btn primary small" style="margin:4px"
           onClick=${() => approveAll(approvable(c))}>Approve all ${approvable(c).length}</button>`}
+        ${remakeable(c).length > 0 && html`<button type="button" class="btn small" style="margin:4px"
+          onClick=${() => remakeAll(remakeable(c))}>Make the missing documents (${remakeable(c).length})</button>`}
         ${c.items.map(a => html`<${Card} a=${a} />`)}
         ${!c.items.length && html`<p class="small sub" style="margin:8px 4px">Nothing here yet.</p>`}</section>`)}</div>`
       : html`<div class="card">${all.map(a => html`<div class="li" style="align-items:center"><div class="grow"><b>${a.title}</b>

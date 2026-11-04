@@ -57,7 +57,8 @@ class Routes(unittest.TestCase):
 
     def test_the_board_puts_each_application_in_its_column_and_keeps_the_closed_ones(self):
         self.start_applying("sorrel-ready")
-        board = self.c.get("/api/v2/applications").json()
+        with mock.patch.object(queries, "_has_documents", lambda job: True):   # Hal has made its documents
+            board = self.c.get("/api/v2/applications").json()
         cols = {c["key"]: [i["id"] for i in c["items"]] for c in board["columns"]}
         self.assertEqual([c["title"] for c in board["columns"]],
                          ["Getting ready", "Form filled", "Sent", "Interview", "Offer"])
@@ -189,6 +190,29 @@ class Routes(unittest.TestCase):
             r = self.c.post(self.url("sorrel-ready", "/form/fill"), {"here": True})
             self.wait(r.json()["action_id"])
         self.assertEqual(asked, [(True, False)])
+
+    def test_documents_a_restart_stopped_are_shown_and_made_again_together(self):
+        # testers: after a restart, queued jobs sat under Getting ready saying "Check and approve documents" with
+        # no documents to check, and nothing started them again (2026-11-04)
+        self.start_applying("sorrel-ready", "wexford-ready")
+        self.con.execute("""INSERT INTO actions (id, kind, subject, job_id, state, created)
+                            VALUES ('made-up-prepare', 'docs.prepare', ?, ?, 'interrupted', ?)""",
+                         (job_id("sorrel-ready"), job_id("sorrel-ready"), db.now()))
+        self.con.commit()
+        with mock.patch.object(queries, "_has_documents", lambda job: job["id"] != job_id("sorrel-ready")):
+            board = self.c.get("/api/v2/applications").json()
+            cards = {i["id"]: i for c in board["columns"] for i in c["items"]}
+            stalled = cards[job_id("sorrel-ready")]
+            self.assertEqual((stalled["next"], stalled["tone"], stalled["remakeable"]),
+                             ("Documents not made: make them again", "warn", True))
+            self.assertFalse(cards[job_id("wexford-ready")]["remakeable"])
+            started = []
+            with mock.patch.object(actions, "start", lambda kind, job, **k: started.append((kind, job)) or "made"):
+                r = self.c.post("/api/v2/applications/remake-missing",
+                                {"ids": [job_id("sorrel-ready"), job_id("wexford-ready")]})
+        self.assertEqual(r.status, 200, r.text)
+        self.assertEqual(started, [("docs.prepare", job_id("sorrel-ready"))])
+        self.assertEqual(r.json()["skipped"], [job_id("wexford-ready")])
 
     def test_approve_all_starts_every_ready_form_and_leaves_the_rest(self):
         # testers asked to queue several jobs, as the older tool did, then apply to them together
