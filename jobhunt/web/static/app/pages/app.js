@@ -1,8 +1,9 @@
 /* One application and its four steps: Documents, Form, Sent, Interview, with Previous
    and Next through the applications in progress ([ and ] on the keyboard). Discard, Back to Matches and
-   "I sent it myself" work at every step. */
+   "I sent it myself" work at every step. A closed application says why in place of its step. */
 import { html, cx, useState, useLayoutEffect } from "../core/html.js";
-import { useApi, openDialog } from "../core/store.js";
+import { post } from "../core/api.js";
+import { useApi, openDialog, toast, invalidate } from "../core/store.js";
 import { go, route } from "../core/router.js";
 import { useKeys } from "../core/keys.js";
 import { Head } from "../ui/controls.js";
@@ -17,6 +18,20 @@ const REFRESH_ON = [ev => ev.type === "action" || ev.type === "step" || ev.type 
 /** The four steps' names and notes, as the page shows them under the title. */
 export function stepInfo(a) {
   return (a && a.steps ? a.steps : []).map(s => [s.name, s.note]);
+}
+
+/** Why a closed application closed, and the way to put its job back among the matches. */
+function Closed({ a }) {
+  const back = async () => {
+    try {
+      await post("/applications/" + encodeURIComponent(a.id) + "/restore", {});
+      toast("Back in Matches: " + a.job.title);
+      invalidate("/applications*"); invalidate("/jobs*");
+      go("jobs");
+    } catch (e) { toast(e.message); }
+  };
+  return html`<div class="card" role="status"><p><b>This application is closed.</b> ${a.closed}.</p>
+    <div class="row"><button type="button" class="btn" onClick=${back}>Back to Matches</button></div></div>`;
 }
 
 /** The application page. */
@@ -49,8 +64,9 @@ export function AppPage({ arg }) {
       aria-selected=${shown === k + 1 ? "true" : "false"} class=${cx("step", s.state === "done" && "done", s.state === "now" && "now", shown === k + 1 && "view")}
       onClick=${() => setView(k + 1)}><span class="num">${s.state === "done" ? html`<${Icon} n="check" c="s" />` : k + 1}</span>
       <span><b>${s.name}</b><small>${s.note || "Not yet"}</small></span></button>`)}</div>
-    ${shown === 1 && html`<${DocsStep} a=${a} reload=${reload} onApproved=${() => { setView(2); reload(); }} />`}
-    ${shown === 2 && html`<${FormStep} a=${a} reload=${reload} onReopen=${() => { setView(1); reload(); }} />`}
-    ${shown === 3 && html`<${SentStep} a=${a} />`}
-    ${shown === 4 && html`<${InterviewStep} a=${a} />`}`;
+    ${a.closed && html`<${Closed} a=${a} />`}
+    ${!a.closed && shown === 1 && html`<${DocsStep} a=${a} reload=${reload} onApproved=${() => { setView(2); reload(); }} />`}
+    ${!a.closed && shown === 2 && html`<${FormStep} a=${a} reload=${reload} onReopen=${() => { setView(1); reload(); }} />`}
+    ${!a.closed && shown === 3 && html`<${SentStep} a=${a} />`}
+    ${!a.closed && shown === 4 && html`<${InterviewStep} a=${a} />`}`;
 }

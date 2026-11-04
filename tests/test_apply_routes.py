@@ -131,6 +131,14 @@ class Routes(unittest.TestCase):
                                "WHERE j.id = ?", (job_id("sorrel-ready"),)).fetchone()
         self.assertEqual((row["status"], row["closed_reason"]), ("ready", None))
 
+    def test_a_closed_applications_page_says_why_it_closed(self):
+        # testers: a closed application's page showed its step's buttons and no word of why (2026-11-04)
+        self.start_applying("sorrel-ready")
+        self.assertIsNone(self.c.get(self.url("sorrel-ready")).json()["closed"])
+        self.c.post(self.url("sorrel-ready", "/discard"), {"reason": "advert_closed"})
+        self.assertEqual(self.c.get(self.url("sorrel-ready")).json()["closed"],
+                         "The advert closed while you were applying")
+
     def test_approving_the_documents_starts_the_form(self):
         self.start_applying("sorrel-ready")
         r = self.c.post(self.url("sorrel-ready", "/documents/approve"), {"letter": "A made-up letter."})

@@ -94,6 +94,20 @@ class ApplicationsTest(unittest.TestCase):
         self.assertEqual(state.posts[0][1], {"here": True})
         self.assertEqual(p.errors, [])
 
+    def test_a_closed_application_says_why_and_offers_back_to_matches_not_its_step(self) -> None:
+        # testers: an application whose advert had closed showed its Documents step and "Approve and fill in the
+        # form" (2026-11-04)
+        state = apps_state()
+        state.pages[APP_PATH].update(closed="The advert closed while you were applying")
+        srv = self.serve(state)
+        p = self.tab(srv).open(APP)
+        p.page.wait_for_selector("text=This application is closed.")
+        self.assertEqual(p.page.locator("text=Fill in from this page").count(), 0)
+        p.page.click("text=Back to Matches")
+        p.page.wait_for_selector("text=Back in Matches: Museum Assistant")
+        self.assertEqual([path for path, _ in state.posts], ["/api/v2/applications/demo%3A1/restore"])
+        self.assertEqual(p.errors, [])
+
     def test_while_hal_works_the_form_step_shows_no_stuck_hint_and_no_submit_words(self) -> None:
         state = apps_state()
         state.pages[APP_PATH].update(action_id="a1")

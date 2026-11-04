@@ -420,6 +420,8 @@ def application(con, ref: str) -> dict:
     out = {
         "id": job_id, "number": row["number"] if row is not None else None, "job": job_card(r), "step": step,
         "steps": steps, "nav": nav(con, job_id), "column": col, "action_id": held["id"] if held else None,
+        # A closed application kept its step, so its page offered Approve or Fill for a job that had closed.
+        "closed": _closed_why(con, r) if r["status"] in CLOSED_STATUSES else None,
         "first_time": not settings.get("setup.first_app_seen"),
         "docs": {"state": "writing" if writing else "approved" if step > 1 or (row is not None and row["approved_at"])
                  else "ready",

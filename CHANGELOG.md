@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A closed application says so.** An application whose advert had closed still showed its step, with
+  **Approve and fill in the form** or the Form step's buttons. Its page now says why it closed and offers
+  **Back to Matches**.
 - **Queueing many jobs keeps the page clear.** Each **Add to queue** showed its own message, and twenty of
   them covered the job list. They now join into one ("Added 20 jobs to Getting ready"), and at most three
   messages show at once.
