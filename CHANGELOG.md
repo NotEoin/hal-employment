@@ -78,6 +78,9 @@ What changed in each version, in plain words.
   "No results", and some forms (Ashby's) hide every other question while a list is open. Hal then saw three
   questions, took the page for a new one and filled the whole form again. Hal now closes the list, and reads
   the whole form even while a list is open.
+- **Searched lists are filled through the browser helper.** A list that offers its options only once you type,
+  such as Ashby's "Where are you currently located?", was left empty with "no option matching", since the
+  helper was never told it could type there. It now types the answer until the list offers it.
 - **Follow-up questions are left alone when they do not apply.** An optional "If you answered yes to the above,
   ..." after a "No", or "If you selected other, please specify" after another choice, was answered with
   filler such as "A" or "N/A". Hal now leaves it empty.

@@ -382,6 +382,18 @@ class Fixes:
         self.assertEqual([f["label"] for f in browser.read_here(job_id)["fields"]], everything)
         self.assertEqual(self.site.sent(), 0)
 
+    def test_a_searched_list_is_typed_into_until_it_offers_the_answer(self):
+        """Regression (testers, 2026-11-04): the helper was never told a list could be typed into, so Ashby's
+        location list, which offers places only once you type, was left empty: "no option matching"."""
+        page = "hides-while-listed.html"
+        job_id, found = self.opened("searched", page)
+        out = browser.fill(job_id, self.answers(found, {"Where are you": "London, United Kingdom"}),
+                           driver._shot(job_id))
+        self.assertEqual(out["errors"], {})
+        self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#loc")),
+                         "London, Greater London, England, United Kingdom")
+        self.assertEqual(self.site.sent(), 0)
+
     def test_a_boards_search_and_alerts_in_its_one_page_form_are_passed_on_the_way_to_the_form(self):
         """Regression (testers, 2026-11-04): on ProductionBase, whose whole page is one form, Hal filled the
         board's job search ("Job Types", "Industry") as the application."""

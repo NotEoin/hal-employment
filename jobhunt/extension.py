@@ -449,7 +449,8 @@ def fill(job_id: str, fields: list[dict], shot) -> dict:
     """Enters the approved values, after any `field_transform` note; there is no picture, since the form is in
     the applicant's own tab."""
     fields, trace = browser.with_notes(job_id, _last_url.get(job_id, ""), fields)
-    wanted = [{k: f.get(k) for k in ("hid", "kind", "value", "options")} for f in fields
+    # `typeable` lets the helper type into a list that offers its options only once you type (Ashby's places).
+    wanted = [{k: f.get(k) for k in ("hid", "kind", "value", "options", "typeable")} for f in fields
               if f.get("value") not in (None, "", []) and not f.get("skip")]
     paths = [f["value"] for f in wanted if f["kind"] == "file"]
     out = _ask("fill", timeout=max(FILL_WAIT, FILL_PER_FIELD_S * len(wanted)), job=job_id, fields=wanted, paths=paths)
