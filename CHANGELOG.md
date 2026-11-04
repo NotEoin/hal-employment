@@ -25,6 +25,9 @@ What changed in each version, in plain words.
   them as tabs beside Hal's.
 - **Approving stays on the application.** **Approve and fill in the form** went back to the Applications
   board; the application now moves on to its Form step, where Hal's answers appear as it fills the form.
+- **The CV goes in the right upload.** A form that named its cover letter and certificate uploads but not the
+  CV's got no CV, since Hal took "cover" to mean the CV's upload was named too. The CV now goes in the
+  first upload named for no other document, and Hal knows the German words for CV and cover letter.
 - **The helper's button says what it is for.** Pressed on Hal's own page or on a browser page, it showed a
   bare "!"; it now says to press it on an employer's application page.
 - **Fewer wrong jobs for humanities graduates.** Specialist technical titles (software, machine learning,

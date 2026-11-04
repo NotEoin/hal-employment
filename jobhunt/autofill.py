@@ -703,8 +703,10 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
     notes = page_notes(job, notes)
     answers = docs.get("answers") or []
     uploads = [f for f in fields if f["kind"] == "file"]
-    named = any(re.search(r"cover|resume|r\u00e9sum\u00e9|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
-                for f in uploads)
+    named = any(CV_UPLOAD.search(_upload_text(f)) for f in uploads)
+    # With no upload named for the CV, the first upload named for nothing else takes it: StudySmarter's form
+    # named its cover letter and certificate boxes but left the CV's as "Eingabefeld" (testers, 2026-11-04).
+    free = next((f for f in uploads if not OTHER_UPLOAD.search(_upload_text(f))), None)
     for f in fields:
         f.update(value=None, source="you", note="", skip=False, why=LEFT_WHY, notes_used=[])
         label = f.get("label") or ""
@@ -719,7 +721,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
                      why="The site emails you this code. Hal never guesses it.")
             continue
         if f["kind"] == "file":
-            _upload(f, text, files, named, f is uploads[0])
+            _upload(f, text, files, named, f is free)
             continue
         if private_question(f) is not None:
             if not (_health(f) or _carer(f)) or f.get("value") is None:
@@ -773,20 +775,35 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
     return mark_written(fields)
 
 
+CV_UPLOAD = re.compile(r"resume|r\u00e9sum\u00e9|\bcv\b|curriculum vitae|lebenslauf", re.I)
+LETTER_UPLOAD = re.compile(r"cover|anschreiben|motivation", re.I)
+# Uploads for something other than the CV: the letter, or papers Hal does not hold.
+OTHER_UPLOAD = re.compile(LETTER_UPLOAD.pattern + r"|autofill|photo|picture|avatar|certificate|zeugnis|"
+                          r"transcript|portfolio|passport|reference", re.I)
+
+
+def _upload_text(f: dict) -> str:
+    return f"{f.get('label') or ''} {f.get('context', '')}"
+
+
 def _upload(f: dict, text: str, files: dict, named: bool, first: bool) -> None:
-    """Puts the CV or the cover letter into a file upload, or leaves an upload that wants neither."""
+    """Puts the CV or the cover letter into a file upload, or leaves an upload that wants neither.
+
+    `named` says some upload on the page names the CV; `first` says this is the upload that takes the CV when
+    none does.
+    """
     if re.search(r"autofill|photo|picture|avatar", text, re.I):
         f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
-    elif re.search(r"cover", text, re.I) and files.get("letter"):
+    elif LETTER_UPLOAD.search(text) and files.get("letter"):
         f.update(value=files["letter"], source="documents: cover letter",
                  why="Your cover letter for this job, as you approved it.")
-    elif re.search(r"resume|r\u00e9sum\u00e9|\bcv\b", text, re.I) and files.get("cv"):
+    elif CV_UPLOAD.search(text) and files.get("cv"):
         f.update(value=files["cv"], source="documents: CV", why="Your CV for this job, as you approved it.")
     elif not named and first and files.get("cv"):
-        # A form whose uploads name no document wants the CV in the first.
+        # A form whose uploads name no CV wants it in the first upload named for nothing else.
         f.update(value=files["cv"], source="documents: CV", note="taken to be the CV upload; check this",
-                 why="Your CV for this job. The form does not say which upload is the CV, so Hal used the first. "
-                     "Check this.")
+                 why="Your CV for this job. The form does not say which upload is the CV, so Hal used the first "
+                     "one not named for another document. Check this.")
     else:
         f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
 

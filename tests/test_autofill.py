@@ -185,6 +185,15 @@ class Answers(unittest.TestCase):
         self.assertTrue(self.propose(kind="checkbox", label="Send me the newsletter", required=False)["skip"])
         self.assertIs(self.propose(kind="checkbox", label="I agree to the privacy policy")["value"], True)
 
+    def test_the_cv_goes_in_the_first_upload_named_for_no_other_document(self):
+        """Regression (testers, 2026-11-04): an upload named "cover" made Hal think the CV's was named too, so
+        a form with "cover-letter-input", "certificate-input" and an unnamed "Eingabefeld" got no CV."""
+        uploads = [{"hid": f"h{i}", "kind": "file", "type": "file", "label": label, "required": False, "context": ""}
+                   for i, label in enumerate(("cover-letter-input", "certificate-input", "Eingabefeld"))]
+        files = {"cv": "/made/up/cv.pdf", "letter": "/made/up/letter.pdf"}
+        out = autofill.propose(self.job, uploads, {}, files)
+        self.assertEqual([f["value"] for f in out], ["/made/up/letter.pdf", None, "/made/up/cv.pdf"])
+
     def test_the_source_is_matched_to_the_nearest_kind_the_list_offers(self):
         f = self.propose(kind="select", label="How did you hear about us?",
                          options=["Company website", "Job board", "A friend"])
