@@ -52,8 +52,30 @@ class BaseCv(unittest.TestCase):
         found = {(c["path"], c["kind"]) for c in cv.changes(base, variant)}
         self.assertEqual(found, {("title", "text"), ("projects", "order"), ("projects.0.body", "text"),
                                  ("skills", "left out")})
-        self.assertEqual(next(c for c in cv.changes(base, variant) if c["path"] == "title")["before"], "Graduate")
+        title = next(c for c in cv.changes(base, variant) if c["path"] == "title")
+        self.assertEqual((title["before"], title["after"]), ("Graduate", "Graduate - security"))
+        # the application page said only "(changed)", never the new wording
+        body = next(c for c in cv.changes(base, variant) if c["path"] == "projects.0.body")
+        self.assertEqual(body["after"], "A careful assistant.")
         self.assertEqual(cv.changes(base, base), [])
+
+    def test_an_undone_change_is_put_back_in_the_cv_that_is_sent(self):
+        # Undo on the application page was recorded but never applied: the PDF kept Hal's change
+        base = cv.load()
+        variant = json.loads(json.dumps(base))
+        variant["title"] = "Graduate - security"
+        variant["projects"].reverse()
+        variant["projects"][0]["body"] = "A careful assistant."
+        variant["skills"] = []
+        ids = {(c["path"], c["kind"]): c["id"] for c in cv.changes(base, variant)}
+        sent = cv.revert(base, variant, [ids[("title", "text")], ids[("projects.0.body", "text")]])
+        self.assertEqual(sent["title"], base["title"])
+        self.assertEqual(sent["projects"][-1]["body"], base["projects"][0]["body"])
+        self.assertEqual(sent["skills"], [], "a change still on stays")
+        sent = cv.revert(base, variant, [ids[("projects", "order")], ids[("skills", "left out")]])
+        self.assertEqual([p["name"] for p in sent["projects"]], [p["name"] for p in base["projects"]])
+        self.assertEqual([s[0] for s in sent["skills"]], [s[0] for s in base["skills"]])
+        self.assertEqual(cv.revert(base, variant, []), variant)
 
 
 class StartingCv(unittest.TestCase):

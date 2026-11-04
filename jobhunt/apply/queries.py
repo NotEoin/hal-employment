@@ -279,14 +279,14 @@ def _cv_changes(job, docs: dict) -> list[dict]:
     from .. import cv
 
     try:
-        found = cv.changes(cv.load(), documents.current_cv(job, docs))
+        found = cv.changes(cv.load(), documents.proposed_cv(job, docs))
     except Exception as e:  # a CV that cannot be read shows no changes, and the page still opens
         log.warning("could not list the CV changes for %s: %r", job["id"], e)
         return []
     undone = set(docs.get("undone_changes") or [])
     kinds = {"text": "Reworded", "order": "Moved", "added": "Added", "left out": "Left out"}
-    return [{"id": c["path"], "kind": kinds.get(c["kind"], c["kind"]), "where": c["label"], "before": c["before"],
-             "after": "", "why": "", "on": c["path"] not in undone} for c in found]
+    return [{"id": c["id"], "kind": kinds.get(c["kind"], c["kind"]), "where": c["label"], "before": c["before"],
+             "after": c.get("after", ""), "why": "", "on": c["id"] not in undone} for c in found]
 
 
 def _fields(form: dict | None) -> list[dict]:
