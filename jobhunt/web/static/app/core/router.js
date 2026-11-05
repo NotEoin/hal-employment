@@ -26,7 +26,8 @@ export const ROUTES = {
 /** Every deep link the app knows, with example args for the ones that take an id (used by the tests). */
 export const ROUTE_EXAMPLES = [
   "home", "jobs", "jobs-saved", "jobs-hidden", "jobs-where", "job-<id>", "apps", "app-<id>", "inbox", "cv", "cv-sugg",
-  "cv-style", "cv-checks", "cv-versions", "docs", "docs-<id>", "docs-details", "record", "activity", "memory",
+  "cv-style", "cv-checks", "cv-versions", "docs", "docs-<id>", "docs-details", "record", "record-work",
+  "record-inconsistencies", "record-files", "activity", "memory",
   "memory-learned", "memory-sites", "memory-answers", "settings", "settings-<group>", "setup", "setup-<step>",
 ];
 
