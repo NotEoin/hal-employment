@@ -155,12 +155,10 @@ class OldDatabases(Folder):
         con.execute("UPDATE answers2 SET scope = 'everywhere' WHERE label = 'Are you willing to relocate?'")
         con.commit()
         kept = con.execute("SELECT * FROM answers2 ORDER BY id").fetchall()
-        up_to_18 = migrate.discover()[:18]
-        with mock.patch.object(migrate, "LATEST", 18), mock.patch.object(migrate, "discover", return_value=up_to_18):
-            self.assertEqual(self.run_migrate(con), [18])
+        self.assertEqual(self.run_migrate(con), list(range(18, migrate.LATEST + 1)))
         self.assertEqual(con.execute("SELECT * FROM answers2 ORDER BY id").fetchall(), kept)
         self.assertNotIn("answers", tables(con))
-        self.assertEqual(migrate.user_version(con), 18)
+        self.assertEqual(migrate.user_version(con), migrate.LATEST)
 
     def test_old_messages_are_marked_read_and_recent_ones_needing_attention_are_not(self):
         old_db.build(self.db, "L")
@@ -182,8 +180,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 21)))
-        self.assertEqual(migrate.LATEST, 20)
+        self.assertEqual(numbers, list(range(1, 22)))
+        self.assertEqual(migrate.LATEST, 21)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

@@ -57,9 +57,10 @@ older rows end in `+00:00` and compare the same on 19 characters.
 `db.connect(path=None)` opens `paths.db_path()` with WAL, foreign keys and a 30 s busy timeout, then runs
 `core.db.migrate.migrate` when `PRAGMA user_version` is below `LATEST`, and raises `DataTooNew` when above.
 Only migrations make the schema: 0001 is the baseline, so `db.py` holds no `CREATE` statement. A migration
-backs up `jobs.db` first. `LATEST` is 20. Migration 0018 (`0018_old_answers`) is the one destructive
+backs up `jobs.db` first. `LATEST` is 21. Migration 0018 (`0018_old_answers`) is the one destructive
 migration: it drops the old `answers` table, because the saved answers live in `answers2` alone; every other
-migration only adds.
+migration only adds. Migration 0021 adds `writing_edits`, the person's edits of Hal's drafts (How Hal learns,
+below).
 
 ## Settings (`core/settings/`)
 
@@ -515,15 +516,23 @@ available yet.
 
 ## How Hal learns (`jobhunt/learn/`)
 
-- `learn/patterns.py` finds three patterns: "Too far" for 4 or more jobs in 7 days, all beyond X miles (a
+- `learn/patterns.py` finds four patterns: "Too far" for 4 or more jobs in 7 days, all beyond X miles (a
   smaller distance); 5 or more saved or applied-to jobs sharing a title word missing from `goal.roles` (add
-  the word); two "Keep my wording" answers on one CV line (lock it). A pattern only calls `items.offer()`; it
+  the word); two "Keep my wording" answers on one CV line (lock it); and the person's edits (below). A pattern only calls `items.offer()`; it
   never changes a setting, note or the CV (`test_nothing_changes_without_your_yes`). A waiting suggestion
   whose pattern no longer holds is withdrawn on the next run.
 - `learn/items.py` applies a yes from the live value: a setting through `settings.set(..., by="learned")`
   with its own Activity row and Undo, or a CV lock as a `cv_preferences` row. The replaced value is kept, and
   switch off, Delete and Undo put it back only while the value is still the one Hal set. "Not now" asks again
   after 7 days; "Never suggest this" keeps the suggestion's fingerprint.
+- Edits (`writing/edits.py`): saving the documents through the route (`save_documents(by_you=True)`), an
+  approval with edits, a form answer the person changed (`autofill.by_you` keeps Hal's as `hal_value`, then
+  `remember`), an edited CV suggestion and a CV line reworded on My CV each keep a draft and final pair in
+  `writing_edits` (migration 0021). Hal's own rewrites teach nothing, and a private question's answer is never
+  kept. The pattern `writing_edits` (area `writing`) reads the pairs word by word with no AI: a word taken out
+  of three drafts in a cut of at most two words, and never written in a final, offers "Never use <word>?"
+  (`cvdocs.never_use`); two letters of 100 words or more cut by a tenth offer the nearest shorter
+  `cvdocs.letter_words`. A kept pair publishes `writing`, which starts a run like a job event.
 - Distances: `learn/places.py` holds 160 UK town centres and measures straight-line miles from "Where you
   live". A job whose location names no town in the table is never evidence.
 - The action `learn.patterns` (priority 2, no AI) runs 20 s after the last job event, CV suggestions event

@@ -607,6 +607,9 @@ def remember(con, fields: list[dict], company: str = "", job=None) -> int:
                     (question, _asked(f), db.json_text(value), scope, scope_key, db.now()))
         kept += 1
     con.commit()
+    from .writing import edits
+
+    edits.from_fields(con, fields, job)
     return kept
 
 
@@ -937,7 +940,12 @@ def _profile_why(key: str, prof: dict, job) -> str:
 
 
 def by_you(f: dict, value, note: str = "") -> dict:
-    """Marks a field as answered by the person, so its words and "Why this answer?" say so; returns it."""
+    """Marks a field as answered by the person, so its words and "Why this answer?" say so; returns it.
+
+    Hal's own answer is kept as `hal_value`, so `remember` can learn from what the person changed.
+    """
+    if f.get("source") != "you" and isinstance(f.get("value"), str) and f["value"]:
+        f.setdefault("hal_value", f["value"])
     f.update(value=value, source="you", note=note, skip=False, why=YOU_WHY, notes_used=[])
     return f
 

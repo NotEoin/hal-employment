@@ -251,9 +251,13 @@ def _approve_documents(con, job_id: str, body: dict | None, *, session_id: str |
     job = _job(con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "chosen from the queue")
+    from ..writing import edits
+
     now = db.now()
-    docs = {**_merge_edits(documents.load(con, job), body or {}), "approved": now}
+    before = documents.load(con, job)
+    docs = {**_merge_edits(before, body or {}), "approved": now}
     documents.save(con, job, docs)
+    edits.from_documents(con, job, before, docs)   # an approval carries the person's last edits
     # The Form step starts now, not when the page has loaded: the application page follows it at once.
     stage = {} if _app(con, job_id)["stage"] in ("form", "filled") else {"stage": "form"}
     _set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id, **stage)
@@ -283,10 +287,20 @@ def reopen_documents(con, job_id: str) -> None:
     con.commit()
 
 
-def save_documents(con, job_id: str, body: dict) -> dict:
-    """Keeps edits to the documents; a form already filled holds the old ones, so it is marked out of date."""
+def save_documents(con, job_id: str, body: dict, *, by_you: bool = False) -> dict:
+    """Keeps edits to the documents; a form already filled holds the old ones, so it is marked out of date.
+
+    `by_you` when the person wrote the edits (the Save route): Hal keeps each change as a pair to learn their
+    writing from (`writing.edits`). Hal's own rewrites pass through here too and teach nothing.
+    """
+    from ..writing import edits
+
     job = _job(con, job_id)
-    documents.save(con, job, _merge_edits(documents.load(con, job), body))
+    before = documents.load(con, job)
+    after = _merge_edits(before, body)
+    documents.save(con, job, after)
+    if by_you:
+        edits.from_documents(con, job, before, after)
     form = _app(con, job_id)["form"]
     stale = bool(form and form.get("filled"))
     if stale:

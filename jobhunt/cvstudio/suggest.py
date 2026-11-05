@@ -828,6 +828,10 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
     new_vid = _store().new_version(new_doc, origin="improved", what=f"You accepted: {row['title']}", by="you",
                                    parent=vid)
     edited = text is not None and after != afters[alt]
+    if edited:
+        from jobhunt.writing import edits
+
+        edits.record(con, "cv_line", row["target"], afters[alt], after, job_id=row["job_id"])
     con.execute("UPDATE cv_suggestions SET status = ?, alt = ?, edited = ?, result_version_id = ?, decided = ? "
                 "WHERE id = ?", ("edited" if edited else "accepted", alt, after if edited else None, new_vid,
                                  clock.iso(), sugg_id))

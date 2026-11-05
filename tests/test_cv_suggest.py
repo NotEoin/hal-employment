@@ -148,6 +148,14 @@ class Reviewers(CvCase):
 
 
 class Accepting(CvCase):
+    def test_your_edit_of_a_suggestion_is_kept_as_a_pair_to_learn_from(self):
+        suggest.look_again(self.con)
+        spelling = self.one("Consistency", "Profile")
+        mine = "History graduate who catalogued parish letters and organised a heritage open day."
+        suggest.accept(self.con, spelling["id"], text=mine)
+        rows = self.con.execute("SELECT kind, ref, draft, final FROM writing_edits").fetchall()
+        self.assertEqual([tuple(r) for r in rows], [("cv_line", PROFILE, spelling["afters"][0], mine)])
+
     def test_accept_makes_a_version_the_next_suggestion_is_worked_out_from(self):
         suggest.look_again(self.con)
         spelling = self.one("Consistency", "Profile")

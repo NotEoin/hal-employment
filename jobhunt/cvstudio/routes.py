@@ -148,9 +148,13 @@ def put_document(req) -> dict:
     data = {k: v for k, v in data.items() if k not in ("version_id", "n")}
     try:
         doc = model.from_dict(data)
+        before = store.current(req.con)[1]
         vid = store.new_version(doc, origin="manual", what=what, by="you", con=req.con)
     except CVError as e:
         raise _bad(e) from e
+    from ..writing import edits
+
+    edits.from_cv(req.con, before, doc)
     n = store.version(vid, con=req.con)["n"]
     _note(f"Saved your CV as version {n}: {what}")
     return {"version_id": vid, "n": n}

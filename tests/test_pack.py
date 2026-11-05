@@ -582,6 +582,12 @@ class Requests(unittest.TestCase):
         docs = documents.load(self.a.con, self.job)
         self.assertIn("letter_notes", docs)
 
+    def test_saving_your_edits_keeps_them_to_learn_your_writing_from(self):
+        r = self.c.request("PUT", self.url("/documents"), {"letter": "My own made-up letter, in my own words."})
+        self.assertEqual(r.status, 200, r.text)
+        rows = self.a.con.execute("SELECT kind, final FROM writing_edits").fetchall()
+        self.assertEqual([tuple(x) for x in rows], [("letter", "My own made-up letter, in my own words.")])
+
     def test_asking_for_changes_with_no_words_is_refused(self):
         r = self.c.post(self.url("/documents/change"), {"words": "  "})
         self.assertEqual(r.status, 400)
