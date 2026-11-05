@@ -242,6 +242,15 @@ Hal sorts every document by whose it is, and that decides what it can learn from
 Hal only counts a document as yours when it names you. If your files use another name for you, such as a
 username or a student number, add it under **Settings > You > Other names you go by**.
 
+### Tidying your record
+
+If you read files into your record with an older Hal, press **Tidy my record** on the Overview (or run
+`jobhunt ingest --tidy`). Hal first saves a copy of your record and its database in Hal's backups folder.
+Then it holds every note to the rules above: it takes out notes of other people's files and private files,
+settings files, notes about people and places, lecturers' emails and older copies of your projects, and
+facts that came from the wrong kind of file. Slides and documents only the AI can judge are read again,
+which can take a while for a large record. Notes you wrote yourself are never changed.
+
 ## Your record
 
 Your record has a tab for each part of your profile: **Work history**, **Education**, **Skills**,

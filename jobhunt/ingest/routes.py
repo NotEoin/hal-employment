@@ -70,6 +70,17 @@ def again(req) -> dict:
     return {"action_id": action_id}
 
 
+@route("POST", "/api/v2/record/ingest/tidy", auth="session_or_local")
+def tidy(req) -> dict:
+    """Starts tidying the record: a backup, then everything already filed held to the rules reads follow now."""
+    try:
+        action_id = actions.queue(tidy=True, session_id=getattr(req.session, "id", None), remote=req.remote,
+                                  why="You asked Hal to tidy your record")
+    except RuntimeError as e:
+        raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
+    return {"action_id": action_id}
+
+
 @route("POST", "/api/v2/record/links", auth="session_or_local")
 def links(req) -> dict:
     """Starts reading web links (a site, a GitHub profile or repository, a public Google Doc) into the record."""

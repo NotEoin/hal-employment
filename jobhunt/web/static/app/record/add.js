@@ -106,6 +106,11 @@ function readAgain() {
     err => toast(err.message));
 }
 
+function tidyNow() {
+  post(INGEST + "/tidy").then(() => { toast("Hal is tidying your record."); invalidate(INGEST); },
+    err => toast(err.message));
+}
+
 function addAnyway(item) {
   post(INGEST + "/private/allow", { id: item.id }).then(out => {
     toast(out.action_id ? "Hal is reading " + item.name + " into your record."
@@ -141,7 +146,9 @@ export function IngestCard() {
   const pct = data.total ? (data.done / data.total) * 100 : 0;
   const states = counted(data.states).filter(([s]) => !["not_downloaded", "not_mine", "private"].includes(s));
   const leftOut = counted(data.left_out);
-  const title = data.again
+  const title = data.tidy
+    ? (running ? "Tidying your record" : data.state === "done" ? "Your record was tidied" : "Hal stopped tidying your record")
+    : data.again
     ? (running ? "Reading the rest with the AI" : data.state === "done" ? "The rest was read with the AI" : "Hal stopped reading the rest")
     : (running ? "Reading your files" : data.state === "done" ? "Your files were read" : "Hal stopped reading your files");
   return html`<section class="card stack s rec-ingest" aria-labelledby="rec-ing-h" data-state=${data.state}>
@@ -172,5 +179,9 @@ export function IngestCard() {
     ${!running && data.by_rules > 0 && html`<div class="row wrap rec-again"><p class="small sub grow rec-line">
       ${plural(data.by_rules, "note was", "notes were")} filed by headings and words only, without the AI reading them.</p>
       <button type="button" class="btn small" onClick=${readAgain}>Read them with the AI</button></div>`}
+    ${!running && html`<div class="row wrap rec-tidy"><p class="small sub grow rec-line">
+      Hal can tidy what it filed before: it backs up your record, then takes out other people's files, private
+      files, lecturers' emails and older copies of your projects, and reads some files again with the AI.</p>
+      <button type="button" class="btn small" onClick=${tidyNow}>Tidy my record</button></div>`}
   </section>`;
 }

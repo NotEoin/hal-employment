@@ -328,6 +328,17 @@ class RecordPage(unittest.TestCase):
         self.assertEqual(queued[0]["allow"], [item_id])
         self.assertEqual(self.errors(p), [])
 
+    def test_tidy_my_record_starts_a_tidy(self) -> None:
+        finished_ingest()
+        queued = []
+        self.enterContext(mock.patch.object(ingest_actions, "queue",
+                                            side_effect=lambda **kw: queued.append(kw) or "ing2"))
+        p = self.page()
+        p.page.locator(".rec-ingest").get_by_role("button", name="Tidy my record").click()
+        p.shows(p.page.get_by_text("Hal is tidying your record."), "the toast")
+        self.assertTrue(queued[0]["tidy"])
+        self.assertEqual(self.errors(p), [])
+
     def test_pasted_links_start_a_read(self) -> None:
         queued = []
         self.enterContext(mock.patch.object(ingest_actions, "queue",

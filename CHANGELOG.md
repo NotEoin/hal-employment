@@ -21,6 +21,9 @@ What changed in each version, in plain words.
   Notes and slides are filed by their words unless **Read every document with the AI** is on, and
   **Read them with the AI** on the Overview reads the ones already filed, in place. Hal reads as many
   documents at once as **AI calls at once** allows.
+- **Tidy my record.** One button on the Overview (or `jobhunt ingest --tidy`) backs up your record, then
+  holds what an older Hal filed to today's rules: other people's and private files, notes about people and
+  places, lecturers' emails and older copies of projects come out, and slides become lecture notes.
 - **Whose each document is.** Hal sorts what it reads into your own documents, course material and someone
   else's. Course material only shows what you studied, your contact details come only from your CVs and
   letters, and someone else's documents (a friend's CV, a downloaded paper) are left out of your record.

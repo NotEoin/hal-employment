@@ -1,5 +1,5 @@
 $ jobhunt ingest --help
-usage: jobhunt ingest [-h] [--again] [folders ...]
+usage: jobhunt ingest [-h] [--again] [--tidy] [folders ...]
 
 positional arguments:
   folders
@@ -7,3 +7,4 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
   --again     read with the AI the documents an earlier ingest filed by rules alone
+  --tidy      back up, then hold everything already in the record to today's rules

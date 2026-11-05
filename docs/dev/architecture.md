@@ -563,6 +563,17 @@ runner starts the action again with the same batch and only pending items are re
    `Attachments/Sources/` when `record.copy_originals` is on and the file is at most 100 MiB. The record's
    own conversion leaves the drop folder and `Attachments/Sources/` alone, so no passage is indexed twice.
 
+`tidy.py` holds a record filed by an older Hal to these rules (`record.ingest` with `tidy`, from
+`POST /api/v2/record/ingest/tidy` or `jobhunt ingest --tidy`). `tidy.prepare` runs once per batch: a
+database snapshot and a `.tar.gz` of the record folder in the backups folder, then each Hal note judged by
+rules (role from its `role` or older `about_owner`, tool files, `privacy.reason`, decks `lectures.Covered`
+already covers, copies of one project via `versions`), facts its role may not give deleted, course material
+scrubbed, code text fenced, and the notes only the AI can settle (converted course material, unsure rich
+documents) moved into the batch to be read again in place. `tidy.finish` runs when nothing is pending:
+source notes no item points at are deleted with their facts and copied originals, entity notes outside
+the profile's names and all People and Places notes go, links to deleted notes become plain words, and
+`store.rebuild_found` merges the profile again. Notes without Hal's frontmatter are never touched.
+
 Reading is split so the AI can work on several items at once: worker threads (`ai.parallel` of them, which
 also caps the AI layer's own turns) only convert and describe (`engine._prepare`), and the action's thread
 writes notes, entities, facts and rows in the items' own order, so the database and record have one

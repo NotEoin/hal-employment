@@ -47,6 +47,7 @@ from jobhunt.ingest import (
     understand,
     versions,
 )
+from jobhunt.ingest import tidy as tidy_pass
 
 log = logging.getLogger(__name__)
 
@@ -576,16 +577,22 @@ def drop_has_new(con: sqlite3.Connection) -> bool:
 
 
 def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bool = False, urls=(),
-        again: bool = False, step: Callable[[str], None], progress: Progress) -> dict:
+        again: bool = False, tidy: bool = False, step: Callable[[str], None], progress: Progress) -> dict:
     """The whole ingest of one batch; returns its counts, what was left out and the problems found.
 
     With `again`, the batch is the notes written by rules from documents, read now by the AI (`mark_again`);
-    on a carry-on after a restart they are already in the batch.
+    on a carry-on after a restart they are already in the batch. With `tidy`, the record is held to today's
+    rules (`tidy.prepare`, once), the notes it asks to be read again are read, and `tidy.finish` cleans up.
     """
     step("Finding your files")
     found = find(con, batch, folders=folders, uploads=uploads, drop=drop, urls=urls)
     if again and not items.pending(con, batch):
         mark_again(con, batch)
+    tidied = {}
+    if tidy and not con.execute("SELECT 1 FROM ingest_items WHERE batch = ? LIMIT 1", (batch,)).fetchone():
+        # once only: a carry-on after a restart finds the notes to read again in the batch already
+        step("Backing up and tidying your record")
+        tidied = tidy_pass.prepare(con, batch, vault())
     step("Reading each file, your CV and other rich documents first")
     drop_root = sources.drop_folder().resolve() if drop else None
     versions.settle(con, batch, vault())
@@ -601,6 +608,8 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     written += _courses(con, batch)
     vault_dir = vault()
     notes.link_pass(vault_dir, written)
+    if tidy and not items.pending(con, batch):
+        tidied.update(tidy_pass.finish(con, vault_dir))
     notes.write_indexes(vault_dir)
     con.commit()
     if con.execute("SELECT 1 FROM profile_items LIMIT 1").fetchone():
@@ -619,4 +628,4 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
         found["problems"].append(str(e))
     c = items.counts(con, batch)
     return {"batch": batch, "notes": len(written), "states": c["states"], "categories": c["categories"],
-            "left_out": found["left_out"], "problems": found["problems"]}
+            "left_out": found["left_out"], "problems": found["problems"], "tidied": tidied}

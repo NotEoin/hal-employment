@@ -312,7 +312,7 @@ MADE_UP_PAGES = {
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
                        "not_downloaded_paths": [], "not_mine": 0, "not_mine_paths": [], "errors": [],
-                       "left_out": {}, "by_rules": 0, "again": False, "private": []},
+                       "left_out": {}, "by_rules": 0, "again": False, "tidy": False, "private": []},
     "/profile": MADE_UP_PROFILE,
     **MADE_UP_PROFILE_KINDS,
     "/profile/check": MADE_UP_PROFILE_CHECK,

@@ -176,5 +176,6 @@ def summary(con: sqlite3.Connection) -> dict:
             "not_downloaded": c["states"].get("not_downloaded", 0), "not_downloaded_paths": missing,
             "not_mine": c["states"].get("not_mine", 0), "not_mine_paths": not_mine,
             "errors": errors, "by_rules": by_rules(con), "again": bool(params.get("again")),
+            "tidy": bool(params.get("tidy")),
             "left_out": result.get("left_out", {}), "private": private(con), "started": action["started"],
             "ended": action["ended"]}

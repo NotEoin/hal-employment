@@ -40,7 +40,7 @@ def _example(world) -> dict:
                why="You gave Hal files to read into your record", priority=2, exclusive="kind", resumable=True,
                example=_example)
 def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = None, drop: bool = False,
-           urls: list | None = None, again: bool = False, allow: list | None = None) -> dict:
+           urls: list | None = None, again: bool = False, allow: list | None = None, tidy: bool = False) -> dict:
     """Reads every file of the inputs into notes in the record; says how many and what could not be read."""
     def step(text: str) -> None:
         ctx.step(text, total=engine.STEPS)
@@ -49,7 +49,7 @@ def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = 
         privacy.requeue(ctx.con, batch, allow)
 
     out = engine.run(ctx.con, batch, folders=folders or [], uploads=uploads or [], drop=drop, urls=urls or [],
-                     again=again, step=step, progress=ctx.progress)
+                     again=again, tidy=tidy, step=step, progress=ctx.progress)
     states = out["states"]
     if out["notes"]:
         ctx.changed(f"Wrote {out['notes']} notes in your record.")
@@ -64,16 +64,17 @@ def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = 
     return out
 
 
-def queue(*, folders=(), uploads=(), drop: bool = False, urls=(), again: bool = False, allow=(),
+def queue(*, folders=(), uploads=(), drop: bool = False, urls=(), again: bool = False, allow=(), tidy: bool = False,
           session_id: str | None = None, remote: bool = False, why: str | None = None) -> str:
     """Starts an ingest of these inputs and returns its action id; RuntimeError while another is running.
 
     `again` reads the notes written by rules from documents with the AI, in place (`engine.mark_again`);
-    `allow` reads the private items with these ids, which the person let in (`privacy.requeue`).
+    `allow` reads the private items with these ids, which the person let in (`privacy.requeue`); `tidy`
+    holds what the record already has to today's rules (`tidy.py`).
     """
     params = {"batch": engine.new_batch(), "folders": [str(f) for f in folders],
               "uploads": [str(u) for u in uploads], "drop": bool(drop), "urls": [str(u) for u in urls],
-              "again": bool(again)}
+              "again": bool(again), "tidy": bool(tidy)}
     if allow:
         params["allow"] = [int(i) for i in allow]
     return runner.start("record.ingest", params=params, session_id=session_id, remote=remote, why=why)
