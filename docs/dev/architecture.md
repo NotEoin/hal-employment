@@ -501,7 +501,9 @@ runner starts the action again with the same batch and only pending items are re
 6. **Understand** (`understand.py`). Rich documents get the `ingest_doc` prompt (role checker), cleaned in
    code: fixed categories and doc types, 12 to 30 tags, `about_owner` held to "unsure" when the text never
    names `you.name`, and every fact's quote checked against the text; a quote not found marks the fact
-   "Check this" and the note `hal: needs-review`. A document that is someone else's gives no facts. Light
+   "Check this" and the note `hal: needs-review`. An organisation or place that neither the text nor the
+   file's path names is dropped, with its tag, so a guess gets no entity note. A document that is someone
+   else's gives no facts. Light
    documents, and every document while the AI is unavailable, get tags from the path, headings, frequent
    words and years. Facts go to `jobhunt.profile.store.add_found(con, kind, fields, evidence)` with
    evidence `{source_rel, quote, field, doc_type, verified}`; the ingest keeps no profile of its own. A fact

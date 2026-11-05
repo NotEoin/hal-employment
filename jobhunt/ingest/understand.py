@@ -46,6 +46,7 @@ DOC_TYPES = ("cv", "transcript", "letter", "personal_statement", "certificate", 
              "job_description", "contract", "report", "coursework", "dissertation", "project", "repository", "essay",
              "writing", "notes", "slides", "email", "artwork", "other", "course", "image", "media", "code")
 ENTITY_KINDS = ("organisations", "places", "people", "projects", "courses", "skills")
+NAMED_KINDS = ("organisations", "places")  # named in the document itself; skills and projects may be described
 FACT_KINDS = ("job", "education", "skill", "project", "achievement", "certificate", "basic", "link")
 YEAR = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
 HEADING = re.compile(r"^#{1,3}\s+(.+?)\s*#*$", re.M)
@@ -179,7 +180,13 @@ def clean(reply: dict, rel: str, text: str, rule: rank.Rule, owner: str) -> dict
            "about_owner": judge_owner(reply.get("about_owner"), owner, text), "by": "model"}
     # People are named in a note only when the document names them; a role the model made up stays a role.
     out["entities"]["people"] = [p for p in out["entities"]["people"] if quote_found(p, text) or " " not in p]
-    tags = _tags(_strings(reply.get("tags")))
+    # An organisation or place gets a note and a tag only when the document or its path names it: a module
+    # report naming no university came back from "Trinity College Dublin" (2026-11-05).
+    named = f"{rel}\n{text}"
+    guessed = {tag(n) for k in NAMED_KINDS for n in out["entities"][k] if not quote_found(n, named)}
+    for k in NAMED_KINDS:
+        out["entities"][k] = [n for n in out["entities"][k] if tag(n) not in guessed]
+    tags = [t for t in _tags(_strings(reply.get("tags"))) if t not in guessed]
     if len(tags) < TAGS_MIN:
         tags = _tags(tags + [tag(e) for k in ("skills", "organisations", "places") for e in out["entities"][k]]
                      + base["tags"])

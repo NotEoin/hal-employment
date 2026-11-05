@@ -462,6 +462,25 @@ class Understanding(unittest.TestCase):
             self.assertFalse(record.should_index(entity), "entity notes are links, not content to search")
             self.assertTrue(record.sync()["notes"] >= 1)
 
+    def test_an_organisation_the_document_never_names_gets_no_note_or_tag(self):
+        # a module report naming no university came back from "Trinity College Dublin" (2026-11-05)
+        report = "Avery Quillon - a1234567\n\nA report on genetic algorithms for module HIS2034."
+        guess = {**REPLY, "doc_type": "report", "category": "Coursework", "title": "Algorithms report",
+                 "tags": [*REPLY["tags"], "glenmore-university", "kestrel-town"],
+                 "entities": {**REPLY["entities"], "organisations": ["Glenmore University"],
+                              "places": ["Kestrel Town"], "courses": ["HIS2034"]}, "facts": []}
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(guess)}):
+            put(files, "BA History/year 2/HIS2034/Algorithms report.md", report)
+            run(con, [files])
+            fm, _ = frontmatter.parse((vault / rows(con)["Files/BA History/year 2/HIS2034/Algorithms report.md"]
+                                       ["note"]).read_text(encoding="utf-8"))
+            self.assertEqual(fm["organisations"], [])
+            self.assertNotIn("glenmore-university", fm["tags"])
+            self.assertNotIn("kestrel-town", fm["tags"])
+            self.assertFalse((vault / "Organisations" / "Glenmore University.md").exists())
+            self.assertFalse((vault / "Places" / "Kestrel Town.md").exists())
+            self.assertTrue((vault / "Courses" / "HIS2034.md").exists(), "a course its path names is kept")
+
     def test_a_light_note_gets_tags_without_any_model(self):
         with home() as (con, vault, files), fake_ai({}) as backend:
             put(files, "Revision/week 3 notes.md", "# Rivers\n\nMeanders and oxbow lakes, 2022 fieldwork.")
