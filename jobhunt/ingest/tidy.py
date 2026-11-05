@@ -13,7 +13,9 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
    note (`versions`).
 3. Notes the AI should read again are put back in the batch, to be rewritten in place (`engine._again`):
    converted course material, for a lecture note, and documents whose role the rules cannot settle, such
-   as a report no AI has judged as the person's or someone else's. Each is read once.
+   as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
+   under these rules says so (`read_by: ai`, and `lecture_note` for course material), so a second tidy
+   sends it to the AI only if its lecture note could not be written.
 
 `finish` runs at the end of every tidy run, and is safe to run again: notes no item points at any more are
 deleted with their facts and copied originals, entity notes outside `notes.noted` go (all of People and
@@ -213,7 +215,7 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
         if role == roles.TAUGHT and doc_type in lectures.NOTE_TYPES and lectures.is_typed(row["rel"]):
             covered.add(row["id"], row["rel"], Path(row["rel"]).stem, row["note"])
         done["judged"] += 1
-        if _ask_again(row, role, doc_type):
+        if _ask_again(row, role, doc_type, fm):
             con.execute("UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered' WHERE id = ?",
                         (batch, row["id"]))
             done["again"] += 1
@@ -221,14 +223,14 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
     return done
 
 
-def _ask_again(row: sqlite3.Row, role: str, doc_type: str) -> bool:
+def _ask_again(row: sqlite3.Row, role: str, doc_type: str, fm: dict) -> bool:
     """True when the AI should read a filed note again: course material from a converted file, for its
-    lecture note, or a document of a kind whose role only the AI can settle."""
+    lecture note, or a document of a kind whose role only the AI can settle and no AI has judged yet."""
     if row["kind"] == "page" or not Path(row["path"]).exists():
         return False
     if role == roles.TAUGHT:
-        return not lectures.is_typed(row["rel"]) and row["kind"] == "file"
-    return role == roles.UNSURE and doc_type in JUDGED_BY_AI
+        return not lectures.is_typed(row["rel"]) and row["kind"] == "file" and fm.get("lecture_note") != "true"
+    return role == roles.UNSURE and doc_type in JUDGED_BY_AI and fm.get("read_by") != "ai"
 
 
 def _pointed_at(con: sqlite3.Connection) -> set[str]:

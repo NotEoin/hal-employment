@@ -3,9 +3,10 @@
 Layout, inside the record (an Obsidian vault):
 
 - `Sources/<Category>/<Title>.md`, one per document or unit, with list frontmatter (`frontmatter.py`):
-  type source, category, doc_type, title, tags, period, organisations, skills, role, about_owner, source,
-  sha256, ingested (UTC, with Z) and `hal: ingested`, or `hal: needs-review` when a quote was not found or it
-  is unclear whose the document is. The body is the summary, the key facts with their quotes, links, the
+  type source, category, doc_type, title, tags, period, organisations, skills, role, about_owner, read_by
+  (`ai` or `rules`), lecture_note (`true` when the AI wrote the text as study notes), source, sha256,
+  ingested (UTC, with Z) and `hal: ingested`, or `hal: needs-review` when a quote was not found or it is
+  unclear whose the document is. The body is the summary, the key facts with their quotes, links, the
   original, then the converted text.
 - Entity notes in `Organisations/`, `Projects/`, `Courses/` and `Skills/`, each `type: entity` with a
   "Mentioned in" list, only for what belongs in the person's record (`noted`): the organisations their facts
@@ -216,8 +217,10 @@ def write_source(vault: Path, desc: dict, *, text: str, source: str, sha256: str
     fields = {"type": "source", "category": desc["category"], "doc_type": desc["doc_type"], "title": desc["title"],
               "tags": desc["tags"], "period": desc["period"], "organisations": ents["organisations"],
               "skills": ents["skills"], "role": desc.get("role", "unsure"), "about_owner": desc["about_owner"],
-              "source": source, "sha256": sha256,
+              "read_by": "ai" if desc.get("by") == "model" else "rules", "source": source, "sha256": sha256,
               "ingested": clock.iso(), "hal": "needs-review" if needs_review(desc) else "ingested"}
+    if desc.get("lecture"):
+        fields["lecture_note"] = True
     lines = [f"# {desc['title']}", ""]
     if desc["summary"]:
         lines += [desc["summary"], ""]

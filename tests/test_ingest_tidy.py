@@ -26,7 +26,8 @@ def make_old(vault, note_rel, **fields):
     """Rewrites a note's frontmatter as an older Hal wrote it: no role, an `about_owner` answer."""
     path = vault / note_rel
     fm, body = frontmatter.parse(path.read_text(encoding="utf-8"))
-    fm.pop("role", None)
+    for newer in ("role", "read_by", "lecture_note"):
+        fm.pop(newer, None)
     fm.update(fields)
     path.write_text(frontmatter.dump(fm) + body, encoding="utf-8")
 
@@ -107,6 +108,38 @@ class Tidy(unittest.TestCase):
             self.assertFalse((vault / note).exists())
         self.assertEqual(len(backend.requests("ingest_doc")), 1)
         self.assertEqual((row["state"], projects), ("not_mine", 0))
+
+    def test_a_second_tidy_sends_nothing_the_first_one_read_to_the_ai(self):
+        """Every tidy read every deck and unsure report again, an hour each time on a large record (2026-11-05)."""
+        slides = "# Rivers\n\nMeanders form where the outer bank erodes and the inner bank gains sediment."
+        lecture = {**NOTE_REPLY, "doc_type": "slides", "category": "Slides", "role": "taught", "title": "Rivers"}
+        report = {**REPLY, "doc_type": "report", "category": "Coursework", "role": "own"}
+        notes_of = ("# Rivers\n\n## Meanders\n\nA meander forms where the outer bank erodes faster than the "
+                    "inner bank, which gains the sediment the river drops, and the bend grows.\n\n## Oxbow "
+                    "lakes\n\nWhen the neck of a meander is cut through, the old loop is left as a lake.")
+        real_text_of = engine.convert.text_of
+
+        def deck(path, *args, **kwargs):
+            return slides if path.suffix == ".pdf" else real_text_of(path, *args, **kwargs)
+        with home() as (con, vault, files):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            with fake_ai({}):
+                put(files, "GEO101/Lecture 3 slides.pdf", b"%PDF-1.4 made up")
+                put(files, "Tide report.md", REPORT)
+                with mock.patch.object(engine.convert, "text_of", side_effect=deck):
+                    run(con, [files])
+            for row in rows(con).values():
+                if row["note"]:
+                    make_old(vault, row["note"], about_owner="unsure")
+            asked = []
+            for batch in ("t1", "t2"):
+                with fake_ai({"ingest_doc": lambda req: json.dumps(lecture if "Rivers" in req.user else report),
+                              "lecture_note": notes_of}) as backend, \
+                        mock.patch.object(engine.convert, "text_of", side_effect=deck):
+                    run(con, [], batch=batch, tidy=True)
+                asked.append(len(backend.requests("ingest_doc")))
+        self.assertEqual(asked, [2, 0])
 
     def test_a_typed_note_is_judged_by_rules_and_never_sent_to_the_ai(self):
         with home() as (con, _vault, files):

@@ -569,7 +569,8 @@ database snapshot and a `.tar.gz` of the record folder in the backups folder, th
 rules (role from its `role` or older `about_owner`, tool files, `privacy.reason`, decks `lectures.Covered`
 already covers, copies of one project via `versions`), facts its role may not give deleted, course material
 scrubbed, code text fenced, and the notes only the AI can settle (converted course material, unsure rich
-documents) moved into the batch to be read again in place. `tidy.finish` runs when nothing is pending:
+documents) moved into the batch to be read again in place, unless the note's `read_by: ai` (and
+`lecture_note`, for course material) says the AI already read it under these rules. `tidy.finish` runs when nothing is pending:
 source notes no item points at are deleted with their facts and copied originals, entity notes outside
 the profile's names and all People and Places notes go, links to deleted notes become plain words, and
 `store.rebuild_found` merges the profile again. Notes without Hal's frontmatter are never touched.

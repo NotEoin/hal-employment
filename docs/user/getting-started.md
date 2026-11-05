@@ -249,7 +249,8 @@ If you read files into your record with an older Hal, press **Tidy my record** o
 Then it holds every note to the rules above: it takes out notes of other people's files and private files,
 settings files, notes about people and places, lecturers' emails and older copies of your projects, and
 facts that came from the wrong kind of file. Slides and documents only the AI can judge are read again,
-which can take a while for a large record. Notes you wrote yourself are never changed.
+which can take a while for a large record; a second tidy skips what the first one already read. Notes you
+wrote yourself are never changed.
 
 ## Your record
 
