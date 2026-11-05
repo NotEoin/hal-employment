@@ -7,6 +7,7 @@ refused while unpacking is an item too (state error), so the page lists it with 
 """
 from __future__ import annotations
 
+import itertools
 import json
 import sqlite3
 
@@ -74,17 +75,34 @@ def latest_action(con: sqlite3.Connection) -> sqlite3.Row | None:
     return con.execute("SELECT * FROM actions WHERE kind = ? ORDER BY created DESC LIMIT 1", (KIND,)).fetchone()
 
 
+# Rich documents go to the model and light ones are read by rules, so one pace for both said 21 hours for an
+# ingest that took two (2026-11-05). Each kind gets its own pace; these stand in until one of it is done.
+RICH_BELOW_RANK = 9           # rank.RULES: notes (9) and everything after them are light
+RICH_GUESS_S = 10.0
+LIGHT_GUESS_S = 0.05
+GAP_CAP_S = 300               # a pause (the AI restarting, a stop) is not the pace of either kind
+
+
 def _eta(con: sqlite3.Connection, batch: str, action: sqlite3.Row, left: int) -> int | None:
-    """Seconds left from this run's pace on the items it read; earlier runs of a resumed ingest do not count."""
+    """Seconds left: rich and light items left, each at the pace this run has read that kind so far."""
     if action["state"] != "running" or not action["started"] or not left:
         return None
-    started = action["started"]
-    done = con.execute("""SELECT count(*) FROM ingest_items WHERE batch = ? AND state != 'pending'
-                              AND updated >= ? AND stage != 'discovered'""", (batch, started)).fetchone()[0]
+    done = con.execute("""SELECT rank, updated FROM ingest_items WHERE batch = ? AND state != 'pending'
+                          AND updated >= ? AND stage != 'discovered' ORDER BY updated, id""",
+                       (batch, action["started"])).fetchall()
     if not done:
         return None
-    elapsed = (clock.now_utc() - clock.parse(started)).total_seconds()
-    return max(0, round(elapsed / done * left))
+    spent = {True: [0.0, 0], False: [0.0, 0]}
+    for before, row in itertools.pairwise(done):
+        gap = (clock.parse(row["updated"]) - clock.parse(before["updated"])).total_seconds()
+        rich = (row["rank"] if row["rank"] is not None else RICH_BELOW_RANK) < RICH_BELOW_RANK
+        spent[rich][0] += min(gap, GAP_CAP_S)
+        spent[rich][1] += 1
+    pace = {rich: (t / n if n else (RICH_GUESS_S if rich else LIGHT_GUESS_S)) for rich, (t, n) in spent.items()}
+    rich_left = con.execute("SELECT count(*) FROM ingest_items WHERE batch = ? AND state = 'pending' "
+                            "AND kind != 'course' AND rank < ?", (batch, RICH_BELOW_RANK)).fetchone()[0]
+    light_left = max(0, left - rich_left)
+    return max(0, round(rich_left * pace[True] + light_left * pace[False]))
 
 
 def summary(con: sqlite3.Connection) -> dict:

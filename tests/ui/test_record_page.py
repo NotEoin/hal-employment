@@ -32,7 +32,7 @@ FAILED_LOAD = "Failed to load resource"
 CV = "Sources/CVs and letters/Marnie Quillfeather CV.md"
 LETTER = "Sources/CVs and letters/Museum letter.md"
 EMPLOYER = "Fenwick Lantern Museum Trust"
-STARTED_S = 120            # the made-up ingest started this long ago; 2 read and 2 to go leaves 2 minutes
+STARTED_S = 120            # the made-up ingest started this long ago
 CLOUD = ["Cloud/Offer letter.pdf", "Cloud/Reference.docx"]
 
 
@@ -57,12 +57,18 @@ def running_ingest() -> None:
         con.execute("""INSERT INTO actions (id, kind, subject, state, priority, params, message, created, started)
                        VALUES ('ing1', ?, 'record', 'running', 2, ?, 'Reading Essays/Letters essay.docx', ?, ?)""",
                     (ingest_items.KIND, json.dumps({"batch": "b1"}), started, started))
-        for n, (rel, state, stage, category) in enumerate([
-                ("CV.docx", "done", "written", "CVs and letters"), ("Transcript.pdf", "done", "written", "Education"),
-                (CLOUD[0], "not_downloaded", "discovered", ""), (CLOUD[1], "pending", "discovered", ""),
-                ("Essays/Letters essay.docx", "pending", "discovered", "")]):
+        # rich documents read two minutes apart, one rich and one light file left: about two minutes to go
+        start = clock.parse(started)
+        for n, (rel, state, stage, category, rank, done_s) in enumerate([
+                ("CV.docx", "done", "written", "CVs and letters", 0, 60),
+                ("Transcript.pdf", "done", "written", "Education", 1, 180),
+                (CLOUD[0], "not_downloaded", "discovered", "", 15, None),
+                (CLOUD[1], "pending", "discovered", "", 15, None),
+                ("Essays/Letters essay.docx", "pending", "discovered", "", 6, None)]):
             ingest_items.add(con, "b1", path=f"/made/up/{n}", rel=rel, state=state, category=category)
-            con.execute("UPDATE ingest_items SET stage = ? WHERE batch = 'b1' AND rel = ?", (stage, rel))
+            at = clock.iso(start + timedelta(seconds=done_s)) if done_s is not None else started
+            con.execute("UPDATE ingest_items SET stage = ?, rank = ?, updated = ? WHERE batch = 'b1' AND rel = ?",
+                        (stage, rank, at, rel))
 
 
 @skip_unless_browser

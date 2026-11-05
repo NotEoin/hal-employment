@@ -494,6 +494,27 @@ class Progress(unittest.TestCase):
             self.assertEqual(len(list((vault / "Sources").rglob("essay *.md"))) +
                              len(list((vault / "Sources").rglob("Essay *.md"))), 4)
 
+    def test_time_left_counts_rich_and_light_documents_at_their_own_pace(self):
+        # one pace for both kinds said 21 hours for an ingest that took two (2026-11-05)
+        with home() as (con, _vault, _files):
+            con.execute("INSERT INTO actions (id, kind, state, priority, step_n, resumable, created, started, params) "
+                        "VALUES ('a1', 'record.ingest', 'running', 2, 0, 1, '2026-11-05T08:00:00Z', "
+                        "'2026-11-05T08:00:00Z', '{\"batch\": \"b1\"}')")
+            def item(n, rank, state, at):
+                con.execute("INSERT INTO ingest_items (batch, path, rel, kind, rank, stage, state, created, updated) "
+                            "VALUES ('b1', ?, ?, 'file', ?, ?, ?, '', ?)",
+                            (f"/f/{n}", f"f/{n}", rank, "written" if state == "done" else "discovered", state, at))
+            item(1, 0, "done", "2026-11-05T08:01:00Z")
+            item(2, 6, "done", "2026-11-05T08:01:10Z")     # a rich document: 10 s
+            item(3, 9, "done", "2026-11-05T08:01:11Z")     # a light one: 1 s
+            for n in range(4, 8):
+                item(n, 6, "pending", "")                  # 4 rich left
+            for n in range(8, 108):
+                item(n, 15, "pending", "")                 # 100 light left
+            con.commit()
+            with mock.patch.object(items.clock, "now_utc", return_value=items.clock.parse("2026-11-05T08:01:20Z")):
+                self.assertEqual(items.summary(con)["eta_s"], 4 * 10 + 100 * 1)
+
     def test_the_action_reports_done_total_and_the_page_summary(self):
         with home() as (con, _vault, files), fake_ai({}):
             put(files, "CV.md", CV_TEXT)
