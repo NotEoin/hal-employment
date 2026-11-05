@@ -162,7 +162,10 @@ processes, once a second. Payloads carry ids, never private data.
 - An area registers a kind with `@runner.action(kind, area=, label=, why=, priority=, resumable=,
   exclusive=, example=)`. `start()` runs it in the background and returns its id; `run()` runs it in the
   calling thread (the command line, scheduled children, data tasks). `Ctx` gives `step`, `used`, `changed`,
-  `undo_with`, `waiting_for_you`, `checkpoint` and `resumed_from`.
+  `undo_with`, `waiting_for_you`, `checkpoint`, `resumed_from` and `progress(done, total, text)`.
+- `progress` counts items (files read, pages fetched) in `actions.done_n` and `done_total`, beside the
+  steps and without adding one, so a long action shows a bar. The Action shape carries `done_n`,
+  `done_total` and `eta_s`: the time per item since the action started, times the items left.
 - Two pools: user (4 threads, priorities 0 and 1) and background (2, priority 2). One running action per
   subject unless `replace=True`.
 - Bookkeeping writes go through one writer thread with its own connection, so a caller holding a write
@@ -416,6 +419,54 @@ one `Page` with `error` in plain words. Every request has a 20 s timeout, a size
   needs the person signed in.
 
 `tests/test_ingest_web.py` serves a made-up site, GitHub API and Google export from 127.0.0.1.
+## Reading files into the record (`jobhunt/ingest/`)
+
+One `record.ingest` action (area documents, priority 2, `exclusive="kind"`, resumable) reads folders, zips,
+the drop folder and web links into the record folder as Obsidian notes. Each item is a row of
+`ingest_items` (migration 0019) with the stage it reached, committed as it ends, so after a restart the
+runner starts the action again with the same batch and only pending items are read.
+
+1. **Sources** (`sources.py`). A folder on this computer (`POST /api/v2/record/ingest`, `local_only`), a zip
+   uploaded through `POST /api/v2/record/files` (saved under `<data>/ingest/uploads/`; that route alone takes
+   bodies up to `UPLOAD_MAX_BODY`, 256 MB), and the drop folder (`record.drop_folder`, default
+   `<record>/+Inbox`), which the scheduled `record.sync` checks (`actions.queue_drop`). Zips unpack under
+   `<data>/ingest/unpacked/<batch>/`: names that are absolute or climb out with `..` are refused, links
+   skipped, members counted as they are copied against a per-file and a per-zip cap (stated sizes can lie),
+   encrypted members named, and zips inside zips unpacked to depth 3. Each refusal is an item in state
+   `error`.
+2. **Discover** (`discover.py`). Size, SHA-256 and the kind by the first bytes. Junk folders (`.git`,
+   virtual environments, `node_modules`, caches, and build folders inside a repository) are never entered;
+   weights, programs, databases and fonts are left out by name. A file of zero bytes only is a cloud
+   placeholder: `not_downloaded`, listed, never converted. A file with the same SHA-256 as one already read,
+   in any batch, is a `duplicate` named once under "Also at" in the first copy's note.
+3. **Group** (`group.py`). A repository (a `.git` folder or a manifest at its top) is one `repo` item,
+   summarised from its README, docs headings, manifest, language mix and file tree, never file by file. A
+   folder whose own files are mostly notes or slides (three or more) is a `course` unit: light notes per
+   file and one summary note linking them.
+4. **Rank** (`rank.py`). CV, transcript, letters and statements, certificates, references, job papers,
+   then reports and coursework, projects, writing, notes, slides, email, pictures and the rest, by words in
+   the name, then the folders, then the start of a plain text file.
+5. **Convert** (`convert.py`). `record.text_of`, the record's own conversion. An empty result is `no_text`
+   and is never sent to a model, because a model given no text invents a document and its author.
+6. **Understand** (`understand.py`). Rich documents get the `ingest_doc` prompt (role checker), cleaned in
+   code: fixed categories and doc types, 12 to 30 tags, `about_owner` held to "unsure" when the text never
+   names `you.name`, and every fact's quote checked against the text; a quote not found marks the fact
+   "Check this" and the note `hal: needs-review`. A document that is someone else's gives no facts. Light
+   documents, and every document while the AI is unavailable, get tags from the path, headings, frequent
+   words and years. Facts go to `jobhunt.profile.store.add_found(con, kind, fields, evidence)` with
+   evidence `{source_rel, quote, field, doc_type, verified}`; the ingest keeps no profile of its own.
+7. **Write and link** (`notes.py`). `Sources/<Category>/<Title>.md` with YAML-list frontmatter
+   (`frontmatter.py`, which the record's reader also uses), entity notes in `Organisations/`, `Places/`,
+   `People/`, `Projects/`, `Courses/` and `Skills/` (`type: entity`, skipped by search), an `Index.md` per
+   category, a wikilink on the first mention of each known title, and the original copied to
+   `Attachments/Sources/` when `record.copy_originals` is on and the file is at most 100 MiB. The record's
+   own conversion leaves the drop folder and `Attachments/Sources/` alone, so no passage is indexed twice.
+
+`GET /api/v2/record/ingest` returns the latest ingest: `state`, `done`, `total`, `eta_s` (this run's pace
+only, so a resumed ingest is not counted as fast), counts by stage, state and category, the item in hand,
+`not_downloaded` with the first paths, and recent errors. Web links are read by `ingest/web.py` when it is
+present (`fetch(urls, page_cap=)`), imported lazily; without it the ingest says web links are not
+available yet.
 
 ## Sources (`find/sources_registry.py`, `find/detect.py`, `find/source_routes.py`)
 

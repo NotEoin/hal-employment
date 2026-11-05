@@ -135,6 +135,38 @@ behaved before it could be changed.
 
 Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts** for the keys.
 
+## Reading many files into your record
+
+Hal can read a whole folder of your files at once: an old laptop's Documents, a university account
+downloaded as a zip, a folder of certificates.
+
+- **A zip.** On Your record, press **Add files** and choose the zip, up to 256 MB. Hal unpacks it safely,
+  zips inside it too, and reads what is inside.
+- **The drop folder.** Anything you put in the **+Inbox** folder inside your record is read the next time
+  Hal reads your record, every 10 minutes unless you changed it. To use another folder, set **Drop folder
+  for your record** in Settings, CV and documents.
+- **A folder on the computer Hal runs on** can be read where it is, so nothing needs copying first. This
+  works only on that computer, not in a window opened from another one.
+
+Hal reads your CV, transcripts, letters and certificates first, so what it learns about you arrives early,
+then reports, projects, writing, notes and slides. Each document becomes a note in your record's `Sources`
+folder, grouped by kind (CVs and letters, Education, Certificates and so on), with a summary, tags and links
+to notes about the organisations, places, skills and courses it mentions. A code project becomes one note,
+and a folder of one course's lecture notes becomes one course note linking its files. With **Keep a copy
+of each file Hal reads in** on, the original is copied to `Attachments` beside the notes.
+
+Some files are listed rather than read:
+
+- **Not downloaded**: OneDrive and Dropbox keep a file's name on your computer before its contents arrive.
+  Open the folder in OneDrive or Dropbox, choose to keep the files on this device, and read it again.
+- **No text**: a file with no words Hal can read, such as a scan read while **Read photos and scans of
+  certificates** is off or tesseract is not installed. Hal never guesses what such a file says.
+- **Copies** of a file Hal has already read are named in the first copy's note, not read again.
+
+Each fact Hal takes from a document comes with the document's own words. When those words are not in the
+document, the fact is marked **Check this**. A document that is someone else's, such as a friend's CV,
+gives no facts about you. If Hal closes part way through, it carries on from the next file when it opens.
+
 ## What Hal remembers
 
 - **Waiting for you**: suggestions from your choices, for example a smaller travel distance after you hide
