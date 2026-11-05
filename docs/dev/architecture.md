@@ -631,6 +631,18 @@ available yet.
   `LINE_MAX` characters, cut at a whole list item, and one location is named. `pack._kept` puts it
   above the record's passages (`profile.writing.with_record`), so the fit map, letter, message and answers
   read it, and `cvstudio.context.build` gives it to every document prompt as the `profile` value.
+- The check queue: `check.queue(con)` works out, from the items' states each time, what the person has
+  still to check, so stopping and coming back needs nothing saved. Open conflicts come first, then one
+  card per found `hal` item in `check.KIND_ORDER` (basics by `store.BASIC_KEYS`, then jobs, education,
+  certificates, achievements, projects, links), then skills in groups by the file each rests on most
+  (`check.best_source`: the person's own document, then `merge.rank`, then a quote found in the file).
+  Skills are ranked by `check.strength`; the first `SKILLS_FIRST` (30) are queued and the rest, then the
+  weak ones, go to `more` ("Show more"). `store.is_weak(item)` is the one rule for weak: a found skill that
+  fewer than two files name and whose evidence has no `role` of "own" ("" is unknown and does not count).
+  `GET /api/v2/profile/check` serves it with `done` and `total` for the progress bar, and
+  `POST /api/v2/profile/confirm-many` and `/hide-many` {ids} change a group in one transaction with one
+  conflicts refresh and one `profile` event. The page is `pages/check.js` (route `check`) with its cards
+  in `record/check.js`.
 - `profile.write_notes(folder)` writes the `Profile/` notes in the record folder (`Profile.md`,
   `Work history.md`, `Education.md`, `Skills.md`, `Projects.md`, `Inconsistencies.md`), each
   `type: dashboard` so search leaves them out. A note whose text has not changed is not written again.

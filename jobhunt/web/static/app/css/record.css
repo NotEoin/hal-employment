@@ -31,7 +31,19 @@
 .rec-hidden[open] summary { margin-bottom: 10px; }
 .rec-ingest .chips { margin-top: 4px; }
 .rec-ingest .note ul { margin: 6px 0 0; }
+/* Check your record: one card at a time with large buttons (44px, the WCAG 2.5.5 target size) */
+.rec-check-page { max-width: 760px; }
+.rec-check { display: flex; flex-direction: column; gap: 12px; overflow-wrap: anywhere; }
+.rec-check .rec-check-h { margin: 0; }
+.rec-check-btns { display: flex; flex-wrap: wrap; gap: 10px; }
+.rec-check-btns .btn, .rec-check .rec-conflict .btn { min-height: 44px; }
+.rec-check-progress { display: flex; flex-direction: column; gap: 6px; }
+.rec-check-skills { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rec-check-skill { display: flex; gap: 10px; align-items: flex-start; padding: 8px 4px; min-height: 44px; cursor: pointer; }
+.rec-check-skill input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; }
+.rec-check-more { margin-top: 4px; }
 @media (max-width: 640px) {
+  .rec-check-btns .btn { flex: 1 1 100%; white-space: normal; }
   .rec-form { grid-template-columns: minmax(0, 1fr); }
   .rec-kv { grid-template-columns: minmax(0, 1fr); }
   .rec-kv dd { margin-bottom: 6px; }

@@ -140,9 +140,41 @@ class ProfileRoutes(unittest.TestCase):
         self.assertEqual((settled["id"], settled["resolution"], settled["items"][0]["id"]),
                          (conflict["id"], {"keep_all": True}, ids["job"]))
 
+    def test_the_check_queue_asks_the_conflict_first_then_the_name_then_the_job(self):
+        ids = self.seed()
+        page = self.c.get("/api/v2/profile/check").json()
+        self.assertEqual([c["item_ids"] for c in page["conflicts"]], [[ids["job"]]])
+        self.assertEqual([c["items"][0]["id"] for c in page["cards"]], [ids["basic"], ids["job"], ids["education"]])
+        self.assertEqual(page["cards"][0]["file_id"], None)
+        (more,) = page["more"]
+        self.assertEqual((more["items"][0]["id"], more["file_id"]), (ids["skill"], file_id(CV)),
+                         "a skill one file names waits under Show more")
+        self.assertEqual((page["done"], page["total"]), (0, 3), "the project was added by hand, so it is checked")
+
+    def test_keeping_and_hiding_many_publishes_one_event_each(self):
+        ids = self.seed()
+        sub = events.subscribe()
+        self.addCleanup(sub.close)
+        r = self.c.post("/api/v2/profile/confirm-many", {"ids": [ids["skill"], ids["education"]]})
+        self.assertEqual((r.status, r.json()), (200, {"ids": [ids["skill"], ids["education"]]}))
+        self.assertEqual(self.c.post("/api/v2/profile/hide-many", {"ids": [ids["basic"]]}).status, 200)
+        seen = [e for e in iter(lambda: sub.get(timeout=EVENT_WAIT_S), None) if e.type == "profile"]
+        self.assertEqual(len(seen), 2)
+        page = self.c.get("/api/v2/profile/check").json()
+        self.assertEqual([c["items"][0]["id"] for c in page["cards"]], [ids["job"]])
+        self.assertEqual((page["done"], page["total"]), (3, 4))
+
+    def test_keeping_many_with_no_ids_or_an_unknown_id_changes_nothing(self):
+        ids = self.seed()
+        r = self.c.post("/api/v2/profile/confirm-many", {"ids": []})
+        self.assertEqual((r.status, r.json()["error"]["field"]), (400, "ids"))
+        self.assertEqual(self.c.post("/api/v2/profile/hide-many", {"ids": [ids["skill"], 999]}).status, 404)
+        self.assertEqual(self.c.get("/api/v2/profile/skill").json()["items"][0]["state"], "hal")
+
     def test_the_made_up_replies_have_the_real_shapes(self):
         self.seed()
         same_keys(self, fake_api.MADE_UP_PAGES["/profile"], self.c.get("/api/v2/profile").json())
+        same_keys(self, fake_api.MADE_UP_PAGES["/profile/check"], self.c.get("/api/v2/profile/check").json())
         for kind in store.KINDS:
             with self.subTest(kind):
                 real = self.c.get(f"/api/v2/profile/{kind}").json()

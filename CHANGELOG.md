@@ -58,6 +58,11 @@ What changed in each version, in plain words.
 - **Hal only uses facts you checked.** Your CV, cover letters, answers and messages use only the facts you
   confirmed or edited in your profile, never one Hal found that you have not checked, and never one you hid.
   My CV and an application's documents say how many facts are waiting for you, with **Check them**.
+- **Check your record.** A page that shows what Hal found one card at a time: **Yes, that's right**,
+  **Fix it** or **Not me**, with the words from your file and the file's name. Where your files disagree it
+  asks **Which is right?** first. Skills come in groups from one file to keep or drop together, and the
+  ones Hal is less sure of wait under **Show more**. A bar shows how many you have checked, and you can stop
+  and carry on later. A fact you said is not you stays hidden when another file names it.
 - **Profile notes in your record folder.** A Profile folder holds Work history, Education, Skills, Projects
   and Inconsistencies notes, written from your profile, for reading in Obsidian.
 - **Letters and answers written for the kind of job.** Hal reads which field a job is in from the advert

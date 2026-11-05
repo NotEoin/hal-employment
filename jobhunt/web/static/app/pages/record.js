@@ -1,5 +1,6 @@
 /* Your record: the folder of certificates, references and notes Hal uses as evidence, and the profile Hal
-   reads out of it (jobs, education, skills, projects and the rest), each in its own tab.
+   reads out of it (jobs, education, skills, projects and the rest), each in its own tab. "Check your record"
+   (pages/check.js) asks about what Hal found one card at a time.
 
    The tab is part of the route ("record-work"), so a link opens the right one. Overview adds files, folders
    and links and shows how reading them is going; each profile tab lists what Hal found for the person to
@@ -8,6 +9,7 @@
 import { html, useState, useLayoutEffect } from "../core/html.js";
 import { post, run } from "../core/api.js";
 import { useApi, toast } from "../core/store.js";
+import { go } from "../core/router.js";
 import { plural } from "../core/format.js";
 import { Head, Tabs, Chip, Note, Empty } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
@@ -89,6 +91,9 @@ function Summary({ profile, onTab }) {
   const open = (profile.conflicts || []).length;
   return html`<section class="card stack s" aria-labelledby="rec-sum-h"><h2 class="h2" id="rec-sum-h">Your profile</h2>
     <p class="small sub rec-line">What Hal found about you in your files. ${profile.to_check ? plural(profile.to_check, "thing") + " to check." : "Everything is checked."}</p>
+    ${(profile.to_check > 0 || open > 0) && html`<div><button type="button" class="btn primary" onClick=${() => go("check")}>
+      <${Icon} n="check" c="s" />Check your record</button>
+      <p class="small sub rec-line">Hal only uses the facts you have checked.</p></div>`}
     <ul class="rec-counts">${kinds.map(k => html`<li key=${k.kind}><button type="button" class="btn quiet small" onClick=${() => onTab(TAB_OF[k.kind])}>
       <b>${k.label}</b></button> <span>${k.n}</span>${k.to_check > 0 && html` <${Chip} tone="warn">${k.to_check} to check<//>`}</li>`)}
       <li><button type="button" class="btn quiet small" onClick=${() => onTab("inconsistencies")}><b>Inconsistencies</b></button>

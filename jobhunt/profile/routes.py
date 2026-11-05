@@ -57,12 +57,20 @@ Routes:
 - `DELETE /api/v2/profile/items/{id}`: only for an item added by hand; {"ok": true}.
 - `POST /api/v2/profile/conflicts/{id}/resolve` {"value": "..."} | {"keep_item": 3} | {"keep_all": true}:
   returns CONFLICT, now resolved.
+- `GET /api/v2/profile/check`: the Check your record queue (`check.queue`): {"conflicts": [NAMED_CONFLICT],
+  "cards": [CARD], "more": [CARD], "done": n, "total": n}. A card (`CARD`) is
+  {"type": "item" | "skills", "key", "source_rel", "file_id", "items": [ITEM], "best": [evidence id]}: an item
+  card holds one item and no file (`source_rel` "", `file_id` null); a skills card holds the skills that rest
+  most on one file. `best` gives, for each item, the id of the source whose quote to show.
+  `more` is what the page keeps under "Show more"; `done` of `total` is the progress bar.
+- `POST /api/v2/profile/confirm-many` and `.../hide-many` {"ids": [3, 4]}: changes them all with one event;
+  {"ids": [3, 4]}. An empty list is 400; an unknown id is 404 and changes nothing.
 """
 from __future__ import annotations
 
 from jobhunt.core import events
 from jobhunt.evidence.routes import file_id
-from jobhunt.profile import conflicts, store
+from jobhunt.profile import check, conflicts, store
 from jobhunt.web.router import BadRequest, NotFound, Request, route
 
 PREFIX = "/api/v2/profile"
@@ -103,6 +111,21 @@ def overview(req: Request) -> dict:
             "to_check": sum(c["hal"] for c in counts.values()),
             "conflicts": named(req.con, conflicts.listing(req.con)),
             "resolved": named(req.con, conflicts.listing(req.con, "resolved")[::-1])}
+
+
+# Registered before "/{kind}", which would otherwise take "check" as a kind: the router tries routes in the order
+# they were added.
+@route("GET", PREFIX + "/check")
+def check_queue(req: Request) -> dict:
+    """What is left to check, conflicts first, for the Check your record page."""
+    found = check.queue(req.con)
+    return {"conflicts": named(req.con, found["conflicts"]), "cards": _cards(found["cards"]),
+            "more": _cards(found["more"]), "done": found["done"], "total": found["total"]}
+
+
+def _cards(cards: list[dict]) -> list[dict]:
+    return [{**c, "file_id": file_id(c["source_rel"]) if c["source_rel"] else None,
+             "items": [with_files(i) for i in c["items"]]} for c in cards]
 
 
 @route("GET", PREFIX + "/{kind}")
@@ -148,6 +171,28 @@ def confirm(req: Request) -> dict:
 def hide(req: Request) -> dict:
     """Keeps the item out of documents; it stays hidden when its file is read again."""
     return _changed(store.hide(req.con, req.params["item_id"]))
+
+
+def _many(req: Request, change) -> dict:
+    ids = req.body.get("ids") if isinstance(req.body, dict) else None
+    try:
+        done = change(req.con, ids)
+    except ValueError as e:
+        raise BadRequest(str(e), field="ids") from e
+    events.publish("profile", item_ids=done)
+    return {"ids": done}
+
+
+@route("POST", PREFIX + "/confirm-many")
+def confirm_many(req: Request) -> dict:
+    """The person kept several items at once (a group of skills)."""
+    return _many(req, store.confirm_many)
+
+
+@route("POST", PREFIX + "/hide-many")
+def hide_many(req: Request) -> dict:
+    """The person said none of these items are theirs."""
+    return _many(req, store.hide_many)
 
 
 @route("POST", PREFIX + "/items")

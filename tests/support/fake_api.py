@@ -203,6 +203,14 @@ MADE_UP_PROFILE = {
 MADE_UP_PROFILE_KINDS = {f"/profile/{k}": {"kind": k, "label": PROFILE_LABELS[k], "items": v,
                                            "conflicts": [PROFILE_CONFLICT] if any(i["conflicts"] for i in v) else []}
                          for k, v in PROFILE_ITEMS.items()}
+_SKILL = PROFILE_ITEMS["skill"][0]
+MADE_UP_PROFILE_CHECK = {
+    "conflicts": MADE_UP_PROFILE["conflicts"],
+    "cards": [{"type": "item", "key": "item:5", "source_rel": "", "file_id": None, "items": PROFILE_ITEMS["basic"],
+               "best": [4]},
+              {"type": "skills", "key": "skills:" + PROFILE_CV, "source_rel": PROFILE_CV,
+               "file_id": _SKILL["evidence"][0]["file_id"], "items": [_SKILL], "best": [3]}],
+    "more": [], "done": 2, "total": 5}
 
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
@@ -307,6 +315,7 @@ MADE_UP_PAGES = {
                        "left_out": {}, "by_rules": 0, "again": False, "private": []},
     "/profile": MADE_UP_PROFILE,
     **MADE_UP_PROFILE_KINDS,
+    "/profile/check": MADE_UP_PROFILE_CHECK,
     # My CV; the parse report is the real server's answer before any CV is added
     "/cv/parse-report": {"version_id": None, "n": None, "found": "", "rows": [], "unsure": 0,
                          "original_preview_url": None, "original": None, "file": None, "from_cv": {}},

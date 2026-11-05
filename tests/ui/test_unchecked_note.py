@@ -75,7 +75,7 @@ class UncheckedNote(unittest.TestCase):
         p.shows(note, "the notice")
         self.assertIn(f"Hal found {unchecked} facts in your files " + NOTICE, note.inner_text())
         note.get_by_role("button", name="Check them").click()
-        p.page.wait_for_selector("#main h1:text('Your record')")
+        p.page.wait_for_selector("#main h1:text('Check your record')")
         self.assertEqual(p.errors, [])
 
 

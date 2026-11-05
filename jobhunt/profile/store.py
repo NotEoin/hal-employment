@@ -1,9 +1,9 @@
 """The profile store: facts about the person, where each came from, and what they changed.
 
 The ingest calls `add_found(con, kind, fields, evidence)` for each fact it reads in a document; the Your record
-page reads items with `items` and `item`, and changes them with `edit`, `confirm`, `hide`, `add_by_hand` and
-`delete`. Every write ends with `conflicts.refresh`, so the list of what does not add up always matches the
-facts.
+page reads items with `items` and `item`, and changes them with `edit`, `confirm`, `hide`, `confirm_many`,
+`hide_many`, `add_by_hand` and `delete`. Every write ends with `conflicts.refresh`, so the list of what does
+not add up always matches the facts.
 
 Design decisions, each with its reason:
 
@@ -14,7 +14,10 @@ Design decisions, each with its reason:
 - A note rewritten in place from a newer copy (`replace_source`) replaces that note's evidence. A confirmed
   item whose facts from it changed goes back to `hal` to be checked again: the person checked what the old
   copy said, not the new one. An edited item still keeps their values.
-- A hidden item still matches new facts, so reading the same CV again never brings back what the person hid.
+- A hidden item still matches new facts, so reading the same CV again, or another file that names the same
+  fact, never brings back what the person hid.
+- A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
+  topics in course material is not a claim the person made, so the check page asks about it last.
 - Fields are checked against the kind's list (`KINDS`): an unknown kind or field raises `ValueError` naming
   it, so an ingest that misreads a document fails loudly instead of storing a field nothing shows.
 - Only items the person added by hand can be deleted; a found item is hidden instead, because deleting it
@@ -401,6 +404,30 @@ def hide(con: sqlite3.Connection, item_id) -> dict:
     return item(con, row["id"])
 
 
+def _set_many(con: sqlite3.Connection, item_ids, state: str) -> list[int]:
+    if not isinstance(item_ids, list) or not item_ids:
+        raise ValueError("Send the ids of the items, as a list.")
+    rows = [_row(con, i) for i in item_ids]          # every id is checked before anything changes
+    with con:
+        for row in rows:
+            _set_state(con, row["id"], state)
+        conflicts.refresh(con)
+    return [row["id"] for row in rows]
+
+
+def confirm_many(con: sqlite3.Connection, item_ids: list) -> list[int]:
+    """Confirms several items at once, with one conflicts refresh; returns their ids.
+
+    Raises ValueError for an empty or missing list and LookupError for an unknown id, changing nothing.
+    """
+    return _set_many(con, item_ids, "confirmed")
+
+
+def hide_many(con: sqlite3.Connection, item_ids: list) -> list[int]:
+    """Hides several items at once, with one conflicts refresh; returns their ids. Errors as `confirm_many`."""
+    return _set_many(con, item_ids, "hidden")
+
+
 def add_by_hand(con: sqlite3.Connection, kind: str, fields: dict) -> dict:
     """Adds an item the person typed in; it starts as edited, so their words are used as they are."""
     clean_fields = clean(kind, fields)
@@ -422,6 +449,22 @@ def delete(con: sqlite3.Connection, item_id) -> None:
     with con:
         con.execute("DELETE FROM profile_items WHERE id = ?", (row["id"],))
         conflicts.refresh(con)
+
+
+OWN_ROLE = "own"           # evidence `role`: "own" for the person's own document, "taught" for course material
+STRONG_FILES = 2           # two files naming a skill is a pattern, not one lecture's list of topics
+
+
+def is_weak(item: dict) -> bool:
+    """True for a found skill that fewer than `STRONG_FILES` files name and none of the person's own documents.
+
+    `item` is a shaped item with its evidence (`item`, `items`). An evidence `role` of "" is unknown and does
+    not count as the person's own. Every other kind, and an item added by hand, is never weak.
+    """
+    if item["kind"] != "skill" or item.get("origin") == "you":
+        return False
+    files = {e["source_rel"] for e in item["evidence"]}
+    return len(files) < STRONG_FILES and not any(e.get("role", "") == OWN_ROLE for e in item["evidence"])
 
 
 def evidence_of(con: sqlite3.Connection, item_ids: list[int]) -> dict[int, list[dict]]:

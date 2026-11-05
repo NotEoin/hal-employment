@@ -180,6 +180,49 @@ class Store(unittest.TestCase):
         self.assertEqual(store.item(self.con, a)["state"], "hidden")
         self.assertEqual(store.items(self.con, "job", hidden=False), [])
 
+    def test_a_fact_hidden_as_not_me_stays_hidden_when_another_file_names_it(self):
+        # "Not me" must be remembered: the same fact from a second document must not bring it back
+        a = self.job(CV_A, start="May 2024", current=True)
+        store.hide(self.con, a)
+        self.assertEqual(self.job(CV_B, employer="The Fenwick Lantern Museum Trust Ltd", start="05/2024",
+                                  current=True), a)
+        skill = store.add_found(self.con, "skill", {"name": "Palaeography"}, ev(NOTES, "notes", "palaeography"))
+        store.hide_many(self.con, [skill])
+        self.assertEqual(store.add_found(self.con, "skill", {"name": "palaeography"}, ev(CV_A, "cv")), skill)
+        self.assertEqual([store.item(self.con, i)["state"] for i in (a, skill)], ["hidden", "hidden"])
+        self.assertEqual(len(store.item(self.con, a)["evidence"]), 2)
+        self.assertEqual(store.items(self.con, "job", hidden=False) + store.items(self.con, "skill", hidden=False), [])
+
+    def test_a_skill_from_one_file_that_is_not_the_persons_own_is_weak(self):
+        one = store.item(self.con, store.add_found(self.con, "skill", {"name": "Palaeography"},
+                                                   ev(NOTES, "notes", "palaeography")))
+        self.assertTrue(store.is_weak(one))
+        self.assertTrue(store.is_weak({**one, "evidence": [{**e, "role": "taught"} for e in one["evidence"]]}))
+        self.assertFalse(store.is_weak({**one, "evidence": [{**e, "role": "own"} for e in one["evidence"]]}))
+        two = store.item(self.con, store.add_found(self.con, "skill", {"name": "Palaeography"}, ev(CV_A, "cv")))
+        self.assertFalse(store.is_weak(two), "two different files name it")
+        self.assertFalse(store.is_weak(store.item(self.con, self.job(CV_A))), "only skills can be weak")
+        typed = store.add_by_hand(self.con, "skill", {"name": "Bookbinding"})
+        self.assertFalse(store.is_weak(typed))
+
+    def test_the_same_file_twice_does_not_make_a_skill_strong(self):
+        store.add_found(self.con, "skill", {"name": "Palaeography"}, ev(NOTES, "notes", "palaeography"))
+        again = store.add_found(self.con, "skill", {"name": "Palaeography"}, ev(NOTES, "notes", "old hands"))
+        self.assertTrue(store.is_weak(store.item(self.con, again)))
+
+    def test_many_items_are_confirmed_or_hidden_together_or_not_at_all(self):
+        a = self.job(CV_A, title="Archive assistant", employer="Brackenholt Record Office")
+        b = self.job(CV_A, title="Library assistant", employer="Saltmarsh Cross Library")
+        with self.assertRaises(LookupError):
+            store.confirm_many(self.con, [a, 999])
+        self.assertEqual(store.item(self.con, a)["state"], "hal")
+        with self.assertRaises(ValueError):
+            store.hide_many(self.con, [])
+        with mock.patch.object(conflicts, "refresh", wraps=conflicts.refresh) as refresh:
+            self.assertEqual(store.confirm_many(self.con, [a, b]), [a, b])
+        refresh.assert_called_once()
+        self.assertEqual([store.item(self.con, i)["state"] for i in (a, b)], ["confirmed", "confirmed"])
+
     def test_overlapping_full_time_jobs_and_a_long_gap_are_flagged(self):
         a = self.job(CV_A, title="Archive assistant", employer="Brackenholt Record Office",
                      start="Jan 2021", end="Dec 2021")

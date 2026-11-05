@@ -29,7 +29,7 @@ LATE_EFFECTS_MS = 1500
 # Every deep link, with made-up ids where a route takes one.
 ROUTES = ["home", "jobs", "jobs-saved", "jobs-hidden", "jobs-where", "job-demo%3A1", "apps", "app-1", "inbox",
           "cv", "cv-sugg", "cv-style", "cv-checks", "cv-versions", "docs", "docs-1", "docs-details", "record",
-          "record-work", "record-inconsistencies", "record-files", "activity", "memory", "memory-learned",
+          "record-work", "record-inconsistencies", "record-files", "check", "activity", "memory", "memory-learned",
           "memory-sites", "memory-answers", "settings", "settings-goal",
           "setup", "setup-cv", "setup-goal"]
 

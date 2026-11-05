@@ -17,5 +17,5 @@ export function UncheckedNote() {
   if (!n) return null;
   return html`<div class="unchecked-note"><${Note}>
     <span>Hal found ${plural(n, "fact")} in your files that you have not checked yet. Hal only uses facts you have checked.</span>
-    <div><button type="button" class="btn small" onClick=${() => go("record")}>Check them</button></div><//></div>`;
+    <div><button type="button" class="btn small" onClick=${() => go("check")}>Check them</button></div><//></div>`;
 }

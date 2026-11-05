@@ -259,6 +259,30 @@ qualifications that differ, not the same thing in other words ("Thirty units" an
 keep one and Hal hides the other. The **Inconsistencies** tab lists everything still to sort out, with the
 settled ones folded away below.
 
+### Checking your record
+
+**Check your record** shows what Hal found one card at a time, so you can go through it quickly. Open it
+from **Check your record** on Your record's Overview, or from **Check them** on My CV or an application.
+
+1. When two of your files disagree, Hal asks **Which is right?** first. Press the right value, or say it
+   is right as it is.
+2. Then each fact comes on its own card: your name and contact details, then jobs, education,
+   certificates, achievements, projects and links. The card shows the words Hal found in your file and the
+   file's name, which opens the file.
+   - **Yes, that's right** means Hal can use it.
+   - **Fix it** lets you change it. **Save** keeps your words, and Hal uses them as they are.
+   - **Not me** hides it. Hal never uses it, and it stays hidden even when another file says the same.
+3. Skills come last, in groups from one file, such as one module or one project. Every skill is ticked.
+   Untick any that are not yours, then press **Keep these**, or press **None of these**.
+
+The bar at the top shows how many you have checked, for example "23 of 80 checked". You can stop at any
+time: when you come back, Hal starts where you left off. When nothing is left, Hal says **Your record is
+ready**.
+
+Skills Hal is less sure of wait under **Show more** at the end. These are most often found in only one
+file that is not your own writing, such as a lecture's list of topics. Hal never uses them unless you keep
+them.
+
 ## What Hal remembers
 
 - **Waiting for you**: suggestions from your choices, for example a smaller travel distance after you hide

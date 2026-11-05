@@ -18,6 +18,7 @@ export const ROUTES = {
   cv: { title: "My CV", name: "CvStudio", load: () => import("../pages/cv.js") },
   docs: { title: "Documents", name: "Docs", load: () => import("../pages/docs.js") },
   record: { title: "Your record", name: "Record", load: () => import("../pages/record.js") },
+  check: { title: "Check your record", name: "Check", load: () => import("../pages/check.js"), parent: "record" },
   activity: { title: "Activity", name: "Activity", load: () => import("../pages/activity.js") },
   memory: { title: "What Hal remembers", name: "Memory", load: () => import("../pages/memory.js") },
   settings: { title: "Settings", name: "Settings", load: () => import("../pages/settings.js") },
@@ -27,7 +28,7 @@ export const ROUTES = {
 export const ROUTE_EXAMPLES = [
   "home", "jobs", "jobs-saved", "jobs-hidden", "jobs-where", "job-<id>", "apps", "app-<id>", "inbox", "cv", "cv-sugg",
   "cv-style", "cv-checks", "cv-versions", "docs", "docs-<id>", "docs-details", "record", "record-work",
-  "record-inconsistencies", "record-files", "activity", "memory",
+  "record-inconsistencies", "record-files", "check", "activity", "memory",
   "memory-learned", "memory-sites", "memory-answers", "settings", "settings-<group>", "setup", "setup-<step>",
 ];
 

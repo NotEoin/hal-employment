@@ -26,7 +26,7 @@ async function act(fn, said) {
 const fileName = rel => rel.split("/").pop().replace(/\.md$/, "");
 
 /** "From:" the files an item came from, each with its quote and a mark when the quote is not in the file. */
-function Sources({ evidence }) {
+export function Sources({ evidence }) {
   if (!evidence.length) return null;
   return html`<div class="rec-from"><div class="small sub"><b>From:</b></div><ul class="rec-sources">
     ${evidence.map(e => html`<li key=${e.id}>
@@ -42,7 +42,8 @@ function Value({ type, v }) {
   return s;
 }
 
-function Fields({ item }) {
+/** An item's fields as a list of words and values; nothing when it has none. */
+export function Fields({ item }) {
   const rows = KIND_FIELDS[item.kind].filter(([f, , type]) => shown(type, item.fields[f]) !== "");
   if (!rows.length) return null;
   return html`<dl class="kv rec-kv">${rows.map(([f, words, type]) => html`<dt>${words}</dt><dd>
