@@ -16,8 +16,8 @@ import sqlite3
 
 from jobhunt.core import clock
 
-FINAL = ("done", "duplicate", "older_version", "not_downloaded", "no_text", "skipped", "not_mine", "error",
-         "private")
+FINAL = ("done", "duplicate", "older_version", "covered", "not_downloaded", "no_text", "skipped", "not_mine",
+         "error", "private")
 FIRST_PATHS = 10            # not-downloaded files named on the page; the rest are counted
 PRIVATE_SHOWN = 50          # private files named on the page, newest first; each has its own button
 RECENT_ERRORS = 10

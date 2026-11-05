@@ -34,6 +34,7 @@ from pathlib import Path
 from jobhunt import record
 from jobhunt.core import clock
 from jobhunt.ingest import frontmatter
+from jobhunt.profile import merge
 
 SOURCES = "Sources"
 INDEX = "Index"
@@ -45,8 +46,6 @@ ENTITY_FOLDERS = {"organisations": "Organisations", "projects": "Projects", "cou
 ENTITY_WORD = {"organisations": "organisation", "projects": "project", "courses": "course", "skills": "skill"}
 ORG_FIELDS = ("employer", "institution", "issuer")
 COURSE_ROLES = ("own", "taught")
-# A module code: "CSC3632", "GEO 101", "HIST-2045". It names one module however the title is written.
-MODULE_CODE = re.compile(r"(?<![A-Za-z0-9])([A-Za-z]{2,4})[ -]?(\d{3,4})(?![0-9])")
 FENCED_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".c", ".h", ".cpp", ".cs", ".go", ".rs", ".rb",
                    ".php", ".swift", ".kt", ".scala", ".r", ".m", ".sql", ".sh", ".lua", ".scad", ".csv", ".tsv",
                    ".json", ".yaml", ".yml", ".toml", ".xml", ".ini", ".cfg", ".bib"}
@@ -152,8 +151,8 @@ def entity_key(name: str, kind: str = "") -> str:
     """An entity's name as compared: "3D Printing", "3D printing" and "3d-printing" are one, and a course is
     its module code when it has one ("CSC3632 System and Network Security" is "System and Network Security
     (CSC3632)": one module had seven notes, 2026-11-05)."""
-    if kind == "courses" and (code := MODULE_CODE.search(name)):
-        return f"{code.group(1).lower()}{code.group(2)}"
+    if kind == "courses" and (code := merge.module_code(name)):
+        return code.lower()
     return " ".join(re.split(r"[\s_-]+", slug(name).lower())).strip()
 
 

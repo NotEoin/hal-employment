@@ -510,7 +510,14 @@ runner starts the action again with the same batch and only pending items are re
 3. **Group** (`group.py`). A repository (a `.git` folder or a manifest at its top) is one `repo` item,
    summarised from its README, docs headings, manifest, language mix and file tree, never file by file. A
    folder whose own files are mostly notes or slides (three or more) is a `course` unit: light notes per
-   file and one summary note linking them.
+   file and one summary note linking them, one per module code (`engine._courses`: a unit whose code
+   already has a course note adds its files to it).
+   Course material goes through `lectures.py`. Within a rank, typed notes are read before converted decks
+   and handouts, and a deck or handout whose module code and title words match typed notes already written
+   (`lectures.Covered`) gets state `covered`: no note, no AI call, its path under "Also at" in those notes.
+   A converted document the AI calls `taught` is written again by the `lecture_note` prompt on the worker
+   thread, and the note keeps that text instead of the raw words. Every `taught` note's text and summary
+   lose emails and phone numbers (`lectures.scrub`), and its original is not copied into the record.
    Copies of one project (`versions.py`, run by `engine.run` before reading) are one project when they
    share a git remote from `.git/config` (https, ssh and `.git` forms alike), or, when either has none,
    when their names match once copy marks such as "(2)", "-v3", "-final" or "Copy of" are removed (one

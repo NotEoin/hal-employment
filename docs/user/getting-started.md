@@ -187,9 +187,9 @@ then reports, projects, writing, notes and slides. Each document becomes a note 
 folder, grouped by kind (CVs and letters, Education, Certificates and so on), with a summary, tags and links
 to notes about your modules, and the employers, skills and projects it gives facts about. Hal makes no notes
 about the people and places a document mentions, as they do not help an application. A code project
-becomes one note,
-and a folder of one course's lecture notes becomes one course note linking its files. With **Keep a copy
-of each file Hal reads in** on, the original is copied to `Attachments` beside the notes.
+becomes one note, and each module gets one course note linking its lectures, however many folders they
+came from. With **Keep a copy of each file Hal reads in** on, the original is copied to `Attachments`
+beside the notes.
 
 The AI reads the rich documents in full. Notes and slides are filed by their headings and words, which is
 quick but gives them no AI summary and adds nothing to your profile. To have the AI read those too:
@@ -232,6 +232,10 @@ Hal sorts every document by whose it is, and that decides what it can learn from
   letters, so a classmate's email in a group report never becomes yours.
 - **Course material**: slides, handouts, lecture notes and module pages. These show what you studied, so
   they give skills and nothing else: never a lecturer's email, and never a lecture's example as your project.
+  When the AI reads slides or a handout, it writes them up as lecture notes: the topics, ideas, definitions
+  and examples, without names, emails, rooms or admin. Email addresses and phone numbers are taken out of
+  all course material. Slides of a lecture you already have your own notes on are not filed again: your
+  notes list them under **Also at**.
 - **Someone else's**: another person's CV, a paper you downloaded, a classmate's poster. Hal leaves these out
   of your record and names them when it finishes.
 

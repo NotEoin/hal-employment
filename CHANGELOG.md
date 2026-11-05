@@ -13,7 +13,8 @@ What changed in each version, in plain words.
 - **Read a whole folder or zip into your record.** Add a zip with **Add files** on Your record, or put files
   in the **+Inbox** drop folder, and Hal reads every document into a note of its own, CVs, transcripts and
   letters first. Each note has a summary, tags and links to your modules and to the employers, skills and
-  projects it gives facts about. Code projects and a course's lecture notes each become one note. Files OneDrive or Dropbox
+  projects it gives facts about. Code projects become one note each, and each module one course note.
+  Slides and handouts are written up as lecture notes without names, emails or admin. Files OneDrive or Dropbox
   has not downloaded, files with no text and copies are listed rather than read, settings files, hidden
   folders and bundled code are left out, and a fact whose words
   are not in its document is marked **Check this**. Hal carries on from the next file after a restart.

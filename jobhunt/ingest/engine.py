@@ -33,7 +33,20 @@ from pathlib import Path
 
 from jobhunt import profile, record
 from jobhunt.core import events
-from jobhunt.ingest import convert, discover, group, items, notes, privacy, rank, roles, sources, understand, versions
+from jobhunt.ingest import (
+    convert,
+    discover,
+    group,
+    items,
+    lectures,
+    notes,
+    privacy,
+    rank,
+    roles,
+    sources,
+    understand,
+    versions,
+)
 
 log = logging.getLogger(__name__)
 
@@ -209,7 +222,27 @@ def _judge(con: sqlite3.Connection, row: sqlite3.Row, desc: dict, text: str) -> 
     role = roles.decide(desc.get("said"), doc_type=desc["doc_type"], text=f"{row['rel']}\n{text}", words=words,
                         in_course=bool(row["unit"]))
     desc["role"], desc["about_owner"] = role, roles.ABOUT_OWNER[role]
+    if role == roles.TAUGHT:
+        desc["summary"] = lectures.scrub(desc["summary"])
     desc["facts"] = [f for f in desc["facts"] if roles.allowed(role, f["kind"], desc["doc_type"])]
+
+
+def _shown_text(desc: dict, text: str) -> str:
+    """The text a note keeps: course material without contact details (`lectures.scrub`)."""
+    return lectures.scrub(text) if desc["role"] == roles.TAUGHT else text
+
+
+def _covered(con: sqlite3.Connection, row: sqlite3.Row, batch: str, covered: lectures.Covered) -> bool:
+    """True when the item is slides of a lecture the person's notes already cover: those notes name the deck
+    under "Also at", and it gets no note of its own (`lectures`)."""
+    if row["note"] or row["kind"] != "file" or not lectures.is_material(row["rel"], _rule(row).doc_type):
+        return False
+    hit = covered.find(row["rel"], Path(row["rel"]).stem)
+    if hit is None:
+        return False
+    _also_at(vault(), hit[1], _source(row, batch))
+    items.update(con, row["id"], state="covered", dup_of=hit[0], note=hit[1], role=roles.TAUGHT)
+    return True
 
 
 def _give_facts(con: sqlite3.Connection, desc: dict, note_rel: str) -> int:
@@ -277,6 +310,9 @@ def _prepare(row: dict, rule: rank.Rule) -> _Read:
         desc = understand.ask(row["rel"], text, rule)
         if why := privacy.held_back(row, "", str(desc.get("sensitive") or "")):
             return _Read("", None, why)
+        if lectures.wants_note(row["rel"], desc.get("said")) and (note := lectures.write(row["rel"], desc["title"],
+                                                                                          text)):
+            text, desc["lecture"] = note, True
     else:
         desc = understand.light(row["rel"], text, rule)
         if is_picture and not text.strip():
@@ -315,8 +351,8 @@ def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Pa
     old = path.read_text(encoding="utf-8", errors="replace")
     fm, _ = notes.frontmatter.parse(old)
     source = _source(row, batch) if newer else str(fm.get("source") or row["path"])
-    notes.write_source(vault_dir, desc, text=read.text, source=source, sha256=row["sha256"] or "", original=None,
-                       at=path)
+    notes.write_source(vault_dir, desc, text=_shown_text(desc, read.text), source=source,
+                       sha256=row["sha256"] or "", original=None, at=path)
     if kept := _kept(old):
         text = path.read_text(encoding="utf-8")
         notes.write(path, text.replace("\n## Original\n", f"\n{kept}## Original\n", 1))
@@ -349,9 +385,9 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
     path = Path(row["path"])
     moving = drop_root is not None and drop_root in path.parents
     original = None
-    if row["kind"] == "file":
+    if row["kind"] == "file" and desc["role"] != roles.TAUGHT:   # a deck's copy would keep what `scrub` took out
         original = notes.keep_original(vault_dir, path, desc["category"], move=moving)
-    note_rel = notes.write_source(vault_dir, desc, text=read.text, source=_source(row, batch),
+    note_rel = notes.write_source(vault_dir, desc, text=_shown_text(desc, read.text), source=_source(row, batch),
                                   sha256=row["sha256"] or "", original=original)
     notes.add_mentions(vault_dir, desc, note_rel)
     _give_facts(con, desc, note_rel)
@@ -391,6 +427,7 @@ def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, dr
     from jobhunt.core import settings
 
     workers = max(1, int(settings.get("ai.parallel")))
+    covered = lectures.Covered(con)
     written: list[str] = []
     queue = iter(todo)
     in_hand: deque[tuple[sqlite3.Row, Future | None]] = deque()
@@ -400,6 +437,10 @@ def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, dr
         while True:
             while len(in_hand) < workers * AHEAD and (row := next(queue, None)) is not None:
                 sha = row["sha256"] or ""
+                if _covered(con, row, batch, covered):
+                    con.commit()
+                    done += 1
+                    continue
                 if not row["note"] and sha and sha in handed:
                     in_hand.append((row, None))
                     continue
@@ -411,7 +452,12 @@ def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, dr
             row, job = in_hand.popleft()
             progress(done, total, row["rel"])
             try:
-                if _copy_of(con, row, batch) or job is None:
+                # notes written while these slides were with a worker may cover them too
+                if _covered(con, row, batch, covered):
+                    if job is not None:
+                        job.cancel()
+                    note = None
+                elif _copy_of(con, row, batch) or job is None:
                     note = None
                 else:
                     note = _finish(con, row, job.result(), batch, drop_root)
@@ -422,6 +468,9 @@ def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, dr
             con.commit()
             if note:
                 written.append(note)
+                kept = con.execute("SELECT doc_type, role FROM ingest_items WHERE id = ?", (row["id"],)).fetchone()
+                if kept["doc_type"] in lectures.NOTE_TYPES and kept["role"] in (roles.OWN, roles.TAUGHT):
+                    covered.add(row["id"], row["rel"], Path(row["rel"]).stem, note)
             done += 1
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
@@ -451,31 +500,58 @@ def mark_again(con: sqlite3.Connection, batch: str) -> int:
     return n
 
 
+def _module_note(con: sqlite3.Connection, code: str, vault_dir: Path) -> str | None:
+    """The course note already written for module `code` in any ingest, or None."""
+    if not code:
+        return None
+    for r in con.execute("SELECT rel, note FROM ingest_items WHERE kind = 'course' AND state = 'done' "
+                         "AND note IS NOT NULL ORDER BY id"):
+        if lectures.module_code(r["rel"]) == code and (vault_dir / r["note"]).is_file():
+            return r["note"]
+    return None
+
+
 def _courses(con: sqlite3.Connection, batch: str) -> list[str]:
-    """Writes each course unit's summary note, linking its files' notes, and links them back to it."""
+    """Writes each course unit's summary note, linking its files' notes, and links them back to it.
+
+    One module is one note: a unit whose module code already has a course note, such as the same module's
+    slides in another folder, adds its files to that note. One module had seven notes, one per folder and
+    spelling of its name (2026-11-05).
+    """
     vault_dir, written = vault(), []
     for unit in con.execute("SELECT * FROM ingest_items WHERE batch = ? AND kind = 'course' AND state = 'pending'",
                             (batch,)).fetchall():
         members = con.execute("""SELECT rel, note FROM ingest_items WHERE batch = ? AND unit = ? AND note IS NOT NULL
-                                 ORDER BY rel""", (batch, unit["path"])).fetchall()
+                                 AND state = 'done' ORDER BY rel""", (batch, unit["path"])).fetchall()
         if not members:
             items.update(con, unit["id"], state="no_text")
             continue
-        texts = []
-        for m in members:
-            _, body = notes.frontmatter.parse((vault_dir / m["note"]).read_text(encoding="utf-8", errors="replace"))
-            texts.append(body)
         title = Path(unit["path"]).name
-        desc = understand.light(unit["rel"] + "/", "\n\n".join(texts), rank.COURSE)
-        desc["title"] = title
-        desc["summary"] = f"{len(members)} files of notes and slides from {title}."
-        files = ["## Files", "", *(f"- {notes.link(m['note'])}" for m in members)]
-        note_rel = notes.write_source(vault_dir, desc, text="\n".join(files), source=unit["path"], sha256="",
-                                      original=None)
+        code = lectures.module_code(unit["rel"])
+        lines = [f"- {notes.link(m['note'])}" for m in members]
+        if (note_rel := _module_note(con, code, vault_dir)) is not None:
+            path = vault_dir / note_rel
+            text = path.read_text(encoding="utf-8")
+            new = [line for line in lines if line not in text]
+            if new:
+                notes.write(path, text.replace("## Files\n\n", "## Files\n\n" + "\n".join(new) + "\n", 1))
+        else:
+            texts = []
+            for m in members:
+                _, body = notes.frontmatter.parse((vault_dir / m["note"]).read_text(encoding="utf-8",
+                                                                                    errors="replace"))
+                texts.append(body)
+            desc = understand.light(unit["rel"] + "/", "\n\n".join(texts), rank.COURSE)
+            desc["title"] = title
+            desc["summary"] = f"{len(members)} files of notes and slides from {title}."
+            note_rel = notes.write_source(vault_dir, desc, text="\n".join(["## Files", "", *lines]),
+                                          source=unit["path"], sha256="", original=None)
         for m in members:
             path = vault_dir / m["note"]
-            notes.write(path, path.read_text(encoding="utf-8").replace(
-                "\n## Original\n", f"\n## Part of\n\n- {notes.link(note_rel, title)}\n\n## Original\n", 1))
+            text = path.read_text(encoding="utf-8")
+            if "\n## Part of\n" not in text:
+                notes.write(path, text.replace("\n## Original\n",
+                                               f"\n## Part of\n\n- {notes.link(note_rel, title)}\n\n## Original\n", 1))
         items.update(con, unit["id"], stage="written", state="done", note=note_rel)
         written.append(note_rel)
     return written
@@ -514,6 +590,10 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     drop_root = sources.drop_folder().resolve() if drop else None
     versions.settle(con, batch, vault())
     todo = [r for r in items.pending(con, batch) if r["kind"] != "course"]
+    # Within a rank, typed notes before converted decks and handouts, so a lecture's notes are in the record
+    # when its slides come up and cover them (`lectures.Covered`); the sort keeps the rest in their order.
+    todo.sort(key=lambda r: (r["rank"] if r["rank"] is not None else rank.OTHER.rank, r["kind"] == "file",
+                             not lectures.is_typed(r["rel"])))
     total = sum(items.counts(con, batch)["states"].values())
     written = _read_items(con, todo, batch, drop_root, progress, total - len(todo), total)
     versions.record_earlier(con, batch, vault())
