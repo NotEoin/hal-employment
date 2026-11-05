@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A site's comment box is never filled.** Signed in to Hacker News, a job post there shows a reply box, and
+  Hal typed an application answer into it, one press away from posting it. Boxes known only as "text",
+  "comment" or "reply" are now the site's own.
 - **A search box known only as "q" is the site's own.** Hacker News's search box has no label, and Hal took it
   for a one-question form.
 - **Forms filling side by side keep to their own tabs.** With several forms filling at once, one job's list of

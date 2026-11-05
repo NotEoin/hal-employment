@@ -153,6 +153,10 @@ class SiteKeys(unittest.TestCase):
             self.assertTrue(browser.not_the_application({"label": label}), label)
         for label in ("Postcode", "Town or city", "Job title", "Current company", "Location (City)"):
             self.assertFalse(browser.not_the_application({"label": label}), label)
+        # A signed-in reader's comment box under a forum post (Hacker News, 2026-11-05).
+        for label in ("text", "Add a comment", "Reply"):
+            self.assertTrue(browser.not_the_application({"label": label, "kind": "textarea"}), label)
+        self.assertFalse(browser.not_the_application({"label": "Cover letter", "kind": "textarea"}))
 
     def test_the_browsers_words_for_a_page_that_went_away_are_not_shown(self):
         """Regression (testers, 2026-11-05): "Frame with ID 0 was removed." reached the Form step as it was."""

@@ -426,12 +426,20 @@ JOB_ALERT = re.compile(r"job alerts?|similar (new )?(jobs|roles|vacancies)|jobs 
                        r"(send|email) me (new |similar |more )?(jobs|roles|vacancies)|new jobs by email", re.I)
 
 
+# A site's own comment box, known only as "text" or "comment": Hacker News shows one under every post to a signed-in
+# reader, and Hal typed an application answer into it, one press from being posted (testers, 2026-11-05).
+COMMENT_BOX = re.compile(r"^\s*(text|comments?|reply|(add|leave|write|post) a (comment|reply)|your (comment|reply))"
+                         r"\s*:?\s*$", re.I)
+
+
 def not_the_application(field: dict) -> bool:
-    """True for a box that belongs to the site rather than the application: its job search or job alerts, by
-    its words, or by where it sits on the page (`site_box`, from page.js)."""
+    """True for a box that belongs to the site rather than the application: its job search, job alerts or
+    comment box, by its words, or by where it sits on the page (`site_box`, from page.js)."""
     if field.get("site_box"):
         return True
     label = field.get("label") or ""
+    if field.get("kind") == "textarea" and COMMENT_BOX.search(label):
+        return True
     return bool(SITE_SEARCH.search(label) or JOB_ALERT.search(f"{label} {field.get('help') or ''}"))
 
 
