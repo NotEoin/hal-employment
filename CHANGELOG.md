@@ -25,6 +25,7 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **"First and last name" gets your full name.** "Legal First and Last Name" was given only your surname.
 - **A job board's account page is left to you.** Adzuna's register page (email, password and the password again)
   was filled with your email address as the application's last page. Through the browser helper, as in Hal's own
   window, a short page with a password box is now a sign-in for you.

@@ -248,6 +248,14 @@ class Answers(unittest.TestCase):
                                                                    "profile: grad_year"), label)
         self.assertEqual(self.propose(label="University")["value"], "Southbrook University")
 
+    def test_a_label_asking_for_first_and_last_name_gets_the_full_name(self):
+        """Regression (testers, 2026-11-05): "Legal First and Last Name" was given only the surname."""
+        autofill.profile = lambda: {**PROFILE, "first_name": "Robin", "last_name": "Testwell",
+                                    "full_name": "Robin Testwell"}
+        for label in ("Legal First and Last Name", "First & last name"):
+            self.assertEqual(self.propose(label=label)["value"], "Robin Testwell", label)
+        self.assertEqual(self.propose(label="Last Name")["value"], "Testwell")
+
     def test_an_optional_follow_up_to_a_different_answer_is_left_empty(self):
         """Regression (testers, 2026-11-04): after "No" to sponsorship, the model answered "If you answered yes to
         the above, confirm your visa" with "A"."""

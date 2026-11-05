@@ -265,6 +265,9 @@ CONSENT = re.compile(r"consent|i agree|agree to|privacy|data (protection|process
 # (label pattern, profile key, preferred options for a choice, in order)
 # Standard answers to questions, however they are worded.
 ANSWERS = {"sponsorship", "right_to_work", "notice", "start", "salary", "how_heard", "office", "relocate"}
+# "Legal First and Last Name" asks for both names, and the last-name rule gave it the surname (Harvey, testers
+# 2026-11-05).
+BOTH_NAMES = re.compile(r"first\s*(and|&|/|\+)\s*last|given\s*(and|&)\s*family", re.I)
 RIGHT_TO_WORK = re.compile(r"right to work|legally (entitled|authori[sz]ed|eligible|able)|eligib\w+ to work|"
                            r"authori[sz]ed to work|work permit|immigration status|visa status|work status", re.I)
 SPONSOR = re.compile(r"sponsor", re.I)
@@ -275,7 +278,7 @@ RULES = [
     (r"\bmiddle name", "middle_name", []),
     (r"\bfirst name|given name|forename", "first_name", []),
     (r"\blast name|surname|family name", "last_name", []),
-    (r"^(full )?(legal )?name\b|^your name$|full name", "full_name", []),
+    (r"^(full )?(legal )?name\b|^your name$|full name|" + BOTH_NAMES.pattern, "full_name", []),
     (r"e-?mail", "email", []),
     # Before the phone rule: "Phone country code" asks for the dialling code, not the number (Totaljobs,
     # testers 2026-11-04).
@@ -320,7 +323,8 @@ HIGH_SCHOOL = re.compile(r"high ?school|secondary school|sixth form|\bgcses?\b|\
 # Labels a rule's words match that ask about something else (Jane Street, testers 2026-11-05): "What year did you
 # graduate high school?" was given the university, and "Secondary Major" the degree.
 NOT_FOR = {"university": HIGH_SCHOOL, "grad_year": HIGH_SCHOOL,
-           "degree": re.compile(r"secondary|second|minor|double", re.I)}
+           "degree": re.compile(r"secondary|second|minor|double", re.I),
+           "first_name": BOTH_NAMES, "last_name": BOTH_NAMES, "preferred_name": BOTH_NAMES}
 HEARD_SITE = [re.compile(r"(company|careers?|our) (web)?(site|page)|^website", re.I)]
 HEARD_BOARD = [re.compile(r"job ?board|job (site|website|search)|online (job|search)", re.I)]
 # Shortest option or answer matched inside the other; shorter ones ("UK", "No") match too much by accident.
