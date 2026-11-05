@@ -226,7 +226,8 @@ FIELDS = (
           answer=("Answer precisely and briefly, with one example, as a lawyer would draft it.",)),
     Field("finance", "Finance, banking and accountancy",
           ("investment bank", "banking", "audit", "accountancy", "accountant", "acca", "cima", "cfa",
-           "asset management", "corporate finance", "financial analyst", "trading", "actuarial", "tax"),
+           "asset management", "corporate finance", "financial analyst", "trading", "actuarial", "tax",
+           "financial services", "fca", "consumer duty", "lending", "credit risk", "financial ombudsman"),
           letter=("Give one result with its figure from the facts, and why this firm and division.",),
           cv=("One page for graduate and analyst roles; education first while a student, with the degree "
               "class and A-level grades.",

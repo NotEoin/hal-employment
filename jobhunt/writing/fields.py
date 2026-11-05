@@ -76,12 +76,17 @@ def person_field(person: dict) -> str:
 
 
 def resolve(title: str, advert: str, person: dict | None = None) -> Resolved:
-    """The field of a job from its advert, else from the person; the general field when neither shows one."""
+    """The field of a job from its advert, else the general field; the person's own field is only background.
+
+    The advert decides: a computing graduate's letter for a complaints role came out in the tech field's
+    voice when an advert with no clear field fell back to the person's (2026-11-05).
+    """
     own = person_field(person or {})
-    found = _best(scores(title, advert))
-    if found:
-        return Resolved(found, own if own and own != found else "")
-    return Resolved(own or rules.GENERAL.id, "")
+    if not (title or advert).strip():
+        # no job at all (a CV looked over on its own): the person's field is the only one there is
+        return Resolved(own or rules.GENERAL.id, "")
+    found = _best(scores(title, advert)) or rules.GENERAL.id
+    return Resolved(found, own if own and own != found else "")
 
 
 def person_now() -> dict:

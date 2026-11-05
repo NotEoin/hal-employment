@@ -147,9 +147,16 @@ class Fields(unittest.TestCase):
         self.assertEqual(fields.resolve("Coordinator", "Keep projects on time.").field, "general")
         self.assertEqual(fields.conventions(fields.Resolved(), "letter"), list(rules.GENERAL.letter))
 
-    def test_the_persons_own_field_stands_in_for_an_advert_that_shows_none(self):
+    def test_the_advert_decides_the_field_and_the_persons_own_is_only_background(self):
+        # a computing graduate's letter for a complaints role was written in the tech field's voice when the
+        # advert showed no clear field (2026-11-05)
         person = {"cv_type_id": "humanities_grad"}
-        self.assertEqual(fields.resolve("Coordinator", "Keep projects on time.", person).field, "humanities")
+        plain = fields.resolve("Coordinator", "Keep projects on time.", person)
+        self.assertEqual((plain.field, plain.background), ("general", "humanities"))
+        self.assertEqual(fields.resolve("", "", person).field, "humanities", "with no job, the person's field")
+        complaints = fields.resolve("Complaints Officer", "Investigate complaints under FCA rules for our lending "
+                                    "products in financial services.", {"cv_type_id": "technical_grad"})
+        self.assertEqual(complaints.field, "finance")
         civil = fields.resolve("Executive Officer", "Civil Service behaviours.", person)
         self.assertEqual((civil.field, civil.background), ("public_sector", "humanities"))
         self.assertTrue(set(rules.BY_FIELD["humanities"].background) <= set(fields.conventions(civil, "answer")))

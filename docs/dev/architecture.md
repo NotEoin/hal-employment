@@ -431,8 +431,10 @@ runs: tests use `tests/support/fake_claude/`.
   over 35 words, a letter sentence that repeats a CV line, greeting and sign-off pairing ("Dear" and a name
   with "Yours sincerely", a team or "Sir or Madam" with "Yours faithfully"), numbers no source holds and
   length limits. It replaced `pack.CLICHES`; every word that list flagged is still flagged.
-- `fields.py` resolves the field from the advert (title words count three times), else from the person's
-  CV type, roles and subject; nothing found is the general field. The analyse step stores it on the
+- `fields.py` resolves the field from the advert alone (title words count three times); an advert that shows
+  none is the general field, never the person's, so a computing graduate's letter for a complaints role is
+  not written as a tech one. The person's own field (CV type, roles, subject) is background only, and decides
+  only when there is no job at all (a CV looked over on its own). The analyse step stores it on the
   analysis, and the letter, answers, form-filling and CV suggestion requests carry its conventions, plus
   the person's own field's background advice when the two differ. Conventions are in the request, never
   the prompt, since they depend on the job.
