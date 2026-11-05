@@ -6,14 +6,22 @@ hashed again. One file that cannot be read is an error on its own row and never 
 
 Duplicates are found by SHA-256 against every item read before, in this batch or an earlier one: the copy
 gets no note of its own, and its path is added once to the first copy's note under "Also at".
+
+Up to `ai.parallel` items are with worker threads at once, which only convert and ask the AI; this thread
+alone writes, in the items' order, so SQLite and the record each have one writer. A read `again` puts notes
+first written by rules back in a batch and rewrites each at its own path, so links to it still hold.
 """
 from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 import uuid
+from collections import deque
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -26,6 +34,9 @@ log = logging.getLogger(__name__)
 STEPS = 3                    # finding, reading, linking
 ERROR_CHARS = 300
 ALSO_AT = "## Also at"
+KEPT_SECTIONS = ("## Part of", ALSO_AT)   # added to a note after it was written; kept when it is read again
+NEVER_BY_MODEL = ("code", "image", "media")
+AHEAD = 2                    # items handed to workers per worker, so none waits while this thread writes
 NO_WEB = "Reading web links is not available in this version of Hal yet."
 
 Progress = Callable[[int, int, str], None]
@@ -210,44 +221,189 @@ def _pictures_by_ai() -> bool:
     return bool(settings.get("record.ingest_vision"))
 
 
-def read_one(con: sqlite3.Connection, row: sqlite3.Row, batch: str, drop_root: Path | None) -> str | None:
-    """Reads one pending item into a note; returns the note's path inside the record, or None for none."""
-    vault_dir = vault()
-    first = items.first_copy(con, row["sha256"], row["id"])
-    if first is not None:
-        if first["note"] and row["path"] != first["path"]:   # the same file read again is not a copy
-            _also_at(vault_dir, first["note"], _source(row, batch))
-        items.update(con, row["id"], state="duplicate", dup_of=first["id"], note=first["note"])
-        return None
-    rule = _rule(row)
+def by_model(rule: rank.Rule, is_picture: bool, *, every: bool = False) -> bool:
+    """True when an item goes to the AI: a rich document, any document when `every` or `record.read_all`
+    asks, and a picture's words when `record.ingest_vision` is on. Code files never do: a repository is read
+    as one unit."""
+    from jobhunt.core import settings
+
+    if is_picture:
+        return _pictures_by_ai()
+    return rule.rich or ((every or bool(settings.get("record.read_all"))) and rule.doc_type not in NEVER_BY_MODEL)
+
+
+@dataclass
+class _Read:
+    """What a worker made of one item: its text and description, or no description for a file with no text."""
+
+    text: str
+    desc: dict | None
+
+
+def _prepare(row: dict, rule: rank.Rule) -> _Read:
+    """Converts one item and describes it, by the AI or by rules; touches neither the database nor the record.
+
+    Runs on a worker thread, so several items can be with the AI at once (`ai.parallel`).
+    """
     path = Path(row["path"])
     text = convert.repo_text(path) if row["kind"] == "repo" else convert.text_of(path, rule)
-    items.update(con, row["id"], stage="converted")
-    # Committed before the model is asked: the AI layer writes its usage row on a connection of its own, and
-    # would wait out the busy timeout behind this one's open write.
-    con.commit()
     is_picture = path.suffix.lower() in rank.IMAGE_SUFFIXES | rank.MEDIA_SUFFIXES
     if not text.strip() and not is_picture:
-        items.update(con, row["id"], state="no_text")
-        return None
-    if text.strip() and (_pictures_by_ai() if is_picture else rule.rich):
+        return _Read(text, None)
+    if text.strip() and by_model(rule, is_picture, every=bool(row["note"])):
         desc = understand.ask(row["rel"], text, rule)
     else:
         desc = understand.light(row["rel"], text, rule)
         if is_picture and not text.strip():
             desc["title"] = path.stem
+    return _Read(text, desc)
+
+
+def _kept(note_text: str) -> str:
+    """The sections of a note that the ingest added after it was written ("Part of", "Also at"), to carry over."""
+    out = []
+    for heading in KEPT_SECTIONS:
+        found = re.search(rf"^{re.escape(heading)}\n.*?(?=^## |\Z)", note_text, re.S | re.M)
+        if found:
+            out.append(found.group(0).rstrip("\n") + "\n\n")
+    return "".join(out)
+
+
+def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Path) -> str | None:
+    """Writes the AI's reading of a note first written by rules over that note, at the same path."""
+    path = vault_dir / row["note"]
+    if read.desc is None or read.desc.get("by") != "model" or not path.is_file():
+        # the AI did not answer, or the note is gone: the note stays as it was, to be read again next time
+        items.update(con, row["id"], state="done")
+        return None
+    old = path.read_text(encoding="utf-8", errors="replace")
+    fm, _ = notes.frontmatter.parse(old)
+    desc = {**read.desc, "category": row["category"] or read.desc["category"]}   # the note stays in its folder
+    notes.write_source(vault_dir, desc, text=read.text, source=str(fm.get("source") or row["path"]),
+                       sha256=row["sha256"] or "", original=None, at=path)
+    if kept := _kept(old):
+        text = path.read_text(encoding="utf-8")
+        notes.write(path, text.replace("\n## Original\n", f"\n{kept}## Original\n", 1))
+    notes.add_mentions(vault_dir, desc, row["note"])
+    _give_facts(con, desc, row["note"])
+    items.update(con, row["id"], stage="written", state="done", model=1, doc_type=desc["doc_type"])
+    return row["note"]
+
+
+def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, drop_root: Path | None) -> str | None:
+    """Writes one prepared item's note, entities and facts; returns the note's path inside the record."""
+    vault_dir = vault()
+    if row["note"]:
+        return _again(con, row, read, vault_dir)
+    items.update(con, row["id"], stage="converted")
+    if read.desc is None:
+        items.update(con, row["id"], state="no_text")
+        return None
+    desc = read.desc
     items.update(con, row["id"], stage="understood", model=int(desc.get("by") == "model"))
+    path = Path(row["path"])
     moving = drop_root is not None and drop_root in path.parents
     original = None
     if row["kind"] == "file":
         original = notes.keep_original(vault_dir, path, desc["category"], move=moving)
-    note_rel = notes.write_source(vault_dir, desc, text=text, source=_source(row, batch), sha256=row["sha256"] or "",
-                                  original=original)
+    note_rel = notes.write_source(vault_dir, desc, text=read.text, source=_source(row, batch),
+                                  sha256=row["sha256"] or "", original=original)
     notes.add_mentions(vault_dir, desc, note_rel)
     _give_facts(con, desc, note_rel)
     items.update(con, row["id"], stage="written", state="done", note=note_rel, category=desc["category"],
                  doc_type=desc["doc_type"])
     return note_rel
+
+
+def _copy_of(con: sqlite3.Connection, row: sqlite3.Row, batch: str) -> bool:
+    """True when the item is a copy of one read before: it is linked to that note and gets none of its own."""
+    if row["note"]:          # a note read again is its own first copy
+        return False
+    first = items.first_copy(con, row["sha256"], row["id"])
+    if first is None:
+        return False
+    if first["note"] and row["path"] != first["path"]:   # the same file read again is not a copy
+        _also_at(vault(), first["note"], _source(row, batch))
+    items.update(con, row["id"], state="duplicate", dup_of=first["id"], note=first["note"])
+    return True
+
+
+def read_one(con: sqlite3.Connection, row: sqlite3.Row, batch: str, drop_root: Path | None) -> str | None:
+    """Reads one pending item into a note; returns the note's path inside the record, or None for none."""
+    if _copy_of(con, row, batch):
+        return None
+    return _finish(con, row, _prepare(dict(row), _rule(row)), batch, drop_root)
+
+
+def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, drop_root: Path | None,
+              progress: Progress, done: int, total: int) -> list[str]:
+    """Reads the items in order, up to `ai.parallel` of them with workers at once; returns the notes written.
+
+    Workers only convert and ask; this thread writes, in the items' own order, so the record and the
+    database see one writer and a CV still lands before the notes. A file whose bytes match one handed to a
+    worker already waits for it, then is linked as its copy rather than read twice.
+    """
+    from jobhunt.core import settings
+
+    workers = max(1, int(settings.get("ai.parallel")))
+    written: list[str] = []
+    queue = iter(todo)
+    in_hand: deque[tuple[sqlite3.Row, Future | None]] = deque()
+    handed: set[str] = set()
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ingest")
+    try:
+        while True:
+            while len(in_hand) < workers * AHEAD and (row := next(queue, None)) is not None:
+                sha = row["sha256"] or ""
+                if not row["note"] and sha and sha in handed:
+                    in_hand.append((row, None))
+                    continue
+                if sha:
+                    handed.add(sha)
+                in_hand.append((row, pool.submit(_prepare, dict(row), _rule(row))))
+            if not in_hand:
+                break
+            row, job = in_hand.popleft()
+            progress(done, total, row["rel"])
+            try:
+                if _copy_of(con, row, batch) or job is None:
+                    note = None
+                else:
+                    note = _finish(con, row, job.result(), batch, drop_root)
+            except Exception as e:  # one unreadable file must not stop the rest; its row keeps the words
+                log.warning("could not read %s: %s", row["rel"], e)
+                items.update(con, row["id"], state="error", error=str(e)[:ERROR_CHARS] or type(e).__name__)
+                note = None
+            con.commit()
+            if note:
+                written.append(note)
+            done += 1
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+    progress(done, total, "")
+    return written
+
+
+def mark_again(con: sqlite3.Connection, batch: str) -> int:
+    """Puts every note written by rules from a document back in `batch` to be read by the AI; returns how many.
+
+    Each file's newest row is moved, so its note is rewritten in place and its links still lead to it. Code
+    and pictures are left as they are (see `by_model`), and so is a file no longer on this computer.
+    """
+    rows = con.execute("""SELECT * FROM ingest_items WHERE id IN (SELECT max(id) FROM ingest_items
+                          WHERE state = 'done' AND model = 0 AND kind = 'file' AND note IS NOT NULL GROUP BY path)
+                          ORDER BY rank, rel""").fetchall()
+    n = 0
+    for row in rows:
+        path = Path(row["path"])
+        is_picture = path.suffix.lower() in rank.IMAGE_SUFFIXES | rank.MEDIA_SUFFIXES
+        if is_picture or not by_model(_rule(row), False, every=True) or not path.is_file():
+            continue
+        con.execute("UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered' WHERE id = ?",
+                    (batch, row["id"]))
+        n += 1
+    con.commit()
+    return n
 
 
 def _courses(con: sqlite3.Connection, batch: str) -> list[str]:
@@ -299,29 +455,21 @@ def drop_has_new(con: sqlite3.Connection) -> bool:
 
 
 def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bool = False, urls=(),
-        step: Callable[[str], None], progress: Progress) -> dict:
-    """The whole ingest of one batch; returns its counts, what was left out and the problems found."""
+        again: bool = False, step: Callable[[str], None], progress: Progress) -> dict:
+    """The whole ingest of one batch; returns its counts, what was left out and the problems found.
+
+    With `again`, the batch is the notes written by rules from documents, read now by the AI (`mark_again`);
+    on a carry-on after a restart they are already in the batch.
+    """
     step("Finding your files")
     found = find(con, batch, folders=folders, uploads=uploads, drop=drop, urls=urls)
+    if again and not items.pending(con, batch):
+        mark_again(con, batch)
     step("Reading each file, your CV and other rich documents first")
     drop_root = sources.drop_folder().resolve() if drop else None
     todo = [r for r in items.pending(con, batch) if r["kind"] != "course"]
-    written: list[str] = []
     total = sum(items.counts(con, batch)["states"].values())
-    done = total - len(todo)
-    for row in todo:
-        progress(done, total, row["rel"])
-        try:
-            note = read_one(con, row, batch, drop_root)
-        except Exception as e:  # one unreadable file must not stop the rest; its row keeps the words
-            log.warning("could not read %s: %s", row["rel"], e)
-            items.update(con, row["id"], state="error", error=str(e)[:ERROR_CHARS] or type(e).__name__)
-            note = None
-        con.commit()
-        if note:
-            written.append(note)
-        done += 1
-    progress(done, total, "")
+    written = _read_items(con, todo, batch, drop_root, progress, total - len(todo), total)
     step("Linking your notes")
     written += _courses(con, batch)
     vault_dir = vault()

@@ -53,4 +53,8 @@ register(
     Setting("record.ingest_vision", "bool", False, "Read certificates and artwork in pictures with the AI",
             group="cvdocs", advanced=True, order=190,
             help="The words in them are read first. Other pictures are listed by name and date only."),
+    Setting("record.read_all", "bool", False, "Read every document with the AI", group="cvdocs", advanced=True,
+            order=195, help="Hal reads CVs, transcripts, coursework and other rich documents with the AI, and files "
+                            "notes and slides by their headings and words. Turn this on to have the AI read and "
+                            "summarise those too. Reading takes much longer."),
 )

@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import tempfile
+import threading
 import time
 import unittest
 import zipfile
@@ -47,6 +48,11 @@ REPLY = {"doc_type": "cv", "category": "CVs and letters", "title": "Avery Quillo
                     "field": "title", "quote": "Gallery assistant, Brindle Arts Centre"},
                    {"kind": "achievement", "fields": {"title": "Won the Wexley Prize"}, "field": "title",
                     "quote": "Won the Wexley Prize in 2022"}]}
+
+
+NOTE_REPLY = {**REPLY, "doc_type": "notes", "category": "Study notes", "title": "Rivers and meanders",
+              "summary": "Notes on how rivers meander and leave oxbow lakes.", "facts": [],
+              "entities": {k: [] for k in understand.ENTITY_KINDS}}
 
 
 @contextlib.contextmanager
@@ -511,6 +517,80 @@ class Understanding(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 2)
         self.assertEqual(out.count("[[Places/Made up place 14999|made up place 14999]]"), 1)
 
+
+class ReadingEverything(unittest.TestCase):
+    def test_with_read_all_on_notes_go_to_the_ai_and_code_files_still_do_not(self):
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(NOTE_REPLY)}) as backend:
+            settings.set("record.read_all", True)
+            put(files, "Revision/week 3 notes.md", "# Rivers\n\nMeanders and oxbow lakes, 2022 fieldwork.")
+            put(files, "scratch/sort.py", "def sort(xs):\n    return sorted(xs)\n")
+            run(con, [files])
+            got = rows(con)
+            self.assertEqual(got["Files/Revision/week 3 notes.md"]["model"], 1)
+            self.assertEqual(got["Files/scratch/sort.py"]["model"], 0)
+            self.assertEqual(len(backend.requests("ingest_doc")), 1)
+
+    def test_reading_again_rewrites_a_rules_note_in_place_and_keeps_its_links(self):
+        notes_text = "# Rivers\n\nMeanders and oxbow lakes, 2022 fieldwork."
+        with home() as (con, vault, files):
+            with fake_ai({}):
+                put(files, "GEO101/week 1 notes.md", notes_text)
+                put(files, "GEO101/week 2 notes.md", "# Coasts\n\nLongshore drift along the made-up bay.")
+                put(files, "GEO101/week 3 notes.md", "# Glaciers\n\nCirques and aretes in the made-up valley.")
+                put(files, "Old/week 1 notes copy.md", notes_text)
+                run(con, [files])
+            first = rows(con)["Files/GEO101/week 1 notes.md"]["note"]
+            before = (vault / first).read_text(encoding="utf-8")
+            self.assertIn("## Part of", before)
+            self.assertIn("## Also at", before)
+            self.assertEqual(items.by_rules(con), 3)
+            with fake_ai({"ingest_doc": json.dumps(NOTE_REPLY)}) as backend:
+                run(con, [], batch="b2", again=True)
+            self.assertEqual(len(backend.requests("ingest_doc")), 3, "each document once, not its copy")
+            after = (vault / first).read_text(encoding="utf-8")
+            fm, body = frontmatter.parse(after)
+            self.assertEqual(fm["title"], "Rivers and meanders")
+            self.assertIn("Notes on how rivers meander", body)
+            self.assertIn("## Part of", body)
+            self.assertIn("## Also at", body)
+            self.assertEqual(len(list((vault / "Sources").rglob("Rivers and meanders*.md"))), 0,
+                             "the note keeps its own path, so links to it still lead to it")
+            self.assertEqual(items.by_rules(con), 0)
+            self.assertEqual({r["model"] for r in rows(con, "b2").values()}, {1})
+
+    def test_a_note_the_ai_could_not_read_again_is_left_as_it_was(self):
+        with home() as (con, vault, files):
+            with fake_ai({}):
+                put(files, "Revision/week 3 notes.md", "# Rivers\n\nMeanders and oxbow lakes, 2022 fieldwork.")
+                run(con, [files])
+            note = rows(con)["Files/Revision/week 3 notes.md"]["note"]
+            before = (vault / note).read_text(encoding="utf-8")
+            with fake_ai({}):            # the AI answers nothing: the note stays a rules note
+                run(con, [], batch="b2", again=True)
+            self.assertEqual((vault / note).read_text(encoding="utf-8"), before)
+            self.assertEqual(items.by_rules(con), 1, "it is read again next time")
+
+    def test_several_documents_are_with_the_ai_at_once_up_to_the_limit(self):
+        lock, now, most = threading.Lock(), [0], [0]
+
+        def slow(req):
+            with lock:
+                now[0] += 1
+                most[0] = max(most[0], now[0])
+            time.sleep(0.2)
+            with lock:
+                now[0] -= 1
+            return json.dumps({**REPLY, "title": req.user.split("\n")[0].rsplit("/", 1)[-1], "facts": []})
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": slow}):
+            settings.set("ai.parallel", 3)
+            for n in range(6):
+                put(files, f"Essays/essay {n}.md", f"# Essay {n}\n\nOn the made-up town of Wexley, part {n}.")
+            run(con, [files])
+            self.assertEqual({r["state"] for r in rows(con).values()}, {"done"})
+        self.assertGreater(most[0], 1, "more than one document was with the AI at a time")
+        self.assertLessEqual(most[0], 3)
+
+
 class Frontmatter(unittest.TestCase):
     def test_lists_and_awkward_scalars_round_trip(self):
         fields = {"title": "Report: phase 2 # draft", "tags": ["a", "b-c"], "about_owner": "true", "empty": [],
@@ -628,6 +708,15 @@ class Routes(unittest.TestCase):
         self.assertEqual(started.status, 200, started.text)
         self.assertEqual(finished(started.json()["action_id"])["state"], "done")
         self.assertEqual(c.get("/api/v2/record/ingest", headers=key).json()["state"], "done")
+
+    def test_reading_again_is_refused_when_the_ai_has_read_everything(self):
+        c = self.hal.signed_in()
+        self.assertEqual(c.post("/api/v2/record/ingest/again", {}).status, 400)
+        with mock.patch.object(items, "by_rules", return_value=3), \
+                mock.patch.object(ingest_actions, "queue", return_value="a1") as queue:
+            started = c.post("/api/v2/record/ingest/again", {})
+        self.assertEqual(started.json(), {"action_id": "a1"})
+        self.assertTrue(queue.call_args.kwargs["again"])
 
     def test_pasted_links_start_an_ingest_and_an_empty_paste_is_refused(self):
         c = self.hal.signed_in()

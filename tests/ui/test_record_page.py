@@ -71,6 +71,19 @@ def running_ingest() -> None:
                         (stage, rank, at, rel))
 
 
+def finished_ingest() -> None:
+    """A made-up ingest that ended with two lecture notes filed by rules, the AI not having read them."""
+    at = clock.iso(clock.now_utc() - timedelta(seconds=STARTED_S))
+    with closing(db.connect()) as con, con:
+        con.execute("""INSERT INTO actions (id, kind, subject, state, priority, params, created, started, ended)
+                       VALUES ('ing0', ?, 'record', 'done', 2, ?, ?, ?, ?)""",
+                    (ingest_items.KIND, json.dumps({"batch": "b0"}), at, at, at))
+        for n in range(2):
+            ingest_items.add(con, "b0", path=f"/made/up/notes {n}.md", rel=f"Lectures/notes {n}.md", state="done",
+                             category="Study notes")
+        con.execute("UPDATE ingest_items SET stage = 'written', note = 'Sources/Study notes/x.md' WHERE batch = 'b0'")
+
+
 @skip_unless_browser
 class RecordPage(unittest.TestCase):
     def errors(self, p: AppPage) -> list[str]:
@@ -267,6 +280,19 @@ class RecordPage(unittest.TestCase):
                     self.assertIn(expected, words)
                 self.assertTrue(card.get_by_role("button", name="Stop").is_visible())
                 self.clean(p)
+
+    def test_notes_filed_without_the_ai_can_be_read_with_it(self) -> None:
+        finished_ingest()
+        queued = []
+        self.enterContext(mock.patch.object(ingest_actions, "queue",
+                                            side_effect=lambda **kw: queued.append(kw) or "ing2"))
+        p = self.page()
+        card = p.page.locator(".rec-ingest")
+        p.shows(card.get_by_text("2 notes were filed by headings and words only"), "the note")
+        card.get_by_role("button", name="Read them with the AI").click()
+        p.shows(p.page.get_by_text("Hal is reading the rest of your documents."), "the toast")
+        self.assertTrue(queued[0]["again"])
+        self.assertEqual(self.errors(p), [])
 
     def test_pasted_links_start_a_read(self) -> None:
         queued = []

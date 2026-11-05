@@ -516,9 +516,23 @@ runner starts the action again with the same batch and only pending items are re
    `Attachments/Sources/` when `record.copy_originals` is on and the file is at most 100 MiB. The record's
    own conversion leaves the drop folder and `Attachments/Sources/` alone, so no passage is indexed twice.
 
+Reading is split so the AI can work on several items at once: worker threads (`ai.parallel` of them, which
+also caps the AI layer's own turns) only convert and describe (`engine._prepare`), and the action's thread
+writes notes, entities, facts and rows in the items' own order, so the database and record have one
+writer. A file whose SHA-256 matches one already with a worker waits for it and becomes its duplicate.
+`engine.by_model` decides what the AI reads: rich rules always, every document but code and pictures when
+`record.read_all` is on, pictures when `record.ingest_vision` is.
+
+`POST /api/v2/record/ingest/again` (or `jobhunt ingest --again`) queues a `record.ingest` with `again`:
+`engine.mark_again` moves the newest row of each document note written by rules (`model = 0`, not code or
+pictures, file still there) into the new batch as pending. A pending row that already has a note is read by
+the AI and its note rewritten at the same path (`notes.write_source(at=)`), carrying over the "Part of" and
+"Also at" sections, so links still lead to it; when the AI does not answer, the note is left as it was and
+the row stays `model = 0` for next time. `items.by_rules` counts those notes for the page's button.
+
 `GET /api/v2/record/ingest` returns the latest ingest: `state`, `done`, `total`, `eta_s` (this run's pace
 only, so a resumed ingest is not counted as fast), counts by stage, state and category, the item in hand,
-`not_downloaded` with the first paths, and recent errors. Web links are read by `ingest/web.py` when it is
+`not_downloaded` with the first paths, recent errors, `by_rules` and whether it was a read `again`. Web links are read by `ingest/web.py` when it is
 present (`fetch(urls, page_cap=)`), imported lazily; without it the ingest says web links are not
 available yet.
 ## Profile (`jobhunt/profile/`)

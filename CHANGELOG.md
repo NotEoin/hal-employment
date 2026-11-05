@@ -16,6 +16,9 @@ What changed in each version, in plain words.
   it mentions. Code projects and a course's lecture notes each become one note. Files OneDrive or Dropbox
   has not downloaded, files with no text and copies are listed rather than read, and a fact whose words
   are not in its document is marked **Check this**. Hal carries on from the next file after a restart.
+  Notes and slides are filed by their words unless **Read every document with the AI** is on, and
+  **Read them with the AI** on the Overview reads the ones already filed, in place. Hal reads as many
+  documents at once as **AI calls at once** allows.
 - **Your profile.** Hal keeps the facts it finds in your record as a profile: jobs, education with its
   modules and marks, skills with the words that show them, projects, certificates, achievements and links.
   Each fact names the files it came from. The same job in two CVs is one entry, written the same way in

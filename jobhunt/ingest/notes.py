@@ -158,11 +158,17 @@ def existing_entity(vault: Path, kind: str, name: str) -> str:
 
 
 def write_source(vault: Path, desc: dict, *, text: str, source: str, sha256: str, original: str | None,
-                 extra_links: list[str] = ()) -> str:
-    """Writes the note for one document or unit; returns its path inside the record."""
-    folder = vault / SOURCES / slug(desc["category"])
-    folder.mkdir(parents=True, exist_ok=True)
-    path = free_note(folder, desc["title"], sha256)
+                 extra_links: list[str] = (), at: Path | None = None) -> str:
+    """Writes the note for one document or unit; returns its path inside the record.
+
+    `at` rewrites a note already there in place, whatever its title is now, so links to it still lead to it.
+    """
+    if at is None:
+        folder = vault / SOURCES / slug(desc["category"])
+        folder.mkdir(parents=True, exist_ok=True)
+        path = free_note(folder, desc["title"], sha256)
+    else:
+        path = at
     ents = desc["entities"]
     fields = {"type": "source", "category": desc["category"], "doc_type": desc["doc_type"], "title": desc["title"],
               "tags": desc["tags"], "period": desc["period"], "organisations": ents["organisations"],

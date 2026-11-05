@@ -88,7 +88,9 @@ def main():
     s.add_argument("op", nargs="?", default="status", choices=["status", "sync", "search", "ask"])
     s.add_argument("text", nargs="*"); s.set_defaults(fn=cmd_record)
     s = sub.add_parser("ingest", help="read whole folders into the record in the running Hal")
-    s.add_argument("folders", nargs="+")
+    s.add_argument("folders", nargs="*")
+    s.add_argument("--again", action="store_true",
+                   help="read with the AI the documents an earlier ingest filed by rules alone")
     s.set_defaults(fn=cmd_ingest)
     sub.add_parser("queue").set_defaults(fn=cmd_queue)
     s = sub.add_parser("contacts"); s.add_argument("id"); s.set_defaults(fn=cmd_contacts)

@@ -1,8 +1,9 @@
 $ jobhunt ingest --help
-usage: jobhunt ingest [-h] folders [folders ...]
+usage: jobhunt ingest [-h] [--again] [folders ...]
 
 positional arguments:
   folders
 
 options:
   -h, --help  show this help message and exit
+  --again     read with the AI the documents an earlier ingest filed by rules alone

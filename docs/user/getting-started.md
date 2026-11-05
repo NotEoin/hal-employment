@@ -181,6 +181,19 @@ to notes about the organisations, places, skills and courses it mentions. A code
 and a folder of one course's lecture notes becomes one course note linking its files. With **Keep a copy
 of each file Hal reads in** on, the original is copied to `Attachments` beside the notes.
 
+The AI reads the rich documents in full. Notes and slides are filed by their headings and words, which is
+quick but gives them no AI summary and adds nothing to your profile. To have the AI read those too:
+
+- **For the next files you add:** turn on **Read every document with the AI** in Settings, CV and
+  documents. Reading takes much longer.
+- **For files already read:** when the last read has ended, the Overview says how many notes were filed
+  without the AI; press **Read them with the AI**. Each note is rewritten where it is, so links to it still
+  work. From a terminal, `python -m jobhunt ingest --again` does the same. Code files are still read as part
+  of their project, and pictures by **Read certificates and artwork in pictures with the AI**.
+
+Hal reads as many documents at once as **AI calls at once** allows (Settings, AI). A model on your own
+computer that can answer several requests together (Hal's managed vLLM model can) reads faster at 3 or 4.
+
 Some files are listed rather than read:
 
 - **Not downloaded**: OneDrive and Dropbox keep a file's name on your computer before its contents arrive.

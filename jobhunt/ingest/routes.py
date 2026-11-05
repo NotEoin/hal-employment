@@ -55,6 +55,19 @@ def start(req) -> dict:
     return {"action_id": action_id}
 
 
+@route("POST", "/api/v2/record/ingest/again", auth="session_or_local")
+def again(req) -> dict:
+    """Starts reading with the AI the documents Hal filed by their words alone (`record.read_all` for new ones)."""
+    if not items.by_rules(req.con):
+        raise BadRequest("Every document in your record has been read by the AI already.")
+    try:
+        action_id = actions.queue(again=True, session_id=getattr(req.session, "id", None), remote=req.remote,
+                                  why="You asked Hal to read the rest of your documents with the AI")
+    except RuntimeError as e:
+        raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
+    return {"action_id": action_id}
+
+
 @route("POST", "/api/v2/record/links", auth="session_or_local")
 def links(req) -> dict:
     """Starts reading web links (a site, a GitHub profile or repository, a public Google Doc) into the record."""

@@ -38,17 +38,27 @@ def _hal(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
         con.close()
 
 
-def ingest(folders: list[str]) -> None:
-    """Starts an ingest of `folders` in the running Hal and prints its progress until it ends."""
-    if not folders:
-        sys.exit("ingest: give one or more folders to read")
+def ingest(folders: list[str], again: bool = False) -> None:
+    """Starts an ingest of `folders` in the running Hal and prints its progress until it ends.
+
+    `again` instead reads with the AI the documents an earlier ingest filed by rules alone.
+    """
+    if not folders and not again:
+        sys.exit("ingest: give one or more folders to read, or --again")
+    if folders and again:
+        sys.exit("ingest: give folders or --again, not both")
     try:
-        status, out = _hal("POST", "/api/v2/record/ingest", {"folders": [str(Path(f).resolve()) for f in folders]})
+        if again:
+            status, out = _hal("POST", "/api/v2/record/ingest/again", {})
+        else:
+            status, out = _hal("POST", "/api/v2/record/ingest",
+                               {"folders": [str(Path(f).resolve()) for f in folders]})
     except (OSError, ValueError) as e:
         sys.exit(f"ingest: Hal is not running here ({e}); start it, then try again")
     if status != 200:
         sys.exit(f"ingest: {(out.get('error') or {}).get('message') or status}")
-    print(f"Reading {len(folders)} folder(s) into your record; it shows on Your record too.")
+    print("Reading the rest of your documents with the AI" if again else
+          f"Reading {len(folders)} folder(s) into your record", "; it shows on Your record too.", sep="")
     try:
         while True:
             time.sleep(FOLLOW_EVERY_S)
@@ -64,7 +74,7 @@ def ingest(folders: list[str]) -> None:
 
 def cmd_ingest(args):
     """Handles `jobhunt ingest`: reads whole folders into the record in the running Hal."""
-    ingest(args.folders)
+    ingest(args.folders, again=args.again)
 
 
 def cmd_record(args):

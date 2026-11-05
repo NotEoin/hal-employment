@@ -98,6 +98,11 @@ function stopNow(id) {
     () => { toast("Hal stopped. What it read so far is kept."); invalidate(INGEST); }, err => toast(err.message));
 }
 
+function readAgain() {
+  post(INGEST + "/again").then(() => { toast("Hal is reading the rest of your documents."); invalidate(INGEST); },
+    err => toast(err.message));
+}
+
 const counted = obj => Object.entries(obj || {}).filter(([, n]) => n > 0);
 
 /** The latest read of files into the record: a bar, time left, the file in hand, counts, and what went wrong. */
@@ -115,7 +120,9 @@ export function IngestCard() {
   const pct = data.total ? (data.done / data.total) * 100 : 0;
   const states = counted(data.states).filter(([s]) => s !== "not_downloaded");
   const leftOut = counted(data.left_out);
-  const title = running ? "Reading your files" : data.state === "done" ? "Your files were read" : "Hal stopped reading your files";
+  const title = data.again
+    ? (running ? "Reading the rest with the AI" : data.state === "done" ? "The rest was read with the AI" : "Hal stopped reading the rest")
+    : (running ? "Reading your files" : data.state === "done" ? "Your files were read" : "Hal stopped reading your files");
   return html`<section class="card stack s rec-ingest" aria-labelledby="rec-ing-h" data-state=${data.state}>
     <div class="row rec-head"><h2 class="h2 grow" id="rec-ing-h">${title}</h2>
       ${running && data.action_id && html`<button type="button" class="btn stop small" onClick=${() => stopNow(data.action_id)}>
@@ -136,5 +143,8 @@ export function IngestCard() {
     ${data.errors.length > 0 && html`<div><div class="small sub">Could not be read</div><ul class="rec-paths small">
       ${data.errors.map(e => html`<li><b>${e.path}</b>: ${e.error}</li>`)}</ul></div>`}
     ${leftOut.length > 0 && html`<p class="small sub rec-line">Left out on purpose: ${leftOut.map(([w, n]) => n + " " + (LEFT_OUT_WORDS[w] || w)).join(", ")}.</p>`}
+    ${!running && data.by_rules > 0 && html`<div class="row wrap rec-again"><p class="small sub grow rec-line">
+      ${plural(data.by_rules, "note was", "notes were")} filed by headings and words only, without the AI reading them.</p>
+      <button type="button" class="btn small" onClick=${readAgain}>Read them with the AI</button></div>`}
   </section>`;
 }

@@ -70,6 +70,16 @@ def counts(con: sqlite3.Connection, batch: str) -> dict:
     return {"states": by_state, "stages": {s: by_stage.get(s, 0) for s in STAGES}, "categories": by_category}
 
 
+BY_RULES_ONLY = ("Code", "Media")    # categories the AI never reads one file at a time (`engine.by_model`)
+
+
+def by_rules(con: sqlite3.Connection) -> int:
+    """How many notes from documents were written by rules alone, so the AI could still read them."""
+    return con.execute(f"""SELECT count(DISTINCT path) FROM ingest_items WHERE state = 'done' AND model = 0
+                           AND kind = 'file' AND note IS NOT NULL
+                           AND category NOT IN ({','.join('?' * len(BY_RULES_ONLY))})""", BY_RULES_ONLY).fetchone()[0]
+
+
 def latest_action(con: sqlite3.Connection) -> sqlite3.Row | None:
     """The newest ingest action, running or ended."""
     return con.execute("SELECT * FROM actions WHERE kind = ? ORDER BY created DESC LIMIT 1", (KIND,)).fetchone()
@@ -109,7 +119,7 @@ def summary(con: sqlite3.Connection) -> dict:
     """The latest ingest for the page: state, done, total, eta_s, counts, current item, not downloaded, errors."""
     action = latest_action(con)
     if action is None:
-        return {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
+        return {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {}, "by_rules": 0,
                 "states": {}, "categories": {}, "current": "", "not_downloaded": 0, "not_downloaded_paths": [],
                 "errors": [], "left_out": {}}
     params = json.loads(action["params"] or "{}")
@@ -128,5 +138,5 @@ def summary(con: sqlite3.Connection) -> dict:
             "total": total, "eta_s": _eta(con, batch, action, left), "stages": c["stages"], "states": c["states"],
             "categories": c["categories"], "current": (action["message"] or "") if action["state"] == "running" else "",
             "not_downloaded": c["states"].get("not_downloaded", 0), "not_downloaded_paths": missing,
-            "errors": errors,
+            "errors": errors, "by_rules": by_rules(con), "again": bool(params.get("again")),
             "left_out": result.get("left_out", {}), "started": action["started"], "ended": action["ended"]}

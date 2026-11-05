@@ -303,7 +303,7 @@ MADE_UP_PAGES = {
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
-                       "not_downloaded_paths": [], "errors": [], "left_out": {}},
+                       "not_downloaded_paths": [], "errors": [], "left_out": {}, "by_rules": 0, "again": False},
     "/profile": MADE_UP_PROFILE,
     **MADE_UP_PROFILE_KINDS,
     # My CV; the parse report is the real server's answer before any CV is added
