@@ -534,29 +534,23 @@ def recruiter_read(cv_text: str, t: cvtypes.CVType) -> dict:
     """The AI's opinion as a recruiter for the people the type fits; raises `ai.LLMUnavailable` when it cannot."""
     from jobhunt import ai
     from jobhunt.ai import prompts
+    from jobhunt.writing import critique
 
     persona = f"Read it as a recruiter would for this kind of candidate: {t.name} ({t.fits})."
     be = ai.backend()
-    reply = ai.chat_json(prompts.text("cv_judge"), f"{persona}\n\n<<<CV\n{cv_text}\nCV>>>", role="checker",
+    reply = ai.chat_json(prompts.text("cv_judge"), critique.cv_request(persona, cv_text), role="checker",
                          timeout=RECRUITER_TIMEOUT_S, ctx=RECRUITER_CTX, purpose="cv_judge", priority=0)
-    grades = []
-    for g in reply.get("grades") or []:
-        if not isinstance(g, dict):
-            continue
-        try:
-            grade = max(1, min(5, int(g.get("grade"))))
-        except (TypeError, ValueError):
-            continue
-        grades.append({"criterion": str(g.get("criterion") or ""), "grade": grade, "why": str(g.get("why") or ""),
-                       "fix": str(g.get("fix") or "")})
-    words = str(reply.get("summary") or "").strip() or " ".join(g["why"] for g in grades if g["why"]).strip()
+    read = critique.parse(reply if isinstance(reply, dict) else {}, cv_text)
+    grades = [{k: g[k] for k in ("criterion", "grade", "why", "fix")} for g in read["grades"]]
+    words = read["summary"] or " ".join(g["why"] for g in grades if g["why"]).strip()
     if not words:
         raise ai.LLMUnavailable("The AI's answer had nothing Hal could show.", kind="unavailable")
     try:
         ai_words = ai.model_for(be, "checker")
     except ai.LLMUnavailable:
         ai_words = be.name
-    return {"text": words, "ai_words": ai_words, "grades": grades}
+    return {"text": words, "ai_words": ai_words, "grades": grades, "screen": read["screen"],
+            "requirements": read["requirements"], "top_fixes": read["top_fixes"]}
 
 
 # What the routes and actions read ----------------------------------------------------------------------------

@@ -588,6 +588,17 @@ class Requests(unittest.TestCase):
         rows = self.a.con.execute("SELECT kind, final FROM writing_edits").fetchall()
         self.assertEqual([tuple(x) for x in rows], [("letter", "My own made-up letter, in my own words.")])
 
+    def test_critique_as_a_recruiter_starts_a_read_that_changes_nothing(self):
+        before = documents.load(self.a.con, self.job)
+        r = self.c.post(self.url("/documents/critique"), {})
+        self.assertEqual(r.status, 200, r.text)
+        action_id = r.json()["action_id"]
+        self.assertEqual(self.wait(action_id)["state"], "done")
+        result = self.c.get(f"/api/v2/actions/{action_id}").json()["result"]
+        self.assertEqual(set(result), {"field", "screen", "requirements", "documents", "top_fixes", "ai", "note"})
+        self.assertEqual([d["document"] for d in result["documents"]], ["cv", "letter"])
+        self.assertEqual(documents.load(self.a.con, self.job), before)
+
     def test_asking_for_changes_with_no_words_is_refused(self):
         r = self.c.post(self.url("/documents/change"), {"words": "  "})
         self.assertEqual(r.status, 400)

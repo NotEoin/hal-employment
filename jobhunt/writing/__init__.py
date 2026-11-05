@@ -6,4 +6,5 @@ conventions of each kind of job, and the person's own voice.
 - `fields`: which kind of job a document is for, and that field's conventions for the request.
 - `edits`: the person's edits of Hal's drafts, kept as pairs, and the rules they show.
 - `voice`: a voice card and exemplars built from the person's own writing, with no AI.
+- `critique`: a recruiter's read of the CV and the letter against the advert.
 """

@@ -406,6 +406,36 @@ runs: tests use `tests/support/fake_claude/`.
   title the advert does not give.
 - `docs/write_routes.py` serves the document change, letter rewrite, interview prep and contacts routes;
   each starts its kind in `docs/write_actions.py` and returns `{action_id}`.
+- Critique as a recruiter: `POST /applications/{id}/documents/critique` starts `docs.critique` (priority 0,
+  subject `<job id>:critique`, so it never stops Hal writing or filling for the job). `writing/critique.py`
+  reads the CV sent with the application and its letter against the advert: the writing checker's findings
+  as line comments, then `cv_judge` (a six-second screen of the top `TOP_CHARS` in its own block, the
+  advert's requirements mapped to quoted evidence before any grade, anchored 1 to 5 grades on nine criteria
+  including Fit to advert and Voice) and `letter_judge` (seven criteria, among them Why them and Adds to the
+  CV). The person's name, email, phone and town are replaced before the AI reads anything; a quote not in
+  the document is dropped. The action's result is `{field, screen, requirements, documents: [{document,
+  title, summary, grades, lines}], top_fixes, ai, note}`; nothing is changed. My CV's recruiter's read uses
+  the same `cv_judge` prompt and parser.
+
+## Writing (`jobhunt/writing/`)
+
+- `rules.py` holds the rule set as data: each `Rule` has an id (T truth, L language, B bullets, C letters),
+  the rule in plain words, the document kinds it applies to (letter, cv, answer) and a severity. `high`
+  makes the writer revise its draft once (`pack.revise_once`, one call, never a loop); `high` and `medium`
+  are listed under "Check before sending"; `low` is advice shown only in a critique. `FIELDS` are the field
+  add-ons, each with the words that identify it and conventions per document kind.
+- `check.py` is the deterministic checker for letters, CV lines and form answers: one-match words (L1),
+  fashionable words two to a paragraph (L2), evaluative words by density (L3), filler, `-ing` tails,
+  puffery, staged contrasts, stacked qualities, the other spelling, dashes, bold, chatbot words and
+  placeholders, stock openings and closings, hedges, weak bullet openers, first person in CV lines, bullets
+  over 35 words, a letter sentence that repeats a CV line, greeting and sign-off pairing ("Dear" and a name
+  with "Yours sincerely", a team or "Sir or Madam" with "Yours faithfully"), numbers no source holds and
+  length limits. It replaced `pack.CLICHES`; every word that list flagged is still flagged.
+- `fields.py` resolves the field from the advert (title words count three times), else from the person's
+  CV type, roles and subject; nothing found is the general field. The analyse step stores it on the
+  analysis, and the letter, answers, form-filling and CV suggestion requests carry its conventions, plus
+  the person's own field's background advice when the two differ. Conventions are in the request, never
+  the prompt, since they depend on the job.
 
 ### Web links for the record (`ingest/web.py`)
 

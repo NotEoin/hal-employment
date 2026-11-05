@@ -2,7 +2,8 @@
 
 Kinds: `docs.change` rewrites the letter, message and answers as the person asked;
 `docs.rewrite_letter` rewrites the letter alone; `docs.prep` drafts notes for the next stage; `docs.contacts`
-finds who to message. Each is slow AI or search work, so it runs as an action with steps, Stop and an
+finds who to message; `docs.critique` reads the CV and letter as a recruiter would (`writing.critique`) and
+changes nothing. Each is slow AI or search work, so it runs as an action with steps, Stop and an
 Activity row, and the route only starts it (`docs/write_routes.py`).
 
 Design decisions, each with its reason:
@@ -22,6 +23,7 @@ from .. import contacts, documents, llm, pack, prep
 from ..apply import actions as apply_actions
 from ..apply.queries import _job
 from ..core import runner
+from ..writing import critique as writing_critique
 from ..writing import fields
 
 WORDS_SHOWN = 200   # characters of the person's request kept in the action's parameters and its why
@@ -107,6 +109,29 @@ def rewrite_letter(ctx, job_id: str, words: str = "") -> dict:
     written = rewrite_letter_now(ctx, job, (words or "").strip()[:WORDS_SHOWN])
     ctx.changed("Hal rewrote the cover letter. Read it before you approve.")
     return {"letter": written["text"], "flags": written["flags"], "notes": written["notes"]}
+
+
+def critique_subject(job_id: str) -> str:
+    """The subject of a critique: its own, so asking for one never stops Hal writing or filling for the job."""
+    return f"{job_id}:critique"
+
+
+def _critique_example(world: Any) -> dict:
+    row = world.con.execute("SELECT id FROM jobs WHERE status = 'ready' ORDER BY id LIMIT 1").fetchone()
+    return {"job_id": row["id"], "_subject": critique_subject(row["id"])}
+
+
+@runner.action("docs.critique", area="documents", label="Reading your documents as a recruiter",
+               why="You asked for a recruiter's read of your documents", priority=0,
+               example=_critique_example)
+def critique(ctx, job_id: str) -> dict:
+    """Grades the CV and letter against the advert, with line comments and the top three fixes; changes nothing."""
+    job = _job(ctx.con, job_id)
+    ctx.step("Reading your CV and letter against the advert, as a recruiter would")
+    ctx.used("application", "Your CV and cover letter for this job", job_id)
+    out = writing_critique.critique(ctx.con, job)
+    ctx.step(out["note"] or "Hal's read is ready. It is Hal's opinion; nothing was changed.")
+    return out
 
 
 @runner.action("docs.prep", area="documents", label="Getting you ready for {title} at {company}",
