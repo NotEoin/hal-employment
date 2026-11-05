@@ -15,6 +15,9 @@ Design decisions, each with its reason:
 - Organisation names are compared without case, punctuation, "the", company endings (Ltd, plc) and word
   order, so "The Fenwick Museum Trust Ltd" and "Fenwick Museum Trust" are one employer, as are
   "University of Nowhere Fen" and "Nowhere Fen University".
+- For the Inconsistencies list, titles and grades are compared without case, punctuation, plurals,
+  number words ("Thirty" is "30") or common abbreviations ("HE" is "Higher Education"), and a qualification
+  by its level, so only facts that differ are raised.
 - Skills are compared without case, spaces, hyphens and dots, and through a small table of other names for
   the same skill ("MS Excel" is "Excel"), covering office, research and writing skills as well as code.
 - A found item's fields come from its sources in rank order (transcript, certificate, CV, letter, notes):
@@ -278,12 +281,71 @@ def skill_key(name: str) -> str:
     return SKILL_ALIASES.get(key, key)       # "TypeScript/JavaScript" is "JavaScript/TypeScript"
 
 
+# Wording that differs while the fact is the same: "Thirty units" and "30 units", "GCSE" and "GCSEs",
+# "Access to HE Diploma" and "Access to Higher Education Diploma" were raised as inconsistencies (2026-11-05).
+NUMBER_WORDS = {w: n for n, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+    "seventeen eighteen nineteen".split())}
+TENS_WORDS = {w: n * 10 for n, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split(), 2)}
+ABBREVIATIONS = {"he": "higher education", "hons": "honours", "uni": "university", "dept": "department",
+                 "mgr": "manager", "asst": "assistant", "snr": "senior", "sr": "senior", "jnr": "junior",
+                 "jr": "junior", "intl": "international", "admin": "administration", "1st": "first"}
+# UK degree classes written in words or figures ("Upper Second", "2:1", "2.1")
+GRADE_PHRASES = (("upper second", "2 1"), ("lower second", "2 2"), ("second upper", "2 1"),
+                 ("second lower", "2 2"))
+FILLER_WORDS = {"the", "a", "an", "at", "of", "and", "with", "in"}
+GRADE_FILLER = {"class", "honours", "degree", "grade", "overall", "classification"}
+PLURAL_MIN = 4             # "units" is "unit"; "is", "bus" and "class" are left alone
+
+
+def _number(words: list[str]) -> list[str]:
+    """Number words as digits: "thirty five units" is "35 units"."""
+    out: list[str] = []
+    for w in words:
+        if w in NUMBER_WORDS and out and out[-1].isdigit() and int(out[-1]) in TENS_WORDS.values():
+            out[-1] = str(int(out[-1]) + NUMBER_WORDS[w])
+        elif w in NUMBER_WORDS or w in TENS_WORDS:
+            out.append(str(NUMBER_WORDS.get(w, TENS_WORDS.get(w))))
+        else:
+            out.append(w)
+    return out
+
+
+def fact_key(text: str, grade: bool = False) -> str:
+    """A title or grade as compared for conflicts: wording, number words, plurals and abbreviations aside.
+
+    With `grade`, UK degree classes in words are their figures and "class" or "honours" are left out.
+    """
+    t = _plain(text)
+    if grade:
+        for phrase, figure in GRADE_PHRASES:
+            t = t.replace(phrase, figure)
+    words = " ".join(ABBREVIATIONS.get(w, w) for w in t.split()).split()
+    skip = FILLER_WORDS | (GRADE_FILLER if grade else set())
+    words = [w[:-1] if len(w) >= PLURAL_MIN and w.endswith("s") and not w.endswith("ss") else w
+             for w in _number(words) if w not in skip]
+    return " ".join(words)
+
+
+def qualification_key(text: str) -> str:
+    """A qualification as compared for conflicts: its level and level number, or its words if it has no level."""
+    found = level(text)
+    if not found:
+        return fact_key(text)
+    number = re.search(r"\blevel (\d)", _plain(text))
+    return f"{found} {number.group(1)}" if number else found
+
+
 def value_key(field: str, value) -> str:
-    """A field's value as compared for conflicts: dates by month, text without case or punctuation."""
+    """A field's value as compared for conflicts: dates by month, a qualification by level, wording aside."""
     if field in ("start", "end", "date", "expires"):
         return clean_date(str(value or ""), "end" if field == "end" else "start")
     if field in ("employer", "institution", "issuer"):
         return org_key(str(value or ""))
+    if field == "qualification":
+        return qualification_key(str(value or ""))
+    if field in ("title", "grade"):
+        return fact_key(str(value or ""), grade=field == "grade")
     if field == "value" and re.fullmatch(r"[\d\s()+-]{7,}", str(value or "")):
         return re.sub(r"\D", "", str(value))      # "07700 900123" and "07700900123" are one number
     if isinstance(value, bool):

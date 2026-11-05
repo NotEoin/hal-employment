@@ -4,7 +4,9 @@
 
 - `field`: two sources give one item different values for a field (a start of "May 2024" in one CV and
   "June 2024" in another, a grade on the transcript that is not the one on the CV). Each value is listed
-  with the files that gave it; the item shows the best-ranked source's value (see `merge.RANKS`).
+  with the files that gave it; the item shows the best-ranked source's value (see `merge.RANKS`). Values
+  are compared by `merge.value_key`, so wording alone ("Thirty units", "30 units"; "GCSE", "GCSEs") is no
+  conflict, and only fields that are facts (`CHECKED_FIELDS`) are compared.
 - `dates`: an item ends before it starts.
 - `overlap`: two jobs that are not marked part-time share more than a month.
 - `gap`: more than `GAP_MONTHS` months between one job or course ending and the next starting.
@@ -23,13 +25,16 @@ from jobhunt.profile import merge
 
 GAP_MONTHS = 6             # employers ask about a gap longer than six months
 OVERLAP_MIN_MONTHS = 2     # one shared month is a job change, not two jobs at once
-CHECKED_FIELDS = {          # the fields whose disagreement is worth the person's time
-    "job": ("title", "employer", "start", "end", "location"),
-    "education": ("qualification", "subject", "institution", "start", "end", "grade"),
+# The fields whose disagreement is a fact worth the person's time: dates, grades, employers, job titles and
+# qualification levels. A subject, institution, place or project role written two ways was most of a real
+# Inconsistencies list ("Developer", "owner" and "Author" of one project) and said nothing wrong
+# (2026-11-05); items only merge when their institution and employer already agree.
+CHECKED_FIELDS = {
+    "job": ("title", "employer", "start", "end"),
+    "education": ("qualification", "start", "end", "grade"),
     "certificate": ("issuer", "date", "grade"),
     "achievement": ("date",),
     "basic": ("value",),
-    "project": ("role",),
 }
 FIELD_WORDS = {"start": "start date", "end": "end date", "date": "date", "value": "value"}
 GROUP_WORDS = {"transcript": "transcript", "certificate": "certificate", "cv": "CV", "letter": "letter",

@@ -45,7 +45,8 @@ What changed in each version, in plain words.
   a newer copy of a project that says something else: then a fact you checked goes back to unchecked.
 - **What does not add up.** Hal lists two files that give different dates for one job, a grade on your
   transcript that is not the one on your CV (Hal uses the transcript's until you choose), an end date
-  before a start date, two full-time jobs at once, and gaps of more than six months.
+  before a start date, two full-time jobs at once, and gaps of more than six months. The same fact in
+  other words ("Thirty units" and "30 units", "GCSE" and "GCSEs") is not listed, nor is a project role.
 - **Your record in tabs.** Your record has a tab for work history, education, skills, projects,
   certificates and achievements, and the details about you, each a card you can confirm, edit, hide or add
   by hand. Each card names the files it came from with their words, and marks words not found in the file.

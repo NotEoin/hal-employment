@@ -609,9 +609,11 @@ available yet.
   goes back to `hal`, so the review shows it again; an edited item keeps its values. Only items added by hand
   can be deleted.
 - `conflicts.py` lists what does not add up: two sources giving one field different values (each value
-  with its files), an end before a start, two jobs not marked part-time that share more than a month, and
-  a gap of more than `GAP_MONTHS` (6) months. Each conflict has a fingerprint, so finding it again keeps
-  its row and a settled one stays settled.
+  with its files), only for fields that are facts (`CHECKED_FIELDS`: dates, grades, employers, job titles,
+  qualification levels, issuers) and compared by `merge.value_key`, so case, punctuation, plurals, number
+  words and common abbreviations are no conflict; an end before a start, two jobs not marked part-time
+  that share more than a month, and a gap of more than `GAP_MONTHS` (6) months. Each conflict has a
+  fingerprint, so finding it again keeps its row and a settled one stays settled.
 - `profile/routes.py` serves `GET /api/v2/profile` (counts, basics, links, open and settled conflicts, each
   naming its items) and
   `GET /api/v2/profile/{kind}`, the person's edit, confirm, hide, add and delete, and

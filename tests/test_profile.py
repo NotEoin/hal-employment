@@ -102,6 +102,42 @@ class Store(unittest.TestCase):
         self.job(NOTES, "notes", start="2024", current=True)
         self.assertEqual(self.open_conflicts(), [])
 
+    def test_the_same_fact_in_other_words_is_no_inconsistency(self):
+        # a real Inconsistencies list was mostly wording: "Thirty units" and "30 units", "GCSE" and "GCSEs",
+        # "Developer", "owner" and "Author" of one project (2026-11-05)
+        def edu(source, **fields):
+            store.add_found(self.con, "education", {"institution": "Saltmarsh Cross College", "period": "2020-21",
+                                                    **fields}, ev(source, "cv", "x"))
+        edu(CV_A, qualification="Access to HE Diploma", grade="30 units at Distinction", subject="History")
+        edu(CV_B, qualification="Access to Higher Education Diploma", grade="Thirty Units at distinction.",
+            subject="History and Politics")
+        store.add_found(self.con, "education", {"qualification": "GCSE", "institution": "Harrowgate Vale School",
+                                                "grade": "Upper Second"}, ev(CV_A, "cv", "x"))
+        store.add_found(self.con, "education", {"qualification": "GCSEs", "institution": "Harrowgate Vale School",
+                                                "grade": "2:1"}, ev(CV_B, "cv", "x"))
+        for source, role in ((CV_A, "Developer"), (CV_B, "owner"), (NOTES, "Author")):
+            store.add_found(self.con, "project", {"name": "Parish map", "role": role}, ev(source, "cv", "x"))
+        self.job(CV_A, title="Sales Assistants", start="May 2024", location="Wexley")
+        self.job(CV_B, title="sales assistant", start="May 2024", location="Wexley, Fenshire")
+        self.assertEqual(self.open_conflicts("field"), [])
+
+    def test_facts_that_differ_are_still_inconsistencies(self):
+        # an end of January 2025 in some CVs and May 2025 in others; "Team Member" and "Bartender / Team
+        # Member" are two titles (2026-11-05)
+        a = self.job(CV_A, title="Team Member", start="Sep 2023", end="January 2025")
+        self.job(CV_B, title="Bartender / Team Member", start="Sep 2023", end="May 2025")
+        self.assertEqual(sorted(c["field"] for c in self.open_conflicts("field")), ["end", "title"])
+        degree = {"institution": "University of Wexley", "subject": "History", "period": "2021-24"}
+        store.add_found(self.con, "education", {**degree, "qualification": "BA", "grade": "First"}, ev(CV_A, "cv"))
+        store.add_found(self.con, "education", {**degree, "qualification": "BA (Hons)", "grade": "2:1"}, ev(CV_B, "cv"))
+        self.assertEqual([c["field"] for c in self.open_conflicts("field") if a not in c["item_ids"]], ["grade"])
+
+    def test_wording_keys_fold_numbers_plurals_and_levels(self):
+        self.assertEqual(merge.fact_key("Thirty-five Units"), merge.fact_key("35 unit"))
+        self.assertNotEqual(merge.fact_key("Team Member"), merge.fact_key("Bartender / Team Member"))
+        self.assertEqual(merge.qualification_key("Access to HE Diploma"), "access")
+        self.assertNotEqual(merge.qualification_key("BTEC Level 2"), merge.qualification_key("BTEC Level 3"))
+
     def test_a_transcript_grade_beats_a_cv_grade(self):
         degree = {"qualification": "BA (Hons)", "subject": HUMANITIES.you["education.subject"],
                   "institution": HUMANITIES.you["education.university"], "period": "2022-25"}
