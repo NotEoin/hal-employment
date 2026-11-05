@@ -25,6 +25,8 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **"This listing went offline" closes the job.** An expired Totaljobs advert saying "This listing went offline"
+  was reported as a form of two questions, which were the site's own search boxes. Hal now reads it as closed.
 - **A high school or second subject is not given your degree.** "What year did you graduate high school?" and
   "High School" were answered with your university, and "Secondary Major" with your degree subject.
 - **Hal leaves your current pay and your past with an employer to you.** The expected salary went into "What is

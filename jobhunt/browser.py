@@ -91,7 +91,12 @@ CLOSED = re.compile(r"(no longer|not) (available|accepting applications|open|exi
                     # "Applications Closed", "Applications for this position have now closed" (ProductionBase,
                     # testers 2026-11-04)
                     r"\bapplications? closed\b|applications? for this (position|role|job|vacancy) (have|has) "
-                    r"(now )?closed", re.I)
+                    r"(now )?closed|"
+                    # "This listing went offline", "the listing that you're looking for is expired" (Totaljobs,
+                    # testers 2026-11-05)
+                    r"(listing|job|advert|vacancy|posting) went offline|"
+                    r"(listing|job|advert|vacancy|posting)( that you'?re looking for)? (is|has) (now )?(expired|gone)",
+                    re.I)
 BOT_CHECK = re.compile(r"just a moment|verify (that )?you are (a )?human|human verification|are you a robot|"
                        r"attention required|pardon our interruption|checking your browser|security check", re.I)
 # Pages that refuse the browser outright, with no check to pass.

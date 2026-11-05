@@ -128,7 +128,8 @@ class SiteKeys(unittest.TestCase):
         survey = {"title": "Jobs", "headings": [], "url": banner["url"], "text": banner["text"], "controls": []}
         self.assertTrue(browser._closed(survey, 200))
         self.assertFalse(browser._closed({**survey, "text": "Apply now. " * 80 + banner["text"]}, 200))
-        for said in ("Applications Closed", "Applications for this position have now closed."):
+        for said in ("Applications Closed", "Applications for this position have now closed.",
+                     "This listing went offline.", "Sorry, the listing that you're looking for is expired."):
             self.assertTrue(browser._closed({**survey, "text": said}, 200), said)
         self.assertFalse(browser._closed({**survey, "text": "Applications close on 30 November."}, 200))
 
