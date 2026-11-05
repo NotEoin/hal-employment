@@ -149,7 +149,7 @@ class SiteKeys(unittest.TestCase):
         """Regression (testers, 2026-11-05): Totaljobs' "Job title, skill or company" and "Town, city or postcode"
         were taken for an application form's two questions."""
         for label in ("Job title, skill or company", "Town, city or postcode", "Job title, skills or keywords",
-                      "What?", "City, town or zip code", "Search:"):
+                      "What?", "City, town or zip code", "Search:", "q"):
             self.assertTrue(browser.not_the_application({"label": label}), label)
         for label in ("Postcode", "Town or city", "Job title", "Current company", "Location (City)"):
             self.assertFalse(browser.not_the_application({"label": label}), label)

@@ -25,6 +25,8 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A search box known only as "q" is the site's own.** Hacker News's search box has no label, and Hal took it
+  for a one-question form.
 - **Forms filling side by side keep to their own tabs.** With several forms filling at once, one job's list of
   tabs came to hold another job's, and Hal read and filled the wrong page: Encord's form picked up Lane Clark &
   Peacock's questions, and every answer on both was lost. A tab now belongs to one job only.
