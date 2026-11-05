@@ -16,7 +16,7 @@ from support.profiles import humanities_profile
 from jobhunt import db, pack, profile, record
 from jobhunt.core import paths
 from jobhunt.cvstudio import context as cv_context
-from jobhunt.profile import writing
+from jobhunt.profile import store, writing
 
 NOW = "2026-11-05T09:00:00Z"
 SHORT = 400                # room for the headings and the checked degree, not the found facts
@@ -36,6 +36,16 @@ class Writing(unittest.TestCase):
         block = profile.context_block(self.con)
         self.assertNotIn("Paper round", block)
         self.assertNotIn("Harrowgate Vale News", block)
+
+    def test_a_found_fact_whose_quote_was_not_in_its_file_waits_for_the_person(self):
+        # a degree the model made up from a coursework report reached the profile block (2026-11-05)
+        made_up = store.add_found(self.con, "education",
+                                  {"qualification": "MA History", "institution": "Glenmoor College", "start": "2024"},
+                                  {"source_rel": "Sources/Coursework/essay.md", "quote": "MA History, Glenmoor",
+                                   "field": "qualification", "doc_type": "report", "verified": False})
+        self.assertNotIn("Glenmoor", profile.context_block(self.con))
+        store.confirm(self.con, made_up)
+        self.assertIn("Glenmoor", profile.context_block(self.con))
 
     def test_checked_facts_come_before_found_ones_and_contact_details_are_left_out(self):
         humanities_profile(self.con)

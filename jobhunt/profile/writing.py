@@ -86,6 +86,10 @@ def _lines(con: sqlite3.Connection, states: tuple[str, ...]) -> list[str]:
         for it in store.items(con, kind, hidden=False):
             if it["state"] not in states:
                 continue
+            # A found fact no quote was found for is the model's word alone: it reached a letter as a degree
+            # from a university the person never went to (2026-11-05). It waits for the person to confirm it.
+            if it["state"] == "hal" and not any(e.get("verified", True) for e in it["evidence"]):
+                continue
             if kind == "basic" and it["fields"].get("key", "").lower() in CONTACT_KEYS:
                 continue
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
@@ -94,7 +98,8 @@ def _lines(con: sqlite3.Connection, states: tuple[str, ...]) -> list[str]:
 
 
 def context_block(con: sqlite3.Connection, limit: int = LIMIT) -> str:
-    """The "Profile" block for a writing prompt: checked and edited facts, then found ones; never hidden ones.
+    """The "Profile" block for a writing prompt: checked and edited facts, then found ones; never hidden ones,
+    and never a found one whose every quote was missing from its document.
 
     "" when the profile holds nothing to say.
     """
