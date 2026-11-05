@@ -57,7 +57,7 @@ older rows end in `+00:00` and compare the same on 19 characters.
 `db.connect(path=None)` opens `paths.db_path()` with WAL, foreign keys and a 30 s busy timeout, then runs
 `core.db.migrate.migrate` when `PRAGMA user_version` is below `LATEST`, and raises `DataTooNew` when above.
 Only migrations make the schema: 0001 is the baseline, so `db.py` holds no `CREATE` statement. A migration
-backs up `jobs.db` first. `LATEST` is 18. Migration 0018 (`0018_old_answers`) is the one destructive
+backs up `jobs.db` first. `LATEST` is 20. Migration 0018 (`0018_old_answers`) is the one destructive
 migration: it drops the old `answers` table, because the saved answers live in `answers2` alone; every other
 migration only adds.
 
@@ -467,6 +467,26 @@ only, so a resumed ingest is not counted as fast), counts by stage, state and ca
 `not_downloaded` with the first paths, and recent errors. Web links are read by `ingest/web.py` when it is
 present (`fetch(urls, page_cap=)`), imported lazily; without it the ingest says web links are not
 available yet.
+## Profile (`jobhunt/profile/`)
+
+- The profile is the facts about the person that Hal finds in their record: jobs, education (with modules
+  and marks), skills, projects, achievements, certificates, basics (name, email, phone, location) and links.
+  Migration 0020 keeps them in `profile_items` (fields as JSON, a state and an origin), `profile_evidence`
+  (the file inside the record, the quote, the field, the document type and what that file said) and
+  `profile_conflicts`.
+- The ingest calls `store.add_found(con, kind, fields, evidence)` for each fact. `merge.py` decides, in code,
+  when it is an item already there: employers and institutions compared without case, "the", Ltd or word
+  order; the same employer with overlapping or touching dates, or the same title, is one job; skills
+  compared without case and through other names ("MS Excel" is "Excel"). Dates are stored as `YYYY-MM` or
+  `YYYY` from UK ways of writing them ("May 2024", "05/2024", "2023-24", "Sept 2023 - present",
+  "Summer 2023"). An unknown kind or field raises `ValueError` naming it.
+- A found item (state `hal`) takes each field from its best-ranked source: transcript, then certificate,
+  CV, letter and notes. Confirmed and edited items keep the person's values, and no later ingest changes
+  them; a hidden item stays hidden when its file is read again. Only items added by hand can be deleted.
+- `conflicts.py` lists what does not add up: two sources giving one field different values (each value
+  with its files), an end before a start, two jobs not marked part-time that share more than a month, and
+  a gap of more than `GAP_MONTHS` (6) months. Each conflict has a fingerprint, so finding it again keeps
+  its row and a settled one stays settled.
 
 ## Sources (`find/sources_registry.py`, `find/detect.py`, `find/source_routes.py`)
 

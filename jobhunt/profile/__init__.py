@@ -1,5 +1,5 @@
-"""The person's profile: jobs, education, skills and the rest, each fact with the documents it came from.
+"""The profile: the facts about the person that Hal finds in their record, checked and corrected by them.
 
-This package holds a stand-in `store.add_found` only, so the bulk ingest (`jobhunt.ingest`) has somewhere to
-hand the facts it finds. The profile store proper (its tables, merge rules and routes) replaces it.
+`store` keeps the facts and their sources, `merge` decides when two facts are one, and `conflicts` finds
+what does not add up.
 """

@@ -189,9 +189,13 @@ def _give_facts(con: sqlite3.Connection, desc: dict, note_rel: str) -> int:
 
     n = 0
     for f in desc["facts"]:
-        store.add_found(con, f["kind"], f["fields"], {"source_rel": note_rel, "quote": f["quote"],
-                                                     "field": f["field"], "doc_type": desc["doc_type"],
-                                                     "verified": f["verified"]})
+        try:
+            store.add_found(con, f["kind"], f["fields"], {"source_rel": note_rel, "quote": f["quote"],
+                                                         "field": f["field"], "doc_type": desc["doc_type"],
+                                                         "verified": f["verified"]})
+        except ValueError as e:  # one malformed fact from the model is left out, not the whole document
+            log.info("left out a fact from %s: %s", note_rel, e)
+            continue
         n += 1
     return n
 

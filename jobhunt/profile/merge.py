@@ -1,0 +1,360 @@
+"""The profile's merge rules: when two found facts are one, and what the merged fact says.
+
+Everything here is plain code over the facts' fields, never a model, so the same files always give the same
+profile. `store.add_found` uses `same_item` to pick the item a new fact belongs to and `fold` to work out a
+found item's fields from its sources.
+
+Design decisions, each with its reason:
+
+- Dates are kept as `YYYY-MM` or `YYYY`, whatever way a document wrote them ("May 2024", "05/2024",
+  "Sept 2023 - present", "Summer 2023", "2023-24"), so two CVs that write one date two ways agree. Text that
+  is not a date is kept as written, never guessed at.
+- A whole period written with a two-digit second year ("2023-24", "2022-25") runs from September to June,
+  as do two four-digit years in a row ("2023-2024"), because UK CVs and transcripts write academic years
+  that way. A single point such as "2023-12" is always a month, so a stored date reads back as itself.
+- Organisation names are compared without case, punctuation, "the", company endings (Ltd, plc) and word
+  order, so "The Fenwick Museum Trust Ltd" and "Fenwick Museum Trust" are one employer, as are
+  "University of Nowhere Fen" and "Nowhere Fen University".
+- Skills are compared without case, spaces, hyphens and dots, and through a small table of other names for
+  the same skill ("MS Excel" is "Excel"), covering office, research and writing skills as well as code.
+- A found item's fields come from its sources in rank order (transcript, certificate, CV, letter, notes):
+  each field takes the value of the best-ranked source that gives one, so a transcript's grade beats a CV's.
+  Lists (duties, modules, tools) are joined across sources.
+"""
+from __future__ import annotations
+
+import re
+
+from jobhunt.core import clock
+
+# Rank of each kind of document; a higher rank's value wins. The person's own edits are above all of these
+# and are never folded at all (see store.py).
+RANKS = {"transcript": 5, "certificate": 4, "cv": 3, "letter": 2, "notes": 1}
+DOC_TYPES = {  # other names the ingest may give a document type
+    "hear": "transcript", "degree_transcript": "transcript", "marks": "transcript",
+    "degree_certificate": "certificate", "award": "certificate", "certificates": "certificate",
+    "resume": "cv", "curriculum_vitae": "cv",
+    "cover_letter": "letter", "personal_statement": "letter", "reference": "letter", "statement": "letter",
+    "note": "notes", "study_notes": "notes", "slides": "notes",
+}
+UNKNOWN_RANK = 0           # a document type Hal has no rank for is below notes
+MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
+          "november", "december")
+MONTH_MIN = 3              # "Sep" and "Sept" are months; "ma" is not
+# (first month, last month) of each season; winter runs into the next year
+SEASONS = {"spring": (3, 5), "summer": (6, 8), "autumn": (9, 11), "fall": (9, 11), "winter": (12, 2)}
+ACADEMIC_START, ACADEMIC_END = 9, 6        # a UK academic year runs September to June
+NOW_WORDS = {"present", "now", "current", "ongoing", "to date", "date", "today"}
+DASHES = "-\u2013\u2014"                    # hyphen, en dash, em dash, as documents write ranges
+CENTURY = 100
+FIRST_MONTH, LAST_MONTH = 1, 12
+ORG_ENDINGS = {"ltd", "limited", "plc", "llp", "llc", "inc", "co", "cic", "uk"}
+ORG_SKIP = {"the", "of", "and", "at", "for"}
+# Other names for one skill, by their compared form (see `skill_key`); the value is the shared key.
+SKILL_ALIASES = {
+    "msexcel": "excel", "microsoftexcel": "excel", "excelspreadsheets": "excel", "spreadsheets": "excel",
+    "msword": "word", "microsoftword": "word", "mspowerpoint": "powerpoint", "microsoftpowerpoint": "powerpoint",
+    "msoffice": "microsoftoffice", "office365": "microsoftoffice", "microsoft365": "microsoftoffice",
+    "archiveresearch": "archivalresearch", "researchinarchives": "archivalresearch",
+    "oralhistories": "oralhistory", "oralhistoryinterviews": "oralhistory",
+    "proofreading": "proofreading", "copyediting": "copyediting", "editing": "editing",
+    "customerservices": "customerservice", "publicspeaking": "presenting", "presentations": "presenting",
+    "js": "javascript", "py": "python", "postgres": "postgresql", "gsheets": "googlesheets",
+}
+LIST_FIELDS = {"duties", "achievements", "tools", "modules"}
+
+
+def rank(doc_type: str) -> int:
+    """How much a document type is trusted: transcript 5, certificate 4, CV 3, letter 2, notes 1, else 0."""
+    key = (doc_type or "").strip().lower().replace(" ", "_").replace("-", "_")
+    return RANKS.get(DOC_TYPES.get(key, key), UNKNOWN_RANK)
+
+
+def doc_group(doc_type: str) -> str:
+    """The ranked group a document type belongs to (`transcript`, `cv` and so on), or the type itself."""
+    key = (doc_type or "").strip().lower().replace(" ", "_").replace("-", "_")
+    return DOC_TYPES.get(key, key)
+
+
+# Dates ---------------------------------------------------------------------------------------------------
+
+def _month_word(word: str) -> int | None:
+    word = word.lower().rstrip(".")
+    if len(word) < MONTH_MIN:
+        return None
+    return next((i for i, name in enumerate(MONTHS, 1) if name.startswith(word)), None)
+
+
+def _year(text: str) -> int | None:
+    return int(text) if re.fullmatch(r"(19|20)\d\d", text) else None
+
+
+def parse_point(text: str, side: str = "start") -> str | None:
+    """One date as `YYYY-MM` or `YYYY`; None when it is not a date. A season is its first or last month.
+
+    "May 2024", "05/2024", "1/5/2024" (UK day first), "2024-05", "2024-05-01", "2024" and "Summer 2023" are
+    understood; `side` ("start" or "end") picks a season's first or last month.
+    """
+    t = " ".join((text or "").replace(",", " ").split()).lower()
+    if not t:
+        return None
+    if m := re.fullmatch(r"((19|20)\d\d)", t):
+        return m.group(1)
+    if m := re.fullmatch(r"((19|20)\d\d)[-/.](\d{1,2})(?:[-/.]\d{1,2})?", t):
+        month = int(m.group(3))
+        return f"{m.group(1)}-{month:02d}" if FIRST_MONTH <= month <= LAST_MONTH else None
+    if m := re.fullmatch(r"(?:\d{1,2}[/.-])?(\d{1,2})[/.-]((19|20)\d\d)", t):
+        month = int(m.group(1))
+        return f"{m.group(2)}-{month:02d}" if FIRST_MONTH <= month <= LAST_MONTH else None
+    words = t.split()
+    if len(words) == 3 and re.fullmatch(r"\d{1,2}(st|nd|rd|th)?", words[0]):
+        words = words[1:]                  # "1st May 2024": the day is dropped
+    if len(words) == 2 and (year := _year(words[-1])):
+        first = words[-2]
+        if first in SEASONS:
+            start, end = SEASONS[first]
+            if side == "end" and end < start:
+                return f"{year + 1}-{end:02d}"
+            return f"{year}-{(start if side == 'start' else end):02d}"
+        if (month := _month_word(first)) is not None:
+            return f"{year}-{month:02d}"
+    return None
+
+
+def _split(text: str) -> tuple[str, str] | None:
+    """The two ends of a written range, or None when `text` is one date."""
+    t = " ".join((text or "").split())
+    for sep in (" to ", " until ", " till "):
+        if sep in t.lower():
+            i = t.lower().index(sep)
+            return t[:i], t[i + len(sep):]
+    m = re.fullmatch(rf"(.+?)\s*[{DASHES}]\s*(.+)", t)
+    if m and not re.fullmatch(r"(19|20)\d\d[-/.]\d{1,2}([-/.]\d{1,2})?", t) \
+            and not re.fullmatch(r"\d{1,2}[-/.]\d{1,2}[-/.](19|20)\d\d|\d{1,2}[-/.](19|20)\d\d", t):
+        return m.group(1), m.group(2)
+    return None
+
+
+def _academic(text: str) -> tuple[str, str] | None:
+    m = re.fullmatch(r"((19|20)\d\d)\s*[/\-\u2013]\s*(\d\d|(19|20)\d\d)", (text or "").strip())
+    if not m:
+        return None
+    first = int(m.group(1))
+    second = int(m.group(3))
+    short = second < CENTURY
+    if short:
+        second = first - first % CENTURY + second
+    if second <= first or (not short and second != first + 1):
+        return None
+    return f"{first}-{ACADEMIC_START:02d}", f"{second}-{ACADEMIC_END:02d}"
+
+
+def is_now(text: str) -> bool:
+    """True when `text` says the period has not ended ("present", "now", "to date")."""
+    return " ".join((text or "").lower().split()).strip(".") in NOW_WORDS
+
+
+def parse_period(text: str) -> tuple[str, str, bool]:
+    """A written period as (start, end, current): "Sept 2023 - present" is ("2023-09", "", True).
+
+    An end or start that is not a date is kept as written; "2023-24" is the academic year 2023-09 to 2024-06.
+    """
+    t = " ".join((text or "").split())
+    if not t:
+        return "", "", False
+    if year := _academic(t):
+        return year[0], year[1], False
+    if is_now(t):
+        return "", "", True
+    parts = _split(t)
+    if parts is None:
+        start = parse_point(t, "start")
+        if start is None:
+            return t, "", False
+        season = t.lower().split()[0] in SEASONS
+        return start, (parse_point(t, "end") or "") if season else "", False
+    start_text, end_text = parts
+    if is_now(end_text):
+        return parse_point(start_text, "start") or start_text.strip(), "", True
+    return (parse_point(start_text, "start") or start_text.strip(),
+            parse_point(end_text, "end") or end_text.strip(), False)
+
+
+def clean_date(text: str, side: str = "start") -> str:
+    """A date field as stored: `YYYY-MM` or `YYYY` when it is a date, else the text as written."""
+    t = " ".join(str(text or "").split())
+    return parse_point(t, side) or t
+
+
+def month_index(point: str, side: str = "start") -> int | None:
+    """A stored date as a count of months, for comparing; a bare year is January (start) or December (end)."""
+    m = re.fullmatch(r"((19|20)\d\d)-(\d\d)", point or "")
+    if m and FIRST_MONTH <= int(m.group(3)) <= LAST_MONTH:
+        return int(m.group(1)) * 12 + int(m.group(3)) - 1
+    if re.fullmatch(r"(19|20)\d\d", point or ""):
+        return int(point) * 12 + (0 if side == "start" else LAST_MONTH - 1)
+    return None
+
+
+def this_month() -> int:
+    """Today as a count of months, so "present" can be compared."""
+    today = clock.local_day()
+    return today.year * 12 + today.month - 1
+
+
+def span(fields: dict) -> tuple[int, int] | None:
+    """An item's (first month, last month), "present" as this month and a missing end as its start; or None."""
+    start = month_index(fields.get("start") or "", "start")
+    if start is None:
+        return None
+    if fields.get("current"):
+        return start, max(start, this_month())
+    end = month_index(fields.get("end") or "", "end")
+    return start, (end if end is not None else start)
+
+
+def shared_months(a: dict, b: dict) -> int:
+    """How many months the two periods share (0 when either has no start)."""
+    sa, sb = span(a), span(b)
+    if sa is None or sb is None:
+        return 0
+    return max(0, min(sa[1], sb[1]) - max(sa[0], sb[0]) + 1)
+
+
+def overlap_or_touch(a: dict, b: dict) -> bool:
+    """True when the two periods share a month or one starts the month after the other ends."""
+    sa, sb = span(a), span(b)
+    if sa is None or sb is None:
+        return False
+    return sa[0] <= sb[1] + 1 and sb[0] <= sa[1] + 1
+
+
+def date_words(point: str) -> str:
+    """A stored date for people: "2024-05" is "May 2024"; anything else is shown as it is."""
+    m = re.fullmatch(r"((19|20)\d\d)-(\d\d)", point or "")
+    if m and FIRST_MONTH <= int(m.group(3)) <= LAST_MONTH:
+        return f"{MONTHS[int(m.group(3)) - 1].capitalize()} {m.group(1)}"
+    return point or ""
+
+
+# Names ---------------------------------------------------------------------------------------------------
+
+def _plain(text: str) -> str:
+    t = (text or "").lower().replace("&", " and ")
+    return " ".join(re.sub(r"[^a-z0-9+#]+", " ", t).split())
+
+
+def org_key(name: str) -> str:
+    """An employer's or institution's name as compared: no case, punctuation, "the", Ltd or word order."""
+    words = [w for w in _plain(name).replace("univ ", "university ").split() if w not in ORG_SKIP]
+    while words and words[-1] in ORG_ENDINGS:
+        words.pop()
+    return " ".join(sorted(words))
+
+
+def text_key(text: str) -> str:
+    """A title or name as compared: no case, punctuation or extra spaces."""
+    return _plain(text)
+
+
+def skill_key(name: str) -> str:
+    """A skill's name as compared: no case, spaces, hyphens or dots, and other names folded to one."""
+    key = re.sub(r"[\s\-_./]+", "", (name or "").lower())
+    return SKILL_ALIASES.get(key, key)
+
+
+def value_key(field: str, value) -> str:
+    """A field's value as compared for conflicts: dates by month, text without case or punctuation."""
+    if field in ("start", "end", "date", "expires"):
+        return clean_date(str(value or ""), "end" if field == "end" else "start")
+    if field in ("employer", "institution", "issuer"):
+        return org_key(str(value or ""))
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    return _plain(str(value or ""))
+
+
+# Same item -----------------------------------------------------------------------------------------------
+
+def _same(key, a: dict, b: dict, field: str) -> bool:
+    """True when both facts give `field` and it compares equal under `key`."""
+    ka, kb = key(a.get(field, "")), key(b.get(field, ""))
+    return bool(ka) and ka == kb
+
+
+def same_item(kind: str, a: dict, b: dict) -> bool:
+    """True when the facts `a` and `b` of one kind are the same thing (see the module notes)."""
+    if kind == "job":
+        if not (a.get("employer") or b.get("employer")):
+            return _same(text_key, a, b, "title") and overlap_or_touch(a, b)
+        return _same(org_key, a, b, "employer") and (_same(text_key, a, b, "title") or overlap_or_touch(a, b))
+    if kind == "education":
+        if not _same(org_key, a, b, "institution"):
+            return False
+        qa, qb = text_key(a.get("qualification", "")), text_key(b.get("qualification", ""))
+        if qa and qb and qa != qb:
+            return False                   # a BA and then an MA at one university are two
+        return qa == qb != "" or _same(text_key, a, b, "subject") or shared_months(a, b) > 0
+    if kind == "skill":
+        return _same(skill_key, a, b, "name")
+    if kind == "basic":
+        if not _same(text_key, a, b, "key"):
+            return False
+        return text_key(a["key"]) in SINGLE_BASICS or value_key("value", a.get("value")) == value_key(
+            "value", b.get("value"))
+    if kind == "link":
+        return _same(_url_key, a, b, "url")
+    return _same(text_key, a, b, "title" if kind == "achievement" else "name")
+
+
+SINGLE_BASICS = {"name"}      # basics a person has one of; others (emails, phones, links) can be several
+
+
+def _url_key(url: str) -> str:
+    u = (url or "").strip().lower()
+    u = re.sub(r"^https?://(www\.)?", "", u)
+    return u.rstrip("/")
+
+
+# Folding sources into fields -----------------------------------------------------------------------------
+
+def _join(lists: list) -> list:
+    out, seen = [], set()
+    for items in lists:
+        for x in items or []:
+            key = text_key(x.get("name", "")) if isinstance(x, dict) else text_key(str(x))
+            if key and key not in seen:
+                seen.add(key)
+                out.append(x)
+    return out
+
+
+def _modules(sources: list[dict]) -> list[dict]:
+    """Modules joined by name; a module's mark is the best-ranked source's (sources come best first)."""
+    out: dict[str, dict] = {}
+    for said in sources:
+        for mod in said.get("modules") or []:
+            key = text_key(mod.get("name", ""))
+            if not key:
+                continue
+            if key not in out:
+                out[key] = {"name": mod.get("name", ""), "mark": mod.get("mark", "")}
+            elif not out[key].get("mark") and mod.get("mark"):
+                out[key]["mark"] = mod["mark"]
+    return list(out.values())
+
+
+def fold(sources: list[tuple[int, dict]]) -> dict:
+    """A found item's fields from its sources' (rank, fields): best rank first, earlier sources on a tie."""
+    ordered = [said for _, (_, said) in sorted(enumerate(sources), key=lambda p: (-p[1][0], p[0]))]
+    out: dict = {}
+    for said in ordered:
+        for field, value in said.items():
+            if field in LIST_FIELDS or value in (None, "", []):
+                continue
+            out.setdefault(field, value)
+    for field in LIST_FIELDS:
+        joined = _modules(ordered) if field == "modules" else _join([s.get(field) for s in ordered])
+        if joined:
+            out[field] = joined
+    return out
