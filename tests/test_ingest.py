@@ -281,6 +281,22 @@ class Understanding(unittest.TestCase):
         with self.assertRaises(ValueError):
             understand.ask("x.md", "   ", rank.RULES[0])
 
+    def test_a_document_is_asked_about_again_when_the_ai_comes_back(self):
+        # a long ingest read every document of a gateway restart by rules alone (2026-11-05)
+        from jobhunt import ai
+
+        reply = json.dumps(REPLY)
+        with mock.patch.object(understand, "RETRY_WAITS_S", (0, 0)), \
+                mock.patch.object(ai, "ready", return_value="Hal's gateway does not answer."), \
+                mock.patch.object(ai, "chat_json", side_effect=[ai.LLMUnavailable("down"), json.loads(reply)]) as ask:
+            desc = understand.ask("CV.md", CV_TEXT, rank.RULES[0])
+        self.assertEqual((desc["by"], ask.call_count), ("model", 2))
+        with mock.patch.object(understand, "RETRY_WAITS_S", (0, 0)), \
+                mock.patch.object(ai, "ready", return_value=None), \
+                mock.patch.object(ai, "chat_json", side_effect=ai.LLMUnavailable("too long")) as ask:
+            desc = understand.ask("CV.md", CV_TEXT, rank.RULES[0])
+        self.assertEqual((desc["by"], ask.call_count), ("rules", 1))
+
     def test_a_quote_not_in_the_text_marks_the_fact_check_this(self):
         found = []
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}), \

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from collections import Counter
 from pathlib import PurePosixPath
 
@@ -24,8 +25,11 @@ log = logging.getLogger(__name__)
 
 PURPOSE = "ingest_doc"
 TAGS_MIN, TAGS_MAX = 12, 30
-PROMPT_CHARS = 24_000        # the start of a long document: CVs and transcripts say most in their first pages
+PROMPT_CHARS = 60_000        # about 15K tokens: a CV whole, a long report's first chapters, inside a 64K context
 TIMEOUT_S = 300
+# Waits before asking again when the AI itself is down mid-ingest (a gateway restart, a model loading); a
+# long ingest otherwise read every document of those minutes by rules alone (2026-11-05).
+RETRY_WAITS_S = (30, 120, 300)
 QUOTE_MIN = 3                # characters; a shorter quote ("BA") would be found in almost any text
 QUOTE_MAX_WORDS = 40         # the prompt asks for 25; a longer quote is a paragraph pasted back
 FREQUENT_TERMS = 8
@@ -194,13 +198,20 @@ def ask(rel: str, text: str, rule: rank.Rule, *, role: str = "checker") -> dict:
     name = owner()
     system = prompts.text(PURPOSE, name=name or "the person whose files these are")
     user = f"File: {rel}\n\nText:\n{text[:PROMPT_CHARS]}"
-    try:
-        reply = ai.chat_json(system, user, role=role, timeout=TIMEOUT_S, purpose=PURPOSE, priority=2)
-    except ai.LLMUnavailable as e:
-        log.info("read %s by rules: %s", rel, e)
-        return light(rel, text, rule)
-    except PrivateLeak:
-        # The guard stopped the request before anything was sent; the file is still noted, by rules, and
-        # said to hold a private answer. Raising would stop the whole ingest at this file on every carry-on.
-        return {**light(rel, text, rule), "private": True}
-    return clean(reply, rel, text, rule, name)
+    for wait in (*RETRY_WAITS_S, None):
+        try:
+            reply = ai.chat_json(system, user, role=role, timeout=TIMEOUT_S, purpose=PURPOSE, priority=2)
+        except ai.LLMUnavailable as e:
+            # This request failing while the AI answers (too long, refused) is not worth waiting for.
+            if wait is None or e.kind == "local_only" or ai.ready(priority=2) is None:
+                log.info("read %s by rules: %s", rel, e)
+                return light(rel, text, rule)
+            log.info("the AI is not answering (%s); asking about %s again in %d s", e, rel, wait)
+            time.sleep(wait)
+            continue
+        except PrivateLeak:
+            # The guard stopped the request before anything was sent; the file is still noted, by rules, and
+            # said to hold a private answer. Raising would stop the whole ingest at this file on every carry-on.
+            return {**light(rel, text, rule), "private": True}
+        return clean(reply, rel, text, rule, name)
+    raise AssertionError("unreachable: the last try returns")
