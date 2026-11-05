@@ -4,6 +4,10 @@
   are build folders inside a repository. Binaries that hold no words for a person (model weights, programs,
   libraries, databases, fonts) are left out by name, so a folder of a few projects does not become a hundred
   thousand items.
+- Hidden folders and files (a name starting with ".") are never read: they hold an app's settings, an
+  editor's state or a search index, never a document. Nor are an AI tool's instruction files, lockfiles and
+  minified or bundled third-party code (`is_tool_file`): on a real dump these were filed as the person's
+  notes and code (2026-11-05).
 - A file whose bytes are all zero is a cloud placeholder: OneDrive and Dropbox keep the name and size of a
   file not yet downloaded and fill it with zeros. It is listed as "not downloaded", never converted, since
   its "text" would be nothing and a model given nothing invents a document.
@@ -15,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +36,14 @@ JUNK_DIRS = {".git", ".hg", ".svn", ".venv", "venv", "node_modules", "__pycache_
 # Junk only inside a repository: elsewhere a folder called "build" or "target" may be the person's own.
 REPO_JUNK_DIRS = {"build", "dist", "target", "coverage", "htmlcov", "env", "out", "bin", "obj"}
 JUNK_FILES = {".ds_store", "thumbs.db", "desktop.ini", ".localized"}
+# Instructions for AI coding tools and dependency lockfiles: written for a program, not about the person.
+TOOL_FILES = {"claude.md", "agents.md", "gemini.md", "copilot-instructions.md", "package-lock.json", "yarn.lock",
+              "pnpm-lock.yaml", "poetry.lock", "cargo.lock", "uv.lock", "composer.lock", "gemfile.lock"}
+# A tool file by its shape: "CLAUDE-archive.md", "jquery.min.js", "app.js.map", "react-entry-be1bde4765d8e661.js"
+# (a bundler names its output after a hash of at least 8 hex digits, letters and digits mixed, so a dated
+# "notes-20241105.js" is not one).
+TOOL_NAME = re.compile(r"^(?:claude|agents|gemini)[-_ ].*\.md$|\.min\.(?:js|css)$|\.(?:js|css)\.map$|"
+                       r"[-.](?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{8,}\.(?:js|mjs|css)$", re.I)
 BINARY_SUFFIXES = {
     # model weights and data dumps
     ".pt", ".pth", ".ckpt", ".safetensors", ".onnx", ".h5", ".hdf5", ".gguf", ".pkl", ".pickle", ".npy", ".npz",
@@ -87,13 +100,21 @@ class Walk:
 
 def is_junk_dir(name: str, in_repo: bool = False) -> bool:
     """True for a folder never worth entering, such as `.git` or `node_modules`, or `build` in a repository."""
-    return name in JUNK_DIRS or name.endswith(".egg-info") or (in_repo and name.lower() in REPO_JUNK_DIRS)
+    return (name in JUNK_DIRS or name.startswith(".") or name.endswith(".egg-info")
+            or (in_repo and name.lower() in REPO_JUNK_DIRS))
 
 
 def is_binary_name(name: str) -> bool:
     """True for a file left out by its name: weights, programs, libraries, databases, fonts, temporary files."""
     low = name.lower()
     return low in JUNK_FILES or low.startswith("~$") or Path(low).suffix in BINARY_SUFFIXES
+
+
+def is_tool_file(name: str) -> bool:
+    """True for a file written for a program rather than a person: a hidden file, an AI tool's instructions,
+    a lockfile, or minified or bundled code."""
+    low = name.lower()
+    return low.startswith(".") or low in TOOL_FILES or TOOL_NAME.search(low) is not None
 
 
 def is_repo(names: list[str]) -> bool:
@@ -191,6 +212,9 @@ def walk(root: Path, prefix: str | None = None) -> Walk:
                 continue
             if is_binary_name(name):
                 out.leave_out("program or data file")
+                continue
+            if is_tool_file(name):
+                out.leave_out("settings or tool file")
                 continue
             try:
                 st = path.stat()

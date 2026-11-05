@@ -187,6 +187,21 @@ class Discovery(unittest.TestCase):
             self.assertEqual(list(rows(con)), ["Files/Thesis/thesis.md"])
             self.assertEqual(out["left_out"], {"junk folder": 1, "program or data file": 1})
 
+    def test_settings_tool_files_and_bundled_code_are_left_out(self):
+        with home() as (con, _vault, files), fake_ai({}):
+            put(files, "Vault/.claude/settings.local.json", "{}")
+            put(files, "Vault/.rag/chunks.jsonl", "{}")
+            put(files, "Vault/.mcp.json", "{}")
+            put(files, "Vault/CLAUDE.md", "# How to work in this vault")
+            put(files, "Vault/CLAUDE-Archive.md", "# Older instructions")
+            put(files, "Site/jquery-1.10.2.min.js", "!function(){}")
+            put(files, "Site/react-entry-be1bde4765d8e661.js", "!function(){}")
+            put(files, "Site/notes-20241105.js", "// my own script")
+            put(files, "Vault/Rivers.md", "# Rivers\n\nMeanders and oxbow lakes.")
+            out = run(con, [files])
+            self.assertEqual(sorted(rows(con)), ["Files/Site/notes-20241105.js", "Files/Vault/Rivers.md"])
+            self.assertEqual(out["left_out"], {"junk folder": 2, "settings or tool file": 5})
+
     def test_a_repository_becomes_one_unit_summarised_from_its_readme(self):
         with home() as (con, vault, files), fake_ai({}):
             put(files, "tidewatch/.git/HEAD", "ref: refs/heads/main")

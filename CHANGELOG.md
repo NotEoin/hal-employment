@@ -14,7 +14,8 @@ What changed in each version, in plain words.
   in the **+Inbox** drop folder, and Hal reads every document into a note of its own, CVs, transcripts and
   letters first. Each note has a summary, tags and links to the organisations, places, skills and courses
   it mentions. Code projects and a course's lecture notes each become one note. Files OneDrive or Dropbox
-  has not downloaded, files with no text and copies are listed rather than read, and a fact whose words
+  has not downloaded, files with no text and copies are listed rather than read, settings files, hidden
+  folders and bundled code are left out, and a fact whose words
   are not in its document is marked **Check this**. Hal carries on from the next file after a restart.
   Notes and slides are filed by their words unless **Read every document with the AI** is on, and
   **Read them with the AI** on the Overview reads the ones already filed, in place. Hal reads as many

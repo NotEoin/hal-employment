@@ -486,7 +486,9 @@ runner starts the action again with the same batch and only pending items are re
    `error`.
 2. **Discover** (`discover.py`). Size, SHA-256 and the kind by the first bytes. Junk folders (`.git`,
    virtual environments, `node_modules`, caches, and build folders inside a repository) are never entered;
-   weights, programs, databases and fonts are left out by name. A file of zero bytes only is a cloud
+   weights, programs, databases and fonts are left out by name. So are hidden folders and files, an AI
+   tool's instruction files (`CLAUDE.md`, `AGENTS.md`), lockfiles and minified or bundled code
+   (`discover.is_tool_file`). A file of zero bytes only is a cloud
    placeholder: `not_downloaded`, listed, never converted. A file with the same SHA-256 as one already read,
    in any batch, is a `duplicate` named once under "Also at" in the first copy's note.
 3. **Group** (`group.py`). A repository (a `.git` folder or a manifest at its top) is one `repo` item,

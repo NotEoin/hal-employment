@@ -23,8 +23,9 @@ const STAGE_WORDS = { discovered: "Found", converted: "Turned into text", unders
   written: "Saved to your record" };
 const STATE_WORDS = { done: "read", duplicate: "copies of files already read", no_text: "with no text to read",
   skipped: "skipped", error: "could not be read", pending: "still to read" };
-const LEFT_OUT_WORDS = { "junk folder": "folders of program files", link: "shortcuts",
-  "program or data file": "programs and data files", unreadable: "files Hal could not open" };
+const LEFT_OUT_WORDS = { "junk folder": "hidden folders and folders of program files", link: "shortcuts",
+  "program or data file": "programs and data files", "settings or tool file": "settings files and bundled code",
+  unreadable: "files Hal could not open" };
 const RUNNING = new Set(["queued", "running"]);
 let following = null;       // the ingest action on screen, whose steps reload the card
 
