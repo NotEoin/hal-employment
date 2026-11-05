@@ -387,9 +387,16 @@ runs: tests use `tests/support/fake_claude/`.
 
 - `cvstudio.context.build(job=None)` is the one source of every document prompt's placeholders: the person
   (`you.*`, `goal.*`), the CV type's `[documents]` and `[writing]`, `cvdocs.*`, the profile block
-  (`profile`, see Profile below) and up to four voice examples from saved answers that are never reused on
-  forms (never anything `autofill.private_question` marks). Job facts are never placeholders, so a prompt
+  (`profile`, see Profile below) and the person's voice. Job facts are never placeholders, so a prompt
   reads the same for every job of one person.
+- The voice (`writing/voice.py`, while `cvdocs.voice` is on) is read with no AI from the person's own
+  writing: the finals of their edits (`writing_edits`), the answers they rewrote (`answers2` rows never
+  reused on forms) and the CVs, letters, statements and essays in the record, found by the ingest's
+  `doc_type` frontmatter or else by file name, outside private folders and never converted on the way. The
+  voice card states measured values (median sentence length, contractions, British or American spelling,
+  usual openings and words, words they take out of drafts); 2 or 3 exemplars of the closest kind are cut to
+  80 words and 1,500 characters in all. Checker-list words the person uses themselves (`own_words`) are
+  never flagged for them.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The pack's `## Letter notes` section says Tone, Length,
   Evidence and Checked; the application page reads them back.

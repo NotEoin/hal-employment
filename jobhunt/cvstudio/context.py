@@ -4,8 +4,9 @@
 answers, verify, prep and contacts_pick prompts, so no document is written for one fixed kind of career.
 It reads the `you.*`, `goal.*` and `cvdocs.*` settings, the `[documents]` and `[writing]` tables of the CV
 type of Hal's copy of the CV, the profile (the `profile` value: what the person checked first, never what
-they hid) and, for the voice, answers the person rewrote. It never reads a private answer: voice examples
-skip every question `autofill.private_question` marks.
+they hid) and, for the voice, the person's own writing (`writing.voice`: their edits of Hal's drafts, the
+answers they rewrote and the letters, statements and CVs in their record). It never reads a private answer:
+the voice skips every question `autofill.private_question` marks and every private folder.
 
 Design decisions, each with its reason:
 
@@ -40,8 +41,6 @@ SPECIAL_CASES = {
 SPELLING_WORDS = {"en-GB": "UK English", "en-US": "US English"}
 TONE_WORDS = {"plain": "plain and direct", "formal": "formal", "warm": "warm", "confident": "confident"}
 SOMEONE = "the applicant"   # what a prompt calls the person before they have given a name
-VOICE_MAX = 4               # rewritten answers used as voice examples
-VOICE_CHARS = 400           # each example is cut to this, so the examples never crowd out the facts
 # Kinds of test an advert may name, for the prep notes.
 TEST_KINDS = {
     "online test": r"online (test|assessment)",
@@ -105,30 +104,22 @@ def _person() -> dict:
     }
 
 
-def voice_examples(con=None) -> list[str]:
-    """Answers the person rewrote in their own words, newest first; none while "Match my own writing" is off."""
-    from .. import autofill, db
+def voice(job=None, con=None) -> dict:
+    """The person's voice from their own writing (`writing.voice`); empty while "Match my own writing" is off."""
+    from .. import db
     from ..core import settings
+    from ..writing import voice as voice_mod
 
     if not settings.get("cvdocs.voice"):
-        return []
+        return {"card": {}, "lines": [], "exemplars": [], "own_words": []}
+    keys = tuple(job.keys()) if hasattr(job, "keys") else ()
+    query = f"{job['title'] or ''} {job['description'] or ''}" if "description" in keys else ""
     own = con or db.connect()
     try:
-        rows = own.execute("SELECT label, question, answer FROM answers2 WHERE scope = 'never' "
-                           "AND source IN ('you', 'learned') ORDER BY updated DESC").fetchall()
+        return voice_mod.voice_for(own, "letter", query)
     finally:
         if con is None:
             own.close()
-    out = []
-    for row in rows:
-        if autofill.private_question({"label": row["label"]}) or autofill.private_question({"label": row["question"]}):
-            continue
-        value = db.json_value(row["answer"])
-        if isinstance(value, str) and value.strip():
-            out.append(" ".join(value.split())[:VOICE_CHARS])
-        if len(out) == VOICE_MAX:
-            break
-    return out
 
 
 def profile_block() -> str:
@@ -168,11 +159,16 @@ def _type_part(kind) -> dict:
     }
 
 
-def _voice_block(examples: list[str]) -> str:
-    if not examples:
-        return ""
-    lines = "\n".join(f"- {e}" for e in examples)
-    return f"Examples of the applicant's own writing; match their voice, never copy their facts:\n{lines}"
+def _voice_block(lines: list[str], examples: list[str]) -> str:
+    """The voice card and the exemplars as the prompt's last lines; "" when there is neither."""
+    out = []
+    if lines:
+        out.append("How the applicant writes, measured from their own writing; match it:\n"
+                   + "\n".join(f"- {line}" for line in lines))
+    if examples:
+        out.append("Examples of the applicant's own writing; match their voice, never copy their facts:\n"
+                   + "\n".join(f"- {e}" for e in examples))
+    return "\n".join(out)
 
 
 def _job_part(job) -> dict:
@@ -197,7 +193,9 @@ def build(job=None) -> dict:
     """The placeholders of every document prompt for the person, and with `job` that job's own facts."""
     kind = cv_type()
     values = {**_person(), **_type_part(kind)}
-    values["voice_examples"] = _voice_block(voice_examples())
+    own = voice(job)
+    values["voice_examples"] = _voice_block(own["lines"], own["exemplars"])
+    values["own_words"] = own["own_words"]
     values["profile"] = profile_block()
     if job is not None:
         values.update(_job_part(job))

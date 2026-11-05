@@ -33,7 +33,8 @@ register(
     Setting("cvdocs.never_use", "tags", ["passionate", "team player", "go-getter"], "Never use", order=100,
             help="Words and phrases Hal must avoid."),
     Setting("cvdocs.voice", "bool", True, "Match my own writing", order=110,
-            help="Uses answers you rewrote as examples of your voice."),
+            help="Uses your own writing as a guide to your voice: your edits, answers you rewrote, and the "
+                 "letters and CVs in your record."),
     Setting("cvdocs.folder", "path", "", "Where documents are saved", machine=True, remote="local_only", order=120,
             help="Leave empty for Documents, Hal Employment, Applications."),
     Setting("record.folder", "path", "", "Your record folder", group="cvdocs", machine=True, remote="local_only",
