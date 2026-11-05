@@ -1,6 +1,10 @@
 /* The Documents step of an application: while Hal writes, its steps and Stop; then the
    CV changes (Undo and Redo per change), the letter, the answers and the message, with "Approve and fill in
-   the form". The first approval shows the three-step guide (dialogs/firstapp.js) before anything opens. */
+   the form". The first approval shows the three-step guide (dialogs/firstapp.js) before anything opens.
+
+   The CV and the letter are each shown beside the PDF Hal will upload, so the person sees the document
+   itself and not only the words. An Undo, a Redo or saved letter edits make the PDF again, and its address
+   changes with it, so the preview follows. */
 import { html, cx, useState } from "../core/html.js";
 import { post, put } from "../core/api.js";
 import { toast, openDialog, invalidate } from "../core/store.js";
@@ -12,17 +16,35 @@ import { plural } from "../core/format.js";
 
 const appPath = a => "/applications/" + encodeURIComponent(a.id);
 
-/** Approve and fill in the form: starts the form, then shows the board. */
-export async function approve(a, edits = {}) {
+/** Approve and fill in the form: starts the form, then calls `then`, which shows the Form step. The page
+    stays on this application, so the person watches the form being filled rather than the board. */
+export async function approve(a, edits = {}, then = null) {
   try {
     await post(appPath(a) + "/documents/approve", edits);
     invalidate("/applications*");
     toast("Approved. Hal is opening the form on the employer's site.");
-    go("apps");
+    if (then) then();
+  } catch (err) { toast(err.message); }
+}
+
+/** Change the documents: Hal stops filling and the documents can be edited and approved again. */
+async function reopen(a, reload) {
+  try {
+    await post(appPath(a) + "/documents/reopen", {});
+    toast("Hal stopped. Change the documents, then approve them again.");
+    invalidate("/applications*");
+    if (reload) reload();
   } catch (err) { toast(err.message); }
 }
 
 const copy = text => copyText(text);
+
+/** The PDF Hal will upload, drawn in the page; nothing when there is no file yet. */
+function Pdf({ url, label }) {
+  if (!url) return html`<div class="card"><p class="small sub">The ${label.toLowerCase()} appears here once Hal has made it.</p></div>`;
+  return html`<div class="stack s"><iframe class="pdfview" src=${url} title=${label}></iframe>
+    <a class="btn small" href=${url} target="_blank" rel="noopener"><${Icon} n="external" c="s" />Open in a new tab</a></div>`;
+}
 
 async function stop(a) {
   try { await post("/actions/" + encodeURIComponent(a.action_id) + "/stop"); toast("Hal stopped. Nothing was sent and no form was opened."); }
@@ -38,7 +60,7 @@ function Writing({ a }) {
 }
 
 /** The Documents step. */
-export function DocsStep({ a, reload }) {
+export function DocsStep({ a, reload, onApproved }) {
   const d = a.docs;
   const [tab, setTab] = useState("cv");
   const [letter, setLetter] = useState(d.letter.text);
@@ -49,15 +71,18 @@ export function DocsStep({ a, reload }) {
     return html`<section class="card"><div class="row"><div class="ic good"><${Icon} n="check" /></div><div class="grow" style="flex:1">
       <b>You approved these documents${d.approved_at ? " on " + new Date(d.approved_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}.</b>
       <div class="small sub">Cover letter of ${d.letter.words} words.</div></div>
+      ${a.column === "form" && html`<button type="button" class="btn small" onClick=${() => reopen(a, reload)}>Change the documents</button>`}
       <button type="button" class="btn small" onClick=${() => go("docs-" + (a.number || ""))}>Open in Documents</button></div></section>`;
   }
   const edits = { letter, message, answers };
-  const onApprove = () => (a.first_time ? openDialog("firstapp", { app: a, edits }) : approve(a, edits));
+  const onApprove = () => (a.first_time ? openDialog("firstapp", { app: a, edits, then: onApproved }) : approve(a, edits, onApproved));
   const toggle = async (c, on) => {
     try { await post(appPath(a) + "/documents/changes/" + encodeURIComponent(c.id), { on }); reload(); }
     catch (err) { toast(err.message); }
   };
-  const save = async body => { try { await put(appPath(a) + "/documents", body); toast("Saved"); } catch (err) { toast(err.message); } };
+  const save = async body => {
+    try { await put(appPath(a) + "/documents", body); toast("Saved"); reload(); } catch (err) { toast(err.message); }
+  };
   const changes = d.cv.changes || [];
   return html`
     <div class="approve"><div class="ic info"><${Icon} n="file" /></div><div class="grow"><b>Check what Hal made for this job, then approve it.</b>
@@ -66,19 +91,20 @@ export function DocsStep({ a, reload }) {
       <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button></div>
     <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
-    ${tab === "cv" && html`<div class="stack s">
+    ${tab === "cv" && html`<div class="docs-split"><div class="stack s">
       <p class="sub" style="margin:0">${changes.length ? "Hal changed " + plural(changes.length, "thing") + " from your CV for this job." : "Hal used your main CV as it is for this job."}</p>
       ${changes.map(c => html`<article class=${cx("sugg", !c.on && "done")}><div class="row tight"><span class="chip info">${c.kind}</span><span class="small sub">${c.where}</span><span class="sp"></span>
         ${c.on ? html`<button type="button" class="btn quiet small" onClick=${() => toggle(c, false)}><${Icon} n="undo" c="s" />Undo</button>`
           : html`<span class="small sub">Undone: your CV's version is used</span><button type="button" class="btn quiet small" onClick=${() => toggle(c, true)}>Redo</button>`}</div>
         ${c.on && html`<div class="ba"><div class="b"><small>Your CV</small>${c.before || "(not there)"}</div><div class="a"><small>For this job</small>${c.after || "(changed)"}</div></div>
           ${c.why && html`<div class="small"><b style="color:var(--why)">Why:</b> ${c.why}</div>`}`}</article>`)}
-      ${d.cv.preview_url && html`<a class="btn small" href=${d.cv.preview_url} target="_blank" rel="noopener"><${Icon} n="external" c="s" />Open the CV</a>`}</div>`}
-    ${tab === "letter" && html`<div class="stack s">
+      </div><${Pdf} url=${d.cv.preview_url} label="CV preview" /></div>`}
+    ${tab === "letter" && html`<div class="docs-split"><div class="stack s">
       <label class="small" for="letter-text"><b>Cover letter</b> <span class="sub">${letter.split(/\s+/).filter(Boolean).length} words</span></label>
       <textarea id="letter-text" class="input" style="min-height:260px" value=${letter} onInput=${e => setLetter(e.target.value)}></textarea>
       <div class="row"><button type="button" class="btn" onClick=${() => save({ letter })}><${Icon} n="edit" c="s" />Save my edits</button>
-      ${d.letter.preview_url && html`<a class="btn quiet" href=${d.letter.preview_url} target="_blank" rel="noopener"><${Icon} n="external" c="s" />Open the letter</a>`}</div></div>`}
+      ${letter !== d.letter.text && html`<span class="small sub">Save your edits to see them in the letter.</span>`}</div></div>
+      <${Pdf} url=${d.letter.preview_url} label="Cover letter preview" /></div>`}
     ${tab === "answers" && html`<div class="card">
       <p class="small sub">${answers.length ? "The advert asks " + answers.length + " questions. Hal drafted these from your evidence. They go into the form after you approve." : "The advert asks no questions of its own."}</p>
       ${answers.map((x, k) => html`<div class="field-row"><div class="q">${x.q}</div><button type="button" class="btn quiet small" onClick=${() => copy(x.a)}><${Icon} n="copy" c="s" />Copy</button>

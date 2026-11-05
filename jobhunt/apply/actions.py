@@ -18,6 +18,8 @@ Design decisions, each with its reason:
 from __future__ import annotations
 
 import logging
+import threading
+from collections import defaultdict
 from typing import Any
 
 from .. import browser, db, documents
@@ -38,6 +40,10 @@ DISCARD_REASONS = {
 STATUS_REASONS = {"rejected": "rejected", "withdrawn": "withdrawn", "closed": "advert_closed"}
 CHANGEABLE = ("applying", "applied", "assessment", "interview", "offer", "rejected", "withdrawn")
 ADOPT_WHY = "You handed Hal a tab you opened yourself"
+# One approval of an application at a time: a double-click sent two, and the second stopped the fill the first had
+# started (testers, 2026-11-04).
+_APPROVING: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
+_APPROVING_GUARD = threading.Lock()
 
 
 # ------------------------------------------------------------------------------------------- action kinds
@@ -65,14 +71,18 @@ def _example(name: str | None, owner: Any = driver, **extra: Any):
 def _prepare_example(world: Any) -> dict:
     from .. import pack
 
-    return _example("build", pack, time="10:00")(world)
+    return _example("build", pack, time="10:00", open_check=False)(world)
 
 
 @runner.action("docs.prepare", area="documents", label="Writing your documents for {title} at {company}",
                why="You pressed Apply with Hal at {time}. Documents come first.", priority=1,
-               example=_prepare_example)
-def prepare(ctx, job_id: str, time: str = "") -> dict:
-    """Moves a job to Getting ready and makes its documents; nothing is opened or sent."""
+               resumable=True, example=_prepare_example)
+def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
+    """Moves a job to Getting ready and makes its documents; nothing is opened or sent.
+
+    Resumable: a restart part way through starts it again by itself, since a queue of jobs left every one
+    stalled under Getting ready after a restart (testers, 2026-11-04). Starting again only rewrites the drafts.
+    """
     from .. import pack
 
     job = _job(ctx.con, job_id)
@@ -80,19 +90,51 @@ def prepare(ctx, job_id: str, time: str = "") -> dict:
         db.set_status(ctx.con, job_id, "applying", "chosen from the queue")
         ctx.con.commit()
     ctx.step("Reading the advert")
+    if open_check and settings.get("cvdocs.check_open") and _advert_closed(ctx.con, job):
+        ctx.step("The advert has closed, so Hal wrote nothing for it")
+        return {"job_id": job_id, "closed": True}
     if not documents.summary(job)["has_pack"]:
         ctx.step("Writing your CV and cover letter for this job")
         pack.build(ctx.con, job_id, ctx=ctx)   # the record passages the letter used go under Activity "Used"
-    ctx.step("Your documents are ready for you to check")
+    # The pack drafts the letter's words only; without this the folder held no cover letter until the person
+    # saved an edit or approved (testers found none, 2026-11-03), and the page had no letter to show.
+    ctx.step("Making the PDFs of your CV and cover letter")
+    made = documents.render(job, documents.load(ctx.con, job))
+    ctx.step("Your documents are ready for you to check" if "letter" in made else
+             "Hal drafted no cover letter for this job; write one on the Cover letter tab, or check that Hal's AI "
+             "is working in Settings")
     return {"job_id": job_id}
+
+
+def _advert_closed(con, job) -> bool:
+    """Checks the advert is still open before Hal writes for it; a closed one closes the job.
+
+    Queued adverts had often closed since they were found, and writing for them took minutes of the graphics
+    card each (testers, 2026-11-04). One fetch, as the check before a job first shows in Matches; a page that
+    cannot be read (some boards refuse plain fetches) counts as open, and the form step finds out later.
+    """
+    from ..core import clock
+    from ..find import closed_check
+
+    if closed_check.check(dict(job)) != "closed":
+        return False
+    db.set_status(con, job["id"], "closed", "the advert had closed before Hal wrote the documents")
+    con.execute("UPDATE jobs SET open_state = 'closed', open_checked_at = ? WHERE id = ?", (clock.iso(), job["id"]))
+    db.alert(con, "info", f"No longer open: {job['company']}", job["title"], job["id"])
+    con.commit()
+    return True
 
 
 @runner.action("apply.fill", area="applying", label="Filling in the form for {title} at {company}",
                why="You approved the documents for {title}", priority=1, example=_example("act_auto"))
-def fill(ctx, job_id: str, fresh: bool = False) -> str:
-    """Opens the employer's form and fills it, stopping where a person must check; never presses Submit."""
-    ctx.step("Opening the employer's form")
-    return driver.act_auto(ctx.con, job_id, False, bool(fresh))
+def fill(ctx, job_id: str, fresh: bool = False, here: bool = False) -> str:
+    """Opens the employer's form and fills it, stopping where a person must check; never presses Submit.
+
+    With `here`, Hal fills the page the job's tab shows from its first step, pressing nothing to get there:
+    the person found the form when Hal could not.
+    """
+    ctx.step("Reading the page you are on" if here else "Opening the employer's form")
+    return driver.act_auto(ctx.con, job_id, bool(here), bool(fresh))
 
 
 @runner.action("apply.apply_edits", area="applying", label="Putting your changes in the form for {title}",
@@ -151,10 +193,14 @@ def match_tab(ctx, page: dict) -> dict:
 
 
 def start(kind: str, job_id: str, *, params: dict | None = None, why: str | None = None,
-          session_id: str | None = None, helper_id: str | None = None, remote: bool = False) -> str:
-    """Starts one of the kinds above for a job, in place of anything Hal is doing for it; returns its id."""
+          session_id: str | None = None, helper_id: str | None = None, remote: bool = False,
+          priority: int | None = None) -> str:
+    """Starts one of the kinds above for a job, in place of anything Hal is doing for it; returns its id.
+
+    `priority` 0 is for a button the person just pressed and is watching; it never waits behind queued jobs.
+    """
     return runner.start(kind, job_id=job_id, params={"job_id": job_id, **(params or {})}, why=why, replace=True,
-                        session_id=session_id, helper_id=helper_id, remote=remote)
+                        session_id=session_id, helper_id=helper_id, remote=remote, priority=priority)
 
 
 # ----------------------------------------------------------------------------------------- workflow rules
@@ -183,21 +229,58 @@ def _merge_edits(docs: dict, body: dict) -> dict:
 
 
 def approve_documents(con, job_id: str, body: dict | None = None, *, session_id: str | None = None,
-                      helper_id: str | None = None, remote: bool = False) -> str:
-    """Approve and fill in the form: keeps the edits, fixes where the form is filled, starts `apply.fill`."""
+                      helper_id: str | None = None, remote: bool = False, priority: int | None = None) -> str:
+    """Approve and fill in the form: keeps the edits, fixes where the form is filled, moves the application to
+    the Form step and starts `apply.fill`.
+
+    An approval of an application Hal is already filling, as a double-click sends, returns that fill's id.
+    """
+    with _APPROVING_GUARD:
+        lock = _APPROVING[job_id]
+    with lock:
+        held = runner.running_for(job_id)
+        approved = con.execute("SELECT approved_at FROM applications WHERE job_id = ?", (job_id,)).fetchone()
+        if held and held["kind"] == "apply.fill" and approved and approved["approved_at"]:
+            return held["id"]
+        return _approve_documents(con, job_id, body, session_id=session_id, helper_id=helper_id, remote=remote,
+                                  priority=priority)
+
+
+def _approve_documents(con, job_id: str, body: dict | None, *, session_id: str | None, helper_id: str | None,
+                       remote: bool, priority: int | None) -> str:
     job = _job(con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "chosen from the queue")
     now = db.now()
     docs = {**_merge_edits(documents.load(con, job), body or {}), "approved": now}
     documents.save(con, job, docs)
-    _set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id)
+    # The Form step starts now, not when the page has loaded: the application page follows it at once.
+    stage = {} if _app(con, job_id)["stage"] in ("form", "filled") else {"stage": "form"}
+    _set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id, **stage)
     db.log(con, job_id, "note", "documents approved")
     con.commit()
     if not settings.get("setup.first_app_seen"):
         settings.set("setup.first_app_seen", True, by="you", session_id=session_id)
     return start("apply.fill", job_id, why=f"You approved the documents for {job['title']}",
-                 session_id=session_id, helper_id=helper_id, remote=remote)
+                 session_id=session_id, helper_id=helper_id, remote=remote, priority=priority)
+
+
+def reopen_documents(con, job_id: str) -> None:
+    """Takes an approved application back to its Documents step, to change the documents and approve them again.
+
+    Hal stops filling. The employer's tab stays open, so approving again fills the form on show there with
+    the changed documents.
+    """
+    job = _job(con, job_id)
+    if job["status"] != "applying":
+        raise ValueError("Only an application in progress can go back to its documents.")
+    runner.stop_action(job_id)
+    docs = documents.load(con, job)
+    docs.pop("approved", None)
+    documents.save(con, job, docs)
+    _set_app(con, job_id, stage="documents", approved_at=None)
+    db.log(con, job_id, "note", "documents reopened to change them")
+    con.commit()
 
 
 def save_documents(con, job_id: str, body: dict) -> dict:
@@ -228,6 +311,8 @@ def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") 
 
     Hal stops at once and its tab closes when the browser is free; the documents stay. "Too much effort"
     is remembered against the site, and the same advert listed twice does not come back into the queue.
+    "The same advert" is the repost rule's (`rules.repost_key`): employer, title and place, so discarding a
+    role in one city leaves the same role in another (testers, 2026-11-04).
     """
     if reason not in DISCARD_REASONS:
         raise ValueError(f"Choose why: one of {', '.join(DISCARD_REASONS)}.")
@@ -250,10 +335,14 @@ def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") 
                     (job_id, db.now()))
     con.execute("UPDATE applications SET closed_reason = ?, closed_detail = ?, updated = ? WHERE job_id = ?",
                 (reason, words or None, db.now(), job_id))
-    for d in con.execute("""SELECT id FROM jobs WHERE id != ? AND status IN ('new','shortlisted','ready')
-                            AND lower(company) = lower(?) AND lower(title) = lower(?)""",
-                         (job_id, job["company"], job["title"])).fetchall():
-        db.set_status(con, d["id"], "skipped", "duplicate of a discarded job")
+    from ..find import rules
+
+    key = rules.repost_key(job)
+    for d in con.execute("""SELECT id, company, title, location FROM jobs WHERE id != ?
+                            AND status IN ('new','shortlisted','ready') AND lower(company) = lower(?)""",
+                         (job_id, job["company"])).fetchall():
+        if rules.repost_key(d) == key:
+            db.set_status(con, d["id"], "skipped", "duplicate of a discarded job")
     con.commit()
 
 

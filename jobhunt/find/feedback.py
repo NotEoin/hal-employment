@@ -109,6 +109,9 @@ def save(con: sqlite3.Connection, job_id: str, saved: bool, *, session_id: str |
         con.execute("UPDATE jobs SET saved_at = NULL WHERE id = ?", (job_id,))
         _feedback(con, job_id, "unsave")
         _tick_reminder(con, job_id)
+    from jobhunt.find import rules  # rules reads this module's statuses
+
+    rules.settle_reposts_of(con, job_id)
     con.commit()
     events.publish("job", id=job_id)
     due = reminder_day(job["closes_at"]) if saved else None

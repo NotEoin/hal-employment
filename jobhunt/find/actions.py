@@ -12,6 +12,7 @@ from jobhunt.core.db.tasks import data_task
 from jobhunt.find import rules
 
 FIND_MIGRATION = 6          # 0006_find adds job_reasons and the kind columns this task fills
+REPOSTS_AFTER = 18          # the latest migration when reposts were first hidden; the task needs no new one
 PROGRESS_EVERY = 500        # jobs between progress steps
 
 
@@ -78,4 +79,10 @@ def prepare(ctx, n: int = 1, target: int | None = None) -> dict:
 @data_task("find.rescore_all", after=FIND_MIGRATION, title="Gave every job its reasons under your goal")
 def rescore_all(ctx) -> None:
     """Re-scores every job once after the update, so each has its reasons and kind."""
+    _rescore(ctx)
+
+
+@data_task("find.hide_reposts", after=REPOSTS_AFTER, title="Hid adverts listed more than once")
+def hide_reposts(ctx) -> None:
+    """Re-scores every job once, so adverts found again under a new id before this update are hidden too."""
     _rescore(ctx)

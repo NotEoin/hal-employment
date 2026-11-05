@@ -7,6 +7,7 @@ import logging
 import re
 import traceback
 from datetime import timedelta
+from pathlib import Path
 from urllib.parse import quote
 
 from .. import browser, db, documents, tasks
@@ -171,6 +172,29 @@ def _need_words(to_check: int) -> str:
     return "1 answer needs you" if to_check == 1 else f"{to_check} answers need you"
 
 
+STOPPED_WORDS = {"interrupted": "Hal was restarted part way through", "stopped": "you stopped it"}
+STOPPED = ("Hal stopped before the form was filled: {why}. Press \"Fill it in again\", or open the form yourself "
+           "in Hal's browser window and press \"Fill in from this page\".")
+
+
+def _stopped_why(con, job_id: str, form: dict | None) -> str | None:
+    """Why Hal is no longer working on a form it left unfinished; None while it works, or once it finished.
+
+    A run that failed or was cut off left the form saying Hal was filling it, or waiting for the person and
+    carrying on afterwards, long after Hal had stopped (testers, 2026-11-04).
+    """
+    if not form or form.get("state") not in ("working", "needs"):
+        return None
+    if _queued(con, job_id):
+        return None
+    last = con.execute("""SELECT state, error FROM actions WHERE job_id = ? AND kind LIKE 'apply.%'
+                          ORDER BY created DESC LIMIT 1""", (job_id,)).fetchone()
+    if last is None or last["state"] == "done":
+        return None
+    why = (last["error"] or STOPPED_WORDS.get(last["state"], "")).strip().rstrip(".")
+    return why or "Hal did not finish"
+
+
 def _card_words(con, r, col: str) -> tuple[str, str, str]:
     """(next, tone, note) for one card on the board, in the board's own words."""
     app = _app(con, r["id"])
@@ -178,10 +202,17 @@ def _card_words(con, r, col: str) -> tuple[str, str, str]:
     if col == "ready":
         if _busy(r["id"]):
             return "Hal is writing your documents", "hal", ACTIONS[r["id"]].get("message") or ""
+        if not _has_documents(r):
+            if _queued(con, r["id"]):
+                return "Waiting for Hal to write your documents", "hal", ""
+            return "Documents not made: make them again", "warn", _prepare_stopped(con, r["id"])
         return "Check and approve documents", "info", ""
     if col == "form":
         if _busy(r["id"]):
             return "Hal is filling in the form", "hal", ACTIONS[r["id"]].get("message") or ""
+        why = _stopped_why(con, r["id"], form)
+        if why:
+            return "Hal stopped: fill it in again, or from your tab", "warn", why
         filled, total, to_check = _form_counts(form)
         note = f"{filled} of {total} filled" if total else ""
         if to_check:
@@ -209,6 +240,26 @@ def _closed_why(con, r) -> str:
     return f"{words} ({detail})" if detail else words
 
 
+def _queued(con, job_id: str) -> bool:
+    """True when an action for this job is waiting its turn or under way."""
+    return con.execute(f"SELECT 1 FROM actions WHERE job_id = ? AND state IN ({','.join('?' * len(ACTIVE))})",
+                       (job_id, *ACTIVE)).fetchone() is not None
+
+
+def _prepare_stopped(con, job_id: str) -> str:
+    """Why the job's documents were last left unmade, in a few words; "" when Hal never began them."""
+    last = con.execute("""SELECT state, error FROM actions WHERE job_id = ? AND kind = 'docs.prepare'
+                          ORDER BY created DESC LIMIT 1""", (job_id,)).fetchone()
+    if last is None or last["state"] == "done":
+        return ""
+    return (last["error"] or STOPPED_WORDS.get(last["state"], "")).strip()
+
+
+def _has_documents(job) -> bool:
+    """True when Hal has made this application's CV, so its documents can be approved."""
+    return "cv" in documents.files(job)
+
+
 def board(con) -> dict:
     """The Applications board: its columns, each card's next step, and the Closed list."""
     columns = {key: [] for key, _, _ in COLUMNS}
@@ -223,8 +274,12 @@ def board(con) -> dict:
                            "why": _closed_why(con, r)})
             continue
         nxt, tone, note = _card_words(con, r, col)
+        busy = _busy(r["id"])
         columns[col].append({"id": r["id"], "number": r["number"], "org": r["company"], "title": r["title"],
-                             "next": nxt, "tone": tone, "note": note, "hal_busy": _busy(r["id"])})
+                             "next": nxt, "tone": tone, "note": note, "hal_busy": busy,
+                             "approvable": col == "ready" and not busy and _has_documents(r),
+                             "remakeable": col == "ready" and not busy and not _has_documents(r)
+                             and not _queued(con, r["id"])})
     for col in IN_PROGRESS:
         order = in_progress_ids(con)
         columns[col].sort(key=lambda c: order.index(c["id"]) if c["id"] in order else len(order))
@@ -279,14 +334,14 @@ def _cv_changes(job, docs: dict) -> list[dict]:
     from .. import cv
 
     try:
-        found = cv.changes(cv.load(), documents.current_cv(job, docs))
+        found = cv.changes(cv.load(), documents.proposed_cv(job, docs))
     except Exception as e:  # a CV that cannot be read shows no changes, and the page still opens
         log.warning("could not list the CV changes for %s: %r", job["id"], e)
         return []
     undone = set(docs.get("undone_changes") or [])
     kinds = {"text": "Reworded", "order": "Moved", "added": "Added", "left out": "Left out"}
-    return [{"id": c["path"], "kind": kinds.get(c["kind"], c["kind"]), "where": c["label"], "before": c["before"],
-             "after": "", "why": "", "on": c["path"] not in undone} for c in found]
+    return [{"id": c["id"], "kind": kinds.get(c["kind"], c["kind"]), "where": c["label"], "before": c["before"],
+             "after": c.get("after", ""), "why": "", "on": c["id"] not in undone} for c in found]
 
 
 def _fields(form: dict | None) -> list[dict]:
@@ -318,7 +373,7 @@ def _fields(form: dict | None) -> list[dict]:
 # The engines' field sources ("profile: diversity", "documents: CV", ...) by their first word, as the API's
 # Field.src, and the chip words, where a site note reads "Site rule".
 SOURCE_OF = {"profile": "profile", "documents": "cv", "cv": "cv", "record": "record", "your": "saved",
-             "saved": "saved", "note": "note", "hal": "hal", "private": "private", "you": "you"}
+             "saved": "saved", "note": "note", "hal": "hal", "private": "private", "you": "you", "site": "site"}
 PRIVATE_SHOWN = "Filled in from your private answers"
 
 
@@ -328,12 +383,13 @@ def source_of(source: str | None) -> str:
     return SOURCE_OF.get(first, "hal")
 
 SOURCE_WORDS = {"profile": "Your profile", "cv": "Your CV", "record": "Your record", "saved": "Saved answer",
-                "note": "Site note", "hal": "Written by Hal", "private": "Private answer", "you": "Your answer"}
+                "note": "Site note", "hal": "Written by Hal", "private": "Private answer", "you": "Your answer",
+                "site": "Filled in by the site"}
 SOURCE_WHY = {"profile": "From your profile (Settings, You).", "cv": "From your CV.", "record": "From your record.",
               "saved": "An answer you gave on an earlier form.", "note": "From a note about this job site.",
               "hal": "Written for this job by Hal. Please read it.",
               "private": "From your private answers. These are never shown to the AI or saved in logs.",
-              "you": "You typed this."}
+              "you": "You typed this.", "site": "The site had already filled this in, and Hal left it as it was."}
 
 
 def _letter_notes(job, docs: dict) -> dict:
@@ -364,6 +420,8 @@ def application(con, ref: str) -> dict:
     out = {
         "id": job_id, "number": row["number"] if row is not None else None, "job": job_card(r), "step": step,
         "steps": steps, "nav": nav(con, job_id), "column": col, "action_id": held["id"] if held else None,
+        # A closed application kept its step, so its page offered Approve or Fill for a job that had closed.
+        "closed": _closed_why(con, r) if r["status"] in CLOSED_STATUSES else None,
         "first_time": not settings.get("setup.first_app_seen"),
         "docs": {"state": "writing" if writing else "approved" if step > 1 or (row is not None and row["approved_at"])
                  else "ready",
@@ -389,6 +447,14 @@ def application(con, ref: str) -> dict:
                        "last_page": bool(form.get("final")),
                        "handed_over": bool(row is not None and row["handed_over_at"]),
                        "words": form_words(form)}
+        why = _stopped_why(con, job_id, form)
+        if why:
+            out["form"].update(state="stopped", words=STOPPED.format(why=why))
+            out["steps"][1]["note"] = "Hal stopped"
+        elif held and form.get("state") == "working":
+            # While Hal works, the page says what it is doing rather than nothing (testers, 2026-11-04).
+            doing = (ACTIONS.get(job_id) or {}).get("message") or "opening the form"
+            out["form"].update(words=f"Hal is working on the form: {doing[0].lower()}{doing[1:]}.".replace("..", "."))
     if step >= 3 and row is not None:
         timeline = []
         if row["sent_at"]:
@@ -419,8 +485,18 @@ def _running_for(job_id: str) -> dict | None:
 
 
 def _file_url(path: str | None) -> str | None:
-    """The `/files` address of a stored file, with the path encoded so "+", "#" and "&" survive."""
-    return f"/files?path={quote(path)}" if path else None
+    """The `/files` address of a stored file, with the path encoded so "+", "#" and "&" survive.
+
+    The file's change time rides along (`m`, ignored by the server), so a preview shows the new PDF as soon
+    as an Undo or an edit makes it again, rather than the browser's copy of the old one.
+    """
+    if not path:
+        return None
+    try:
+        made = Path(path).stat().st_mtime_ns
+    except OSError:
+        made = 0
+    return f"/files?path={quote(path)}&m={made}"
 
 
 def form_words(form: dict) -> str:
@@ -437,4 +513,4 @@ def driver_marks(form: dict) -> list[dict]:
     return _marks(form)
 
 
-from ..core.runner import ACTIONS, _checkpoint  # noqa: E402 - imported last; runner imports this module
+from ..core.runner import ACTIONS, ACTIVE, _checkpoint  # noqa: E402 - imported last; runner imports this module

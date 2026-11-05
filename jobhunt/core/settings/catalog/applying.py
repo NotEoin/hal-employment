@@ -1,6 +1,12 @@
 """Settings group "Applying": how Hal fills forms. Hal never presses Submit.
 
-`applying.max_steps` and `applying.page_timeout` show in the Advanced group.
+`applying.window` starts as "separate": forms open in one window of Hal's own, brought to the front, and every
+later form while the browser stays open goes into that window, so Hal's page and the forms never share
+a tab strip (testers, 2026-11-04). The window used to open behind the person's, which looked as if no
+tab had opened (2026-11-03).
+
+`applying.max_steps` and `applying.page_timeout` show in the Advanced group; `applying.window`,
+`applying.press_next` and `applying.wait_minutes` show under Preferences (catalog/prefs.py).
 """
 
 from __future__ import annotations
@@ -42,11 +48,15 @@ register(
             remote="local_only", order=20, choices=choices(
                 ("helper", "In your browser, with the helper"), ("window", "In Hal's own window"),
                 ("headless", "In a hidden window (for tests)"))),
-    Setting("applying.window", "seg", "separate", "Open forms in", order=30,
+    Setting("applying.window", "seg", "separate", "Open forms in", group="prefs", order=10,
             choices=choices(("separate", "A separate window"), ("this", "This window")),
-            help="\"This window\" opens each form as a tab beside yours, brought forward while Hal fills it in."),
-    Setting("applying.press_next", "bool", True, "Press Next on pages with nothing for you to check", order=40),
-    Setting("applying.wait_minutes", "choice", 15, "Wait for you to sign in or pass a check for up to", order=50,
+            help="\"A separate window\" opens a browser window for Hal's forms and keeps every form in it until you "
+                 "close it. \"This window\" opens each form as a tab beside Hal's, brought forward while Hal "
+                 "fills it in."),
+    Setting("applying.press_next", "bool", True, "Press Next on pages with nothing for you to check", group="prefs",
+            order=30),
+    Setting("applying.wait_minutes", "choice", 15, "Wait for you to sign in or pass a check for up to", group="prefs",
+            order=40,
             choices=same(5, 15, 30, unit="minutes")),
     Setting("applying.notes", "link", None, "Notes about job sites", to="memory-sites", order=60,
             help="What works on each site, and what to avoid."),

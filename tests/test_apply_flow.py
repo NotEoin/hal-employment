@@ -125,6 +125,35 @@ class Flow(unittest.TestCase):
         self.assertIn("Check them here or in the form.", words)
         self.assertIn(driver.LAST_PAGE, words)
 
+    def test_a_list_answer_the_form_refused_is_picked_once_more_on_its_own(self):
+        # testers: Greenhouse's location list found no option for "London" in a full fill, and took it at once
+        # when picked by itself (2026-11-05)
+        engine = FakeEngine(page1=[field("n", "Full name"), field("l", "Location (City)", kind="combobox")], page2=[])
+        engine.pages = [engine.pages[0]]
+        tries = []
+
+        def fill(job_id, fields, shot):
+            tries.append([f["hid"] for f in fields])
+            refused = {"l": 'no option matching "London"'} if len(tries) == 1 else {}
+            return {"new": [], "errors": refused, "next": False, "screenshot": "", "password": False}
+
+        engine.fill = fill
+        propose = lambda job, fields, docs, files, con, notes=None: [  # noqa: E731 - a one-line stand-in
+            {**f, "value": "London" if f["hid"] == "l" else "Robin Testwell", "source": "profile"} for f in fields]
+        self.run_in("extension", engine, propose)
+        self.assertEqual(tries, [["n", "l"], ["l"]])
+        self.assertEqual([f["error"] for f in self.form()["fields"]], ["", ""])
+
+    def test_a_page_with_only_a_sites_sign_ups_is_no_form(self):
+        # testers: a jobs.ac.uk advert that sends you to the employer's site held only two email-preference tick
+        # boxes, and Hal called them the form's last page and said to press Submit (2026-11-05)
+        engine = FakeEngine(page1=[field("m", "I would like to receive email communication from the site relating "
+                                              "to made-up alerts", kind="checkbox", required=False)], page2=[])
+        engine.pages = [engine.pages[0]]
+        with self.assertRaisesRegex(RuntimeError, "no application form found"):
+            self.run_in("extension", engine)
+        self.assertEqual(self.form()["state"], "stuck")
+
     def test_middle_pages_with_nothing_to_check_are_passed(self):
         for mode in ("window", "extension"):
             with self.subTest(mode=mode):

@@ -209,6 +209,66 @@ class JobsApi(unittest.TestCase):
         self.assertEqual(self.matches("?place=Elsewhere"), [])
         self.assertEqual(self.c.get("/api/v2/jobs?sort=sideways").status, 400)
 
+    def test_a_longer_list_comes_whole_in_one_reply(self):
+        # "Show more" kept old pages, so a job hidden or applied for on them stayed until a reload
+        from jobhunt.find import routes
+
+        add(self.con, "cheap", "Graduate Archive Assistant", GRAD_TEXT.replace("25,000", "22,000"))
+        with mock.patch.object(routes, "PAGE", 1):
+            first = self.get("/api/v2/jobs?sort=pay")
+            self.assertEqual(len(first["jobs"]), 1)
+            self.assertEqual(first["cursor"], "1")
+            whole = self.get("/api/v2/jobs?sort=pay&limit=2")
+        self.assertEqual([j["id"] for j in whole["jobs"]][:1], [j["id"] for j in first["jobs"]])
+        self.assertEqual(len(whole["jobs"]), len(self.matches()))
+        self.assertEqual(self.c.get("/api/v2/jobs?limit=0").status, 400)
+        self.assertEqual(self.c.get(f"/api/v2/jobs?limit={routes.MAX_LIMIT + 1}").status, 400)
+
+    def test_a_job_leaves_matches_as_soon_as_it_is_queued(self):
+        # testers saw a queued job stay in Matches: it moved only when its action got a thread
+        self.assertIn(self.grad, self.matches())
+        with mock.patch.object(runner, "start", return_value="a1"):     # the action has not started
+            reply = self.post(self.path(self.grad, "/apply"))
+        self.assertEqual(reply["application_id"], self.grad)
+        self.assertNotIn(self.grad, self.matches())
+        board = self.get("/api/v2/applications")
+        self.assertIn(self.grad, [i["id"] for i in board["columns"][0]["items"]])
+
+    def test_an_advert_listed_again_under_a_new_id_shows_once(self):
+        # an agency reposted one trainee advert daily on Reed: testers saw it many times in Matches
+        older = add(self.con, "repost-1", "Trainee Archive Assistant", GRAD_TEXT, company="Fernvale Agency Ltd")
+        self.con.execute("UPDATE jobs SET first_seen = '2026-10-20T07:00:00Z' WHERE id = ?", (older,))
+        newer = add(self.con, "repost-2", "Trainee  Archive Assistant", GRAD_TEXT, company="Fernvale Agency")
+        rules.score_and_save(self.con, dict(self.con.execute("SELECT * FROM jobs WHERE id = ?", (older,)).fetchone()))
+        self.con.commit()
+        shown = self.matches()
+        self.assertIn(newer, shown, "the newest listing is the one shown")
+        self.assertNotIn(older, shown)
+        hidden = {g["rule"]: g for g in self.get("/api/v2/jobs/hidden")["groups"]}
+        self.assertEqual(hidden["repost"]["n"], 1)
+
+    def test_queueing_one_copy_takes_its_reposts_out_of_matches(self):
+        older = add(self.con, "repost-a", "Trainee Archive Assistant", GRAD_TEXT, company="Fernvale Agency")
+        self.con.execute("UPDATE jobs SET first_seen = '2026-10-20T07:00:00Z' WHERE id = ?", (older,))
+        self.con.commit()
+        newer = add(self.con, "repost-b", "Trainee Archive Assistant", GRAD_TEXT, company="Fernvale Agency")
+        with mock.patch.object(runner, "start", return_value="a1"):
+            self.post(self.path(newer, "/apply"))
+        self.assertFalse({older, newer} & set(self.matches()))
+        reason = self.get(self.path(older))["hidden"]
+        self.assertEqual(reason["label"], "Already in your applications")
+
+    def test_the_same_title_in_another_place_is_another_job(self):
+        here = add(self.con, "place-1", "Trainee Archive Assistant", GRAD_TEXT, company="Fernvale Agency")
+        job = advert("Trainee Archive Assistant", GRAD_TEXT, id="test:place-2", company="Fernvale Agency",
+                     location="Saltmarsh", url="https://jobs.example.org/place-2", posted_at=None)
+        db.upsert(self.con, job)
+        row = self.con.execute("SELECT * FROM jobs WHERE id = ?", (job["id"],)).fetchone()
+        rules.score_and_save(self.con, dict(row))
+        self.con.commit()
+        row = self.con.execute("SELECT hidden_rule FROM jobs WHERE id = ?", (here,)).fetchone()
+        self.assertNotEqual(row["hidden_rule"], "repost")
+
     def test_an_advert_can_be_added_by_its_address(self):
         with mock.patch.object(job_actions, "_fetch", return_value=ADVERT_PAGE):
             started = self.post("/api/v2/jobs/add-advert", {"url": "https://careers.example.org/archivist"})

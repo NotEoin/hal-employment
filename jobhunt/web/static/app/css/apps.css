@@ -1,1 +1,8 @@
 /* Rules for the apps pages only; the page's owner adds them here, never in app.css. */
+
+/* The Documents step: what Hal changed or wrote beside the PDF it will send, side by side on a wide screen. */
+.docs-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 960px) { .docs-split { grid-template-columns: minmax(0, 1fr); } }
+.pdfview { display: block; width: 100%; height: 78vh; min-height: 480px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; }
+.ba > div { white-space: pre-line; }

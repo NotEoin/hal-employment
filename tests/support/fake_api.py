@@ -301,6 +301,7 @@ class FakeState:
     posts: list = field(default_factory=list)      # (path, body) of every POST, PUT and DELETE received
     missing: list = field(default_factory=list)    # every address answered 404, so a failing test can name it
     stopping: threading.Event = field(default_factory=threading.Event)
+    code: dict = field(default_factory=lambda: {"ok": True, "version": "0.0.0", "commit": "made-up-1"})  # /healthz
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -349,6 +350,8 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         if url.path == "/":
             self._static("index.html")
+        elif url.path == "/healthz":
+            self._json(self.server.state.code)
         elif url.path.startswith("/app/"):
             self._static(url.path[len("/app/"):])
         elif url.path.startswith("/api/v2/"):

@@ -46,6 +46,11 @@ class EveryKind(unittest.TestCase):
                 self.assertEqual(runner.recover(), 0)
                 self.assertGreater(w.con.execute("SELECT count(*) FROM action_steps").fetchone()[0], 0)
 
+    def test_writing_documents_carries_on_by_itself_after_a_restart(self):
+        """Regression (testers, 2026-11-04): a restart left every queued job's documents interrupted, and
+        Getting ready stalled until each was started again by hand."""
+        self.assertTrue(runner.load_kinds()["docs.prepare"].resumable)
+
     def test_the_harness_catches_a_kind_without_an_example_or_steps(self):
         runner.action("test.no_example", area="find", label="Looking", why="Because")(lambda ctx: None)
         self.addCleanup(runner.forget, "test.no_example")

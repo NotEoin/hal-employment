@@ -15,6 +15,8 @@ from jobhunt import db, extension
 from jobhunt.apply import helpers
 from jobhunt.core import clock, events
 
+VERSION = helpers.wanted_version()   # the helper this checkout ships, so a version bump needs no edit here
+
 SHORT_POLL_S = 0.2     # long enough for a poll to be held, short enough for a quick test
 HELD_WRITE_S = 5   # far under the 30 s busy timeout a held write cost before
 
@@ -31,7 +33,7 @@ def pair(hal, client=None, *, browser="opera", origin=None, host=None) -> dict:
     headers = {"Origin": origin or helper_origin()}
     if host:
         headers["Host"] = host
-    reply = hal.client().post("/api/v2/helpers/pair", {"code": code, "browser": browser, "version": "1.0.0",
+    reply = hal.client().post("/api/v2/helpers/pair", {"code": code, "browser": browser, "version": VERSION,
                                                         "protocol": 1, "extension_id": helpers.manifest_id()},
                               headers=headers)
     return {"status": reply.status, **(reply.json() if reply.status == 200 else {})}
@@ -61,14 +63,14 @@ class Pairing(HelperTest):
             with closing(db.connect()) as con:
                 row = helpers.row(con, paired["helper_id"])
                 self.assertNotEqual(row["key_hash"], paired["key"])   # only the hash is kept
-                self.assertEqual((row["browser"], row["version"], row["protocol"]), ("opera", "1.0.0", 1))
+                self.assertEqual((row["browser"], row["version"], row["protocol"]), ("opera", VERSION, 1))
             listed = window.get("/api/v2/helpers").json()
             self.assertEqual([(h["id"], h["connected"], h["this_browser"]) for h in listed],
                              [(paired["helper_id"], False, True)])
 
             sub = events.subscribe()
             self.addCleanup(sub.close)
-            polled = hal.client().post("/api/v2/helpers/poll", {"helper_id": paired["helper_id"], "version": "1.0.0",
+            polled = hal.client().post("/api/v2/helpers/poll", {"helper_id": paired["helper_id"], "version": VERSION,
                                                                  "protocol": 1}, headers=key_headers(paired))
             self.assertEqual(polled.status, 200)
             self.assertEqual(polled.json()["commands"], [])
@@ -80,7 +82,7 @@ class Pairing(HelperTest):
             self.assertTrue(window.get("/api/v2/helpers").json()[0]["connected"])
 
             # a second poll is not a new connection, so the step does not tick again
-            hal.client().post("/api/v2/helpers/poll", {"version": "1.0.0", "protocol": 1}, headers=key_headers(paired))
+            hal.client().post("/api/v2/helpers/poll", {"version": VERSION, "protocol": 1}, headers=key_headers(paired))
             again = [ev for ev in iter(lambda: sub.get(timeout=0.3), None) if ev.type == "helper"]
             self.assertEqual(again, [])
 
@@ -90,7 +92,7 @@ class Pairing(HelperTest):
             code = window.post("/api/v2/helpers/pairing-code", {"browser": "chrome"}).json()
             self.assertEqual(code["expires_in"], 120)
             self.assertTrue(code["pair_url"].endswith(f"/pair#code={code['code']}"))
-            body = {"code": code["code"], "version": "1.0.0", "protocol": 1}
+            body = {"code": code["code"], "version": VERSION, "protocol": 1}
             first = hal.client().post("/api/v2/helpers/pair", body, headers={"Origin": helper_origin()})
             again = hal.client().post("/api/v2/helpers/pair", body, headers={"Origin": helper_origin()})
             self.assertEqual((first.status, again.status), (200, 403))
@@ -146,7 +148,7 @@ class Keys(HelperTest):
     def test_helper_requests_without_the_key_are_refused(self):
         with HalServer() as hal:
             paired = pair(hal)
-            body = {"version": "1.0.0", "protocol": 1}
+            body = {"version": VERSION, "protocol": 1}
             c = hal.client()
             self.assertEqual(c.post("/api/v2/helpers/poll", body, headers={"Origin": helper_origin()}).status, 401)
             wrong = {"X-Hal-Key": f"{paired['helper_id']}:not-the-key", "Origin": helper_origin()}
@@ -162,7 +164,7 @@ class Keys(HelperTest):
             window = hal.signed_in()
             paired = pair(hal, window)
             self.assertEqual(window.request("DELETE", f"/api/v2/helpers/{paired['helper_id']}").status, 200)
-            polled = hal.client().post("/api/v2/helpers/poll", {"version": "1.0.0", "protocol": 1},
+            polled = hal.client().post("/api/v2/helpers/poll", {"version": VERSION, "protocol": 1},
                                        headers=key_headers(paired))
             self.assertEqual(polled.status, 401)
             self.assertEqual(window.get("/api/v2/helpers").json(), [])
@@ -185,7 +187,7 @@ class HeldWrite(HelperTest):
             with closing(db.connect()) as holder:
                 holder.execute("BEGIN IMMEDIATE")
                 started = time.monotonic()
-                reply = hal.client().post("/api/v2/helpers/poll", {"version": "1.0.0", "protocol": 1},
+                reply = hal.client().post("/api/v2/helpers/poll", {"version": VERSION, "protocol": 1},
                                           headers=key_headers(paired))
                 waited = time.monotonic() - started
                 holder.rollback()

@@ -249,8 +249,9 @@ processes, once a second. Payloads carry ids, never private data.
   (`{note, field, what}`) is kept on the field and in `form["notes_used"]`, which the Form step lists.
 - An upload is checked by finding the file's name in the input or on the page; a dropped file is
   `UPLOAD_FAILED`, never done. The cookie clicker never presses inside a form. Multi-select lists get every
-  value. Google Forms frames are read. With "Open forms in: This window", the helper brings the tab forward
-  before each read, fill and press; watches (`peek`, `look`) never switch tabs.
+  value. Google Forms frames are read. With "Open forms in: This window" (Preferences), the helper opens the
+  tab beside Hal's, in its tab group, and brings it forward before each read, fill and press; watches
+  (`peek`, `look`) never switch tabs.
 - `Browser._run` services Playwright while its queue is empty, so a tab the page opens is followed at once
   and a person's own Submit in Hal's window is not held until Hal's next call. The page-world submit block
   counts its holders, so two commands in one tab never lift each other's block.
@@ -439,8 +440,9 @@ runs: tests use `tests/support/fake_claude/`.
 `platform.current()` is everything Hal asks of the computer: opening files and windows, pop-ups, start at
 login, finding browsers, hidden or detached children. No other module tests `os.name`. `linux.py` and
 `windows.py` take their outside world (command runner, registry reader, file checks, home) as constructor
-arguments, so tests drive the real code with fakes. The app window and PDF printing never depend on the
-person's browser: Microsoft Edge on Windows; on Linux the first Chromium-family browser, else a tab.
+arguments, so tests drive the real code with fakes. Hal opens in the person's default browser
+(`open_in_default_browser`), where their browser helper is. PDF printing never depends on that browser:
+Microsoft Edge on Windows; on Linux Playwright's Chromium.
 
 ## Health, Home and search providers
 

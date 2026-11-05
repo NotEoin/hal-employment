@@ -24,6 +24,7 @@ from test_cv_render import made_up_cv, profile_of, type_for
 from jobhunt.cvstudio import export, pdfread, printer, render, store
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+REPLY_MARGIN_S = 5  # time for the server to send the PDF once the printer is done
 
 
 @contextlib.contextmanager
@@ -59,7 +60,9 @@ class Exports(unittest.TestCase):
             client = hal.signed_in()
             got = {}
             for fmt in export.FORMATS:
-                reply = client.get(f"/api/v2/cv/export?format={fmt}")
+                # a PDF printed by a real browser waits for it to start, which took over 10 s on a Windows
+                # runner (run 41633262148); the request waits as long as the printer itself does
+                reply = client.get(f"/api/v2/cv/export?format={fmt}", timeout=printer.PRINT_TIMEOUT_S + REPLY_MARGIN_S)
                 self.assertEqual(reply.status, 200, f"{fmt}: {reply.text[:200]}")
                 self.assertIn("attachment", reply.headers["Content-Disposition"])
                 got[fmt] = reply

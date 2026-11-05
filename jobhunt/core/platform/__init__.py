@@ -112,8 +112,8 @@ class Platform(Protocol):
         """Opens a page in a given browser."""
     def open_browser_window(self, browser: Browser) -> None:
         """Opens a new window of a given browser."""
-    def open_app_window(self, url: str) -> None:
-        """Opens a page in a window without browser controls."""
+    def open_in_default_browser(self, url: str) -> None:
+        """Opens a page in the person's default browser."""
     def run_hidden(self, args: list[str], **kw) -> subprocess.CompletedProcess:
         """Runs a command without showing a console window."""
     def popen_hidden(self, args: list[str], **kw) -> subprocess.Popen:

@@ -7,9 +7,11 @@ anything, the person corrects it, and only `POST /goal/understood` saves it, as 
 not built, so the quiz is the only way in.
 
 Every answer is checked by the settings registry itself, so the quiz cannot store a value the Settings page
-would refuse. A career-area starter fills roles, interests and roles to avoid only where the person gave
-none; for a new graduate or early-career person it also picks the scoring starting point, because the
-technical preset hides any title that does not name a role, which suits programmers and no one else.
+would refuse. The person may choose several career areas (`starters`; the older single `starter` is still
+read): their roles, interests and roles to avoid are joined, and fill each only where the person gave none.
+For a new graduate or early-career person the quiz also picks the scoring starting point, from the areas or
+else from the roles typed: the technical preset hides any title that does not name a role, which suits
+programmers and no one else, so it is chosen only when every area is Technology or every role is technical.
 """
 
 from __future__ import annotations
@@ -98,10 +100,34 @@ def _places_words(places: list[str]) -> str:
     return f"{places[0]} first, then {later}"
 
 
-def _preset(stage: str, starter: str | None) -> str | None:
-    if stage in STARTER_STAGES and starter:
-        return "technical_grad" if starter == TECH_STARTER else "humanities_grad"
+def _technical(roles: list[str]) -> bool:
+    """True when every role is one the technical preset's own role words name."""
+    from jobhunt.find import rules
+
+    words = rules.phrase_rx(rules.weights_from("technical_grad").roles)
+    return bool(roles) and words is not None and all(words.search(r) for r in roles)
+
+
+def _preset(stage: str, starters: list[str], roles: list[str]) -> str | None:
+    if stage in STARTER_STAGES and starters:
+        return "technical_grad" if set(starters) == {TECH_STARTER} else "humanities_grad"
+    if stage in STARTER_STAGES and roles:
+        return "technical_grad" if _technical(roles) else "humanities_grad"
     return scoring_catalog.PRESET_BY_STAGE.get(stage)
+
+
+def _areas(answers: dict) -> tuple[list[str], dict]:
+    """The chosen career areas' ids, and their roles, interests and roles to avoid joined in order."""
+    chosen = _words(answers.get("starters")) or _words(answers.get("starter"))
+    known = goal_mod.starters()
+    for starter_id in chosen:
+        if starter_id not in known:
+            raise BadRequest("Hal does not know that career area.", field="starters")
+    joined = {key: list(dict.fromkeys(item for s in chosen for item in known[s].get(key, [])))
+              for key in ("roles", "interests", "avoid_roles")}
+    # one area's role is never another's role to avoid
+    joined["avoid_roles"] = [a for a in joined["avoid_roles"] if a not in joined["roles"]]
+    return chosen, joined
 
 
 def understood_rows(u: dict) -> list[list[str]]:
@@ -119,6 +145,8 @@ def understood_rows(u: dict) -> list[list[str]]:
     elif u["study_end"]:
         rows.append(["Course ended", u["study_end"]])
     rows.append(["Lowest pay", f"{u['min_pay']:,} pounds a year" if u["min_pay"] else "Any"])
+    if u.get("preset"):
+        rows.append(["Scored as", dict(scoring_catalog.PRESETS).get(u["preset"], u["preset"])])
     return rows
 
 
@@ -130,10 +158,7 @@ def quiz(req: Request) -> dict:
         raise BadRequest("Send the answers.", field="answers")
     now = settings.get_many("goal.")
     stage = _checked("stage", answers.get("stage") or now["goal.stage"])
-    starter_id = answers.get("starter") or None
-    area = goal_mod.starters().get(starter_id or "", {}) if starter_id else {}
-    if starter_id and not area:
-        raise BadRequest("Hal does not know that career area.", field="starter")
+    chosen, area = _areas(answers)
     defaults = goal_mod.defaults_for(stage) if stage != now["goal.stage"] else {}
     roles = _words(answers.get("roles")) or list(area.get("roles", [])) or list(now["goal.roles"])
     pattern_in = str(answers.get("pattern") or now["goal.pattern"]).strip().lower()
@@ -153,8 +178,8 @@ def quiz(req: Request) -> dict:
         "min_pay": _checked("min_pay", answers.get("min_pay") if answers.get("min_pay") not in (None, "")
                             else now["goal.min_pay"]),
     }
-    preset = _preset(stage, starter_id)
-    if preset and (starter_id or defaults):
+    preset = _preset(stage, chosen, u["roles"])
+    if preset and (chosen or defaults or (stage in STARTER_STAGES and u["roles"])):
         u["preset"] = preset
     return {"understood": u, "rows": understood_rows(u)}
 

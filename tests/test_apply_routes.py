@@ -5,7 +5,9 @@ driver are replaced by stand-ins; the routes, the rules of `apply/actions.py` an
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import threading
 import unittest
 from unittest import mock
 from urllib.parse import quote
@@ -14,7 +16,7 @@ from support.api import HalServer
 from support.world import World, job_id
 
 from jobhunt import browser, db, documents
-from jobhunt.apply import driver, helpers, queries
+from jobhunt.apply import actions, driver, helpers, queries
 from jobhunt.core import naming, paths, runner
 
 WAIT_S = 10.0
@@ -57,7 +59,8 @@ class Routes(unittest.TestCase):
 
     def test_the_board_puts_each_application_in_its_column_and_keeps_the_closed_ones(self):
         self.start_applying("sorrel-ready")
-        board = self.c.get("/api/v2/applications").json()
+        with mock.patch.object(queries, "_has_documents", lambda job: True):   # Hal has made its documents
+            board = self.c.get("/api/v2/applications").json()
         cols = {c["key"]: [i["id"] for i in c["items"]] for c in board["columns"]}
         self.assertEqual([c["title"] for c in board["columns"]],
                          ["Getting ready", "Form filled", "Sent", "Interview", "Offer"])
@@ -109,6 +112,19 @@ class Routes(unittest.TestCase):
         self.assertIn("It needs a car", closed[job_id("tidewater-grad")])
         self.assertEqual(self.c.post(self.url("cobalt-interview", "/discard"), {"reason": "bored"}).status, 400)
 
+    def test_discarding_skips_copies_in_the_same_place_only(self):
+        # discarding the Newcastle copies of an agency's advert also took its London listing out of Matches
+        here, there = "lever:copy-here", "lever:copy-there"
+        for copy, place in ((here, "London"), (there, "Manchester")):
+            self.con.execute("INSERT INTO jobs (id, source, company, title, location, url, description, status, "
+                             "first_seen, last_seen) SELECT ?, source, company, title, ?, url, description, 'new', "
+                             "first_seen, last_seen FROM jobs WHERE id = ?", (copy, place, job_id("sorrel-ready")))
+        self.con.commit()
+        self.start_applying("sorrel-ready")
+        self.assertEqual(self.c.post(self.url("sorrel-ready", "/discard"), {"reason": "not_interested"}).status, 200)
+        status = dict(self.con.execute("SELECT id, status FROM jobs").fetchall())
+        self.assertEqual((status[here], status[there]), ("skipped", "new"))
+
     def test_restore_takes_a_discarded_job_back_to_matches(self):
         self.start_applying("sorrel-ready")
         self.c.post(self.url("sorrel-ready", "/discard"), {"reason": "not_interested"})
@@ -116,6 +132,28 @@ class Routes(unittest.TestCase):
         row = self.con.execute("SELECT j.status, a.closed_reason FROM jobs j JOIN applications a ON a.job_id = j.id "
                                "WHERE j.id = ?", (job_id("sorrel-ready"),)).fetchone()
         self.assertEqual((row["status"], row["closed_reason"]), ("ready", None))
+
+    def test_a_double_clicked_approval_starts_one_fill(self):
+        # testers: two approvals at once failed with "UNIQUE constraint failed: files.root, files.rel", and the
+        # second stopped the fill the first had started (2026-11-04)
+        self.start_applying("sorrel-ready")
+        slow = threading.Event()
+        with mock.patch.object(driver, "act_auto", lambda con, job_id, here=False, fresh=False: slow.wait(WAIT_S)):
+            with concurrent.futures.ThreadPoolExecutor(2) as pool:
+                replies = list(pool.map(lambda _: self.c.post(self.url("sorrel-ready", "/documents/approve"), {}),
+                                        range(2)))
+            self.assertEqual([r.status for r in replies], [200, 200], [r.text for r in replies])
+            self.assertEqual(len({r.json()["action_id"] for r in replies}), 1)
+            slow.set()
+        self.wait(replies[0].json()["action_id"])
+
+    def test_a_closed_applications_page_says_why_it_closed(self):
+        # testers: a closed application's page showed its step's buttons and no word of why (2026-11-04)
+        self.start_applying("sorrel-ready")
+        self.assertIsNone(self.c.get(self.url("sorrel-ready")).json()["closed"])
+        self.c.post(self.url("sorrel-ready", "/discard"), {"reason": "advert_closed"})
+        self.assertEqual(self.c.get(self.url("sorrel-ready")).json()["closed"],
+                         "The advert closed while you were applying")
 
     def test_approving_the_documents_starts_the_form(self):
         self.start_applying("sorrel-ready")
@@ -127,6 +165,163 @@ class Routes(unittest.TestCase):
         self.assertIsNotNone(page["docs"]["approved_at"])
         self.assertEqual(page["docs"]["letter"]["text"], "A made-up letter.")
         self.assertFalse(page["first_time"])
+
+    def test_an_approved_application_is_on_the_form_step_before_the_form_opens(self):
+        # testers: approving went back to the board, and the application stayed on Documents until the page loaded
+        self.start_applying("sorrel-ready")
+        with mock.patch.object(actions, "start", lambda *a, **k: "held"):
+            r = self.c.post(self.url("sorrel-ready", "/documents/approve"), {})
+        self.assertEqual(r.status, 200, r.text)
+        page = self.c.get(self.url("sorrel-ready")).json()
+        self.assertEqual((page["step"], page["column"], page["form"]), (2, "form", None))
+
+    def test_change_the_documents_takes_an_approved_application_back_to_approve_again(self):
+        # testers asked for a way back from the form to edit and approve the documents again (2026-11-04)
+        self.start_applying("sorrel-ready")
+        with mock.patch.object(actions, "start", lambda *a, **k: "held"):
+            self.c.post(self.url("sorrel-ready", "/documents/approve"), {"letter": "A made-up letter."})
+            self.assertEqual(self.c.post(self.url("sorrel-ready", "/documents/reopen")).status, 200)
+            page = self.c.get(self.url("sorrel-ready")).json()
+            self.assertEqual((page["step"], page["docs"]["state"], page["docs"]["approved_at"]), (1, "ready", None))
+            self.assertEqual(page["docs"]["letter"]["text"], "A made-up letter.")
+            self.c.post(self.url("sorrel-ready", "/documents/approve"), {"letter": "A changed letter."})
+        self.assertEqual(self.c.get(self.url("sorrel-ready")).json()["step"], 2)
+        self.assertEqual(self.c.post(self.url("ambleside-applied", "/documents/reopen")).status, 400)
+
+    def test_a_form_hal_stopped_on_says_why_rather_than_that_hal_is_filling_it(self):
+        # testers: a failed run left "Hal is filling it in" on the page for a day (2026-11-04)
+        self.start_applying("sorrel-ready")
+        self.put_app("sorrel-ready", stage="form", form='{"state": "working", "fields": [], "url": ""}')
+        self.con.execute("""INSERT INTO actions (id, kind, subject, job_id, state, error, created)
+                            VALUES ('made-up-run', 'apply.fill', ?, ?, 'error', 'the made-up site would not load',
+                                    ?)""", (job_id("sorrel-ready"), job_id("sorrel-ready"), db.now()))
+        self.con.commit()
+        page = self.c.get(self.url("sorrel-ready")).json()
+        self.assertEqual((page["form"]["state"], page["steps"][1]["note"]), ("stopped", "Hal stopped"))
+        self.assertIn("the made-up site would not load", page["form"]["words"])
+        board = self.c.get("/api/v2/applications").json()
+        card = next(i for c in board["columns"] for i in c["items"] if i["id"] == job_id("sorrel-ready"))
+        self.assertEqual(card["tone"], "warn")
+
+    def test_while_hal_works_on_a_form_the_page_says_what_it_is_doing(self):
+        # testers: the Form step showed an empty banner and the stuck hint while Hal was working (2026-11-04)
+        self.start_applying("sorrel-ready")
+        self.put_app("sorrel-ready", stage="form", form='{"state": "working", "fields": [], "url": ""}')
+        key = job_id("sorrel-ready")
+        with mock.patch.object(queries, "_busy", lambda job: job == key), \
+                mock.patch.object(queries, "_running_for", lambda job: {"id": "made-up-fill"}), \
+                mock.patch.dict(queries.ACTIONS, {key: {"message": "Answering 7 questions", "state": "running"}}):
+            page = self.c.get(self.url("sorrel-ready")).json()
+        self.assertEqual(page["action_id"], "made-up-fill")
+        self.assertEqual(page["form"]["words"], "Hal is working on the form: answering 7 questions.")
+
+    def test_fill_in_from_this_page_reads_the_tab_without_opening_the_advert(self):
+        self.start_applying("sorrel-ready")
+        asked = []
+        def act_auto(con, job_id, here, fresh):
+            asked.append((here, fresh))
+            return "ok"
+
+        with mock.patch.object(driver, "act_auto", act_auto):
+            r = self.c.post(self.url("sorrel-ready", "/form/fill"), {"here": True})
+            self.wait(r.json()["action_id"])
+        self.assertEqual(asked, [(True, False)])
+        # a button the person pressed never waits behind queued jobs (testers, 2026-11-04)
+        priority = self.con.execute("SELECT priority FROM actions WHERE id = ?", (r.json()["action_id"],)).fetchone()
+        self.assertEqual(priority[0], 0)
+
+    def test_documents_a_restart_stopped_are_shown_and_made_again_together(self):
+        # testers: after a restart, queued jobs sat under Getting ready saying "Check and approve documents" with
+        # no documents to check, and nothing started them again (2026-11-04)
+        self.start_applying("sorrel-ready", "wexford-ready")
+        self.con.execute("""INSERT INTO actions (id, kind, subject, job_id, state, created)
+                            VALUES ('made-up-prepare', 'docs.prepare', ?, ?, 'interrupted', ?)""",
+                         (job_id("sorrel-ready"), job_id("sorrel-ready"), db.now()))
+        self.con.commit()
+        with mock.patch.object(queries, "_has_documents", lambda job: job["id"] != job_id("sorrel-ready")):
+            board = self.c.get("/api/v2/applications").json()
+            cards = {i["id"]: i for c in board["columns"] for i in c["items"]}
+            stalled = cards[job_id("sorrel-ready")]
+            self.assertEqual((stalled["next"], stalled["tone"], stalled["remakeable"]),
+                             ("Documents not made: make them again", "warn", True))
+            self.assertFalse(cards[job_id("wexford-ready")]["remakeable"])
+            started = []
+            with mock.patch.object(actions, "start", lambda kind, job, **k: started.append((kind, job)) or "made"):
+                r = self.c.post("/api/v2/applications/remake-missing",
+                                {"ids": [job_id("sorrel-ready"), job_id("wexford-ready")]})
+        self.assertEqual(r.status, 200, r.text)
+        self.assertEqual(started, [("docs.prepare", job_id("sorrel-ready"))])
+        self.assertEqual(r.json()["skipped"], [job_id("wexford-ready")])
+
+    def test_a_closed_advert_closes_the_job_before_hal_writes_for_it(self):
+        # testers: queued adverts that had closed took minutes of the graphics card each (2026-11-04)
+        from jobhunt import pack
+        from jobhunt.find import closed_check
+
+        self.start_applying("sorrel-ready")
+        built = []
+        with mock.patch.object(closed_check, "check", lambda job: "closed"), \
+                mock.patch.object(pack, "build", lambda *a, **k: built.append(a)):
+            r = self.c.post(self.url("sorrel-ready", "/documents/redo"))
+            done = self.wait(r.json()["action_id"])
+        self.assertEqual(done["state"], "done")
+        self.assertEqual(built, [])
+        row = self.con.execute("SELECT status, open_state FROM jobs WHERE id = ?", (job_id("sorrel-ready"),)).fetchone()
+        self.assertEqual((row["status"], row["open_state"]), ("closed", "closed"))
+
+    def test_hal_waits_for_you_as_long_as_preferences_say(self):
+        # testers: "Wait for you to sign in ... for up to" was shown but never read; Hal always waited 15 minutes
+        from jobhunt.core import settings
+
+        settings.set("applying.wait_minutes", 5, by="you")
+        self.addCleanup(settings.reset, "applying.wait_minutes")
+        self.start_applying("sorrel-ready")
+        job = self.con.execute("SELECT * FROM jobs WHERE id = ?", (job_id("sorrel-ready"),)).fetchone()
+        clock = iter([0, 5 * 60 + 1])
+        looks = []
+        found = {"needs": "sign-in", "sent": False, "url": "https://jobs.example.org/sign-in",
+                 "site": "jobs.example.org"}
+        with mock.patch.object(driver.time, "time", lambda: next(clock)), \
+                mock.patch.object(driver.time, "sleep", lambda s: None), \
+                mock.patch.object(driver, "_checkpoint", lambda job: None), \
+                mock.patch.object(browser, "show", lambda job: True), \
+                mock.patch.object(browser, "peek", lambda job: looks.append(job) or {"needs": "sign-in"}):
+            with self.assertRaisesRegex(RuntimeError, "gave up waiting"):
+                driver._past_walls(self.con, job, found)
+        self.assertEqual(looks, [])
+
+    def test_preferences_can_turn_off_the_advert_check_before_writing(self):
+        from jobhunt import pack
+        from jobhunt.core import settings
+        from jobhunt.find import closed_check
+
+        settings.set("cvdocs.check_open", False, by="you")
+        self.addCleanup(settings.reset, "cvdocs.check_open")
+        self.start_applying("sorrel-ready")
+        checked = []
+        with mock.patch.object(closed_check, "check", lambda job: checked.append(job) or "closed"), \
+                mock.patch.object(pack, "build", lambda *a, **k: None):
+            self.wait(self.c.post(self.url("sorrel-ready", "/documents/redo")).json()["action_id"])
+        self.assertEqual(checked, [])
+
+    def test_approve_all_starts_every_ready_form_and_leaves_the_rest(self):
+        # testers asked to queue several jobs, as the older tool did, then apply to them together
+        self.start_applying("sorrel-ready", "wexford-ready")
+        ready = {job_id("sorrel-ready"), job_id("wexford-ready")}
+        with mock.patch.object(queries, "_has_documents", lambda job: job["id"] in ready):
+            board = self.c.get("/api/v2/applications").json()
+            shown = {i["id"]: i["approvable"] for c in board["columns"] for i in c["items"]}
+            self.assertTrue(shown[job_id("sorrel-ready")])
+            self.assertFalse(shown[job_id("ambleside-applied")])
+            r = self.c.post("/api/v2/applications/approve-ready",
+                            {"ids": [job_id("sorrel-ready"), job_id("wexford-ready"), job_id("ambleside-applied")]})
+        self.assertEqual(r.status, 200, r.text)
+        out = r.json()
+        self.assertEqual(set(out["started"]), ready)
+        self.assertEqual(out["skipped"], [job_id("ambleside-applied")])
+        for action_id in out["started"].values():
+            self.assertEqual(self.wait(action_id)["kind"], "apply.fill")
+        self.assertEqual(self.c.post("/api/v2/applications/approve-ready", {"ids": []}).status, 400)
 
     def test_editing_documents_after_the_form_is_filled_marks_the_form_out_of_date(self):
         self.start_applying("sorrel-ready")

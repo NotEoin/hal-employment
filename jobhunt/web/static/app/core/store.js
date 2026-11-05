@@ -1,7 +1,9 @@
 /* The app's state: one small store for what the shell shows, and one cache of server data keyed by API path.
 
    Server data is never copied into the store. Pages read it with useApi(path), and the event stream
-   (core/events.js) marks paths stale so every page showing them reloads. Per-viewer conveniences (theme,
+   (core/events.js) marks paths stale so every page showing them reloads. A page that mounts on data
+   already cached shows it at once and fetches it again quietly, because a path nobody showed when its
+   event came was kept as it was (testers saw a new application missing from the board until reload). Per-viewer conveniences (theme,
    simple menu) may live in localStorage; every access is wrapped because a private window or blocked
    site data makes it throw. */
 import { useState, useEffect, useRef } from "./html.js";
@@ -55,12 +57,11 @@ function entry(path) {
 
 function tell(e) { e.subs.forEach(f => f()); }
 
-/** Fetches `path` again and tells every component that shows it. */
-export function load(path) {
+/** Fetches `path` again and tells every component that shows it; `quiet` keeps the data shown as not loading. */
+export function load(path, { quiet = false } = {}) {
   const e = entry(path);
   const seq = ++e.seq;
-  e.loading = true;
-  tell(e);
+  if (!quiet) { e.loading = true; tell(e); }
   return get(path).then(
     data => { if (seq === e.seq) { e.data = data; e.error = null; e.loading = false; tell(e); } return data; },
     err => { if (seq === e.seq) { e.error = err; e.loading = false; tell(e); } throw err; });
@@ -101,6 +102,7 @@ export function useApi(path, { on = [] } = {}) {
     const sub = () => force(x => x + 1);
     e.subs.add(sub);
     if (e.data === undefined && !e.loading) load(path).catch(() => {});
+    else if (!e.loading) load(path, { quiet: true }).catch(() => {});
     const ws = on.map(pred => ({ pred, reload: () => load(path).catch(() => {}) }));
     ws.forEach(w => watchers.add(w));
     return () => { e.subs.delete(sub); ws.forEach(w => watchers.delete(w)); };
@@ -125,16 +127,29 @@ export function closeDialog() {
 }
 
 let toastSeq = 0;
-/** Shows a short message; with `undo` (a function) it carries an Undo button. */
-export function toast(text, undo) {
-  const id = ++toastSeq;
-  store.set(s => ({ toasts: [...s.toasts, { id, text, undo }] }));
-  setTimeout(() => dismissToast(id), undo ? TOAST_UNDO_MS : TOAST_MS);
+const toastTimers = new Map();
+/** Shows a short message; with `undo` (a function) it carries a button, named `label` (Undo by default).
+
+    With `group`, a toast of the same group already on show is replaced rather than stacked, and `text` may be a
+    function of how many times the group has been raised: queueing twenty jobs filled the window with twenty
+    toasts (testers, 2026-11-04). */
+export function toast(text, undo, label = "Undo", group = null) {
+  const had = group ? store.s.toasts.find(t => t.group === group) : null;
+  const n = had ? had.n + 1 : 1;
+  const id = had ? had.id : ++toastSeq;
+  const said = typeof text === "function" ? text(n) : text;
+  const made = { id, text: said, undo, label, group, n };
+  store.set(s => ({ toasts: had ? s.toasts.map(t => (t.id === id ? made : t)) : [...s.toasts, made] }));
+  clearTimeout(toastTimers.get(id));
+  toastTimers.set(id, setTimeout(() => dismissToast(id), undo ? TOAST_UNDO_MS : TOAST_MS));
   return id;
 }
 
 /** Removes one toast. */
-export function dismissToast(id) { store.set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })); }
+export function dismissToast(id) {
+  toastTimers.delete(id);
+  store.set(s => ({ toasts: s.toasts.filter(t => t.id !== id) }));
+}
 
 /* ---- per-viewer conveniences ---- */
 

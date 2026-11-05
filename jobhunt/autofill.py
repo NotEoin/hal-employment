@@ -29,6 +29,7 @@ Design notes:
 from __future__ import annotations
 
 import difflib
+import itertools
 import re
 from datetime import date
 from typing import TYPE_CHECKING
@@ -108,7 +109,8 @@ PROFILE_WORDS = {
     "sponsorship": "your right to work in the UK", "right_to_work": "your right to work in the UK",
     "notice": "your notice period", "start": "when you can start", "office": "whether you can work in an office",
     "relocate": "whether you would move for a job", "postcode": "your postcode", "address1": "your address",
-    "country": "your country", "city": "your town or city", "location": "where you are based",
+    "country": "your country", "phone_code": "your phone's dialling code", "city": "your town or city",
+    "location": "where you are based",
     "nationality": "your nationality", "university": "your university", "degree": "your degree",
     "grade": "your grade", "grad_year": "when your course ends or ended", "salary": "the salary answer you set",
 }
@@ -153,6 +155,7 @@ def profile() -> dict:
         "email": (you.get("you.email") or "").strip().lower(), "phone": (you.get("you.phone") or "").strip(),
         **links,
         "city": you.get("you.city") or "", "country": you.get("you.country") or "United Kingdom",
+        "phone_code": _dial_code(you.get("you.phone") or "", you.get("you.country") or "United Kingdom"),
         "location": you.get("you.location_line") or "",
         "right_to_work": _yes(work != "need_sponsorship"), "sponsorship": _yes(work == "need_sponsorship"),
         "work_status": (you.get("you.work_status") or "").strip() or WORK_WORDS.get(work, ""),
@@ -166,6 +169,48 @@ def profile() -> dict:
         "salary": (you.get("you.salary_answer") or "").strip(),
     }
     return {k: v for k, v in p.items() if k not in PRIVATE_KEYS}
+
+
+def sign_ups_only(fields: list[dict]) -> bool:
+    """True when every field is an optional tick box for news or alerts: a site's sign-up, not an application
+    (jobs.ac.uk's email preferences beside an advert that sends you elsewhere, testers 2026-11-05)."""
+    return bool(fields) and all(
+        f["kind"] == "checkbox" and not f.get("required")
+        and MARKETING.search(f"{f.get('label') or ''} {f.get('context') or ''}") for f in fields)
+
+
+# Facts only the applicant has, which no rule, saved note or model may supply (testers, 2026-11-05): the
+# expected salary went into "What is your current salary?", and the model said "Yes" to "Have you interviewed
+# with Jane Street before?".
+CURRENT_PAY = re.compile(r"\b(current|present|most recent|previous|last)\b[^?]{0,30}\b(salary|pay|compensation|"
+                         r"remuneration)", re.I)
+PAST = re.compile(r"\b(interviewed|applied|worked|employed)\b[^?]*\b(before|previously|ever)\b|"
+                  r"\b(before|previously|ever)\b[^?]*\b(interviewed|applied|worked|employed)\b", re.I)
+US = re.compile(r"\b(us|our (company|firm|organi[sz]ation)|this (company|firm|organi[sz]ation|employer))\b", re.I)
+MIN_NAME = 3   # letters in the first word of an employer's name before it alone names them ("Jane" of Jane Street)
+YOURS_WHY = {"pay": "Only you know your current pay, so Hal leaves it for you.",
+             "past": "Only you know whether you have dealt with this employer before, so Hal leaves it for you."}
+
+
+def left_to_you(field: dict, company: str = "") -> str | None:
+    """Why Hal leaves this question to the applicant whatever it knows, or None: a question with two answers in
+    one, the applicant's current pay, or their past with this employer (`company`, or "us")."""
+    label = field.get("label") or ""
+    if two_in_one(field):
+        return TWO_IN_ONE_WHY
+    if CURRENT_PAY.search(label):
+        return YOURS_WHY["pay"]
+    name = company.split()[0] if company.split() and len(company.split()[0]) >= MIN_NAME else company
+    if PAST.search(label) and (US.search(label) or (name and re.search(rf"\b{re.escape(name)}", label, re.I))):
+        return YOURS_WHY["past"]
+    return None
+
+
+def two_in_one(field: dict) -> bool:
+    """True for a label that asks two opposite questions under one answer: "Are you legally entitled to work in the
+    UK? Will you require sponsorship?" Any one answer is wrong for one of them, so it is left to the person."""
+    label = field.get("label") or ""
+    return bool(RIGHT_TO_WORK.search(label) and SPONSOR.search(label)) and label.count("?") >= 2
 
 
 def private_question(field: dict) -> str | None:
@@ -211,7 +256,8 @@ DIVERSITY = re.compile(
     r"long[- ]term (physical|health)", re.I)
 # Opt-ins that are not part of the application; they are left as the form has them.
 MARKETING = re.compile(r"newsletter|marketing|talent (community|pool|network)|hear (more )?about|"
-                       r"(future|other) (opportunit|vacanc|roles)|job alerts?|notifications?:?$|keep (me|my)", re.I)
+                       r"(future|other) (opportunit|vacanc|roles)|job alerts?|notifications?:?$|keep (me|my)|"
+                       r"receive (e-?mail )?(communications?|updates|news|offers)", re.I)
 CONSENT = re.compile(r"consent|i agree|agree to|privacy|data (protection|processing)|process(ing)? (of )?(my|your) "
                      r"(personal )?(data|information)|terms|acknowledge|i (confirm|understand|certify)|"
                      r"confirm (that|the)|you understand|declaration", re.I)
@@ -219,20 +265,31 @@ CONSENT = re.compile(r"consent|i agree|agree to|privacy|data (protection|process
 # (label pattern, profile key, preferred options for a choice, in order)
 # Standard answers to questions, however they are worded.
 ANSWERS = {"sponsorship", "right_to_work", "notice", "start", "salary", "how_heard", "office", "relocate"}
+# "Legal First and Last Name" asks for both names, and the last-name rule gave it the surname (Harvey, testers
+# 2026-11-05).
+BOTH_NAMES = re.compile(r"first\s*(and|&|/|\+)\s*last|given\s*(and|&)\s*family", re.I)
+RIGHT_TO_WORK = re.compile(r"right to work|legally (entitled|authori[sz]ed|eligible|able)|eligib\w+ to work|"
+                           r"authori[sz]ed to work|work permit|immigration status|visa status|work status", re.I)
+SPONSOR = re.compile(r"sponsor", re.I)
+TWO_IN_ONE_WHY = ("It asks whether you may work here and whether you need sponsorship, with one answer for both, so "
+                  "Hal leaves it for you.")
 RULES = [
     (r"\bpreferred (first )?name\b", "preferred_name", []),
     (r"\bmiddle name", "middle_name", []),
     (r"\bfirst name|given name|forename", "first_name", []),
     (r"\blast name|surname|family name", "last_name", []),
-    (r"^(full )?(legal )?name\b|^your name$|full name", "full_name", []),
+    (r"^(full )?(legal )?name\b|^your name$|full name|" + BOTH_NAMES.pattern, "full_name", []),
     (r"e-?mail", "email", []),
+    # Before the phone rule: "Phone country code" asks for the dialling code, not the number (Totaljobs,
+    # testers 2026-11-04).
+    (r"country code|dial(l)?ing code|calling code|(phone|mobile|telephone) (country )?(code|prefix)|"
+     r"international (code|prefix)", "phone_code", []),
     (r"phone|mobile|telephone", "phone", []),
     (r"linkedin", "linkedin", []),
     (r"github", "github", []),
     (r"website|portfolio|personal (site|url|page)|other links?", "website", []),
     (r"sponsor", "sponsorship", []),
-    (r"right to work|legally (entitled|authori[sz]ed|eligible|able)|eligib\w+ to work|authori[sz]ed to work|"
-     r"work permit|immigration status|visa status|work status", "right_to_work", []),
+    (RIGHT_TO_WORK.pattern, "right_to_work", []),
     (r"notice period", "notice", []),
     (r"start date|when (can|could) you start|earliest (start|availability)|available to start", "start", []),
     (r"salary|compensation|pay expectation|remuneration", "salary", []),
@@ -262,6 +319,12 @@ OTHER_PERSON = re.compile(r"referee|references?\b|emergency|next of kin|employme
 HISTORY = re.compile(r"education|qualification|academic|employment|experience|training|course", re.I)
 # Answers about the job applied for, which a dated history section is not asking.
 ABOUT_THIS_JOB = {"start", "notice", "salary", "office", "relocate", "how_heard"}
+HIGH_SCHOOL = re.compile(r"high ?school|secondary school|sixth form|\bgcses?\b|\ba[- ]?levels?\b", re.I)
+# Labels a rule's words match that ask about something else (Jane Street, testers 2026-11-05): "What year did you
+# graduate high school?" was given the university, and "Secondary Major" the degree.
+NOT_FOR = {"university": HIGH_SCHOOL, "grad_year": HIGH_SCHOOL,
+           "degree": re.compile(r"secondary|second|minor|double", re.I),
+           "first_name": BOTH_NAMES, "last_name": BOTH_NAMES, "preferred_name": BOTH_NAMES}
 HEARD_SITE = [re.compile(r"(company|careers?|our) (web)?(site|page)|^website", re.I)]
 HEARD_BOARD = [re.compile(r"job ?board|job (site|website|search)|online (job|search)", re.I)]
 # Shortest option or answer matched inside the other; shorter ones ("UK", "No") match too much by accident.
@@ -420,14 +483,33 @@ def _carer(f: dict, prof: dict | None = None) -> bool:
     return True
 
 
+# Dialling codes by country, for a form that asks for the code apart from the number; a number written with
+# its code ("+353 ...") says it itself.
+DIAL_CODES = {"united kingdom": "+44", "uk": "+44", "great britain": "+44", "ireland": "+353", "united states": "+1",
+              "france": "+33", "germany": "+49", "spain": "+34", "italy": "+39", "netherlands": "+31",
+              "india": "+91", "canada": "+1", "australia": "+61"}
+
+
+def _dial_code(phone: str, country: str) -> str:
+    """The dialling code for the person's phone: from the number when it has one, else from their country."""
+    written = re.match(r"\s*(\+\d{1,3})[\s-]", phone)
+    return written.group(1) if written else DIAL_CODES.get(country.strip().lower(), "")
+
+
 def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
     label = f.get("label") or ""
     section = f.get("section") or ""
     if OTHER_PERSON.search(section):
         return None
     listed = f["kind"] in ("select", "radio", "combobox", "checkgroup") and bool(f.get("options"))
-    for pattern, key, preferred in RULES:
-        if not re.search(pattern, label, re.I):
+    rules = RULES
+    rtw, sponsor = RIGHT_TO_WORK.search(label), SPONSOR.search(label)
+    if rtw and sponsor and rtw.start() < sponsor.start():
+        # "Are you authorised to work here without sponsorship?" asks first about the right to work, so it is
+        # answered as that; the sponsorship rule answered it "No" (ComplyAdvantage, testers 2026-11-05).
+        rules = [r for r in RULES if r[1] != "sponsorship"]
+    for pattern, key, preferred in rules:
+        if not re.search(pattern, label, re.I) or (key in NOT_FOR and NOT_FOR[key].search(label)):
             continue
         if key in ABOUT_THIS_JOB and HISTORY.search(section):
             return None
@@ -447,6 +529,9 @@ def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
                 worded = _choose(f["options"], prof["work_status"], [])
                 if worded:
                     return ([worded] if f["kind"] == "checkgroup" else worded, f"profile: {key}")
+        elif key == "phone_code":
+            # "+44" as a whole code, in "+44" or "United Kingdom (+44)", never inside "+441".
+            preferred = [re.compile(rf"(^|[^\d+]){re.escape(str(value))}(?!\d)")]
         elif key in ("notice", "start") and SOON.search(str(value)):
             preferred = [SOON]
         if key == "salary" and prof.get("salary_figure"):
@@ -703,8 +788,10 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
     notes = page_notes(job, notes)
     answers = docs.get("answers") or []
     uploads = [f for f in fields if f["kind"] == "file"]
-    named = any(re.search(r"cover|resume|r\u00e9sum\u00e9|\bcv\b", f"{f.get('label')} {f.get('context', '')}", re.I)
-                for f in uploads)
+    named = any(CV_UPLOAD.search(_upload_text(f)) for f in uploads)
+    # With no upload named for the CV, the first upload named for nothing else takes it: StudySmarter's form
+    # named its cover letter and certificate boxes but left the CV's as "Eingabefeld" (testers, 2026-11-04).
+    free = next((f for f in uploads if not OTHER_UPLOAD.search(_upload_text(f))), None)
     for f in fields:
         f.update(value=None, source="you", note="", skip=False, why=LEFT_WHY, notes_used=[])
         label = f.get("label") or ""
@@ -719,7 +806,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
                      why="The site emails you this code. Hal never guesses it.")
             continue
         if f["kind"] == "file":
-            _upload(f, text, files, named, f is uploads[0])
+            _upload(f, text, files, named, f is free)
             continue
         if private_question(f) is not None:
             if not (_health(f) or _carer(f)) or f.get("value") is None:
@@ -728,6 +815,10 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
                 f.update(value=None, source="you", note=note, why=LEFT_PRIVATE_WHY)
             else:
                 f["why"] = PRIVATE_WHY
+            continue
+        yours = left_to_you(f, _get(job, "company") or "")
+        if yours:
+            f.update(note=YOURSELF, why=yours)
             continue
         if _note_answer(f, notes, _get(job, "source")):
             continue
@@ -770,23 +861,64 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
             if drafted:
                 f.update(value=drafted, source="documents: drafted answer",
                          why="From the answers you approved with this job's documents.")
+    _skip_follow_ups(fields)
     return mark_written(fields)
 
 
+# "If yes, please give details", "If you selected other to the above, please specify": a question about the answer
+# to the one before it.
+FOLLOW_UP = re.compile(r"^\s*if\s+(?:you\s+(?:have\s+)?(?:answered|selected|chose|chosen|ticked|said|picked)\s+)?"
+                       r"[\"']?(yes|no|other)\b", re.I)
+FOLLOW_UP_WHY = "It asks about a different answer to the question before it, so Hal leaves it empty."
+
+
+def _skip_follow_ups(fields: list[dict]) -> None:
+    """Leaves an optional follow-up empty when the answer just before it is not the one it asks about.
+
+    The model filled "If you answered yes to the above, confirm your visa" with "A" after a "No" (Ashby, testers
+    2026-11-04). A follow-up whose question went unanswered is left to the model as before.
+    """
+    for before, f in itertools.pairwise(fields):
+        m = FOLLOW_UP.match(f.get("label") or "")
+        given = before.get("value")
+        if not m or f.get("required") or f.get("value") not in (None, "", []) or given in (None, "", []):
+            continue
+        if before["kind"] not in ("radio", "select", "combobox", "checkbox"):
+            continue
+        said = ("yes" if given else "no") if isinstance(given, bool) else str(given).strip().lower()
+        if not said.startswith(m.group(1).lower()):
+            f.update(skip=True, source="skipped", note="", why=FOLLOW_UP_WHY)
+
+
+CV_UPLOAD = re.compile(r"resume|r\u00e9sum\u00e9|\bcv\b|curriculum vitae|lebenslauf", re.I)
+LETTER_UPLOAD = re.compile(r"cover|anschreiben|motivation", re.I)
+# Uploads for something other than the CV: the letter, or papers Hal does not hold.
+OTHER_UPLOAD = re.compile(LETTER_UPLOAD.pattern + r"|autofill|photo|picture|avatar|certificate|zeugnis|"
+                          r"transcript|portfolio|passport|reference", re.I)
+
+
+def _upload_text(f: dict) -> str:
+    return f"{f.get('label') or ''} {f.get('context', '')}"
+
+
 def _upload(f: dict, text: str, files: dict, named: bool, first: bool) -> None:
-    """Puts the CV or the cover letter into a file upload, or leaves an upload that wants neither."""
+    """Puts the CV or the cover letter into a file upload, or leaves an upload that wants neither.
+
+    `named` says some upload on the page names the CV; `first` says this is the upload that takes the CV when
+    none does.
+    """
     if re.search(r"autofill|photo|picture|avatar", text, re.I):
         f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
-    elif re.search(r"cover", text, re.I) and files.get("letter"):
+    elif LETTER_UPLOAD.search(text) and files.get("letter"):
         f.update(value=files["letter"], source="documents: cover letter",
                  why="Your cover letter for this job, as you approved it.")
-    elif re.search(r"resume|r\u00e9sum\u00e9|\bcv\b", text, re.I) and files.get("cv"):
+    elif CV_UPLOAD.search(text) and files.get("cv"):
         f.update(value=files["cv"], source="documents: CV", why="Your CV for this job, as you approved it.")
     elif not named and first and files.get("cv"):
-        # A form whose uploads name no document wants the CV in the first.
+        # A form whose uploads name no CV wants it in the first upload named for nothing else.
         f.update(value=files["cv"], source="documents: CV", note="taken to be the CV upload; check this",
-                 why="Your CV for this job. The form does not say which upload is the CV, so Hal used the first. "
-                     "Check this.")
+                 why="Your CV for this job. The form does not say which upload is the CV, so Hal used the first "
+                     "one not named for another document. Check this.")
     else:
         f.update(skip=True, source="skipped", note="not a CV or cover letter upload")
 
@@ -808,6 +940,26 @@ def by_you(f: dict, value, note: str = "") -> dict:
     """Marks a field as answered by the person, so its words and "Why this answer?" say so; returns it."""
     f.update(value=value, source="you", note=note, skip=False, why=YOU_WHY, notes_used=[])
     return f
+
+
+SITE_WHY = "The site had already filled this in, and Hal left it as it was."
+
+
+def keep_site_answers(fields: list[dict]) -> list[dict]:
+    """Keeps what the site already filled in where Hal has no answer of its own.
+
+    A dialling code the site set to "+44" was counted as a required question Hal could not answer (Totaljobs,
+    testers 2026-11-04). Tick boxes and uploads are left out: an unticked box is no answer, and a file the
+    site holds is not one Hal can check. A question Hal left for the person on purpose, such as a private one,
+    carries a note and stays theirs.
+    """
+    for f in fields:
+        current = f.get("current")
+        if f.get("value") in (None, "", []) and not f.get("skip") and not f.get("note") \
+                and f["kind"] not in ("file", "checkbox") and current not in (None, "", [], False) \
+                and f.get("type") != "password":
+            f.update(value=current, source="site: already filled", why=SITE_WHY, note="")
+    return fields
 
 
 def mark_written(fields: list[dict]) -> list[dict]:
@@ -930,7 +1082,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
     if not problems and not gpu.busy():
         _review(job, fields)
     open_fields = [f for f in fields if f["kind"] != "file" and f.get("type") != "password"
-                   and private_question(f) is None
+                   and private_question(f) is None and left_to_you(f, _get(job, "company") or "") is None
                    and (f["hid"] in problems or (f.get("value") in (None, "", []) and not f.get("skip")))]
     if not open_fields:
         return 0, None

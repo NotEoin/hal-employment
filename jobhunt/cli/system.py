@@ -56,7 +56,7 @@ def cmd_open(args):
     if args.print:
         print(url)
     else:
-        platform.current().open_app_window(url)
+        platform.current().open_in_default_browser(url)
 
 
 def register(sub) -> None:

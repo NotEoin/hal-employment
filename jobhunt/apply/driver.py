@@ -19,7 +19,9 @@ from ..apply.queries import AGGREGATORS, _app, _job, _set_app, mark_applied
 from ..core import settings
 from ..core.runner import ACTIONS, _carry_out, _checkpoint, _note, _say
 
-WAIT_FOR_YOU = 15 * 60  # seconds Hal waits on a page only the applicant can pass
+MINUTE_S = 60
+# How long Hal waits on a page only the applicant can pass is `applying.wait_minutes`; the setting was shown but
+# never read, and Hal always waited 15 minutes (testers, 2026-11-04).
 # What Hal asks for when a page on the way to the form needs the applicant.
 ASKS = {"sign-in": "sign in to {site}", "check": "pass the check on {site}",
         "code": "type the code {site} emailed you",
@@ -49,7 +51,7 @@ def _past_walls(con, job, found: dict) -> dict:
     An emailed code is typed in for the person when `email.codes` is on.
     """
     job_id = job["id"]
-    deadline = time.time() + WAIT_FOR_YOU
+    deadline = time.time() + int(settings.get("applying.wait_minutes")) * MINUTE_S
     while found["needs"] and not found["sent"]:
         need, wall = found["needs"], found["url"]
         typed = need == "code" and _type_code(con, job, found.get("boxes") or [])
@@ -168,6 +170,8 @@ def _answer(con, job, found: dict, step: int, done: list) -> dict:
         if mine is not None and f["kind"] != "file":
             autofill.by_you(f, mine)
     _answered, waiting = autofill.ask_model(job, fields, docs, con, notes=notes)
+    if settings.get("applying.keep_site_answers"):
+        autofill.keep_site_answers(fields)
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": fields,
             "model": waiting or "", "filled": None, "submit": None, "step": step, "done": done,
             "final": not found["next"], "state": "working", "message": "", "press": ""}
@@ -191,7 +195,7 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
     fields = form["fields"]
     notes = browser.notes_for(form.get("url") or "", job_id)
     _say(job_id, "filling in the form")
-    out = browser.fill(job_id, only if only is not None else fields, _shot(job_id))
+    out = _fill_uploads_first(job_id, only if only is not None else fields)
     _note_uses(form, out)
     for _ in range(FIX_ROUNDS):
         fresh = [f for f in out["new"] if f["sig"] not in {x["sig"] for x in fields}]
@@ -201,11 +205,13 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
             break
         if fresh:
             _say(job_id, f"answering {len(fresh)} more questions the form has just shown")
-            fields.extend(autofill.propose(job, fresh, docs, documents.files(job), con, notes=notes))
+            fields.extend(_one_cv(fields, autofill.propose(job, fresh, docs, documents.files(job), con,
+                                                          notes=notes)))
         autofill.ask_model(job, fields, docs, con, problems=retry, notes=notes)
         _checkpoint(job_id)
         out = browser.fill(job_id, fields, _shot(job_id))
         _note_uses(form, out)
+    _pick_again(job_id, fields, out)
     for f in fields:
         f["error"] = out["errors"].get(f["hid"], "")
     _count_note_answers(form, job_id)
@@ -213,6 +219,69 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
     form["filled"] = {"at": db.now(), "screenshot": out["screenshot"], "errors": len(out["errors"]),
                       "next": out["next"], "password": out["password"]}
     return out
+
+
+def _pick_again(job_id: str, fields: list[dict], out: dict) -> None:
+    """Picks each list answer the form found no option for once more, on its own, and clears what then lands.
+
+    A list picked while another widget's list was still open came up empty in a full fill and took the same
+    answer by itself (Greenhouse's location, testers 2026-11-05). The model's answers are put to it again instead.
+    """
+    again = [f for f in fields if out["errors"].get(f["hid"], "").startswith("no option") and f.get("source") != "hal"]
+    if not again:
+        return
+    _checkpoint(job_id)
+    second = browser.fill(job_id, again, _shot(job_id))
+    for f in again:
+        if f["hid"] in second["errors"]:
+            out["errors"][f["hid"]] = second["errors"][f["hid"]]
+        else:
+            out["errors"].pop(f["hid"], None)
+
+
+UPLOAD_SETTLE_LOOKS = 5   # reads of a page after an upload, until its questions stop changing
+UPLOAD_SETTLE_S = 2       # seconds between those reads; a CV is read and the form rebuilt within a few
+
+
+def _fill_uploads_first(job_id: str, todo: list[dict]) -> dict:
+    """Fills a page's uploads, waits for the page to settle, then fills the rest into the page as it is then.
+
+    Some forms read an uploaded CV and build themselves again, and what Hal had typed was lost: Ashby left ten
+    answers "no longer on the page" (testers, 2026-11-04). After the uploads, the rest are matched to the new
+    boxes by their signature. A page with no uploads, or only uploads, is filled in one go as before.
+    """
+    uploads = [f for f in todo if f["kind"] == "file" and f.get("value") and not f.get("skip")]
+    rest = [f for f in todo if f not in uploads]
+    if not uploads or not rest:
+        return browser.fill(job_id, todo, _shot(job_id))
+    first = browser.fill(job_id, uploads, _shot(job_id))
+    seen: set[str] = set()
+    for _ in range(UPLOAD_SETTLE_LOOKS):
+        time.sleep(UPLOAD_SETTLE_S)
+        _checkpoint(job_id)
+        now = browser.read_here(job_id)["fields"]
+        sigs = {f["sig"] for f in now}
+        if sigs == seen:
+            break
+        seen = sigs
+    hids = {f["sig"]: f["hid"] for f in now}
+    for f in rest:
+        f["hid"] = hids.get(f["sig"], f["hid"])
+    out = browser.fill(job_id, rest, _shot(job_id))
+    out["errors"] = {**first["errors"], **out["errors"]}
+    out["notes_used"] = [*(first.get("notes_used") or []), *(out.get("notes_used") or [])]
+    return out
+
+
+def _one_cv(fields: list[dict], fresh: list[dict]) -> list[dict]:
+    """Leaves a new upload alone when the form already has its CV: one that appeared after a form rebuilt
+    itself was taken for the CV upload on its own (Ashby, testers 2026-11-04), and Lever's, relabelled
+    "Resume/CV ... Success!" after each upload, took the CV four times (testers, 2026-11-05)."""
+    has_cv = any(f["kind"] == "file" and f.get("source") == "documents: CV" and not f.get("skip") for f in fields)
+    for f in fresh:
+        if has_cv and f["kind"] == "file" and f.get("source") == "documents: CV":
+            f.update(value=None, skip=True, source="skipped", note="not a CV or cover letter upload")
+    return fresh
 
 
 def _note_uses(form: dict, out: dict) -> None:
@@ -402,7 +471,7 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
     docs = documents.load(con, job)
     notes = browser.notes_for(found["url"], job_id)
     new = [f for f in found["fields"] if f["sig"] not in known]
-    fresh = autofill.propose(job, new, docs, documents.files(job), con, notes=notes)
+    fresh = _one_cv(form["fields"], autofill.propose(job, new, docs, documents.files(job), con, notes=notes))
     form["fields"].extend(fresh)
     autofill.ask_model(job, form["fields"], docs, con, notes=notes)
     by_sig = {f["sig"]: f for f in found["fields"]}
@@ -461,7 +530,7 @@ def _terminal(con, job, found: dict) -> str | None:
         return "application sent"
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": [], "model": "",
             "filled": None, "submit": None, "step": 1, "done": [], "final": True, "press": ""}
-    if not found["fields"]:
+    if not found["fields"] or autofill.sign_ups_only(found["fields"]):
         why = (f"{found['site']} refuses Hal's browser" if found["blocked"]
                else f"no application form found on {found['site']}")
         form.update(state="stuck", message=f"{why}. Open the form in {browser.where()}, then press "

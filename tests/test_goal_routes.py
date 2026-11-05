@@ -58,6 +58,35 @@ class GoalSteps(unittest.TestCase):
         # nothing is saved until the person says it is right
         self.assertEqual(settings.get_many("goal."), before)
 
+    def test_several_career_areas_join_their_roles_and_interests(self):
+        # testers could press only one area, so heritage and creative work could not both be chosen
+        u = self.post("/api/v2/goal/quiz", {"answers": {
+            "stage": "new_grad", "starters": ["heritage_and_museums", "creative_and_media"]}})["understood"]
+        self.assertIn("collections assistant", u["roles"])
+        self.assertIn("museums", u["interests"])
+        areas = {a["id"]: a for a in self.c.get("/api/v2/goal/starters").json()}
+        self.assertTrue(set(areas["creative_and_media"]["roles"]) <= set(u["roles"]))
+        self.assertEqual(len(u["roles"]), len(set(u["roles"])))
+        self.assertTrue(set(u["avoid"]).isdisjoint(u["roles"]))
+        self.assertEqual(u["preset"], "humanities_grad")
+
+    def test_an_unknown_career_area_among_several_names_the_field(self):
+        reply = self.c.post("/api/v2/goal/quiz", {"answers": {"starters": ["heritage_and_museums", "astrology"]}})
+        self.assertEqual(reply.status, 400, reply.text)
+        self.assertEqual(reply.json()["error"]["field"], "starters")
+
+    def test_the_technical_preset_needs_technology_alone_or_technical_roles(self):
+        # a new graduate who typed museum roles was scored with the programmers' preset
+        def quiz(answers: dict) -> dict:
+            return self.post("/api/v2/goal/quiz", {"answers": answers})["understood"]
+        self.assertEqual(quiz({"stage": "new_grad", "starters": ["technology"]})["preset"], "technical_grad")
+        self.assertEqual(quiz({"stage": "new_grad", "starters": ["technology", "education"]})["preset"],
+                         "humanities_grad")
+        self.assertEqual(quiz({"stage": "new_grad", "roles": "museum assistant, archivist"})["preset"],
+                         "humanities_grad")
+        self.assertEqual(quiz({"stage": "new_grad", "roles": "software developer, data engineer"})["preset"],
+                         "technical_grad")
+
     def test_saving_what_hal_understood_is_one_goal_version(self):
         found = self.post("/api/v2/goal/quiz", {"answers": {
             "stage": "student", "study_status": "at_uni", "study_end": "2027-06", "roles": ["marketing"],

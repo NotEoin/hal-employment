@@ -92,14 +92,17 @@ def changes(base: dict, variant: dict) -> list[dict]:
     """Lists where an application's CV differs from the base CV, for skimming before approving it.
 
     Each change names the field by its path in `variant` ("projects.0.body", or a section for
-    an order change), says what kind of change it is ("text", "order", "added", "left out"),
-    and carries a short label and the base's wording.
+    an order change), has an `id` unique in the list (the path, except "<section>:order" and
+    "<section>:left out:<name>", which share a section's path), says what kind of change it is ("text",
+    "order", "added", "left out"),
+    and carries a short label, the base's wording (`before`) and the application's (`after`), so the
+    person sees what Hal changed rather than only that it changed.
     """
     out = []
     for f in ("title", "summary", "moreProjects", "closing"):
         if (variant.get(f) or "") != (base.get(f) or ""):
             out.append({"path": f, "kind": "text", "label": {"moreProjects": "Further projects"}.get(f, f.capitalize()),
-                        "before": base.get(f) or ""})
+                        "before": _plain(base.get(f)), "after": _plain(variant.get(f))})
     for section in (*NAMED_BY, *PAIRS):
         mine = variant.get(section) or []
         theirs = _shown(base.get(section))
@@ -109,11 +112,13 @@ def changes(base: dict, variant: dict) -> list[dict]:
         if common != [n for n in before if n in shown]:
             moved = [f"{n} (was {before.index(n) + 1}, now {shown.index(n) + 1})" for n in common
                      if before.index(n) != shown.index(n)]
-            out.append({"path": section, "kind": "order", "label": f"Order of {section}",
-                        "before": ", ".join(moved[:6])})
+            out.append({"path": section, "id": f"{section}:order", "kind": "order", "label": f"Order of {section}",
+                        "before": ", ".join(moved[:6]), "after": ", ".join(common[:6])})
         for name in before:
             if name not in shown:
-                out.append({"path": section, "kind": "left out", "label": f"{name} ({section})", "before": ""})
+                out.append({"path": section, "id": f"{section}:left out:{name}", "kind": "left out",
+                            "label": f"{name} ({section})", "before": name,
+                            "after": ""})
         for i, item in enumerate(mine):
             name = _name(section, item)
             if isinstance(item, dict) and item.get("hidden"):
@@ -121,19 +126,78 @@ def changes(base: dict, variant: dict) -> list[dict]:
             was = _find(base, section, name) if section in PAIRS else next(
                 (x for x in theirs if _name(section, x) == name), None)
             if was is None:
-                out.append({"path": f"{section}.{i}", "kind": "added", "label": f"{name} ({section})", "before": ""})
+                out.append({"path": f"{section}.{i}", "kind": "added", "label": f"{name} ({section})", "before": "",
+                            "after": name})
                 continue
             if section in PAIRS:
                 if item[1] != was[1]:
                     out.append({"path": f"{section}.{i}.1", "kind": "text", "label": name,
-                                "before": ", ".join(was[1]) if isinstance(was[1], list) else was[1]})
+                                "before": _plain(was[1], ", "), "after": _plain(item[1], ", ")})
                 continue
             for field, value in item.items():
                 if field in ("_key", "hidden", "modules") or value == was.get(field):
                     continue
                 out.append({"path": f"{section}.{i}.{field}", "kind": "text", "label": f"{name}: {field}",
-                            "before": was.get(field) or ""})
+                            "before": _plain(was.get(field)), "after": _plain(value)})
+    for change in out:
+        change.setdefault("id", change["path"])
     return out
+
+
+def revert(base: dict, variant: dict, undone) -> dict:
+    """A copy of `variant` with the changes whose ids are in `undone` put back as `base` has them.
+
+    This is what Undo on the application page sends: the change stays listed (from the variant), and the
+    CV printed and uploaded holds the base's wording, entry or order instead.
+    """
+    undone = set(undone or [])
+    out = copy.deepcopy(variant)
+    drop: dict[str, set[int]] = {}
+    restore: dict[str, list] = {}
+    reorder: set[str] = set()
+    for c in changes(base, variant):
+        if c["id"] not in undone:
+            continue
+        section, *rest = c["path"].split(".")
+        if c["kind"] == "order":
+            reorder.add(section)
+        elif c["kind"] == "left out":
+            was = next((x for x in _shown(base.get(section)) if _name(section, x) == c["before"]), None)
+            if was is not None:
+                restore.setdefault(section, []).append(copy.deepcopy(was))
+        elif c["kind"] == "added":
+            drop.setdefault(section, set()).add(int(rest[0]))
+        elif not rest:
+            out[section] = copy.deepcopy(base.get(section))
+        else:
+            item = out[section][int(rest[0])]
+            name = _name(section, item)
+            was = _find(base, section, name) if section in PAIRS else next(
+                (x for x in _shown(base.get(section)) if _name(section, x) == name), None)
+            if was is None:
+                continue
+            if section in PAIRS:
+                out[section][int(rest[0])] = [item[0], copy.deepcopy(was[1])]
+            elif rest[1] in was:
+                item[rest[1]] = copy.deepcopy(was[rest[1]])
+            else:
+                item.pop(rest[1], None)
+    for section, gone in drop.items():
+        out[section] = [x for i, x in enumerate(out[section]) if i not in gone]
+    for section, items in restore.items():
+        out[section] = [*(out.get(section) or []), *items]
+    for section in reorder:
+        order = [_name(section, x) for x in _shown(base.get(section))]
+        out[section] = sorted(out.get(section) or [], key=lambda x: order.index(_name(section, x))
+                              if _name(section, x) in order else len(order))
+    return out
+
+
+def _plain(value, sep: str = "\n") -> str:
+    """A CV field as text to show: a list of lines joined, anything else as written."""
+    if isinstance(value, list):
+        return sep.join(_plain(v, sep) for v in value)
+    return "" if value is None else str(value)
 
 
 def _words(text: str) -> set[str]:

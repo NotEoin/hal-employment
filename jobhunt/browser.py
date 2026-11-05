@@ -25,6 +25,7 @@ import collections
 import concurrent.futures
 import contextlib
 import difflib
+import importlib.util
 import json
 import os
 import queue
@@ -64,6 +65,8 @@ STALE_JS = "() => {\n" + PAGE_JS + "\nreturn halStale();\n}"
 PAGE_TEXT_JS = "() => {\n" + PAGE_JS + "\nreturn halText();\n}"
 
 RESULTS_JS = "() => {\n" + PAGE_JS + "\nreturn halResults();\n}"
+POPUP_JS = "() => {\n" + PAGE_JS + "\nreturn halPopup();\n}"
+POPUP_GONE_MS = 400  # a closed pop-up fades out before the page under it takes clicks
 # Apply controls on an advert. Ones that hand the application to another account are left alone.
 APPLY_BUTTON = re.compile(
     r"^\s*((easy|quick|1[- ]click) )?apply\b(?!.{0,40}\b(linkedin|indeed|seek|xing|filters?|later|coupon|code)\b).{0,40}$|"
@@ -77,11 +80,31 @@ SUCCESS = re.compile(r"thank(s| you)[^.]{0,60}(appl|submi|interest)|"
                      r"your application is (in|on its way)", re.I)
 APPLIED = re.compile(r"you(('ve| have) already| have|'ve)? applied (for|to) this (job|role|position|vacancy)", re.I)
 SIGN_IN = re.compile(r"\b(sign|log)[ -]?in\b|\blogin\b|\bregister\b|create (an |your )?account", re.I)
-SIGN_OUT = re.compile(r"^\s*(sign|log) ?out\s*$", re.I)
+# The host of an account service, which may say nothing of signing in on the page: account.ycombinator.com asked
+# only for an email address, and Hal typed it in and pressed on (testers, 2026-11-05).
+SIGN_IN_HOST = re.compile(r"^(accounts?|login|auth|signin|sso|id|identity)\.", re.I)
+SIGN_IN_TEXT = 600   # characters of the page's opening words that may say it is for signing in
+# What a sign-in page says in its opening words; a bare "login" link in a site's menu does not count (every Hacker
+# News page starts "... submit login", and each job post there was taken for a sign-in, testers 2026-11-05).
+SIGN_IN_WORDS = re.compile(r"\b(sign|log)[ -]?in (to|with)\b|forgot (your )?password|don'?t have an account|"
+                           r"create (an |your )?account|welcome back", re.I)
+REGISTER_FIELDS = 5  # questions beyond which a page with a password box is an application, not an account page
+# A session on the page's site: "Sign out", or an account's own pages, which Totaljobs shows in place of it; its
+# plain Apply then sent the saved CV at once (testers, 2026-11-05).
+SIGN_OUT = re.compile(r"^\s*((sign|log) ?out|my (account|profile|jobs|applications|dashboard))\s*$", re.I)
 CLOSED = re.compile(r"(no longer|not) (available|accepting applications|open|exists?|active|live)|not available anymore|"
                     r"(job|position|vacancy|role|posting|advert|page) (you requested )?(has |was |is )?"
                     r"(been )?(filled|expired|closed|removed|not found|unavailable)|"
-                    r"(job|position|vacancy|page) not found|applications? (are|is|have|has) (now )?closed|\b404\b", re.I)
+                    r"(job|position|vacancy|page) not found|applications? (are|is|have|has) (now )?closed|\b404\b|"
+                    # "Applications Closed", "Applications for this position have now closed" (ProductionBase,
+                    # testers 2026-11-04)
+                    r"\bapplications? closed\b|applications? for this (position|role|job|vacancy) (have|has) "
+                    r"(now )?closed|"
+                    # "This listing went offline", "the listing that you're looking for is expired" (Totaljobs,
+                    # testers 2026-11-05)
+                    r"(listing|job|advert|vacancy|posting) went offline|"
+                    r"(listing|job|advert|vacancy|posting)( that you'?re looking for)? (is|has) (now )?(expired|gone)",
+                    re.I)
 BOT_CHECK = re.compile(r"just a moment|verify (that )?you are (a )?human|human verification|are you a robot|"
                        r"attention required|pardon our interruption|checking your browser|security check", re.I)
 # Pages that refuse the browser outright, with no check to pass.
@@ -145,6 +168,17 @@ BLOCK_JS = """() => {
   return true;
 }"""
 UNBLOCK_JS = "() => window.__halUnblock ? window.__halUnblock() : []"
+
+
+NO_PLAYWRIGHT = ("Hal's own window needs the browser part, which is not installed here. Install it again with "
+                 "the browser option, or let the browser helper fill in forms in your own browser.")
+
+
+class BrowserMissing(RuntimeError):
+    """Playwright is not installed, so Hal's own browser window cannot open."""
+
+    def __init__(self) -> None:
+        super().__init__(NO_PLAYWRIGHT)
 
 
 class TabGone(RuntimeError):
@@ -290,7 +324,13 @@ class Browser:
         self.pages: dict[str, list] = {}
 
     def call(self, fn, *args, timeout: float = 600):
-        """Runs fn(browser, *args) on the browser thread and returns its result."""
+        """Runs fn(browser, *args) on the browser thread and returns its result.
+
+        Raises `BrowserMissing` at once without Playwright: the thread would die on its import and leave the
+        caller waiting out `timeout` (the WSL2 CI job, installed without the browser extra, 2026-11-05).
+        """
+        if importlib.util.find_spec("playwright") is None:
+            raise BrowserMissing
         if self._thread is None or not self._thread.is_alive():
             self._thread = threading.Thread(target=self._run, name="browser", daemon=True)
             self._thread.start()
@@ -392,6 +432,40 @@ class Browser:
 BROWSER = Browser()
 
 
+# A job board's own job search and its job-alert sign-up sit beside the advert, and are never the application:
+# Adzuna's "What?", "Where?", "Salaries" and "Receive similar jobs by email" were filled as the form (testers,
+# 2026-11-04). The search words match whole labels only, so a form's own "Where are you based?" stays.
+# A job board's own search: "Job title, skill or company" and "Town, city or postcode" on Totaljobs, and a box known
+# only by its name "q", as Hacker News's is (testers, 2026-11-05).
+SITE_SEARCH = re.compile(r"^\s*((what|where)\s*\??|keywords?|q|query|search( for)?( jobs)?|"
+                         r"job title,? (skills?|keywords?|company)\b.*|(town|city)[ ,/]*((town|city)[ ,/]*)?or "
+                         r"(post|zip) ?code|salaries|distance|radius|sort( by)?|date posted)\s*:?\s*$", re.I)
+JOB_ALERT = re.compile(r"job alerts?|similar (new )?(jobs|roles|vacancies)|jobs like this|newsletter|"
+                       r"(send|email) me (new |similar |more )?(jobs|roles|vacancies)|new jobs by email", re.I)
+
+
+# A site's own comment box, known only as "text" or "comment": Hacker News shows one under every post to a signed-in
+# reader, and Hal typed an application answer into it, one press from being posted (testers, 2026-11-05).
+COMMENT_BOX = re.compile(r"^\s*(text|comments?|reply|(add|leave|write|post) a (comment|reply)|your (comment|reply))"
+                         r"\s*:?\s*$", re.I)
+
+
+def not_the_application(field: dict) -> bool:
+    """True for a box that belongs to the site rather than the application: its job search, job alerts or
+    comment box, by its words, or by where it sits on the page (`site_box`, from page.js)."""
+    if field.get("site_box"):
+        return True
+    label = field.get("label") or ""
+    if field.get("kind") == "textarea" and COMMENT_BOX.search(label):
+        return True
+    return bool(SITE_SEARCH.search(label) or JOB_ALERT.search(f"{label} {field.get('help') or ''}"))
+
+
+def application_fields(fields: list[dict]) -> list[dict]:
+    """The fields of a page that could be the application's, without the site's search and job-alert boxes."""
+    return [f for f in fields if not not_the_application(f)]
+
+
 def _is_form(fields: list[dict]) -> bool:
     """True when the fields look like an application form rather than a search box or banner."""
     if any(f["kind"] == "file" for f in fields):
@@ -430,7 +504,21 @@ def banner_words(notes) -> tuple[list, object]:
 
 
 def _dismiss_banners(page, notes=None) -> None:
-    """Closes a cookie banner, refusing optional cookies where it can; never presses a button inside a form."""
+    """Closes a cookie banner, refusing optional cookies where it can, then a job-alert or similar pop-up
+    (`halPopup` in page.js); never presses a button inside a form."""
+    _cookie_banner(page, notes)
+    from .core import settings
+
+    if not settings.get("applying.close_popups"):
+        return
+    try:
+        if page.main_frame.evaluate(POPUP_JS):
+            page.wait_for_timeout(POPUP_GONE_MS)
+    except Exception:  # the page moved on mid-look; the next read looks again
+        pass
+
+
+def _cookie_banner(page, notes=None) -> None:
     patterns, never = banner_words(notes)
     for pattern in patterns:
         try:
@@ -503,7 +591,7 @@ def _extract(page) -> tuple[object, list[dict]]:
     best = (page.main_frame, [])
     for frame in _frames(page):
         try:
-            fields = frame.evaluate(EXTRACT_JS)
+            fields = application_fields(frame.evaluate(EXTRACT_JS))
         except Exception:  # a frame that has gone, or that the site forbids reading
             if frame is page.main_frame:
                 raise
@@ -568,8 +656,11 @@ def _close_list(page, box) -> None:
     only the last resort, for a list in neither a form nor a dialog.
     """
     try:
-        box.evaluate("e => e.blur()")
-        if page.locator("[data-hal-opt]:visible").count() and not box.evaluate(PRESS_AROUND_JS):
+        # A box without focus never loses it, so its list stays open (react-select's, testers 2026-11-05).
+        box.evaluate("e => { if (document.activeElement !== e) e.focus(); e.blur(); }")
+        # A list showing "No results" has no options but is still open, and may hide the rest of the form (Ashby's).
+        still_open = box.get_attribute("aria-expanded") == "true"
+        if (page.locator("[data-hal-opt]:visible").count() or still_open) and not box.evaluate(PRESS_AROUND_JS):
             box.press("Escape")
     except Exception:  # nothing was open
         pass
@@ -621,18 +712,26 @@ def _needs(survey: dict, fields: list[dict]) -> str:
     form = _is_form(fields)
     if BOT_CHECK.search(survey["title"]) or (not form and BOT_CHECK.search(survey["text"][:400])):
         return "check"
+    if only_code_boxes(fields, survey["text"][:3000]):
+        return "code"
     if survey["password"]:
         # A registration form that also asks the usual questions is filled in, apart from its password.
-        return "" if form and len(fields) > 5 else "sign-in"
+        return "" if form and len(fields) > REGISTER_FIELDS else "sign-in"
     if not form and 0 < len(fields) <= 3 and CODE_WALL.search(survey["text"][:3000]):
         return "code"
     if form:
         return ""
     # Sign-in pages that ask for the email address first show no password box yet.
-    if 0 < len(fields) <= 2 and _apply_control(survey) is None \
-            and SIGN_IN.search(f"{head} {urlparse(survey['url']).path}"):
+    if 0 < len(fields) <= 2 and _apply_control(survey) is None and sign_in_page(head, survey["url"], survey["text"]):
         return "sign-in"
     return ""
+
+
+def sign_in_page(head: str, url: str, text: str) -> bool:
+    """True when a page's title and headings (`head`), its address or its opening words say it is for signing in."""
+    where = urlparse(url)
+    return bool(SIGN_IN_HOST.search(where.hostname or "") or SIGN_IN.search(f"{head} {where.path}")
+                or SIGN_IN_WORDS.search(text[:SIGN_IN_TEXT]))
 
 
 def _signed_in(survey: dict) -> bool:
@@ -642,7 +741,8 @@ def _signed_in(survey: dict) -> bool:
 
 def _apply_control(survey: dict) -> dict | None:
     """Returns the page's Apply link or button, preferring one in the advert over one in a menu."""
-    found = [c for c in survey["controls"] if APPLY_BUTTON.search(c["name"])]
+    # Never one in the page's footer, such as Hacker News's "Apply to YC" (testers, 2026-11-05).
+    found = [c for c in survey["controls"] if APPLY_BUTTON.search(c["name"]) and not c.get("inFooter")]
     found.sort(key=lambda c: (c["inNav"], not any(h in c["href"] for h in ATS_FRAME)))
     return found[0] if found else None
 
@@ -681,10 +781,20 @@ def _buttons(page, frame) -> tuple[dict | None, dict | None, object]:
     return None, None, frame
 
 
+CLOSED_TEXT = 600   # characters at the top of a page where a board's "no longer available" banner sits
+
+
 def _closed(survey: dict, status: int | None) -> bool:
+    """True when the advert has been taken down: said in its title or headings, by a 404 or 410, or in a
+    banner at the top of a page that has no Apply control. Adzuna says "Unfortunately, this job is no longer
+    available" in a banner, not a heading, and Hal reported no form instead (testers, 2026-11-04)."""
     head = f"{survey['title']} {' '.join(survey['headings'][:4])}"
-    return CLOSED.search(head) is not None or status in (404, 410) \
-        or ("greenhouse.io" in survey["url"] and "error=true" in survey["url"])
+    if CLOSED.search(head) is not None or status in (404, 410) \
+            or ("greenhouse.io" in survey["url"] and "error=true" in survey["url"]):
+        return True
+    has_apply = survey["apply"] if "apply" in survey else _apply_control({"controls": survey.get("controls", [])}) \
+        is not None
+    return not has_apply and CLOSED.search(survey.get("text", "")[:CLOSED_TEXT]) is not None
 
 
 def _report(page, frame, fields: list[dict], survey: dict, needs: str, pressed: bool,
@@ -1193,9 +1303,22 @@ CODE_FIELD = re.compile(r"\bcode\b|\botp\b|one[- ]time|passcode|verification", r
 NOT_CODE_TYPES = ("email", "date", "url", "search")
 
 
+CODE_DIGIT_BOXES = 4   # a code split into one box a digit has at least this many boxes
+
+
+def only_code_boxes(fields: list[dict], text: str) -> bool:
+    """True when every box on the page is for an emailed code, however many there are: Oracle's six boxes, one
+    a digit, counted as a form, and Hal said "press Submit" on a page that wanted a code (testers, 2026-11-04).
+    The page must say a code was sent, or split it a digit a box; a lone "Code" box may be a discount code."""
+    if not fields or not all(f["kind"] == "text" and f.get("type") not in NOT_CODE_TYPES
+                             and CODE_FIELD.search(f.get("label") or "") for f in fields):
+        return False
+    return len(fields) >= CODE_DIGIT_BOXES or CODE_WALL.search(text or "") is not None
+
+
 def code_boxes(fields: list[dict], text: str) -> list[str]:
     """The tags of the empty boxes a page asks the emailed code in, or [] when it asks for none."""
-    if not CODE_WALL.search(text or ""):
+    if not CODE_WALL.search(text or "") and not only_code_boxes(fields, text):
         return []
     return [f["hid"] for f in fields if f["kind"] == "text" and not f.get("current")
             and f.get("type") not in NOT_CODE_TYPES and CODE_FIELD.search(f.get("label") or "")]

@@ -91,10 +91,7 @@ MOCK_GROUPS = (
     ("cvdocs", "CV and documents", ("How your CV is made", "Adjust your CV for each job", "Spelling",
                                     "File names employers see", "Cover letter tone", "Cover letter length",
                                     "Sign-off", "Where documents are saved")),
-    ("applying", "Applying", ("Browser Hal fills forms in", "Open forms in",
-                              "Press Next on pages with nothing for you to check",
-                              "Wait for you to sign in or pass a check for up to", "Notes about job sites",
-                              "Press Submit for you")),
+    ("applying", "Applying", ("Browser Hal fills forms in", "Notes about job sites", "Press Submit for you")),
     ("email", "Email", ("Email account", "Address", "App password", "Turn interview and test emails into to-dos",
                         "Read sign-in codes that job sites email you")),
     ("notify", "Notifications", ("Pop-ups on this computer", "Alerts on your phone",
@@ -114,7 +111,8 @@ MOCK_GROUPS = (
                               "Give up on a slow page after")),
 )
 # Groups the owner's answers add to the design: after Updates, and last.
-ADDED_GROUPS = {"remote": "updates", "addon": "advanced"}
+# Groups added after the mock, each after the one named; Preferences took three rows from Applying (2026-11-04).
+ADDED_GROUPS = {"remote": "updates", "addon": "advanced", "prefs": "goal"}
 # Ranges whose ends the Settings page shows: key -> (min, max, default).
 MOCK_RANGES = {"goal.max_distance": (5, 60), "scoring.w.first_place": (0, 20), "scoring.w.role_title": (0, 20),
                "scoring.w.fresh": (0, 10), "scoring.w.pay_under": (-30, 0), "scoring.w.years_required": (-40, 0),
@@ -177,6 +175,21 @@ class Catalogue(unittest.TestCase):
         self.assertEqual((s.kind, s.default), ("locked", "Never"))
         with self.assertRaises(registry.SettingError):
             parse.check(s, "Always")
+
+    def test_preferences_gather_how_hal_behaves_and_keep_each_key(self):
+        """Testers asked for one place for the behaviour choices (2026-11-04); saved values keep their keys."""
+        from jobhunt.core.settings import registry
+
+        self.assertEqual([g[0] for g in registry.GROUPS][:3], ["you", "goal", "prefs"])
+        prefs = sorted((s.order, k) for k, s in REGISTRY.items() if s.group == "prefs")
+        self.assertEqual([k for _, k in prefs],
+                         ["applying.window", "applying.bring_forward", "applying.close_popups",
+                          "applying.keep_site_answers", "applying.press_next", "applying.wait_minutes",
+                          "cvdocs.check_open", "updates.reload_pages"])
+        # every one starts as Hal behaved before it could be chosen
+        self.assertTrue(all(REGISTRY[k].default is True for k in ("applying.bring_forward", "applying.close_popups",
+                                                                 "applying.keep_site_answers", "cvdocs.check_open",
+                                                                 "updates.reload_pages")))
 
     def test_forms_can_open_in_this_window(self):
         """The choice waited for the helper to bring a form's tab forward before reading it. Proved by

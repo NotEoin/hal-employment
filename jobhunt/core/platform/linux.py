@@ -182,13 +182,12 @@ class LinuxPlatform:
         """
         self._start(browser.argv(NEW_WINDOW))
 
-    def open_app_window(self, url: str) -> None:
-        """The first Chromium-family browser as an app window, else a tab in the default browser."""
-        chromium = next((b for b in self.browsers() if b.supported), None)
-        if chromium is None:
-            webbrowser.open(url)
+    def open_in_default_browser(self, url: str) -> None:
+        """Opens `url` in the desktop's default browser, as a tab beside the person's own."""
+        if self._which("xdg-open"):
+            self._start(["xdg-open", url])
             return
-        self._start(chromium.argv(f"--app={url}"))
+        webbrowser.open(url)
 
     # ------------------------------------------------------------------------------------- children
 

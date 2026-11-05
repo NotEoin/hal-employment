@@ -1,5 +1,5 @@
 /* Keyboard shortcuts: Ctrl K (search or jump), ? (the shortcuts list) and Esc are the app's own;
-   J, K, A, S, N, [ and ] belong to whichever page registers them with useKeys.
+   J, K, A, Q, S, N, [ and ] belong to whichever page registers them with useKeys.
 
    No single-key shortcut fires while the person is typing or while a dialog is open, so a letter typed
    into a box never acts on a job. */
@@ -9,10 +9,10 @@ import { store, openDialog, closeDialog } from "./store.js";
 /** The keys pages may claim, with what each does (the "Help and shortcuts" list). */
 export const SHORTCUTS = [
   ["Ctrl K", "Search or jump anywhere"], ["?", "Show these shortcuts"], ["J and K", "Next and previous job"],
-  ["A", "Apply with Hal"], ["S", "Save the job"], ["N", "Not for me"], ["[ and ]", "Previous and next application"],
+  ["A", "Apply with Hal"], ["Q", "Add the job to the queue"], ["S", "Save the job"], ["N", "Not for me"], ["[ and ]", "Previous and next application"],
   ["Esc", "Close a window"],
 ];
-const PAGE_KEYS = new Set(["j", "k", "a", "s", "n", "[", "]"]);
+const PAGE_KEYS = new Set(["j", "k", "a", "q", "s", "n", "[", "]"]);
 const pageHandlers = [];  // a stack: the page shown last wins
 
 /** True while focus is in a box the person types into. */

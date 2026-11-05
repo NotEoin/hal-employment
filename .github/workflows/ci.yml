@@ -49,14 +49,14 @@ jobs:
         run: uv run python -m unittest discover tests -v 2>&1 | tee tests.log
         env: { HAL_TEST_MODE: "1", HAL_TEST_BROWSER: "1", PYTHONUNBUFFERED: "1" }
       # The Windows-only checks: the install file's PowerShell parses under Windows PowerShell 5.1,
-      # CVs print with Microsoft Edge, and the platform layer finds browsers and opens the window with Edge.
+      # CVs print with Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser.
       # unittest prints a test's docstring on the line after its name, so the result may be one line down, and
       # Python on Windows ends the lines with CR LF.
       - if: runner.os == 'Windows'
         name: The Windows-only checks ran and passed
         shell: bash
         run: |
-          for t in test_the_powershell_part_parses test_accented_names_print_in_every_look test_the_app_window_is_edge_on_windows test_browsers_are_found_from_app_paths_and_install_folders; do
+          for t in test_the_powershell_part_parses test_accented_names_print_in_every_look test_hal_opens_in_the_default_browser_on_windows_not_an_edge_app_window test_browsers_are_found_from_app_paths_and_install_folders; do
             awk -v t="$t" '{ sub(/\r$/, "") }
               found { ok = /\.\.\. ok$/; exit }
               index($0, t " (") == 1 { if (/ \.\.\. /) { ok = /\.\.\. ok$/; exit } found = 1 }
@@ -93,7 +93,10 @@ jobs:
         # /mnt/d has no Unix permissions, and the suite checks file modes
         shell: wsl-bash {0}
         run: |
-          src="$(wslpath -u "$GITHUB_WORKSPACE" 2>/dev/null || printf %s "$GITHUB_WORKSPACE")"
+          # WSLENV's /p already makes the path a WSL one (/mnt/d/a/...), and wslpath on that made
+          # /mnt/d/mnt/d/a/... (run 41633262148); it converts only a path that arrived as Windows wrote it
+          src="$GITHUB_WORKSPACE"
+          [ -d "$src" ] || src="$(wslpath -u "$src")"
           rm -rf "$HOME/hal-employment"
           cp -r "$src" "$HOME/hal-employment"
 
@@ -106,7 +109,9 @@ jobs:
       - name: Test
         shell: wsl-bash {0}
         run: |
-          export PATH="$HOME/.local/bin:$PATH" UV_PYTHON_DOWNLOADS=never
+          # Ubuntu 24.04's own Python is 3.12; .python-version's 3.13 is not there and downloads are off
+          # (run 41959197666)
+          export PATH="$HOME/.local/bin:$PATH" UV_PYTHON_DOWNLOADS=never UV_PYTHON=3.12
           cd "$HOME/hal-employment"
           uv sync --frozen
           HAL_TEST_MODE=1 PYTHONUNBUFFERED=1 uv run python -m unittest discover tests

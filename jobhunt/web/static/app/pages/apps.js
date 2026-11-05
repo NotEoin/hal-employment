@@ -1,18 +1,49 @@
 /* The Applications board: every application by step, Board or List, and the Closed list.
    The columns and their help words come from GET /applications, so the board and the server never
-   disagree about where an application stands. */
+   disagree about where an application stands. When two or more applications wait for approval, "Approve
+   all" approves their documents together and Hal starts every form; it still never presses Submit. "Make the
+   missing documents" starts Hal again on every application whose documents stopped before they were made. */
 import { html, cx, useState } from "../core/html.js";
-import { useApi } from "../core/store.js";
+import { post } from "../core/api.js";
+import { useApi, toast, invalidate } from "../core/store.js";
 import { go, route } from "../core/router.js";
+import { ask } from "../ui/dialog.js";
 import { Head, Seg, Empty } from "../ui/controls.js";
 
 const REFRESH_ON = [ev => ev.type === "action" || ev.type === "activity"];
+const approvable = c => c.items.filter(a => a.approvable);
+const remakeable = c => c.items.filter(a => a.remakeable);
 
 /** One card on the board. */
 function Card({ a }) {
   return html`<button type="button" class="acard" onClick=${() => go(route("app", a.id))}><span class="org">${a.org}</span>
     <b>${a.title}</b><span class=${cx("chip w", a.tone)}>${a.tone === "hal" && html`<span class="eye sm busy" aria-hidden="true"></span>`}${a.next}</span>
     ${a.note && html`<span class="small sub">${a.note}</span>`}</button>`;
+}
+
+/** Approves every application waiting for approval, after one question. */
+async function approveAll(items) {
+  const yes = await ask({ title: "Approve " + items.length + " applications?", icon: "check", yes: "Approve all",
+    text: "Hal fills in each employer's form with these CVs and letters, each in its own tab. It never presses " +
+      "Submit: every form waits for you to check it and send it yourself." });
+  if (!yes) return;
+  try {
+    const r = await post("/applications/approve-ready", { ids: items.map(a => a.id) });
+    invalidate("/applications*");
+    const n = Object.keys(r.started || {}).length;
+    toast("Approved " + n + (n === 1 ? " application" : " applications") + ". Hal is opening the forms."
+      + ((r.skipped || []).length ? " " + r.skipped.length + " changed meanwhile and were left for you." : ""));
+  } catch (err) { toast(err.message); }
+}
+
+/** Starts Hal writing again every set of documents that stopped before it was made. */
+async function remakeAll(items) {
+  try {
+    const r = await post("/applications/remake-missing", { ids: items.map(a => a.id) });
+    invalidate("/applications*");
+    const n = Object.keys(r.started || {}).length;
+    toast("Hal is writing the documents for " + n + (n === 1 ? " application" : " applications") + " again.");
+  } catch (err) { toast(err.message); }
 }
 
 /** The Applications page. */
@@ -29,6 +60,10 @@ export function Apps() {
     ${view === "Board" ? html`<div class="board">${cols.map(c => html`<section class="colm" aria-label=${c.title}>
         <header><h3 class="h3">${c.title}</h3><span class="count">${c.items.length}</span></header>
         <p class="small sub" style="margin:0 4px">${c.help}</p>
+        ${approvable(c).length > 1 && html`<button type="button" class="btn primary small" style="margin:4px"
+          onClick=${() => approveAll(approvable(c))}>Approve all ${approvable(c).length}</button>`}
+        ${remakeable(c).length > 0 && html`<button type="button" class="btn small" style="margin:4px"
+          onClick=${() => remakeAll(remakeable(c))}>Make the missing documents (${remakeable(c).length})</button>`}
         ${c.items.map(a => html`<${Card} a=${a} />`)}
         ${!c.items.length && html`<p class="small sub" style="margin:8px 4px">Nothing here yet.</p>`}</section>`)}</div>`
       : html`<div class="card">${all.map(a => html`<div class="li" style="align-items:center"><div class="grow"><b>${a.title}</b>

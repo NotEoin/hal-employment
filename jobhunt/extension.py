@@ -35,6 +35,7 @@ from .browser import (
     FORM_FRAME,
     MAX_PRESSES,
     NEXT_BUTTON,
+    REGISTER_FIELDS,
     SIGN_IN,
     SIGN_OUT,
     SUBMIT_BUTTON,
@@ -45,8 +46,10 @@ from .browser import (
     _site,
     code_boxes,
     note_signed_in,
+    only_code_boxes,
     signed_in_at,
 )
+from .core import settings
 
 POLL_WAIT = 20  # seconds a poll is held open; the browser stops a worker whose request takes 30
 PATTERNS = {"apply": APPLY_BUTTON.pattern, "next": NEXT_BUTTON.pattern, "submit": SUBMIT_BUTTON.pattern,
@@ -57,6 +60,7 @@ FILL_WAIT = 180  # seconds a fill of a few fields may take: uploads and searched
 FILL_PER_FIELD_S = 20
 NOT_CONNECTED = "Open Hal in the browser that has the helper"
 CONNECTED_S = 2 * POLL_WAIT  # a helper in touch this recently is connected: it polls again as each poll ends
+READ_AGAIN_S = 2  # a pop-up's own link to the job (Adzuna's "No thanks, take me to the job") leaves the page
 
 _lock = threading.Lock()
 _queues: dict[str, queue.Queue] = {}
@@ -254,10 +258,21 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
         for what in dict.fromkeys((value or {}).get("blocked", []) if isinstance(value, dict) else []):
             guard.record(args.get("job"), (value or {}).get("url") or "", what)
         return value
-    # A tab closed between finding it and acting in it is reported by the browser in its own words.
-    if result["error"] == "gone" or result["error"].startswith("No tab with id"):
-        raise RuntimeError("the form's tab was closed; press \"Fill in the form\" to open it again")
-    raise RuntimeError(result["error"])
+    raise RuntimeError(plain_error(result["error"]))
+
+
+# The browser's words for a page swapped out while the helper reached into it, after the helper's own retry.
+FRAME_GONE = re.compile(r"frame with id \d+ was removed|no frame with id|frame was removed", re.I)
+
+
+def plain_error(error: str) -> str:
+    """A helper error in the applicant's words: the browser's own wording for a tab or page that went away
+    ("Frame with ID 0 was removed" reached the Form step as it was, testers 2026-11-05)."""
+    if error == "gone" or error.startswith("No tab with id"):
+        return "the form's tab was closed; press \"Fill in the form\" to open it again"
+    if FRAME_GONE.search(error):
+        return "the page changed while Hal was reading it; press \"Fill it in again\""
+    return error
 
 
 def reset() -> None:
@@ -281,13 +296,20 @@ def _read(job_id: str, banners: bool = True, options: bool = False, front: bool 
     never open; a look that only watches (`peek`) leaves the tabs where they are.
     """
     words, never = browser.banner_words(browser.notes_for(_last_url.get(job_id, ""), job_id))
-    facts = _ask("read", job=job_id, front=front, patterns={
+    patterns = {
         **PATTERNS, "banners": [p.pattern for p in words] if banners else None,
-        "bannersNever": never.pattern if never is not None and banners else None, "options": options})
+        "popups": banners and bool(settings.get("applying.close_popups")),
+        "bannersNever": never.pattern if never is not None and banners else None, "options": options}
+    facts = _ask("read", job=job_id, front=front, patterns=patterns)
+    if not facts and patterns["popups"]:
+        # Closing a pop-up can follow its link away mid-read; the page it leads to is read instead.
+        time.sleep(READ_AGAIN_S)
+        facts = _ask("read", job=job_id, front=front, patterns={**patterns, "popups": False})
     if not facts:
         # The page was swapped out while it was read, or is one the browser will not let a script into.
         raise RuntimeError("the job's tab could not be read; it may still be loading or be a browser error page")
     _last_url[job_id] = facts["url"]
+    facts["fields"] = browser.application_fields(facts["fields"])
     return facts
 
 
@@ -298,17 +320,22 @@ def _needs(facts: dict) -> str:
     its title, and a page that asks only for an emailed code is a code wall.
     """
     fields = facts["fields"]
+    if only_code_boxes(fields, facts["text"][:3000]):
+        return "code"
+    if facts["password"] and not (_is_form(fields) and len(fields) > REGISTER_FIELDS):
+        # An account page (email, password, confirm) is a sign-in, form or not; Adzuna's register page was filled
+        # as the form's last page (testers, 2026-11-05). A registration form that also asks the usual questions
+        # is filled in, apart from its password, as in Hal's own window.
+        return "sign-in"
     if _is_form(fields):
         return ""
     if BOT_CHECK.search(facts["title"]) or BOT_CHECK.search(facts["text"][:400]):
         return "check"
-    if facts["password"]:
-        return "sign-in"
     if 0 < len(fields) <= 3 and CODE_WALL.search(facts["text"][:3000]):
         return "code"
     # Sign-in pages that ask for the email address first show no password box yet.
     if 0 < len(fields) <= 2 and not facts["apply"] \
-            and SIGN_IN.search(f"{facts['title']} {urlparse(facts['url']).path}"):
+            and browser.sign_in_page(f"{facts['title']} {facts['headings']}", facts["url"], facts["text"]):
         return "sign-in"
     return ""
 
@@ -319,7 +346,8 @@ def _report(facts: dict, needs: str, pressed: bool) -> dict:
     return {"url": facts["url"], "title": facts["title"], "fields": [] if needs else facts["fields"],
             "needs": needs, "sent": pressed and SUCCESS.search(text) is not None, "site": _site(facts["url"]),
             "closed": not form and _closed({"title": facts["title"], "headings": [facts["headings"]],
-                                            "url": facts["url"]}, None),
+                                            "url": facts["url"], "text": facts["text"],
+                                            "apply": facts.get("apply", False)}, None),
             "blocked": not form and not needs and BLOCKED.search(f"{facts['title']} {facts['text'][:300]}") is not None,
             "applied": APPLIED.search(text) is not None, "captcha": facts["captcha"],
             "alerts": facts.get("alerts", []), "next": form and facts["next"] and not facts["submit"],
@@ -380,9 +408,9 @@ def _advance(job_id: str, pressed: bool = False) -> dict:
 def open_form(job_id: str, url: str) -> dict:
     """Opens the application form in the applicant's own tab."""
     _last_url[job_id] = url
-    from .core import settings
 
-    _ask("open", timeout=120, job=job_id, url=url, window=settings.get("applying.window"))
+    _ask("open", timeout=120, job=job_id, url=url, window=settings.get("applying.window"),
+         front=bool(settings.get("applying.bring_forward")))
     return _advance(job_id)
 
 
@@ -436,7 +464,8 @@ def fill(job_id: str, fields: list[dict], shot) -> dict:
     """Enters the approved values, after any `field_transform` note; there is no picture, since the form is in
     the applicant's own tab."""
     fields, trace = browser.with_notes(job_id, _last_url.get(job_id, ""), fields)
-    wanted = [{k: f.get(k) for k in ("hid", "kind", "value", "options")} for f in fields
+    # `typeable` lets the helper type into a list that offers its options only once you type (Ashby's places).
+    wanted = [{k: f.get(k) for k in ("hid", "kind", "value", "options", "typeable")} for f in fields
               if f.get("value") not in (None, "", []) and not f.get("skip")]
     paths = [f["value"] for f in wanted if f["kind"] == "file"]
     out = _ask("fill", timeout=max(FILL_WAIT, FILL_PER_FIELD_S * len(wanted)), job=job_id, fields=wanted, paths=paths)

@@ -10,6 +10,7 @@ from ..web.router import BadRequest, NotHere, Request, route
 from . import actions, queries
 
 PREFIX = "/api/v2/applications"
+NOW = 0   # runner priority for a button the person just pressed on one application and is watching
 TAB_CLOSED = "The form's tab is closed. Press \"Fill it in again\" to open it."
 
 
@@ -31,10 +32,51 @@ def _id(req: Request) -> str:
     return queries.resolve(req.con, req.params["app_id"])
 
 
+def _for_each(req: Request, flag: str, missing: str, start) -> dict:
+    """Runs `start(job_id)` for each application in the body's `ids` whose board card has `flag` set.
+
+    Returns {started: {job id: action id}, skipped: [the ids left out]}; a card that changed since the page
+    drew it is skipped rather than acted on.
+    """
+    ids = _body(req).get("ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+        raise BadRequest(missing, field="ids")
+    marked = {c["id"] for col in queries.board(req.con)["columns"] for c in col["items"] if c.get(flag)}
+    started, skipped = {}, []
+    for ref in ids:
+        job_id = queries.resolve(req.con, ref)
+        if job_id in marked:
+            started[job_id] = start(job_id)
+        else:
+            skipped.append(ref)
+    return {"started": started, "skipped": skipped}
+
+
 @route("GET", PREFIX)
 def board(req: Request) -> dict:
     """The board's columns and the Closed list."""
     return queries.board(req.con)
+
+
+@route("POST", PREFIX + "/approve-ready")
+def approve_ready(req: Request) -> dict:
+    """Approves the documents of every application named in `ids` and starts filling each form.
+
+    Only applications the board shows as ready to approve are taken; any other id is left out and listed.
+    """
+    return _for_each(req, "approvable", "Send the applications to approve.",
+                     lambda job_id: actions.approve_documents(req.con, job_id, {}, **_who(req)))
+
+
+@route("POST", PREFIX + "/remake-missing")
+def remake_missing(req: Request) -> dict:
+    """Starts Hal writing the documents again for every application named in `ids` whose documents stopped.
+
+    A restart or a failure left queued jobs under Getting ready with no documents (testers, 2026-11-04). Only
+    applications the board shows as `remakeable` are taken; any other id is left out and listed.
+    """
+    return _for_each(req, "remakeable", "Send the applications whose documents to make.",
+                     lambda job_id: actions.start("docs.prepare", job_id, **_who(req)))
 
 
 @route("GET", PREFIX + "/{app_id}")
@@ -47,7 +89,7 @@ def application(req: Request) -> dict:
 def approve(req: Request) -> dict:
     """Approve and fill in the form."""
     who = _who(req)
-    return {"action_id": actions.approve_documents(req.con, _id(req), _body(req), **who)}
+    return {"action_id": actions.approve_documents(req.con, _id(req), _body(req), **who, priority=NOW)}
 
 
 @route("PUT", PREFIX + "/{app_id}/documents")
@@ -73,11 +115,22 @@ def redo(req: Request) -> dict:
     return {"action_id": actions.start("docs.prepare", _id(req), **_who(req))}
 
 
+@route("POST", PREFIX + "/{app_id}/documents/reopen")
+def reopen(req: Request) -> dict:
+    """Change the documents: back to the Documents step, to approve them again."""
+    try:
+        actions.reopen_documents(req.con, _id(req))
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    return {"ok": True}
+
+
 @route("POST", PREFIX + "/{app_id}/form/fill")
 def fill(req: Request) -> dict:
-    """Fill it in again."""
-    fresh = bool(_body(req).get("fresh"))
-    return {"action_id": actions.start("apply.fill", _id(req), params={"fresh": fresh}, **_who(req))}
+    """Fill it in again: from the advert (`fresh`), or from the page the job's tab shows now (`here`)."""
+    body = _body(req)
+    params = {"fresh": bool(body.get("fresh")), "here": bool(body.get("here"))}
+    return {"action_id": actions.start("apply.fill", _id(req), params=params, **_who(req), priority=NOW)}
 
 
 @route("POST", PREFIX + "/{app_id}/form/edits")

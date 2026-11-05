@@ -157,6 +157,7 @@ class Weights:
     interests: tuple[str, ...]
     skills: tuple[tuple[str, int], ...]
     kinds: tuple[str, ...] = field(default=())
+    off_field: tuple[str, ...] = field(default=())
 
     def __getitem__(self, name: str) -> int:
         return int(self.w.get(name, 0))
@@ -220,7 +221,8 @@ def weights_from(preset_id: str, changed: dict | None = None) -> Weights:
         skill_cap=int(changed.get("scoring.skill_cap", raw.get("skill_cap", 0))),
         interest_cap=int(changed.get("scoring.interest_cap", raw.get("interest_cap", 0))),
         roles=tuple(raw.get("roles", [])), avoid_roles=tuple(raw.get("avoid_roles", [])),
-        interests=tuple(raw.get("interests", [])), skills=parse_skills(skills), kinds=tuple(raw.get("kinds", [])))
+        interests=tuple(raw.get("interests", [])), skills=parse_skills(skills), kinds=tuple(raw.get("kinds", [])),
+        off_field=tuple(raw.get("off_field", [])))
 
 
 _memo: dict[str, Weights] = {}
@@ -247,6 +249,7 @@ class _Compiled:
     places: list[tuple[object, re.Pattern | None]]
     roles: re.Pattern | None
     avoid: re.Pattern | None
+    off_field: re.Pattern | None
     interests: list[tuple[str, re.Pattern]]
     skills: list[tuple[re.Pattern, int]]
     ok_places: re.Pattern | None
@@ -257,7 +260,8 @@ _compiled: dict[tuple, _Compiled] = {}
 
 def compiled(goal: Goal, w: Weights) -> _Compiled:
     """The goal's and preset's word lists as patterns, made once per goal and weights."""
-    key = (goal, w.preset, json.dumps(w.w, sort_keys=True), w.roles, w.avoid_roles, w.interests, w.skills)
+    key = (goal, w.preset, json.dumps(w.w, sort_keys=True), w.roles, w.avoid_roles, w.off_field, w.interests,
+           w.skills)
     found = _compiled.get(key)
     if found is not None:
         return found
@@ -268,7 +272,7 @@ def compiled(goal: Goal, w: Weights) -> _Compiled:
     interests = goal.interests or w.interests
     found = _Compiled(
         places=places, roles=phrase_rx(goal.roles or w.roles),
-        avoid=phrase_rx(tuple(goal.avoid_roles) + tuple(w.avoid_roles)),
+        avoid=phrase_rx(tuple(goal.avoid_roles) + tuple(w.avoid_roles)), off_field=phrase_rx(w.off_field),
         interests=[(i, re.compile(rf"\b{re.escape(i.lower())}\b", re.I)) for i in interests if i.strip()],
         skills=[(re.compile(p, re.I), pts) for p, pts in w.skills],
         ok_places=re.compile("|".join(ok), re.I) if ok else None)
@@ -396,6 +400,9 @@ def score(job: dict, goal: Goal | None = None, weights: Weights | None = None) -
         elif avoided:
             hide("avoid_role", "filter", f"Roles you avoid: {avoided.group(0).lower()}",
                  f"role to avoid: {avoided.group(0).lower()}", avoided.group(0))
+        elif (off := c.off_field.search(title) if c.off_field is not None else None) and not wanted:
+            hide("off_field", "filter", f"Outside your field: {off.group(0).lower()}",
+                 f"outside your field: {off.group(0).lower()}", off.group(0))
         elif c.roles is not None and not w.role_filter:
             if wanted:
                 role_points = Reason("role_title", "points", w["role_title"],
@@ -612,15 +619,92 @@ def save(con, job_id: str, scored: Scored, *, goal_version: int | None = None, p
          json.dumps(elig) if elig else None, goal_version, preset, clock.iso(), job_id))
 
 
-def score_and_save(con, job: dict, goal: Goal | None = None, weights: Weights | None = None) -> int:
-    """Scores one job under the live goal, stores the result and returns the score; the caller commits."""
+def score_and_save(con, job: dict, goal: Goal | None = None, weights: Weights | None = None, *,
+                   settle: bool = True) -> int:
+    """Scores one job under the live goal, stores the result and returns the score; the caller commits.
+
+    The score returned is 0 when the job turns out to be a repost of one shown or applied for already.
+    `settle=False` leaves reposts to the caller, which settles them all at once (`rescore_all`).
+    """
     from jobhunt.find.goal import current
 
     goal = goal or current()
     w = weights or current_weights()
     scored = score(job, goal, w)
     save(con, job["id"], scored, goal_version=goal.version or None, preset=w.preset)
+    if settle and settle_reposts(con, job, goal, w) == job["id"]:
+        return 0
     return scored.score
+
+
+REPOST = "repost"
+# An application already under way, sent or saved: its reposts are never shown beside it.
+IN_HAND = ("applying", "applied", "assessment", "interview", "offer")
+
+
+def repost_key(job) -> tuple[str, str, str]:
+    """What makes two adverts one job: the employer, the title and the place, ignoring case and spacing."""
+    def flat(text):
+        return " ".join((text or "").lower().split())
+    return company_key(job["company"]), flat(job["title"]), flat(job["location"])
+
+
+def settle_reposts_of(con, job_id: str) -> None:
+    """Settles the reposts of one job under the live goal, after it was queued or saved; the caller commits."""
+    from jobhunt.find.goal import current
+
+    row = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if row is not None:
+        settle_reposts(con, dict(row), current(), current_weights())
+
+
+def settle_reposts(con, job, goal: Goal, w: Weights) -> str | None:
+    """Shows one advert of a job listed more than once and hides the rest as reposts; the caller commits.
+
+    Agencies post the same advert again each day under a new id (Reed, 2026-11-04: 11 copies of one trainee
+    role in each of two cities), and each copy was a new match. The one kept is the copy already applied
+    for or saved, else the newest listing, whose link is the likeliest still to work. Returns the id of
+    `job` when it was hidden, else None.
+    """
+    key = repost_key(job)
+    rows = con.execute("SELECT * FROM jobs WHERE lower(replace(title, ' ', '')) = ? AND active = 1 "
+                       "AND source != 'email'", (key[1].replace(" ", ""),)).fetchall()
+    group = [dict(r) for r in rows if repost_key(r) == key]
+    return job["id"] if job["id"] in _settle_group(con, group, goal, w) else None
+
+
+def settle_all_reposts(con, goal: Goal, w: Weights) -> int:
+    """Settles every job's reposts in one pass; returns how many copies are hidden. The caller commits."""
+    groups: dict[tuple, list[dict]] = {}
+    for r in con.execute("SELECT * FROM jobs WHERE active = 1 AND source != 'email'"):
+        groups.setdefault(repost_key(r), []).append(dict(r))
+    return sum(len(_settle_group(con, g, goal, w)) for g in groups.values())
+
+
+def _settle_group(con, group: list[dict], goal: Goal, w: Weights) -> set[str]:
+    """Hides all but one copy of one job (see `settle_reposts`); returns the ids hidden."""
+    from jobhunt.find.feedback import OPEN_STATUSES
+
+    if len(group) < 2:
+        return set()
+    in_hand = [r for r in group if r["status"] in IN_HAND or r["saved_at"]]
+    shown = [r for r in group if r["status"] in OPEN_STATUSES and not r["saved_at"]
+             and r["hidden_rule"] in (None, REPOST)]
+    keeper = in_hand[0] if in_hand else max(shown, key=lambda r: (r["first_seen"] or "", r["id"]), default=None)
+    hidden = set()
+    for r in shown:
+        if keeper is not None and r["id"] == keeper["id"]:
+            if r["hidden_rule"] == REPOST:   # the copy it stood behind went: show this one again
+                save(con, r["id"], score(r, goal, w), goal_version=goal.version or None, preset=w.preset)
+            continue
+        label = ("Already in your applications" if in_hand else "Listed again; Hal shows the newest listing")
+        con.execute("DELETE FROM job_reasons WHERE job_id = ? AND rule = ?", (r["id"], REPOST))
+        con.execute("""INSERT INTO job_reasons (job_id, rule, stage, points, hide, label, note, quote, data)
+                       VALUES (?, ?, 'filter', 0, 1, ?, 'repost', '', ?)""",
+                    (r["id"], REPOST, label, json.dumps({"same_as": keeper["id"]})))
+        con.execute("UPDATE jobs SET hidden_rule = ?, score = 0 WHERE id = ?", (REPOST, r["id"]))
+        hidden.add(r["id"])
+    return hidden
 
 
 def rescore_all(con, step=None, *, every: int = 500) -> int:
@@ -634,8 +718,9 @@ def rescore_all(con, step=None, *, every: int = 500) -> int:
     # applications found in email have no advert to score
     rows = con.execute("SELECT * FROM jobs WHERE source != 'email'").fetchall()
     for n, row in enumerate(rows, 1):
-        score_and_save(con, dict(row), goal, w)
+        score_and_save(con, dict(row), goal, w, settle=False)
         if step is not None and n % every == 0:
             step(n, len(rows))
+    settle_all_reposts(con, goal, w)
     con.commit()
     return len(rows)

@@ -185,6 +185,106 @@ class Answers(unittest.TestCase):
         self.assertTrue(self.propose(kind="checkbox", label="Send me the newsletter", required=False)["skip"])
         self.assertIs(self.propose(kind="checkbox", label="I agree to the privacy policy")["value"], True)
 
+    def test_the_cv_goes_in_the_first_upload_named_for_no_other_document(self):
+        """Regression (testers, 2026-11-04): an upload named "cover" made Hal think the CV's was named too, so
+        a form with "cover-letter-input", "certificate-input" and an unnamed "Eingabefeld" got no CV."""
+        uploads = [{"hid": f"h{i}", "kind": "file", "type": "file", "label": label, "required": False, "context": ""}
+                   for i, label in enumerate(("cover-letter-input", "certificate-input", "Eingabefeld"))]
+        files = {"cv": "/made/up/cv.pdf", "letter": "/made/up/letter.pdf"}
+        out = autofill.propose(self.job, uploads, {}, files)
+        self.assertEqual([f["value"] for f in out], ["/made/up/letter.pdf", None, "/made/up/cv.pdf"])
+
+    def test_a_dialling_code_is_answered_from_the_country_not_the_phone_number(self):
+        """Regression (testers, 2026-11-04): a required "Country code" list was left empty on Totaljobs."""
+        autofill.profile = lambda: {**PROFILE, "phone_code": autofill._dial_code("07700 900000", "United Kingdom")}
+        f = self.propose(kind="select", label="Country code", options=["+1", "+353", "+44", "+441"])
+        self.assertEqual((f["value"], f["source"]), ("+44", "profile: phone_code"))
+        named = self.propose(kind="select", label="Phone country code",
+                             options=["Ireland (+353)", "United Kingdom (+44)", "Guernsey (+441)"])
+        self.assertEqual(named["value"], "United Kingdom (+44)")
+        self.assertEqual(autofill._dial_code("+353 87 123 4567", "United Kingdom"), "+353")
+
+    def test_the_right_to_work_asked_with_sponsorship_is_never_answered_from_sponsorship(self):
+        """Regression (testers, 2026-11-05): "Are you legally entitled to work in the United Kingdom? Will you
+        require sponsorship now or anytime in the future?" was answered "No" from the sponsorship answer."""
+        both = self.propose(kind="radio", options=["Yes", "No"],
+                            label="Are you legally entitled to work in the United Kingdom? Will you require "
+                                  "sponsorship now or anytime in the future?")
+        self.assertEqual((both["value"], both["note"], both["why"]),
+                         (None, autofill.YOURSELF, autofill.TWO_IN_ONE_WHY))
+        self.assertTrue(autofill.two_in_one(both))
+        first = self.propose(kind="radio", options=["Yes", "No"],
+                             label="Are you authorised to work in the UK without requiring sponsorship?")
+        self.assertEqual((first["value"], first["source"]), ("Yes", "profile: right_to_work"))
+        sponsor = self.propose(kind="radio", options=["Yes", "No"],
+                               label="Will you now or in the future require sponsorship to work in the UK?")
+        self.assertEqual((sponsor["value"], sponsor["source"]), ("No", "profile: sponsorship"))
+
+    def test_optional_sign_up_boxes_alone_are_not_an_application(self):
+        news = {"kind": "checkbox", "label": "I would like to receive email communication from the site"}
+        self.assertTrue(autofill.sign_ups_only([news, {**news, "label": "Send me job alerts"}]))
+        self.assertFalse(autofill.sign_ups_only([news, {"kind": "text", "label": "Email"}]))
+        self.assertFalse(autofill.sign_ups_only([{**news, "required": True}]))
+        self.assertFalse(autofill.sign_ups_only([]))
+
+    def test_questions_only_the_applicant_can_answer_are_left_for_them(self):
+        """Regression (testers, 2026-11-05): the expected salary went into "What is your current salary?", and the
+        model said "Yes" to "Have you interviewed with Jane Street before?"."""
+        autofill.profile = lambda: {**PROFILE, "salary": "30000"}
+        for label in ("What is your current salary?", "What is your current (or most recent) salary?",
+                      "Have you interviewed with Practice Ltd before?", "Have you ever applied to us before?"):
+            f = self.propose(label=label)
+            self.assertEqual((f["value"], f["note"]), (None, autofill.YOURSELF), label)
+            self.assertIsNotNone(autofill.left_to_you(f, "Practice Ltd"), label)
+        self.assertEqual(self.propose(label="What is your desired salary?")["source"], "profile: salary")
+        self.assertIsNone(autofill.left_to_you({"label": "Have you worked with Python before?"}, "Practice Ltd"))
+
+    def test_a_high_school_or_second_subject_is_not_given_the_university_degree(self):
+        """Regression (testers, 2026-11-05): "What year did you graduate high school?" and "High School" were given
+        the university, and "Secondary Major" the degree."""
+        autofill.profile = lambda: {**PROFILE, "university": "Southbrook University", "degree": "BSc Made-up Studies"}
+        for label in ("What year did you graduate high school?", "High School", "Secondary Major"):
+            self.assertNotIn(self.propose(label=label)["source"], ("profile: university", "profile: degree",
+                                                                   "profile: grad_year"), label)
+        self.assertEqual(self.propose(label="University")["value"], "Southbrook University")
+
+    def test_a_label_asking_for_first_and_last_name_gets_the_full_name(self):
+        """Regression (testers, 2026-11-05): "Legal First and Last Name" was given only the surname."""
+        autofill.profile = lambda: {**PROFILE, "first_name": "Robin", "last_name": "Testwell",
+                                    "full_name": "Robin Testwell"}
+        for label in ("Legal First and Last Name", "First & last name"):
+            self.assertEqual(self.propose(label=label)["value"], "Robin Testwell", label)
+        self.assertEqual(self.propose(label="Last Name")["value"], "Testwell")
+
+    def test_an_optional_follow_up_to_a_different_answer_is_left_empty(self):
+        """Regression (testers, 2026-11-04): after "No" to sponsorship, the model answered "If you answered yes to
+        the above, confirm your visa" with "A"."""
+        fields = [{"hid": "h0", "kind": "radio", "label": "Do you need sponsorship?", "options": ["Yes", "No"],
+                   "required": True},
+                  {"hid": "h1", "kind": "text", "label": "If  you answered yes to the above, confirm your visa",
+                   "required": False},
+                  {"hid": "h2", "kind": "radio", "label": "Do you hold a made-up licence?", "options": ["Yes", "No"],
+                   "required": True},
+                  {"hid": "h3", "kind": "text", "label": "If yes, please give details", "required": False},
+                  {"hid": "h4", "kind": "text", "label": "If you selected other, please specify", "required": False}]
+        out = [{**f, "value": v} for f, v in zip(fields, ["No", None, "Yes", None, None], strict=True)]
+        autofill._skip_follow_ups(out)
+        self.assertEqual([f.get("skip", False) for f in out], [False, True, False, False, False])
+        self.assertEqual(out[1]["why"], autofill.FOLLOW_UP_WHY)
+
+    def test_what_the_site_already_filled_is_kept_when_hal_has_no_answer(self):
+        """Regression (testers, 2026-11-04): a code the site had set to "+44" was counted as a required
+        question Hal could not answer."""
+        fields = [{"hid": "h0", "kind": "select", "label": "Made-up list", "required": True, "value": None,
+                   "current": "Option B", "note": ""},
+                  {"hid": "h1", "kind": "radio", "label": "A private question", "required": True, "value": None,
+                   "current": "No", "note": "answer this yourself"},
+                  {"hid": "h2", "kind": "checkbox", "label": "Send me news", "value": None, "current": False,
+                   "note": ""}]
+        kept = autofill.keep_site_answers(fields)
+        self.assertEqual([(f["value"], f.get("source")) for f in kept],
+                         [("Option B", "site: already filled"), (None, None), (None, None)])
+
     def test_the_source_is_matched_to_the_nearest_kind_the_list_offers(self):
         f = self.propose(kind="select", label="How did you hear about us?",
                          options=["Company website", "Job board", "A friend"])

@@ -110,9 +110,83 @@ class SiteKeys(unittest.TestCase):
         self.assertEqual(extension._needs(code), "code")
         self.assertEqual(extension._needs(check), "check")
         self.assertEqual(extension._needs(page), "")
+        # six boxes, one a digit, are still a page asking for a code (Oracle, testers 2026-11-04)
+        digits = [{"kind": "text", "label": f"Enter verification code digit {n} of six.", "form": 0, "hid": f"h{n}"}
+                  for n in range(1, 7)]
+        self.assertEqual(extension._needs({**page, "fields": digits}), "code")
+        survey = {"title": "Apply", "headings": [], "password": False, "text": "", "url": page["url"], "controls": []}
+        self.assertEqual(browser._needs(survey, digits), "code")
+        self.assertEqual(browser.code_boxes(digits, ""), [f"h{n}" for n in range(1, 7)])
         closed = {**page, "fields": [], "url": "https://boards.greenhouse.io/fernvale/jobs/1?error=true",
                   "captcha": False, "next": False, "submit": False, "unchecked": False}
         self.assertTrue(extension._report(closed, "", False)["closed"])
+        # a board's banner at the top of the page, not in a heading (Adzuna, testers 2026-11-04)
+        banner = {**closed, "url": "https://jobs.example.org/jobs/1",
+                  "text": "What? Where? Search Unfortunately, this job is no longer available. Popular jobs"}
+        self.assertTrue(extension._report(banner, "", False)["closed"])
+        self.assertFalse(extension._report({**banner, "apply": True}, "", False)["closed"])
+        survey = {"title": "Jobs", "headings": [], "url": banner["url"], "text": banner["text"], "controls": []}
+        self.assertTrue(browser._closed(survey, 200))
+        self.assertFalse(browser._closed({**survey, "text": "Apply now. " * 80 + banner["text"]}, 200))
+        for said in ("Applications Closed", "Applications for this position have now closed.",
+                     "This listing went offline.", "Sorry, the listing that you're looking for is expired."):
+            self.assertTrue(browser._closed({**survey, "text": said}, 200), said)
+        self.assertFalse(browser._closed({**survey, "text": "Applications close on 30 November."}, 200))
+
+    def test_a_form_opens_behind_when_preferences_say_not_to_bring_it_forward(self):
+        from jobhunt.core import settings
+
+        settings.set("applying.bring_forward", False, by="you")
+        self.addCleanup(settings.reset, "applying.bring_forward")
+        asked = []
+        with mock.patch.object(extension, "_ask", lambda cmd, **k: asked.append((cmd, k)) or {}), \
+                mock.patch.object(extension, "_advance", lambda job_id: {}):
+            extension.open_form("test:behind", "https://jobs.example.org/apply/1")
+        self.assertEqual(asked[0][0], "open")
+        self.assertIs(asked[0][1]["front"], False)
+
+    def test_a_job_boards_search_boxes_are_not_the_application(self):
+        """Regression (testers, 2026-11-05): Totaljobs' "Job title, skill or company" and "Town, city or postcode"
+        were taken for an application form's two questions."""
+        for label in ("Job title, skill or company", "Town, city or postcode", "Job title, skills or keywords",
+                      "What?", "City, town or zip code", "Search:", "q"):
+            self.assertTrue(browser.not_the_application({"label": label}), label)
+        for label in ("Postcode", "Town or city", "Job title", "Current company", "Location (City)"):
+            self.assertFalse(browser.not_the_application({"label": label}), label)
+        # A signed-in reader's comment box under a forum post (Hacker News, 2026-11-05).
+        for label in ("text", "Add a comment", "Reply"):
+            self.assertTrue(browser.not_the_application({"label": label, "kind": "textarea"}), label)
+        self.assertFalse(browser.not_the_application({"label": "Cover letter", "kind": "textarea"}))
+
+    def test_the_browsers_words_for_a_page_that_went_away_are_not_shown(self):
+        """Regression (testers, 2026-11-05): "Frame with ID 0 was removed." reached the Form step as it was."""
+        self.assertEqual(extension.plain_error("Frame with ID 0 was removed."),
+                         "the page changed while Hal was reading it; press \"Fill it in again\"")
+        self.assertIn("tab was closed", extension.plain_error("No tab with id: 12."))
+        self.assertEqual(extension.plain_error("a made-up error"), "a made-up error")
+
+    def test_an_account_services_address_marks_a_sign_in_page(self):
+        """Regression (testers, 2026-11-05): account.ycombinator.com asked only for an email address, and Hal
+        typed it in and pressed on."""
+        self.assertTrue(browser.sign_in_page("Y Combinator", "https://account.ycombinator.com/?continue=x", "Email"))
+        self.assertTrue(browser.sign_in_page("", "https://login.example.org/", ""))
+        self.assertFalse(browser.sign_in_page("Junior Analyst", "https://jobs.example.org/apply", "Your details"))
+        # A bare "login" in a site's menu is not a sign-in page (every Hacker News page starts "... submit login").
+        self.assertFalse(browser.sign_in_page("A post", "https://forum.example.org/item?id=1", "new | submit login"))
+
+    def test_an_upload_that_appears_later_does_not_get_a_second_cv(self):
+        """Regression (testers, 2026-11-04): after an Ashby form rebuilt itself, its new upload box was taken for
+        the CV's on its own, so the CV went in twice; Lever's, relabelled after each upload, took it four times
+        (2026-11-05)."""
+        placed = [{"hid": "h1", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf"}]
+        guessed = [{"hid": "h9", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf",
+                    "note": "taken to be the CV upload; check this"}]
+        self.assertTrue(driver._one_cv(placed, [dict(guessed[0])])[0]["skip"])
+        # Lever relabels its upload after each file, and the relabelled box names the CV itself.
+        named = {"hid": "h7", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf", "note": "",
+                 "label": "Resume/CV EOIN EXAMPLE CV.PDF Success!"}
+        self.assertTrue(driver._one_cv(placed, [named])[0]["skip"])
+        self.assertEqual(driver._one_cv([], [dict(guessed[0])])[0]["value"], "/made/up/cv.pdf")
 
     def test_the_tab_is_brought_forward_for_work_but_never_for_a_watch(self):
         """Regression: every command, a watch's look every 3 s too, made the job's tab the active one, so two
@@ -137,6 +211,19 @@ def forget_notes() -> None:
         con.execute("DELETE FROM site_events")
         con.execute("DELETE FROM site_notes")
         con.commit()
+
+
+class WithoutPlaywright(unittest.TestCase):
+    def test_hals_window_refuses_at_once_when_playwright_is_missing(self):
+        # the browser thread died on its import and each caller waited out the 10-minute timeout (the WSL2 CI
+        # job, installed without the browser extra, 2026-11-05)
+        real = browser.importlib.util.find_spec
+        with mock.patch.object(browser.importlib.util, "find_spec",
+                               side_effect=lambda name, *a: None if name == "playwright" else real(name, *a)):
+            start = time.monotonic()
+            with self.assertRaises(browser.BrowserMissing):
+                browser.Browser().call(lambda b: None, timeout=30)
+            self.assertLess(time.monotonic() - start, 1)
 
 
 class NoteHooks(unittest.TestCase):
@@ -309,6 +396,113 @@ class Fixes:
         _job_id, found = self.opened("first-with", page)
         self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email"])
         self.assertEqual(self.site.sent(), 0)
+
+    def test_a_job_boards_search_alerts_and_pop_up_are_passed_on_the_way_to_the_form(self):
+        """Regression (testers, 2026-11-04): on an Adzuna advert Hal filled the board's job search and its
+        job-alert box as the application, under a job-alert pop-up, and never pressed Apply."""
+        job_id, found = self.opened("board", "board-advert.html")
+        self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email", "Phone"])
+        self.assertEqual(self.on_page(job_id, "single.html",
+                                      lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')")), "1")
+        self.assertEqual((self.site.sent(), self.site.posts["/alerts"]), (0, 0))
+
+    def test_a_job_alert_box_opened_by_apply_is_left_by_its_link_to_the_job(self):
+        """Regression (testers, 2026-11-04): Adzuna's Apply opened a job-alert box placed absolutely under it, and
+        Hal said "no Apply button recognised" instead of following "No thanks, take me to the job"."""
+        job_id, found = self.opened("capture", "apply-capture.html")
+        self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email", "Phone"])
+        self.assertEqual(self.on_page(job_id, "single.html",
+                                      lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')")), "1")
+        self.assertEqual((self.site.sent(), self.site.posts["/alerts"]), (0, 0))
+
+    def test_a_list_that_found_nothing_is_closed_and_an_open_one_hides_no_questions(self):
+        """Regression (testers, 2026-11-04): an Ashby location list left open on "No results" hid the rest of the
+        form, so Hal read three questions, took the page for a new one and filled the whole form again."""
+        page = "hides-while-listed.html"
+        job_id, found = self.opened("listed", page)
+        everything = ["First name", "Last name", "Where are you currently located?", "Do you need sponsorship?"]
+        self.assertEqual([f["label"] for f in found["fields"]], everything)
+        out = browser.fill(job_id, self.answers(found, {"Where are you": "Atlantis"}), driver._shot(job_id))
+        self.assertTrue(next(iter(out["errors"].values())).startswith("no option"), out["errors"])
+        self.assertEqual(self.on_page(job_id, page, lambda tab: tab.get_attribute("#loc", "aria-expanded")), "false")
+        # The person opens the list themselves while Hal looks.
+        self.on_page(job_id, page, lambda tab: tab.focus("#loc"))
+        self.assertEqual([f["label"] for f in browser.read_here(job_id)["fields"]], everything)
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_a_sign_in_page_that_asks_for_the_email_first_is_left_to_the_person(self):
+        """Regression (testers, 2026-11-05): a sign-in page that said so only in its opening words was filled in
+        with the applicant's email address and Continue was pressed."""
+        page = "welcome-back.html"
+        job_id, found = self.opened("email-first", page)
+        self.assertEqual((found["needs"], found["fields"]), ("sign-in", []))
+        self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#em")), "")
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_an_apply_link_in_the_pages_footer_is_not_the_jobs(self):
+        """Regression (testers, 2026-11-05): on a Hacker News job post Hal pressed the forum's own "Apply to YC"
+        link, from its row of links at the foot of the page, and reached Y Combinator's sign-in."""
+        page = "forum-post.html"
+        job_id, found = self.opened("forum", page)
+        self.assertEqual((found["fields"], found["needs"]), ([], ""))
+        self.assertTrue(self.on_page(job_id, page, lambda tab: tab.url.endswith(page)))
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_a_boards_account_page_with_a_password_is_left_to_the_person(self):
+        """Regression (testers, 2026-11-05): Adzuna's register page (email, password, confirm) was filled with the
+        email address as the application's last page."""
+        page = "join-board.html"
+        job_id, found = self.opened("join", page)
+        self.assertEqual((found["needs"], found["fields"]), ("sign-in", []))
+        self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#em")), "")
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_a_searched_list_is_typed_into_until_it_offers_the_answer(self):
+        """Regression (testers, 2026-11-04): the helper was never told a list could be typed into, so Ashby's
+        location list, which offers places only once you type, was left empty: "no option matching"."""
+        page = "hides-while-listed.html"
+        job_id, found = self.opened("searched", page)
+        out = browser.fill(job_id, self.answers(found, {"Where are you": "London, United Kingdom"}),
+                           driver._shot(job_id))
+        self.assertEqual(out["errors"], {})
+        self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#loc")),
+                         "London, Greater London, England, United Kingdom")
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_a_boards_search_and_alerts_in_its_one_page_form_are_passed_on_the_way_to_the_form(self):
+        """Regression (testers, 2026-11-04): on ProductionBase, whose whole page is one form, Hal filled the
+        board's job search ("Job Types", "Industry") as the application."""
+        _job_id, found = self.opened("one-form", "one-form-board.html")
+        self.assertEqual([f["label"] for f in found["fields"]], ["First name", "Last name", "Email", "Phone"])
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_answers_survive_a_form_that_rebuilds_itself_after_the_cv_is_uploaded(self):
+        """Regression (testers, 2026-11-04): an Ashby form read the uploaded CV and built itself again, and ten of
+        Hal's answers were lost "no longer on the page"."""
+        page = "rebuilds-on-upload.html"
+        job_id, found = self.opened("rebuild", page)
+        fields = self.answers(found, {"CV": str(self.cv), "First name": "Ada", "Last name": "Lovelace",
+                                      "Email": "ada@example.org"})
+        for f in fields:
+            f["source"] = "documents: CV" if f["kind"] == "file" else "profile"
+        out = driver._fill_uploads_first(job_id, fields)
+        self.assertEqual(out["errors"], {})
+        shown = self.on_page(job_id, page, lambda tab: (tab.evaluate("() => window.rebuilds"), tab.input_value("#fn"),
+                                                        tab.input_value("#ln"), tab.input_value("#em")))
+        self.assertEqual(shown, (1, "Ada", "Lovelace", "ada@example.org"))
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_with_pop_ups_left_alone_in_preferences_hal_closes_none(self):
+        from jobhunt.core import settings
+
+        settings.set("applying.close_popups", False, by="you")
+        self.addCleanup(settings.reset, "applying.close_popups")
+        job_id, _found = self.opened("board-off", "board-advert.html")
+        page = "board-advert.html"
+        # Hal's own window may follow the Apply link's address past the pop-up; either way Hal never closed it.
+        closed = self.on_page(job_id, page, lambda tab: tab.evaluate("() => sessionStorage.getItem('popupClosed')"))
+        self.assertIsNone(closed)
+        self.assertEqual(self.site.posts["/alerts"], 0)
 
     def test_a_google_form_in_a_frame_is_read(self):
         """Regression: every google.com/ frame was passed over, Google Forms too."""

@@ -20,12 +20,14 @@ import json
 import sqlite3
 from datetime import date
 
+from jobhunt import db
 from jobhunt.core import clock, runner, settings
 from jobhunt.find import feedback, job_actions, kinds, rules
 from jobhunt.find import goal as goal_mod
 from jobhunt.web.router import BadRequest, NotFound, Request, route
 
 PAGE = 50                   # jobs per page of a list; the page asks for more as the person scrolls
+MAX_LIMIT = 500             # most jobs one list request returns, however far the person has scrolled
 EXAMPLES = 2                # example jobs named under each Hidden group
 NEW_DAYS = 2                # a job found in the last two days carries "New"
 TOP_POINTS = 3              # point chips on a card
@@ -48,12 +50,13 @@ GOAL = "settings-goal"
 # Hidden groups whose rule ids vary by job ("avoid_role" says which role) get one heading.
 GROUP_WORDS = {"avoid_role": "Roles you avoid", "role_title": "Not one of the roles you want",
                "years_required": "Asks for more experience than you have",
+               "off_field": "Outside your field", "repost": "Listed more than once",
                "pay_far_under": "Pay well under your lowest", "screen_out": "Hal's AI check said it does not fit",
                "pattern": "A working pattern you did not choose"}
 FIXES = {"excluded_employer": ("Edit employers to avoid", GOAL), "training_scheme": ("Change this", GOAL),
          "clearance": ("Change this", GOAL), "too_far": ("Change your places", GOAL),
          "pattern": ("Change your working pattern", GOAL), "avoid_role": ("Edit roles to avoid", GOAL),
-         "role_title": ("Change the roles you want", GOAL),
+         "role_title": ("Change the roles you want", GOAL), "off_field": ("Add it to the roles you want", GOAL),
          "students_only": ("Check when your course ends", GOAL), "grad_year": ("Check your finishing year", GOAL),
          "years_required": ("Change your career stage", GOAL),
          "experience_required": ("Change your career stage", GOAL),
@@ -234,7 +237,11 @@ def counts(con: sqlite3.Connection) -> dict:
 
 @route("GET", "/api/v2/jobs")
 def jobs(req: Request) -> dict:
-    """Matches or Saved, sorted and filtered, a page at a time."""
+    """Matches or Saved, sorted and filtered, a page at a time.
+
+    `limit` asks for more than one page in one reply, so a list the person has scrolled through can be
+    fetched again whole when a job changes, rather than keeping pages that no longer hold.
+    """
     tab = req.query.get("tab") or "matches"
     if tab not in ("matches", "saved"):
         raise BadRequest("tab is matches or saved.", field="tab")
@@ -242,16 +249,19 @@ def jobs(req: Request) -> dict:
     if sort not in SORTS:
         raise BadRequest(f"sort is one of {', '.join(SORTS)}.", field="sort")
     offset = _int(req.query.get("cursor"), "cursor")
+    limit = _int(req.query.get("limit"), "limit", PAGE)
+    if not 1 <= limit <= MAX_LIMIT:
+        raise BadRequest(f"limit is between 1 and {MAX_LIMIT}.", field="limit")
     where, args = _filters(*_shown_where(tab), req.query)
     rows = req.con.execute(f"SELECT j.* FROM jobs j WHERE {where} ORDER BY {SORTS[sort]} LIMIT ? OFFSET ?",
-                           [*args, PAGE + 1, offset]).fetchall()
+                           [*args, limit + 1, offset]).fetchall()
     goal = goal_mod.current()
     places = [p.name for p in goal.places] or sorted({
         (r[0] or "").split(",")[0].strip() for r in req.con.execute(
             f"SELECT j.location FROM jobs j WHERE {_shown_where(tab)[0]} LIMIT 200", _shown_where(tab)[1])} - {""})[:6]
-    return {"jobs": cards(req.con, rows[:PAGE]), "counts": counts(req.con),
+    return {"jobs": cards(req.con, rows[:limit]), "counts": counts(req.con),
             "filters": {"places": places, "patterns": list(PATTERNS), "kinds": kind_filter(req.con, goal)},
-            "cursor": str(offset + PAGE) if len(rows) > PAGE else None}
+            "cursor": str(offset + limit) if len(rows) > limit else None}
 
 
 def _fix(rule: str) -> dict | None:
@@ -419,8 +429,16 @@ def _start(req: Request, kind: str, **kw) -> str:
 
 @route("POST", "/api/v2/jobs/{job_id}/apply")
 def apply(req: Request) -> dict:
-    """Apply with Hal: documents come first; no form is opened until the person approves them."""
+    """Apply with Hal, or Add to queue: documents come first; no form is opened until the person approves them.
+
+    The job leaves Matches here rather than when its action starts, because with several jobs queued the
+    action waits for a free thread, and the list reloaded before the job had moved (testers, 2026-11-04).
+    """
     row = _row(req.con, req.params["job_id"])
+    if row["status"] in OPEN:
+        db.set_status(req.con, row["id"], "applying", "chosen from the queue")
+        rules.settle_reposts_of(req.con, row["id"])    # its copies leave Matches with it
+        req.con.commit()
     at = clock.local()
     action_id = _start(req, "docs.prepare", job_id=row["id"], params={"job_id": row["id"]},
                        why=f"You pressed Apply with Hal at {at:%H:%M}. Documents come first.")

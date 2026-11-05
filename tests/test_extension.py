@@ -25,7 +25,7 @@ from support.practice_site import HelperBrowser
 
 from jobhunt import db, extension
 from jobhunt.apply import driver, helpers
-from jobhunt.core import runner
+from jobhunt.core import runner, settings
 from jobhunt.web import auth
 
 # unittest runs these for this module: no salary research, and no private answers.
@@ -103,7 +103,10 @@ class InYourBrowser(PairedHelper, Practice):
         opening.join()
 
     def test_applications_open_together_in_a_window_of_their_own(self):
-        """apply_window = "separate": job tabs share one window, apart from the one the applicant works in."""
+        """By default job tabs share one window of Hal's, apart from the one the applicant works in.
+
+        The test browser reports every window as focused, so bringing the window forward is not checked here."""
+        settings.reset("applying.window")
         for name in ("ext-window-1", "ext-window-2"):
             driver.act_auto(self.con, self.job(name, f"form.html?{name}"))
         tabs = self.in_worker("() => chrome.tabs.query({}).then(ts => ts.map(t => [t.url, t.windowId]))")
@@ -111,6 +114,36 @@ class InYourBrowser(PairedHelper, Practice):
         # Earlier tests may have opened the window already; either way both jobs are in it, and it is not the only one.
         self.assertEqual({w for url, w in tabs if "ext-window" in url}, {own})
         self.assertGreater(len({w for _, w in tabs}), 1)
+
+    def test_this_window_opens_the_form_beside_hals_page_in_its_tab_group(self):
+        """Regression (testers, 2026-11-04): "This window" opened the form wherever the browser last had focus,
+        outside the tab group the person kept Hal's page in."""
+        settings.set("applying.window", "this", by="you")
+        self.addCleanup(settings.reset, "applying.window")
+        self.on_helper(lambda: self.ctx.new_page().goto(f"http://127.0.0.1:{self.port}/healthz"))
+        hal = self.in_worker("""async base => {
+            const [t] = (await chrome.tabs.query({})).filter(t => t.url.startsWith(base));
+            const group = await chrome.tabs.group({ tabIds: [t.id] });
+            return { id: t.id, group, window: t.windowId }; }""", f"http://127.0.0.1:{self.port}/")
+        driver.act_auto(self.con, self.job("ext-beside", "form.html?beside"))
+        tab = self.in_worker("""() => chrome.tabs.query({}).then(ts => ts.filter(t => t.url.includes('beside'))
+            .map(t => ({ group: t.groupId, window: t.windowId, opener: t.openerTabId })))""")
+        self.assertEqual(tab, [{"group": hal["group"], "window": hal["window"], "opener": hal["id"]}])
+
+    def test_a_tab_is_only_ever_one_jobs(self):
+        """Regression (testers, 2026-11-05): with several forms filling at once, one job's list came to hold another
+        job's tab, and Hal read and filled the other job's page."""
+        first = self.job("ext-owner-1", "form.html?owner-1")
+        second = self.job("ext-owner-2", "form.html?owner-2")
+        driver.act_auto(self.con, first)
+        driver.act_auto(self.con, second)
+        # The state the bug left: the second job's tab is also in the first job's list, as its newest.
+        self.in_worker("""async ([one, two]) => {
+            const { jobs } = await chrome.storage.session.get('jobs');
+            jobs[one] = [...jobs[one], ...jobs[two]];
+            await chrome.storage.session.set({ jobs }); }""", [first, second])
+        self.assertIn("owner-1", extension._read(first, banners=False)["url"])
+        self.assertIn("owner-2", extension._read(second, banners=False)["url"])
 
     def test_fills_the_first_page_and_leaves_what_it_cannot_answer(self):
         job_id = self.job("ext-fill", "form.html")
@@ -218,19 +251,21 @@ class Reloading(PairedHelper, Practice):
                 self.developer_mode()
                 helper_id = self.pair_in(self.window())
                 # git brings a newer helper: the folder changes, and the server now wants that version
+                shipped = helpers.version_key(helpers.wanted_version())
+                newer = ".".join(map(str, (*shipped[:-1], shipped[-1] + 1)))
                 manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
-                manifest["version"] = "1.0.1"
+                manifest["version"] = newer
                 (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-                with mock.patch.object(helpers, "wanted_version", return_value="1.0.1"):
+                with mock.patch.object(helpers, "wanted_version", return_value=newer):
                     deadline = time.monotonic() + CONNECT_WAIT_S
                     version = None
                     while time.monotonic() < deadline:
                         with closing(db.connect()) as con:
                             version = helpers.row(con, helper_id)["version"]
-                        if version == "1.0.1":
+                        if version == newer:
                             break
                         time.sleep(STEP_S)
-                    self.assertEqual(version, "1.0.1")
+                    self.assertEqual(version, newer)
                     self.assertFalse(extension.still_older(helper_id))
             finally:
                 self.close_browser()

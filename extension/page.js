@@ -30,9 +30,14 @@ function halExtract() {
   const textOf = ids => clean(byId(ids).map(e => e.innerText).join(' '));
   const GENERIC = /^(select|select\.\.\.|choose|search|type to search|toggle( flyout)?|open|clear|remove|required|optional|please select.*|select an option|select one|--+)$/i;
   const UPLOAD = /^(attach|attach files?|choose files?|upload( files?| a file)?|browse|select files?|drop.*|no file chosen|or drag and drop.*)$/i;
+  // An open list may hide the rest of the form from screen readers, marking what it hides data-aria-hidden as the
+  // aria-hidden library does (Ashby's location list, 2026-11-04); that is still the form, unless a dialog is open.
+  const listOpen = Boolean(document.querySelector('[aria-expanded=true]:is([role=combobox], [aria-haspopup=listbox])'))
+    && !halAll('[aria-modal=true], dialog[open]').some(visible);
+  const HIDDEN = listOpen ? '[aria-hidden=true]:not([data-aria-hidden])' : '[aria-hidden=true]';
   const HELPER = 'option, select, button, script, style, svg, [role=option], [role=listbox], [role=alert], '
     + '[class*="error" i], [class*="invalid" i], [class*="counter" i], [class*="placeholder" i], '
-    + '[class*="single-value" i], [class*="singleValue"], [class*="multi-value" i], [aria-hidden=true]';
+    + '[class*="single-value" i], [class*="singleValue"], [class*="multi-value" i], ' + HIDDEN;
 
   // Language pickers and site searches sit in the page's own furniture, not in the form.
   const CHROME = 'header, nav, footer, [role=banner], [role=navigation], [role=contentinfo]';
@@ -54,7 +59,7 @@ function halExtract() {
     const shown = visible(el) || (choice
       && ((el.labels && el.labels[0] && visible(el.labels[0])) || (el.parentElement && visible(el.parentElement))));
     if (type !== 'file' && !shown) continue;
-    if (el.closest('[aria-hidden=true]') && type !== 'file') continue;
+    if (el.closest(HIDDEN) && type !== 'file') continue;
     if (el.closest('[role=search]') || (el.closest(CHROME) && !el.form)) continue;
     add(el, { type, combo, native: true });
   }
@@ -62,7 +67,7 @@ function halExtract() {
   for (const el of halAll('[role=combobox], button[aria-haspopup=listbox], [role=radio], [role=checkbox], '
       + '[role=switch], [role=textbox], [contenteditable=true], [contenteditable=""]')) {
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !visible(el)) continue;
-    if (el.closest('[aria-hidden=true], [role=search]') || el.getAttribute('aria-disabled') === 'true') continue;
+    if (el.closest(HIDDEN + ', [role=search]') || el.getAttribute('aria-disabled') === 'true') continue;
     if (el.closest(CHROME)) continue;
     if (el.querySelector('input:not([type=hidden]), textarea, select')) continue;
     const role = el.getAttribute('role') || (el.isContentEditable ? 'textbox' : 'combobox');
@@ -207,6 +212,27 @@ function halExtract() {
     return found;
   };
 
+  // The site's own job search or job-alert sign-up, which no label says: "search" or "alert", or "" for neither.
+  // ProductionBase wraps its whole page in one form, so the search's boxes sat in the same form as everything
+  // else, labelled "Job Types" and "Industry" (testers, 2026-11-04). Names are matched narrowly, so an
+  // application's own searchable dropdown ("select__search") is never taken for the site's search.
+  const SEARCH_NAME = /job.?search|search.?(box|bar|form|section|panel|area|field|input|query)|site.?search|searchkeyword/i;
+  const ALERT_WORDS = /job alerts?|alerts? (direct )?to your inbox|similar (new )?jobs|newsletter|jobs by email/i;
+  const siteBox = el => {
+    const form = el.form;
+    if (el.closest('[role=search]') || SEARCH_NAME.test(`${el.name} ${el.id}`)
+        || (form && /search/i.test(form.getAttribute('action') || '') && !/apply|application/i.test(form.getAttribute('action') || ''))) {
+      return 'search';
+    }
+    for (let n = el.parentElement, depth = 0; n && depth < 5 && !STOP.test(n.tagName); n = n.parentElement, depth++) {
+      if (SEARCH_NAME.test(`${typeof n.className === 'string' ? n.className : ''} ${n.id}`)) return 'search';
+      const text = n.innerText || '';
+      const boxes = n.querySelectorAll('input:not([type=hidden]):not([type=submit]), textarea, select').length;
+      if (text.length < 400 && boxes <= 3 && ALERT_WORDS.test(text)) return 'alert';
+    }
+    return '';
+  };
+
   const fields = [];
   for (const g of groups) {
     const lead = g.lead, el = lead.el, box = boxOf(g);
@@ -299,6 +325,8 @@ function halExtract() {
     const problem = errorIn(box, el);
     if (problem || el.getAttribute('aria-invalid') === 'true') f.invalid = problem || 'marked invalid';
     f.form = el.form ? [...document.forms].indexOf(el.form) : -1;
+    const site = siteBox(el);
+    if (site) f.site_box = site;
     const section = sectionOf(el, f.label);
     if (section) f.section = section;
     f.sig = [f.kind, f.name || '', f.label.slice(0, 120)].join('|');
@@ -309,6 +337,32 @@ function halExtract() {
 
 // What the page as a whole shows, for deciding where to go next: its buttons and
 // links (tagged with data-hal-nav so one can be pressed), headings, messages and walls.
+// Where a control sits in the page's own furniture: 'footer' (a footer, or a bar of links near the end of the
+// page, as Hacker News builds its "Guidelines | FAQ | ... | Apply to YC" row from plain spans), 'nav' (a header
+// or menu, where some sites keep their real Apply button), or '' for the page's content.
+const HAL_BAR_LINKS = 5;      // links in a row before it counts as a bar of links
+const HAL_BAR_SHARE = 0.6;    // the part of the row's words that are link words (HN's: 0.71, with " | " between)
+const HAL_PAGE_END = 0.6;     // how far down the page a footer's bar starts (HN's on a short post: 0.73)
+// Words of a site's own pages; two of them make a bar of links the footer wherever it sits.
+const HAL_FOOTER_WORDS = /^(privacy|terms|legal|contact( us)?|faqs?|guidelines|help|api|security|cookies|about( us)?)/i;
+function halFurniture(el) {
+  if (el.closest('footer, [role=contentinfo]')) return 'footer';
+  // The content's own height: a short page sits in a taller window, and its last row is still its end.
+  const height = Math.max(document.body.scrollHeight || document.documentElement.scrollHeight, 1);
+  const top = el.getBoundingClientRect().top + window.scrollY;
+  for (let n = el.parentElement, up = 0; n && n !== document.body && up < 3; n = n.parentElement, up++) {
+    const links = [...n.querySelectorAll('a[href]')];
+    const words = halClean(n.innerText).length;
+    if (links.length >= HAL_BAR_LINKS && words
+        && links.reduce((sum, a) => sum + halClean(a.innerText).length, 0) / words >= HAL_BAR_SHARE) {
+      const own = links.filter(a => HAL_FOOTER_WORDS.test(halClean(a.innerText))).length;
+      if (top / height >= HAL_PAGE_END || own >= 2) return 'footer';
+      break;
+    }
+  }
+  return el.closest('nav, header, [role=navigation], [role=banner]') ? 'nav' : '';
+}
+
 function halSurvey() {
   const clean = halClean, visible = halVisible;
   const nameOf = el => clean(el.getAttribute('aria-label') || el.innerText || el.value || el.getAttribute('title') || '');
@@ -324,7 +378,7 @@ function halSurvey() {
     const link = el.tagName === 'A' || el.getAttribute('role') === 'link';
     controls.push({ id, name, link, href: link ? (el.href || '') : '', submit: el.type === 'submit',
                     inForm: Boolean(el.closest('form')),
-                    inNav: Boolean(el.closest('nav, header, footer, [role=navigation], [role=banner], [role=contentinfo]')) });
+                    inNav: Boolean(halFurniture(el)), inFooter: halFurniture(el) === 'footer' });
   }
   const alerts = halAll('[role=alert], [aria-live=assertive], [class*="error" i], [class*="invalid-feedback" i]')
     .filter(e => visible(e) && !e.querySelector('input, textarea, select, form'))
@@ -344,6 +398,49 @@ function halSurvey() {
       .some(f => f.getBoundingClientRect().height > 100) || turnstile.some(e => !e.value),
     stayed: halAll('[data-hal-step]').some(visible),
   };
+}
+
+// Pop-ups that ask for something other than the application, such as a job-alert or newsletter sign-up, lie
+// over the advert and catch its clicks (Adzuna's, 2026-11-04). Closes the first one on show with its own
+// close control, or with Escape when it has none, and returns what it pressed, or '' when nothing was in the
+// way. A pop-up that could hold the application (an upload, or three or more boxes) is never closed, and a
+// button that would send a form inside the pop-up is never the one pressed.
+// A pop-up is found by its role or class, or from a close control upward to the fixed layer it sits in:
+// Adzuna's pop-up library names its layers "mfp-wrap" and "mfp-container", with no role and no word a class
+// match would know (2026-11-04).
+function halPopup() {
+  const clean = halClean, visible = halVisible;
+  const ASKS = /job alert|email alert|similar (new )?jobs|jobs like this|newsletter|subscribe|sign up for|stay (up to date|in the loop)|don.t miss|never miss|get (the )?latest|notifications|download (our|the) app|get the app|jobs by email|join our talent/i;
+  const CLOSE = /^(close|close (this )?(dialog|modal|pop-?up|window)|dismiss|no,? thanks?( you)?(,? .{0,40})?|not now|maybe later|skip|continue browsing|continue without .*|\u00d7|\u2715|\u2716|x)$/i;
+  const LAYER = '[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]';
+  const nameOf = el => clean(el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || '');
+  const sends = el => el.closest('form') && (el.type === 'submit' || (el.tagName === 'BUTTON' && !el.getAttribute('type')));
+  const closeClass = el => typeof el.className === 'string' && /(^|[\s_-])close([\s_-]|$)/i.test(el.className);
+  const closer = el => visible(el) && !sends(el) && (CLOSE.test(nameOf(el)) || closeClass(el));
+  // a box raised over the page, as Adzuna's job-alert box under its Apply button is (absolute, z-index 50)
+  const RAISED_Z = 10;
+  const raised = n => { const s = getComputedStyle(n); return s.position === 'absolute' && +s.zIndex >= RAISED_Z; };
+  const layerOf = el => {
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      if (n.matches(LAYER) || getComputedStyle(n).position === 'fixed' || raised(n)) return n;
+    }
+    return null;
+  };
+  const named = halAll(LAYER + ', [class*="modal" i], [class*="popup" i], [class*="pop-up" i], [class*="overlay" i], '
+      + '[id*="modal" i], [id*="popup" i]')
+    .filter(el => visible(el) && (el.matches(LAYER) || ['fixed', 'absolute', 'sticky'].includes(getComputedStyle(el).position)));
+  const found = halAll('button, [role=button], a, [aria-label], [title]').filter(closer).map(layerOf).filter(Boolean);
+  for (const box of new Set([...named, ...found])) {
+    if (box.querySelector('input[type=file]')) continue;
+    const inputs = [...box.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select')]
+      .filter(visible);
+    if (inputs.length >= 3 || !ASKS.test(clean(box.innerText).slice(0, 1500))) continue;
+    const close = [...box.querySelectorAll('button, [role=button], a, [aria-label], [title]')].find(closer);
+    if (close) { close.click(); return nameOf(close) || 'close'; }
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    return 'Escape';
+  }
+  return '';
 }
 
 const HAL_ITEMS = '[role=option], [class*="__option"], [id*="-option-"], [role=menuitemradio], [role=menuitem], li[data-value]';

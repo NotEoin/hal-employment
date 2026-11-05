@@ -122,11 +122,28 @@ class JobsPages(unittest.TestCase):
         p.page.keyboard.press("Escape")
         p.page.wait_for_selector('[role="dialog"]', state="detached")
 
+        # Add to queue: the person stays, and the job leaves the list at once
+        queued = p.page.inner_text(".job.sel .title")
+        p.page.keyboard.press("q")
+        p.page.wait_for_selector(".toast:has-text('Added to Getting ready')")
+        p.page.wait_for_function("t => ![...document.querySelectorAll('.joblist .job .title')]"
+                                 ".some(e => e.textContent === t)", arg=queued)
+        self.assertIn("#jobs", p.page.url)
+        self.assertTrue(runner.idle(ACTION_WAIT_S))
+        self.assertEqual(len(started), 1)
+        # a second one joins the first's toast rather than stacking another: twenty queued jobs filled the
+        # window with twenty toasts (testers, 2026-11-04)
+        p.page.evaluate("""async () => { const { toast } = await import('/app/core/store.js');
+            toast(n => 'Added ' + n + ' jobs to Getting ready', () => {}, 'Open the queue', 'queued'); }""")
+        p.page.wait_for_selector(".toast:has-text('Added 2 jobs to Getting ready')")
+        self.assertEqual(p.page.locator(".toast", has_text="Getting ready").count(), 1)
+
+        # Apply with Hal: the application opens
         p.page.keyboard.press("a")
         p.page.wait_for_url("**#app-*")
         # the page moves on when the action is queued; the action itself runs on a pool thread
         self.assertTrue(runner.idle(ACTION_WAIT_S))
-        self.assertEqual(len(started), 1)
+        self.assertEqual(len(started), 2)
         self.assert_no_errors(p)
 
     def test_hidden_shows_each_reason_and_a_way_to_change_it(self) -> None:

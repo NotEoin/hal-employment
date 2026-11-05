@@ -40,8 +40,9 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    [Your privacy](privacy.md).
 4. **What you're looking for.** Your career stage, whether you are studying now, and the kinds of role you
    want: graduate jobs, graduate schemes, paid internships, placement years, insight weeks and spring
-   weeks, apprenticeships, part-time or fixed-term work. Hal then says "Here is what I understood"; press
-   **Change something** if it is not right.
+   weeks, apprenticeships, part-time or fixed-term work. Press every career area you are interested in, such
+   as **Heritage and museums** and **Creative and media**; each fills in example roles you can change. Hal
+   then says "Here is what I understood"; press **Change something** if it is not right.
 5. **Your record.** Hal makes a folder for your certificates, references and other evidence. Press
    **Add files** to copy documents into it.
 6. **How Hal thinks.** Choose **On this computer** if your computer runs a local model through Ollama, or
@@ -65,14 +66,27 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
 2. Open **Jobs**, **Matches**. Each job says why it fits you and anything that does not. Press **Save** to
    keep a job for later, or **Not for me** and say why, so Hal learns what you want.
 3. On a job you like, press **Apply with Hal**. Hal writes the documents for this job: your CV adjusted
-   for it, a cover letter, and answers to the form's questions.
+   for it, a cover letter, and answers to the form's questions. To choose several jobs first, press
+   **Add to queue** on each instead (or Q): they wait under **Getting ready** on the **Applications**
+   board while Hal writes, and **Approve all** there approves them together.
 4. Read the documents. Change anything you like, or ask Hal for changes. When you are happy, press
    **Approve and fill in the form**.
-5. Hal opens the employer's form in your browser and fills it in. Each answer is marked "Fine" or "Check
-   this", and **Why this answer?** under each one says where it came from.
+5. Hal opens the employer's form in a new window of your browser and fills it in, and the application
+   moves on to its **Form** step. Later forms open in that same window until you close it. Each answer is
+   marked "Fine" or "Check this", and **Why this answer?** under each one says where it came from.
 6. Check the form, then press **Submit** on the employer's site yourself. The application moves to
    **Sent** on the **Applications** board.
 7. When the employer replies, Hal sorts it into **Messages** and moves the application on the board.
+
+### When Hal gets stuck before the form
+
+If Hal stops on the advert or a page before the form, open the form yourself in Hal's browser window: press
+Apply on the site, close any pop-up, and sign in if it asks. Then press **Fill in from this page** on the
+application's Form step, and Hal fills the form from the page your tab shows.
+
+To change documents you have already approved, press **Change the documents** on the Form step. Hal stops
+filling, and the application goes back to its Documents step; approve them again and Hal fills the form
+with the changed documents.
 
 ### When Hal cannot fill in a form
 
@@ -112,6 +126,12 @@ public sector and technology. **Jobs**, **Where Hal looks** lists each one, with
 | Activity | Everything Hal did and why, with Undo where it can be undone |
 | What Hal remembers | Suggestions from your choices, what Hal learned, saved answers, notes about job sites |
 | Settings | Every choice, grouped as in the setup guide, plus Is Hal working? and Updates |
+
+**Settings**, **Preferences** holds the choices about how Hal behaves while you work: whether forms open in
+a separate window or beside Hal, whether Hal brings that window to the front, closes job-alert pop-ups,
+keeps answers a site has already filled in, presses Next for you, how long it waits for you to sign in,
+checks an advert is still open before writing, and reloads its page after an update. Each starts as Hal
+behaved before it could be changed.
 
 Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts** for the keys.
 

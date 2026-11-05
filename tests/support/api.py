@@ -60,9 +60,12 @@ class Client:
         self.jar: dict[str, str] = {}
 
     def request(self, method: str, path: str, body: Any = None, *, headers: dict[str, str] | None = None,
-                csrf: bool = True) -> Reply:
-        """Sends one request; JSON bodies are encoded and writes carry `X-Hal: 1` unless `csrf` is False."""
-        con = http.client.HTTPConnection("127.0.0.1", self.port, timeout=TIMEOUT_S)
+                csrf: bool = True, timeout: float = TIMEOUT_S) -> Reply:
+        """Sends one request; JSON bodies are encoded and writes carry `X-Hal: 1` unless `csrf` is False.
+
+        `timeout` is for the few requests that start a program, such as a PDF printed by a real browser.
+        """
+        con = http.client.HTTPConnection("127.0.0.1", self.port, timeout=timeout)
         sent = {"Host": f"127.0.0.1:{self.port}"}
         if self.jar:
             sent["Cookie"] = "; ".join(f"{k}={v}" for k, v in self.jar.items())

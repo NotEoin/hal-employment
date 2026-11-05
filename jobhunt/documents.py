@@ -156,9 +156,17 @@ def tailored(job, docs: dict) -> dict:
     return variant
 
 
-def current_cv(job, docs: dict) -> dict:
-    """The CV this application sends: the applicant's own edit of it, else Hal's tailoring of the base CV."""
+def proposed_cv(job, docs: dict) -> dict:
+    """The CV as made for this application, before any of Hal's changes the person undid."""
     return docs.get("cv") or tailored(job, docs)
+
+
+def current_cv(job, docs: dict) -> dict:
+    """The CV this application sends: the applicant's own edit of it, else Hal's tailoring of the base CV,
+    with the changes the person undid put back as the base CV has them."""
+    made = proposed_cv(job, docs)
+    undone = docs.get("undone_changes")
+    return cv.revert(cv.load(), made, undone) if undone else made
 
 
 def render(job, docs: dict, out: Path | None = None) -> dict:

@@ -37,19 +37,32 @@ function withJobs(change) {
   return writing;
 }
 
+// A tab is one job's only: with several forms filling at once, one job read and filled another's page
+// (Encord and Lane Clark & Peacock, testers 2026-11-05), so the tab another job was opened in is never this job's.
 async function tabFor(job) {
   await writing;
   const { jobs = {} } = await chrome.storage.session.get("jobs");
+  const others = new Set(Object.entries(jobs).filter(([j]) => j !== job).map(([, ids]) => ids[0]));
   for (const id of [...(jobs[job] || [])].reverse()) {
+    if (others.has(id)) continue;
     try { return await chrome.tabs.get(id); } catch { /* closed */ }
   }
   return null;
 }
 
+// Gives the tab to this job alone, taking it from any other job's list.
+function claim(jobs, job, tabId) {
+  for (const [j, ids] of Object.entries(jobs)) if (j !== job) jobs[j] = ids.filter(id => id !== tabId);
+  jobs[job] = [tabId];
+}
+
 chrome.tabs.onCreated.addListener(tab => {
   if (tab.openerTabId == null) return;
-  // A form that opens in a new tab belongs to the job whose tab opened it.
-  withJobs(jobs => Object.values(jobs).forEach(ids => ids.includes(tab.openerTabId) && ids.push(tab.id)));
+  // A form that opens in a new tab belongs to the one job whose newest tab opened it, and to no other.
+  withJobs(jobs => {
+    const heirs = Object.values(jobs).filter(ids => ids[ids.length - 1] === tab.openerTabId);
+    if (heirs.length === 1 && !Object.values(jobs).some(ids => ids.includes(tab.id))) heirs[0].push(tab.id);
+  });
 });
 // A page the browser loaded ahead of time swaps in under a new tab id; the job keeps the tab.
 chrome.tabs.onReplaced.addListener((added, removed) => {
@@ -76,11 +89,22 @@ async function loaded(tabId, timeout = 45000) {
   return tab;
 }
 
+// A page swapped out while the helper reaches into it loses its frame ("Frame with ID 0 was removed", Totaljobs,
+// testers 2026-11-05); the page that replaced it is tried once, when it has loaded.
+const FRAME_GONE = /frame with id \d+ was removed|no frame with id|frame was removed/i;
+
 async function inTab(tabId, method, arg) {
-  await chrome.scripting.executeScript({ target: { tabId }, files: ["page.js", "content.js"] });
-  const [out] = await chrome.scripting.executeScript({
-    target: { tabId }, func: (m, a) => window.halPage[m](a), args: [method, arg ?? null] });
-  return out.result;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["page.js", "content.js"] });
+      const [out] = await chrome.scripting.executeScript({
+        target: { tabId }, func: (m, a) => window.halPage[m](a), args: [method, arg ?? null] });
+      return out.result;
+    } catch (e) {
+      if (attempt || !FRAME_GONE.test(String(e && e.message))) throw e;
+      await loaded(tabId);
+    }
+  }
 }
 
 // The page-world block, the same as BLOCK_JS in jobhunt/browser.py. For the whole of each command
@@ -139,7 +163,8 @@ async function blocked(tabId, work) {
 }
 
 // Hal's own window, holding every application tab when the helper asks for one ("separate"),
-// so they never crowd the window the applicant is working in. Made again if it was closed.
+// so they never crowd the window the applicant is working in. Its id lasts as long as the browser runs, so
+// every form until then goes into the same window; it is made again if it was closed.
 async function halWindow() {
   const { halWindow: id } = await chrome.storage.session.get("halWindow");
   if (id != null) {
@@ -148,12 +173,37 @@ async function halWindow() {
   return null;
 }
 
-async function newTab(url, separate) {
-  const own = separate ? await halWindow() : null;
-  if (own) return chrome.tabs.create({ url, windowId: own.id, active: true });
-  if (!separate) return chrome.tabs.create({ url, active: false });
-  // Opened behind the applicant's window; some window managers bring it forward anyway.
-  const made = await chrome.windows.create({ url, focused: false, type: "normal" });
+// The Hal page the person used last, which a "This window" form opens beside; null when none is open.
+async function halTab() {
+  const at = await link();
+  if (!at) return null;
+  const tabs = (await chrome.tabs.query({})).filter(t => (t.url || "").startsWith(at.base + "/"));
+  tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  return tabs[0] || null;
+}
+
+// A form's new tab. Hal's window comes to the front with it: opened behind the applicant's window, it
+// looked as if no form had opened (testers, 2026-11-03); `front` false (Preferences) leaves it behind. "This
+// window" puts it beside Hal's page and in that
+// page's tab group, as the setting says; it opened wherever the browser last had focus (testers, 2026-11-04).
+async function newTab(url, separate, front = true) {
+  if (!separate) {
+    const hal = await halTab();
+    if (!hal) return chrome.tabs.create({ url, active: false });
+    const tab = await chrome.tabs.create({ url, active: false, windowId: hal.windowId, index: hal.index + 1,
+                                           openerTabId: hal.id });
+    if (hal.groupId !== undefined && hal.groupId !== -1) {
+      await chrome.tabs.group({ groupId: hal.groupId, tabIds: [tab.id] }).catch(() => {});  // a group closed meanwhile
+    }
+    return tab;
+  }
+  const own = await halWindow();
+  if (own) {
+    const tab = await chrome.tabs.create({ url, windowId: own.id, active: true });
+    if (front) await chrome.windows.update(own.id, { focused: true });
+    return tab;
+  }
+  const made = await chrome.windows.create({ url, focused: front, type: "normal" });
   await chrome.storage.session.set({ halWindow: made.id });
   return made.tabs[0];
 }
@@ -178,12 +228,12 @@ function base64(buffer) {
 }
 
 const COMMANDS = {
-  async open({ job, url, window = "separate" }) {
+  async open({ job, url, window = "separate", front = true }) {
     let tab = await tabFor(job);
     if (tab) await chrome.tabs.update(tab.id, { url });
     else {
-      tab = await newTab(url, window === "separate");
-      await withJobs(jobs => { jobs[job] = [tab.id]; });
+      tab = await newTab(url, window === "separate", front);
+      await withJobs(jobs => claim(jobs, job, tab.id));
     }
     await loaded(tab.id);
     return {};
@@ -318,6 +368,21 @@ async function handTab(tab) {
     await chrome.action.setTitle({ tabId: tab.id, title });
   };
   try {
+    // The button pressed on Hal's own page, or on a browser page no extension may read, used to end in a bare
+    // "!" (testers, 2026-11-03); each now says what the button is for.
+    const hal = await link();
+    if (!hal) {
+      await say("!", "Hal's helper is not connected yet. In Hal, open Settings, then Browser helper, and press Connect.");
+      return;
+    }
+    if (!/^https?:/.test(tab.url || "")) {
+      await say("!", "Hal cannot read this browser page. Press this button on an employer's application page.");
+      return;
+    }
+    if (new URL(tab.url).origin === hal.base) {
+      await say("", "This is Hal itself. Press Apply with Hal on a job, or press this button on an employer's application page.");
+      return;
+    }
     await say("...", "Hal is filling this application");
     const [read] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({
       url: location.href, title: document.title,
