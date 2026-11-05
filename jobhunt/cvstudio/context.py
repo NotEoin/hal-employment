@@ -38,7 +38,6 @@ SPECIAL_CASES = {
     "ktp": "Knowledge Transfer Partnership (KTP) adverts are listed under the scheme: the employer is the "
            "host company the advert names.",
 }
-SPELLING_WORDS = {"en-GB": "UK English", "en-US": "US English"}
 TONE_WORDS = {"plain": "plain and direct", "formal": "formal", "warm": "warm", "confident": "confident"}
 SOMEONE = "the applicant"   # what a prompt calls the person before they have given a name
 # Kinds of test an advert may name, for the prep notes.
@@ -131,10 +130,12 @@ def profile_block() -> str:
 
 def _type_part(kind) -> dict:
     from ..core import settings
+    from ..writing import spelling as spelling_mod
 
     docs = {**NEUTRAL, **((kind.documents or {}) if kind is not None else {})}
     writing = (kind.writing or {}) if kind is not None else {}
-    spelling = settings.get("cvdocs.spelling") or writing.get("spelling") or "en-GB"
+    # an empty setting falls back to the type's, then to UK English: never to no spelling at all
+    spelling = spelling_mod.code_of(settings.get("cvdocs.spelling") or writing.get("spelling"))
     tone = settings.get("cvdocs.letter_tone") or writing.get("tone") or "plain"
     avoid = []
     for phrase in [*(settings.get("cvdocs.never_use") or []), *(writing.get("banned") or [])]:
@@ -150,7 +151,7 @@ def _type_part(kind) -> dict:
         "prep_topics": list(docs["prep_topics"]), "type_prep_topics": _words(list(docs["prep_topics"]), "and"),
         "special_cases": special,
         "type_special_cases": " ".join(SPECIAL_CASES[s] for s in special if s in SPECIAL_CASES),
-        "spelling": SPELLING_WORDS.get(spelling, spelling),
+        "spelling": spelling_mod.WORDS[spelling],
         "spelling_code": spelling,
         "tone": TONE_WORDS.get(tone, tone),
         "letter_words": int(settings.get("cvdocs.letter_words") or 250),

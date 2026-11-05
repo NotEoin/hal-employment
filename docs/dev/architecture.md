@@ -430,7 +430,23 @@ runs: tests use `tests/support/fake_claude/`.
   placeholders, stock openings and closings, hedges, weak bullet openers, first person in CV lines, bullets
   over 35 words, a letter sentence that repeats a CV line, greeting and sign-off pairing ("Dear" and a name
   with "Yours sincerely", a team or "Sir or Madam" with "Yours faithfully"), numbers no source holds and
-  length limits. It replaced `pack.CLICHES`; every word that list flagged is still flagged.
+  length limits. It replaced `pack.CLICHES`; every word that list flagged is still flagged. An L10 hit
+  carries its fix (`Hit.fix`), and the flag reads `... : color (write "colour")`.
+- `spelling.py` is the one source of UK and US spelling. `find(text, code)` returns each word spelt the
+  other way with the form to write instead, and `respell` applies them all. It matches only words with
+  one right form: -ize/-yze, -or/-our, -er/-re, -ense, catalog, doubled l, and a list of single words.
+  The -ize rule needs no list, except for words ending in -size; the US -ise rule uses a list of stems.
+  It never matches "program", "disk", "analog", "meter", the verb "license", or "dialog" before
+  box or window. It also skips capitalised words inside a sentence, words in capitals or with inner
+  capitals, code (a word joined to `_`, `.`, `/`, `(` or a digit), backticks, double quotes, web addresses and
+  email addresses. `code_of` turns an unset, empty or unknown setting into `en-GB`, so the check is never
+  off, and `chosen()` reads `cvdocs.spelling`. Each prompt that writes for the person (letter, message,
+  answers, form_fill, prep, cv_compose, cv_suggest, cv_another) takes `{spelling}` from
+  `spelling.WORDS`. Each AI draft is respelt before it is checked or shown: `pack.spelt` for the letter,
+  message, answers and prep notes (the pack and `docs.change`), `autofill.ask_model` for form text,
+  `fresh._ai_profile`, and `suggest.guard` for AI suggestions. A spelling has one right form, so it is
+  fixed in place rather than by a revision. The person's own CV lines get a "Consistency" suggestion
+  instead (`suggest._spelling`), and the CV check `one_spelling` and the voice card count with `find`.
 - `fields.py` resolves the field from the advert alone (title words count three times); an advert that shows
   none is the general field, never the person's, so a computing graduate's letter for a complaints role is
   not written as a tech one. The person's own field (CV type, roles, subject) is background only, and decides

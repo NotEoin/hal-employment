@@ -297,6 +297,32 @@ class Letter(unittest.TestCase):
         self.assertIn("It matches the work I have done.", section(md, "Form answers"))
         self.assertNotIn("passionate", section(md, "Check before sending"))
 
+    def test_every_draft_is_written_in_your_spelling_without_another_ai_call(self):
+        us_words = {"letter": "I organized the catalog of a made-up archive by color.",
+                    "message": "I analyzed the made-up visitor behavior.",
+                    "answers": {"answers": [{"question": "Why this role?", "answer": "I traveled to the center."}]}}
+        writer = FakeWriter()
+        writer.reply = lambda system, user, original=writer.reply: us_words.get(prompt_id(system)) or original(
+            system, user)
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertIn("I organised the catalogue of a made-up archive by colour.", section(md, "Cover letter"))
+        self.assertIn("I analysed the made-up visitor behaviour.", section(md, "Message to the hiring manager"))
+        self.assertIn("I travelled to the centre.", section(md, "Form answers"))
+        self.assertNotIn("other side of the Atlantic", section(md, "Check before sending"))
+        self.assertEqual(len(writer.asked("letter")), 1, "a spelling is fixed in place, never by a revision")
+        self.assertIn("write in UK English, with UK spelling", " ".join(writer.asked("letter")[0]["system"].split()))
+
+    def test_a_us_spelling_setting_turns_uk_spelling_in_a_draft_into_us(self):
+        writer = FakeWriter(letter="I organised the catalogue of a made-up archive.")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("cvdocs.spelling", "en-US", by="you")
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(written["text"], "I organized the catalog of a made-up archive.")
+        self.assertIn("write in US English, with US spelling", " ".join(writer.asked("letter")[0]["system"].split()))
+
     def test_with_no_employment_record_no_request_mentions_one(self):
         # "Employment record: none" in the fit, letter and verify requests read to Claude as
         # a record that lacked a job on the CV; prep already leaves it out
@@ -581,6 +607,19 @@ class Requests(unittest.TestCase):
         self.assertIn("Volunteering/guide.md > Role", why["used"])
         docs = documents.load(self.a.con, self.job)
         self.assertIn("letter_notes", docs)
+
+    def test_a_change_you_ask_for_comes_back_in_your_spelling(self):
+        # the changed message and answers were saved as the AI wrote them, never checked for spelling
+        plain = self.a.writer.reply
+        us = {"message": "I organized the made-up catalog.",
+              "answers": {"answers": [{"question": "Why this role?", "answer": "I analyzed the center's records."}]}}
+        self.a.writer.reply = lambda system, user: us.get(prompt_id(system)) or plain(system, user)
+        r = self.c.post(self.url("/documents/change"), {"words": "Mention my catalogue work"})
+        self.assertEqual(self.wait(r.json()["action_id"])["state"], "done")
+        docs = documents.load(self.a.con, self.job)
+        self.assertEqual(docs["message"], "I organised the made-up catalogue.")
+        self.assertEqual([a["answer"] for a in docs["answers"] if a["question"] == "Why this role?"],
+                         ["I analysed the centre's records."])
 
     def test_saving_your_edits_keeps_them_to_learn_your_writing_from(self):
         r = self.c.request("PUT", self.url("/documents"), {"letter": "My own made-up letter, in my own words."})

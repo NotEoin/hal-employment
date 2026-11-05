@@ -115,6 +115,18 @@ class Checker(unittest.TestCase):
         self.assertNotIn("L10", rule_ids(check.check("Organised the catalogue.", "cv", spelling="en-GB")))
         self.assertIn("L10", rule_ids(check.check("Organised the catalogue.", "cv", spelling="en-US")))
 
+    def test_an_unset_spelling_is_checked_as_uk_english(self):
+        # an empty spelling used to turn the check off altogether
+        for unset in ("", None, "fr"):
+            self.assertIn("L10", rule_ids(check.check("Organized the catalog.", "cv", spelling=unset)))
+
+    def test_a_spelling_hit_carries_the_form_to_write_instead(self):
+        hits = [h for h in check.check("Organized the color catalog.", "cv", spelling="en-GB") if h.rule == "L10"]
+        self.assertEqual([(h.quote, h.fix) for h in hits],
+                         [("Organized", "Organised"), ("color", "colour"), ("catalog", "catalogue")])
+        self.assertIn('(write "colour")', hits[1].flag)
+        self.assertIn("UK English", hits[1].message)
+
     def test_length_limits_hold_for_letters_and_answers(self):
         long_letter = " ".join(["word"] * 400)
         hits = check.check(long_letter, "letter", target_words=250)

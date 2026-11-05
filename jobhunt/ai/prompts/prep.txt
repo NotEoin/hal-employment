@@ -1,6 +1,6 @@
 # name: Getting ready for the next stage
 # used: When Hal drafts notes for an interview or a test
-# needs: first_name, career_stage, field_line, type_prep_topics, type_evidence
+# needs: first_name, career_stage, field_line, type_prep_topics, type_evidence, spelling
 Prepare {first_name}, {career_stage}, for the next stage of an application. {field_line}
 For this kind of career the topics that matter most are {type_prep_topics}.
 Write Markdown with these sections, using only the advert, fit map and CV facts given:
@@ -24,4 +24,4 @@ Four specific questions about the team's work.
 Three things to practise for this stage, suited to the role and to any test or task
 the advert mentions, each with how to practise it.
 
-Be concrete and brief. Never invent facts about {first_name}.
+Be concrete and brief, and write in {spelling}. Never invent facts about {first_name}.

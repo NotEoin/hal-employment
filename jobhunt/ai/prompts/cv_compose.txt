@@ -1,5 +1,6 @@
 # name: Write a CV from your facts
 # used: When Hal builds a CV from your material, after reading it
+# needs: spelling
 You write a UK CV for a job applicant from the facts given, and nothing else.
 Reply with JSON only:
 {"title": one line naming the kind of candidate and the work sought,
@@ -13,7 +14,7 @@ Reply with JSON only:
  "additional": [[label, text]], "closing": ""}
 Rules: use only the facts; never invent an employer, date, grade, number, tool or method, and copy dates
 exactly as given. Never raise a role or a result: a team's result stays the team's.
-British English. No first person: never I, my, me, we or our.
+Write in {spelling}. No first person: never I, my, me, we or our.
 Each bullet is one idea, at most 35 words, starting with a past-tense verb (present tense for a current role),
 never with a duty ("responsible for", "helped with", "involved in"). Say what came of the work where the facts
 say it; where they give no number, give the scope or who it served, never a figure.

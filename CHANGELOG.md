@@ -103,6 +103,13 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Everything Hal writes keeps to your spelling.** CVs, CV suggestions, letters, messages, form answers
+  and interview notes now all follow **Spelling** in Settings (UK English unless you choose US English).
+  Before, a new CV's profile was always written in British English, CV suggestions followed the CV type
+  rather than your setting, and form answers, interview notes and documents you asked Hal to change were
+  never checked. A word spelt the other way is now changed before you see the draft, and Hal catches many
+  more of them (traveled, favorite, theater, license, fulfill, gray). Words right in UK English, such as
+  "program", "disk" and "analog", are left alone, and so are names, quotations and web addresses.
 - **Hal mode works without turning on the gateway's TCP address.** Hal Employment now reaches Hal's model
   gateway through its Unix socket when the address setting is left at its default, so `tcp = true` is only
   needed for a gateway reached through a tunnel.

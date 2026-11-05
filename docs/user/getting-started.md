@@ -89,6 +89,14 @@ the work served instead. A first draft that breaks one of Hal's writing rules (a
 number, "not just X but Y") is rewritten once, and anything still wrong is listed under **Check before
 sending**.
 
+Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
+English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the
+person hiring, form answers and interview notes. Hal changes a word spelt the other way (organize to
+organise, color to colour, traveled to travelled) before you see the draft. In your own CV lines, it
+offers the same change as a suggestion. Words that are right in both spellings are left alone, such as
+"program" for software, "disk", "analog" and "dialog box". So are names (the Kennedy Center), quotations
+and web addresses.
+
 On the Documents step, press **Critique as a recruiter** for a hiring manager's read of your CV and cover
 letter against the advert, saved as they are now. It shows the three changes that would help most, what a
 recruiter sees in the first six seconds, each requirement of the advert with the line that shows it (or

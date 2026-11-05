@@ -3,6 +3,7 @@ conventions of each kind of job, and the person's own voice.
 
 - `rules`: the rule set as data (id, rule, document kinds, severity) and the field add-ons.
 - `check`: the deterministic checker every letter, CV suggestion and form answer goes through.
+- `spelling`: UK and US spelling: the words a text spells the other way, with their fixes.
 - `fields`: which kind of job a document is for, and that field's conventions for the request.
 - `edits`: the person's edits of Hal's drafts, kept as pairs, and the rules they show.
 - `voice`: a voice card and exemplars built from the person's own writing, with no AI.

@@ -37,6 +37,7 @@ from urllib.parse import urlparse
 
 from . import cv, db, gpu, llm, record, salary
 from .ai import prompts
+from .writing import spelling
 
 if TYPE_CHECKING:
     from .sites.notes import Note, NoteSet
@@ -1107,6 +1108,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
         return 0, reason
     facts = _facts(job, docs, con, notes=page_notes(job, notes))
     cv_lines = _cv_lines(facts)
+    spelt_in = spelling.chosen()
     answered = 0
     for start in range(0, len(open_fields), MODEL_BATCH):
         batch = open_fields[start:start + MODEL_BATCH]
@@ -1150,7 +1152,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
             if f["kind"] == "checkbox":
                 value = str(value).lower() in ("true", "yes", "1")
             if isinstance(value, str) and not f.get("options"):
-                value = llm.undash(value)
+                value = spelling.respell(llm.undash(value), spelt_in)
             if f.get("type") == "number" and not re.fullmatch(r"\s*-?[\d.,]+\s*", str(value)):
                 continue
             f.update(value=value, source="hal", skip=False, note="" if a.get("sure") else "Hal is unsure; check this",

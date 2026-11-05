@@ -13,6 +13,8 @@ Design decisions, each with its reason:
   a CV suggestion and a form answer agree on what counts as an invented number.
 - A letter's greeting and sign-off are checked only when the text holds both; the pack adds them around
   the model's body itself.
+- A word in the other spelling (L10) comes with the form to write instead (`Hit.fix`, from
+  `writing.spelling`), so the flag says what to change and a caller can apply it without the AI.
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ import re
 from dataclasses import asdict, dataclass
 
 from jobhunt.writing import rules
+from jobhunt.writing import spelling as spelling_mod
 from jobhunt.writing.rules import ANSWER, CV, LETTER
 
 BULLET_WORDS_MAX = 35         # one idea per bullet; longer reads as a paragraph (research B1)
@@ -113,12 +116,17 @@ NUMBER = re.compile(r"\d[\d,.]*")
 
 @dataclass(frozen=True)
 class Hit:
-    """One break of a rule: the rule, how much it matters, the words found and what to do about it."""
+    """One break of a rule: the rule, how much it matters, the words found and what to do about it.
+
+    `fix` is the exact text to write in place of `quote` when there is only one right answer (a spelling);
+    "" otherwise.
+    """
 
     rule: str
     severity: str
     quote: str
     message: str
+    fix: str = ""
 
     def to_dict(self) -> dict:
         """The hit as JSON-ready fields."""
@@ -126,8 +134,8 @@ class Hit:
 
     @property
     def flag(self) -> str:
-        """The line for "Check before sending": the rule's name and the words found."""
-        return f"{rules.BY_ID[self.rule].name}: {self.quote}"
+        """The line for "Check before sending": the rule's name, the words found and any exact fix."""
+        return f"{rules.BY_ID[self.rule].name}: {self.quote}" + (f' (write "{self.fix}")' if self.fix else "")
 
 
 def unsupported_numbers(draft: str, *sources: str) -> list[str]:
@@ -151,9 +159,9 @@ def words_of(text: str) -> list[str]:
     return re.findall(r"[a-z][a-z'-]*", (text or "").lower())
 
 
-def _hit(rule_id: str, quote: str, message: str = "") -> Hit:
+def _hit(rule_id: str, quote: str, message: str = "", *, fix: str = "") -> Hit:
     rule = rules.BY_ID[rule_id]
-    return Hit(rule_id, rule.severity, " ".join(quote.split())[:120], message or rule.rule)
+    return Hit(rule_id, rule.severity, " ".join(quote.split())[:120], message or rule.rule, fix)
 
 
 def _applies(rule_id: str, kind: str) -> bool:
@@ -207,12 +215,16 @@ def _repeats(text: str, cv_text: str) -> list[str]:
     return out
 
 
-def _spelling(text: str, spelling: str) -> list[str]:
-    from jobhunt import cvscore
-    from jobhunt.cvstudio import checks as cv_checks
-
-    other = cvscore.AMERICAN if spelling == "en-GB" else cv_checks.BRITISH if spelling == "en-US" else None
-    return sorted({m.group(0).lower() for m in other.finditer(text)}) if other is not None else []
+def _spelling(text: str, spelling: str | None) -> list[Hit]:
+    """L10: each word in the other spelling once, with the form `spelling` writes instead."""
+    code = spelling_mod.code_of(spelling)
+    seen, hits = set(), []
+    for f in spelling_mod.find(text, code):
+        if f.word.lower() not in seen:
+            seen.add(f.word.lower())
+            hits.append(_hit("L10", f.word, f'Write "{f.fix}": your settings say {spelling_mod.LABELS[code]}.',
+                             fix=f.fix))
+    return hits
 
 
 def _length(text: str, kind: str, max_words: int | None, target_words: int | None) -> list[Hit]:
@@ -229,13 +241,14 @@ def _length(text: str, kind: str, max_words: int | None, target_words: int | Non
     return []
 
 
-def check(text: str, kind: str, *, sources: tuple[str, ...] | None = None, spelling: str = "",
+def check(text: str, kind: str, *, sources: tuple[str, ...] | None = None, spelling: str | None = None,
           cv_text: str = "", max_words: int | None = None, target_words: int | None = None,
           allowed: tuple[str, ...] | set[str] = ()) -> list[Hit]:
     """Every rule `text` breaks, as hits with the words quoted; [] for a clean draft.
 
     `kind` is "letter", "cv" (one line or several, one per line) or "answer". `sources` are the texts every
-    number must come from (None skips the number check); `spelling` is "en-GB" or "en-US"; `cv_text` lets
+    number must come from (None skips the number check); `spelling` is "en-GB" or "en-US", and anything else
+    (unset included) is "en-GB", so the spelling is always checked; `cv_text` lets
     a letter be checked for repeating the CV; `allowed` holds words the person uses in their own writing.
     """
     if kind not in rules.KINDS:
@@ -265,7 +278,7 @@ def check(text: str, kind: str, *, sources: tuple[str, ...] | None = None, spell
     hits += [_hit("L8", m.group(0)) for m in CONTRAST.finditer(text)]
     if _applies("L9", kind):
         hits += [_hit("L9", t) for t in _triads(text, allowed)]
-    hits += [_hit("L10", w) for w in _spelling(text, spelling)]
+    hits += _spelling(text, spelling)
     hits += [_hit("L11", text[max(0, m.start() - 20):m.end() + 20]) for m in DASH.finditer(text)]
     hits += [_hit("L12", m.group(0)) for m in BOLD.finditer(text)]
     hits += [_hit("L13", m.group(0)) for m in CHATBOT.finditer(text)]

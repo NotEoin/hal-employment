@@ -14,6 +14,8 @@ Design notes:
 - One letter path: `write_letter` reads the advert, the record and the fit map, writes the letter and checks
   it, for a pack and for a letter a form asks for (`documents.draft_letter`), so every letter is checked
   the same way.
+- Every draft the AI writes is respelt to the person's spelling (`spelt`, `writing.spelling`) before it is
+  checked, as dashes are taken out (`llm.undash`): a spelling has one right form, so it needs no revision.
 - Every draft goes through the writing checker (`writing.check`). A high-severity break (an invented number,
   a machine-made word, a staged contrast) makes the writer revise once with the problems quoted; what is
   left is listed under "Check before sending", never fixed in a loop.
@@ -30,7 +32,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import fields
+from .writing import fields, spelling
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -181,8 +183,13 @@ def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, 
             + _record_part("Employment record (true; use it where the CV is silent)", kept))
 
 
+def spelt(text: str, who: dict) -> str:
+    """An AI draft in the person's spelling (`who["spelling_code"]`; UK English when it is unset)."""
+    return spelling.respell(text, who.get("spelling_code"))
+
+
 def _letter(who: dict, context: str) -> str:
-    return drop_notes(llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip()))
+    return spelt(drop_notes(llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip())), who)
 
 
 def _hits(who: dict, text: str, kind: str, *, facts: str, kept: str, sources: tuple[str, ...]) -> list:
@@ -291,7 +298,7 @@ def _answers(who: dict, questions: list[str], context: str, *, facts: str, kept:
 
     def ask(text: str) -> list[dict]:
         found = llm.chat_json(prompt("answers", who), text, role="writer").get("answers", [])
-        return [{**a, "answer": llm.undash(a.get("answer", ""))} for a in found if isinstance(a, dict)]
+        return [{**a, "answer": spelt(llm.undash(a.get("answer", "")), who)} for a in found if isinstance(a, dict)]
 
     answers = ask(request)
     hits = [h for a in answers for h in _hits(who, a["answer"], "answer", facts=facts, kept=kept, sources=sources)]
@@ -369,7 +376,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit)
     letter = written["text"]
     context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
-    message = drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip()))
+    message = spelt(drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip())), who)
     message = untitled(message, analysis, job_text)
     questions = analysis.get("questions") or []
     answers = _answers(who, [*questions, *COMMON_QUESTIONS],

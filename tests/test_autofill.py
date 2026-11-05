@@ -321,6 +321,24 @@ class Answers(unittest.TestCase):
         self.assertIsNone(f["value"])
         self.assertIn("manager's number", f["note"])
 
+    def test_a_written_answer_is_asked_for_and_kept_in_your_spelling(self):
+        f = {"hid": "h0", "kind": "textarea", "type": "textarea", "label": "Describe a project you are proud of",
+             "required": True}
+        asked = []
+
+        def model(system, user, **kw):
+            asked.append(system)
+            return {"answers": [{"hid": "h0", "value": "I organized the color catalog of a made-up archive.",
+                                 "sure": True}]}
+        saved = autofill.llm.chat_json, autofill.gpu.busy
+        autofill.llm.chat_json, autofill.gpu.busy = model, lambda: None
+        try:
+            autofill.ask_model(self.job, [f], {})
+        finally:
+            autofill.llm.chat_json, autofill.gpu.busy = saved
+        self.assertEqual(f["value"], "I organised the colour catalogue of a made-up archive.")
+        self.assertIn("in UK English, with UK spelling", " ".join(asked[-1].split()))
+
     def test_a_salary_typed_for_one_job_is_never_offered_to_another(self):
         con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
         self.addCleanup(con.close)

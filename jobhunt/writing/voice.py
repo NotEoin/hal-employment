@@ -165,10 +165,8 @@ def card(found: list[Sample], dropped: dict | None = None) -> dict:
 
     `dropped` is `edits.dropped_words` of the person's edits, for the words they take out of drafts.
     """
-    from jobhunt import cvscore
     from jobhunt import record as record_mod
-    from jobhunt.cvstudio import checks as cv_checks
-    from jobhunt.writing import edits
+    from jobhunt.writing import edits, spelling
 
     prose = [s for s in found if s.kind in PROSE]
     sentences = [x for s in prose for x in _sentences(s.text)]
@@ -177,8 +175,9 @@ def card(found: list[Sample], dropped: dict | None = None) -> dict:
         return {}
     lengths = [len(x.split()) for x in sentences]
     everything = " ".join(s.text for s in found)
-    british = len(cv_checks.BRITISH.findall(everything))
-    american = len(cvscore.AMERICAN.findall(everything))
+    # words a US reader would correct are British, and the other way round
+    british = len(spelling.find(everything, spelling.US))
+    american = len(spelling.find(everything, spelling.UK))
     lower_in = Counter()
     for s in found:
         lower_in.update({w for w in WORD.findall(s.text) if w.islower() and len(w) >= 5})

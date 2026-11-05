@@ -5,7 +5,7 @@ interests. `build` turns the answers into a schema 2 document with the type's se
 Module marks are optional for everyone: a module with no mark is listed by name only when the type shows
 all modules, and never makes the build fail. When the AI is ready, it may write the profile line from the
 same facts, through the suggestion guards, so it cannot add a number or qualification the answers do not
-hold, or speak as I or we.
+hold, or speak as I or we, and it is respelt to the person's spelling.
 
 `make` saves the result as a generated version, checks it against its type, and runs the reviewers, so a
 failing check arrives as a suggestion rather than as a silent edit.
@@ -21,6 +21,7 @@ import logging
 
 from jobhunt import db
 from jobhunt.cvstudio import suggest
+from jobhunt.writing import spelling
 
 log = logging.getLogger(__name__)
 
@@ -156,14 +157,14 @@ def _ai_profile(doc, type_, answers: dict) -> str | None:
     if not suggest.ai_ready():
         return None
     try:
-        got = ai.chat_json(prompts.text("cv_compose"), json.dumps({"facts": answers, "cv_type": type_.name,
-                                                                  "conventions": suggest.field_conventions()},
-                                                                  ensure_ascii=True),
+        system = prompts.text("cv_compose", spelling=suggest.spelling_words())
+        got = ai.chat_json(system, json.dumps({"facts": answers, "cv_type": type_.name,
+                                               "conventions": suggest.field_conventions()}, ensure_ascii=True),
                            role="writer", purpose="cv_compose", priority=suggest.AI_PRIORITY)
     except ai.LLMUnavailable as e:
         log.info("fresh CV profile by rules: %s", e)
         return None
-    text = str(got.get("summary") or "").strip()
+    text = spelling.respell(str(got.get("summary") or "").strip(), spelling.chosen())
     if not text:
         return None
     gapped = suggest.with_gaps(text, json.dumps(answers))

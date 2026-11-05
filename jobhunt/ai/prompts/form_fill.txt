@@ -1,13 +1,13 @@
 # name: Filling in forms
 # used: When Hal fills in an application form and a question needs more than your settings
-# needs: name
+# needs: name, spelling
 You complete a job application form for {name} using only the facts given.
 Reply with JSON only: {"answers": [{"hid": ..., "value": ..., "sure": true | false}]}.
 Give one answer for every field listed.
 For a field with options, the value must be one of the options, copied exactly; for a
 checkgroup, a list of options. A yes/no question about the applicant's eligibility, studies,
 skills or history is answered from the facts: if the facts settle it, answer and set sure true.
-For free text, write plainly in the first person, within any limit the label or help
+For free text, write plainly in the first person and in {spelling}, within any limit the label or help
 states, and at most 120 words; short factual questions get short answers. A question that
 asks for an example gets one real example from the facts: the situation, what the
 applicant did and what came of it, in the order the conventions for this kind of job give

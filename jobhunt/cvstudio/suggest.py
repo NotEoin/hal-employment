@@ -14,6 +14,8 @@ counts as a gap, whoever wrote it, so a gap is never accepted into the CV or sen
 Design decisions:
 - One suggestion per line. A spelling fix covers every word on its line, so accepting one never makes
   another suggestion's `before` stale, and "Accept all" can apply a kind in one version.
+- The AI's wordings are respelt to the person's spelling (`writing.spelling`) before the guards, so a
+  suggestion never brings in the other spelling; the person's own lines get a spelling suggestion instead.
 - `before` and each `after` are what the card shows. For a reorder they are the names in order, which
   are resolved back to ids against the version being changed, so a renamed part is caught by the guard.
 - The store's functions open their own connection, so this module commits its own rows before and after
@@ -59,15 +61,6 @@ DECIDED = "You already decided on this suggestion."
 REVIEW_ORDER = ("summary", ("experience", "volunteering"), "projects", "skills", "interests")
 REVIEW_FIRST = ("summary", "education")
 
-# US spellings Hal turns into UK ones when `cvdocs.spelling` is en-GB (the same list `cvscore.py` uses).
-US_TO_UK = (
-    (r"organiz", "organis"), (r"analyz", "analys"), (r"optimiz", "optimis"), (r"prioritiz", "prioritis"),
-    (r"summariz", "summaris"), (r"recogniz", "recognis"), (r"visualiz", "visualis"), (r"customiz", "customis"),
-    (r"minimiz", "minimis"), (r"maximiz", "maximis"), (r"behavior", "behaviour"), (r"color", "colour"),
-    (r"modeled", "modelled"), (r"modeling", "modelling"), (r"defense", "defence"),
-)
-US_WORD = re.compile(r"\b(" + "|".join(us for us, _ in US_TO_UK) + r")(\w*)", re.I)
-CENTER = re.compile(r"\b(cent)(er)(s|ed)?\b", re.I)
 # Characters job-site scanners drop or misread, with what to write instead ("" drops them).
 SYMBOLS = {"\u2605": "", "\u2606": "", "\u2713": "", "\u2714": "", "\u2192": "-", "\u27a4": "", "\u25ba": "",
            "\u25cf": "", "\u2022": "", "\u25aa": "", "\u2794": "-", "\u00bb": "", "\u2756": ""}
@@ -225,29 +218,23 @@ def _locked(doc, target: str, layout: dict) -> bool:
 
 # -- the checks that need no AI ---------------------------------------------------------------------------
 
-def _uk(text: str) -> str:
-    def word(m: re.Match) -> str:
-        stem, rest = m.group(1), m.group(2)
-        uk = next(u for us, u in US_TO_UK if re.fullmatch(us, stem, re.I))
-        return (uk.capitalize() if stem[0].isupper() else uk) + rest
-    text = US_WORD.sub(word, text)
-    return CENTER.sub(lambda m: m.group(1) + ("re" if m.group(2).islower() else "RE") + (m.group(3) or ""), text)
-
-
 def _spelling(doc, sid: str) -> list[Draft]:
-    if str(_setting("cvdocs.spelling")) != "en-GB":
-        return []
+    from jobhunt.writing import spelling
+
+    code = spelling.chosen()
+    label = spelling.LABELS[code]
     out = []
     for target, text, s in lines(doc):
-        fixed = _uk(text)
-        if s != sid or fixed == text:
+        found = spelling.find(text, code) if s == sid else []
+        if not found:
             continue
-        us = (US_WORD.search(text) or CENTER.search(text)).group(0)
-        uk = _uk(us)
-        out.append(Draft(target, "replace", "Consistency", f'Use one spelling: "{uk.lower()}"',
-                         f'This line uses the US spelling "{us}". Your settings say UK English.',
-                         {"type": "setting", "id": "cvdocs.spelling", "label": "Setting: spelling is UK English"},
-                         text, [fixed], sid, [{"label": f'Found: "{us}"', "ref": target}]))
+        first = found[0]
+        out.append(Draft(target, "replace", "Consistency", f'Use one spelling: "{first.fix.lower()}"',
+                         f'This line uses the {spelling.SIDES[code]} spelling "{first.word}". Your settings say '
+                         f'{label}.',
+                         {"type": "setting", "id": "cvdocs.spelling", "label": f"Setting: spelling is {label}"},
+                         text, [spelling.respell(text, code)], sid,
+                         [{"label": f'Found: "{first.word}"', "ref": target}]))
     return out
 
 
@@ -445,6 +432,8 @@ def _has(text: str, phrase: str) -> bool:
 
 def guard(draft: Draft, ctx: Context) -> Draft | None:
     """The draft with gaps filled in when it passes every guard, else None."""
+    from jobhunt.writing import spelling
+
     model = _model()
     if draft.op not in OPS or draft.kind not in KINDS or not draft.afters:
         return None
@@ -460,8 +449,11 @@ def guard(draft: Draft, ctx: Context) -> Draft | None:
         return None
     afters = []
     phrases = banned_phrases(ctx.type_)
+    code = spelling.chosen() if draft.ai else None
     for after in draft.afters:
         after = with_gaps(str(after), ctx.known_text) if draft.op == "replace" else str(after)
+        if code:
+            after = spelling.respell(after, code)
         if any(_has(after, p) and not _has(now, p) for p in phrases):
             continue
         # a fix that needs no AI keeps the person's own I; the AI's wording never speaks as I
@@ -544,12 +536,20 @@ def ai_ready() -> bool:
     return ai.ready(AI_PRIORITY, "cv_suggest") is None
 
 
+def spelling_words() -> str:
+    """The person's spelling as the CV prompts name it ("UK English, with UK spelling ...")."""
+    from jobhunt.writing import spelling
+
+    return spelling.WORDS[spelling.chosen()]
+
+
 def writing_problems(block: str, type_) -> list[str]:
     """What the writing checker finds in a section's bullet lines, as "<target>: <problem>" lines."""
     from jobhunt.writing import check as writing_check
+    from jobhunt.writing import spelling as spelling_mod
 
     out = []
-    spelling = str((type_.writing or {}).get("spelling") or "")
+    spelling = spelling_mod.chosen()   # the setting, as the prompt is told; the type's own is only a default
     for row in block.splitlines():
         target, _, text = row.partition("\t")
         if "/b:" not in target:
@@ -580,7 +580,7 @@ def ask_ai(con: sqlite3.Connection, doc, type_, sids: list[str], failing: list[D
     if not block:
         return None
     extra = str((type_.prompts or {}).get("cv_suggest") or "").strip()
-    system = prompts.text("cv_suggest", con=con) + (f"\n{extra}\n" if extra else "")
+    system = prompts.text("cv_suggest", con=con, spelling=spelling_words()) + (f"\n{extra}\n" if extra else "")
     user = json.dumps({
         "cv_type": type_.name, "writing": type_.writing, "lines": block,
         "failing_checks": [d.title for d in failing], "writing_problems": writing_problems(block, type_),
@@ -938,7 +938,7 @@ def another(con: sqlite3.Connection, sugg_id: str) -> dict:
     if row["op"] != "replace" or not ai_ready():
         return {"new": False, "message": ONLY_OPTION, "alt": row["alt"]}
     type_ = cv_type()
-    system = prompts.text("cv_another", con=con)
+    system = prompts.text("cv_another", con=con, spelling=spelling_words())
     user = json.dumps({"cv_type": type_.name, "writing": type_.writing, "target": row["target"],
                        "now": row["before"], "why": row["why"], "already_shown": afters,
                        "preferences": _prefs_words(con)}, ensure_ascii=True)

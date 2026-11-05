@@ -77,8 +77,6 @@ AVAILABLE = re.compile(r"\bavailab|\bfree (to start|from)|\bplacement year\b|\b\
                        r"\bsummer 20\d\d\b|\bfrom (january|february|march|april|may|june|july|august|september|"
                        r"october|november|december)\b", re.I)
 FIRST_PERSON = re.compile(r"\b(I|my|me|we|our)\b")
-BRITISH = re.compile(r"\b(optimis\w*|analys(e|ed|ing)|organis\w*|prioritis\w*|colour\w*|behaviour\w*|"
-                     r"modelling|modelled|centre|centres|defence|catalogue)\b", re.I)
 URL = re.compile(r"(https?://\S+|\bwww\.\S+|\b[\w-]+\.(com|co\.uk|org|net|io|art|design|uk)(/\S*)?)", re.I)
 MONTHS = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)"
 DATE_FORMS = (("month_short", rf"^{MONTHS}\.? \d{{4}}$"), ("month_long", r"^[a-z]{4,9} \d{4}$"),
@@ -307,10 +305,11 @@ def _pages_within(c: _In) -> tuple[bool, str]:
 
 
 def _one_spelling(c: _In) -> tuple[bool, str]:
-    wrong = cvscore.AMERICAN if c.spelling == "en-GB" else BRITISH
-    found = sorted({m.group(0).lower() for m in wrong.finditer(c.text)})
-    side = "US" if c.spelling == "en-GB" else "UK"
-    return not found, f"{side} spellings: {', '.join(found)}." if found else ""
+    from jobhunt.writing import spelling
+
+    code = spelling.code_of(c.spelling)
+    found = sorted({f"{f.word.lower()} ({f.fix.lower()})" for f in spelling.find(c.text, code)})
+    return not found, f"{spelling.SIDES[code]} spellings: {', '.join(found)}." if found else ""
 
 
 def _entry_says_what(c: _In) -> tuple[bool, str]:

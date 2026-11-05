@@ -64,7 +64,8 @@ def rewrite_letter_now(ctx, job, words: str) -> dict:
 def _message(job, who: dict, docs: dict, words: str) -> str:
     request = (f"Job: {job['title']} at {job['company']}\n\nThe message as it stands:\n{docs.get('message') or ''}"
                f"\n\nThe applicant asked for this change: {words}")
-    return pack.drop_notes(llm.undash(llm.chat(pack.prompt("message", who), request, role="writer").strip()))
+    return pack.spelt(pack.drop_notes(llm.undash(llm.chat(pack.prompt("message", who), request,
+                                                          role="writer").strip())), who)
 
 
 def _answers(job, who: dict, docs: dict, words: str) -> list[dict]:
@@ -76,7 +77,8 @@ def _answers(job, who: dict, docs: dict, words: str) -> list[dict]:
                f"\n\n{fields.block(fields.for_job(job, who), 'answer')}"
                f"\n\nThe applicant asked for this change: {words}")
     reply = llm.chat_json(pack.prompt("answers", who), request, role="writer").get("answers") or []
-    by_question = {a.get("question", ""): llm.undash(a.get("answer", "")) for a in reply if isinstance(a, dict)}
+    by_question = {a.get("question", ""): pack.spelt(llm.undash(a.get("answer", "")), who)
+                   for a in reply if isinstance(a, dict)}
     return [{"question": a.get("question", ""), "answer": by_question.get(a.get("question", "")) or a.get("answer", "")}
             for a in given]
 

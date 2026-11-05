@@ -30,7 +30,8 @@ def request(job, who: dict) -> str:
 def build(con, job) -> str:
     """Drafts the preparation notes for a job, stores them, and returns them."""
     who = pack.person(job)
-    notes = llm.chat(pack.prompt("prep", who), request(job, who), role="main", timeout=PREP_TIMEOUT).strip()
+    notes = pack.spelt(llm.chat(pack.prompt("prep", who), request(job, who), role="main",
+                                timeout=PREP_TIMEOUT).strip(), who)
     con.execute("""INSERT INTO applications (job_id, stage, prep, updated) VALUES (?, 'submitted', ?, ?)
                    ON CONFLICT(job_id) DO UPDATE SET prep = excluded.prep, updated = excluded.updated""",
                 (job["id"], notes, db.now()))
