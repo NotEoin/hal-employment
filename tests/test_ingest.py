@@ -242,6 +242,9 @@ class Ranking(unittest.TestCase):
         self.assertEqual(kind("uni/Transcript_10293 (2nd year).pdf"), "transcript")
         self.assertEqual(kind("Documents/Academic transcript.docx"), "transcript")
         self.assertEqual(kind("Jobs/Bar CV.md", "Avery Quillon\n\nProfile\n\nKind.\n\nExperience\n\nBar"), "cv")
+        long_start = "# Avery Quillon\n\n" + "A long profile. " * 120 + "\n\n## Education\n\nBA History\n\n" \
+            + "- A module. " * 80 + "\n\n## Experience\n\nArchive assistant"
+        self.assertEqual(kind("CVs/Avery Quillon CV 2026.md", long_start), "cv")
         self.assertEqual(kind("Third year/Dissertation.pdf"), "report")
         self.assertEqual(kind("Certificates/First aid.pdf"), "certificate")
         self.assertEqual(kind("Topics/TLS certificate.md", "A TLS certificate binds a key to a name."), "notes")

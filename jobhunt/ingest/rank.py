@@ -99,6 +99,9 @@ PEEK_TRANSCRIPT = re.compile(r"transcript of (?:study|records?)|academic transcr
 PEEK_CV_SECTIONS = re.compile(r"^\W*(?:profile|personal profile|summary|experience|work experience|employment|"
                               r"work history|education|qualifications|skills|key skills|references)\W*$", re.I | re.M)
 CV_SECTIONS_MIN = 2       # a CV has headed sections; a note that says "resume" once does not
+# A CV's headings can sit far down: a long profile and education section held the second heading past the
+# first 2,000 characters, and eight Markdown CVs were read as notes (2026-11-05).
+CV_PEEK_CHARS = 10_000
 TRANSCRIPT_WORD = _w(r"transcripts?")
 ACADEMIC_NAME = re.compile(r"\d|year|stage|semester|term|university|college|school|academic|official|degree", re.I)
 PEEK_CERTIFICATE = re.compile(r"this is to certify|has (?:successfully )?completed|is awarded|awarded to|"
@@ -110,10 +113,10 @@ NOT_DOCUMENTS = re.compile(r"(?:licen[cs]e|copying|notice|third[ _-]?party[ _-]?
                            r"code[ _-]?of[ _-]?conduct|contributing|security|authors|maintainers)", re.I)
 
 
-def _peek(path: Path) -> str:
+def _peek(path: Path, chars: int = PEEK_CHARS) -> str:
     try:
         with path.open(encoding="utf-8", errors="replace") as f:
-            return f.read(PEEK_CHARS)
+            return f.read(chars)
     except OSError:
         return ""
 
@@ -177,7 +180,8 @@ def rule_for(rel: str, path: Path | None = None) -> Rule:
             and (ACADEMIC_NAME.search(name) or TRANSCRIPT_WORD.fullmatch(name.strip())):
         hit = RULES[1]
     start = _peek(path) if path is not None and suffix in TEXT_SUFFIXES else None
-    if hit is RULES[0] and start is not None and len(PEEK_CV_SECTIONS.findall(start)) < CV_SECTIONS_MIN:
+    if hit is RULES[0] and start is not None and len(PEEK_CV_SECTIONS.findall(_peek(path, CV_PEEK_CHARS))) \
+            < CV_SECTIONS_MIN:
         hit = None
     if hit is RULES[3] and suffix in TEXT_SUFFIXES and not PEEK_CERTIFICATE.search(f"{name}\n{start or ''}"):
         hit = None
