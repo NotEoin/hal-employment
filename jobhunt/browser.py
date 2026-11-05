@@ -615,7 +615,8 @@ def _close_list(page, box) -> None:
     only the last resort, for a list in neither a form nor a dialog.
     """
     try:
-        box.evaluate("e => e.blur()")
+        # A box without focus never loses it, so its list stays open (react-select's, testers 2026-11-05).
+        box.evaluate("e => { if (document.activeElement !== e) e.focus(); e.blur(); }")
         # A list showing "No results" has no options but is still open, and may hide the rest of the form (Ashby's).
         still_open = box.get_attribute("aria-expanded") == "true"
         if (page.locator("[data-hal-opt]:visible").count() or still_open) and not box.evaluate(PRESS_AROUND_JS):

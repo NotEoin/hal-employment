@@ -48,6 +48,9 @@
   // Escape also closes the dialog a form may sit in (Workable's did, 2026-10-20), so a list inside a form or
   // dialog is closed by a press on that, which is outside the list but still inside the form.
   function closeList(el) {
+    // A widget closes its list when its box loses focus, which a box without focus never does: react-select's
+    // stayed open after a bare blur (Greenhouse, testers 2026-11-05).
+    if (document.activeElement !== el) el.focus();
     el.blur();
     // A list showing "No results" has no options but is still open, and may hide the rest of the form (Ashby's).
     if (!document.querySelector('[data-hal-opt]') && el.getAttribute('aria-expanded') !== 'true') return;

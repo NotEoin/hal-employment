@@ -211,6 +211,7 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
         _checkpoint(job_id)
         out = browser.fill(job_id, fields, _shot(job_id))
         _note_uses(form, out)
+    _pick_again(job_id, fields, out)
     for f in fields:
         f["error"] = out["errors"].get(f["hid"], "")
     _count_note_answers(form, job_id)
@@ -218,6 +219,24 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
     form["filled"] = {"at": db.now(), "screenshot": out["screenshot"], "errors": len(out["errors"]),
                       "next": out["next"], "password": out["password"]}
     return out
+
+
+def _pick_again(job_id: str, fields: list[dict], out: dict) -> None:
+    """Picks each list answer the form found no option for once more, on its own, and clears what then lands.
+
+    A list picked while another widget's list was still open came up empty in a full fill and took the same
+    answer by itself (Greenhouse's location, testers 2026-11-05). The model's answers are put to it again instead.
+    """
+    again = [f for f in fields if out["errors"].get(f["hid"], "").startswith("no option") and f.get("source") != "hal"]
+    if not again:
+        return
+    _checkpoint(job_id)
+    second = browser.fill(job_id, again, _shot(job_id))
+    for f in again:
+        if f["hid"] in second["errors"]:
+            out["errors"][f["hid"]] = second["errors"][f["hid"]]
+        else:
+            out["errors"].pop(f["hid"], None)
 
 
 UPLOAD_SETTLE_LOOKS = 5   # reads of a page after an upload, until its questions stop changing
