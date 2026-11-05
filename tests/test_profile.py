@@ -246,6 +246,17 @@ class Store(unittest.TestCase):
         with self.assertRaises(ValueError):
             edu("Sources/Coursework/e.md", qualification="Dissertation (HIS3020)", institution="University of Wexley")
 
+    def test_modules_from_course_notes_join_the_qualification_studied_there(self):
+        degree = store.add_found(self.con, "education",
+                                 {"qualification": "BA History", "institution": "Wexley University"},
+                                 ev("Sources/Education/transcript.md", "transcript", "BA History"))
+        module = store.add_found(self.con, "education",
+                                 {"subject": "Early Modern Europe", "institution": "University of Wexley",
+                                  "modules": [{"name": "HIS2010", "mark": ""}]},
+                                 ev("Sources/Study notes/week 1.md", "notes", "HIS2010"))
+        self.assertEqual(module, degree)
+        self.assertIn("HIS2010", [m["name"] for m in store.item(self.con, degree)["fields"]["modules"]])
+
     def test_near_identical_certificate_names_merge_but_different_levels_do_not(self):
         def cert(source, name):
             return store.add_found(self.con, "certificate", {"name": name}, ev(source, "certificate", name))

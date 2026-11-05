@@ -339,6 +339,8 @@ def _same_education(a: dict, b: dict) -> bool:
         return False
     la, lb = level(a.get("qualification", "")), level(b.get("qualification", ""))
     shared = bool(_subject_words(a) & _subject_words(b))
+    if ia and ib and not (a.get("qualification") and b.get("qualification")):
+        return True     # modules from course notes, with no qualification named, belong to the one studied there
     if la and lb:
         return la == lb and (bool(ia and ib) or shared)
     if ia and ib:
