@@ -533,17 +533,35 @@ def search_many(queries: list[str], k: int = 5, min_score: float = MIN_SCORE,
     return results
 
 
+# How much a passage counts for writing, by the ingest's category in its path (`Sources/<Category>/`): a
+# trivia quiz in the study notes outranked the person's CVs as evidence for a letter (2026-11-05). Notes
+# outside `Sources/` are the person's own and count fully.
+CATEGORY_WEIGHT = {"CVs and letters": 1.0, "Work": 1.0, "Education": 1.0, "Certificates": 1.0, "Projects": 1.0,
+                   "Coursework": 0.9, "Writing": 0.9, "Code": 0.7, "Creative work": 0.7, "Study notes": 0.5,
+                   "Slides": 0.4, "Email": 0.6, "Media": 0.3, "Other": 0.3}
+CANDIDATES = 4                # passages fetched per one kept, so the weighting has some to choose from
+
+
+def weight(path: str) -> float:
+    """How much a passage at `path` counts as evidence for writing (see `CATEGORY_WEIGHT`)."""
+    parts = path.split("/")
+    if len(parts) > 2 and parts[0] == "Sources":
+        return CATEGORY_WEIGHT.get(parts[1], 1.0)
+    return 1.0
+
+
 def context(queries: list[str], per_query: int = 3, limit: int = 6000) -> str:
     """Passages of the record relevant to the queries, as text for a prompt; "" when the record cannot be read.
 
-    Never holds a passage from a private folder.
+    Never holds a passage from a private folder. Each query's passages are ranked by score times `weight`.
     """
     try:
-        found = search_many([q for q in queries if q.strip()][:20], per_query)
+        found = search_many([q for q in queries if q.strip()][:20], per_query * CANDIDATES)
     except (OSError, ValueError, KeyError, TypeError):
         return ""
     seen, lines = set(), []
     for hits in found:
+        hits = sorted(hits, key=lambda h: -h.get("score", 0) * weight(h["path"]))[:per_query]
         for h in hits:
             key = (h["path"], h["heading"], h["text"][:80])
             if key in seen or is_private(h["path"]):

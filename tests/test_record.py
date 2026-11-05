@@ -254,5 +254,18 @@ class Health(unittest.TestCase):
         self.assertEqual(rows["record"]["fix"], {"label": "Make the folder", "action": None, "route": "record"})
 
 
+
+class EvidenceWeight(unittest.TestCase):
+    def test_a_cv_outranks_a_lecture_note_that_matches_the_words_better(self):
+        # a trivia quiz in the study notes outranked the person's CVs as a letter's evidence (2026-11-05)
+        hits = [[{"path": "Sources/Study notes/quiz.md", "heading": "Text", "text": "Quiz on customers.", "score": 1.0},
+                 {"path": "Sources/CVs and letters/CV.md", "heading": "Experience", "text": "Served customers.",
+                  "score": 0.8},
+                 {"path": "My notes/Volunteering.md", "heading": "Museum", "text": "Ran tours.", "score": 0.7}]]
+        with mock.patch.object(record, "search_many", return_value=hits):
+            out = record.context(["customer service"], per_query=2)
+        self.assertEqual(re.findall(r"^\[(.*?) >", out, re.M),
+                         ["Sources/CVs and letters/CV.md", "My notes/Volunteering.md"])
+
 if __name__ == "__main__":
     unittest.main()
