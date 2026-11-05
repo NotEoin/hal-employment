@@ -292,6 +292,12 @@ class Ranking(unittest.TestCase):
             letter = put(Path(tmp), "Reference.md", "To whom it may concern,\n\nI have known Avery for two years.")
             self.assertEqual(rank.rule_for("Jobs/Reference.md", letter).doc_type, "reference")
 
+    def test_a_quote_split_by_markdown_across_lines_is_still_found(self):
+        # every job of a Markdown CV came out "Check this": the heading and the dates were on two lines
+        text = "#### Gallery assistant, Brindle Arts Centre\n**May 2022 - June 2024**\n- Ran tours."
+        self.assertTrue(understand.quote_found("Gallery assistant, Brindle Arts Centre May 2022 - June 2024", text))
+        self.assertFalse(understand.quote_found("Gallery assistant, Brindle Arts Centre Ma", text))
+
     def test_a_persons_own_note_at_an_entity_path_is_never_written_to(self):
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp)

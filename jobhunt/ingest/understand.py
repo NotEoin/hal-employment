@@ -63,10 +63,22 @@ def _fold(text: str) -> str:
     return " ".join(str(text).translate(FOLD).lower().split())
 
 
+def _words(text: str) -> str:
+    return " " + " ".join(re.findall(r"\w+", _fold(text))) + " "
+
+
 def quote_found(quote: str, text: str) -> bool:
-    """True when `quote` is in `text` word for word, ignoring spacing, case and typographic quotes."""
+    """True when `quote`'s words are in `text` in the same order, ignoring case, spacing and punctuation.
+
+    Only the words count: a CV's "#### Bartender, The Old George Inn" with "**November 2024 - January 2025**"
+    on the next line was quoted as one line, and every job of a Markdown CV came out "Check this"
+    (2026-11-05).
+    """
     q = _fold(quote).strip(" .,;:\"'")
-    return len(q) >= QUOTE_MIN and len(q.split()) <= QUOTE_MAX_WORDS and q in _fold(text)
+    if len(q) < QUOTE_MIN or len(q.split()) > QUOTE_MAX_WORDS:
+        return False
+    words = _words(q)
+    return words.strip() != "" and words in _words(text)
 
 
 def owner_names(owner: str) -> list[str]:
