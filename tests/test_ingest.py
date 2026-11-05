@@ -298,6 +298,14 @@ class Ranking(unittest.TestCase):
         self.assertTrue(understand.quote_found("Gallery assistant, Brindle Arts Centre May 2022 - June 2024", text))
         self.assertFalse(understand.quote_found("Gallery assistant, Brindle Arts Centre Ma", text))
 
+    def test_one_entity_spelt_several_ways_has_one_note(self):
+        # "3D Modeling" and "3D modeling" were two skill notes (2026-11-05)
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            for n, name in enumerate(["Oral History", "oral history", "Oral-history"]):
+                notes.add_mentions(vault, {"title": f"Note {n}", "entities": {"skills": [name]}}, f"Sources/x/{n}.md")
+            self.assertEqual([p.name for p in (vault / "Skills").iterdir()], ["Oral History.md"])
+
     def test_a_persons_own_note_at_an_entity_path_is_never_written_to(self):
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp)

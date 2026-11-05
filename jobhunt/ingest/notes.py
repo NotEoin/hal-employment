@@ -137,6 +137,26 @@ def entity_rel(kind: str, name: str) -> str:
     return f"{ENTITY_FOLDERS[kind]}/{slug(name)}.md"
 
 
+def entity_key(name: str) -> str:
+    """An entity's name as compared: "3D Printing", "3D printing" and "3d-printing" are one."""
+    return " ".join(re.split(r"[\s_-]+", slug(name).lower())).strip()
+
+
+def existing_entity(vault: Path, kind: str, name: str) -> str:
+    """The path of the entity note already there under another spelling of `name`, else its own path.
+
+    Names came back cased and hyphenated in every way ("3D Modeling", "3D modeling"), one note each
+    (2026-11-05).
+    """
+    folder = vault / ENTITY_FOLDERS[kind]
+    want = entity_key(name)
+    if folder.is_dir():
+        for p in folder.glob("*.md"):
+            if entity_key(p.stem) == want:
+                return _rel(vault, p)
+    return entity_rel(kind, name)
+
+
 def write_source(vault: Path, desc: dict, *, text: str, source: str, sha256: str, original: str | None,
                  extra_links: list[str] = ()) -> str:
     """Writes the note for one document or unit; returns its path inside the record."""
@@ -155,7 +175,7 @@ def write_source(vault: Path, desc: dict, *, text: str, source: str, sha256: str
         lines += ["This file holds one of your private answers, so Hal did not send it to the AI.", ""]
     if desc["facts"]:
         lines += ["## Key facts", "", *(_fact_line(f) for f in desc["facts"]), ""]
-    linked = [f"- {ENTITY_FOLDERS[k]}: " + ", ".join(link(entity_rel(k, n), n) for n in ents[k])
+    linked = [f"- {ENTITY_FOLDERS[k]}: " + ", ".join(link(existing_entity(vault, k, n), n) for n in ents[k])
               for k in ENTITY_FOLDERS if ents.get(k)]
     if linked or extra_links:
         lines += ["## Links", "", *linked, *extra_links, ""]
@@ -178,7 +198,7 @@ def add_mentions(vault: Path, desc: dict, note_rel: str) -> list[str]:
         for name in names:
             if len(slug(name)) < 2 or slug(name) == "Untitled":
                 continue
-            rel = entity_rel(kind, name)
+            rel = existing_entity(vault, kind, name)
             path = vault / rel
             line = f"- {link(note_rel, desc['title'])}"
             if path.exists():
