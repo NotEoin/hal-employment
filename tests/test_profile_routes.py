@@ -130,6 +130,16 @@ class ProfileRoutes(unittest.TestCase):
         self.assertEqual((job["id"], job["state"], job["fields"]["start"]), (ids["job"], "edited", "2023-10"))
         self.assertEqual(self.c.get("/api/v2/profile").json()["conflicts"], [])
 
+    def test_the_overview_names_each_conflicts_items_and_keeps_the_settled_ones(self):
+        ids = self.seed()
+        (conflict,) = self.c.get("/api/v2/profile").json()["conflicts"]
+        self.assertEqual([(i["id"], i["title"]) for i in conflict["items"]], [(ids["job"], "Collections volunteer")])
+        self.assertEqual(self.c.get("/api/v2/profile").json()["resolved"], [])
+        self.c.post(f"/api/v2/profile/conflicts/{conflict['id']}/resolve", {"keep_all": True})
+        (settled,) = self.c.get("/api/v2/profile").json()["resolved"]
+        self.assertEqual((settled["id"], settled["resolution"], settled["items"][0]["id"]),
+                         (conflict["id"], {"keep_all": True}, ids["job"]))
+
     def test_the_made_up_replies_have_the_real_shapes(self):
         self.seed()
         same_keys(self, fake_api.MADE_UP_PAGES["/profile"], self.c.get("/api/v2/profile").json())

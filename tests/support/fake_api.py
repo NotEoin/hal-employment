@@ -197,7 +197,9 @@ MADE_UP_PROFILE = {
                "to_check": sum(i["state"] == "hal" for i in v)} for k, v in PROFILE_ITEMS.items()],
     "basics": PROFILE_ITEMS["basic"], "links": PROFILE_ITEMS["link"],
     "to_check": sum(i["state"] == "hal" for v in PROFILE_ITEMS.values() for i in v),
-    "conflicts": [PROFILE_CONFLICT]}
+    "conflicts": [{**PROFILE_CONFLICT, "items": [{"id": 1, "kind": "job", "title": "Collections volunteer",
+                                                  "when": "September 2023 to now", "state": "hal"}]}],
+    "resolved": []}
 MADE_UP_PROFILE_KINDS = {f"/profile/{k}": {"kind": k, "label": PROFILE_LABELS[k], "items": v,
                                            "conflicts": [PROFILE_CONFLICT] if any(i["conflicts"] for i in v) else []}
                          for k, v in PROFILE_ITEMS.items()}

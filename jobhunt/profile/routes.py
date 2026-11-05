@@ -38,13 +38,16 @@ A conflict (`CONFLICT`):
      "state": "open", "resolution": null, "choices": ["value", "keep_all"]}
 
 `kind` is field | dates | overlap | gap; `values` are best-ranked first and empty for overlap and gap;
-`choices` say which bodies the resolve route takes.
+`choices` say which bodies the resolve route takes. The overview's conflicts (`NAMED_CONFLICT`) also carry
+`"items": [{"id", "kind", "title", "when", "state"}]`, the items they name, so the Inconsistencies tab can
+offer "keep this one" without reading every list.
 
 Routes:
 
 - `GET /api/v2/profile`: {"counts": {kind: {"total", "hal", "confirmed", "edited", "hidden"}},
   "kinds": [{"kind", "label", "n", "to_check"}], "basics": [ITEM], "links": [ITEM], "to_check": n,
-  "conflicts": [CONFLICT]}. `n` leaves out hidden items; basics and links are the ones not hidden.
+  "conflicts": [NAMED_CONFLICT], "resolved": [NAMED_CONFLICT]}. `n` leaves out hidden items; basics and links
+  are the ones not hidden; `resolved` holds the settled conflicts, newest first.
 - `GET /api/v2/profile/{kind}`: {"kind", "label", "items": [ITEM], "conflicts": [CONFLICT]}, every item of
   that kind (hidden ones too, last of all), jobs and education newest first, skills by name.
 - `PUT /api/v2/profile/items/{id}` {"fields": {...}}: changes those fields ("" or [] clears one); the item
@@ -72,6 +75,18 @@ def with_files(item: dict) -> dict:
     return {**item, "evidence": [{**e, "file_id": file_id(e["source_rel"])} for e in item["evidence"]]}
 
 
+def named(con, found: list[dict]) -> list[dict]:
+    """Conflicts with the items they name (id, kind, title, when, state); an item since deleted is left out."""
+    rows = {}
+    for item_id in sorted({i for c in found for i in c["item_ids"]}):
+        try:
+            rows[item_id] = store.item(con, item_id)
+        except LookupError:
+            continue
+    return [{**c, "items": [{k: rows[i][k] for k in ("id", "kind", "title", "when", "state")}
+                            for i in c["item_ids"] if i in rows]} for c in found]
+
+
 def _visible_first(items: list[dict]) -> list[dict]:
     return [i for i in items if i["state"] != "hidden"] + [i for i in items if i["state"] == "hidden"]
 
@@ -86,7 +101,8 @@ def overview(req: Request) -> dict:
             "basics": [with_files(i) for i in store.items(req.con, "basic", hidden=False)],
             "links": [with_files(i) for i in store.items(req.con, "link", hidden=False)],
             "to_check": sum(c["hal"] for c in counts.values()),
-            "conflicts": conflicts.listing(req.con)}
+            "conflicts": named(req.con, conflicts.listing(req.con)),
+            "resolved": named(req.con, conflicts.listing(req.con, "resolved")[::-1])}
 
 
 @route("GET", PREFIX + "/{kind}")

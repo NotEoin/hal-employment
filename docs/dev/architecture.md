@@ -538,7 +538,8 @@ available yet.
   with its files), an end before a start, two jobs not marked part-time that share more than a month, and
   a gap of more than `GAP_MONTHS` (6) months. Each conflict has a fingerprint, so finding it again keeps
   its row and a settled one stays settled.
-- `profile/routes.py` serves `GET /api/v2/profile` (counts, basics, links, open conflicts) and
+- `profile/routes.py` serves `GET /api/v2/profile` (counts, basics, links, open and settled conflicts, each
+  naming its items) and
   `GET /api/v2/profile/{kind}`, the person's edit, confirm, hide, add and delete, and
   `POST /api/v2/profile/conflicts/{id}/resolve` with the right value, the item to keep, or "keep them all".
   Its docstring gives every reply's shape; `tests/support/fake_api.py` has made-up replies in the same
