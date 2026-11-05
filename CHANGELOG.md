@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Hal mode works without turning on the gateway's TCP address.** Hal Employment now reaches Hal's model
+  gateway through its Unix socket when the address setting is left at its default, so `tcp = true` is only
+  needed for a gateway reached through a tunnel.
 - **No ten-minute wait without the browser part.** On an install without Hal's own browser window (such as
   WSL2 without the browser option), a step that needs that window now says so at once instead of waiting.
 - **A site's comment box is never filled.** Signed in to Hacker News, a job post there shows a reply box, and

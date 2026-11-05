@@ -11,6 +11,11 @@ The gateway only listens on loopback (another computer reaches it through
 an SSH tunnel, which is loopback again), so the token is only ever sent to a loopback address, straight
 there: never through a proxy from the environment and never on to where a redirect points.
 
+The gateway always listens on a Unix socket in Hal's runtime directory, and on TCP only when
+`[gateway].tcp = true`. With `ai.hal_url` left at its default, this backend talks to that socket when it
+is there, so Hal mode works without turning the TCP listener on. A test run only looks in
+`HAL_RUNTIME_DIR`, never the real runtime directory, so no test meets a live Hal.
+
 The gateway can also front an online model (a backend with `allow_remote = true`; it lists such models as
 `owned_by: "remote:<host>"` and marks each reply with `X-Hal-Remote`). Hal mode promises a local model and
 never Claude, so this backend leaves those models out of its list, refuses to ask one by name, and refuses
@@ -18,8 +23,10 @@ any reply that still carries the header.
 """
 from __future__ import annotations
 
+import http.client
 import logging
 import os
+import socket
 import stat
 import urllib.error
 import urllib.request
@@ -33,6 +40,8 @@ log = logging.getLogger(__name__)
 
 DEFAULT_URL = "http://127.0.0.1:8741/v1"        # the gateway's loopback listener when `[gateway].tcp = true`
 DEFAULT_TOKEN_FILE = "~/.config/hal/gateway-token"
+SOCKET_NAME = "gateway.sock"        # the gateway's Unix listener in Hal's runtime directory (halgateway/server.py)
+RUN_USER_ROOT = Path("/run/user")   # Hal's runtime directory without XDG_RUNTIME_DIR (halkit/paths.py)
 PROBE_TIMEOUT_S = 2        # setup waits on this; a running gateway answers in milliseconds
 UNAUTHORIZED = (401, 403)
 REMOTE_HEADER = "X-Hal-Remote"      # set by the gateway on every reply from an online backend
@@ -49,6 +58,52 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
+
+
+class _SocketConnection(http.client.HTTPConnection):
+    """HTTP to the gateway over its Unix socket; the host name in the request is only a label."""
+
+    def __init__(self, path: Path, timeout: float | None) -> None:
+        super().__init__("localhost", timeout=timeout)
+        self.path = path
+
+    def connect(self) -> None:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)  # type: ignore[attr-defined]  # POSIX only
+        sock.settimeout(self.timeout)
+        sock.connect(str(self.path))
+        self.sock = sock
+
+
+class _SocketHandler(urllib.request.HTTPHandler):
+    """Sends every http request to the gateway's socket instead of a TCP address."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__()
+        self.path = path
+
+    def http_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        return self.do_open(lambda _host, timeout=None, **_kw: _SocketConnection(self.path, timeout), req)
+
+
+def default_socket() -> Path | None:
+    """The gateway's Unix socket in Hal's runtime directory when one is there; None on Windows.
+
+    The directory follows Hal's own rule: `HAL_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/hal`, else
+    `/run/user/<uid>/hal`. A test run only honours `HAL_RUNTIME_DIR`.
+    """
+    if not POSIX_MODES:
+        return None
+    override = os.environ.get("HAL_RUNTIME_DIR")
+    if override:
+        base = Path(override).expanduser()
+    elif os.environ.get("HAL_TEST_MODE") == "1" and not os.environ.get("HAL_TEST_REAL_AI"):
+        return None
+    elif os.environ.get("XDG_RUNTIME_DIR"):
+        base = Path(os.environ["XDG_RUNTIME_DIR"]) / "hal"
+    else:
+        base = RUN_USER_ROOT / str(os.getuid()) / "hal"  # type: ignore[attr-defined]  # POSIX only
+    path = base / SOCKET_NAME
+    return path if path.is_socket() else None
 
 
 def read_token(path: str | Path) -> str | None:
@@ -86,7 +141,10 @@ class GatewayBackend(OpenAICompatBackend):
     def __init__(self, url: str, token_file: str | Path) -> None:
         super().__init__(url, None)
         self.token_file = token_file
+        self.socket = default_socket() if self.url == DEFAULT_URL.rstrip("/") else None
         self.loopback = classify(self.url)[1]     # (online, local_gpu): only loopback gives local_gpu
+        self._opener = (urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect,
+                                                    _SocketHandler(self.socket)) if self.socket else _OPENER)
         self.local_gpu = False
 
     @property
@@ -102,7 +160,7 @@ class GatewayBackend(OpenAICompatBackend):
         if not self.loopback:
             raise LLMUnavailable(f"Hal's gateway must be on this computer, not at {self.url}, so the token "
                                  "stays here.")
-        reply = _OPENER.open(req, timeout=timeout)
+        reply = self._opener.open(req, timeout=timeout)
         host = reply.headers.get(REMOTE_HEADER)
         if host:
             reply.close()
@@ -151,7 +209,8 @@ class GatewayBackend(OpenAICompatBackend):
                               fix="Make a new token with hal-gateway token rotate, then try again")
             return Status(ready=False, why=f"Hal's gateway answered {e.code}.")
         except LLMUnavailable:
-            return Status(ready=False, why=f"Hal's gateway does not answer at {self.url}.",
+            where = self.socket or self.url
+            return Status(ready=False, why=f"Hal's gateway does not answer at {where}.",
                           fix="Start Hal's gateway with hal-gateway serve, with [gateway] tcp = true")
         warning = loose_mode_warning(self.token_file)
         if warning:

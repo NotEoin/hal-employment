@@ -4,7 +4,9 @@ With Hal's gateway running, Hal Employment uses Hal's local model for every AI j
 in this mode, even when the gateway is down: you get a plain-words message instead. Hal Employment takes
 the gateway's address and token from two settings, so nothing else is needed.
 
-1. Turn the gateway's loopback address on in Hal, then restart the gateway.
+1. Nothing to turn on when Hal runs on this computer: with the address setting left at its default, Hal
+   Employment reaches the gateway through its Unix socket in Hal's runtime directory (`/run/user/<uid>/hal`).
+   Only for a gateway reached through a tunnel, turn its loopback address on, then restart the gateway.
 
    ```toml
    [gateway]
@@ -52,7 +54,8 @@ yourself; it never switches by itself.
 
 | Symptom | Fix |
 | --- | --- |
-| "Hal's gateway does not answer at ..." | Set `tcp = true` under `[gateway]`, restart the gateway, then run `hal-gateway status`. |
+| "Hal's gateway does not answer at ..." | Run `hal on`, then `hal-gateway status`. For a tunnelled gateway, set `tcp = true` under `[gateway]` and restart it. |
+| Every AI call starts about 10 seconds late | The gateway waits for a GPU claim that gpu-light does not grant while the gateway's own model server holds the card. Set `claim_wait_s = 0` under `[gateway.gpu]` in Hal's config and restart the gateway. |
 | "Hal's gateway must be on this computer" | Set `ai.hal_url` to a `127.0.0.1` address, through an SSH tunnel if the gateway runs elsewhere. |
 | "Hal's gateway token was not found" | Run `hal-gateway token issue --name hal-employment` and save the secret as one line in the token file. |
 | "can be read by other users" on the AI status | The token file is open to group or others. Run `chmod 600 ~/.config/hal/gateway-token`; Hal keeps working meanwhile. |

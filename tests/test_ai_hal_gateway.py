@@ -2,9 +2,13 @@
 import http.server
 import json
 import os
+import shutil
+import socketserver
+import tempfile
 import threading
 import unittest
 import urllib.request
+from pathlib import Path
 from typing import ClassVar
 from unittest import mock
 
@@ -14,7 +18,14 @@ from test_ai_backends import InHome
 from jobhunt import ai
 from jobhunt.ai import provider
 from jobhunt.ai.base import LLMUnavailable
-from jobhunt.ai.hal_gateway import GatewayBackend, gateway_answers, loose_mode_warning, read_token
+from jobhunt.ai.hal_gateway import (
+    DEFAULT_URL,
+    GatewayBackend,
+    default_socket,
+    gateway_answers,
+    loose_mode_warning,
+    read_token,
+)
 from jobhunt.core import settings
 from jobhunt.core.settings import store
 from jobhunt.core.settings.catalog import ai as ai_catalog
@@ -191,6 +202,45 @@ class Gateway(InHome):
             with self.assertRaises(LLMUnavailable):
                 ai.chat("s", "u", timeout=2)
             self.assertEqual(provider.current(), "hal")
+
+
+@unittest.skipIf(os.name == "nt", "Unix sockets are POSIX only")
+class GatewaySocket(InHome):
+    """The gateway's always-on Unix listener, used when the TCP one is off (Hal mode 20 s calls, 2026-11-05)."""
+
+    def setUp(self):
+        super().setUp()
+        _Gateway.seen = []
+        _Gateway.remote_reply = False
+        _Gateway.redirect = False
+        # a short directory: a socket path over about 100 bytes is refused
+        self.run = Path(tempfile.mkdtemp(prefix="hal-run-", dir="/tmp"))
+        self.addCleanup(shutil.rmtree, self.run, True)
+        self.server = socketserver.ThreadingUnixStreamServer(str(self.run / "gateway.sock"), _Gateway)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        self.token = self.tmp / "gateway-token"
+        self.token.write_text(TOKEN + "\n", encoding="utf-8")
+        env = mock.patch.dict("os.environ", {"HAL_RUNTIME_DIR": str(self.run)})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_the_default_address_reaches_the_gateway_through_its_socket(self):
+        be = GatewayBackend(DEFAULT_URL, self.token)
+        self.assertEqual(be.socket, self.run / "gateway.sock")
+        self.assertTrue(be.status().ready)
+        self.assertEqual(be.models(), ["made-up-model"])
+        self.assertEqual(_Gateway.seen[-1], ("/v1/models", f"Bearer {TOKEN}"))
+
+    def test_an_address_set_by_hand_never_uses_the_socket(self):
+        self.assertIsNone(GatewayBackend("http://127.0.0.1:9/v1", self.token).socket)
+
+    def test_a_test_run_never_looks_in_the_real_runtime_directory(self):
+        with mock.patch.dict("os.environ", {"XDG_RUNTIME_DIR": str(self.run.parent)}):
+            os.environ.pop("HAL_RUNTIME_DIR")
+            (self.run.parent / "hal").mkdir(exist_ok=True)
+            self.assertIsNone(default_socket())
 
 
 if __name__ == "__main__":
