@@ -277,6 +277,11 @@ class Store(unittest.TestCase):
         self.assertEqual(store.add_found(self.con, "job", {"title": "Staff",
                                                            "employer": "Fenwick Lantern Museum Trust"}, src), dated)
 
+    def test_a_phone_number_written_with_spaces_is_the_same_number(self):
+        src = ev("Sources/CVs and letters/a.md", "cv", "x")
+        one = store.add_found(self.con, "basic", {"key": "phone", "value": "07700900123"}, src)
+        self.assertEqual(store.add_found(self.con, "basic", {"key": "phone", "value": "07700 900123"}, src), one)
+
     def test_near_identical_certificate_names_merge_but_different_levels_do_not(self):
         def cert(source, name):
             return store.add_found(self.con, "certificate", {"name": name}, ev(source, "certificate", name))

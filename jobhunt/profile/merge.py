@@ -271,6 +271,8 @@ def value_key(field: str, value) -> str:
         return clean_date(str(value or ""), "end" if field == "end" else "start")
     if field in ("employer", "institution", "issuer"):
         return org_key(str(value or ""))
+    if field == "value" and re.fullmatch(r"[\d\s()+-]{7,}", str(value or "")):
+        return re.sub(r"\D", "", str(value))      # "07700 900123" and "07700900123" are one number
     if isinstance(value, bool):
         return "yes" if value else "no"
     return _plain(str(value or ""))
