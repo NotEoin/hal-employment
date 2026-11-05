@@ -292,6 +292,14 @@ class Ranking(unittest.TestCase):
             letter = put(Path(tmp), "Reference.md", "To whom it may concern,\n\nI have known Avery for two years.")
             self.assertEqual(rank.rule_for("Jobs/Reference.md", letter).doc_type, "reference")
 
+    def test_a_persons_own_note_at_an_entity_path_is_never_written_to(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            own = put(vault, "Projects/Oral history archive.md", "# Oral history archive\n\nMy own words.\n")
+            desc = {"title": "Interview notes", "entities": {"projects": ["Oral history archive"]}}
+            notes.add_mentions(vault, desc, "Sources/Study notes/Interview notes.md")
+            self.assertEqual(own.read_text(encoding="utf-8"), "# Oral history archive\n\nMy own words.\n")
+
     def test_a_project_copied_without_its_version_control_is_still_one_unit(self):
         self.assertTrue(discover.is_repo(["README.md", "LICENSE", "docs", "media"]))
         self.assertTrue(discover.is_repo(["README.md", "main.lua", "util.lua"]))

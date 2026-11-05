@@ -160,7 +160,11 @@ def write_source(vault: Path, desc: dict, *, text: str, source: str, sha256: str
 
 
 def add_mentions(vault: Path, desc: dict, note_rel: str) -> list[str]:
-    """Adds `note_rel` to the "Mentioned in" list of each entity the document names; returns their paths."""
+    """Adds `note_rel` to the "Mentioned in" list of each entity the document names; returns their paths.
+
+    Only Hal's own entity notes (`type: entity`) are changed; a note of the person's at the same path is left
+    exactly as it is.
+    """
     out = []
     for kind, names in desc["entities"].items():
         for name in names:
@@ -171,7 +175,8 @@ def add_mentions(vault: Path, desc: dict, note_rel: str) -> list[str]:
             line = f"- {link(note_rel, desc['title'])}"
             if path.exists():
                 text = path.read_text(encoding="utf-8", errors="replace")
-                if line in text:
+                # A note the person wrote under the same name is theirs: it is linked to, never written to.
+                if line in text or frontmatter.parse(text)[0].get("type") != "entity":
                     out.append(rel)
                     continue
                 text = text.rstrip("\n") + ("\n" if MENTIONED in text else f"\n\n{MENTIONED}\n\n") + line + "\n"
