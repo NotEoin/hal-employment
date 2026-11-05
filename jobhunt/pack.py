@@ -14,6 +14,9 @@ Design notes:
 - One letter path: `write_letter` reads the advert, the record and the fit map, writes the letter and checks
   it, for a pack and for a letter a form asks for (`documents.draft_letter`), so every letter is checked
   the same way.
+- Every draft goes through the writing checker (`writing.check`). A high-severity break (an invented number,
+  a machine-made word, a staged contrast) makes the writer revise once with the problems quoted; what is
+  left is listed under "Check before sending", never fixed in a loop.
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -26,6 +29,7 @@ from .ai import prompts
 from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
+from .writing import check as writing_check
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -69,18 +73,12 @@ NOTES_HEADING = "Letter notes"
 NOTE_KEYS = {"Tone": "tone", "Length": "length", "Evidence": "evidence", "Checked": "checked"}
 TONE_LABELS = {"plain": "Plain", "formal": "Formal", "warm": "Warm"}   # the setting's choices (catalog/cvdocs.py)
 CHECKED_CLEAN = "Every fact is in your CV, record or the advert. No numbers were invented."
+REVISED = "Hal revised it once for its writing rules. "   # before the Checked line when the first draft broke one
 EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence line
 PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
 QUESTION_SHARE = 0.8      # share of a question's words the advert must hold for it to count as written out
 TITLED = re.compile(r"^Dear (Mr|Mrs|Ms|Miss|Mx|Dr)\.? ([^\s,]+),", re.M)   # a greeting with a title
 NOTE_PARA = re.compile(r"\(.*\)\Z|(notes?|word count)\b", re.S | re.I)   # a closing paragraph about the draft
-
-# Phrases that mark generic or machine-written prose; drafts containing them are flagged.
-CLICHES = re.compile(
-    r"\b(excited|thrilled|passion(ate)?|thrive|leverage|fast-paced|perfectly align|"
-    r"aligns? perfectly|dynamic|synergy|eager to|I am writing to|look forward to hearing)\b"
-    r"|\u2014|\u2013", re.I)
-
 
 def slug(text: str) -> str:
     """Returns a file-name-safe form of a text."""
@@ -93,9 +91,7 @@ def _job_text(job) -> str:
 
 def unsupported_numbers(draft: str, *sources: str) -> list[str]:
     """Returns numbers in a draft that appear in none of the sources."""
-    # A number ending a sentence ("2023-2024.") is collected with its full stop; it is the same number.
-    known = {n.rstrip(".,") for n in re.findall(r"\d[\d,.]*", " ".join(sources))}
-    return sorted({n for n in re.findall(r"\d[\d,.]*", draft) if n.rstrip(".,") not in known and len(n) > 1})
+    return writing_check.unsupported_numbers(draft, *sources)
 
 
 def _research(company: str) -> tuple[str, list[str]]:
@@ -179,6 +175,27 @@ def _letter(who: dict, context: str) -> str:
     return drop_notes(llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip()))
 
 
+def _hits(who: dict, text: str, kind: str, *, facts: str, kept: str, sources: tuple[str, ...]) -> list:
+    """What the writing checker finds in a draft, against every fact it may draw on."""
+    return writing_check.check(text, kind, sources=(facts, kept, *sources), spelling=who.get("spelling_code", ""),
+                               cv_text=facts if kind == "letter" else "",
+                               target_words=who.get("letter_words") if kind == "letter" else None,
+                               allowed=who.get("own_words") or ())
+
+
+def revise_once(draft, hits: list, rewrite):
+    """The draft revised once by `rewrite(note)` when the checker found a high-severity problem.
+
+    One revision, never a loop: what is still wrong after it is listed for the person to check, so a draft
+    is never held up by the checker. Returns (text, whether it was revised).
+    """
+    serious = writing_check.high(hits)
+    if not serious:
+        return draft, False
+    again = rewrite(writing_check.revision_note(serious))
+    return (again or draft), bool(again)
+
+
 def drop_notes(text: str) -> str:
     """A draft without the model's closing notes about it, and without Markdown bold."""
     # Claude ended a message with "(About 75 words. The advert names no individual, ...)" and began one with
@@ -189,15 +206,18 @@ def drop_notes(text: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"\1", "\n\n".join(paras))
 
 
-def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, fit: dict, sources: tuple[str, ...]) -> list[str]:
-    """What to check before sending: numbers no source holds, claims the facts do not support, banned words."""
-    flagged = [f"number not in the CV or advert: {n}" for n in unsupported_numbers(drafts, facts, kept, *sources)]
+def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, fit: dict, sources: tuple[str, ...],
+                 kind: str = "letter") -> list[str]:
+    """What to check before sending: numbers no source holds, claims the facts do not support, the writing
+    rules a draft breaks (`writing.check`) and the person's never-use phrases."""
+    hits = _hits(who, drafts, kind, facts=facts, kept=kept, sources=sources)
+    flagged = [h.flag for h in hits if h.rule == "T1"]
     flagged += [f"unsupported claim: {c}" for c in
                 llm.chat_json(prompt("verify", who),
                               f"Facts:\n{facts}" + _record_part("Employment record", kept) +
                               f"\n\nEvidence map:\n{fit.get('matches', [])}\n\nDrafts:\n{drafts}",
                               role="main").get("unsupported", [])]
-    flagged += [f"cliche or dash: {m}" for m in sorted({m.group(0).lower() for m in CLICHES.finditer(drafts)})]
+    flagged += [h.flag for h in writing_check.flagged(hits) if h.rule != "T1"]
     lowered = drafts.lower()
     flagged += [f"a phrase you never use: {a}" for a in avoided(who) if a.lower() in lowered]
     return flagged
@@ -208,8 +228,9 @@ def avoided(who: dict) -> list[str]:
     return re.findall(r'"([^"]+)"', who.get("avoid_phrases") or "")
 
 
-def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str]) -> dict:
-    """The Tone, Length, Evidence and Checked lines shown beside a letter."""
+def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], *, revised: bool = False) -> dict:
+    """The Tone, Length, Evidence and Checked lines shown beside a letter; `revised` when the writer had to
+    revise it once for the writing rules."""
     from .core import settings
 
     tone = TONE_LABELS.get(settings.get("cvdocs.letter_tone"), who["tone"].capitalize())
@@ -219,9 +240,10 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str]) 
     return {"tone": f"{tone} (your setting)",
             "length": f"{len(letter.split())} words (you prefer about {who['letter_words']})",
             "evidence": "; ".join(shown) or "None named",
-            "checked": (CHECKED_CLEAN if not letter_flags else
-                        f"{len(letter_flags)} {'thing' if len(letter_flags) == 1 else 'things'} to check before "
-                        "sending: see Check before sending.")}
+            "checked": (REVISED if revised else "") + (
+                CHECKED_CLEAN if not letter_flags else
+                f"{len(letter_flags)} {'thing' if len(letter_flags) == 1 else 'things'} to check before "
+                "sending: see Check before sending.")}
 
 
 def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = None, about: str = "",
@@ -241,10 +263,30 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     if request:
         text += f"\n\nThe applicant asked for this change: {request}"
     letter = _letter(who, text)
-    flags = check_drafts(who, letter, facts=facts, kept=kept, fit=fit, sources=(_job_text(job), about))
+    sources = (_job_text(job), about)
+    letter, revised = revise_once(letter, _hits(who, letter, "letter", facts=facts, kept=kept, sources=sources),
+                                  lambda note: _letter(who, f"{text}\n\nYour first draft:\n{letter}\n\n{note}"))
+    flags = check_drafts(who, letter, facts=facts, kept=kept, fit=fit, sources=sources)
     used = passages(kept)
     evidence = used or [m.get("evidence", "") for m in fit.get("matches", []) if m.get("strength") == "strong"]
-    return {"text": letter, "flags": flags, "used": used, "notes": letter_notes(who, letter, evidence, flags)}
+    return {"text": letter, "flags": flags, "used": used, "revised": revised,
+            "notes": letter_notes(who, letter, evidence, flags, revised=revised)}
+
+
+def _answers(who: dict, questions: list[str], context: str, *, facts: str, kept: str,
+             sources: tuple[str, ...]) -> list[dict]:
+    """Answers to the advert's questions, revised once together when one breaks a high-severity rule."""
+    request = "Questions:\n" + "\n".join(f"- {q}" for q in questions) + f"\n\n{context}"
+
+    def ask(text: str) -> list[dict]:
+        found = llm.chat_json(prompt("answers", who), text, role="writer").get("answers", [])
+        return [{**a, "answer": llm.undash(a.get("answer", ""))} for a in found if isinstance(a, dict)]
+
+    answers = ask(request)
+    hits = [h for a in answers for h in _hits(who, a["answer"], "answer", facts=facts, kept=kept, sources=sources)]
+    drafted = "\n".join(f"- {a.get('question', '')}: {a['answer']}" for a in answers)
+    return revise_once(answers, hits,
+                       lambda note: ask(f"{request}\n\nYour first answers:\n{drafted}\n\n{note}"))[0]
 
 
 def _eligibility_flag(job, who: dict, fit: dict, conditions: list) -> str:
@@ -319,16 +361,14 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     message = drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip()))
     message = untitled(message, analysis, job_text)
     questions = analysis.get("questions") or []
-    answers = llm.chat_json(prompt("answers", who),
-                            "Questions:\n" + "\n".join(f"- {q}" for q in [*questions, *COMMON_QUESTIONS])
-                            + f"\n\n{context}", role="writer").get("answers", [])
-    for a in answers:
-        a["answer"] = llm.undash(a.get("answer", ""))
+    answers = _answers(who, [*questions, *COMMON_QUESTIONS], context, facts=facts, kept=kept,
+                       sources=(job_text, about))
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
     others = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
-    flagged = written["flags"] + check_drafts(who, others, facts=facts, kept=kept, fit=fit, sources=(job_text, about))
+    flagged = written["flags"] + check_drafts(who, others, facts=facts, kept=kept, fit=fit,
+                                              sources=(job_text, about), kind="answer")
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
     employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]

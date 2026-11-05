@@ -160,6 +160,7 @@ def _type_part(kind) -> dict:
         "special_cases": special,
         "type_special_cases": " ".join(SPECIAL_CASES[s] for s in special if s in SPECIAL_CASES),
         "spelling": SPELLING_WORDS.get(spelling, spelling),
+        "spelling_code": spelling,
         "tone": TONE_WORDS.get(tone, tone),
         "letter_words": int(settings.get("cvdocs.letter_words") or 250),
         "signoff": (settings.get("cvdocs.signoff") or "").strip() or "Kind regards",

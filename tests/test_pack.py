@@ -249,6 +249,54 @@ class Letter(unittest.TestCase):
         self.assertIn("1 thing to check", docs["letter_notes"]["checked"])
 
 
+    def test_a_letter_that_breaks_a_high_rule_is_revised_once_and_what_is_left_is_listed(self):
+        writer = FakeWriter(letter="I am passionate about the made-up collections and the visitors.")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        letters = writer.asked("letter")
+        self.assertEqual(len(letters), 2, "one revision, never a loop")
+        self.assertIn("Your first draft:\n" + writer.letter, letters[1]["user"])
+        self.assertIn('"passionate"', letters[1]["user"])
+        self.assertTrue(written["revised"])
+        self.assertIn("a word that reads as machine-written or stock: passionate", written["flags"])
+        self.assertTrue(written["notes"]["checked"].startswith(pack.REVISED))
+
+    def test_a_revised_letter_in_plain_words_is_clean(self):
+        replies = iter(["I am passionate about the made-up collections.",
+                        "I would bring my dissertation on river trade to the collections."])
+        writer = FakeWriter()
+        writer.reply = lambda system, user, original=writer.reply: (
+            next(replies) if prompt_id(system) == "letter" else original(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(written["text"], "I would bring my dissertation on river trade to the collections.")
+        self.assertEqual(written["flags"], [])
+        self.assertEqual(written["notes"]["checked"], pack.REVISED + pack.CHECKED_CLEAN)
+
+    def test_a_plain_first_draft_is_never_revised(self):
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(len(a.writer.asked("letter")), 1)
+        self.assertFalse(written["revised"])
+
+    def test_answers_that_break_a_high_rule_are_revised_once_together(self):
+        replies = iter([{"answers": [{"question": "Why this role?", "answer": "I am a passionate team player."}]},
+                        {"answers": [{"question": "Why this role?", "answer": "It matches the work I have done."}]}])
+        writer = FakeWriter()
+        writer.reply = lambda system, user, original=writer.reply: (
+            next(replies) if prompt_id(system) == "answers" else original(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        asked = writer.asked("answers")
+        self.assertEqual(len(asked), 2)
+        self.assertIn("Your first answers:", asked[1]["user"])
+        self.assertIn("It matches the work I have done.", section(md, "Form answers"))
+        self.assertNotIn("passionate", section(md, "Check before sending"))
+
     def test_with_no_employment_record_no_request_mentions_one(self):
         # "Employment record: none" in the fit, letter and verify requests read to Claude as
         # a record that lacked a job on the CV; prep already leaves it out
