@@ -1,6 +1,8 @@
 /* The Documents step of an application: while Hal writes, its steps and Stop; then the
    CV changes (Undo and Redo per change), the letter, the answers and the message, with "Approve and fill in
    the form". The first approval shows the three-step guide (dialogs/firstapp.js) before anything opens.
+   "Critique as a recruiter" (dialogs/critique.js) reads the saved documents against the advert and changes
+   nothing.
 
    The CV and the letter are each shown beside the PDF Hal will upload, so the person sees the document
    itself and not only the words. An Undo, a Redo or saved letter edits make the PDF again, and its address
@@ -88,7 +90,8 @@ export function DocsStep({ a, reload, onApproved }) {
     <div class="approve"><div class="ic info"><${Icon} n="file" /></div><div class="grow"><b>Check what Hal made for this job, then approve it.</b>
       <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div></div>
       <button type="button" class="btn primary" onClick=${onApprove}>Approve and fill in the form</button>
-      <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button></div>
+      <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button>
+      <button type="button" class="btn quiet" onClick=${() => openDialog("critique", { app: a })}><${Icon} n="eye" c="s" />Critique as a recruiter</button></div>
     <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
     ${tab === "cv" && html`<div class="docs-split"><div class="stack s">
