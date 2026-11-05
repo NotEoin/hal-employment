@@ -109,7 +109,9 @@ jobs:
       - name: Test
         shell: wsl-bash {0}
         run: |
-          export PATH="$HOME/.local/bin:$PATH" UV_PYTHON_DOWNLOADS=never
+          # Ubuntu 24.04's own Python is 3.12; .python-version's 3.13 is not there and downloads are off
+          # (run 41959197666)
+          export PATH="$HOME/.local/bin:$PATH" UV_PYTHON_DOWNLOADS=never UV_PYTHON=3.12
           cd "$HOME/hal-employment"
           uv sync --frozen
           HAL_TEST_MODE=1 PYTHONUNBUFFERED=1 uv run python -m unittest discover tests
