@@ -11,6 +11,7 @@ import { SuggTab } from "../cv/sugg-tab.js";
 import { StyleTab } from "../cv/style-tab.js";
 import { ChecksTab } from "../cv/checks-tab.js";
 import { VersionsTab } from "../cv/versions-tab.js";
+import { UncheckedNote } from "../ui/unchecked-note.js";
 
 const TABS = ["cv", "sugg", "style", "checks", "versions"];
 
@@ -35,6 +36,7 @@ export function CvStudio({ arg }) {
       <a class="btn quiet small" href=${cv.send === "original" ? "/api/v2/cv/original" : previewUrl({ versionId: cv.version.id, look: cv.look.id })}
         target="_blank" rel="noopener">${cv.send === "original" ? "Your file" : "Preview"}</a>
       <button type="button" class="btn small" onClick=${() => setT("cv")}>Change</button></div>`}
+    <${UncheckedNote} />
     <${Tabs} label="My CV" value=${t} onChange=${setT} tabs=${[["cv", "Your CV", ""], ["sugg", "Suggestions", pending || ""],
       ["style", "Type and look", ""], ["checks", "Checks", ""], ["versions", "Versions", shown || ""]]} />
     ${t === "cv" && html`<${CvTab} cv=${cv} setT=${setT} />`}

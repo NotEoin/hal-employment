@@ -55,8 +55,9 @@ What changed in each version, in plain words.
   Where your files disagree, choose the right value on the card or on the Inconsistencies tab. The Overview
   adds files, zips, folders on this computer and web links, and shows a bar with the time left, the file in
   hand and the files OneDrive or Dropbox has not downloaded.
-- **Letters use your checked facts first.** Cover letters, answers and messages read the facts you checked
-  or edited before the ones Hal found, and never a fact you hid.
+- **Hal only uses facts you checked.** Your CV, cover letters, answers and messages use only the facts you
+  confirmed or edited in your profile, never one Hal found that you have not checked, and never one you hid.
+  My CV and an application's documents say how many facts are waiting for you, with **Check them**.
 - **Profile notes in your record folder.** A Profile folder holds Work history, Education, Skills, Projects
   and Inconsistencies notes, written from your profile, for reading in Obsidian.
 - **Letters and answers written for the kind of job.** Hal reads which field a job is in from the advert

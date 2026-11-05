@@ -215,6 +215,7 @@ input[type="range"] { accent-color: var(--primary); width: 180px; max-width: 100
 .note.warn svg { color: var(--warn); }
 .note.lock { background: var(--sunk); }
 .note.lock svg { color: var(--ink-2); }
+.unchecked-note .btn { margin-top: 8px; }
 .quote { font-size: 14px; color: var(--ink-2); padding: 8px 12px; background: var(--sunk); border-radius: 8px; margin-top: 6px; }
 .quote small { display: block; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 2px; }
 .quote.mine { background: var(--why-soft); }

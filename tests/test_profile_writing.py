@@ -19,8 +19,16 @@ from jobhunt.cvstudio import context as cv_context
 from jobhunt.profile import store, writing
 
 NOW = "2026-11-05T09:00:00Z"
-SHORT = 400                # room for the headings and the checked degree, not the found facts
+SHORT = 400                # room for the heading, the name and some of the facts, not all of them
 PASSAGE = "[Jobs/Fenwick.md > Collections]\nSorted 400 donated letters into series."
+
+
+def check_everything(con) -> None:
+    """The person says every fact Hal found is right, as on the Check your record page."""
+    for kind in store.KINDS:
+        for item in store.items(con, kind, hidden=False):
+            if item["state"] == "hal":
+                store.confirm(con, item["id"])
 
 
 class Writing(unittest.TestCase):
@@ -36,6 +44,24 @@ class Writing(unittest.TestCase):
         block = profile.context_block(self.con)
         self.assertNotIn("Paper round", block)
         self.assertNotIn("Harrowgate Vale News", block)
+
+    def test_a_fact_nobody_checked_never_reaches_the_block(self):
+        # Hal used every fact it found, right or wrong, until the person checked them (2026-11-05)
+        ids = humanities_profile(self.con)
+        block = profile.context_block(self.con)
+        self.assertIn("BA (Hons)", block, "the degree is confirmed")
+        for unchecked in ("Collections volunteer", "Archival research", HUMANITIES.you["name"]):
+            self.assertNotIn(unchecked, block)
+        store.edit(self.con, ids["job"], {"title": "Collections assistant"})
+        store.confirm(self.con, ids["name"])
+        block = profile.context_block(self.con)
+        self.assertIn("Job: Collections assistant", block)
+        self.assertIn(f"Name: {HUMANITIES.you['name']}", block)
+
+    def test_with_nothing_checked_there_is_no_block(self):
+        store.add_found(self.con, "skill", {"name": "Archival research"},
+                        {"source_rel": "Sources/CVs and letters/a.md", "quote": "archives", "doc_type": "cv"})
+        self.assertEqual(profile.context_block(self.con), "")
 
     def test_a_found_fact_whose_quote_was_not_in_its_file_waits_for_the_person(self):
         # a degree the model made up from a coursework report reached the profile block (2026-11-05)
@@ -56,6 +82,7 @@ class Writing(unittest.TestCase):
             store.add_found(self.con, "basic", {"key": "location", "value": place}, src)
             store.add_found(self.con, "job", {"title": "Collections volunteer", "employer": "Fenwick Lantern Museum",
                                               "start": "2023-09", "duties": [duty]}, src)
+        check_everything(self.con)
         block = profile.context_block(self.con)
         self.assertEqual(block.count("Location:"), 1)
         self.assertIn("Location: Harrowgate", block)
@@ -69,6 +96,7 @@ class Writing(unittest.TestCase):
                                           "duties": [f"Catalogued box {n} of letters" for n in range(400)]}, src)
         store.add_found(self.con, "education", {"qualification": "BA History", "institution": "Wexley University",
                                                 "start": "2021-09"}, src)
+        check_everything(self.con)
         block = profile.context_block(self.con)
         self.assertIn("Education: BA History", block)
         self.assertLessEqual(max(len(x) for x in block.splitlines()), writing.LINE_MAX + len(" ..."))
@@ -77,22 +105,22 @@ class Writing(unittest.TestCase):
         src = {"source_rel": "Sources/Projects/a.md", "quote": "x", "field": "name", "doc_type": "notes"}
         for name in ("Pottery stall accounts", "Oral history of the Wexley mills", "Choir rota"):
             store.add_found(self.con, "project", {"name": name}, src)
+        check_everything(self.con)
         block = profile.context_block(self.con, queries=["Recording oral history interviews for a heritage trust"])
         projects = [x for x in block.splitlines() if x.startswith("- Project")]
         self.assertTrue(projects[0].startswith("- Project: Oral history"))
 
-    def test_checked_facts_come_before_found_ones_and_contact_details_are_left_out(self):
+    def test_contact_details_are_left_out_even_when_checked(self):
         humanities_profile(self.con)
+        check_everything(self.con)
         block = profile.context_block(self.con)
         self.assertTrue(block.startswith(writing.HEADING))
-        self.assertLess(block.index(writing.CHECKED), block.index("BA (Hons)"))
-        self.assertLess(block.index("BA (Hons)"), block.index(writing.UNCHECKED))
-        self.assertLess(block.index(writing.UNCHECKED), block.index("Collections volunteer"))
         self.assertNotIn(HUMANITIES.you["email"], block)
         self.assertIn(f"Name: {HUMANITIES.you['name']}", block)
 
     def test_a_humanities_profile_gives_modules_marks_and_research_skills(self):
         humanities_profile(self.con)
+        check_everything(self.con)
         block = profile.context_block(self.con)
         self.assertIn("Modules: Early Modern Letters (72); Oral History in Practice (68)", block)
         self.assertIn('Skill: Archival research (research). Shown by: "read the parish records in the county '
@@ -100,13 +128,16 @@ class Writing(unittest.TestCase):
         self.assertIn("Collections volunteer at Fenwick Lantern Museum Trust (September 2023 to now), part-time",
                       block)
 
-    def test_the_block_is_cut_at_a_whole_line_and_keeps_checked_facts_first(self):
+    def test_the_block_is_cut_at_a_whole_line_and_keeps_the_first_facts(self):
         humanities_profile(self.con)
+        check_everything(self.con)
         short = profile.context_block(self.con, limit=SHORT)
         self.assertLessEqual(len(short), SHORT)
-        self.assertTrue(profile.context_block(self.con).startswith(short))
-        self.assertIn("BA (Hons)", short)
-        self.assertTrue(all(line.startswith(("Profile", "Checked", "Found", "- ")) for line in short.splitlines()))
+        full = profile.context_block(self.con).splitlines()
+        kept = short.splitlines()
+        self.assertEqual([x for x in full if x in kept], kept, "whole lines, in the full block's order")
+        self.assertEqual(kept[:2], full[:2], "the heading and the name come first")
+        self.assertTrue(all(line.startswith(("Profile", "- ")) for line in short.splitlines()))
         self.assertEqual(profile.context_block(self.con, limit=10), "")
 
     def test_an_empty_profile_gives_no_block(self):

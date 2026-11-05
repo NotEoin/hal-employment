@@ -123,7 +123,7 @@ def voice(job=None, con=None) -> dict:
 
 
 def profile_block() -> str:
-    """The person's profile as a "Profile" block (checked facts first, never hidden ones); "" when empty."""
+    """The person's profile as a "Profile" block (only the facts they checked); "" when there are none."""
     from ..profile import writing
 
     return writing.block()

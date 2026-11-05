@@ -622,9 +622,12 @@ available yet.
   `POST /api/v2/profile/conflicts/{id}/resolve` with the right value, the item to keep, or "keep them all".
   Its docstring gives every reply's shape; `tests/support/fake_api.py` has made-up replies in the same
   shapes, which `tests/test_profile_routes.py` compares with the real ones.
-- `profile.context_block(con, limit)` is the "Profile" block for writing prompts: facts the person checked
-  or edited first, then the ones Hal found, never hidden ones, no email or phone, and no found fact whose every
-  quote was missing from its document (it waits for the person to confirm it). Each item is one line of at most
+- The approval gate: `profile.context_block(con, limit)` is the "Profile" block for writing prompts, and it
+  holds only facts the person confirmed or edited (`writing.USED_STATES`). A fact Hal found and nobody
+  checked (state `hal`) and a hidden one never reach a CV, letter, answer or message prompt; with nothing
+  checked the block is empty. No email or phone is included. The pages that write (My CV, an application's
+  Documents step) show `ui/unchecked-note.js`, which reads `to_check` from `GET /api/v2/profile` and says
+  how many facts wait. Each item is one line of at most
   `LINE_MAX` characters, cut at a whole list item, and one location is named. `pack._kept` puts it
   above the record's passages (`profile.writing.with_record`), so the fit map, letter, message and answers
   read it, and `cvstudio.context.build` gives it to every document prompt as the `profile` value.

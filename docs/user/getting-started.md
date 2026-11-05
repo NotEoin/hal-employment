@@ -237,6 +237,10 @@ Your record has a tab for each part of your profile: **Work history**, **Educati
 things of each kind Hal found and how many are left to check, and is where you add files, folders and links.
 **Files** lists the folder's contents and has **Ask your record**.
 
+Hal only uses the facts you have checked. A fact Hal found stays out of your CV, letters and answers until
+you confirm it or edit it. While some are waiting, My CV and each application's documents say how many,
+with a **Check them** button.
+
 Each job, qualification or skill is a card:
 
 - **Found by Hal**, **Checked by you**, **Edited by you** or **Hidden** says where it stands.

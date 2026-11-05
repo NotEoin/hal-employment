@@ -1,17 +1,20 @@
 """The profile as words: the "Profile" block that document prompts get, and one line per item.
 
-`context_block(con, limit)` lists what the person checked or edited first, then what Hal found and nobody has
-checked yet, and never a hidden item. `with_record(queries)` puts that block above the record passages
+`context_block(con, limit)` lists only what the person checked or edited: a fact Hal found and nobody has checked
+yet, and a hidden one, never reach a prompt. `with_record(queries)` puts that block above the record passages
 `record.context` finds, and is what the pack's letter, fit map and answers read (`pack._kept`).
 
 Design decisions, each with its reason:
 
+- Only checked facts are used (2026-11-05): Hal reads hundreds of facts out of a person's files, and some are
+  wrong (a lecturer's course as the person's own skill, a guessed degree). An application must say only what
+  the person has seen and agreed to, so they check each fact first.
 - Contact details (email, phone) are left out: no document a prompt writes needs them, and the CV and the
   person's settings already hold them where they belong.
 - No line of the block is a bracketed "[file > heading]" label, because `pack.passages` counts those lines
   as record passages the letter used.
-- The block is cut at a whole line when it reaches `limit`, so the checked facts, which come first, are the
-  last to go.
+- The block is cut at a whole line when it reaches `limit`, kind by kind in `KIND_ORDER`, so the basics and
+  jobs are the last to go.
 """
 from __future__ import annotations
 
@@ -28,9 +31,8 @@ LIMIT = 5000               # below the record part's 6000 (`record.context`); a 
 # block alone and left no room for education or skills (2026-11-05). Cut at a whole list item.
 LINE_MAX = 450
 QUOTE_CHARS = 160          # a skill's evidence quote, cut so it never crowds out the other facts
-HEADING = "Profile (facts about the applicant from their files; the ones they checked come first):"
-CHECKED = "Checked by the applicant:"
-UNCHECKED = "Found in their files, not checked yet:"
+HEADING = "Profile (facts about the applicant from their files, each checked by them):"
+USED_STATES = ("confirmed", "edited")
 
 
 def _period(fields: dict) -> str:
@@ -93,7 +95,7 @@ def _relevance(item: dict, wanted: set[str]) -> int:
     return len(words & wanted)
 
 
-def _lines(con: sqlite3.Connection, states: tuple[str, ...], queries: list[str] | None = None) -> list[str]:
+def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[str]:
     out = []
     wanted = set(merge.text_key(" ".join(queries or [])).split()) - QUERY_STOP
     for kind in KIND_ORDER:
@@ -103,11 +105,7 @@ def _lines(con: sqlite3.Connection, states: tuple[str, ...], queries: list[str] 
         if kind in RANKED_KINDS and wanted:
             found = sorted(found, key=lambda it: -_relevance(it, wanted))
         for it in found:
-            if it["state"] not in states:
-                continue
-            # A found fact no quote was found for is the model's word alone: it reached a letter as a degree
-            # from a university the person never went to (2026-11-05). It waits for the person to confirm it.
-            if it["state"] == "hal" and not any(e.get("verified", True) for e in it["evidence"]):
+            if it["state"] not in USED_STATES:
                 continue
             if kind == "basic" and it["fields"].get("key", "").lower() in CONTACT_KEYS:
                 continue
@@ -135,20 +133,14 @@ QUERY_STOP = {"and", "or", "the", "a", "an", "of", "to", "in", "for", "with", "o
 
 
 def context_block(con: sqlite3.Connection, limit: int = LIMIT, queries: list[str] | None = None) -> str:
-    """The "Profile" block for a writing prompt: checked and edited facts, then found ones; never hidden ones,
-    and never a found one whose every quote was missing from its document.
+    """The "Profile" block for a writing prompt: the facts the person confirmed or edited, never others.
 
-    "" when the profile holds nothing to say.
+    "" when the person has checked nothing yet.
     """
-    checked = _lines(con, ("confirmed", "edited"), queries)
-    found = _lines(con, ("hal",), queries)
-    if not checked and not found:
+    checked = _lines(con, queries)
+    if not checked:
         return ""
-    parts = [HEADING]
-    if checked:
-        parts += [CHECKED, *checked]
-    if found:
-        parts += [UNCHECKED, *found]
+    parts = [HEADING, *checked]
     out, size = [], 0
     for part in parts:
         if len(part) > LINE_MAX:
@@ -157,8 +149,8 @@ def context_block(con: sqlite3.Connection, limit: int = LIMIT, queries: list[str
             continue                       # a later, shorter fact may still fit
         out.append(part)
         size += len(part) + 1
-    while out and out[-1] in (HEADING, CHECKED, UNCHECKED):
-        out.pop()                          # a heading with no line under it says nothing
+    if out == [HEADING]:
+        return ""                          # a heading with no line under it says nothing
     return "\n".join(out)
 
 

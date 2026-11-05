@@ -15,6 +15,7 @@ import { Tabs } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { copyText } from "../ui/clipboard.js";
 import { plural } from "../core/format.js";
+import { UncheckedNote } from "../ui/unchecked-note.js";
 
 const appPath = a => "/applications/" + encodeURIComponent(a.id);
 
@@ -92,6 +93,7 @@ export function DocsStep({ a, reload, onApproved }) {
       <button type="button" class="btn primary" onClick=${onApprove}>Approve and fill in the form</button>
       <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button>
       <button type="button" class="btn quiet" onClick=${() => openDialog("critique", { app: a })}><${Icon} n="eye" c="s" />Critique as a recruiter</button></div>
+    <${UncheckedNote} />
     <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
     ${tab === "cv" && html`<div class="docs-split"><div class="stack s">
