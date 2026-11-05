@@ -29,6 +29,25 @@ What changed in each version, in plain words.
   or edited before the ones Hal found, and never a fact you hid.
 - **Profile notes in your record folder.** A Profile folder holds Work history, Education, Skills, Projects
   and Inconsistencies notes, written from your profile, for reading in Obsidian.
+- **Letters and answers written for the kind of job.** Hal reads which field a job is in from the advert
+  and your goal, and follows that field's conventions: STAR examples against the behaviours for the Civil
+  Service, the person specification for the NHS, publications and grants for academic posts, the portfolio
+  link for creative work, a key skills section for technical roles. A job Hal cannot place gets general
+  advice, never another field's.
+- **Plainer, truer drafts.** Every letter, answer and CV suggestion is checked against Hal's writing rules:
+  stock and machine-sounding words, "not just X but Y", lists of three qualities, long dashes, hedging, duty
+  openers on CV lines, a letter that repeats the CV, a greeting and sign-off that do not match ("Dear Sir or
+  Madam" ends "Yours faithfully"), and numbers your facts do not hold. A draft that breaks a serious rule is
+  rewritten once; anything left is listed under **Check before sending**.
+- **Critique as a recruiter.** On an application's Documents step, Hal reads your CV and cover letter
+  against the advert as a hiring manager would: the three changes that would help most, the first six
+  seconds, each requirement with the line that shows it, a grade per part with why, and comments on the
+  lines it quotes. Your name and contact details are taken out first, and nothing is changed.
+- **Hal learns your writing.** With **Match my own writing** on, the writer is told how you write
+  (sentence length, contractions, spelling, your usual words), measured from your own letters, statements,
+  essays and CVs, your rewritten answers and your edits, with two or three short passages of yours as
+  examples. A word you take out of three of Hal's drafts becomes a **Never use** suggestion, and letters you
+  cut short suggest a shorter length; nothing changes until you say yes.
 - **Choose several career areas.** The goal step's career areas are now toggles: press every area you are
   interested in, such as Heritage and museums and Creative and media, and their example roles are joined.
 - **Queue jobs, then approve them together.** **Add to queue** (or Q) beside **Apply with Hal** puts a job

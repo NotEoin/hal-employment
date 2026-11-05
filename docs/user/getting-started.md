@@ -78,6 +78,25 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    **Sent** on the **Applications** board.
 7. When the employer replies, Hal sorts it into **Messages** and moves the application on the board.
 
+### How Hal writes, and a recruiter's read
+
+Hal writes each letter and answer for the kind of job it is: a Civil Service form gets examples in the
+STAR order (situation, task, action, result) against its behaviours, an NHS form follows the person
+specification, an academic CV keeps its publications and grants, a creative CV puts the portfolio link at
+the top. When Hal cannot tell the field from the advert or your goal, it uses general advice rather than
+another field's. It uses only your facts and never invents a number: where a result has none, it says who
+the work served instead. A first draft that breaks one of Hal's writing rules (a stock phrase, an invented
+number, "not just X but Y") is rewritten once, and anything still wrong is listed under **Check before
+sending**.
+
+On the Documents step, press **Critique as a recruiter** for a hiring manager's read of your CV and cover
+letter against the advert, saved as they are now. It shows the three changes that would help most, what a
+recruiter sees in the first six seconds, each requirement of the advert with the line that shows it (or
+"not shown yet"), a grade from 1 to 5 for each part of each document with why, and comments on the lines
+they quote. Your name and contact details are taken out before the AI reads them, and the read never
+comments on your age, gaps or background. It is Hal's opinion, and nothing is changed. Without Hal's AI,
+you still get the writing rules' comments, line by line.
+
 ### When Hal gets stuck before the form
 
 If Hal stops on the advert or a page before the form, open the form yourself in Hal's browser window: press
@@ -179,7 +198,21 @@ gives no facts about you. If Hal closes part way through, it carries on from the
 - **Saved answers**: answers Hal reuses on forms. Each says where Hal may use it; one marked **Choose where
   to use it** is never used until you pick.
 
-To stop the suggestions, open **Settings**, **Advanced**, **Suggestions from your choices**.
+### How Hal learns your writing
+
+- **Your voice.** With **Match my own writing** on (**Settings**, **CV and documents**), Hal measures how
+  you write from your own words: the letters, statements, essays and CVs in your record (never a private
+  folder), the answers you rewrote and your edits of its drafts. It tells the writer your usual sentence
+  length, whether you use contractions, your spelling and your usual words, and shows it two or three
+  short passages of yours as examples of style, never of facts. A word Hal would normally avoid stays
+  yours if you use it yourself.
+- **Your edits.** When you change a letter, an answer, the message or a CV line Hal wrote, Hal keeps both
+  versions. A word you take out of three drafts becomes the suggestion **Never use "word"?**, and letters
+  you cut short become **Write letters of about 150 words?**. Like every suggestion, nothing changes until
+  you press **Yes, do this**. An answer to a private question is never kept.
+
+To stop the suggestions, open **Settings**, **Advanced**, **Suggestions from your choices**; **Your writing**
+there covers the ones from your edits.
 
 ## When something goes wrong
 

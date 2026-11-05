@@ -436,6 +436,14 @@ runs: tests use `tests/support/fake_claude/`.
   analysis, and the letter, answers, form-filling and CV suggestion requests carry its conventions, plus
   the person's own field's background advice when the two differ. Conventions are in the request, never
   the prompt, since they depend on the job.
+- Sources. The rules and conventions are Hal's own wording, drawn from UK careers guidance read on
+  2026-11-05: Prospects (CVs, cover letters, example, academic and creative CVs), the National Careers
+  Service's CV sections, Newcastle University Careers' CV booklet, GOV.UK's Success Profiles candidate
+  overview, the NHS Business Services Authority's guide to supporting information in NHS Jobs, jobs.ac.uk
+  career advice and Harvard FAS Career Services; and from what open CV tools check (Resume Matcher, Reactive
+  Resume, OpenResume). The catalogues of machine-sounding patterns that informed the word lists are credited
+  in THIRD_PARTY_NOTICES.md. Thresholds from these sources (35-word bullets, two A4 pages, about 250 words
+  per behaviour example) are guidance; the tests check that Hal applies them, not that they are right.
 
 ### Web links for the record (`ingest/web.py`)
 
