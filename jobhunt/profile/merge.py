@@ -260,8 +260,9 @@ def text_key(text: str) -> str:
 
 def skill_key(name: str) -> str:
     """A skill's name as compared: no case, spaces, hyphens or dots, and other names folded to one."""
-    key = re.sub(r"[\s\-_./]+", "", (name or "").lower())
-    return SKILL_ALIASES.get(key, key)
+    parts = sorted(re.sub(r"[\s\-_.]+", "", part) for part in (name or "").lower().split("/"))
+    key = "/".join(p for p in parts if p)
+    return SKILL_ALIASES.get(key, key)       # "TypeScript/JavaScript" is "JavaScript/TypeScript"
 
 
 def value_key(field: str, value) -> str:
@@ -353,7 +354,11 @@ def same_item(kind: str, a: dict, b: dict) -> bool:
     if kind == "job":
         if not (a.get("employer") or b.get("employer")):
             return _same(text_key, a, b, "title") and overlap_or_touch(a, b)
-        return _same(org_key, a, b, "employer") and (_same(text_key, a, b, "title") or overlap_or_touch(a, b))
+        if not _same(org_key, a, b, "employer"):
+            return False
+        # a job named with no dates at all is the dated one there ("Staff" and "Supervisor" at one bar)
+        undated = not (a.get("start") or a.get("end")) or not (b.get("start") or b.get("end"))
+        return _same(text_key, a, b, "title") or overlap_or_touch(a, b) or undated
     if kind == "education":
         return _same_education(a, b)        # a BA and then an MA at one university stay two: their levels differ
     if kind == "skill":

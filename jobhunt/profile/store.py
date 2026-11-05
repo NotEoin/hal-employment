@@ -140,6 +140,9 @@ def clean(kind: str, fields: dict) -> dict:
 
 # A module, project or dissertation the model filed under education is not a qualification (2026-11-05): it
 # would show as a second degree. Projects are found as projects anyway.
+BASIC_KEYS = ("name", "email", "phone", "location")
+PATH_SLASHES = 2           # "London / Newcastle" is a place; "Computer Science BSc/Year 3/ideas" is a folder
+SKILL_LIST = re.compile(r"\s*[,;]\s*")
 NOT_QUALIFICATION = re.compile(r"\b(?:project|dissertation|module|coursework|assignment|practical|lecture|"
                                r"student)\b", re.I)
 
@@ -150,6 +153,13 @@ def _named(kind: str, fields: dict) -> None:
     qualification = str(fields.get("qualification") or "")
     if kind == "education" and not merge.level(qualification) and NOT_QUALIFICATION.search(qualification):
         raise ValueError(f"{qualification} is a piece of work or a module, not a qualification.")
+    if kind == "education" and not any(fields.get(f) for f in ("institution", "start", "end")):
+        # an "MSc" in a dissertation's topic, from nowhere and no time, was the model's guess (2026-11-05)
+        raise ValueError("A qualification needs where or when it was studied.")
+    if kind == "basic" and fields.get("key") not in BASIC_KEYS:
+        raise ValueError(f"A basic is one of {', '.join(BASIC_KEYS)}, not {fields.get('key')}.")
+    if kind == "basic" and fields["key"] == "location" and str(fields.get("value") or "").count("/") >= PATH_SLASHES:
+        raise ValueError("A folder path is not where the person lives.")
     if kind == "basic" and not fields.get("value"):
         raise ValueError("A basic needs a value.")
 
@@ -207,8 +217,13 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, 
     `evidence` is {source_rel, quote, field, doc_type}: the file inside the record, the verbatim quote, the
     field the quote supports and the document type (transcript, certificate, cv, letter, notes, ...).
     Raises ValueError for an unknown kind or field, a fact with nothing to name it, or evidence with no file.
-    `refresh=False` leaves the conflicts to the caller, who refreshes them once after many facts.
+    `refresh=False` leaves the conflicts to the caller, who refreshes them once after many facts. A skill
+    named as a list ("Python, Java, C") is one skill each; the id of the last is returned.
     """
+    names = SKILL_LIST.split(str(fields.get("name") or "")) if kind == "skill" else []
+    if len([n for n in names if n]) > 1:
+        ids = [add_found(con, kind, {**fields, "name": n}, evidence, refresh=refresh) for n in names if n]
+        return ids[-1]
     said = clean(kind, fields)
     _named(kind, said)
     ev = _evidence(evidence)

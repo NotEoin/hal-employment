@@ -257,6 +257,26 @@ class Store(unittest.TestCase):
         self.assertEqual(module, degree)
         self.assertIn("HIS2010", [m["name"] for m in store.item(self.con, degree)["fields"]["modules"]])
 
+    def test_noisy_facts_from_a_real_ingest_are_cleaned_or_refused(self):
+        # a real ingest gave skills as lists ("Python, Java, C"), a folder path as a location, a student number
+        # under "basic", an "MSc" in a dissertation's topic, and "Staff" with no dates beside the dated job at
+        # the same bar (2026-11-05)
+        src = ev("Sources/CVs and letters/a.md", "cv", "x")
+        store.add_found(self.con, "skill", {"name": "Archival research, Oral history; Palaeography"}, src)
+        self.assertEqual(sorted(i["fields"]["name"] for i in store.items(self.con, "skill")),
+                         ["Archival research", "Oral history", "Palaeography"])
+        store.add_found(self.con, "skill", {"name": "Excel/Word"}, src)
+        self.assertEqual(store.add_found(self.con, "skill", {"name": "Word/Excel"}, src),
+                         store.add_found(self.con, "skill", {"name": "Excel/Word"}, src))
+        for kind, fields in (("basic", {"key": "location", "value": "History BA/Year 3/ideas"}),
+                             ("basic", {"key": "basic", "value": "230466043"}),
+                             ("education", {"qualification": "MA", "subject": "Letters of the Wexley mills"})):
+            with self.subTest(fields=fields), self.assertRaises(ValueError):
+                store.add_found(self.con, kind, fields, src)
+        dated = self.job("Sources/CVs and letters/a.md", start="2023-09", end="2024-06")
+        self.assertEqual(store.add_found(self.con, "job", {"title": "Staff",
+                                                           "employer": "Fenwick Lantern Museum Trust"}, src), dated)
+
     def test_near_identical_certificate_names_merge_but_different_levels_do_not(self):
         def cert(source, name):
             return store.add_found(self.con, "certificate", {"name": name}, ev(source, "certificate", name))
