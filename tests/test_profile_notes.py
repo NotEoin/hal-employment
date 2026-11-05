@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
-from support.profiles import CV, LETTER, ev, humanities_profile
+from support.profiles import CV, LETTER, NOTES, TRANSCRIPT, ev, humanities_profile
 
 from jobhunt import db, profile, record
 from jobhunt.core import paths
@@ -50,6 +50,20 @@ class Notes(unittest.TestCase):
         self.assertIn("| Early Modern Letters | 72 |", education)
         self.assertIn("Archival research", (self.folder / "Profile" / "Skills.md").read_text(encoding="utf-8"))
         self.assertIn("October 2023", (self.folder / "Profile" / "Inconsistencies.md").read_text(encoding="utf-8"))
+
+    def test_the_module_table_has_one_row_per_module_code_and_no_lecture_titles(self):
+        degree = {"qualification": "BA History", "institution": "University of Wexley", "period": "2022-25"}
+        with closing(db.connect()) as con:
+            store.add_found(con, "education", {**degree, "modules": [
+                {"name": "HIS2010", "mark": "72"}, {"name": "Early Modern Letters (HIS2010)", "mark": ""}]},
+                ev(TRANSCRIPT, "transcript", "HIS2010 72"))
+            store.add_found(con, "education", {**degree, "modules": [{"name": "Week 3 lecture: parish registers"}]},
+                            ev(NOTES, "notes", "lecture notes"))
+            profile.write_notes(self.folder, con)
+        education = (self.folder / "Profile" / "Education.md").read_text(encoding="utf-8")
+        self.assertIn("| Early Modern Letters (HIS2010) | 72 |", education)
+        self.assertEqual(education.count("| HIS2010"), 0)
+        self.assertNotIn("Week 3", education)
 
     def test_notes_whose_text_is_the_same_are_not_written_again(self):
         with closing(db.connect()) as con:

@@ -19,7 +19,12 @@ Design decisions, each with its reason:
   the same skill ("MS Excel" is "Excel"), covering office, research and writing skills as well as code.
 - A found item's fields come from its sources in rank order (transcript, certificate, CV, letter, notes):
   each field takes the value of the best-ranked source that gives one, so a transcript's grade beats a CV's.
-  Lists (duties, modules, tools) are joined across sources.
+  Lists (duties, tools) are joined across sources.
+- An education item's modules come from its transcripts and certificates when any lists modules, else from
+  its CVs, and never from notes, slides or coursework, which name lectures and practicals as well as
+  modules. They are one per module code ("CSC1032", "1032 Computer Systems Design" and "Computer Systems
+  (CSC1032)" are one), with the fullest name and the best source's mark; modules without a code are one
+  when their names are close.
 """
 from __future__ import annotations
 
@@ -418,24 +423,79 @@ def _join(lists: list) -> list:
     return out
 
 
+# A module code as universities write them: two to four letters and three or four digits ("CSC1032",
+# "his2010", "MATH 101"). A space or hyphen is allowed only after capitals, so "Year 2023" is not a code.
+MODULE_CODE = re.compile(r"\b(?:([A-Za-z]{2,4})(\d{3,4})|([A-Z]{2,4})[ -](\d{3,4}))\b")
+# The bare number of a known code ("1032 Computer Systems Design" beside "CSC1032")
+BARE_CODE = re.compile(r"\b(\d{4})\b")
+# Lecture notes and slides named a degree's modules in many spellings, beside 120 lecture titles ("Lesson 14
+# Cascading Style Sheets", "tut8 vectors and matrices") (2026-11-05): modules come from the official papers
+# when they list any, else from CVs, and never from notes.
+OFFICIAL_RANK = RANKS["certificate"]
+CV_RANK = RANKS["cv"]
+
+
+def module_code(text: str) -> str:
+    """The module code a name holds, in capitals ("CSC1032"), or "" when it holds none."""
+    m = MODULE_CODE.search(text or "")
+    if not m:
+        return ""
+    letters, digits = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+    return f"{letters.upper()}{digits}"
+
+
+def _module_words(name: str) -> str:
+    """A module's name without its code, as compared: "Computer Systems (CSC1032)" is "computer systems"."""
+    return text_key(BARE_CODE.sub(" ", MODULE_CODE.sub(" ", name or "")))
+
+
+def _module_sources(sources: list[tuple[int, dict]]) -> list[dict]:
+    """The sources whose modules count: official papers when any lists modules, else CVs, never notes."""
+    listing = [(r, said) for r, said in sources if said.get("modules")]
+    official = [said for r, said in listing if r >= OFFICIAL_RANK]
+    return official or [said for r, said in listing if r == CV_RANK]
+
+
 def _modules(sources: list[dict]) -> list[dict]:
-    """Modules joined by name; a module's mark is the best-ranked source's (sources come best first)."""
-    out: dict[str, dict] = {}
-    for said in sources:
-        for mod in said.get("modules") or []:
-            key = text_key(mod.get("name", ""))
-            if not key:
-                continue
-            if key not in out:
-                out[key] = {"name": mod.get("name", ""), "mark": mod.get("mark", "")}
-            elif not out[key].get("mark") and mod.get("mark"):
-                out[key]["mark"] = mod["mark"]
-    return list(out.values())
+    """Modules one per code (else per close name), with the fullest name and the best-ranked source's mark.
+
+    Sources come best first. A bare four-digit number is a code only when it is the number of exactly one
+    code already in the list.
+    """
+    mods = [m for said in sources for m in said.get("modules") or [] if text_key(m.get("name", ""))]
+    by_digits: dict[str, set[str]] = {}
+    for m in mods:
+        if code := module_code(m["name"]):
+            by_digits.setdefault(re.sub(r"\D", "", code), set()).add(code)
+    groups: list[list] = []                # [code or "", members]
+    for m in mods:
+        code = module_code(m["name"])
+        if not code and (bare := BARE_CODE.search(m["name"])) and len(by_digits.get(bare.group(1), ())) == 1:
+            (code,) = by_digits[bare.group(1)]
+        for group in groups:
+            if code and group[0]:
+                same = group[0] == code    # two codes are two modules, however alike their names
+            else:
+                a, b = _module_words(group[1][0]["name"]), _module_words(m["name"])
+                same = bool(a) and (a == b or _name_close(a, b))
+            if same:
+                group[0] = group[0] or code
+                group[1].append(m)
+                break
+        else:
+            groups.append([code, [m]])
+    out = []
+    for _, members in groups:
+        name = max(members, key=lambda m: len(_module_words(m["name"])))["name"]
+        mark = next((m.get("mark") for m in members if m.get("mark")), "")
+        out.append({"name": name, "mark": mark})
+    return out
 
 
 def fold(sources: list[tuple[int, dict]]) -> dict:
     """A found item's fields from its sources' (rank, fields): best rank first, earlier sources on a tie."""
-    ordered = [said for _, (_, said) in sorted(enumerate(sources), key=lambda p: (-p[1][0], p[0]))]
+    ranked = [pair for _, pair in sorted(enumerate(sources), key=lambda p: (-p[1][0], p[0]))]
+    ordered = [said for _, said in ranked]
     out: dict = {}
     for said in ordered:
         for field, value in said.items():
@@ -443,7 +503,7 @@ def fold(sources: list[tuple[int, dict]]) -> dict:
                 continue
             out.setdefault(field, value)
     for field in LIST_FIELDS:
-        joined = _modules(ordered) if field == "modules" else _join([s.get(field) for s in ordered])
+        joined = _modules(_module_sources(ranked)) if field == "modules" else _join([s.get(field) for s in ordered])
         if joined:
             out[field] = joined
     return out

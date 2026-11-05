@@ -36,7 +36,9 @@ What changed in each version, in plain words.
 - **Your profile.** Hal keeps the facts it finds in your record as a profile: jobs, education with its
   modules and marks, skills with the words that show them, projects, certificates, achievements and links.
   Each fact names the files it came from. The same job in two CVs is one entry, written the same way in
-  both or not ("Sept 2023 - present", "09/2023"), and "MS Excel" and "Excel" are one skill.
+  both or not ("Sept 2023 - present", "09/2023"), and "MS Excel" and "Excel" are one skill. A degree's
+  modules come from your transcript (or your CV when there is no transcript), one per module code with its
+  mark, never lecture titles from your notes or slides.
 - **Your corrections stay.** Confirm, edit or hide each fact in your profile. When Hal reads your files
   again it never changes a fact you checked or edited, and a hidden fact stays hidden. The one exception is
   a newer copy of a project that says something else: then a fact you checked goes back to unchecked.

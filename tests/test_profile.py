@@ -190,20 +190,20 @@ class Store(unittest.TestCase):
         self.assertEqual([e["quote"] for e in got["evidence"]],
                          ["MS Excel (pivot tables)", "built the loans spreadsheet in Excel"])
 
-    def test_a_humanities_profile_keeps_modules_and_marks_with_the_transcripts_mark_first(self):
+    def test_a_transcripts_modules_replace_the_cvs_and_keep_their_marks(self):
         course = {"qualification": "BA (Hons)", "subject": HUMANITIES.you["education.subject"],
                   "institution": HUMANITIES.you["education.university"]}
         a = store.add_found(self.con, "education", {**course, "modules": [{"name": "Early Modern Letters"},
                                                                           {"name": "Oral History in Practice"}]},
                             ev(CV_A, "cv", "Modules: Early Modern Letters, Oral History in Practice"))
+        self.assertEqual(len(store.item(self.con, a)["fields"]["modules"]), 2, "with no transcript, the CV's")
         store.add_found(self.con, "education",
                         {**course, "modules": [{"name": "Early modern letters", "mark": "72"},
                                                {"name": "Archives and Memory", "mark": "68"}]},
                         ev(TRANSCRIPT, "transcript", "Early Modern Letters 72"))
         mods = store.item(self.con, a)["fields"]["modules"]
         self.assertEqual(mods, [{"name": "Early modern letters", "mark": "72"},
-                                {"name": "Archives and Memory", "mark": "68"},
-                                {"name": "Oral History in Practice", "mark": ""}])
+                                {"name": "Archives and Memory", "mark": "68"}])
         store.add_found(self.con, "skill", {"name": "Archival research", "category": "research"},
                         ev(TRANSCRIPT, "transcript", "dissertation drew on parish records"))
         self.assertEqual([i["title"] for i in store.items(self.con, "skill")], ["Archival research"])
@@ -255,7 +255,40 @@ class Store(unittest.TestCase):
                                   "modules": [{"name": "HIS2010", "mark": ""}]},
                                  ev("Sources/Study notes/week 1.md", "notes", "HIS2010"))
         self.assertEqual(module, degree)
-        self.assertIn("HIS2010", [m["name"] for m in store.item(self.con, degree)["fields"]["modules"]])
+        self.assertNotIn("modules", store.item(self.con, degree)["fields"], "notes never name the modules")
+
+    def test_lecture_titles_in_notes_never_become_modules(self):
+        # a degree's 15 modules were followed by about 120 lecture titles from notes and slides (2026-11-05)
+        degree = {"qualification": "BSc Computing", "institution": "University of Wexley", "period": "2023-26"}
+        a = store.add_found(self.con, "education", {**degree, "modules": [{"name": "CSC1032 Systems", "mark": "64"}]},
+                            ev(TRANSCRIPT, "transcript", "CSC1032 Systems 64"))
+        for doc_type, name in (("notes", "Lesson 14 Cascading Style Sheets"), ("slides", "CSC1033 Week 5 Practical"),
+                               ("coursework", "tut8 vectors and matrices"), ("cv", "Web Design")):
+            store.add_found(self.con, "education", {**degree, "modules": [{"name": name}]}, ev(NOTES, doc_type, name))
+        self.assertEqual(store.item(self.con, a)["fields"]["modules"], [{"name": "CSC1032 Systems", "mark": "64"}])
+
+    def test_one_module_written_many_ways_is_one_row_with_the_fullest_name_and_the_mark(self):
+        degree = {"qualification": "BSc Computing", "institution": "University of Wexley", "period": "2023-26"}
+        a = store.add_found(self.con, "education", {**degree, "modules": [
+            {"name": "CSC1032", "mark": ""}, {"name": "1032 Computer Systems Design", "mark": "71"},
+            {"name": "Computer Systems Design and Architectures (CSC1032)", "mark": ""},
+            {"name": "csc1032 computer systems", "mark": "70"}, {"name": "CSC1033 Databases", "mark": "58"},
+            {"name": "Year 2023 Group Project", "mark": "66"}]}, ev(TRANSCRIPT, "transcript", "CSC1032 71"))
+        store.add_found(self.con, "education", {**degree, "modules": [{"name": "Databases (CSC1033)"}]},
+                        ev("Sources/Education/certificate.md", "certificate", "CSC1033"))
+        self.assertEqual(store.item(self.con, a)["fields"]["modules"], [
+            {"name": "Computer Systems Design and Architectures (CSC1032)", "mark": "71"},
+            {"name": "CSC1033 Databases", "mark": "58"}, {"name": "Year 2023 Group Project", "mark": "66"}])
+
+    def test_modules_without_codes_merge_by_close_name_and_two_codes_stay_two(self):
+        self.assertEqual(merge.fold([(5, {"modules": [{"name": "Oral History in Practice"},
+                                                      {"name": "Oral history in practise", "mark": "68"},
+                                                      {"name": "HIS2010 Archives"}, {"name": "HIS2011 Archives"}]})]),
+                         {"modules": [{"name": "Oral History in Practice", "mark": "68"},
+                                      {"name": "HIS2010 Archives", "mark": ""},
+                                      {"name": "HIS2011 Archives", "mark": ""}]})
+        self.assertEqual(merge.module_code("MATH 101 Calculus"), "MATH101")
+        self.assertEqual(merge.module_code("Year 2023 review"), "")
 
     def test_noisy_facts_from_a_real_ingest_are_cleaned_or_refused(self):
         # a real ingest gave skills as lists ("Python, Java, C"), a folder path as a location, a student number
