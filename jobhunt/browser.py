@@ -83,6 +83,10 @@ SIGN_IN = re.compile(r"\b(sign|log)[ -]?in\b|\blogin\b|\bregister\b|create (an |
 # only for an email address, and Hal typed it in and pressed on (testers, 2026-11-05).
 SIGN_IN_HOST = re.compile(r"^(accounts?|login|auth|signin|sso|id|identity)\.", re.I)
 SIGN_IN_TEXT = 600   # characters of the page's opening words that may say it is for signing in
+# What a sign-in page says in its opening words; a bare "login" link in a site's menu does not count (every Hacker
+# News page starts "... submit login", and each job post there was taken for a sign-in, testers 2026-11-05).
+SIGN_IN_WORDS = re.compile(r"\b(sign|log)[ -]?in (to|with)\b|forgot (your )?password|don'?t have an account|"
+                           r"create (an |your )?account|welcome back", re.I)
 REGISTER_FIELDS = 5  # questions beyond which a page with a password box is an application, not an account page
 # A session on the page's site: "Sign out", or an account's own pages, which Totaljobs shows in place of it; its
 # plain Apply then sent the saved CV at once (testers, 2026-11-05).
@@ -417,7 +421,7 @@ BROWSER = Browser()
 # 2026-11-05).
 SITE_SEARCH = re.compile(r"^\s*((what|where)\s*\??|keywords?|search( for)?( jobs)?|"
                          r"job title,? (skills?|keywords?|company)\b.*|(town|city)[ ,/]*((town|city)[ ,/]*)?or "
-                         r"(post|zip) ?code|salaries|distance|radius|sort( by)?|date posted)\s*$", re.I)
+                         r"(post|zip) ?code|salaries|distance|radius|sort( by)?|date posted)\s*:?\s*$", re.I)
 JOB_ALERT = re.compile(r"job alerts?|similar (new )?(jobs|roles|vacancies)|jobs like this|newsletter|"
                        r"(send|email) me (new |similar |more )?(jobs|roles|vacancies)|new jobs by email", re.I)
 
@@ -700,8 +704,8 @@ def _needs(survey: dict, fields: list[dict]) -> str:
 def sign_in_page(head: str, url: str, text: str) -> bool:
     """True when a page's title and headings (`head`), its address or its opening words say it is for signing in."""
     where = urlparse(url)
-    return bool(SIGN_IN_HOST.search(where.hostname or "")
-                or SIGN_IN.search(f"{head} {where.path} {text[:SIGN_IN_TEXT]}"))
+    return bool(SIGN_IN_HOST.search(where.hostname or "") or SIGN_IN.search(f"{head} {where.path}")
+                or SIGN_IN_WORDS.search(text[:SIGN_IN_TEXT]))
 
 
 def _signed_in(survey: dict) -> bool:

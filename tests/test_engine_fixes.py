@@ -149,7 +149,7 @@ class SiteKeys(unittest.TestCase):
         """Regression (testers, 2026-11-05): Totaljobs' "Job title, skill or company" and "Town, city or postcode"
         were taken for an application form's two questions."""
         for label in ("Job title, skill or company", "Town, city or postcode", "Job title, skills or keywords",
-                      "What?", "City, town or zip code"):
+                      "What?", "City, town or zip code", "Search:"):
             self.assertTrue(browser.not_the_application({"label": label}), label)
         for label in ("Postcode", "Town or city", "Job title", "Current company", "Location (City)"):
             self.assertFalse(browser.not_the_application({"label": label}), label)
@@ -167,6 +167,8 @@ class SiteKeys(unittest.TestCase):
         self.assertTrue(browser.sign_in_page("Y Combinator", "https://account.ycombinator.com/?continue=x", "Email"))
         self.assertTrue(browser.sign_in_page("", "https://login.example.org/", ""))
         self.assertFalse(browser.sign_in_page("Junior Analyst", "https://jobs.example.org/apply", "Your details"))
+        # A bare "login" in a site's menu is not a sign-in page (every Hacker News page starts "... submit login").
+        self.assertFalse(browser.sign_in_page("A post", "https://forum.example.org/item?id=1", "new | submit login"))
 
     def test_an_upload_that_appears_later_does_not_get_a_second_cv(self):
         """Regression (testers, 2026-11-04): after an Ashby form rebuilt itself, its new upload box was taken for

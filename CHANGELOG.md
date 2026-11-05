@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A site's menu is not a sign-in page.** Every Hacker News page starts with its menu, ending "login", and Hal
+  took each job post there for a sign-in page. A page's opening words now count only when they say so ("Log in
+  to", "Forgot your password", "Welcome back"), and a "Search:" box is the site's own.
 - **"First and last name" gets your full name.** "Legal First and Last Name" was given only your surname.
 - **A job board's account page is left to you.** Adzuna's register page (email, password and the password again)
   was filled with your email address as the application's last page. Through the browser helper, as in Hal's own
