@@ -7,8 +7,14 @@ Layout, inside the record (an Obsidian vault):
   sha256, ingested (UTC, with Z) and `hal: ingested`, or `hal: needs-review` when a quote was not found or it
   is unclear whose the document is. The body is the summary, the key facts with their quotes, links, the
   original, then the converted text.
-- Entity notes in `Organisations/`, `Places/`, `People/`, `Projects/`, `Courses/` and `Skills/`, each
-  `type: entity` with a "Mentioned in" list. The record's search skips them (`record.SKIP_TYPE`).
+- Entity notes in `Organisations/`, `Projects/`, `Courses/` and `Skills/`, each `type: entity` with a
+  "Mentioned in" list, only for what belongs in the person's record (`noted`): the organisations their facts
+  name (an employer, a place of study, an issuer), the skills and projects in their facts, and the courses of
+  their own documents and course material, one note per module code. People and places get none: one dump
+  gave 1,924 People and 343 Places notes of lecturers, paper authors, rooms and graphics cards, and none of
+  them helped an application (2026-11-05). The record's search skips entity notes (`record.SKIP_TYPE`).
+- The text of code and data files (`FENCED_SUFFIXES`) sits in a fenced block, so `[[1, 6]]` in a Lua table
+  is not a link to a note that does not exist.
 - `Sources/<Category>/Index.md` and `Sources/Index.md`: plain links, no Dataview, `type: index`.
 - Originals are copied to `record.ORIGINALS` (`Attachments/Sources/<Category>/`) when
   `record.copy_originals` is on and the file is at most `COPY_MAX_BYTES`; larger ones are named by path.
@@ -35,10 +41,15 @@ COPY_MAX_BYTES = 100 * 1024 ** 2   # 100 MiB: a scanned portfolio fits; a lectur
 TITLE_CHARS = 80                   # file names stay well under Windows' 260-character path limit
 LINK_MIN_CHARS = 4                 # "Art" or "UCL" would link half the words of a note
 LINKS_MAX = 60                     # per note: past this a note is more blue than black
-ENTITY_FOLDERS = {"organisations": "Organisations", "places": "Places", "people": "People",
-                  "projects": "Projects", "courses": "Courses", "skills": "Skills"}
-ENTITY_WORD = {"organisations": "organisation", "places": "place", "people": "person", "projects": "project",
-               "courses": "course", "skills": "skill"}
+ENTITY_FOLDERS = {"organisations": "Organisations", "projects": "Projects", "courses": "Courses", "skills": "Skills"}
+ENTITY_WORD = {"organisations": "organisation", "projects": "project", "courses": "course", "skills": "skill"}
+ORG_FIELDS = ("employer", "institution", "issuer")
+COURSE_ROLES = ("own", "taught")
+# A module code: "CSC3632", "GEO 101", "HIST-2045". It names one module however the title is written.
+MODULE_CODE = re.compile(r"(?<![A-Za-z0-9])([A-Za-z]{2,4})[ -]?(\d{3,4})(?![0-9])")
+FENCED_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".c", ".h", ".cpp", ".cs", ".go", ".rs", ".rb",
+                   ".php", ".swift", ".kt", ".scala", ".r", ".m", ".sql", ".sh", ".lua", ".scad", ".csv", ".tsv",
+                   ".json", ".yaml", ".yml", ".toml", ".xml", ".ini", ".cfg", ".bib"}
 MENTIONED = "## Mentioned in"
 UNSAFE = re.compile(r'[\\/:*?"<>|#^\[\]]+')
 FACT_FIELDS = {"job": ("title", "employer", "start", "end"), "education": ("qualification", "subject", "institution",
@@ -137,9 +148,42 @@ def entity_rel(kind: str, name: str) -> str:
     return f"{ENTITY_FOLDERS[kind]}/{slug(name)}.md"
 
 
-def entity_key(name: str) -> str:
-    """An entity's name as compared: "3D Printing", "3D printing" and "3d-printing" are one."""
+def entity_key(name: str, kind: str = "") -> str:
+    """An entity's name as compared: "3D Printing", "3D printing" and "3d-printing" are one, and a course is
+    its module code when it has one ("CSC3632 System and Network Security" is "System and Network Security
+    (CSC3632)": one module had seven notes, 2026-11-05)."""
+    if kind == "courses" and (code := MODULE_CODE.search(name)):
+        return f"{code.group(1).lower()}{code.group(2)}"
     return " ".join(re.split(r"[\s_-]+", slug(name).lower())).strip()
+
+
+def _unique(names: list[str]) -> list[str]:
+    out: list[str] = []
+    for n in names:
+        n = " ".join(str(n).split())
+        if n and entity_key(n) not in {entity_key(o) for o in out}:
+            out.append(n)
+    return out
+
+
+def noted(desc: dict) -> dict[str, list[str]]:
+    """The entities of a document that get notes and links: the organisations, skills and projects of the
+    facts it gave, and its courses when it is the person's own or course material."""
+    facts = desc.get("facts") or []
+
+    def named(kind: str, fields: tuple[str, ...]) -> list[str]:
+        return _unique([str(f["fields"].get(k) or "") for f in facts if kind in ("", f["kind"]) for k in fields])
+
+    courses = desc.get("entities", {}).get("courses", []) if desc.get("role") in COURSE_ROLES else []
+    return {"organisations": named("", ORG_FIELDS), "projects": named("project", ("name",)),
+            "courses": _unique(courses), "skills": named("skill", ("name",))}
+
+
+def _fenced(text: str) -> str:
+    """`text` in a fenced block longer than any run of backticks in it, so nothing inside is Markdown."""
+    longest = max((len(m) for m in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return f"{fence}\n{text.rstrip()}\n{fence}"
 
 
 def existing_entity(vault: Path, kind: str, name: str) -> str:
@@ -149,10 +193,10 @@ def existing_entity(vault: Path, kind: str, name: str) -> str:
     (2026-11-05).
     """
     folder = vault / ENTITY_FOLDERS[kind]
-    want = entity_key(name)
+    want = entity_key(name, kind)
     if folder.is_dir():
         for p in folder.glob("*.md"):
-            if entity_key(p.stem) == want:
+            if entity_key(p.stem, kind) == want:
                 return _rel(vault, p)
     return entity_rel(kind, name)
 
@@ -182,26 +226,29 @@ def write_source(vault: Path, desc: dict, *, text: str, source: str, sha256: str
         lines += ["This file holds one of your private answers, so Hal did not send it to the AI.", ""]
     if desc["facts"]:
         lines += ["## Key facts", "", *(_fact_line(f) for f in desc["facts"]), ""]
-    linked = [f"- {ENTITY_FOLDERS[k]}: " + ", ".join(link(existing_entity(vault, k, n), n) for n in ents[k])
-              for k in ENTITY_FOLDERS if ents.get(k)]
+    shown = noted(desc)
+    linked = [f"- {ENTITY_FOLDERS[k]}: " + ", ".join(link(existing_entity(vault, k, n), n) for n in shown[k])
+              for k in ENTITY_FOLDERS if shown.get(k)]
     if linked or extra_links:
         lines += ["## Links", "", *linked, *extra_links, ""]
     lines += ["## Original", "", f"![[{original}]]" if original and original.lower().endswith(
         (".png", ".jpg", ".jpeg", ".webp", ".gif")) else (f"[[{original}]]" if original else f"`{source}`"), ""]
     if text:
-        lines += ["## Text", "", text, ""]
+        fenced = Path(source.split("?")[0]).suffix.lower() in FENCED_SUFFIXES
+        lines += ["## Text", "", _fenced(text) if fenced else text, ""]
     write(path, frontmatter.dump(fields) + "\n".join(lines))
     return _rel(vault, path)
 
 
 def add_mentions(vault: Path, desc: dict, note_rel: str) -> list[str]:
-    """Adds `note_rel` to the "Mentioned in" list of each entity the document names; returns their paths.
+    """Adds `note_rel` to the "Mentioned in" list of each entity of the document that gets a note (`noted`);
+    returns their paths.
 
     Only Hal's own entity notes (`type: entity`) are changed; a note of the person's at the same path is left
     exactly as it is.
     """
     out = []
-    for kind, names in desc["entities"].items():
+    for kind, names in noted(desc).items():
         for name in names:
             if len(slug(name)) < 2 or slug(name) == "Untitled":
                 continue

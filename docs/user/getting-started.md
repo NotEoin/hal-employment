@@ -177,7 +177,9 @@ hand, what kinds of document it found, and any files it could not read. **Stop**
 Hal reads your CV, transcripts, letters and certificates first, so what it learns about you arrives early,
 then reports, projects, writing, notes and slides. Each document becomes a note in your record's `Sources`
 folder, grouped by kind (CVs and letters, Education, Certificates and so on), with a summary, tags and links
-to notes about the organisations, places, skills and courses it mentions. A code project becomes one note,
+to notes about your modules, and the employers, skills and projects it gives facts about. Hal makes no notes
+about the people and places a document mentions, as they do not help an application. A code project
+becomes one note,
 and a folder of one course's lecture notes becomes one course note linking its files. With **Keep a copy
 of each file Hal reads in** on, the original is copied to `Attachments` beside the notes.
 

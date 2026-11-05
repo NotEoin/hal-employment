@@ -327,8 +327,31 @@ class Ranking(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp)
             for n, name in enumerate(["Oral History", "oral history", "Oral-history"]):
-                notes.add_mentions(vault, {"title": f"Note {n}", "entities": {"skills": [name]}}, f"Sources/x/{n}.md")
+                notes.add_mentions(vault, {"title": f"Note {n}", "entities": {}, "facts": [
+                    {"kind": "skill", "fields": {"name": name}}]}, f"Sources/x/{n}.md")
             self.assertEqual([p.name for p in (vault / "Skills").iterdir()], ["Oral History.md"])
+
+    def test_only_what_belongs_in_the_record_gets_an_entity_note(self):
+        desc = {"title": "Lecture 3", "role": "taught",
+                "entities": {"people": ["Dr Pell"], "places": ["Room 4.005"], "organisations": ["Nintendo"],
+                             "courses": ["GEO101 Rivers", "Rivers (GEO101)", "GEO 101"], "skills": ["Slides"]},
+                "facts": [{"kind": "skill", "fields": {"name": "Fieldwork"}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            notes.add_mentions(vault, desc, "Sources/x/1.md")
+            notes.add_mentions(vault, {**desc, "entities": {**desc["entities"], "courses": ["Rivers (GEO101)"]}},
+                               "Sources/x/2.md")
+            made = sorted(p.relative_to(vault).as_posix() for p in vault.rglob("*.md"))
+        self.assertEqual(made, ["Courses/GEO101 Rivers.md", "Skills/Fieldwork.md"])
+
+    def test_code_text_is_fenced_so_its_brackets_are_not_links(self):
+        lua = "local corners = {[[1, 6]], [[2, 7]]}\n-- ```not a fence```"
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            desc = {**understand.light("pilot.lua", lua, rank.CODE), "role": "own"}
+            rel = notes.write_source(vault, desc, text=lua, source="/files/pilot.lua", sha256="", original=None)
+            body = (vault / rel).read_text(encoding="utf-8")
+        self.assertIn("````\nlocal corners = {[[1, 6]], [[2, 7]]}", body)
 
     def test_a_persons_own_note_at_an_entity_path_is_never_written_to(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -557,6 +580,7 @@ class Understanding(unittest.TestCase):
                  "entities": {**REPLY["entities"], "organisations": ["Glenmore University"],
                               "places": ["Kestrel Town"], "courses": ["HIS2034"]}, "facts": []}
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(guess)}):
+            settings.set("you.name", OWNER)
             put(files, "BA History/year 2/HIS2034/Algorithms report.md", report)
             run(con, [files])
             fm, _ = frontmatter.parse((vault / rows(con)["Files/BA History/year 2/HIS2034/Algorithms report.md"]

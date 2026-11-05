@@ -531,8 +531,11 @@ runner starts the action again with the same batch and only pending items are re
    the store refuses (`ValueError`) is left out and logged, not the whole document. When the profile holds
    anything, the run ends by writing the Profile notes and publishing one `profile` event.
 7. **Write and link** (`notes.py`). `Sources/<Category>/<Title>.md` with YAML-list frontmatter
-   (`frontmatter.py`, which the record's reader also uses), entity notes in `Organisations/`, `Places/`,
-   `People/`, `Projects/`, `Courses/` and `Skills/` (`type: entity`, skipped by search), an `Index.md` per
+   (`frontmatter.py`, which the record's reader also uses), entity notes in `Organisations/`, `Projects/`,
+   `Courses/` and `Skills/` (`type: entity`, skipped by search) for what `notes.noted` keeps: the
+   organisations, skills and projects of the facts a document gave, and the courses of own and taught
+   documents, one note per module code (`entity_key`); no people or places. The text of code and data files
+   is fenced (`FENCED_SUFFIXES`), so their brackets make no links. An `Index.md` per
    category, a wikilink on the first mention of each known title, and the original copied to
    `Attachments/Sources/` when `record.copy_originals` is on and the file is at most 100 MiB. The record's
    own conversion leaves the drop folder and `Attachments/Sources/` alone, so no passage is indexed twice.
