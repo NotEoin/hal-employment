@@ -125,6 +125,16 @@ class Flow(unittest.TestCase):
         self.assertIn("Check them here or in the form.", words)
         self.assertIn(driver.LAST_PAGE, words)
 
+    def test_a_page_with_only_a_sites_sign_ups_is_no_form(self):
+        # testers: a jobs.ac.uk advert that sends you to the employer's site held only two email-preference tick
+        # boxes, and Hal called them the form's last page and said to press Submit (2026-11-05)
+        engine = FakeEngine(page1=[field("m", "I would like to receive email communication from the site relating "
+                                              "to made-up alerts", kind="checkbox", required=False)], page2=[])
+        engine.pages = [engine.pages[0]]
+        with self.assertRaisesRegex(RuntimeError, "no application form found"):
+            self.run_in("extension", engine)
+        self.assertEqual(self.form()["state"], "stuck")
+
     def test_middle_pages_with_nothing_to_check_are_passed(self):
         for mode in ("window", "extension"):
             with self.subTest(mode=mode):

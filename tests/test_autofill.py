@@ -220,6 +220,13 @@ class Answers(unittest.TestCase):
                                label="Will you now or in the future require sponsorship to work in the UK?")
         self.assertEqual((sponsor["value"], sponsor["source"]), ("No", "profile: sponsorship"))
 
+    def test_optional_sign_up_boxes_alone_are_not_an_application(self):
+        news = {"kind": "checkbox", "label": "I would like to receive email communication from the site"}
+        self.assertTrue(autofill.sign_ups_only([news, {**news, "label": "Send me job alerts"}]))
+        self.assertFalse(autofill.sign_ups_only([news, {"kind": "text", "label": "Email"}]))
+        self.assertFalse(autofill.sign_ups_only([{**news, "required": True}]))
+        self.assertFalse(autofill.sign_ups_only([]))
+
     def test_an_optional_follow_up_to_a_different_answer_is_left_empty(self):
         """Regression (testers, 2026-11-04): after "No" to sponsorship, the model answered "If you answered yes to
         the above, confirm your visa" with "A"."""

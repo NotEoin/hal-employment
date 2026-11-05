@@ -511,7 +511,7 @@ def _terminal(con, job, found: dict) -> str | None:
         return "application sent"
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": [], "model": "",
             "filled": None, "submit": None, "step": 1, "done": [], "final": True, "press": ""}
-    if not found["fields"]:
+    if not found["fields"] or autofill.sign_ups_only(found["fields"]):
         why = (f"{found['site']} refuses Hal's browser" if found["blocked"]
                else f"no application form found on {found['site']}")
         form.update(state="stuck", message=f"{why}. Open the form in {browser.where()}, then press "

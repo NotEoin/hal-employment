@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **An advert with no form is not called the form's last page.** A jobs.ac.uk advert that sends you to the
+  employer's own site held only two email-preference tick boxes, and Hal said it had filled the form's last
+  page. A page whose only questions are optional sign-ups now counts as no application form.
 - **A right-to-work question asked with sponsorship is never answered from sponsorship.** "Are you legally
   entitled to work in the United Kingdom? Will you require sponsorship?" was answered "No", from your answer to
   sponsorship. A question that asks about the right to work first is now answered as that, and one that asks

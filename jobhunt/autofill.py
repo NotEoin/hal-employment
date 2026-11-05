@@ -171,6 +171,14 @@ def profile() -> dict:
     return {k: v for k, v in p.items() if k not in PRIVATE_KEYS}
 
 
+def sign_ups_only(fields: list[dict]) -> bool:
+    """True when every field is an optional tick box for news or alerts: a site's sign-up, not an application
+    (jobs.ac.uk's email preferences beside an advert that sends you elsewhere, testers 2026-11-05)."""
+    return bool(fields) and all(
+        f["kind"] == "checkbox" and not f.get("required")
+        and MARKETING.search(f"{f.get('label') or ''} {f.get('context') or ''}") for f in fields)
+
+
 def two_in_one(field: dict) -> bool:
     """True for a label that asks two opposite questions under one answer: "Are you legally entitled to work in the
     UK? Will you require sponsorship?" Any one answer is wrong for one of them, so it is left to the person."""
@@ -221,7 +229,8 @@ DIVERSITY = re.compile(
     r"long[- ]term (physical|health)", re.I)
 # Opt-ins that are not part of the application; they are left as the form has them.
 MARKETING = re.compile(r"newsletter|marketing|talent (community|pool|network)|hear (more )?about|"
-                       r"(future|other) (opportunit|vacanc|roles)|job alerts?|notifications?:?$|keep (me|my)", re.I)
+                       r"(future|other) (opportunit|vacanc|roles)|job alerts?|notifications?:?$|keep (me|my)|"
+                       r"receive (e-?mail )?(communications?|updates|news|offers)", re.I)
 CONSENT = re.compile(r"consent|i agree|agree to|privacy|data (protection|processing)|process(ing)? (of )?(my|your) "
                      r"(personal )?(data|information)|terms|acknowledge|i (confirm|understand|certify)|"
                      r"confirm (that|the)|you understand|declaration", re.I)
