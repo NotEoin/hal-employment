@@ -25,6 +25,12 @@ What changed in each version, in plain words.
 - **What does not add up.** Hal lists two files that give different dates for one job, a grade on your
   transcript that is not the one on your CV (Hal uses the transcript's until you choose), an end date
   before a start date, two full-time jobs at once, and gaps of more than six months.
+- **Your record in tabs.** Your record has a tab for work history, education, skills, projects,
+  certificates and achievements, and the details about you, each a card you can confirm, edit, hide or add
+  by hand. Each card names the files it came from with their words, and marks words not found in the file.
+  Where your files disagree, choose the right value on the card or on the Inconsistencies tab. The Overview
+  adds files, zips, folders on this computer and web links, and shows a bar with the time left, the file in
+  hand and the files OneDrive or Dropbox has not downloaded.
 - **Letters use your checked facts first.** Cover letters, answers and messages read the facts you checked
   or edited before the ones Hal found, and never a fact you hid.
 - **Profile notes in your record folder.** A Profile folder holds Work history, Education, Skills, Projects

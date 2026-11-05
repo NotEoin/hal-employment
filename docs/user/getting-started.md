@@ -159,13 +159,19 @@ Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts*
 Hal can read a whole folder of your files at once: an old laptop's Documents, a university account
 downloaded as a zip, a folder of certificates.
 
-- **A zip.** On Your record, press **Add files** and choose the zip, up to 256 MB. Hal unpacks it safely,
-  zips inside it too, and reads what is inside.
+- **A zip.** On Your record, Overview, drop the zip on **Drop files here to add them** (or click there and
+  choose it), up to 256 MB. Hal unpacks it safely, zips inside it too, and reads what is inside.
 - **The drop folder.** Anything you put in the **+Inbox** folder inside your record is read the next time
   Hal reads your record, every 10 minutes unless you changed it. To use another folder, set **Drop folder
   for your record** in Settings, CV and documents.
-- **A folder on the computer Hal runs on** can be read where it is, so nothing needs copying first. This
-  works only on that computer, not in a window opened from another one.
+- **A folder on the computer Hal runs on** can be read where it is, so nothing needs copying first: type or
+  paste where it is under **Folders on this computer** and press **Read these folders**. This works only on
+  that computer; a window opened from another one does not show the box.
+- **Web links**: paste your own site or blog, your GitHub page, or a Google Doc shared with anyone under
+  **Web links**, one a line, and press **Read these links**.
+
+While Hal reads, the Overview shows a bar with how many files are read, about how long is left, the file in
+hand, what kinds of document it found, and any files it could not read. **Stop** keeps what was read so far.
 
 Hal reads your CV, transcripts, letters and certificates first, so what it learns about you arrives early,
 then reports, projects, writing, notes and slides. Each document becomes a note in your record's `Sources`
@@ -185,6 +191,29 @@ Some files are listed rather than read:
 Each fact Hal takes from a document comes with the document's own words. When those words are not in the
 document, the fact is marked **Check this**. A document that is someone else's, such as a friend's CV,
 gives no facts about you. If Hal closes part way through, it carries on from the next file when it opens.
+
+## Your record
+
+Your record has a tab for each part of your profile: **Work history**, **Education**, **Skills**,
+**Projects**, **Certificates and achievements** and **About you and links**. **Overview** shows how many
+things of each kind Hal found and how many are left to check, and is where you add files, folders and links.
+**Files** lists the folder's contents and has **Ask your record**.
+
+Each job, qualification or skill is a card:
+
+- **Found by Hal**, **Checked by you**, **Edited by you** or **Hidden** says where it stands.
+- **From:** names each file it came from, with the words Hal took from it. Click the name to open the
+  file. **Quote not found in the file** means those words are not in the file, so check the fact.
+- **Confirm** says it is right. **Edit** lets you change any field, and **Save** keeps your words; Hal never
+  changes them when it reads your files again. **Hide** keeps it out of your letters and CVs; hidden cards
+  are folded away at the end of the tab, with **Show again**.
+- **Add a job** (or a qualification, skill and so on) adds one by hand. Only those can be deleted: a fact
+  Hal found would come back the next time it reads the file, so hide it instead.
+
+When your files disagree, the card shows each value and the files that give it, for example a start date of
+September 2023 in your CV and October 2023 in a letter. Press **Use** on the right one, or **Keep it as it
+is**. Two jobs at once can be **Both are right**, or you can keep one and Hal hides the other. The
+**Inconsistencies** tab lists everything still to sort out, with the settled ones folded away below.
 
 ## What Hal remembers
 
