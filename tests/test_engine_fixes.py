@@ -403,6 +403,15 @@ class Fixes:
         self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#em")), "")
         self.assertEqual(self.site.sent(), 0)
 
+    def test_an_apply_link_in_the_pages_footer_is_not_the_jobs(self):
+        """Regression (testers, 2026-11-05): on a Hacker News job post Hal pressed the forum's own "Apply to YC"
+        link, from its row of links at the foot of the page, and reached Y Combinator's sign-in."""
+        page = "forum-post.html"
+        job_id, found = self.opened("forum", page)
+        self.assertEqual((found["fields"], found["needs"]), ([], ""))
+        self.assertTrue(self.on_page(job_id, page, lambda tab: tab.url.endswith(page)))
+        self.assertEqual(self.site.sent(), 0)
+
     def test_a_searched_list_is_typed_into_until_it_offers_the_answer(self):
         """Regression (testers, 2026-11-04): the helper was never told a list could be typed into, so Ashby's
         location list, which offers places only once you type, was left empty: "no option matching"."""

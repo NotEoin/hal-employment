@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A site's own links are not the job's Apply.** On a Hacker News job post, Hal pressed the forum's "Apply to
+  YC" link at the foot of the page and reached Y Combinator's sign-in. Hal no longer presses an Apply link in a
+  page's footer, including a bar of links at the end of the page, and prefers one in the advert to one in a menu.
 - **An advert with no form is not called the form's last page.** A jobs.ac.uk advert that sends you to the
   employer's own site held only two email-preference tick boxes, and Hal said it had filled the form's last
   page. A page whose only questions are optional sign-ups now counts as no application form.

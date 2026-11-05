@@ -699,7 +699,8 @@ def _signed_in(survey: dict) -> bool:
 
 def _apply_control(survey: dict) -> dict | None:
     """Returns the page's Apply link or button, preferring one in the advert over one in a menu."""
-    found = [c for c in survey["controls"] if APPLY_BUTTON.search(c["name"])]
+    # Never one in the page's footer, such as Hacker News's "Apply to YC" (testers, 2026-11-05).
+    found = [c for c in survey["controls"] if APPLY_BUTTON.search(c["name"]) and not c.get("inFooter")]
     found.sort(key=lambda c: (c["inNav"], not any(h in c["href"] for h in ATS_FRAME)))
     return found[0] if found else None
 
@@ -749,8 +750,8 @@ def _closed(survey: dict, status: int | None) -> bool:
     if CLOSED.search(head) is not None or status in (404, 410) \
             or ("greenhouse.io" in survey["url"] and "error=true" in survey["url"]):
         return True
-    has_apply = survey["apply"] if "apply" in survey else any(
-        APPLY_BUTTON.search(c["name"]) for c in survey.get("controls", []))
+    has_apply = survey["apply"] if "apply" in survey else _apply_control({"controls": survey.get("controls", [])}) \
+        is not None
     return not has_apply and CLOSED.search(survey.get("text", "")[:CLOSED_TEXT]) is not None
 
 

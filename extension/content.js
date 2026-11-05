@@ -15,6 +15,12 @@
   // halAll (page.js) also looks inside page components, whose controls sit in open shadow roots.
   const controls = (selector, pattern) => halAll(selector).filter(el => visible(el) && rx(pattern).test(nameOf(el)));
   const BUTTONS = "button, [role=button], input[type=submit], input[type=button]";
+  // Apply controls in the page's content first, then in its header or menu; never one in its footer, such as
+  // Hacker News's "Apply to YC" (halFurniture in page.js).
+  const applyControls = pattern => {
+    const found = controls("a[href], [role=link], " + BUTTONS, pattern).map(el => [el, halFurniture(el)]);
+    return [...found.filter(([, at]) => at === ''), ...found.filter(([, at]) => at === 'nav')].map(([el]) => el);
+  };
   const POPUP_GONE_MS = 400;  // a closed pop-up fades out before the page under it takes clicks
   // Widgets such as react-select open on mouse-down, which a bare click() never sends.
   const tap = el => ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type =>
@@ -89,7 +95,7 @@
       text: (document.body.innerText || '').slice(0, 40000),
       headings: [...document.querySelectorAll('h1, h2')].slice(0, 4).map(h => h.innerText).join(' '),
       password: [...document.querySelectorAll('input[type=password]')].some(visible),
-      apply: controls("a[href], [role=link], " + BUTTONS, p.apply).length > 0,
+      apply: applyControls(p.apply).length > 0,
       next: controls(BUTTONS, p.next).length > 0,
       submit: controls(BUTTONS, p.submit).length > 0,
       signOut: controls("a, button", p.signOut).length > 0,
@@ -128,7 +134,7 @@
       // A control the helper chose by name, on a page with no Apply button it recognised.
       control = [...document.querySelectorAll("a[href], [role=link], " + BUTTONS)].find(el => visible(el) && nameOf(el) === p.name);
     } else {
-      const found = p.kind === 'apply' ? controls("a[href], [role=link], " + BUTTONS, p.pattern) : controls(BUTTONS, p.pattern);
+      const found = p.kind === 'apply' ? applyControls(p.pattern) : controls(BUTTONS, p.pattern);
       control = p.kind === 'apply' ? found[0] : found[found.length - 1];
     }
     if (!control) return { pressed: false };

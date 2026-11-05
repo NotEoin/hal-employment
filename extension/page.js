@@ -337,6 +337,29 @@ function halExtract() {
 
 // What the page as a whole shows, for deciding where to go next: its buttons and
 // links (tagged with data-hal-nav so one can be pressed), headings, messages and walls.
+// Where a control sits in the page's own furniture: 'footer' (a footer, or a bar of links near the end of the
+// page, as Hacker News builds its "Guidelines | FAQ | ... | Apply to YC" row from plain spans), 'nav' (a header
+// or menu, where some sites keep their real Apply button), or '' for the page's content.
+const HAL_BAR_LINKS = 5;      // links in a row before it counts as a bar of links
+const HAL_BAR_SHARE = 0.7;    // the part of the row's words that are link words
+const HAL_PAGE_END = 0.7;     // how far down the page a footer's bar starts
+function halFurniture(el) {
+  if (el.closest('footer, [role=contentinfo]')) return 'footer';
+  // The content's own height: a short page sits in a taller window, and its last row is still its end.
+  const height = Math.max(document.body.scrollHeight || document.documentElement.scrollHeight, 1);
+  const top = el.getBoundingClientRect().top + window.scrollY;
+  for (let n = el.parentElement, up = 0; n && n !== document.body && up < 3; n = n.parentElement, up++) {
+    const links = [...n.querySelectorAll('a[href]')];
+    const words = halClean(n.innerText).length;
+    if (links.length >= HAL_BAR_LINKS && words
+        && links.reduce((sum, a) => sum + halClean(a.innerText).length, 0) / words >= HAL_BAR_SHARE) {
+      if (top / height >= HAL_PAGE_END) return 'footer';
+      break;
+    }
+  }
+  return el.closest('nav, header, [role=navigation], [role=banner]') ? 'nav' : '';
+}
+
 function halSurvey() {
   const clean = halClean, visible = halVisible;
   const nameOf = el => clean(el.getAttribute('aria-label') || el.innerText || el.value || el.getAttribute('title') || '');
@@ -352,7 +375,7 @@ function halSurvey() {
     const link = el.tagName === 'A' || el.getAttribute('role') === 'link';
     controls.push({ id, name, link, href: link ? (el.href || '') : '', submit: el.type === 'submit',
                     inForm: Boolean(el.closest('form')),
-                    inNav: Boolean(el.closest('nav, header, footer, [role=navigation], [role=banner], [role=contentinfo]')) });
+                    inNav: Boolean(halFurniture(el)), inFooter: halFurniture(el) === 'footer' });
   }
   const alerts = halAll('[role=alert], [aria-live=assertive], [class*="error" i], [class*="invalid-feedback" i]')
     .filter(e => visible(e) && !e.querySelector('input, textarea, select, form'))
