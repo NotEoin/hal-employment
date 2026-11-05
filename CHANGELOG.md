@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A page that changes while Hal reads it is read again.** "Frame with ID 0 was removed." reached the Form step
+  as it was. The helper now waits for the new page and reads it once more, and says in plain words if that fails
+  too.
 - **A job board's own search boxes are left alone.** Totaljobs' "Job title, skill or company" and "Town, city or
   postcode" were taken for an application's questions.
 - **"This listing went offline" closes the job.** An expired Totaljobs advert saying "This listing went offline"

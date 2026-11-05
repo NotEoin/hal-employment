@@ -257,10 +257,21 @@ def _ask(cmd: str, timeout: float = 90, **args) -> dict:
         for what in dict.fromkeys((value or {}).get("blocked", []) if isinstance(value, dict) else []):
             guard.record(args.get("job"), (value or {}).get("url") or "", what)
         return value
-    # A tab closed between finding it and acting in it is reported by the browser in its own words.
-    if result["error"] == "gone" or result["error"].startswith("No tab with id"):
-        raise RuntimeError("the form's tab was closed; press \"Fill in the form\" to open it again")
-    raise RuntimeError(result["error"])
+    raise RuntimeError(plain_error(result["error"]))
+
+
+# The browser's words for a page swapped out while the helper reached into it, after the helper's own retry.
+FRAME_GONE = re.compile(r"frame with id \d+ was removed|no frame with id|frame was removed", re.I)
+
+
+def plain_error(error: str) -> str:
+    """A helper error in the applicant's words: the browser's own wording for a tab or page that went away
+    ("Frame with ID 0 was removed" reached the Form step as it was, testers 2026-11-05)."""
+    if error == "gone" or error.startswith("No tab with id"):
+        return "the form's tab was closed; press \"Fill in the form\" to open it again"
+    if FRAME_GONE.search(error):
+        return "the page changed while Hal was reading it; press \"Fill it in again\""
+    return error
 
 
 def reset() -> None:

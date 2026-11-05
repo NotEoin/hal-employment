@@ -76,11 +76,22 @@ async function loaded(tabId, timeout = 45000) {
   return tab;
 }
 
+// A page swapped out while the helper reaches into it loses its frame ("Frame with ID 0 was removed", Totaljobs,
+// testers 2026-11-05); the page that replaced it is tried once, when it has loaded.
+const FRAME_GONE = /frame with id \d+ was removed|no frame with id|frame was removed/i;
+
 async function inTab(tabId, method, arg) {
-  await chrome.scripting.executeScript({ target: { tabId }, files: ["page.js", "content.js"] });
-  const [out] = await chrome.scripting.executeScript({
-    target: { tabId }, func: (m, a) => window.halPage[m](a), args: [method, arg ?? null] });
-  return out.result;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["page.js", "content.js"] });
+      const [out] = await chrome.scripting.executeScript({
+        target: { tabId }, func: (m, a) => window.halPage[m](a), args: [method, arg ?? null] });
+      return out.result;
+    } catch (e) {
+      if (attempt || !FRAME_GONE.test(String(e && e.message))) throw e;
+      await loaded(tabId);
+    }
+  }
 }
 
 // The page-world block, the same as BLOCK_JS in jobhunt/browser.py. For the whole of each command

@@ -154,6 +154,13 @@ class SiteKeys(unittest.TestCase):
         for label in ("Postcode", "Town or city", "Job title", "Current company", "Location (City)"):
             self.assertFalse(browser.not_the_application({"label": label}), label)
 
+    def test_the_browsers_words_for_a_page_that_went_away_are_not_shown(self):
+        """Regression (testers, 2026-11-05): "Frame with ID 0 was removed." reached the Form step as it was."""
+        self.assertEqual(extension.plain_error("Frame with ID 0 was removed."),
+                         "the page changed while Hal was reading it; press \"Fill it in again\"")
+        self.assertIn("tab was closed", extension.plain_error("No tab with id: 12."))
+        self.assertEqual(extension.plain_error("a made-up error"), "a made-up error")
+
     def test_an_account_services_address_marks_a_sign_in_page(self):
         """Regression (testers, 2026-11-05): account.ycombinator.com asked only for an email address, and Hal
         typed it in and pressed on."""
