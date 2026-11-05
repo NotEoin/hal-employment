@@ -83,7 +83,10 @@ def line(kind: str, fields: dict, quote: str = "") -> str:
 def _lines(con: sqlite3.Connection, states: tuple[str, ...]) -> list[str]:
     out = []
     for kind in KIND_ORDER:
-        for it in store.items(con, kind, hidden=False):
+        found = store.items(con, kind, hidden=False)
+        if kind == "basic":
+            found = _one_location(found)
+        for it in found:
             if it["state"] not in states:
                 continue
             # A found fact no quote was found for is the model's word alone: it reached a letter as a degree
@@ -95,6 +98,19 @@ def _lines(con: sqlite3.Connection, states: tuple[str, ...]) -> list[str]:
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
             out.append("- " + line(kind, it["fields"], quote))
     return out
+
+
+def _one_location(basics: list[dict]) -> list[dict]:
+    """The basics with one location: the person's own if they set one, else the one most files give.
+
+    A letter needs where the person lives once; seven found places (a home town, a university, an old
+    address) read as seven claims (2026-11-05).
+    """
+    places = [b for b in basics if b["fields"].get("key") == "location"]
+    if len(places) < 2:
+        return basics
+    best = max(places, key=lambda b: (b["state"] in ("confirmed", "edited"), len(b["evidence"])))
+    return [b for b in basics if b["fields"].get("key") != "location" or b is best]
 
 
 def context_block(con: sqlite3.Connection, limit: int = LIMIT) -> str:

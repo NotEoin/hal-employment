@@ -387,14 +387,34 @@ def _url_key(url: str) -> str:
 
 # Folding sources into fields -----------------------------------------------------------------------------
 
+# Lines from several versions of one CV say the same duty in other words ("Served 400+ customers a shift",
+# "serving 400+ covers a shift during peak periods"); a job collected twenty of them (2026-11-05).
+LINE_CLOSE = 0.6
+
+
+def _close_line(key: str, kept: list[str]) -> bool:
+    words = set(key.split())
+    for other in kept:
+        if key in other or other in key:
+            return True
+        theirs = set(other.split())
+        if words and theirs and len(words & theirs) / min(len(words), len(theirs)) >= LINE_CLOSE + 0.2:
+            return True
+        if difflib.SequenceMatcher(None, key, other).ratio() >= LINE_CLOSE:
+            return True
+    return False
+
+
 def _join(lists: list) -> list:
-    out, seen = [], set()
+    """The lists joined best source first; a line that says what one already kept says (other words) is left."""
+    out, seen = [], []
     for items in lists:
         for x in items or []:
             key = text_key(x.get("name", "")) if isinstance(x, dict) else text_key(str(x))
-            if key and key not in seen:
-                seen.add(key)
-                out.append(x)
+            if not key or key in seen or (not isinstance(x, dict) and _close_line(key, seen)):
+                continue
+            seen.append(key)
+            out.append(x)
     return out
 
 

@@ -47,6 +47,20 @@ class Writing(unittest.TestCase):
         store.confirm(self.con, made_up)
         self.assertIn("Glenmoor", profile.context_block(self.con))
 
+    def test_the_block_names_one_place_and_one_wording_of_each_duty(self):
+        # seven found places and twenty rewordings of one job's duties reached the block (2026-11-05)
+        for n, (place, duty) in enumerate([("Harrowgate", "Catalogued donated letters"),
+                                           ("Harrowgate", "Catalogued the donated letters"),
+                                           ("Wexley University", "Ran Saturday tours for visitors")]):
+            src = {"source_rel": f"Sources/CVs and letters/{n}.md", "quote": place, "field": "value", "doc_type": "cv"}
+            store.add_found(self.con, "basic", {"key": "location", "value": place}, src)
+            store.add_found(self.con, "job", {"title": "Collections volunteer", "employer": "Fenwick Lantern Museum",
+                                              "start": "2023-09", "duties": [duty]}, src)
+        block = profile.context_block(self.con)
+        self.assertEqual(block.count("Location:"), 1)
+        self.assertIn("Location: Harrowgate", block)
+        self.assertEqual(block.count("donated letters"), 1)
+
     def test_checked_facts_come_before_found_ones_and_contact_details_are_left_out(self):
         humanities_profile(self.con)
         block = profile.context_block(self.con)
