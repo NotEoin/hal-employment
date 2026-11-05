@@ -57,3 +57,16 @@ pinned by version and SHA-256 in `scripts/install/pins.toml`, into Hal's own `to
 
 Playwright downloads its own Chromium build (BSD-3-Clause and others), and Claude Code, when you choose a
 Claude subscription, is installed with Anthropic's own installer under Anthropic's terms.
+
+## Writing rules: credits
+
+Hal's writing rules (`jobhunt/writing/rules.py`) and its checker are Hal's own wording, written for CVs,
+cover letters and form answers. No text or code is copied from the projects below; their catalogues of
+the patterns that make writing read as machine-made informed which patterns Hal looks for, and they are
+credited here with thanks. Each is under the MIT licence.
+
+| Project | Licence | Copyright | Where |
+| --- | --- | --- | --- |
+| no-ai-slop | MIT | 2026 Peter Yang | https://github.com/petergyang/no-ai-slop |
+| avoid-ai-writing | MIT | 2026 Conor Bronsdon | https://github.com/conorbronsdon/avoid-ai-writing |
+| humanizer | MIT | 2025 Siqi Chen | https://github.com/blader/humanizer |
