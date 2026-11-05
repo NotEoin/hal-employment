@@ -16,6 +16,19 @@ What changed in each version, in plain words.
   it mentions. Code projects and a course's lecture notes each become one note. Files OneDrive or Dropbox
   has not downloaded, files with no text and copies are listed rather than read, and a fact whose words
   are not in its document is marked **Check this**. Hal carries on from the next file after a restart.
+- **Your profile.** Hal keeps the facts it finds in your record as a profile: jobs, education with its
+  modules and marks, skills with the words that show them, projects, certificates, achievements and links.
+  Each fact names the files it came from. The same job in two CVs is one entry, written the same way in
+  both or not ("Sept 2023 - present", "09/2023"), and "MS Excel" and "Excel" are one skill.
+- **Your corrections stay.** Confirm, edit or hide each fact in your profile. When Hal reads your files
+  again it never changes a fact you checked or edited, and a hidden fact stays hidden.
+- **What does not add up.** Hal lists two files that give different dates for one job, a grade on your
+  transcript that is not the one on your CV (Hal uses the transcript's until you choose), an end date
+  before a start date, two full-time jobs at once, and gaps of more than six months.
+- **Letters use your checked facts first.** Cover letters, answers and messages read the facts you checked
+  or edited before the ones Hal found, and never a fact you hid.
+- **Profile notes in your record folder.** A Profile folder holds Work history, Education, Skills, Projects
+  and Inconsistencies notes, written from your profile, for reading in Obsidian.
 - **Choose several career areas.** The goal step's career areas are now toggles: press every area you are
   interested in, such as Heritage and museums and Creative and media, and their example roles are joined.
 - **Queue jobs, then approve them together.** **Add to queue** (or Q) beside **Apply with Hal** puts a job
