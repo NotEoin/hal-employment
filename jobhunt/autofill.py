@@ -179,6 +179,33 @@ def sign_ups_only(fields: list[dict]) -> bool:
         and MARKETING.search(f"{f.get('label') or ''} {f.get('context') or ''}") for f in fields)
 
 
+# Facts only the applicant has, which no rule, saved note or model may supply (testers, 2026-11-05): the
+# expected salary went into "What is your current salary?", and the model said "Yes" to "Have you interviewed
+# with Jane Street before?".
+CURRENT_PAY = re.compile(r"\b(current|present|most recent|previous|last)\b[^?]{0,30}\b(salary|pay|compensation|"
+                         r"remuneration)", re.I)
+PAST = re.compile(r"\b(interviewed|applied|worked|employed)\b[^?]*\b(before|previously|ever)\b|"
+                  r"\b(before|previously|ever)\b[^?]*\b(interviewed|applied|worked|employed)\b", re.I)
+US = re.compile(r"\b(us|our (company|firm|organi[sz]ation)|this (company|firm|organi[sz]ation|employer))\b", re.I)
+MIN_NAME = 3   # letters in the first word of an employer's name before it alone names them ("Jane" of Jane Street)
+YOURS_WHY = {"pay": "Only you know your current pay, so Hal leaves it for you.",
+             "past": "Only you know whether you have dealt with this employer before, so Hal leaves it for you."}
+
+
+def left_to_you(field: dict, company: str = "") -> str | None:
+    """Why Hal leaves this question to the applicant whatever it knows, or None: a question with two answers in
+    one, the applicant's current pay, or their past with this employer (`company`, or "us")."""
+    label = field.get("label") or ""
+    if two_in_one(field):
+        return TWO_IN_ONE_WHY
+    if CURRENT_PAY.search(label):
+        return YOURS_WHY["pay"]
+    name = company.split()[0] if company.split() and len(company.split()[0]) >= MIN_NAME else company
+    if PAST.search(label) and (US.search(label) or (name and re.search(rf"\b{re.escape(name)}", label, re.I))):
+        return YOURS_WHY["past"]
+    return None
+
+
 def two_in_one(field: dict) -> bool:
     """True for a label that asks two opposite questions under one answer: "Are you legally entitled to work in the
     UK? Will you require sponsorship?" Any one answer is wrong for one of them, so it is left to the person."""
@@ -780,8 +807,9 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
             else:
                 f["why"] = PRIVATE_WHY
             continue
-        if two_in_one(f):
-            f.update(note=YOURSELF, why=TWO_IN_ONE_WHY)
+        yours = left_to_you(f, _get(job, "company") or "")
+        if yours:
+            f.update(note=YOURSELF, why=yours)
             continue
         if _note_answer(f, notes, _get(job, "source")):
             continue
@@ -1045,7 +1073,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
     if not problems and not gpu.busy():
         _review(job, fields)
     open_fields = [f for f in fields if f["kind"] != "file" and f.get("type") != "password"
-                   and private_question(f) is None and not two_in_one(f)
+                   and private_question(f) is None and left_to_you(f, _get(job, "company") or "") is None
                    and (f["hid"] in problems or (f.get("value") in (None, "", []) and not f.get("skip")))]
     if not open_fields:
         return 0, None

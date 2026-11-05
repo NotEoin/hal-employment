@@ -227,6 +227,18 @@ class Answers(unittest.TestCase):
         self.assertFalse(autofill.sign_ups_only([{**news, "required": True}]))
         self.assertFalse(autofill.sign_ups_only([]))
 
+    def test_questions_only_the_applicant_can_answer_are_left_for_them(self):
+        """Regression (testers, 2026-11-05): the expected salary went into "What is your current salary?", and the
+        model said "Yes" to "Have you interviewed with Jane Street before?"."""
+        autofill.profile = lambda: {**PROFILE, "salary": "30000"}
+        for label in ("What is your current salary?", "What is your current (or most recent) salary?",
+                      "Have you interviewed with Practice Ltd before?", "Have you ever applied to us before?"):
+            f = self.propose(label=label)
+            self.assertEqual((f["value"], f["note"]), (None, autofill.YOURSELF), label)
+            self.assertIsNotNone(autofill.left_to_you(f, "Practice Ltd"), label)
+        self.assertEqual(self.propose(label="What is your desired salary?")["source"], "profile: salary")
+        self.assertIsNone(autofill.left_to_you({"label": "Have you worked with Python before?"}, "Practice Ltd"))
+
     def test_an_optional_follow_up_to_a_different_answer_is_left_empty(self):
         """Regression (testers, 2026-11-04): after "No" to sponsorship, the model answered "If you answered yes to
         the above, confirm your visa" with "A"."""

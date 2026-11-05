@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Hal leaves your current pay and your past with an employer to you.** The expected salary went into "What is
+  your current salary?", and Hal's model answered "Yes" to "Have you interviewed with Jane Street before?". Both
+  kinds of question are now left for you, and never sent to the model.
 - **A list answer the form refused gets a second try.** Greenhouse's location list found no option for "London"
   while another question's list was still open, and took it at once on its own. Hal now closes each list it
   opens, and picks each refused list answer once more by itself.
