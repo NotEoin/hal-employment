@@ -66,16 +66,14 @@ def register(con: sqlite3.Connection, root: str, path: Path, kind: str, *, job_i
     base = root_dir(root).resolve()
     rel = Path(path).resolve().relative_to(base).as_posix()
     digest, size = sha256(Path(path)), Path(path).stat().st_size
-    row = con.execute("SELECT id FROM files WHERE root = ? AND rel = ?", (root, rel)).fetchone()
-    if row:
-        con.execute("UPDATE files SET kind = ?, job_id = ?, sha256 = ?, size = ?, label = ? WHERE id = ?",
-                    (kind, job_id, digest, size, label, row[0]))
-        return row[0]
-    file_id = secrets.token_hex(ID_BYTES)
+    # One statement, so two saves of the same folder at once both land on the one row (a double-clicked approval
+    # failed with "UNIQUE constraint failed: files.root, files.rel", testers 2026-11-04).
     con.execute("""INSERT INTO files (id, root, rel, kind, job_id, sha256, size, label, created)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (file_id, root, rel, kind, job_id, digest, size, label, clock.iso()))
-    return file_id
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (root, rel) DO UPDATE SET kind = excluded.kind, job_id = excluded.job_id,
+                       sha256 = excluded.sha256, size = excluded.size, label = excluded.label""",
+                (secrets.token_hex(ID_BYTES), root, rel, kind, job_id, digest, size, label, clock.iso()))
+    return con.execute("SELECT id FROM files WHERE root = ? AND rel = ?", (root, rel)).fetchone()[0]
 
 
 def forget_under(con: sqlite3.Connection, root: str, folder_rel: str, *, keep: set[str] = frozenset()) -> None:

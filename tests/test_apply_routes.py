@@ -5,7 +5,9 @@ driver are replaced by stand-ins; the routes, the rules of `apply/actions.py` an
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import threading
 import unittest
 from unittest import mock
 from urllib.parse import quote
@@ -130,6 +132,20 @@ class Routes(unittest.TestCase):
         row = self.con.execute("SELECT j.status, a.closed_reason FROM jobs j JOIN applications a ON a.job_id = j.id "
                                "WHERE j.id = ?", (job_id("sorrel-ready"),)).fetchone()
         self.assertEqual((row["status"], row["closed_reason"]), ("ready", None))
+
+    def test_a_double_clicked_approval_starts_one_fill(self):
+        # testers: two approvals at once failed with "UNIQUE constraint failed: files.root, files.rel", and the
+        # second stopped the fill the first had started (2026-11-04)
+        self.start_applying("sorrel-ready")
+        slow = threading.Event()
+        with mock.patch.object(driver, "act_auto", lambda con, job_id, here=False, fresh=False: slow.wait(WAIT_S)):
+            with concurrent.futures.ThreadPoolExecutor(2) as pool:
+                replies = list(pool.map(lambda _: self.c.post(self.url("sorrel-ready", "/documents/approve"), {}),
+                                        range(2)))
+            self.assertEqual([r.status for r in replies], [200, 200], [r.text for r in replies])
+            self.assertEqual(len({r.json()["action_id"] for r in replies}), 1)
+            slow.set()
+        self.wait(replies[0].json()["action_id"])
 
     def test_a_closed_applications_page_says_why_it_closed(self):
         # testers: a closed application's page showed its step's buttons and no word of why (2026-11-04)

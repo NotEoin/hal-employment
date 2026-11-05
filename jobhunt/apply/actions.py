@@ -18,6 +18,8 @@ Design decisions, each with its reason:
 from __future__ import annotations
 
 import logging
+import threading
+from collections import defaultdict
 from typing import Any
 
 from .. import browser, db, documents
@@ -38,6 +40,10 @@ DISCARD_REASONS = {
 STATUS_REASONS = {"rejected": "rejected", "withdrawn": "withdrawn", "closed": "advert_closed"}
 CHANGEABLE = ("applying", "applied", "assessment", "interview", "offer", "rejected", "withdrawn")
 ADOPT_WHY = "You handed Hal a tab you opened yourself"
+# One approval of an application at a time: a double-click sent two, and the second stopped the fill the first had
+# started (testers, 2026-11-04).
+_APPROVING: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
+_APPROVING_GUARD = threading.Lock()
 
 
 # ------------------------------------------------------------------------------------------- action kinds
@@ -225,7 +231,23 @@ def _merge_edits(docs: dict, body: dict) -> dict:
 def approve_documents(con, job_id: str, body: dict | None = None, *, session_id: str | None = None,
                       helper_id: str | None = None, remote: bool = False, priority: int | None = None) -> str:
     """Approve and fill in the form: keeps the edits, fixes where the form is filled, moves the application to
-    the Form step and starts `apply.fill`."""
+    the Form step and starts `apply.fill`.
+
+    An approval of an application Hal is already filling, as a double-click sends, returns that fill's id.
+    """
+    with _APPROVING_GUARD:
+        lock = _APPROVING[job_id]
+    with lock:
+        held = runner.running_for(job_id)
+        approved = con.execute("SELECT approved_at FROM applications WHERE job_id = ?", (job_id,)).fetchone()
+        if held and held["kind"] == "apply.fill" and approved and approved["approved_at"]:
+            return held["id"]
+        return _approve_documents(con, job_id, body, session_id=session_id, helper_id=helper_id, remote=remote,
+                                  priority=priority)
+
+
+def _approve_documents(con, job_id: str, body: dict | None, *, session_id: str | None, helper_id: str | None,
+                       remote: bool, priority: int | None) -> str:
     job = _job(con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "chosen from the queue")

@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A double-clicked approval fills the form once.** Two presses of **Approve and fill in the form** sent two
+  approvals: one failed with an error, and the other stopped the fill the first had started, which could leave
+  the application with nothing running. A second press now joins the fill already under way.
 - **A closed application says so.** An application whose advert had closed still showed its step, with
   **Approve and fill in the form** or the Form step's buttons. Its page now says why it closed and offers
   **Back to Matches**.
