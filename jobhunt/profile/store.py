@@ -151,14 +151,42 @@ PATH_SLASHES = 2           # "London / Newcastle" is a place; "Computer Science 
 SKILL_LIST = re.compile(r"\s*[,;]\s*")
 NOT_QUALIFICATION = re.compile(r"\b(?:project|dissertation|module|coursework|assignment|practical|lecture|"
                                r"student)\b", re.I)
+# Lecture notes gave a job {"title": "supervisor", "employer": "bar"} and a module code as a course
+# (2026-11-05): a generic word with nothing else is no employer, and a code alone is a module.
+GENERIC_EMPLOYERS = {"bar", "pub", "shop", "store", "cafe", "coffee shop", "restaurant", "hotel", "company",
+                     "business", "firm", "employer", "workplace", "work", "job", "office", "factory",
+                     "warehouse", "supermarket", "agency", "charity", "organisation", "organization"}
+EMPLOYER_SKIP = {"the", "a", "an", "local", "my", "our", "small"}
+JOB_NAMES = {"title", "employer"}
+# A training course from a certificate provider ("CITI Program Training") is found as a certificate from
+# the certificate itself; filed as education it showed as a second course of study (2026-11-05).
+TRAINING = re.compile(r"\b(?:training|course|certification|workshop|webinar|e-?learning|induction)\b", re.I)
+PLACE_OF_STUDY = re.compile(r"\b(?:universit(?:y|ies)|college|school|academy|polytechnic|conservatoire|"
+                            r"sixth form)\b", re.I)
+
+
+def _generic_employer(name: str) -> bool:
+    """True when an employer is only a kind of place ("the bar", "a local shop"), not a name."""
+    words = [w for w in merge.text_key(name).split() if w not in EMPLOYER_SKIP]
+    return " ".join(words) in GENERIC_EMPLOYERS
 
 
 def _named(kind: str, fields: dict) -> None:
     if not any(fields.get(f) for f in NAMED_BY[kind]):
         raise ValueError(f"A {kind} needs {' or '.join(NAMED_BY[kind])}.")
+    if kind == "job" and _generic_employer(str(fields.get("employer") or "")) and set(fields) <= JOB_NAMES:
+        raise ValueError(f"{fields['employer']} is a kind of place, not an employer.")
     qualification = str(fields.get("qualification") or "")
     if kind == "education" and not merge.level(qualification) and NOT_QUALIFICATION.search(qualification):
         raise ValueError(f"{qualification} is a piece of work or a module, not a qualification.")
+    subject = str(fields.get("subject") or "")
+    if kind == "education" and not qualification and subject and \
+            merge.text_key(subject).replace(" ", "") == merge.module_code(subject).lower():
+        raise ValueError(f"{subject} is a module code, not a qualification.")
+    course = f"{qualification} {subject}"
+    if kind == "education" and not merge.level(course) and TRAINING.search(course) and \
+            not PLACE_OF_STUDY.search(str(fields.get("institution") or "")):
+        raise ValueError(f"{course.strip()} is a training course, found as a certificate instead.")
     if kind == "education" and not any(fields.get(f) for f in ("institution", "start", "end")):
         # an "MSc" in a dissertation's topic, from nowhere and no time, was the model's guess (2026-11-05)
         raise ValueError("A qualification needs where or when it was studied.")

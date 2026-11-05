@@ -38,8 +38,10 @@ What changed in each version, in plain words.
   Each fact names the files it came from. The same job in two CVs is one entry, written the same way in
   both or not ("Sept 2023 - present", "09/2023"), and "MS Excel" and "Excel" are one skill. A degree's
   modules come from your transcript (or your CV when there is no transcript), one per module code with its
-  mark, never lecture titles from your notes or slides. A course or job with an end date in the past is
-  shown as ended, even when an older CV says "present".
+  mark, never lecture titles from your notes or slides. A module code on its own is not a course, a
+  training course is a certificate rather than education, and "supervisor at a bar" with nothing more is
+  not a job. A course or job with an end date in the past is shown as ended, even when an older CV says
+  "present".
 - **Your corrections stay.** Confirm, edit or hide each fact in your profile. When Hal reads your files
   again it never changes a fact you checked or edited, and a hidden fact stays hidden. The one exception is
   a newer copy of a project that says something else: then a fact you checked goes back to unchecked.

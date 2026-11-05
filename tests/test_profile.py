@@ -4,6 +4,7 @@ choices win.
 Each test opens a fresh database in a temporary folder. The people, employers, places and files are made up
 (see support/people.py); the humanities graduate is Marnie Quillfeather.
 """
+import json
 import os
 import tempfile
 import unittest
@@ -370,6 +371,57 @@ class Store(unittest.TestCase):
         dated = self.job("Sources/CVs and letters/a.md", start="2023-09", end="2024-06")
         self.assertEqual(store.add_found(self.con, "job", {"title": "Staff",
                                                            "employer": "Fenwick Lantern Museum Trust"}, src), dated)
+
+    def test_a_module_code_a_generic_job_and_a_training_course_are_refused(self):
+        # lecture notes gave {"subject": "CSC1034", "start": "2023-24"} as a course, a "supervisor" at a "bar",
+        # and a provider's training as education (2026-11-05)
+        for kind, fields in (("education", {"subject": "CSC1034", "start": "2023-24"}),
+                             ("education", {"subject": "MATH 101", "institution": "University of Wexley"}),
+                             ("job", {"title": "supervisor", "employer": "bar"}),
+                             ("job", {"employer": "The local pub"}),
+                             ("education", {"qualification": "CITI Program Training", "start": "2024-03"}),
+                             ("education", {"qualification": "Research ethics course", "institution": "CITI Program",
+                                            "start": "2024"})):
+            with self.subTest(fields=fields), self.assertRaises(ValueError):
+                store.add_found(self.con, kind, fields, ev(NOTES, "notes", "x"))
+
+    def test_a_named_employer_a_dated_job_and_a_course_of_study_are_kept(self):
+        src = ev(CV_A, "cv", "x")
+        for kind, fields in (("education", {"subject": "CSC1034 Databases", "start": "2023-24"}),
+                             ("education", {"qualification": "BSc", "subject": "CSC1034", "start": "2023-24"}),
+                             ("education", {"qualification": "Short course in palaeography",
+                                            "institution": "University of Wexley"}),
+                             ("education", {"qualification": "Access course", "start": "2020"}),
+                             ("job", {"title": "supervisor", "employer": "bar", "start": "2022-06"}),
+                             ("job", {"title": "Bar supervisor", "employer": "The Lantern Bar"})):
+            with self.subTest(fields=fields):
+                self.assertGreater(store.add_found(self.con, kind, fields, src), 0)
+
+    def test_a_rebuild_drops_facts_now_refused_and_merges_modules_by_code(self):
+        def raw(kind, fields, source, doc_type):
+            item = self.con.execute("INSERT INTO profile_items (kind, fields, state, origin, created, updated) "
+                                    "VALUES (?, ?, 'hal', 'found', '', '')", (kind, json.dumps(fields))).lastrowid
+            self.con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, "
+                             "found_at) VALUES (?, ?, 'x', '', ?, ?, '')", (item, source, doc_type, json.dumps(fields)))
+            return item
+        degree = {"qualification": "BSc Computing", "institution": "University of Wexley", "start": "2023-09",
+                  "end": "2026-06"}
+        polluted = [{"name": "CSC1032", "mark": "64"}, {"name": "1032 Computer Systems Design", "mark": ""},
+                    {"name": "Lesson 14 Cascading Style Sheets", "mark": ""}]
+        with self.con:   # what the old rules left: a polluted degree, a module as a course, a generic job
+            item = raw("education", {**degree, "current": True, "modules": polluted}, TRANSCRIPT, "transcript")
+            self.con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, "
+                             "found_at) VALUES (?, ?, 'x', '', 'notes', ?, '')",
+                             (item, NOTES, json.dumps({**degree, "modules": [{"name": "tut8 vectors and matrices"}]})))
+            self.con.execute("UPDATE profile_evidence SET said = ? WHERE item_id = ? AND doc_type = 'transcript'",
+                             (json.dumps({**degree, "modules": polluted[:2]}), item))
+            raw("education", {"subject": "CSC1034", "start": "2023-09"}, NOTES, "notes")
+            raw("job", {"title": "supervisor", "employer": "bar"}, NOTES, "notes")
+        store.rebuild_found(self.con)
+        (edu,) = store.items(self.con, "education")
+        self.assertEqual(edu["fields"]["modules"], [{"name": "1032 Computer Systems Design", "mark": "64"}])
+        self.assertNotIn("current", edu["fields"])
+        self.assertEqual(store.items(self.con, "job"), [])
 
     def test_a_phone_number_written_with_spaces_is_the_same_number(self):
         src = ev("Sources/CVs and letters/a.md", "cv", "x")

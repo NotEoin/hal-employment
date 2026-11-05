@@ -592,7 +592,9 @@ available yet.
   institutions whose names hold one another ("Wexley University" is "The University of Wexley"); a BA and
   then an MA stay two. Certificate and achievement names that differ by a letter or two merge, never when
   their numbers differ ("Level 2", "Level 3"). An education fact naming a project, module or dissertation
-  with no qualification level is refused. Dates are stored as `YYYY-MM` or `YYYY` from UK ways of writing
+  with no qualification level is refused, as is one whose subject is only a module code ("CSC1034") and a
+  training course with no place of study ("CITI Program Training", found as a certificate instead). A job
+  whose employer is only a kind of place ("bar", "shop") and that has nothing but a title is refused. Dates are stored as `YYYY-MM` or `YYYY` from UK ways of writing
   them ("May 2024", "05/2024", "2023-24", "Sept 2023 - present", "Summer 2023"). An unknown kind or field
   raises `ValueError` naming it. `store.rebuild_found(con)` merges every unchecked found item again from its
   sources after these rules change, leaving what the person confirmed, edited, hid or added.
