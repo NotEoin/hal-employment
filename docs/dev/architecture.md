@@ -497,6 +497,9 @@ available yet.
   or edited first, then the ones Hal found, never hidden ones, and no email or phone. `pack._kept` puts it
   above the record's passages (`profile.writing.with_record`), so the fit map, letter, message and answers
   read it, and `cvstudio.context.build` gives it to every document prompt as the `profile` value.
+- `profile.write_notes(folder)` writes the `Profile/` notes in the record folder (`Profile.md`,
+  `Work history.md`, `Education.md`, `Skills.md`, `Projects.md`, `Inconsistencies.md`), each
+  `type: dashboard` so search leaves them out. A note whose text has not changed is not written again.
 
 ## Sources (`find/sources_registry.py`, `find/detect.py`, `find/source_routes.py`)
 
