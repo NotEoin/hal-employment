@@ -26,7 +26,7 @@
 /* nine tabs do not fit one line on most screens; wrapped, every tab stays in sight */
 .rec-tabs .tabs { flex-wrap: wrap; overflow-x: visible; }
 .rec-form .rec-btns { grid-column: 1 / -1; }
-.rec-counts .btn { padding-left: 0; }
+.rec-counts .btn { padding-left: 0; justify-content: flex-start; width: 100%; }
 .rec-hidden summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .rec-hidden[open] summary { margin-bottom: 10px; }
 .rec-ingest .chips { margin-top: 4px; }

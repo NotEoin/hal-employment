@@ -70,7 +70,7 @@ export function Conflict({ c, names = {} }) {
     ${open && html`<div class="row">
       ${c.choices.includes("keep_item") && items.map(it => html`<button type="button" class="btn small" disabled=${busy}
         onClick=${() => resolve({ keep_item: it.id }, "Kept " + it.title + ". Hal hid the other.")}>Keep ${it.title}${it.when ? " (" + it.when + ")" : ""}</button>`)}
-      ${c.choices.includes("keep_all") && html`<button type="button" class="btn quiet small" disabled=${busy}
+      ${c.choices.includes("keep_all") && html`<button type="button" class="btn small" disabled=${busy}
         onClick=${() => resolve({ keep_all: true }, "Saved. Hal leaves it as it is.")}>${keepAllWords(c)}</button>`}</div>`}
     ${!open && c.resolution && html`<p class="small sub">${c.resolution.value != null ? "You chose " + c.resolution.value + "."
       : c.resolution.keep_item != null ? "You kept one and Hal hid the other." : "You said it is right as it is."}</p>`}</div>`;
