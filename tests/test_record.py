@@ -146,6 +146,14 @@ class Record(unittest.TestCase):
         self.assertIn("Trained three", record.search("bar staff", min_score=0)[0]["text"])
         self.assertFalse(record.search("chess team"))
 
+    def test_a_note_removed_while_the_record_is_read_is_left_out(self):
+        """A tidy deleted a note between the walk and the read, and the sync failed (2026-11-05)."""
+        self.note("Notes/a.md", "# A\n\nWorked the late bar shift at the Made-up Arms on weekends.\n")
+        listed = [*record._walk((".md",)), self.vault / "Notes" / "gone.md"]
+        with mock.patch.object(record, "_walk", return_value=listed):
+            out = record.sync()
+        self.assertEqual((out["notes"], out["changed"]), (1, 1))
+
     def test_word_forms_match_and_off_subject_passages_are_left_out(self):
         """"Archival cataloguing" finds a note on cataloguing archives; a passage sharing only "experience" does not."""
         self.note("Jobs/Museum.md", "# Museum volunteer\n\n## Archives\n\nCatalogued the parish archives, 400 items, "

@@ -320,10 +320,6 @@ def words(text: str) -> list[str]:
 
 # The index ----------------------------------------------------------------------------------
 
-def _hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _load() -> dict:
     try:
         return json.loads(_live("INDEX").read_text(encoding="utf-8"))
@@ -348,18 +344,23 @@ def sync() -> dict:
         raise RecordUnavailable(f"no employment record at {_live('VAULT')}")
     converted = convert()
     index = _load()
-    notes = {}
+    notes, hashes = {}, {}
     for path in _walk((".md",)):
-        if should_index(path.read_text(encoding="utf-8", errors="replace")):
-            notes[path.relative_to(_live("VAULT")).as_posix()] = path
-    hashes = {rel: _hash(p) for rel, p in notes.items()}
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            continue  # an ingest removed the note after the walk listed it (2026-11-05)
+        text = data.decode("utf-8", errors="replace")
+        if should_index(text):
+            rel = path.relative_to(_live("VAULT")).as_posix()
+            notes[rel], hashes[rel] = text, hashlib.sha256(data).hexdigest()
     changed = [rel for rel, h in hashes.items() if index["manifest"].get(rel) != h]
     gone = set(index["manifest"]) - set(notes)
     if changed or gone:
         drop = set(changed) | gone
         index["chunks"] = [c for c in index["chunks"] if c["path"] not in drop]
         for rel in changed:
-            index["chunks"] += chunks(rel, notes[rel].read_text(encoding="utf-8", errors="replace"))
+            index["chunks"] += chunks(rel, notes[rel])
         index["manifest"] = {rel: h for rel, h in index["manifest"].items() if rel not in gone} | \
             {rel: hashes[rel] for rel in changed}
     vectors_changed = _embed_new(index)
