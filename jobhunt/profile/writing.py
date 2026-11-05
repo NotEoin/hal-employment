@@ -23,7 +23,10 @@ from jobhunt.profile import merge, store
 
 KIND_ORDER = ("basic", "job", "education", "project", "skill", "certificate", "achievement", "link")
 CONTACT_KEYS = {"email", "phone", "mobile", "telephone", "address"}
-LIMIT = 3000               # about a third of what a prompt's record part may hold (`record.context`'s 6000)
+LIMIT = 5000               # below the record part's 6000 (`record.context`); a 64K-token writer has room for both
+# One item's line at most: a degree with every module, or a job with every duty from five CVs, filled the
+# block alone and left no room for education or skills (2026-11-05). Cut at a whole list item.
+LINE_MAX = 450
 QUOTE_CHARS = 160          # a skill's evidence quote, cut so it never crowds out the other facts
 HEADING = "Profile (facts about the applicant from their files; the ones they checked come first):"
 CHECKED = "Checked by the applicant:"
@@ -130,8 +133,10 @@ def context_block(con: sqlite3.Connection, limit: int = LIMIT) -> str:
         parts += [UNCHECKED, *found]
     out, size = [], 0
     for part in parts:
+        if len(part) > LINE_MAX:
+            part = part[:LINE_MAX].rsplit("; ", 1)[0] + " ..."
         if size + len(part) + 1 > limit:
-            break
+            continue                       # a later, shorter fact may still fit
         out.append(part)
         size += len(part) + 1
     while out and out[-1] in (HEADING, CHECKED, UNCHECKED):

@@ -551,7 +551,9 @@ available yet.
   Its docstring gives every reply's shape; `tests/support/fake_api.py` has made-up replies in the same
   shapes, which `tests/test_profile_routes.py` compares with the real ones.
 - `profile.context_block(con, limit)` is the "Profile" block for writing prompts: facts the person checked
-  or edited first, then the ones Hal found, never hidden ones, and no email or phone. `pack._kept` puts it
+  or edited first, then the ones Hal found, never hidden ones, no email or phone, and no found fact whose every
+  quote was missing from its document (it waits for the person to confirm it). Each item is one line of at most
+  `LINE_MAX` characters, cut at a whole list item, and one location is named. `pack._kept` puts it
   above the record's passages (`profile.writing.with_record`), so the fit map, letter, message and answers
   read it, and `cvstudio.context.build` gives it to every document prompt as the `profile` value.
 - `profile.write_notes(folder)` writes the `Profile/` notes in the record folder (`Profile.md`,

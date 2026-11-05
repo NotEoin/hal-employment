@@ -61,6 +61,18 @@ class Writing(unittest.TestCase):
         self.assertIn("Location: Harrowgate", block)
         self.assertEqual(block.count("donated letters"), 1)
 
+    def test_a_job_with_every_duty_leaves_room_for_education_and_skills(self):
+        # one job's duties from five CVs filled the block and education never reached the writer (2026-11-05)
+        src = {"source_rel": "Sources/CVs and letters/a.md", "quote": "x", "field": "title", "doc_type": "cv"}
+        store.add_found(self.con, "job", {"title": "Collections volunteer", "employer": "Fenwick Lantern Museum",
+                                          "start": "2023-09",
+                                          "duties": [f"Catalogued box {n} of letters" for n in range(400)]}, src)
+        store.add_found(self.con, "education", {"qualification": "BA History", "institution": "Wexley University",
+                                                "start": "2021-09"}, src)
+        block = profile.context_block(self.con)
+        self.assertIn("Education: BA History", block)
+        self.assertLessEqual(max(len(x) for x in block.splitlines()), writing.LINE_MAX + len(" ..."))
+
     def test_checked_facts_come_before_found_ones_and_contact_details_are_left_out(self):
         humanities_profile(self.con)
         block = profile.context_block(self.con)
