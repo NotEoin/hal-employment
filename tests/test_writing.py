@@ -61,6 +61,11 @@ class Checker(unittest.TestCase):
         self.assertIn("L8", rule_ids(hits))
         self.assertEqual([h.quote for h in hits if h.rule == "L5"], ["showcasing my care"])
 
+    def test_a_contrast_turned_round_is_found_but_a_plain_not_is_not(self):
+        # "This knowledge is practical, not just theoretical." passed the check in a real letter (2026-11-05)
+        self.assertIn("L8", rule_ids(check.check("The archive work was practical, not just theoretical.", "letter")))
+        self.assertNotIn("L8", rule_ids(check.check("I did not just read the files; I listed them.", "letter")))
+
     def test_three_stacked_qualities_are_found_but_a_list_of_subjects_is_not(self):
         self.assertIn("L9", rule_ids(check.check("I am creative, organised and driven.", "letter")))
         self.assertNotIn("L9", rule_ids(check.check("I studied history, politics and French.", "letter")))

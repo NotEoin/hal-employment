@@ -64,7 +64,10 @@ PUFFERY = re.compile(
     r"\b(a testament to|plays? an? (vital|key|crucial|pivotal) role|pivotal moment|deeply committed|"
     r"invaluable experience|unique opportunity|rich (history|heritage) of|commitment to excellence)\b", re.I)
 COPULA = re.compile(r"\b(serves as|serve as|stands as|boasts)\b", re.I)
+# "X, not just Y" is the same staged contrast turned round ("This knowledge is practical, not just theoretical."):
+# a real letter carried it past the check (2026-11-05).
 CONTRAST = re.compile(r"\bnot (just|only|merely|simply)\b[^.!?]{1,80}?\bbut( also)?\b"
+                      r"|,\s*not (just|only|merely|simply)\b"
                       r"|\b(it'?s|this is|that is) not (about )?[^.!?]{1,40}\.\s+(it'?s|this is|that is)\b", re.I)
 SIZE_WORDS = re.compile(r"\b(significantly|dramatically|greatly|hugely|massively|vastly|substantially|"
                         r"exponentially|tremendously)\b", re.I)
