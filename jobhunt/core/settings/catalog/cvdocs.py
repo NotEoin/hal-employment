@@ -50,6 +50,11 @@ register(
             help="Anything you put here is read into your record. Leave empty for the +Inbox folder in it."),
     Setting("record.copy_originals", "bool", True, "Keep a copy of each file Hal reads in", group="cvdocs",
             order=180, help="Copies go in Attachments in your record. Very large files are linked, not copied."),
+    Setting("record.privacy_check", "bool", True, "Keep private documents out of your record", group="cvdocs",
+            order=185, help="Hal leaves out files that look like bank details, passports and ID cards, payslips "
+                            "and tax forms, medical letters, or passwords and keys. They are not filed, not sent "
+                            "to the AI and give Hal no facts. Hal lists them by name only, each with Add it "
+                            "anyway."),
     Setting("record.ingest_vision", "bool", False, "Read certificates and artwork in pictures with the AI",
             group="cvdocs", advanced=True, order=190,
             help="The words in them are read first. Other pictures are listed by name and date only."),

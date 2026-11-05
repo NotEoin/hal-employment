@@ -33,7 +33,7 @@ from pathlib import Path
 
 from jobhunt import profile, record
 from jobhunt.core import events
-from jobhunt.ingest import convert, discover, group, items, notes, rank, roles, sources, understand, versions
+from jobhunt.ingest import convert, discover, group, items, notes, privacy, rank, roles, sources, understand, versions
 
 log = logging.getLogger(__name__)
 
@@ -251,10 +251,14 @@ def by_model(rule: rank.Rule, is_picture: bool, *, every: bool = False) -> bool:
 
 @dataclass
 class _Read:
-    """What a worker made of one item: its text and description, or no description for a file with no text."""
+    """What a worker made of one item: its text and description, or no description for a file with no text.
+
+    `private` is why the item is kept out of the record (`privacy.reason`); then there is no text either.
+    """
 
     text: str
     desc: dict | None
+    private: str = ""
 
 
 def _prepare(row: dict, rule: rank.Rule) -> _Read:
@@ -265,10 +269,14 @@ def _prepare(row: dict, rule: rank.Rule) -> _Read:
     path = Path(row["path"])
     text = convert.repo_text(path) if row["kind"] == "repo" else convert.text_of(path, rule)
     is_picture = path.suffix.lower() in rank.IMAGE_SUFFIXES | rank.MEDIA_SUFFIXES
+    if why := privacy.held_back(row, text):        # checked before any AI call, so the text never reaches it
+        return _Read("", None, why)
     if not text.strip() and not is_picture:
         return _Read(text, None)
     if text.strip() and by_model(rule, is_picture, every=bool(row["note"])):
         desc = understand.ask(row["rel"], text, rule)
+        if why := privacy.held_back(row, "", str(desc.get("sensitive") or "")):
+            return _Read("", None, why)
     else:
         desc = understand.light(row["rel"], text, rule)
         if is_picture and not text.strip():
@@ -321,6 +329,9 @@ def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Pa
 
 def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, drop_root: Path | None) -> str | None:
     """Writes one prepared item's note, entities and facts; returns the note's path inside the record."""
+    if read.private:                               # no note, no copy of the file, no facts
+        privacy.hold(con, row["id"], read.private)
+        return None
     vault_dir = vault()
     if row["note"]:
         return _again(con, row, read, vault_dir, batch)

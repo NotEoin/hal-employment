@@ -2,14 +2,15 @@
 
 Background work (priority 2), one at a time (`exclusive="kind"`), and resumable: after a restart the runner
 starts it again with the same params, and the batch's `ingest_items` rows say what is left. `queue` is how
-routes and the scheduled read of the record start one.
+routes and the scheduled read of the record start one. With `allow`, the batch is the files the person let
+in after they were kept out as private (`privacy.requeue`); a carry-on finds them in the batch already.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 from jobhunt.core import runner
-from jobhunt.ingest import engine
+from jobhunt.ingest import engine, items, privacy
 
 EXAMPLE_CV = """# Robin Testwell
 
@@ -39,10 +40,13 @@ def _example(world) -> dict:
                why="You gave Hal files to read into your record", priority=2, exclusive="kind", resumable=True,
                example=_example)
 def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = None, drop: bool = False,
-           urls: list | None = None, again: bool = False) -> dict:
+           urls: list | None = None, again: bool = False, allow: list | None = None) -> dict:
     """Reads every file of the inputs into notes in the record; says how many and what could not be read."""
     def step(text: str) -> None:
         ctx.step(text, total=engine.STEPS)
+
+    if allow and not items.seen_paths(ctx.con, batch):
+        privacy.requeue(ctx.con, batch, allow)
 
     out = engine.run(ctx.con, batch, folders=folders or [], uploads=uploads or [], drop=drop, urls=urls or [],
                      again=again, step=step, progress=ctx.progress)
@@ -52,21 +56,25 @@ def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = 
     for state, words in (("duplicate", "copies of files already read"),
                          ("older_version", "older copies of a project, named in its newest copy's note"),
                          ("not_downloaded", "not downloaded yet"),
-                         ("no_text", "with no text Hal could read"), ("error", "could not be read")):
+                         ("no_text", "with no text Hal could read"), ("error", "could not be read"),
+                         ("private", "kept out because they look private")):
         if states.get(state):
             ctx.changed(f"{states[state]} {words}.")
     return out
 
 
-def queue(*, folders=(), uploads=(), drop: bool = False, urls=(), again: bool = False, session_id: str | None = None,
-          remote: bool = False, why: str | None = None) -> str:
+def queue(*, folders=(), uploads=(), drop: bool = False, urls=(), again: bool = False, allow=(),
+          session_id: str | None = None, remote: bool = False, why: str | None = None) -> str:
     """Starts an ingest of these inputs and returns its action id; RuntimeError while another is running.
 
-    `again` reads the notes written by rules from documents with the AI, in place (`engine.mark_again`).
+    `again` reads the notes written by rules from documents with the AI, in place (`engine.mark_again`);
+    `allow` reads the private items with these ids, which the person let in (`privacy.requeue`).
     """
     params = {"batch": engine.new_batch(), "folders": [str(f) for f in folders],
               "uploads": [str(u) for u in uploads], "drop": bool(drop), "urls": [str(u) for u in urls],
               "again": bool(again)}
+    if allow:
+        params["allow"] = [int(i) for i in allow]
     return runner.start("record.ingest", params=params, session_id=session_id, remote=remote, why=why)
 
 

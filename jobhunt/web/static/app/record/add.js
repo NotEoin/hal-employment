@@ -4,7 +4,8 @@
    A folder is read by its path on the computer Hal runs on, so that box is left out in a window from
    another computer (the route is local only); there, files and zips arrive as uploads. The progress card
    follows the `record.ingest` action: its events and a `profile` event reload it, and while it runs it is
-   also asked again every few seconds, because counting files read adds no step and so sends no event. */
+   also asked again every few seconds, because counting files read adds no step and so sends no event.
+   Files kept out because they look private are listed by name and reason only, each with "Add it anyway". */
 import { html, useState, useEffect } from "../core/html.js";
 import { api, post } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
@@ -22,7 +23,8 @@ const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden
 const STAGE_WORDS = { discovered: "Found", converted: "Turned into text", understood: "Read by Hal",
   written: "Saved to your record" };
 const STATE_WORDS = { done: "read", duplicate: "copies of files already read", no_text: "with no text to read",
-  skipped: "skipped", older_version: "older copies of a project", not_mine: "someone else's", error: "could not be read", pending: "still to read" };
+  skipped: "skipped", older_version: "older copies of a project", not_mine: "someone else's", error: "could not be read",
+  pending: "still to read", private: "kept out because they look private" };
 const LEFT_OUT_WORDS = { "junk folder": "hidden folders and folders of program files", link: "shortcuts",
   "program or data file": "programs and data files", "settings or tool file": "settings files and bundled code",
   unreadable: "files Hal could not open" };
@@ -104,6 +106,24 @@ function readAgain() {
     err => toast(err.message));
 }
 
+function addAnyway(item) {
+  post(INGEST + "/private/allow", { id: item.id }).then(out => {
+    toast(out.action_id ? "Hal is reading " + item.name + " into your record."
+      : "Hal no longer has " + item.name + ". Add it again and Hal will read it.");
+    invalidate(INGEST);
+  }, err => toast(err.message));
+}
+
+/** The files kept out because they look private: each one's name, why, and a button to add it anyway. */
+function Private({ list }) {
+  const one = list.length === 1;
+  const them = one ? "it" : "them";
+  return html`<${Note} tone="warn"><b>${plural(list.length, "file was", "files were")} kept out because ${one ? "it looks" : "they look"} private.</b>
+    ${" "}Hal did not file ${them} in your record, send ${them} to the AI or take anything from ${them}. If one is fine to keep, add it anyway.
+    <ul class="rec-paths rec-private">${list.map(item => html`<li class="row wrap"><span class="grow"><b>${item.name}</b>: ${item.reason}</span>
+      <button type="button" class="btn small" aria-label=${"Add " + item.name + " anyway"} onClick=${() => addAnyway(item)}>Add it anyway</button></li>`)}</ul><//>`;
+}
+
 const counted = obj => Object.entries(obj || {}).filter(([, n]) => n > 0);
 
 /** The latest read of files into the record: a bar, time left, the file in hand, counts, and what went wrong. */
@@ -119,7 +139,7 @@ export function IngestCard() {
   }, [running]);
   if (!data || data.state === "none") return null;
   const pct = data.total ? (data.done / data.total) * 100 : 0;
-  const states = counted(data.states).filter(([s]) => s !== "not_downloaded" && s !== "not_mine");
+  const states = counted(data.states).filter(([s]) => !["not_downloaded", "not_mine", "private"].includes(s));
   const leftOut = counted(data.left_out);
   const title = data.again
     ? (running ? "Reading the rest with the AI" : data.state === "done" ? "The rest was read with the AI" : "Hal stopped reading the rest")
@@ -147,6 +167,7 @@ export function IngestCard() {
       ${data.not_mine > data.not_mine_paths.length && html`<span class="small">and ${data.not_mine - data.not_mine_paths.length} more</span>`}<//>`}
     ${data.errors.length > 0 && html`<div><div class="small sub">Could not be read</div><ul class="rec-paths small">
       ${data.errors.map(e => html`<li><b>${e.path}</b>: ${e.error}</li>`)}</ul></div>`}
+    ${!running && (data.private || []).length > 0 && html`<${Private} list=${data.private} />`}
     ${leftOut.length > 0 && html`<p class="small sub rec-line">Left out on purpose: ${leftOut.map(([w, n]) => n + " " + (LEFT_OUT_WORDS[w] || w)).join(", ")}.</p>`}
     ${!running && data.by_rules > 0 && html`<div class="row wrap rec-again"><p class="small sub grow rec-line">
       ${plural(data.by_rules, "note was", "notes were")} filed by headings and words only, without the AI reading them.</p>

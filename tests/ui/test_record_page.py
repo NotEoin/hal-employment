@@ -23,6 +23,7 @@ from jobhunt.core import clock, paths
 from jobhunt.evidence import routes
 from jobhunt.ingest import actions as ingest_actions
 from jobhunt.ingest import items as ingest_items
+from jobhunt.ingest import privacy
 from jobhunt.profile import store
 
 ANSWER = "On 5 March 2025 [Certificates/First Aid.md]."
@@ -303,6 +304,28 @@ class RecordPage(unittest.TestCase):
         card = p.page.locator(".rec-ingest")
         p.shows(card.get_by_text("1 file looks like someone else's"), "the note")
         p.shows(card.get_by_text("Downloads/Friend CV.pdf"), "its name")
+        self.assertEqual(self.errors(p), [])
+
+    def test_files_kept_out_as_private_are_named_and_can_be_added_anyway(self) -> None:
+        finished_ingest()
+        kept = self.hal.home / "Old laptop" / "statement.txt"
+        kept.parent.mkdir(parents=True, exist_ok=True)
+        kept.write_text("A made-up statement.\n", encoding="utf-8")
+        with closing(db.connect()) as con, con:
+            item_id = ingest_items.add(con, "b0", path=str(kept), rel="Old laptop/statement.txt")
+            privacy.hold(con, item_id, privacy.BANK)
+        queued = []
+        self.enterContext(mock.patch.object(ingest_actions, "queue",
+                                            side_effect=lambda **kw: queued.append(kw) or "ing2"))
+        p = self.page()
+        card = p.page.locator(".rec-ingest")
+        p.shows(card.get_by_text("1 file was kept out because it looks private"), "the note")
+        p.shows(card.get_by_text("bank details"), "the reason")
+        self.assertNotIn("made-up statement", card.inner_text(), "names only, never the text")
+        self.clean(p)
+        card.get_by_role("button", name="Add Old laptop/statement.txt anyway").click()
+        p.shows(p.page.get_by_text("Hal is reading Old laptop/statement.txt into your record."), "the toast")
+        self.assertEqual(queued[0]["allow"], [item_id])
         self.assertEqual(self.errors(p), [])
 
     def test_pasted_links_start_a_read(self) -> None:

@@ -208,6 +208,10 @@ Some files are listed rather than read:
   the others under **Earlier versions**. If you add a newer copy later, Hal reads it and updates the same
   note. A fact you checked that the newer copy changes goes back to **Found by Hal**, so you can look again;
   a fact you edited keeps your words.
+- **Private files**, such as bank statements, passport scans, payslips, fit notes and files with
+  passwords, are kept out of your record and never sent to the AI. The Overview lists them by name with
+  the reason; press **Add it anyway** if one is fine to keep. [Your privacy](privacy.md#private-documents-in-your-files)
+  says what is kept out and how to turn the check off.
 
 Each fact Hal takes from a document comes with the document's own words. When those words are not in the
 document, the fact is marked **Check this**. If Hal closes part way through, it carries on from the next

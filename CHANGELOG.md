@@ -28,6 +28,11 @@ What changed in each version, in plain words.
   "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same
   note, and a fact you checked that it changes goes back to unchecked for you to look at again.
+- **Private files stay out of your record.** When Hal reads a folder or zip, files that look like bank
+  details, a passport or ID card, a payslip or tax form, medical information, a date of birth with an ID
+  number, or passwords and keys are not filed, not sent to the AI and give no facts. The Overview lists
+  them by name with the reason, and **Add it anyway** reads one in. **Keep private documents out of your
+  record** in Settings, CV and documents turns the check off.
 - **Your profile.** Hal keeps the facts it finds in your record as a profile: jobs, education with its
   modules and marks, skills with the words that show them, projects, certificates, achievements and links.
   Each fact names the files it came from. The same job in two CVs is one entry, written the same way in

@@ -37,7 +37,7 @@ from jobhunt.core import backup
 
 log = logging.getLogger(__name__)
 
-LATEST = 22                                # highest migration in this code; numbers are contiguous
+LATEST = 23                                # highest migration in this code; numbers are contiguous
 PACKAGE = "jobhunt.core.db.migrations"
 FOLDER = Path(__file__).resolve().parent / "migrations"
 FILE_NAME = re.compile(r"^(?P<number>\d{4})_(?P<name>[a-z0-9_]+)\.py$")

@@ -57,7 +57,7 @@ older rows end in `+00:00` and compare the same on 19 characters.
 `db.connect(path=None)` opens `paths.db_path()` with WAL, foreign keys and a 30 s busy timeout, then runs
 `core.db.migrate.migrate` when `PRAGMA user_version` is below `LATEST`, and raises `DataTooNew` when above.
 Only migrations make the schema: 0001 is the baseline, so `db.py` holds no `CREATE` statement. A migration
-backs up `jobs.db` first. `LATEST` is 21. Migration 0018 (`0018_old_answers`) is the one destructive
+backs up `jobs.db` first. `LATEST` is 23. Migration 0018 (`0018_old_answers`) is the one destructive
 migration: it drops the old `answers` table, because the saved answers live in `answers2` alone; every other
 migration only adds. Migration 0021 adds `writing_edits`, the person's edits of Hal's drafts (How Hal learns,
 below).
@@ -553,6 +553,23 @@ pictures, file still there) into the new batch as pending. A pending row that al
 the AI and its note rewritten at the same path (`notes.write_source(at=)`), carrying over the "Part of",
 "Also at" and "Earlier versions" sections, so links still lead to it; when the AI does not answer, the note is left as it was and
 the row stays `model = 0` for next time. `items.by_rules` counts those notes for the page's button.
+
+Private files (`privacy.py`). In `engine._prepare`, after conversion and before any AI call,
+`privacy.held_back` runs `privacy.reason(rel, text)` unless `record.privacy_check` is off or the row is
+`allowed`; after the AI's answer it runs again with the reply's `sensitive` field as `said`. A reason sends
+the item to `_finish` with no text, which sets state `private` and the reason in `ingest_items.private`
+(migration 0023) and writes no note, no copy and no facts. The rules want a hit that checks out (NI number
+or SSN beside its label, a passport machine-readable zone, sort code with account number, an IBAN by mod 97,
+a card number by Luhn and card words or grouping, an NHS number by mod 11 beside "NHS", a private key body,
+a token or password value that is not a placeholder) or a cluster of payslip or medical words; the
+clusters and the password rule do not count in text with two or more teaching or coursework markers. A copy
+of a private file in the same batch is its `duplicate` (`items.first_copy`). `items.private` lists every
+batch's private rows not let in, newest first, as `{id, name, reason}` (`private` in the summary).
+`POST /api/v2/record/ingest/private/allow` `{id}` queues a `record.ingest` with `allow`, whose action moves
+the row into its batch as pending with `allowed = 1` (`privacy.requeue`); when the file is gone (a zip
+member or upload, removed once read) it only sets `allowed` and answers `add_again`. `items.add` marks a new
+row allowed when an allowed row has the same SHA-256 and the same path or `rel`, so a re-added zip's member
+is read.
 
 `GET /api/v2/record/ingest` returns the latest ingest: `state`, `done`, `total`, `eta_s` (this run's pace
 only, so a resumed ingest is not counted as fast), counts by stage, state and category, the item in hand,

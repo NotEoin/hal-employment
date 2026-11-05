@@ -4,7 +4,9 @@ Reading a folder by its path acts on the computer Hal runs on, so `POST /api/v2/
 `local_only`; from another computer, files arrive as uploads (`POST /api/v2/record/files`, zips included).
 A folder inside the record, or Hal's own data folder, is refused: reading the record into itself would write
 a note of every note. The local API key opens these routes too, so `python -m jobhunt ingest FOLDER`
-can start a long ingest in the running Hal, where its progress shows on Your record.
+can start a long ingest in the running Hal, where its progress shows on Your record. A file kept out as
+private comes back with `POST /api/v2/record/ingest/private/allow`; when Hal no longer has it (it came in a
+zip, removed once read), the person is asked to add it again, and it is let in then.
 """
 from __future__ import annotations
 
@@ -12,8 +14,8 @@ from pathlib import Path
 
 from jobhunt import record
 from jobhunt.core import paths
-from jobhunt.ingest import actions, items
-from jobhunt.web.router import BadRequest, route
+from jobhunt.ingest import actions, items, privacy
+from jobhunt.web.router import BadRequest, NotFound, route
 
 FOLDERS_MAX = 20           # paths in one request; a longer list is a mistake, not a person's choice
 LINKS_MAX = 20             # links in one request, each read up to `record.web_pages` pages
@@ -85,3 +87,27 @@ def links(req) -> dict:
     except RuntimeError as e:
         raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
     return {"action_id": action_id}
+
+
+@route("POST", "/api/v2/record/ingest/private/allow", auth="session_or_local")
+def allow_private(req) -> dict:
+    """Lets one file kept out as private into the record: reads it now, or once it is added again.
+
+    Returns the ingest's `action_id`, or None with `add_again` when Hal no longer has the file.
+    """
+    item_id = (req.body or {}).get("id")
+    if not isinstance(item_id, int) or isinstance(item_id, bool):
+        raise BadRequest("Choose a file to add.", field="id")
+    row = privacy.private_item(req.con, item_id)
+    if row is None:
+        raise NotFound("That file is not kept out any more.")
+    if not Path(row["path"]).is_file():
+        privacy.allow(req.con, item_id)
+        req.con.commit()
+        return {"action_id": None, "add_again": True}
+    try:
+        action_id = actions.queue(allow=[item_id], session_id=getattr(req.session, "id", None), remote=req.remote,
+                                  why="You asked Hal to add a file it had kept out as private")
+    except RuntimeError as e:
+        raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
+    return {"action_id": action_id, "add_again": False}

@@ -4,7 +4,9 @@ A row is written when the file is found and updated as each stage ends, and the 
 item, so a restart loses at most the item in hand. `summary` is the shape `GET /api/v2/record/ingest`
 returns. Paths are stored, never document text: the text lives in the note the item produced. A zip member
 refused while unpacking is an item too (state error), so the page lists it with the other failures. An
-older copy of a code project is `older_version`, its `dup_of` the newest copy (`versions.py`).
+older copy of a code project is `older_version`, its `dup_of` the newest copy (`versions.py`). A file
+kept out as private (`ingest.privacy`) keeps only its name and the reason; `add` marks a new item allowed when
+the person let the same bytes in before, at the same path or with the same name in its folder or zip.
 """
 from __future__ import annotations
 
@@ -14,8 +16,10 @@ import sqlite3
 
 from jobhunt.core import clock
 
-FINAL = ("done", "duplicate", "older_version", "not_downloaded", "no_text", "skipped", "not_mine", "error")
+FINAL = ("done", "duplicate", "older_version", "not_downloaded", "no_text", "skipped", "not_mine", "error",
+         "private")
 FIRST_PATHS = 10            # not-downloaded files named on the page; the rest are counted
+PRIVATE_SHOWN = 50          # private files named on the page, newest first; each has its own button
 RECENT_ERRORS = 10
 STAGES = ("discovered", "converted", "understood", "written")
 KIND = "record.ingest"
@@ -30,7 +34,11 @@ def add(con: sqlite3.Connection, batch: str, *, path: str, rel: str, kind: str =
                        rank, category, doc_type, stage, state, created, updated)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'discovered', ?, ?, ?)""",
                 (batch, path, rel, kind, unit, size, sha256, mtime, magic, rank, category, doc_type, state, at, at))
-    return con.execute("SELECT id FROM ingest_items WHERE batch = ? AND path = ?", (batch, path)).fetchone()[0]
+    item_id = con.execute("SELECT id FROM ingest_items WHERE batch = ? AND path = ?", (batch, path)).fetchone()[0]
+    if sha256 and con.execute("""SELECT 1 FROM ingest_items WHERE sha256 = ? AND allowed = 1 AND id != ?
+                                 AND (path = ? OR rel = ?) LIMIT 1""", (sha256, item_id, path, rel)).fetchone():
+        con.execute("UPDATE ingest_items SET allowed = 1 WHERE id = ?", (item_id,))
+    return item_id
 
 
 def seen_paths(con: sqlite3.Connection, batch: str) -> set[str]:
@@ -46,11 +54,17 @@ def update(con: sqlite3.Connection, item_id: int, **fields) -> None:
 
 
 def first_copy(con: sqlite3.Connection, sha256: str, item_id: int) -> sqlite3.Row | None:
-    """The first other item with these bytes that was read into a note, in this ingest or an earlier one."""
+    """The first other item with these bytes that was read into a note, in this ingest or an earlier one.
+
+    A copy of a file this ingest kept out as private is that file's copy too, so it is held back with it; in
+    a later ingest the copy is checked again and listed on its own.
+    """
     if not sha256:
         return None
-    return con.execute("""SELECT * FROM ingest_items WHERE sha256 = ? AND id != ? AND state = 'done'
-                          ORDER BY id LIMIT 1""", (sha256, item_id)).fetchone()
+    return con.execute("""SELECT * FROM ingest_items WHERE sha256 = ? AND id != ? AND (state = 'done'
+                          OR (state = 'private' AND allowed = 0
+                              AND batch = (SELECT batch FROM ingest_items WHERE id = ?)))
+                          ORDER BY state = 'private', id LIMIT 1""", (sha256, item_id, item_id)).fetchone()
 
 
 def pending(con: sqlite3.Connection, batch: str) -> list[sqlite3.Row]:
@@ -79,6 +93,24 @@ def by_rules(con: sqlite3.Connection) -> int:
     return con.execute(f"""SELECT count(DISTINCT path) FROM ingest_items WHERE state = 'done' AND model = 0
                            AND kind = 'file' AND note IS NOT NULL
                            AND category NOT IN ({','.join('?' * len(BY_RULES_ONLY))})""", BY_RULES_ONLY).fetchone()[0]
+
+
+def private(con: sqlite3.Connection) -> list[dict]:
+    """The files kept out as private and not let in since, newest first: id, name and reason, never text.
+
+    Every ingest's, not just the latest's, so letting one file in (which starts a new ingest) leaves the
+    others listed. A file kept out again in a later ingest is listed once.
+    """
+    out, seen = [], set()
+    for r in con.execute("""SELECT id, rel, sha256, private FROM ingest_items WHERE state = 'private' AND allowed = 0
+                            ORDER BY id DESC"""):
+        if (r["rel"], r["sha256"]) in seen:
+            continue
+        seen.add((r["rel"], r["sha256"]))
+        out.append({"id": r["id"], "name": r["rel"], "reason": r["private"] or ""})
+        if len(out) == PRIVATE_SHOWN:
+            break
+    return out
 
 
 def latest_action(con: sqlite3.Connection) -> sqlite3.Row | None:
@@ -118,12 +150,12 @@ def _eta(con: sqlite3.Connection, batch: str, action: sqlite3.Row, left: int) ->
 
 def summary(con: sqlite3.Connection) -> dict:
     """The latest ingest for the page: state, done, total, eta_s, counts, current item, not downloaded, someone
-    else's documents left out (`not_mine`), errors."""
+    else's documents left out (`not_mine`), errors, and the files kept out as private."""
     action = latest_action(con)
     if action is None:
         return {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {}, "by_rules": 0,
                 "states": {}, "categories": {}, "current": "", "not_downloaded": 0, "not_downloaded_paths": [],
-                "not_mine": 0, "not_mine_paths": [], "errors": [], "left_out": {}}
+                "not_mine": 0, "not_mine_paths": [], "errors": [], "left_out": {}, "private": []}
     params = json.loads(action["params"] or "{}")
     batch = params.get("batch") or ""
     c = counts(con, batch)
@@ -144,4 +176,5 @@ def summary(con: sqlite3.Connection) -> dict:
             "not_downloaded": c["states"].get("not_downloaded", 0), "not_downloaded_paths": missing,
             "not_mine": c["states"].get("not_mine", 0), "not_mine_paths": not_mine,
             "errors": errors, "by_rules": by_rules(con), "again": bool(params.get("again")),
-            "left_out": result.get("left_out", {}), "started": action["started"], "ended": action["ended"]}
+            "left_out": result.get("left_out", {}), "private": private(con), "started": action["started"],
+            "ended": action["ended"]}

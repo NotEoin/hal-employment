@@ -64,6 +64,34 @@ guide or in Settings, **You**, **Private answers (equality and adjustments)**. T
 - Hal never shows them again: the screen only says whether they are saved.
 - When Hal fills one in, the form shows "Filled in from your private answers".
 
+## Private documents in your files
+
+When you add a whole folder or zip to your record, Hal checks each file before the AI sees it. Files that
+look like any of these are kept out:
+
+- bank details: a sort code with an account number, a bank card number, or an IBAN;
+- a passport or ID card, read from the lines of letters and `<` signs at the bottom of the photo page;
+- a National Insurance or social security number;
+- a payslip, P60, P45 or other tax form;
+- medical information: a fit note, a letter about a diagnosis, or an NHS number;
+- a date of birth together with a student, staff or other ID number;
+- passwords or secret keys, such as a settings file with a real password in it.
+
+A file kept out is not filed in your record, no copy of it is kept, it is not sent to the AI, and Hal takes
+no facts from it. Hal keeps only its name and the reason. If the AI is reading a document and says it looks
+private, Hal keeps that one out too, with the AI's reason.
+
+Teaching material about these things, such as a lecture on cryptography or a payroll seminar, is not kept
+out, and neither is a CV with your own email address and phone number.
+
+After a read, the Overview on Your record says how many files were kept out, with each one's name and
+reason. If Hal got one wrong, press **Add it anyway** beside it. Hal reads it in and remembers your choice,
+so the same file is not kept out again. If the file came in a zip, Hal no longer has it: add the zip again
+and that file is read this time.
+
+To turn the check off, turn off **Keep private documents out of your record** in Settings, CV and
+documents.
+
 ## Your data, your choice
 
 Settings, **Privacy and data**:
