@@ -109,7 +109,8 @@ def record_samples() -> list[Sample]:
         try:
             path = _readable(record.file_path(f["path"]))
             text = path.read_text(encoding="utf-8", errors="replace")[:FILE_CHARS] if path else ""
-        except (LookupError, OSError):
+        except (LookupError, OSError) as e:   # moved or locked since the listing: the card uses the rest
+            log.info("skipped %s for the voice card: %s", f["path"], e)
             continue
         kind = _kind_of(f["path"], text)
         body = _body(text)
