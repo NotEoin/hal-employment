@@ -99,11 +99,25 @@ def _keep_allowed_facts(con: sqlite3.Connection, note_rel: str, role: str) -> No
             con.execute("DELETE FROM profile_evidence WHERE id = ?", (e["id"],))
 
 
+def _unlink_gone(text: str) -> str:
+    """`text` with links to People and Places notes as plain words.
+
+    An older read linked the name in an email ("[[People/ama.pell|ama.pell]]@example.org"), which hid it from
+    `lectures.scrub` until `finish` unlinked it again (2026-11-05).
+    """
+    def plain(m: re.Match) -> str:
+        target = m.group(1).strip()
+        if target.split("/", 1)[0] not in GONE_FOLDERS:
+            return m.group(0)
+        return m.group(2) or PurePosixPath(target).name
+    return LINK.sub(plain, text)
+
+
 def _rewrite(path: Path, fm: dict, body: str, role: str, source: str) -> None:
     """Writes the note again with its role, course material without contact details, code text fenced."""
     fm = {**fm, "role": role, "about_owner": roles.ABOUT_OWNER[role]}
     if role == roles.TAUGHT:
-        body = lectures.scrub(body)
+        body = lectures.scrub(_unlink_gone(body))
     suffix = PurePosixPath(source.split("?")[0]).suffix.lower()
     if suffix in notes.FENCED_SUFFIXES and TEXT in body:
         head, text = body.split(TEXT, 1)

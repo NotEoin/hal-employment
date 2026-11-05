@@ -55,6 +55,9 @@ class Tidy(unittest.TestCase):
                         (tool["id"],))
             con.commit()
             make_old(vault, slides, about_owner="false", doc_type="slides")
+            linked = (vault / slides).read_text(encoding="utf-8") + (
+                "\nAsk [[People/ama.pell|ama.pell]]@example.org.\n")
+            (vault / slides).write_text(linked, encoding="utf-8")
             store.add_found(con, "basic", {"key": "email", "value": "ama.pell@example.org"},
                             {"source_rel": slides, "doc_type": "notes", "quote": "ama.pell@example.org"})
             stray = vault / "Sources" / "Other" / "Gone.md"
