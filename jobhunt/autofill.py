@@ -171,6 +171,13 @@ def profile() -> dict:
     return {k: v for k, v in p.items() if k not in PRIVATE_KEYS}
 
 
+def two_in_one(field: dict) -> bool:
+    """True for a label that asks two opposite questions under one answer: "Are you legally entitled to work in the
+    UK? Will you require sponsorship?" Any one answer is wrong for one of them, so it is left to the person."""
+    label = field.get("label") or ""
+    return bool(RIGHT_TO_WORK.search(label) and SPONSOR.search(label)) and label.count("?") >= 2
+
+
 def private_question(field: dict) -> str | None:
     """The private key a form question asks about ("disability", "disability_type", "guaranteed_interview",
     "adjustments", "carer"), or None.
@@ -222,6 +229,11 @@ CONSENT = re.compile(r"consent|i agree|agree to|privacy|data (protection|process
 # (label pattern, profile key, preferred options for a choice, in order)
 # Standard answers to questions, however they are worded.
 ANSWERS = {"sponsorship", "right_to_work", "notice", "start", "salary", "how_heard", "office", "relocate"}
+RIGHT_TO_WORK = re.compile(r"right to work|legally (entitled|authori[sz]ed|eligible|able)|eligib\w+ to work|"
+                           r"authori[sz]ed to work|work permit|immigration status|visa status|work status", re.I)
+SPONSOR = re.compile(r"sponsor", re.I)
+TWO_IN_ONE_WHY = ("It asks whether you may work here and whether you need sponsorship, with one answer for both, so "
+                  "Hal leaves it for you.")
 RULES = [
     (r"\bpreferred (first )?name\b", "preferred_name", []),
     (r"\bmiddle name", "middle_name", []),
@@ -238,8 +250,7 @@ RULES = [
     (r"github", "github", []),
     (r"website|portfolio|personal (site|url|page)|other links?", "website", []),
     (r"sponsor", "sponsorship", []),
-    (r"right to work|legally (entitled|authori[sz]ed|eligible|able)|eligib\w+ to work|authori[sz]ed to work|"
-     r"work permit|immigration status|visa status|work status", "right_to_work", []),
+    (RIGHT_TO_WORK.pattern, "right_to_work", []),
     (r"notice period", "notice", []),
     (r"start date|when (can|could) you start|earliest (start|availability)|available to start", "start", []),
     (r"salary|compensation|pay expectation|remuneration", "salary", []),
@@ -446,7 +457,13 @@ def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
     if OTHER_PERSON.search(section):
         return None
     listed = f["kind"] in ("select", "radio", "combobox", "checkgroup") and bool(f.get("options"))
-    for pattern, key, preferred in RULES:
+    rules = RULES
+    rtw, sponsor = RIGHT_TO_WORK.search(label), SPONSOR.search(label)
+    if rtw and sponsor and rtw.start() < sponsor.start():
+        # "Are you authorised to work here without sponsorship?" asks first about the right to work, so it is
+        # answered as that; the sponsorship rule answered it "No" (ComplyAdvantage, testers 2026-11-05).
+        rules = [r for r in RULES if r[1] != "sponsorship"]
+    for pattern, key, preferred in rules:
         if not re.search(pattern, label, re.I):
             continue
         if key in ABOUT_THIS_JOB and HISTORY.search(section):
@@ -754,6 +771,9 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
             else:
                 f["why"] = PRIVATE_WHY
             continue
+        if two_in_one(f):
+            f.update(note=YOURSELF, why=TWO_IN_ONE_WHY)
+            continue
         if _note_answer(f, notes, _get(job, "source")):
             continue
         recalled = _recall_row(con, f, job)
@@ -1016,7 +1036,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
     if not problems and not gpu.busy():
         _review(job, fields)
     open_fields = [f for f in fields if f["kind"] != "file" and f.get("type") != "password"
-                   and private_question(f) is None
+                   and private_question(f) is None and not two_in_one(f)
                    and (f["hid"] in problems or (f.get("value") in (None, "", []) and not f.get("skip")))]
     if not open_fields:
         return 0, None

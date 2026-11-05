@@ -204,6 +204,22 @@ class Answers(unittest.TestCase):
         self.assertEqual(named["value"], "United Kingdom (+44)")
         self.assertEqual(autofill._dial_code("+353 87 123 4567", "United Kingdom"), "+353")
 
+    def test_the_right_to_work_asked_with_sponsorship_is_never_answered_from_sponsorship(self):
+        """Regression (testers, 2026-11-05): "Are you legally entitled to work in the United Kingdom? Will you
+        require sponsorship now or anytime in the future?" was answered "No" from the sponsorship answer."""
+        both = self.propose(kind="radio", options=["Yes", "No"],
+                            label="Are you legally entitled to work in the United Kingdom? Will you require "
+                                  "sponsorship now or anytime in the future?")
+        self.assertEqual((both["value"], both["note"], both["why"]),
+                         (None, autofill.YOURSELF, autofill.TWO_IN_ONE_WHY))
+        self.assertTrue(autofill.two_in_one(both))
+        first = self.propose(kind="radio", options=["Yes", "No"],
+                             label="Are you authorised to work in the UK without requiring sponsorship?")
+        self.assertEqual((first["value"], first["source"]), ("Yes", "profile: right_to_work"))
+        sponsor = self.propose(kind="radio", options=["Yes", "No"],
+                               label="Will you now or in the future require sponsorship to work in the UK?")
+        self.assertEqual((sponsor["value"], sponsor["source"]), ("No", "profile: sponsorship"))
+
     def test_an_optional_follow_up_to_a_different_answer_is_left_empty(self):
         """Regression (testers, 2026-11-04): after "No" to sponsorship, the model answered "If you answered yes to
         the above, confirm your visa" with "A"."""

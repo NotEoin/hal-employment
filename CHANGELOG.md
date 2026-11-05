@@ -25,6 +25,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A right-to-work question asked with sponsorship is never answered from sponsorship.** "Are you legally
+  entitled to work in the United Kingdom? Will you require sponsorship?" was answered "No", from your answer to
+  sponsorship. A question that asks about the right to work first is now answered as that, and one that asks
+  both with a single answer is left for you.
 - **The CV goes in once.** Lever relabels its upload box after each file ("Resume/CV ... Success!"), and Hal took
   the relabelled box for a new upload question, so a Spotify form got the CV four times. Once a form has its
   CV, an upload box that appears later is left alone.
