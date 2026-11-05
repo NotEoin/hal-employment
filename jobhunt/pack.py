@@ -21,10 +21,11 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from . import cv, db, llm, record, reputation, research
+from . import cv, db, llm, reputation, research
 from .ai import prompts
 from .core import events, paths
 from .cvstudio import context as cv_context
+from .profile import writing as profile_writing
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -140,8 +141,8 @@ def _requirements(analysis: dict) -> list[str]:
 
 
 def _kept(analysis: dict) -> str:
-    """What the CV leaves out (certificates, the detail of each job), looked up in the employment record."""
-    return record.context(_requirements(analysis) + (analysis.get("questions") or [])) or "none"
+    """What the CV leaves out (certificates, the detail of each job): the profile, then the record's passages."""
+    return profile_writing.with_record(_requirements(analysis) + (analysis.get("questions") or [])) or "none"
 
 
 def _record_part(heading: str, kept: str) -> str:

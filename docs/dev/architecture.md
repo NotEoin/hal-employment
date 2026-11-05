@@ -385,9 +385,10 @@ runs: tests use `tests/support/fake_claude/`.
 ## Documents (`cvstudio/context.py`, `pack.py`, `docs/write_*.py`)
 
 - `cvstudio.context.build(job=None)` is the one source of every document prompt's placeholders: the person
-  (`you.*`, `goal.*`), the CV type's `[documents]` and `[writing]`, `cvdocs.*` and up to four voice examples
-  from saved answers that are never reused on forms (never anything `autofill.private_question` marks). Job
-  facts are never placeholders, so a prompt reads the same for every job of one person.
+  (`you.*`, `goal.*`), the CV type's `[documents]` and `[writing]`, `cvdocs.*`, the profile block
+  (`profile`, see Profile below) and up to four voice examples from saved answers that are never reused on
+  forms (never anything `autofill.private_question` marks). Job facts are never placeholders, so a prompt
+  reads the same for every job of one person.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The pack's `## Letter notes` section says Tone, Length,
   Evidence and Checked; the application page reads them back.
@@ -492,6 +493,10 @@ available yet.
   `POST /api/v2/profile/conflicts/{id}/resolve` with the right value, the item to keep, or "keep them all".
   Its docstring gives every reply's shape; `tests/support/fake_api.py` has made-up replies in the same
   shapes, which `tests/test_profile_routes.py` compares with the real ones.
+- `profile.context_block(con, limit)` is the "Profile" block for writing prompts: facts the person checked
+  or edited first, then the ones Hal found, never hidden ones, and no email or phone. `pack._kept` puts it
+  above the record's passages (`profile.writing.with_record`), so the fit map, letter, message and answers
+  read it, and `cvstudio.context.build` gives it to every document prompt as the `profile` value.
 
 ## Sources (`find/sources_registry.py`, `find/detect.py`, `find/source_routes.py`)
 

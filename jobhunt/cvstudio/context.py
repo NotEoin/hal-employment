@@ -3,8 +3,9 @@
 `build(job=None)` is the one source of the placeholders of the analyse, brief, fit, letter, message,
 answers, verify, prep and contacts_pick prompts, so no document is written for one fixed kind of career.
 It reads the `you.*`, `goal.*` and `cvdocs.*` settings, the `[documents]` and `[writing]` tables of the CV
-type of Hal's copy of the CV, and, for the voice, answers the person rewrote. It never reads a private
-answer: voice examples skip every question `autofill.private_question` marks.
+type of Hal's copy of the CV, the profile (the `profile` value: what the person checked first, never what
+they hid) and, for the voice, answers the person rewrote. It never reads a private answer: voice examples
+skip every question `autofill.private_question` marks.
 
 Design decisions, each with its reason:
 
@@ -130,6 +131,13 @@ def voice_examples(con=None) -> list[str]:
     return out
 
 
+def profile_block() -> str:
+    """The person's profile as a "Profile" block (checked facts first, never hidden ones); "" when empty."""
+    from ..profile import writing
+
+    return writing.block()
+
+
 def _type_part(kind) -> dict:
     from ..core import settings
 
@@ -189,6 +197,7 @@ def build(job=None) -> dict:
     kind = cv_type()
     values = {**_person(), **_type_part(kind)}
     values["voice_examples"] = _voice_block(voice_examples())
+    values["profile"] = profile_block()
     if job is not None:
         values.update(_job_part(job))
     return values
