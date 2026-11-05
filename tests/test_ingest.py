@@ -251,6 +251,15 @@ class Ranking(unittest.TestCase):
         self.assertEqual(kind("Major Project and Dissertation/Marcus Joiner.md", "Met Marcus about the brief."),
                          "notes")
 
+    def test_a_light_pdf_is_read_from_its_first_pages_without_converting_it_all(self):
+        # book-length PDFs took over ten seconds each through a full conversion (2026-11-05)
+        from jobhunt.ingest import convert
+
+        pdf = Path(__file__).parent / "fixtures" / "cv" / "Marnie-Quillfeather-CV.pdf"
+        with mock.patch.object(record, "text_of", side_effect=AssertionError("a full conversion")):
+            text = convert.text_of(pdf, rank.rule_for("Reading/Some book.pdf"))
+        self.assertIn("Quillfeather", text)
+
     def test_a_project_copied_without_its_version_control_is_still_one_unit(self):
         self.assertTrue(discover.is_repo(["README.md", "LICENSE", "docs", "media"]))
         self.assertTrue(discover.is_repo(["README.md", "main.lua", "util.lua"]))

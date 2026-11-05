@@ -17,9 +17,11 @@ from collections import Counter
 from pathlib import Path
 
 from jobhunt import record
+from jobhunt.cvstudio import pdfread
 from jobhunt.ingest import discover, rank
 
 READ_CHARS = 400_000         # a 150-page document; past this the note keeps the start and says so
+LIGHT_PDF_PAGES = 20         # a light PDF's tags come from its first pages; the note links the whole file
 README_CHARS = 8000          # a README's first part says what the project is
 DOC_HEADINGS = 40            # headings taken from a repository's docs folder
 TREE_LINES = 80              # lines of a repository's file tree
@@ -77,6 +79,10 @@ def text_of(path: Path, rule: rank.Rule) -> str:
         text = _notebook(path)
     elif suffix in PLAIN and suffix != ".html":
         text = _plain(path)
+    elif suffix == ".pdf" and not rule.rich:
+        # A light note needs words for its tags, not a full conversion: a book-length PDF took MarkItDown a
+        # minute and more, and a 37,000-file dump held hundreds of them (2026-11-05).
+        text = pdfread.first_pages_text(path, LIGHT_PDF_PAGES)
     elif suffix in CONVERTED or discover.magic(path) in ("pdf", "docx", "pptx", "xlsx", "epub", "rtf", "ole"):
         text = record.text_of(path)
     elif discover.magic(path) == "text":
