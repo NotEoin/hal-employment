@@ -23,6 +23,7 @@ Design decisions, each with its reason:
 """
 from __future__ import annotations
 
+import difflib
 import re
 
 from jobhunt.core import clock
@@ -282,6 +283,69 @@ def _same(key, a: dict, b: dict, field: str) -> bool:
     return bool(ka) and ka == kb
 
 
+# Qualification levels, most specific first: a "BSc", a "Bachelor of Science with Honours" and a "Computer
+# Science BSc" are one degree, and the model writes it a different way in each document (2026-11-05).
+LEVELS = (("pgce", r"\bpgce\b|postgraduate certificate in education"),
+          ("doctorate", r"\bph ?d\b|\bd ?phil\b|doctorate"),
+          ("master", r"\bm(?:sc|a|res|phil|ba|eng|st|ed|sci)\b|master"),
+          ("bachelor", r"\bb(?:sc|a|eng|ed|mus|sci)\b|bachelor|\bllb\b|\bhons\b|honours degree|"
+                       r"undergraduate degree"),
+          ("foundation", r"foundation degree|\bhn[cd]\b"),
+          ("access", r"access to (?:he|higher education)|\baccess (?:course|diploma)"),
+          ("a_level", r"\bas? ?levels?\b"),
+          ("btec", r"\bbtec\b"),
+          ("gcse", r"\bi?gcses?\b"),
+          ("diploma", r"\bdiploma\b"))
+# Words that say what a qualification is rather than what it is in: left out when subjects are compared.
+LEVEL_WORDS = {"bsc", "ba", "beng", "bed", "bmus", "msc", "ma", "mres", "mphil", "mba", "meng", "phd", "honours",
+               "hons", "degree", "bachelor", "bachelors", "master", "masters", "of", "in", "with", "and", "science",
+               "arts", "studies", "student", "diploma", "certificate", "first", "class", "1st", "2", "1", "the"}
+# "Newcastle University" is "University of Newcastle upon Tyne"; "University" alone is not
+ORG_SUBSET_MIN = 2
+# "Fire Marshal" and "The Fire Marshall" are one certificate; "Food Safety Level 2" and "Level 3" are not
+NAME_CLOSE = 0.9
+
+
+def level(qualification: str) -> str:
+    """The level of a qualification ("bachelor", "gcse", ...), or "" when its name does not say."""
+    text = _plain(qualification)
+    return next((name for name, pattern in LEVELS if re.search(pattern, text)), "")
+
+
+def _subject_words(fields: dict) -> set[str]:
+    words = set(_plain(f"{fields.get('subject', '')} {fields.get('qualification', '')}").split())
+    return words - LEVEL_WORDS
+
+
+def _org_same(a: str, b: str) -> bool:
+    """True when two institutions are one: equal, or one's name inside the other's ("Newcastle University")."""
+    ka, kb = set(org_key(a).split()), set(org_key(b).split())
+    if not ka or not kb:
+        return False
+    small = min(ka, kb, key=len)
+    return ka == kb or (len(small) >= ORG_SUBSET_MIN and (ka <= kb or kb <= ka))
+
+
+def _name_close(a: str, b: str) -> bool:
+    ka, kb = (re.sub(r"^the ", "", text_key(x)) for x in (a, b))
+    if not ka or re.findall(r"\d+", ka) != re.findall(r"\d+", kb):
+        return False                       # Level 2 and Level 3 differ by one letter and are two certificates
+    return ka == kb or difflib.SequenceMatcher(None, ka, kb).ratio() >= NAME_CLOSE
+
+
+def _same_education(a: dict, b: dict) -> bool:
+    ia, ib = a.get("institution", ""), b.get("institution", "")
+    if ia and ib and not _org_same(ia, ib):
+        return False
+    la, lb = level(a.get("qualification", "")), level(b.get("qualification", ""))
+    shared = bool(_subject_words(a) & _subject_words(b))
+    if la and lb:
+        return la == lb and (bool(ia and ib) or shared)
+    if ia and ib:
+        return shared or shared_months(a, b) > 0
+    return False
+
+
 def same_item(kind: str, a: dict, b: dict) -> bool:
     """True when the facts `a` and `b` of one kind are the same thing (see the module notes)."""
     if kind == "job":
@@ -289,12 +353,7 @@ def same_item(kind: str, a: dict, b: dict) -> bool:
             return _same(text_key, a, b, "title") and overlap_or_touch(a, b)
         return _same(org_key, a, b, "employer") and (_same(text_key, a, b, "title") or overlap_or_touch(a, b))
     if kind == "education":
-        if not _same(org_key, a, b, "institution"):
-            return False
-        qa, qb = text_key(a.get("qualification", "")), text_key(b.get("qualification", ""))
-        if qa and qb and qa != qb:
-            return False                   # a BA and then an MA at one university are two
-        return qa == qb != "" or _same(text_key, a, b, "subject") or shared_months(a, b) > 0
+        return _same_education(a, b)        # a BA and then an MA at one university stay two: their levels differ
     if kind == "skill":
         return _same(skill_key, a, b, "name")
     if kind == "basic":
@@ -304,7 +363,8 @@ def same_item(kind: str, a: dict, b: dict) -> bool:
             "value", b.get("value"))
     if kind == "link":
         return _same(_url_key, a, b, "url")
-    return _same(text_key, a, b, "title" if kind == "achievement" else "name")
+    field = "title" if kind == "achievement" else "name"
+    return _name_close(a.get(field, ""), b.get(field, ""))
 
 
 SINGLE_BASICS = {"name"}      # basics a person has one of; others (emails, phones, links) can be several

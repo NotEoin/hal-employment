@@ -528,9 +528,15 @@ available yet.
 - The ingest calls `store.add_found(con, kind, fields, evidence)` for each fact. `merge.py` decides, in code,
   when it is an item already there: employers and institutions compared without case, "the", Ltd or word
   order; the same employer with overlapping or touching dates, or the same title, is one job; skills
-  compared without case and through other names ("MS Excel" is "Excel"). Dates are stored as `YYYY-MM` or
-  `YYYY` from UK ways of writing them ("May 2024", "05/2024", "2023-24", "Sept 2023 - present",
-  "Summer 2023"). An unknown kind or field raises `ValueError` naming it.
+  compared without case and through other names ("MS Excel" is "Excel"). A qualification is matched by its
+  level (`merge.level`: bachelor, master, GCSE, Access and so on) and subject, not its wording, at
+  institutions whose names hold one another ("Wexley University" is "The University of Wexley"); a BA and
+  then an MA stay two. Certificate and achievement names that differ by a letter or two merge, never when
+  their numbers differ ("Level 2", "Level 3"). An education fact naming a project, module or dissertation
+  with no qualification level is refused. Dates are stored as `YYYY-MM` or `YYYY` from UK ways of writing
+  them ("May 2024", "05/2024", "2023-24", "Sept 2023 - present", "Summer 2023"). An unknown kind or field
+  raises `ValueError` naming it. `store.rebuild_found(con)` merges every unchecked found item again from its
+  sources after these rules change, leaving what the person confirmed, edited, hid or added.
 - A found item (state `hal`) takes each field from its best-ranked source: transcript, then certificate,
   CV, letter and notes. Confirmed and edited items keep the person's values, and no later ingest changes
   them; a hidden item stays hidden when its file is read again. Only items added by hand can be deleted.

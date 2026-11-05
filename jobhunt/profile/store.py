@@ -22,6 +22,7 @@ Design decisions, each with its reason:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 
 from jobhunt import db
@@ -137,9 +138,18 @@ def clean(kind: str, fields: dict) -> dict:
     return out
 
 
+# A module, project or dissertation the model filed under education is not a qualification (2026-11-05): it
+# would show as a second degree. Projects are found as projects anyway.
+NOT_QUALIFICATION = re.compile(r"\b(?:project|dissertation|module|coursework|assignment|practical|lecture|"
+                               r"student)\b", re.I)
+
+
 def _named(kind: str, fields: dict) -> None:
     if not any(fields.get(f) for f in NAMED_BY[kind]):
         raise ValueError(f"A {kind} needs {' or '.join(NAMED_BY[kind])}.")
+    qualification = str(fields.get("qualification") or "")
+    if kind == "education" and not merge.level(qualification) and NOT_QUALIFICATION.search(qualification):
+        raise ValueError(f"{qualification} is a piece of work or a module, not a qualification.")
     if kind == "basic" and not fields.get("value"):
         raise ValueError("A basic needs a value.")
 
@@ -191,12 +201,13 @@ def refold(con: sqlite3.Connection, item_id: int) -> None:
                     (json.dumps(merge.fold(sources)), db.now(), item_id))
 
 
-def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict) -> int:
+def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, *, refresh: bool = True) -> int:
     """Adds one fact the ingest found, merged into the item it belongs to; returns that item's id.
 
     `evidence` is {source_rel, quote, field, doc_type}: the file inside the record, the verbatim quote, the
     field the quote supports and the document type (transcript, certificate, cv, letter, notes, ...).
     Raises ValueError for an unknown kind or field, a fact with nothing to name it, or evidence with no file.
+    `refresh=False` leaves the conflicts to the caller, who refreshes them once after many facts.
     """
     said = clean(kind, fields)
     _named(kind, said)
@@ -215,8 +226,33 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict) 
                     (item_id, ev["source_rel"], ev["quote"], ev["field"], ev["doc_type"], json.dumps(said),
                      int(ev["verified"]), now))
         refold(con, item_id)
-        conflicts.refresh(con)
+        if refresh:
+            conflicts.refresh(con)
     return item_id
+
+
+def rebuild_found(con: sqlite3.Connection) -> int:
+    """Merges every item Hal found and nobody checked again from its sources; returns how many there are now.
+
+    For after the merge rules change: an item the person confirmed, edited, hid or added is kept as it is,
+    and new facts still merge into it. Conflicts are worked out again; ones the person settled about rebuilt
+    items are found afresh.
+    """
+    rows = con.execute("""SELECT i.kind, e.source_rel, e.quote, e.field, e.doc_type, e.said, e.verified
+                          FROM profile_evidence e JOIN profile_items i ON i.id = e.item_id
+                          WHERE i.state = 'hal' AND i.origin = 'found' ORDER BY e.id""").fetchall()
+    with con:
+        con.execute("DELETE FROM profile_items WHERE state = 'hal' AND origin = 'found'")
+    for r in rows:
+        try:
+            add_found(con, r["kind"], json.loads(r["said"]),
+                      {"source_rel": r["source_rel"], "quote": r["quote"], "field": r["field"],
+                       "doc_type": r["doc_type"], "verified": bool(r["verified"])}, refresh=False)
+        except ValueError:  # a fact the rules now refuse, such as a module filed as a qualification, stays out
+            continue
+    with con:
+        conflicts.refresh(con)
+    return con.execute("SELECT COUNT(*) FROM profile_items").fetchone()[0]
 
 
 def _row(con: sqlite3.Connection, item_id) -> sqlite3.Row:

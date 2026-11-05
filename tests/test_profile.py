@@ -230,6 +230,46 @@ class Store(unittest.TestCase):
             store.add_found(self.con, "job", {"location": "Harrowgate Vale"}, ev(NOTES, "notes"))
 
 
+    def test_one_degree_written_many_ways_is_one_item_and_a_ba_then_an_ma_stay_two(self):
+        # a real ingest gave one degree as ten items: "BSc History", "History BSc", "Bachelor of Arts with
+        # Honours in History" and the like, at "Wexley University" and "University of Wexley" (2026-11-05)
+        def edu(source, **fields):
+            return store.add_found(self.con, "education", fields, ev(source, "cv", "History"))
+        first = edu("Sources/CVs and letters/a.md", qualification="BA History", institution="University of Wexley",
+                    start="2021-09")
+        self.assertEqual(edu("Sources/CVs and letters/b.md", qualification="History BA (Hons)",
+                             institution="Wexley University"), first)
+        self.assertEqual(edu("Sources/CVs and letters/c.md", qualification="Bachelor of Arts with Honours in History",
+                             institution="The University of Wexley"), first)
+        self.assertNotEqual(edu("Sources/CVs and letters/d.md", qualification="MA Archives and Records",
+                                institution="University of Wexley", start="2024-09"), first)
+        with self.assertRaises(ValueError):
+            edu("Sources/Coursework/e.md", qualification="Dissertation (HIS3020)", institution="University of Wexley")
+
+    def test_near_identical_certificate_names_merge_but_different_levels_do_not(self):
+        def cert(source, name):
+            return store.add_found(self.con, "certificate", {"name": name}, ev(source, "certificate", name))
+        marshal = cert("Sources/Certificates/a.md", "Fire Marshal")
+        self.assertEqual(cert("Sources/Certificates/b.md", "The Fire Marshall"), marshal)
+        level2 = cert("Sources/Certificates/c.md", "Food Safety Level 2")
+        self.assertNotEqual(cert("Sources/Certificates/d.md", "Food Safety Level 3"), level2)
+
+    def test_a_rebuild_merges_found_items_again_and_keeps_what_the_person_checked(self):
+        mine = self.job("Sources/CVs and letters/a.md", start="2023-09")
+        store.edit(self.con, mine, {"title": "Collections volunteer (Saturdays)"})
+        store.add_found(self.con, "certificate", {"name": "Fire Marshal"}, ev("Sources/x.md", "certificate", "x"))
+        with self.con:   # two items the old rules left apart
+            self.con.execute("INSERT INTO profile_items (kind, fields, state, origin, created, updated) "
+                             "VALUES ('certificate', '{\"name\": \"The Fire Marshall\"}', 'hal', 'found', '', '')")
+            self.con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, "
+                             "found_at) VALUES (last_insert_rowid(), 'Sources/y.md', 'y', '', 'certificate', "
+                             "'{\"name\": \"The Fire Marshall\"}', '')")
+        store.rebuild_found(self.con)
+        certs = store.items(self.con, "certificate")
+        self.assertEqual(len(certs), 1)
+        self.assertEqual(len(certs[0]["evidence"]), 2)
+        self.assertEqual(store.item(self.con, mine)["fields"]["title"], "Collections volunteer (Saturdays)")
+
 class Dates(unittest.TestCase):
     def test_uk_ways_of_writing_a_date_are_read(self):
         cases = {"May 2024": ("2024-05", "", False), "05/2024": ("2024-05", "", False),
