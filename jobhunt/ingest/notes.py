@@ -19,6 +19,7 @@ first, never inside a heading, a code block or an existing link, and never to th
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import unicodedata
@@ -47,6 +48,13 @@ FACT_FIELDS = {"job": ("title", "employer", "start", "end"), "education": ("qual
 # Parts of a note the link pass never changes: code, existing links, headings and the frontmatter.
 TITLE_WORD = re.compile(r"\w+(?:['.+#-]\w+)*")   # "C++" stays "c", fine: titles match word for word
 PROTECTED = re.compile(r"```.*?```|`[^`\n]*`|\[\[[^\]]*\]\]|\[[^\]]*\]\([^)]*\)|^#[^\n]*$|https?://\S+", re.S | re.M)
+
+
+def write(path: Path, text: str) -> None:
+    """Writes a note through a temporary file and a rename, so a stopped ingest never leaves half a note."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def slug(title: str) -> str:
@@ -155,7 +163,7 @@ def write_source(vault: Path, desc: dict, *, text: str, source: str, sha256: str
         (".png", ".jpg", ".jpeg", ".webp", ".gif")) else (f"[[{original}]]" if original else f"`{source}`"), ""]
     if text:
         lines += ["## Text", "", text, ""]
-    path.write_text(frontmatter.dump(fields) + "\n".join(lines), encoding="utf-8")
+    write(path, frontmatter.dump(fields) + "\n".join(lines))
     return _rel(vault, path)
 
 
@@ -185,7 +193,7 @@ def add_mentions(vault: Path, desc: dict, note_rel: str) -> list[str]:
                 text = (frontmatter.dump({"type": "entity", "entity": ENTITY_WORD[kind], "title": name,
                                           "tags": [ENTITY_WORD[kind]]})
                         + f"# {name}\n\n{MENTIONED}\n\n{line}\n")
-            path.write_text(text, encoding="utf-8")
+            write(path, text)
             out.append(rel)
     return out
 
@@ -205,13 +213,13 @@ def write_indexes(vault: Path) -> list[str]:
             fm, _ = frontmatter.parse(p.read_text(encoding="utf-8", errors="replace"))
             rows.append(f"- {link(_rel(vault, p), str(fm.get('title') or p.stem))}")
         index = folder / f"{INDEX}.md"
-        index.write_text(frontmatter.dump({"type": "index", "title": folder.name, "tags": ["index"]})
-                         + f"# {folder.name}\n\n" + "\n".join(rows) + "\n", encoding="utf-8")
+        write(index, frontmatter.dump({"type": "index", "title": folder.name, "tags": ["index"]})
+              + f"# {folder.name}\n\n" + "\n".join(rows) + "\n")
         written.append(_rel(vault, index))
         top.append(f"- {link(_rel(vault, index), folder.name)} ({len(notes)})")
     index = root / f"{INDEX}.md"
-    index.write_text(frontmatter.dump({"type": "index", "title": "Sources", "tags": ["index"]})
-                     + "# Sources\n\n" + "\n".join(top) + "\n", encoding="utf-8")
+    write(index, frontmatter.dump({"type": "index", "title": "Sources", "tags": ["index"]})
+          + "# Sources\n\n" + "\n".join(top) + "\n")
     return [*written, _rel(vault, index)]
 
 
@@ -308,6 +316,6 @@ def link_pass(vault: Path, note_rels: list[str]) -> int:
         text = path.read_text(encoding="utf-8", errors="replace")
         new = link_note(text, titles, rel)
         if new != text:
-            path.write_text(new, encoding="utf-8")
+            write(path, new)
             changed += 1
     return changed

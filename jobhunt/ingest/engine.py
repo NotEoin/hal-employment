@@ -181,7 +181,7 @@ def _also_at(vault_dir: Path, note_rel: str, where: str) -> None:
         text = text.replace(ALSO_AT + "\n\n", f"{ALSO_AT}\n\n{line}\n", 1)
     else:
         text = text.replace("\n## Original\n", f"\n{ALSO_AT}\n\n{line}\n\n## Original\n", 1)
-    path.write_text(text, encoding="utf-8")
+    notes.write(path, text)
 
 
 def _give_facts(con: sqlite3.Connection, desc: dict, note_rel: str) -> int:
@@ -273,9 +273,8 @@ def _courses(con: sqlite3.Connection, batch: str) -> list[str]:
                                       original=None)
         for m in members:
             path = vault_dir / m["note"]
-            path.write_text(path.read_text(encoding="utf-8").replace(
-                "\n## Original\n", f"\n## Part of\n\n- {notes.link(note_rel, title)}\n\n## Original\n", 1),
-                encoding="utf-8")
+            notes.write(path, path.read_text(encoding="utf-8").replace(
+                "\n## Original\n", f"\n## Part of\n\n- {notes.link(note_rel, title)}\n\n## Original\n", 1))
         items.update(con, unit["id"], stage="written", state="done", note=note_rel)
         written.append(note_rel)
     return written
