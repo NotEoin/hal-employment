@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Hacker News posts no longer lead to Y Combinator's sign-in.** The footer rule missed Hacker News's own row
+  of links on a short post. A row of a site's own links (FAQ, Legal, Contact and the like) now counts as its
+  footer wherever it sits.
 - **A page that changes while Hal reads it is read again.** "Frame with ID 0 was removed." reached the Form step
   as it was. The helper now waits for the new page and reads it once more, and says in plain words if that fails
   too.

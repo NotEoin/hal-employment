@@ -341,8 +341,10 @@ function halExtract() {
 // page, as Hacker News builds its "Guidelines | FAQ | ... | Apply to YC" row from plain spans), 'nav' (a header
 // or menu, where some sites keep their real Apply button), or '' for the page's content.
 const HAL_BAR_LINKS = 5;      // links in a row before it counts as a bar of links
-const HAL_BAR_SHARE = 0.7;    // the part of the row's words that are link words
-const HAL_PAGE_END = 0.7;     // how far down the page a footer's bar starts
+const HAL_BAR_SHARE = 0.6;    // the part of the row's words that are link words (HN's: 0.71, with " | " between)
+const HAL_PAGE_END = 0.6;     // how far down the page a footer's bar starts (HN's on a short post: 0.73)
+// Words of a site's own pages; two of them make a bar of links the footer wherever it sits.
+const HAL_FOOTER_WORDS = /^(privacy|terms|legal|contact( us)?|faqs?|guidelines|help|api|security|cookies|about( us)?)/i;
 function halFurniture(el) {
   if (el.closest('footer, [role=contentinfo]')) return 'footer';
   // The content's own height: a short page sits in a taller window, and its last row is still its end.
@@ -353,7 +355,8 @@ function halFurniture(el) {
     const words = halClean(n.innerText).length;
     if (links.length >= HAL_BAR_LINKS && words
         && links.reduce((sum, a) => sum + halClean(a.innerText).length, 0) / words >= HAL_BAR_SHARE) {
-      if (top / height >= HAL_PAGE_END) return 'footer';
+      const own = links.filter(a => HAL_FOOTER_WORDS.test(halClean(a.innerText))).length;
+      if (top / height >= HAL_PAGE_END || own >= 2) return 'footer';
       break;
     }
   }
