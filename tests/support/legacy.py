@@ -7,6 +7,7 @@ application forms use and a confirmation page. Nothing leaves the machine.
 """
 import functools
 import http.server
+import importlib.util
 import os
 import tempfile
 import threading
@@ -77,6 +78,9 @@ class Practice(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # Hal's window is Playwright's: without the browser extra (the WSL2 CI job) there is nothing to drive
+        if importlib.util.find_spec("playwright") is None:
+            raise unittest.SkipTest("the practice site needs Playwright, the browser extra")
         cls.tmp = tempfile.TemporaryDirectory()
         tmp = Path(cls.tmp.name)
         handler = functools.partial(Quiet, directory=str(SITE))
