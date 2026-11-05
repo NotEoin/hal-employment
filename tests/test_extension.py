@@ -130,6 +130,21 @@ class InYourBrowser(PairedHelper, Practice):
             .map(t => ({ group: t.groupId, window: t.windowId, opener: t.openerTabId })))""")
         self.assertEqual(tab, [{"group": hal["group"], "window": hal["window"], "opener": hal["id"]}])
 
+    def test_a_tab_is_only_ever_one_jobs(self):
+        """Regression (testers, 2026-11-05): with several forms filling at once, one job's list came to hold another
+        job's tab, and Hal read and filled the other job's page."""
+        first = self.job("ext-owner-1", "form.html?owner-1")
+        second = self.job("ext-owner-2", "form.html?owner-2")
+        driver.act_auto(self.con, first)
+        driver.act_auto(self.con, second)
+        # The state the bug left: the second job's tab is also in the first job's list, as its newest.
+        self.in_worker("""async ([one, two]) => {
+            const { jobs } = await chrome.storage.session.get('jobs');
+            jobs[one] = [...jobs[one], ...jobs[two]];
+            await chrome.storage.session.set({ jobs }); }""", [first, second])
+        self.assertIn("owner-1", extension._read(first, banners=False)["url"])
+        self.assertIn("owner-2", extension._read(second, banners=False)["url"])
+
     def test_fills_the_first_page_and_leaves_what_it_cannot_answer(self):
         job_id = self.job("ext-fill", "form.html")
         said = driver.act_auto(self.con, job_id)

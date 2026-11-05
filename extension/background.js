@@ -37,19 +37,32 @@ function withJobs(change) {
   return writing;
 }
 
+// A tab is one job's only: with several forms filling at once, one job read and filled another's page
+// (Encord and Lane Clark & Peacock, testers 2026-11-05), so the tab another job was opened in is never this job's.
 async function tabFor(job) {
   await writing;
   const { jobs = {} } = await chrome.storage.session.get("jobs");
+  const others = new Set(Object.entries(jobs).filter(([j]) => j !== job).map(([, ids]) => ids[0]));
   for (const id of [...(jobs[job] || [])].reverse()) {
+    if (others.has(id)) continue;
     try { return await chrome.tabs.get(id); } catch { /* closed */ }
   }
   return null;
 }
 
+// Gives the tab to this job alone, taking it from any other job's list.
+function claim(jobs, job, tabId) {
+  for (const [j, ids] of Object.entries(jobs)) if (j !== job) jobs[j] = ids.filter(id => id !== tabId);
+  jobs[job] = [tabId];
+}
+
 chrome.tabs.onCreated.addListener(tab => {
   if (tab.openerTabId == null) return;
-  // A form that opens in a new tab belongs to the job whose tab opened it.
-  withJobs(jobs => Object.values(jobs).forEach(ids => ids.includes(tab.openerTabId) && ids.push(tab.id)));
+  // A form that opens in a new tab belongs to the one job whose newest tab opened it, and to no other.
+  withJobs(jobs => {
+    const heirs = Object.values(jobs).filter(ids => ids[ids.length - 1] === tab.openerTabId);
+    if (heirs.length === 1 && !Object.values(jobs).some(ids => ids.includes(tab.id))) heirs[0].push(tab.id);
+  });
 });
 // A page the browser loaded ahead of time swaps in under a new tab id; the job keeps the tab.
 chrome.tabs.onReplaced.addListener((added, removed) => {
@@ -220,7 +233,7 @@ const COMMANDS = {
     if (tab) await chrome.tabs.update(tab.id, { url });
     else {
       tab = await newTab(url, window === "separate", front);
-      await withJobs(jobs => { jobs[job] = [tab.id]; });
+      await withJobs(jobs => claim(jobs, job, tab.id));
     }
     await loaded(tab.id);
     return {};

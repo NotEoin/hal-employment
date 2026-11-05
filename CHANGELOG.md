@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Forms filling side by side keep to their own tabs.** With several forms filling at once, one job's list of
+  tabs came to hold another job's, and Hal read and filled the wrong page: Encord's form picked up Lane Clark &
+  Peacock's questions, and every answer on both was lost. A tab now belongs to one job only.
 - **A site's menu is not a sign-in page.** Every Hacker News page starts with its menu, ending "login", and Hal
   took each job post there for a sign-in page. A page's opening words now count only when they say so ("Log in
   to", "Forgot your password", "Welcome back"), and a "Search:" box is the site's own.
