@@ -29,7 +29,10 @@ PROMPT_CHARS = 60_000        # about 15K tokens: a CV whole, a long report's fir
 TIMEOUT_S = 300
 # Waits before asking again when the AI itself is down mid-ingest (a gateway restart, a model loading); a
 # long ingest otherwise read every document of those minutes by rules alone (2026-11-05).
+# Only once the AI has answered in this process: with no AI set up, or none reachable from the start, a
+# document goes straight to rules instead of waiting through every retry.
 RETRY_WAITS_S = (30, 120, 300)
+_answered = False
 QUOTE_MIN = 3                # characters; a shorter quote ("BA") would be found in almost any text
 QUOTE_MAX_WORDS = 40         # the prompt asks for 25; a longer quote is a paragraph pasted back
 FREQUENT_TERMS = 8
@@ -118,6 +121,11 @@ def _title(rel: str, text: str) -> str:
     return found.group(1).strip() if found else PurePosixPath(rel).stem
 
 
+def _note_answered() -> None:
+    global _answered
+    _answered = True
+
+
 def light(rel: str, text: str, rule: rank.Rule) -> dict:
     """A document's description without a model: no facts, `about_owner` unsure."""
     first = next((p.strip() for p in re.split(r"\n\s*\n", text) if p.strip() and not p.startswith("#")), "")
@@ -203,7 +211,7 @@ def ask(rel: str, text: str, rule: rank.Rule, *, role: str = "checker") -> dict:
             reply = ai.chat_json(system, user, role=role, timeout=TIMEOUT_S, purpose=PURPOSE, priority=2)
         except ai.LLMUnavailable as e:
             # This request failing while the AI answers (too long, refused) is not worth waiting for.
-            if wait is None or e.kind == "local_only" or ai.ready(priority=2) is None:
+            if wait is None or not _answered or e.kind == "local_only" or ai.ready(priority=2) is None:
                 log.info("read %s by rules: %s", rel, e)
                 return light(rel, text, rule)
             log.info("the AI is not answering (%s); asking about %s again in %d s", e, rel, wait)
@@ -213,5 +221,6 @@ def ask(rel: str, text: str, rule: rank.Rule, *, role: str = "checker") -> dict:
             # The guard stopped the request before anything was sent; the file is still noted, by rules, and
             # said to hold a private answer. Raising would stop the whole ingest at this file on every carry-on.
             return {**light(rel, text, rule), "private": True}
+        _note_answered()
         return clean(reply, rel, text, rule, name)
     raise AssertionError("unreachable: the last try returns")

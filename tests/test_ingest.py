@@ -288,6 +288,7 @@ class Understanding(unittest.TestCase):
 
         reply = json.dumps(REPLY)
         with mock.patch.object(understand, "RETRY_WAITS_S", (0, 0)), \
+                mock.patch.object(understand, "_answered", True), \
                 mock.patch.object(ai, "ready", return_value="Hal's gateway does not answer."), \
                 mock.patch.object(ai, "chat_json", side_effect=[ai.LLMUnavailable("down"), json.loads(reply)]) as ask:
             desc = understand.ask("CV.md", CV_TEXT, rank.RULES[0])
@@ -295,6 +296,13 @@ class Understanding(unittest.TestCase):
         with mock.patch.object(understand, "RETRY_WAITS_S", (0, 0)), \
                 mock.patch.object(ai, "ready", return_value=None), \
                 mock.patch.object(ai, "chat_json", side_effect=ai.LLMUnavailable("too long")) as ask:
+            desc = understand.ask("CV.md", CV_TEXT, rank.RULES[0])
+        self.assertEqual((desc["by"], ask.call_count), ("rules", 1))
+        # an AI that never answered is not waited for: with none set up, every document would wait minutes
+        with mock.patch.object(understand, "RETRY_WAITS_S", (0, 0)), \
+                mock.patch.object(understand, "_answered", False), \
+                mock.patch.object(ai, "ready", return_value="No AI is set up."), \
+                mock.patch.object(ai, "chat_json", side_effect=ai.LLMUnavailable("none")) as ask:
             desc = understand.ask("CV.md", CV_TEXT, rank.RULES[0])
         self.assertEqual((desc["by"], ask.call_count), ("rules", 1))
 
