@@ -25,6 +25,7 @@ import collections
 import concurrent.futures
 import contextlib
 import difflib
+import importlib.util
 import json
 import os
 import queue
@@ -167,6 +168,17 @@ BLOCK_JS = """() => {
   return true;
 }"""
 UNBLOCK_JS = "() => window.__halUnblock ? window.__halUnblock() : []"
+
+
+NO_PLAYWRIGHT = ("Hal's own window needs the browser part, which is not installed here. Install it again with "
+                 "the browser option, or let the browser helper fill in forms in your own browser.")
+
+
+class BrowserMissing(RuntimeError):
+    """Playwright is not installed, so Hal's own browser window cannot open."""
+
+    def __init__(self) -> None:
+        super().__init__(NO_PLAYWRIGHT)
 
 
 class TabGone(RuntimeError):
@@ -312,7 +324,13 @@ class Browser:
         self.pages: dict[str, list] = {}
 
     def call(self, fn, *args, timeout: float = 600):
-        """Runs fn(browser, *args) on the browser thread and returns its result."""
+        """Runs fn(browser, *args) on the browser thread and returns its result.
+
+        Raises `BrowserMissing` at once without Playwright: the thread would die on its import and leave the
+        caller waiting out `timeout` (the WSL2 CI job, installed without the browser extra, 2026-11-05).
+        """
+        if importlib.util.find_spec("playwright") is None:
+            raise BrowserMissing
         if self._thread is None or not self._thread.is_alive():
             self._thread = threading.Thread(target=self._run, name="browser", daemon=True)
             self._thread.start()

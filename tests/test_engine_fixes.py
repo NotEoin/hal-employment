@@ -213,6 +213,19 @@ def forget_notes() -> None:
         con.commit()
 
 
+class WithoutPlaywright(unittest.TestCase):
+    def test_hals_window_refuses_at_once_when_playwright_is_missing(self):
+        # the browser thread died on its import and each caller waited out the 10-minute timeout (the WSL2 CI
+        # job, installed without the browser extra, 2026-11-05)
+        real = browser.importlib.util.find_spec
+        with mock.patch.object(browser.importlib.util, "find_spec",
+                               side_effect=lambda name, *a: None if name == "playwright" else real(name, *a)):
+            start = time.monotonic()
+            with self.assertRaises(browser.BrowserMissing):
+                browser.Browser().call(lambda b: None, timeout=30)
+            self.assertLess(time.monotonic() - start, 1)
+
+
 class NoteHooks(unittest.TestCase):
     """The engines' note hooks, without a browser."""
 

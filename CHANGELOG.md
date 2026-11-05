@@ -25,6 +25,8 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **No ten-minute wait without the browser part.** On an install without Hal's own browser window (such as
+  WSL2 without the browser option), a step that needs that window now says so at once instead of waiting.
 - **A site's comment box is never filled.** Signed in to Hacker News, a job post there shows a reply box, and
   Hal typed an application answer into it, one press away from posting it. Boxes known only as "text",
   "comment" or "reply" are now the site's own.
