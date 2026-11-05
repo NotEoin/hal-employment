@@ -245,6 +245,8 @@ def resolve(con: sqlite3.Connection, conflict_id, *, value=None, keep_item=None,
     if sum(x is not None and x is not False for x in (value, keep_item, keep_all or None)) != 1:
         raise ValueError("Choose one: the right value, the item to keep, or keep them all.")
     if value is not None:
+        if not str(value).strip():
+            raise ValueError("Give the right value.")
         if "value" not in c["choices"] or not c["field"]:
             raise ValueError("This conflict is not about one value; keep an item or keep them all.")
         resolution = {"value": value}
