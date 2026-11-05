@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -411,6 +412,16 @@ class Understanding(unittest.TestCase):
         self.assertIn("# Brindle Arts Centre\n", out)
         self.assertIn("`Brindle Arts Centre`", out)
 
+
+    def test_linking_a_long_note_against_thousands_of_titles_is_quick(self):
+        # one regular expression of every title, compiled per note, took hours on a 12,000-note dump (2026-11-05)
+        titles = {f"made up place {n}": f"Places/Made up place {n}.md" for n in range(15000)}
+        index = notes.TitleIndex(titles)
+        text = "---\ntitle: x\n---\n" + "Walked past made up place 14999 and other words. " * 4000
+        start = time.monotonic()
+        out = notes.link_note(text, index, "Sources/Other/x.md")
+        self.assertLess(time.monotonic() - start, 2)
+        self.assertEqual(out.count("[[Places/Made up place 14999|made up place 14999]]"), 1)
 
 class Frontmatter(unittest.TestCase):
     def test_lists_and_awkward_scalars_round_trip(self):

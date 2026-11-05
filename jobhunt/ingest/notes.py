@@ -45,6 +45,7 @@ FACT_FIELDS = {"job": ("title", "employer", "start", "end"), "education": ("qual
                "achievement": ("title", "date"), "certificate": ("name", "issuer", "date"),
                "basic": ("name", "email", "phone", "location"), "link": ("label", "url")}
 # Parts of a note the link pass never changes: code, existing links, headings and the frontmatter.
+TITLE_WORD = re.compile(r"\w+(?:['.+#-]\w+)*")   # "C++" stays "c", fine: titles match word for word
 PROTECTED = re.compile(r"```.*?```|`[^`\n]*`|\[\[[^\]]*\]\]|\[[^\]]*\]\([^)]*\)|^#[^\n]*$|https?://\S+", re.S | re.M)
 
 
@@ -226,40 +227,70 @@ def known_titles(vault: Path) -> dict[str, str]:
     return out
 
 
-def link_note(text: str, titles: dict[str, str], own: str) -> str:
+class TitleIndex:
+    """Known titles as runs of lower-case words, so a note is matched in one pass over its words.
+
+    One alternation of every title, compiled per note, took hours over 12,000 notes and 15,000 titles
+    (2026-11-05); a lookup per word run costs the same however many titles there are.
+    """
+
+    def __init__(self, titles: dict[str, str]) -> None:
+        self.runs: dict[tuple[str, ...], str] = {}
+        for title, rel in titles.items():
+            words = tuple(TITLE_WORD.findall(title.lower()))
+            if words:
+                self.runs.setdefault(words, rel)
+        self.longest = max((len(w) for w in self.runs), default=0)
+
+    def swap(self, segment: str, own: str, done: set[str]) -> str:
+        """`segment` with the first mention of each title not yet in `done` linked, never to `own`."""
+        found = list(TITLE_WORD.finditer(segment))
+        lower = [m.group(0).lower() for m in found]
+        out, last, i = [], 0, 0
+        while i < len(found):
+            hit = None
+            for n in range(min(self.longest, len(found) - i), 0, -1):
+                rel = self.runs.get(tuple(lower[i:i + n]))
+                if rel is not None and rel != own:
+                    hit = (n, rel)
+                    break
+            start = found[i].start()
+            if hit is None or (start and segment[start - 1] == "[") or len(done) >= LINKS_MAX:
+                i += 1
+                continue
+            n, rel = hit
+            end = found[i + n - 1].end()
+            if rel not in done:
+                done.add(rel)
+                out += [segment[last:start], link(rel, segment[start:end])]
+                last = end
+            i += n
+        out.append(segment[last:])
+        return "".join(out)
+
+
+def link_note(text: str, titles: dict[str, str] | TitleIndex, own: str) -> str:
     """`text` with a wikilink on the first mention of each title in `titles`, outside protected parts."""
+    index = titles if isinstance(titles, TitleIndex) else TitleIndex(titles)
+    if not index.runs:
+        return text
     fm_end = 0
     if text.startswith(frontmatter.FENCE):
         end = text.find("\n" + frontmatter.FENCE, len(frontmatter.FENCE))
         fm_end = end + len(frontmatter.FENCE) + 1 if end != -1 else 0
     head, body = text[:fm_end], text[fm_end:]
-    wanted = {t: rel for t, rel in titles.items() if rel != own}
-    if not wanted:
-        return text
-    pattern = re.compile(r"(?<![\w\[])(" + "|".join(re.escape(t) for t in sorted(wanted, key=len, reverse=True))
-                         + r")(?![\w\]])", re.I)
     done: set[str] = set()
-
-    def swap(segment: str) -> str:
-        def one(m: re.Match) -> str:
-            key = m.group(1).lower()
-            if key in done or len(done) >= LINKS_MAX:
-                return m.group(0)
-            done.add(key)
-            return link(wanted[key], m.group(1))
-        return pattern.sub(one, segment)
-
     out, last = [], 0
     for m in PROTECTED.finditer(body):
-        out += [swap(body[last:m.start()]), m.group(0)]
+        out += [index.swap(body[last:m.start()], own, done), m.group(0)]
         last = m.end()
-    out.append(swap(body[last:]))
+    out.append(index.swap(body[last:], own, done))
     return head + "".join(out)
 
 
 def link_pass(vault: Path, note_rels: list[str]) -> int:
     """Links the first mention of each known title in the notes at `note_rels`; returns how many changed."""
-    titles = known_titles(vault)
+    titles = TitleIndex(known_titles(vault))
     changed = 0
     for rel in note_rels:
         path = vault / rel
