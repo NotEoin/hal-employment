@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Junior Analyst at Practice Ltd</title></head><body>
+<!-- A job board the person is signed in to that names no "Sign out" on the page, as Totaljobs shows it
+     (2026-11-05): only "My jobs" and "My account". Its plain Apply button, in no form, sends the saved CV at once
+     by script. -->
+<header><a href="/jobs">My career</a> <a href="/my-jobs">My jobs</a> <a href="/account">My account</a></header>
+<h1>Junior Analyst</h1><p>Practice Ltd is hiring a junior analyst.</p>
+<button id="apply" type="button">Apply</button>
+<script>
+document.getElementById('apply').addEventListener('click', () => fetch('/sent/signed-in-account', { method: 'POST' }));
+</script>
+</body></html>

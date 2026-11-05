@@ -252,6 +252,20 @@ class Flows:
         driver.act_approve(self.con, job_id, [])
         self.assertEqual(self.site.sent("after-apply"), 0)
 
+    def test_a_board_that_shows_only_my_account_counts_as_signed_in(self):
+        """Regression (testers, 2026-11-05): Totaljobs showed "My jobs" and "My account" but no "Sign out", so Hal
+        pressed its Apply, which sends the saved CV at once."""
+        job_id = self.practice_job("signed-in-account", "signed-in-account.html")
+        runner.ACTIONS.pop(job_id, None)
+        runner.run_action(job_id, "applying", driver.act_auto, job_id)
+        deadline = time.monotonic() + WAIT_S
+        while "press Apply" not in runner.ACTIONS[job_id]["message"] and time.monotonic() < deadline:
+            time.sleep(POLL_S)
+        self.assertIn("press Apply on", runner.ACTIONS[job_id]["message"])
+        time.sleep(1)
+        self.assertEqual(self.site.sent(), 0)
+        runner.stop_action(job_id)
+
     def test_the_guard_refuses_submit_like_controls_the_ai_picks(self):
         job_id = self.practice_job("review", "review.html")
         offered = []
