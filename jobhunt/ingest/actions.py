@@ -62,3 +62,20 @@ def queue(*, folders=(), uploads=(), drop: bool = False, urls=(), session_id: st
     params = {"batch": engine.new_batch(), "folders": [str(f) for f in folders],
               "uploads": [str(u) for u in uploads], "drop": bool(drop), "urls": [str(u) for u in urls]}
     return runner.start("record.ingest", params=params, session_id=session_id, remote=remote, why=why)
+
+
+def queue_drop() -> str | None:
+    """Starts an ingest of the drop folder when it holds files not read yet; its action id, else None."""
+    from jobhunt import db
+
+    con = db.connect()
+    try:
+        new = engine.drop_has_new(con)
+    finally:
+        con.close()
+    if not new:
+        return None
+    try:
+        return queue(drop=True, why="New files in your drop folder")
+    except RuntimeError:
+        return None      # an ingest is running already; the next scheduled read starts this one

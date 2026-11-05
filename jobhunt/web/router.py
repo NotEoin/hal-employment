@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 
 Auth = Literal["session", "helper", "session_or_helper", "local", "session_or_local", "pairing", "none"]
 AUTH_KINDS = ("session", "helper", "session_or_helper", "local", "session_or_local", "pairing", "none")
-MAX_BODY = 30 * 1024 * 1024        # CV and record uploads stay well under this
+MB = 1024 * 1024
+MAX_BODY = 30 * MB                 # CV and record uploads stay well under this; a route may raise it
 PREFIX = "/api/v2"
 UNEXPECTED = "Something went wrong. Hal kept the details in Activity."
 
@@ -185,6 +186,7 @@ class Route:
     auth: str
     local_only: bool
     slow: bool
+    max_body: int = MAX_BODY
 
 
 ROUTES: dict[tuple[str, str], Route] = {}
@@ -201,8 +203,11 @@ def _compile(pattern: str) -> re.Pattern:
 
 
 def route(method: str, pattern: str, *, auth: Auth = "session", local_only: bool = False,
-          slow: bool = False) -> Callable:
-    """Registers a handler for `method` and `pattern` ("/api/v2/jobs/{job_id}/save"); a duplicate raises."""
+          slow: bool = False, max_body: int = MAX_BODY) -> Callable:
+    """Registers a handler for `method` and `pattern` ("/api/v2/jobs/{job_id}/save"); a duplicate raises.
+
+    `max_body` raises the request size cap for this route alone, for uploads larger than a CV.
+    """
     method = method.upper()
     if auth not in AUTH_KINDS:
         raise ValueError(f"unknown auth {auth!r} for {method} {pattern}")
@@ -211,7 +216,7 @@ def route(method: str, pattern: str, *, auth: Auth = "session", local_only: bool
         key = (method, pattern)
         if key in ROUTES:
             raise ValueError(f"{method} {pattern} is registered twice ({ROUTES[key].fn.__module__}, {fn.__module__})")
-        ROUTES[key] = Route(method, pattern, _compile(pattern), fn, auth, local_only, slow)
+        ROUTES[key] = Route(method, pattern, _compile(pattern), fn, auth, local_only, slow, max_body)
         return fn
     return wrap
 
@@ -245,13 +250,13 @@ def _multipart(ctype: str, raw: bytes) -> tuple[dict, dict[str, Upload]]:
     return fields, files
 
 
-def _read_body(handler: AppHandler) -> tuple[Any, dict[str, Upload]]:
+def _read_body(handler: AppHandler, limit: int = MAX_BODY) -> tuple[Any, dict[str, Upload]]:
     try:
         length = int(handler.headers.get("Content-Length") or 0)
     except ValueError as e:
         raise BadRequest("The request's length cannot be read.") from e
-    if length > MAX_BODY:
-        raise BadRequest("That file is too big. Files up to 30 MB can be added.")
+    if length > limit:
+        raise BadRequest(f"That file is too big. Files up to {limit // MB} MB can be added.")
     raw = handler.rfile.read(length) if length else b""
     if not raw:
         return None, {}
@@ -336,7 +341,7 @@ def dispatch(handler: AppHandler, method: str) -> bool:
     try:
         _allowed(r, req, handler)
         if method in ("POST", "PUT", "DELETE", "PATCH"):
-            req.body, req.files = _read_body(handler)
+            req.body, req.files = _read_body(handler, r.max_body)
         result = r.fn(req)
         try:
             handler.reply(result)

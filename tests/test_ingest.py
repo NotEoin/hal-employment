@@ -14,6 +14,7 @@ from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.actions import finished
+from support.api import HalServer
 from support.fake_ai import fake_ai
 
 from jobhunt import db, record
@@ -361,6 +362,79 @@ class Progress(unittest.TestCase):
             self.assertEqual(shown["not_downloaded_paths"], ["Files/Cloud/Offer letter.pdf"])
             self.assertEqual(shown["categories"], {"CVs and letters": 1})
 
+    def test_a_file_dropped_in_the_drop_folder_is_picked_up_and_moved_in(self):
+        with home() as (con, vault, _files), fake_ai({}):
+            drop = vault / sources.DROP_DEFAULT
+            put(drop, "Certificate of completion.md", "# First aid\n\nCompleted 2025.")
+            self.assertTrue(engine.drop_has_new(con))
+            done = finished(ingest_actions.queue_drop())
+            self.assertEqual(done["state"], "done", done["error"])
+            self.assertFalse((drop / "Certificate of completion.md").exists())
+            self.assertTrue((vault / record.ORIGINALS / "Certificates" / "Certificate of completion.md").exists())
+            self.assertFalse(engine.drop_has_new(con))
+            self.assertIsNone(ingest_actions.queue_drop())
+
+
+class Routes(unittest.TestCase):
+    def setUp(self):
+        self.hal = self.enterContext(HalServer())
+        self.folder = Path(paths.record_default())
+        self.enterContext(mock.patch.object(record, "VAULT", self.folder, create=True))
+        self.addCleanup(record._CACHE.clear)
+        self.enterContext(fake_ai({}))
+        self.files = self.hal.home / "Old laptop"
+
+    def test_there_is_no_ingest_until_one_is_started(self):
+        shown = self.hal.signed_in().get("/api/v2/record/ingest").json()
+        self.assertEqual((shown["state"], shown["done"], shown["total"]), ("none", 0, 0))
+
+    def test_a_folder_on_this_computer_is_read_and_the_page_shows_how_it_went(self):
+        put(self.files, "CV.md", CV_TEXT)
+        put(self.files, "OneDrive/Reference.pdf", bytes(64))
+        c = self.hal.signed_in()
+        started = c.post("/api/v2/record/ingest", {"folders": [str(self.files)]})
+        self.assertEqual(started.status, 200, started.text)
+        self.assertEqual(finished(started.json()["action_id"])["state"], "done")
+        shown = c.get("/api/v2/record/ingest").json()
+        self.assertEqual((shown["state"], shown["done"], shown["total"], shown["not_downloaded"]), ("done", 2, 2, 1))
+        self.assertEqual(shown["not_downloaded_paths"], ["Old laptop/OneDrive/Reference.pdf"])
+        self.assertEqual(shown["stages"]["written"], 1)
+        self.assertTrue(list((self.folder / "Sources").rglob("*.md")))
+
+    def test_reading_a_folder_by_path_is_refused_from_another_computer_and_inside_the_record(self):
+        put(self.files, "CV.md", CV_TEXT)
+        laptop = self.hal.signed_in(remote=True, remote_host="laptop")
+        self.assertEqual(laptop.post("/api/v2/record/ingest", {"folders": [str(self.files)]}).status, 409)
+        c = self.hal.signed_in()
+        self.folder.mkdir(parents=True, exist_ok=True)
+        self.assertEqual(c.post("/api/v2/record/ingest", {"folders": [str(self.folder)]}).status, 400)
+        self.assertEqual(c.post("/api/v2/record/ingest", {"folders": [str(self.files / "missing")]}).status, 400)
+        self.assertEqual(c.post("/api/v2/record/ingest", {"folders": []}).status, 400)
+
+    def test_an_uploaded_zip_is_unpacked_safely_and_read(self):
+        from test_evidence_routes import upload
+
+        from jobhunt.evidence import routes as evidence
+
+        evidence.make_default()
+        data = zip_bytes({"Year 1/CV.md": CV_TEXT.encode(), "../../escape.md": b"# Out"})
+        status, out = upload(self.hal, self.hal.signed_in(), {"uni.zip": data})
+        self.assertEqual(status, 200, out)
+        self.assertIsNone(out["action_id"], "a zip alone starts the ingest, not a plain read")
+        self.assertEqual(finished(out["ingest_id"])["state"], "done")
+        shown = self.hal.signed_in().get("/api/v2/record/ingest").json()
+        self.assertEqual(shown["states"].get("done"), 1)
+        self.assertTrue(any("points outside the zip" in e["error"] for e in shown["errors"]))
+        self.assertFalse((self.hal.home / "escape.md").exists())
+        self.assertFalse(list(sources.uploads_dir().glob("*.zip")), "the upload is removed once it is read")
+
+    def test_only_the_upload_route_takes_a_body_past_the_usual_cap(self):
+        from jobhunt.evidence import routes as evidence
+        from jobhunt.web import router
+
+        self.assertGreater(router.find("POST", "/api/v2/record/files")[0].max_body, router.MAX_BODY)
+        self.assertEqual(router.find("POST", "/api/v2/record/ingest")[0].max_body, router.MAX_BODY)
+        self.assertEqual(evidence.UPLOAD_MAX_BODY, 256 * router.MB)
 
 
 if __name__ == "__main__":

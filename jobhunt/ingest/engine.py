@@ -10,6 +10,7 @@ gets no note of its own, and its path is added once to the first copy's note und
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import uuid
 from collections.abc import Callable
@@ -274,6 +275,24 @@ def _courses(con: sqlite3.Connection, batch: str) -> list[str]:
         items.update(con, unit["id"], stage="written", state="done", note=note_rel)
         written.append(note_rel)
     return written
+
+
+def drop_has_new(con: sqlite3.Connection) -> bool:
+    """True when the drop folder holds a file no ingest has finished with (by path and size)."""
+    folder = sources.drop_folder()
+    if not folder.is_dir():
+        return False
+    known = {(r[0], r[1]) for r in con.execute(
+        f"SELECT path, size FROM ingest_items WHERE state IN ({','.join('?' * len(items.FINAL))})", items.FINAL)}
+    for here, dirs, names in os.walk(folder):
+        dirs[:] = [d for d in dirs if not discover.is_junk_dir(d) and not d.startswith(".")]
+        for name in names:
+            path = Path(here) / name
+            if name.startswith(".") or discover.is_binary_name(name) or path.is_symlink():
+                continue
+            if (str(path), path.stat().st_size) not in known:
+                return True
+    return False
 
 
 def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bool = False, urls=(),

@@ -213,6 +213,9 @@ MADE_UP_PAGES = {
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
+    "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
+                       "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
+                       "not_downloaded_paths": [], "errors": [], "left_out": {}},
     # My CV; the parse report is the real server's answer before any CV is added
     "/cv/parse-report": {"version_id": None, "n": None, "found": "", "rows": [], "unsure": 0,
                          "original_preview_url": None, "original": None, "file": None, "from_cv": {}},

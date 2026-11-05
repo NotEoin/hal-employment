@@ -6,7 +6,9 @@
 - Opening or choosing the folder acts on the computer Hal runs on, so those routes are `local_only`.
 - Reading the folder and asking it a question are actions (`evidence/actions.py`); the routes return their
   ids at once.
-- Uploaded files go into the record's Inbox folder, never over a file already there.
+- Uploaded files go into the record's Inbox folder, never over a file already there. An uploaded zip goes to
+  the ingest's uploads folder instead and starts a bulk read (`record.ingest`), which unpacks it safely.
+  Only this route takes bodies past the router's usual cap, up to `UPLOAD_MAX_BODY`.
 """
 from __future__ import annotations
 
@@ -23,13 +25,16 @@ from pathlib import Path
 from jobhunt import record
 from jobhunt.core import runner
 from jobhunt.evidence import actions  # noqa: F401 - registers record.sync and record.ask before a route starts one
-from jobhunt.web.router import BadRequest, FileResponse, NotFound, route
+from jobhunt.web.router import MB, BadRequest, FileResponse, NotFound, route
 
 log = logging.getLogger(__name__)
 INBOX = "Inbox"
 OTHER_GROUP = "Other files"                   # files at the top of the folder, in no subfolder
 SAMPLE_NAMES = 3                              # file names shown under each group
 OPEN_TIMEOUT_S = 10
+# The whole request is held in memory while it is parsed, twice over, so the cap stays well under a laptop's
+# memory; a larger set of files is read from its folder (`POST /api/v2/record/ingest`) on the computer itself.
+UPLOAD_MAX_BODY = 256 * MB
 # The folders setup makes: Private holds what the AI never sees.
 STARTER_FOLDERS = ("Certificates", "Education", "Jobs", "Volunteering", "References", INBOX, "Private")
 START_HERE = """---
@@ -116,22 +121,40 @@ def _free_name(folder: Path, name: str) -> Path:
     return target
 
 
-@route("POST", "/api/v2/record/files")
+@route("POST", "/api/v2/record/files", max_body=UPLOAD_MAX_BODY)
 def add_files(req) -> dict:
-    """Copies uploaded files into the record's Inbox and starts reading the folder."""
+    """Copies uploaded files into the record's Inbox and starts reading the folder; a zip starts an ingest."""
+    from jobhunt.ingest import actions as ingest_actions
+    from jobhunt.ingest import sources
+
     if not req.files:
         raise BadRequest("Choose one or more files to add.")
     folder = Path(record._live("VAULT"))
     if not folder.exists():
         raise BadRequest("Your record folder is not there yet. Make it first.")
     inbox = folder / INBOX
-    inbox.mkdir(exist_ok=True)
-    added = []
+    added, zips = [], []
     for upload in req.files.values():
-        target = _free_name(inbox, upload.name)
+        if Path(upload.name).suffix.lower() == ".zip":
+            sources.uploads_dir().mkdir(parents=True, exist_ok=True)
+            target = _free_name(sources.uploads_dir(), upload.name)
+            zips.append(target)
+        else:
+            inbox.mkdir(exist_ok=True)
+            target = _free_name(inbox, upload.name)
         target.write_bytes(upload.data)
         added.append(target.name)
-    return {"added": added, "action_id": _start_sync(req)}
+    out = {"added": added, "action_id": _start_sync(req) if len(zips) < len(added) else None}
+    if zips:
+        try:
+            out["ingest_id"] = ingest_actions.queue(uploads=zips, session_id=_session(req), remote=req.remote,
+                                                    why="You added a zip of files to your record")
+        except RuntimeError as e:
+            for z in zips:
+                z.unlink(missing_ok=True)
+            raise RuntimeError("Hal is still reading other files into your record. Add the zip when it is "
+                               "done.") from e
+    return out
 
 
 def _start_sync(req) -> str | None:
