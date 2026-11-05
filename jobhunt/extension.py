@@ -320,7 +320,7 @@ def _needs(facts: dict) -> str:
         return "code"
     # Sign-in pages that ask for the email address first show no password box yet.
     if 0 < len(fields) <= 2 and not facts["apply"] \
-            and SIGN_IN.search(f"{facts['title']} {urlparse(facts['url']).path}"):
+            and browser.sign_in_page(f"{facts['title']} {facts['headings']}", facts["url"], facts["text"]):
         return "sign-in"
     return ""
 

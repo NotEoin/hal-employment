@@ -144,6 +144,13 @@ class SiteKeys(unittest.TestCase):
         self.assertEqual(asked[0][0], "open")
         self.assertIs(asked[0][1]["front"], False)
 
+    def test_an_account_services_address_marks_a_sign_in_page(self):
+        """Regression (testers, 2026-11-05): account.ycombinator.com asked only for an email address, and Hal
+        typed it in and pressed on."""
+        self.assertTrue(browser.sign_in_page("Y Combinator", "https://account.ycombinator.com/?continue=x", "Email"))
+        self.assertTrue(browser.sign_in_page("", "https://login.example.org/", ""))
+        self.assertFalse(browser.sign_in_page("Junior Analyst", "https://jobs.example.org/apply", "Your details"))
+
     def test_an_upload_that_appears_later_does_not_get_a_second_cv(self):
         """Regression (testers, 2026-11-04): after an Ashby form rebuilt itself, its new upload box was taken for
         the CV's on its own, so the CV went in twice."""
@@ -380,6 +387,15 @@ class Fixes:
         # The person opens the list themselves while Hal looks.
         self.on_page(job_id, page, lambda tab: tab.focus("#loc"))
         self.assertEqual([f["label"] for f in browser.read_here(job_id)["fields"]], everything)
+        self.assertEqual(self.site.sent(), 0)
+
+    def test_a_sign_in_page_that_asks_for_the_email_first_is_left_to_the_person(self):
+        """Regression (testers, 2026-11-05): a sign-in page that said so only in its opening words was filled in
+        with the applicant's email address and Continue was pressed."""
+        page = "welcome-back.html"
+        job_id, found = self.opened("email-first", page)
+        self.assertEqual((found["needs"], found["fields"]), ("sign-in", []))
+        self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#em")), "")
         self.assertEqual(self.site.sent(), 0)
 
     def test_a_searched_list_is_typed_into_until_it_offers_the_answer(self):

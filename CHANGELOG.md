@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Sign-in pages are left to you.** A sign-in page that asks for the email address first, and says so only in
+  its words or its address (Y Combinator's account.ycombinator.com), was filled in with your email address and
+  Continue was pressed. Hal now stops there for you to sign in yourself.
 - **A double-clicked approval fills the form once.** Two presses of **Approve and fill in the form** sent two
   approvals: one failed with an error, and the other stopped the fill the first had started, which could leave
   the application with nothing running. A second press now joins the fill already under way.

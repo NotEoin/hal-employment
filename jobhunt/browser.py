@@ -79,6 +79,10 @@ SUCCESS = re.compile(r"thank(s| you)[^.]{0,60}(appl|submi|interest)|"
                      r"your application is (in|on its way)", re.I)
 APPLIED = re.compile(r"you(('ve| have) already| have|'ve)? applied (for|to) this (job|role|position|vacancy)", re.I)
 SIGN_IN = re.compile(r"\b(sign|log)[ -]?in\b|\blogin\b|\bregister\b|create (an |your )?account", re.I)
+# The host of an account service, which may say nothing of signing in on the page: account.ycombinator.com asked
+# only for an email address, and Hal typed it in and pressed on (testers, 2026-11-05).
+SIGN_IN_HOST = re.compile(r"^(accounts?|login|auth|signin|sso|id|identity)\.", re.I)
+SIGN_IN_TEXT = 600   # characters of the page's opening words that may say it is for signing in
 SIGN_OUT = re.compile(r"^\s*(sign|log) ?out\s*$", re.I)
 CLOSED = re.compile(r"(no longer|not) (available|accepting applications|open|exists?|active|live)|not available anymore|"
                     r"(job|position|vacancy|role|posting|advert|page) (you requested )?(has |was |is )?"
@@ -676,10 +680,16 @@ def _needs(survey: dict, fields: list[dict]) -> str:
     if form:
         return ""
     # Sign-in pages that ask for the email address first show no password box yet.
-    if 0 < len(fields) <= 2 and _apply_control(survey) is None \
-            and SIGN_IN.search(f"{head} {urlparse(survey['url']).path}"):
+    if 0 < len(fields) <= 2 and _apply_control(survey) is None and sign_in_page(head, survey["url"], survey["text"]):
         return "sign-in"
     return ""
+
+
+def sign_in_page(head: str, url: str, text: str) -> bool:
+    """True when a page's title and headings (`head`), its address or its opening words say it is for signing in."""
+    where = urlparse(url)
+    return bool(SIGN_IN_HOST.search(where.hostname or "")
+                or SIGN_IN.search(f"{head} {where.path} {text[:SIGN_IN_TEXT]}"))
 
 
 def _signed_in(survey: dict) -> bool:
