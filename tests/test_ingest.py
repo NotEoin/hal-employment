@@ -264,6 +264,7 @@ class Ranking(unittest.TestCase):
         self.assertTrue(discover.is_repo(["README.md", "LICENSE", "docs", "media"]))
         self.assertTrue(discover.is_repo(["README.md", "main.lua", "util.lua"]))
         self.assertFalse(discover.is_repo(["README.md", "week 1.md", "week 2.md"]))
+        self.assertFalse(discover.is_repo([".obsidian", ".git", "README.md", ".gitignore", "Areas"]))
 
     def test_a_plain_text_cv_with_a_dull_name_ranks_as_a_cv_by_its_first_words(self):
         with tempfile.TemporaryDirectory() as tmp:

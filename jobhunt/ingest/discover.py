@@ -50,6 +50,7 @@ VCS_DIRS = {".git", ".hg", ".svn"}
 # A copied project often lost its .git: a README beside one of these at the top still marks a repository.
 PROJECT_SIGNS = {".gitignore", "makefile", "requirements.txt", "license", "license.md", "license.txt", "src",
                  "dockerfile", ".editorconfig"}
+NOTES_VAULT = ".obsidian"
 CODE_FILES_MIN = 2        # a README with two source files beside it is a project, not a folder of notes
 SIGNATURES = ((b"%PDF", "pdf"), (b"\x89PNG", "png"), (b"\xff\xd8\xff", "jpg"), (b"GIF8", "gif"),
               (b"II*\x00", "tiff"), (b"MM\x00*", "tiff"), (b"\xd0\xcf\x11\xe0", "ole"), (b"{\\rtf", "rtf"),
@@ -98,6 +99,8 @@ def is_binary_name(name: str) -> bool:
 def is_repo(names: list[str]) -> bool:
     """True when a folder whose entries are `names` is the top of a code repository."""
     lower = [n.lower() for n in names]
+    if NOTES_VAULT in lower:
+        return False        # an Obsidian vault of notes, even one kept in git, is notes to read one by one
     if any(n in VCS_DIRS for n in names) or any(n in REPO_MARKERS for n in lower):
         return True
     if not any(n.startswith("readme") for n in lower):
