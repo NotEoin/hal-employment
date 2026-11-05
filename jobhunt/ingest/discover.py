@@ -19,6 +19,8 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from jobhunt.ingest import rank
+
 CHUNK = 1 << 20           # read 1 MiB at a time, so a large video never sits in memory
 PEEK = 16                 # bytes enough for every signature below
 MAX_CUT = 3               # a UTF-8 character is at most 4 bytes, so the peek can cut off at most 3 of them
@@ -45,6 +47,10 @@ REPO_MARKERS = {"pyproject.toml", "setup.py", "package.json", "cargo.toml", "go.
                 "build.gradle.kts", "gemfile", "composer.json", "cmakelists.txt", "mix.exs", "pubspec.yaml",
                 "project.clj", "stack.yaml", "deno.json"}
 VCS_DIRS = {".git", ".hg", ".svn"}
+# A copied project often lost its .git: a README beside one of these at the top still marks a repository.
+PROJECT_SIGNS = {".gitignore", "makefile", "requirements.txt", "license", "license.md", "license.txt", "src",
+                 "dockerfile", ".editorconfig"}
+CODE_FILES_MIN = 2        # a README with two source files beside it is a project, not a folder of notes
 SIGNATURES = ((b"%PDF", "pdf"), (b"\x89PNG", "png"), (b"\xff\xd8\xff", "jpg"), (b"GIF8", "gif"),
               (b"II*\x00", "tiff"), (b"MM\x00*", "tiff"), (b"\xd0\xcf\x11\xe0", "ole"), (b"{\\rtf", "rtf"),
               (b"\x7fELF", "exe"), (b"\x1f\x8b", "gzip"), (b"7z\xbc\xaf", "7z"), (b"Rar!", "rar"),
@@ -91,7 +97,13 @@ def is_binary_name(name: str) -> bool:
 
 def is_repo(names: list[str]) -> bool:
     """True when a folder whose entries are `names` is the top of a code repository."""
-    return any(n in VCS_DIRS for n in names) or any(n.lower() in REPO_MARKERS for n in names)
+    lower = [n.lower() for n in names]
+    if any(n in VCS_DIRS for n in names) or any(n in REPO_MARKERS for n in lower):
+        return True
+    if not any(n.startswith("readme") for n in lower):
+        return False
+    code = sum(Path(n).suffix in rank.CODE_SUFFIXES - {".html", ".css"} for n in lower)
+    return any(n in PROJECT_SIGNS for n in lower) or code >= CODE_FILES_MIN
 
 
 def hash_and_zero(path: Path) -> tuple[str, bool]:

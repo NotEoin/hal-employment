@@ -20,7 +20,7 @@ from support.fake_ai import fake_ai
 from jobhunt import db, record
 from jobhunt.core import paths, runner, settings
 from jobhunt.ingest import actions as ingest_actions
-from jobhunt.ingest import engine, frontmatter, items, notes, rank, sources, understand
+from jobhunt.ingest import discover, engine, frontmatter, items, notes, rank, sources, understand
 
 OWNER = "Avery Quillon"
 CV_TEXT = f"""# {OWNER}
@@ -223,6 +223,38 @@ class Ranking(unittest.TestCase):
             engine.run(con, "b1", folders=[str(files)], step=lambda t: None,
                        progress=lambda done, total, text: order.append(text))
             self.assertEqual(order[0], "Files/z/Robin CV.md")
+
+    def test_messy_folders_do_not_make_rich_documents_of_everything(self):
+        # a real 37,000-file dump sent 7,800 files to the model: project trees, LICENSE files, a
+        # "resume_checkpoint.json" and transcriptions of posters all ranked as rich documents (2026-11-05)
+        def kind(rel, text=None):
+            with tempfile.TemporaryDirectory() as tmp:
+                path = put(Path(tmp), Path(rel).name, text) if text is not None else None
+                return rank.rule_for(rel, path).doc_type
+        self.assertEqual(kind("Personal projects/archive/notes/week 3.md"), "notes")
+        self.assertEqual(kind("Personal projects/archive/Vault/Sources/Poster.md"), "notes")
+        self.assertEqual(kind("Projects/tool/LICENSE.md"), "other")
+        self.assertEqual(kind("runs/resume_checkpoint.json"), "other")
+        self.assertEqual(kind("commands/resume.md", "Carry on from where the last session stopped."), "notes")
+        self.assertEqual(kind("Archive/Transcripts/Oral history interview (transcript).md", "Q: When did you"),
+                         "notes")
+        self.assertEqual(kind("uni/Transcript_10293 (2nd year).pdf"), "transcript")
+        self.assertEqual(kind("Documents/Academic transcript.docx"), "transcript")
+        self.assertEqual(kind("Jobs/Bar CV.md", "Avery Quillon\n\nProfile\n\nKind.\n\nExperience\n\nBar"), "cv")
+        self.assertEqual(kind("Third year/Dissertation.pdf"), "report")
+        self.assertEqual(kind("Certificates/First aid.pdf"), "certificate")
+        self.assertEqual(kind("Topics/TLS certificate.md", "A TLS certificate binds a key to a name."), "notes")
+        self.assertEqual(kind("Posters/say it hear it.pdf"), "other")
+        self.assertEqual(kind("Sources/podcast transcript.pdf"), "other")
+        self.assertEqual(kind("Higher Education Achievement Report (HEAR).pdf"), "transcript")
+        self.assertEqual(kind("Major Project and Dissertation/Lecture 05 Research Methods.md"), "notes")
+        self.assertEqual(kind("Major Project and Dissertation/Marcus Joiner.md", "Met Marcus about the brief."),
+                         "notes")
+
+    def test_a_project_copied_without_its_version_control_is_still_one_unit(self):
+        self.assertTrue(discover.is_repo(["README.md", "LICENSE", "docs", "media"]))
+        self.assertTrue(discover.is_repo(["README.md", "main.lua", "util.lua"]))
+        self.assertFalse(discover.is_repo(["README.md", "week 1.md", "week 2.md"]))
 
     def test_a_plain_text_cv_with_a_dull_name_ranks_as_a_cv_by_its_first_words(self):
         with tempfile.TemporaryDirectory() as tmp:
