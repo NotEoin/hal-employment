@@ -495,6 +495,17 @@ runner starts the action again with the same batch and only pending items are re
    summarised from its README, docs headings, manifest, language mix and file tree, never file by file. A
    folder whose own files are mostly notes or slides (three or more) is a `course` unit: light notes per
    file and one summary note linking them.
+   Copies of one project (`versions.py`, run by `engine.run` before reading) are one project when they
+   share a git remote from `.git/config` (https, ssh and `.git` forms alike), or, when either has none,
+   when their names match once copy marks such as "(2)", "-v3", "-final" or "Copy of" are removed (one
+   name's words may hold the other's) and at least half the smaller copy's files, and two or more, share
+   their paths, README and licence files not counted. The newest is the latest commit in
+   `.git/logs/HEAD`, else the newest file, then more files; its time is kept in the item's `mtime`. Only
+   the newest is read. Each other copy becomes `older_version` with `dup_of` the newest and no note, and
+   `versions.record_earlier` lists them under "Earlier versions" in the newest copy's note. A newer copy
+   of a project already noted (compared by its folder, or by the file tree in its note when a zip's copy
+   is gone) is read over that note at the same path, so links still lead to it, and the copy read before
+   becomes `older_version`. The same folder read again unchanged is a `duplicate`.
 4. **Rank** (`rank.py`). CV, transcript, letters and statements, certificates, references, job papers,
    then reports and coursework, projects, writing, notes, slides, email, pictures and the rest, by words in
    the name, then the folders, then the start of a plain text file.
@@ -516,7 +527,7 @@ runner starts the action again with the same batch and only pending items are re
    and `items.summary` names the first few. Facts go to
    `jobhunt.profile.store.add_found(con, kind, fields, evidence)` with evidence
    `{source_rel, quote, field, doc_type, verified, role}`; the ingest keeps no profile of its own. Reading a
-   note again first takes its old facts out (`store.forget_source`). A fact
+   note again replaces its old facts (`store.replace_source`). A fact
    the store refuses (`ValueError`) is left out and logged, not the whole document. When the profile holds
    anything, the run ends by writing the Profile notes and publishing one `profile` event.
 7. **Write and link** (`notes.py`). `Sources/<Category>/<Title>.md` with YAML-list frontmatter
@@ -536,8 +547,8 @@ writer. A file whose SHA-256 matches one already with a worker waits for it and 
 `POST /api/v2/record/ingest/again` (or `jobhunt ingest --again`) queues a `record.ingest` with `again`:
 `engine.mark_again` moves the newest row of each document note written by rules (`model = 0`, not code or
 pictures, file still there) into the new batch as pending. A pending row that already has a note is read by
-the AI and its note rewritten at the same path (`notes.write_source(at=)`), carrying over the "Part of" and
-"Also at" sections, so links still lead to it; when the AI does not answer, the note is left as it was and
+the AI and its note rewritten at the same path (`notes.write_source(at=)`), carrying over the "Part of",
+"Also at" and "Earlier versions" sections, so links still lead to it; when the AI does not answer, the note is left as it was and
 the row stays `model = 0` for next time. `items.by_rules` counts those notes for the page's button.
 
 `GET /api/v2/record/ingest` returns the latest ingest: `state`, `done`, `total`, `eta_s` (this run's pace
@@ -567,7 +578,10 @@ available yet.
   sources after these rules change, leaving what the person confirmed, edited, hid or added.
 - A found item (state `hal`) takes each field from its best-ranked source: transcript, then certificate,
   CV, letter and notes. Confirmed and edited items keep the person's values, and no later ingest changes
-  them; a hidden item stays hidden when its file is read again. Only items added by hand can be deleted.
+  them; a hidden item stays hidden when its file is read again. A note rewritten in place
+  (`store.replace_source`) has its evidence replaced: each item it spoke for is worked out again, an
+  unchecked found item nothing speaks for any more is deleted, and a confirmed item whose facts from that
+  note changed goes back to `hal`, so the review shows it again; an edited item keeps its values. Only items added by hand can be deleted.
 - `conflicts.py` lists what does not add up: two sources giving one field different values (each value
   with its files), an end before a start, two jobs not marked part-time that share more than a month, and
   a gap of more than `GAP_MONTHS` (6) months. Each conflict has a fingerprint, so finding it again keeps

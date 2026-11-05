@@ -22,7 +22,7 @@ const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden
 const STAGE_WORDS = { discovered: "Found", converted: "Turned into text", understood: "Read by Hal",
   written: "Saved to your record" };
 const STATE_WORDS = { done: "read", duplicate: "copies of files already read", no_text: "with no text to read",
-  skipped: "skipped", not_mine: "someone else's", error: "could not be read", pending: "still to read" };
+  skipped: "skipped", older_version: "older copies of a project", not_mine: "someone else's", error: "could not be read", pending: "still to read" };
 const LEFT_OUT_WORDS = { "junk folder": "hidden folders and folders of program files", link: "shortcuts",
   "program or data file": "programs and data files", "settings or tool file": "settings files and bundled code",
   unreadable: "files Hal could not open" };

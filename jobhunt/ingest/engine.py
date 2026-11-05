@@ -10,6 +10,8 @@ nothing; the others give only the facts their role may.
 
 Duplicates are found by SHA-256 against every item read before, in this batch or an earlier one: the copy
 gets no note of its own, and its path is added once to the first copy's note under "Also at".
+Copies of one code project are found by `versions.settle` before reading: only the newest is read, and a
+newer copy than one read before rewrites that project's note in place.
 
 Up to `ai.parallel` items are with worker threads at once, which only convert and ask the AI; this thread
 alone writes, in the items' order, so SQLite and the record each have one writer. A read `again` puts notes
@@ -31,14 +33,14 @@ from pathlib import Path
 
 from jobhunt import profile, record
 from jobhunt.core import events
-from jobhunt.ingest import convert, discover, group, items, notes, rank, roles, sources, understand
+from jobhunt.ingest import convert, discover, group, items, notes, rank, roles, sources, understand, versions
 
 log = logging.getLogger(__name__)
 
 STEPS = 3                    # finding, reading, linking
 ERROR_CHARS = 300
 ALSO_AT = "## Also at"
-KEPT_SECTIONS = ("## Part of", ALSO_AT)   # added to a note after it was written; kept when it is read again
+KEPT_SECTIONS = ("## Part of", ALSO_AT, versions.EARLIER)   # added after a note was written; kept on a re-read
 NEVER_BY_MODEL = ("code", "image", "media")
 AHEAD = 2                    # items handed to workers per worker, so none waits while this thread writes
 NO_WEB = "Reading web links is not available in this version of Hal yet."
@@ -284,33 +286,36 @@ def _kept(note_text: str) -> str:
     return "".join(out)
 
 
-def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Path) -> str | None:
-    """Writes the AI's reading of a note first written by rules over that note, at the same path."""
+def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Path, batch: str) -> str | None:
+    """Writes a new reading over a note at the same path: the AI's reading of a note first written by
+    rules, or a newer copy of a project (`versions.settle`), whose note then names the newer copy."""
+    from jobhunt.profile import store
+
     path = vault_dir / row["note"]
-    if read.desc is None or read.desc.get("by") != "model" or not path.is_file():
+    newer = row["kind"] == "repo"   # `mark_again` never moves a repository, so a repo here is a newer copy
+    if read.desc is None or (read.desc.get("by") != "model" and not newer) or not path.is_file():
         # the AI did not answer, or the note is gone: the note stays as it was, to be read again next time
         items.update(con, row["id"], state="done")
         return None
-    from jobhunt.profile import store
-
     desc = {**read.desc, "category": row["category"] or read.desc["category"]}   # the note stays in its folder
     _judge(con, row, desc, read.text)
-    store.forget_source(con, row["note"])
     if desc["role"] == roles.OTHERS:
+        store.replace_source(con, row["note"], lambda: None)
         path.unlink()
         items.update(con, row["id"], stage="understood", state="not_mine", model=1, role=desc["role"], note=None)
         return None
     old = path.read_text(encoding="utf-8", errors="replace")
     fm, _ = notes.frontmatter.parse(old)
-    notes.write_source(vault_dir, desc, text=read.text, source=str(fm.get("source") or row["path"]),
-                       sha256=row["sha256"] or "", original=None, at=path)
+    source = _source(row, batch) if newer else str(fm.get("source") or row["path"])
+    notes.write_source(vault_dir, desc, text=read.text, source=source, sha256=row["sha256"] or "", original=None,
+                       at=path)
     if kept := _kept(old):
         text = path.read_text(encoding="utf-8")
         notes.write(path, text.replace("\n## Original\n", f"\n{kept}## Original\n", 1))
     notes.add_mentions(vault_dir, desc, row["note"])
-    _give_facts(con, desc, row["note"])
-    items.update(con, row["id"], stage="written", state="done", model=1, doc_type=desc["doc_type"],
-                 role=desc["role"])
+    store.replace_source(con, row["note"], lambda: _give_facts(con, desc, row["note"]))
+    items.update(con, row["id"], stage="written", state="done", model=int(desc.get("by") == "model"),
+                 doc_type=desc["doc_type"], role=desc["role"])
     return row["note"]
 
 
@@ -318,7 +323,7 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
     """Writes one prepared item's note, entities and facts; returns the note's path inside the record."""
     vault_dir = vault()
     if row["note"]:
-        return _again(con, row, read, vault_dir)
+        return _again(con, row, read, vault_dir, batch)
     items.update(con, row["id"], stage="converted")
     if read.desc is None:
         items.update(con, row["id"], state="no_text")
@@ -496,9 +501,11 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
         mark_again(con, batch)
     step("Reading each file, your CV and other rich documents first")
     drop_root = sources.drop_folder().resolve() if drop else None
+    versions.settle(con, batch, vault())
     todo = [r for r in items.pending(con, batch) if r["kind"] != "course"]
     total = sum(items.counts(con, batch)["states"].values())
     written = _read_items(con, todo, batch, drop_root, progress, total - len(todo), total)
+    versions.record_earlier(con, batch, vault())
     step("Linking your notes")
     written += _courses(con, batch)
     vault_dir = vault()

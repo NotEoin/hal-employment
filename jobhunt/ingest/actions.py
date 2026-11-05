@@ -49,7 +49,9 @@ def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = 
     states = out["states"]
     if out["notes"]:
         ctx.changed(f"Wrote {out['notes']} notes in your record.")
-    for state, words in (("duplicate", "copies of files already read"), ("not_downloaded", "not downloaded yet"),
+    for state, words in (("duplicate", "copies of files already read"),
+                         ("older_version", "older copies of a project, named in its newest copy's note"),
+                         ("not_downloaded", "not downloaded yet"),
                          ("no_text", "with no text Hal could read"), ("error", "could not be read")):
         if states.get(state):
             ctx.changed(f"{states[state]} {words}.")

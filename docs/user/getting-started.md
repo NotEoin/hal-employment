@@ -201,6 +201,11 @@ Some files are listed rather than read:
 - **No text**: a file with no words Hal can read, such as a scan read while **Read photos and scans of
   certificates** is off or tesseract is not installed. Hal never guesses what such a file says.
 - **Copies** of a file Hal has already read are named in the first copy's note, not read again.
+- **Older copies of a project**: when you keep a code project several times ("Robot (2)", "robot-v3-final",
+  a copy in a zip), Hal keeps the newest copy of each project. It reads only that one, and its note lists
+  the others under **Earlier versions**. If you add a newer copy later, Hal reads it and updates the same
+  note. A fact you checked that the newer copy changes goes back to **Found by Hal**, so you can look again;
+  a fact you edited keeps your words.
 
 Each fact Hal takes from a document comes with the document's own words. When those words are not in the
 document, the fact is marked **Check this**. If Hal closes part way through, it carries on from the next

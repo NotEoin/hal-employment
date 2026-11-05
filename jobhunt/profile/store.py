@@ -11,6 +11,9 @@ Design decisions, each with its reason:
   are worked out again from its sources when a new one arrives; a confirmed or edited item keeps the
   person's values, so a later ingest never overwrites what they checked or typed. New sources still attach
   to it, so "From:" stays complete.
+- A note rewritten in place from a newer copy (`replace_source`) replaces that note's evidence. A confirmed
+  item whose facts from it changed goes back to `hal` to be checked again: the person checked what the old
+  copy said, not the new one. An edited item still keeps their values.
 - A hidden item still matches new facts, so reading the same CV again never brings back what the person hid.
 - Fields are checked against the kind's list (`KINDS`): an unknown kind or field raises `ValueError` naming
   it, so an ingest that misreads a document fails loudly instead of storing a field nothing shows.
@@ -24,6 +27,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections.abc import Callable
 
 from jobhunt import db
 from jobhunt.profile import conflicts, merge
@@ -246,6 +250,46 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, 
     return item_id
 
 
+def _said_by(con: sqlite3.Connection, source_rel: str) -> dict[int, list[str]]:
+    """What one file said about each item, as sorted JSON texts, so before and after can be compared."""
+    out: dict[int, list[str]] = {}
+    for e in con.execute("SELECT item_id, said FROM profile_evidence WHERE source_rel = ? ORDER BY id",
+                         (source_rel,)):
+        out.setdefault(e["item_id"], []).append(json.dumps(json.loads(e["said"]), sort_keys=True))
+    return {i: sorted(s) for i, s in out.items()}
+
+
+def replace_source(con: sqlite3.Connection, source_rel: str, add: Callable[[], object]) -> list[int]:
+    """Replaces what one rewritten file said: its evidence is deleted, `add()` adds its facts again.
+
+    For a note rewritten in place, such as a project's note from a newer copy. Each item that file spoke
+    for is worked out again from its sources; an unchecked found item no source speaks for any more is
+    deleted. An item the person confirmed whose fields from this file changed goes back to `hal`, so they check it
+    again; an edited or hidden item keeps its state and values. Returns the ids sent back to be checked.
+    """
+    before = _said_by(con, source_rel)
+    with con:
+        con.execute("DELETE FROM profile_evidence WHERE source_rel = ?", (source_rel,))
+    add()
+    after = _said_by(con, source_rel)
+    again = []
+    with con:
+        for item_id in sorted(set(before) | set(after)):
+            row = con.execute("SELECT state, origin FROM profile_items WHERE id = ?", (item_id,)).fetchone()
+            if row is None:
+                continue
+            if row["state"] == "confirmed" and before.get(item_id) != after.get(item_id):
+                _set_state(con, item_id, "hal")
+                again.append(item_id)
+            if row["state"] == "hal" and row["origin"] == "found" and not con.execute(
+                    "SELECT 1 FROM profile_evidence WHERE item_id = ? LIMIT 1", (item_id,)).fetchone():
+                con.execute("DELETE FROM profile_items WHERE id = ?", (item_id,))
+                continue
+            refold(con, item_id)
+        conflicts.refresh(con)
+    return again
+
+
 def rebuild_found(con: sqlite3.Connection) -> int:
     """Merges every item Hal found and nobody checked again from its sources; returns how many there are now.
 
@@ -269,28 +313,6 @@ def rebuild_found(con: sqlite3.Connection) -> int:
     with con:
         conflicts.refresh(con)
     return con.execute("SELECT COUNT(*) FROM profile_items").fetchone()[0]
-
-
-def forget_source(con: sqlite3.Connection, source_rel: str) -> int:
-    """Takes every fact a file gave out of the profile, before the file is read again or left out; returns how
-    many items lost one.
-
-    A found item left with no source is removed; one the person checked, edited, hid or added keeps its
-    values, as the person's word does not depend on a file. Reading a note again added its new facts beside
-    the old ones, so a document since judged someone else's still gave the person its projects (2026-11-05).
-    """
-    with con:
-        ids = [r[0] for r in con.execute("SELECT DISTINCT item_id FROM profile_evidence WHERE source_rel = ?",
-                                         (source_rel,))]
-        con.execute("DELETE FROM profile_evidence WHERE source_rel = ?", (source_rel,))
-        for item_id in ids:
-            if con.execute("SELECT 1 FROM profile_evidence WHERE item_id = ? LIMIT 1", (item_id,)).fetchone():
-                refold(con, item_id)
-            else:
-                con.execute("DELETE FROM profile_items WHERE id = ? AND state = 'hal' AND origin = 'found'",
-                            (item_id,))
-        conflicts.refresh(con)
-    return len(ids)
 
 
 def _row(con: sqlite3.Connection, item_id) -> sqlite3.Row:

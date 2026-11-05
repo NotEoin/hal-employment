@@ -24,12 +24,17 @@ What changed in each version, in plain words.
   else's. Course material only shows what you studied, your contact details come only from your CVs and
   letters, and someone else's documents (a friend's CV, a downloaded paper) are left out of your record.
   Add usernames or a student number under **Other names you go by** so Hal knows a file is yours.
+- **The newest copy of each project.** When a folder holds several copies of one code project ("Robot",
+  "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
+  and lists the others under **Earlier versions** in its note. A newer copy added later updates the same
+  note, and a fact you checked that it changes goes back to unchecked for you to look at again.
 - **Your profile.** Hal keeps the facts it finds in your record as a profile: jobs, education with its
   modules and marks, skills with the words that show them, projects, certificates, achievements and links.
   Each fact names the files it came from. The same job in two CVs is one entry, written the same way in
   both or not ("Sept 2023 - present", "09/2023"), and "MS Excel" and "Excel" are one skill.
 - **Your corrections stay.** Confirm, edit or hide each fact in your profile. When Hal reads your files
-  again it never changes a fact you checked or edited, and a hidden fact stays hidden.
+  again it never changes a fact you checked or edited, and a hidden fact stays hidden. The one exception is
+  a newer copy of a project that says something else: then a fact you checked goes back to unchecked.
 - **What does not add up.** Hal lists two files that give different dates for one job, a grade on your
   transcript that is not the one on your CV (Hal uses the transcript's until you choose), an end date
   before a start date, two full-time jobs at once, and gaps of more than six months.

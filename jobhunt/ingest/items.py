@@ -3,7 +3,8 @@
 A row is written when the file is found and updated as each stage ends, and the action commits after each
 item, so a restart loses at most the item in hand. `summary` is the shape `GET /api/v2/record/ingest`
 returns. Paths are stored, never document text: the text lives in the note the item produced. A zip member
-refused while unpacking is an item too (state error), so the page lists it with the other failures.
+refused while unpacking is an item too (state error), so the page lists it with the other failures. An
+older copy of a code project is `older_version`, its `dup_of` the newest copy (`versions.py`).
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ import sqlite3
 
 from jobhunt.core import clock
 
-FINAL = ("done", "duplicate", "not_downloaded", "no_text", "skipped", "not_mine", "error")
+FINAL = ("done", "duplicate", "older_version", "not_downloaded", "no_text", "skipped", "not_mine", "error")
 FIRST_PATHS = 10            # not-downloaded files named on the page; the rest are counted
 RECENT_ERRORS = 10
 STAGES = ("discovered", "converted", "understood", "written")
