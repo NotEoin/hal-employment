@@ -166,7 +166,8 @@ downloaded as a zip, a folder of certificates.
   for your record** in Settings, CV and documents.
 - **A folder on the computer Hal runs on** can be read where it is, so nothing needs copying first: type or
   paste where it is under **Folders on this computer** and press **Read these folders**. This works only on
-  that computer; a window opened from another one does not show the box.
+  that computer; a window opened from another one does not show the box. From a terminal on that computer,
+  `python -m jobhunt ingest FOLDER...` does the same and prints how far it has got; the bar shows it too.
 - **Web links**: paste your own site or blog, your GitHub page, or a Google Doc shared with anyone under
   **Web links**, one a line, and press **Read these links**.
 

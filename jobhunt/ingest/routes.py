@@ -3,7 +3,8 @@
 Reading a folder by its path acts on the computer Hal runs on, so `POST /api/v2/record/ingest` is
 `local_only`; from another computer, files arrive as uploads (`POST /api/v2/record/files`, zips included).
 A folder inside the record, or Hal's own data folder, is refused: reading the record into itself would write
-a note of every note.
+a note of every note. The local API key opens these routes too, so `python -m jobhunt ingest FOLDER`
+can start a long ingest in the running Hal, where its progress shows on Your record.
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ FOLDERS_MAX = 20           # paths in one request; a longer list is a mistake, n
 LINKS_MAX = 20             # links in one request, each read up to `record.web_pages` pages
 
 
-@route("GET", "/api/v2/record/ingest")
+@route("GET", "/api/v2/record/ingest", auth="session_or_local")
 def latest(req) -> dict:
     """The latest ingest: state, done, total, eta_s, counts by stage and category, the item in hand and errors."""
     return items.summary(req.con)
@@ -29,7 +30,7 @@ def _inside(path: Path, folder: Path) -> bool:
     return path == folder or folder in path.parents
 
 
-@route("POST", "/api/v2/record/ingest", local_only=True)
+@route("POST", "/api/v2/record/ingest", auth="session_or_local", local_only=True)
 def start(req) -> dict:
     """Starts reading the folders (or files and zips) at the given paths into the record."""
     given = (req.body or {}).get("folders")
@@ -54,7 +55,7 @@ def start(req) -> dict:
     return {"action_id": action_id}
 
 
-@route("POST", "/api/v2/record/links")
+@route("POST", "/api/v2/record/links", auth="session_or_local")
 def links(req) -> dict:
     """Starts reading web links (a site, a GitHub profile or repository, a public Google Doc) into the record."""
     given = (req.body or {}).get("urls")

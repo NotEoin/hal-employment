@@ -1,0 +1,8 @@
+$ jobhunt ingest --help
+usage: jobhunt ingest [-h] folders [folders ...]
+
+positional arguments:
+  folders
+
+options:
+  -h, --help  show this help message and exit

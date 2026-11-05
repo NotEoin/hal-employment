@@ -65,7 +65,7 @@ from .cli.find import (  # noqa: E402 - after the venv trampoline
     cmd_stats,
 )
 from .cli.mail import cmd_digest, cmd_inbox, cmd_mail, cmd_todo  # noqa: E402 - after the venv trampoline
-from .cli.record import cmd_record  # noqa: E402 - after the venv trampoline
+from .cli.record import cmd_ingest, cmd_record  # noqa: E402 - after the venv trampoline
 from .cli.system import cmd_serve, cmd_vault  # noqa: E402 - after the venv trampoline
 from .core import tls  # noqa: E402 - after the venv trampoline
 
@@ -87,6 +87,9 @@ def main():
     s = sub.add_parser("record", help="read, search or ask the employment record vault")
     s.add_argument("op", nargs="?", default="status", choices=["status", "sync", "search", "ask"])
     s.add_argument("text", nargs="*"); s.set_defaults(fn=cmd_record)
+    s = sub.add_parser("ingest", help="read whole folders into the record in the running Hal")
+    s.add_argument("folders", nargs="+")
+    s.set_defaults(fn=cmd_ingest)
     sub.add_parser("queue").set_defaults(fn=cmd_queue)
     s = sub.add_parser("contacts"); s.add_argument("id"); s.set_defaults(fn=cmd_contacts)
     s = sub.add_parser("todo"); s.add_argument("op", nargs="?", choices=["add", "done"])

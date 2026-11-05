@@ -546,6 +546,19 @@ class Routes(unittest.TestCase):
         self.assertEqual(shown["stages"]["written"], 1)
         self.assertTrue(list((self.folder / "Sources").rglob("*.md")))
 
+    def test_the_local_key_starts_an_ingest_and_follows_it_without_a_window(self):
+        # `python -m jobhunt ingest` runs a long ingest in the running Hal, where its progress shows
+        from jobhunt.web import auth
+
+        put(self.files, "CV.md", CV_TEXT)
+        c = self.hal.client()
+        key = {"Authorization": f"Bearer {auth.local_api_key()}"}
+        self.assertEqual(c.get("/api/v2/record/ingest").status, 401)
+        started = c.post("/api/v2/record/ingest", {"folders": [str(self.files)]}, headers=key)
+        self.assertEqual(started.status, 200, started.text)
+        self.assertEqual(finished(started.json()["action_id"])["state"], "done")
+        self.assertEqual(c.get("/api/v2/record/ingest", headers=key).json()["state"], "done")
+
     def test_pasted_links_start_an_ingest_and_an_empty_paste_is_refused(self):
         c = self.hal.signed_in()
         self.assertEqual(c.post("/api/v2/record/links", {"urls": []}).status, 400)
