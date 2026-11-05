@@ -18,7 +18,8 @@ Rules:
 - Plain words and short sentences. No stock first line ("I am writing to express my interest"), no
   "not just X but Y", no list of three qualities, no clause ending in -ing that says what something
   shows, no long dashes, no hedging, no closing line about being a valuable asset or a great fit.
-- Start no more than half the sentences with "I".
+- Write in the first person, as {name} writing to the employer; start no more than half the sentences with
+  "I", without writing round it ("The dissertation demonstrated ..." reads as if someone else wrote it).
 - Follow the conventions for this kind of job when the request gives them.
 Never use these words or phrases: {avoid_phrases}. No greeting line or sign-off; those are added
 separately.
