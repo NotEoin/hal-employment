@@ -1,4 +1,4 @@
-"""The bulk ingest's API: how the latest ingest stands, and starting one from folders on this computer.
+"""The bulk ingest's API: how the latest ingest stands, and starting one from folders or web links.
 
 Reading a folder by its path acts on the computer Hal runs on, so `POST /api/v2/record/ingest` is
 `local_only`; from another computer, files arrive as uploads (`POST /api/v2/record/files`, zips included).
@@ -15,6 +15,7 @@ from jobhunt.ingest import actions, items
 from jobhunt.web.router import BadRequest, route
 
 FOLDERS_MAX = 20           # paths in one request; a longer list is a mistake, not a person's choice
+LINKS_MAX = 20             # links in one request, each read up to `record.web_pages` pages
 
 
 @route("GET", "/api/v2/record/ingest")
@@ -48,6 +49,25 @@ def start(req) -> dict:
     try:
         action_id = actions.queue(folders=chosen, session_id=getattr(req.session, "id", None), remote=req.remote,
                                   why="You chose folders to read into your record")
+    except RuntimeError as e:
+        raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
+    return {"action_id": action_id}
+
+
+@route("POST", "/api/v2/record/links")
+def links(req) -> dict:
+    """Starts reading web links (a site, a GitHub profile or repository, a public Google Doc) into the record."""
+    given = (req.body or {}).get("urls")
+    if isinstance(given, str):
+        given = given.split()
+    urls = [u.strip() for u in given or [] if isinstance(u, str) and u.strip()] if isinstance(given, list) else []
+    if not urls:
+        raise BadRequest("Paste one or more links to read.", field="urls")
+    if len(urls) > LINKS_MAX:
+        raise BadRequest(f"Paste at most {LINKS_MAX} links at a time.", field="urls")
+    try:
+        action_id = actions.queue(urls=urls, session_id=getattr(req.session, "id", None), remote=req.remote,
+                                  why="You gave links to read into your record")
     except RuntimeError as e:
         raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
     return {"action_id": action_id}

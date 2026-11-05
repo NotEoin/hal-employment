@@ -473,7 +473,8 @@ the drop folder and web links into the record folder as Obsidian notes. Each ite
 `ingest_items` (migration 0019) with the stage it reached, committed as it ends, so after a restart the
 runner starts the action again with the same batch and only pending items are read.
 
-1. **Sources** (`sources.py`). A folder on this computer (`POST /api/v2/record/ingest`, `local_only`), a zip
+1. **Sources** (`sources.py`). Pasted links (`POST /api/v2/record/links`, at most 20, read by
+   `ingest/web.py`), a folder on this computer (`POST /api/v2/record/ingest`, `local_only`), a zip
    uploaded through `POST /api/v2/record/files` (saved under `<data>/ingest/uploads/`; that route alone takes
    bodies up to `UPLOAD_MAX_BODY`, 256 MB), and the drop folder (`record.drop_folder`, default
    `<record>/+Inbox`), which the scheduled `record.sync` checks (`actions.queue_drop`). Zips unpack under
@@ -501,7 +502,9 @@ runner starts the action again with the same batch and only pending items are re
    "Check this" and the note `hal: needs-review`. A document that is someone else's gives no facts. Light
    documents, and every document while the AI is unavailable, get tags from the path, headings, frequent
    words and years. Facts go to `jobhunt.profile.store.add_found(con, kind, fields, evidence)` with
-   evidence `{source_rel, quote, field, doc_type, verified}`; the ingest keeps no profile of its own.
+   evidence `{source_rel, quote, field, doc_type, verified}`; the ingest keeps no profile of its own. A fact
+   the store refuses (`ValueError`) is left out and logged, not the whole document. When the profile holds
+   anything, the run ends by writing the Profile notes and publishing one `profile` event.
 7. **Write and link** (`notes.py`). `Sources/<Category>/<Title>.md` with YAML-list frontmatter
    (`frontmatter.py`, which the record's reader also uses), entity notes in `Organisations/`, `Places/`,
    `People/`, `Projects/`, `Courses/` and `Skills/` (`type: entity`, skipped by search), an `Index.md` per
@@ -519,7 +522,8 @@ available yet.
 - The profile is the facts about the person that Hal finds in their record: jobs, education (with modules
   and marks), skills, projects, achievements, certificates, basics (name, email, phone, location) and links.
   Migration 0020 keeps them in `profile_items` (fields as JSON, a state and an origin), `profile_evidence`
-  (the file inside the record, the quote, the field, the document type and what that file said) and
+  (the file inside the record, the quote, the field, the document type, what that file said and whether
+  the quote was found in it) and
   `profile_conflicts`.
 - The ingest calls `store.add_found(con, kind, fields, evidence)` for each fact. `merge.py` decides, in code,
   when it is an item already there: employers and institutions compared without case, "the", Ltd or word

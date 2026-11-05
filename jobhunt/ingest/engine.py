@@ -17,13 +17,13 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from jobhunt import record
+from jobhunt import profile, record
+from jobhunt.core import events
 from jobhunt.ingest import convert, discover, group, items, notes, rank, sources, understand
 
 log = logging.getLogger(__name__)
 
 STEPS = 3                    # finding, reading, linking
-WEB_PAGE_CAP = 30           # pages read from one link's site, as the design of the web reader sets it
 ERROR_CHARS = 300
 ALSO_AT = "## Also at"
 NO_WEB = "Reading web links is not available in this version of Hal yet."
@@ -108,7 +108,7 @@ class _Finder:
         except ImportError:
             return [NO_WEB]
         try:
-            found = web.fetch(urls, page_cap=WEB_PAGE_CAP)
+            found = web.fetch(urls)
         except (OSError, ValueError) as e:
             return [f"The web links could not be read: {e}"]
         folder = sources.ingest_dir() / "pages" / self.batch
@@ -329,6 +329,10 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     notes.link_pass(vault_dir, written)
     notes.write_indexes(vault_dir)
     con.commit()
+    if con.execute("SELECT 1 FROM profile_items LIMIT 1").fetchone():
+        profile.write_notes(vault_dir, con)
+    # the store publishes nothing per fact, so a large ingest does not flood the event stream
+    events.publish("profile", batch=batch)
     if not items.pending(con, batch):
         sources.remove(sources.unpacked_dir(batch))
         sources.remove(sources.ingest_dir() / "pages" / batch)

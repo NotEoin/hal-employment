@@ -256,6 +256,35 @@ class Understanding(unittest.TestCase):
         self.assertTrue(found[0][1]["source_rel"].startswith("Sources/CVs and letters/"))
         self.assertEqual(found[0][1]["quote"], "Gallery assistant, Brindle Arts Centre")
 
+    def test_the_profile_keeps_which_quotes_were_found_in_the_file(self):
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}):
+            settings.set("you.name", OWNER)
+            put(files, "CV.md", CV_TEXT)
+            run(con, [files])
+            kept = con.execute("SELECT i.kind, e.verified FROM profile_evidence e JOIN profile_items i "
+                               "ON i.id = e.item_id ORDER BY e.id").fetchall()
+        self.assertEqual([(r["kind"], r["verified"]) for r in kept], [("job", 1), ("achievement", 0)])
+
+    def test_a_fact_the_profile_refuses_leaves_the_rest_of_the_document(self):
+        # the profile store raises ValueError for a fact it cannot name; it stopped the whole document
+        from jobhunt.profile import store
+
+        real, kinds = store.add_found, []
+
+        def picky(con, kind, fields, evidence):
+            if kind == "achievement":
+                raise ValueError("An achievement needs a title.")
+            kinds.append(kind)
+            return real(con, kind, fields, evidence)
+
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}), \
+                mock.patch.object(store, "add_found", picky):
+            settings.set("you.name", OWNER)
+            put(files, "CV.md", CV_TEXT)
+            run(con, [files])
+            self.assertEqual(rows(con)["Files/CV.md"]["state"], "done")
+        self.assertEqual(kinds, ["job"])
+
     def test_someone_elses_document_gives_no_owner_facts(self):
         other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
         found = []
@@ -400,6 +429,14 @@ class Routes(unittest.TestCase):
         self.assertEqual(shown["not_downloaded_paths"], ["Old laptop/OneDrive/Reference.pdf"])
         self.assertEqual(shown["stages"]["written"], 1)
         self.assertTrue(list((self.folder / "Sources").rglob("*.md")))
+
+    def test_pasted_links_start_an_ingest_and_an_empty_paste_is_refused(self):
+        c = self.hal.signed_in()
+        self.assertEqual(c.post("/api/v2/record/links", {"urls": []}).status, 400)
+        with mock.patch.object(ingest_actions, "queue", return_value="a1") as queue:
+            started = c.post("/api/v2/record/links", {"urls": "https://example.org/me  https://example.org/blog"})
+        self.assertEqual(started.json(), {"action_id": "a1"})
+        self.assertEqual(queue.call_args.kwargs["urls"], ["https://example.org/me", "https://example.org/blog"])
 
     def test_reading_a_folder_by_path_is_refused_from_another_computer_and_inside_the_record(self):
         put(self.files, "CV.md", CV_TEXT)
