@@ -1,11 +1,11 @@
 """What a document is and what it says about the person: by the model for rich documents, by rules for light.
 
 - Rich documents get one `ingest_doc` prompt (role checker). The reply is cleaned in code: categories and
-  doc types from fixed lists, tags lowercase-hyphenated and topped up to `TAGS_MIN` from the text, and
-  `about_owner` checked against the person's name, because a model asked "is this theirs?" says yes too often.
+  doc types from fixed lists, tags lowercase-hyphenated and topped up to `TAGS_MIN` from the text. The AI's
+  answer on whose the document is stays in `said`: the engine judges the role against the person's names
+  and keeps only the facts that role may give (`roles`), as it alone holds the database those names need.
 - Every fact carries a verbatim quote, checked here against the document's own text after evening out
   spaces, case and typographic quotes. A fact whose quote is not found is kept, marked "Check this".
-- Someone else's document (about_owner false) gives no facts about the person, whatever the model listed.
 - Light documents (notes, slides, files of a course, email, pictures) and any document read while the AI is
   unavailable get tags from their path, headings, frequent words and years, with no model at all.
 """
@@ -82,27 +82,6 @@ def quote_found(quote: str, text: str) -> bool:
     return words.strip() != "" and words in _words(text)
 
 
-def owner_names(owner: str) -> list[str]:
-    """The parts of the person's name worth looking for: each word of two letters or more."""
-    return [w for w in re.findall(r"[^\W\d_]{2,}", owner or "")]
-
-
-def judge_owner(said, owner: str, text: str) -> str:
-    """"true", "false" or "unsure": the model's answer, held to "unsure" when the text never names the person.
-
-    A false is kept as it is: a document the model says is someone else's gives no facts either way.
-    """
-    said = str(said).strip().lower()
-    said = {"yes": "true", "no": "false"}.get(said, said)
-    if said not in ("true", "false"):
-        return "unsure"
-    if said == "true" and owner_names(owner):
-        folded = _fold(text)
-        if not any(re.search(rf"\b{re.escape(w.lower())}\b", folded) for w in owner_names(owner)):
-            return "unsure"
-    return said
-
-
 def light_tags(rel: str, text: str, rule: rank.Rule) -> list[str]:
     """Tags without a model: the kind, the folders, headings, frequent words and years of a document."""
     out = [tag(rule.doc_type), tag(rule.category)]
@@ -143,11 +122,12 @@ def _note_answered() -> None:
 
 
 def light(rel: str, text: str, rule: rank.Rule) -> dict:
-    """A document's description without a model: no facts, `about_owner` unsure."""
+    """A document's description without a model: no facts, and no answer on whose it is (`said` None)."""
     first = next((p.strip() for p in re.split(r"\n\s*\n", text) if p.strip() and not p.startswith("#")), "")
     return {"doc_type": rule.doc_type, "category": rule.category, "title": _title(rel, text),
             "period": _period(text), "summary": first[:SUMMARY_CHARS], "tags": light_tags(rel, text, rule),
-            "entities": {k: [] for k in ENTITY_KINDS}, "about_owner": "unsure", "facts": [], "by": "rules"}
+            "entities": {k: [] for k in ENTITY_KINDS}, "said": None, "role": "unsure", "about_owner": "unsure",
+            "sensitive": "", "facts": [], "by": "rules"}
 
 
 def _strings(value) -> list[str]:
@@ -163,7 +143,7 @@ def _strings(value) -> list[str]:
     return out
 
 
-def clean(reply: dict, rel: str, text: str, rule: rank.Rule, owner: str) -> dict:
+def clean(reply: dict, rel: str, text: str, rule: rank.Rule) -> dict:
     """The model's reply held to the shapes the vault and profile take, with each quote checked."""
     base = light(rel, text, rule)
     if not isinstance(reply, dict) or not reply:
@@ -177,7 +157,8 @@ def clean(reply: dict, rel: str, text: str, rule: rank.Rule, owner: str) -> dict
            "period": " ".join(str(reply.get("period") or "").split()) or base["period"],
            "summary": " ".join(str(reply.get("summary") or "").split())[:SUMMARY_CHARS] or base["summary"],
            "entities": {k: _strings(entities.get(k)) for k in ENTITY_KINDS},
-           "about_owner": judge_owner(reply.get("about_owner"), owner, text), "by": "model"}
+           "said": reply.get("role", reply.get("about_owner", "")), "role": "unsure", "about_owner": "unsure",
+           "sensitive": " ".join(str(reply.get("sensitive") or "").split()), "by": "model"}
     # People are named in a note only when the document names them; a role the model made up stays a role.
     out["entities"]["people"] = [p for p in out["entities"]["people"] if quote_found(p, text) or " " not in p]
     # An organisation or place gets a note and a tag only when the document or its path names it: a module
@@ -191,7 +172,7 @@ def clean(reply: dict, rel: str, text: str, rule: rank.Rule, owner: str) -> dict
         tags = _tags(tags + [tag(e) for k in ("skills", "organisations", "places") for e in out["entities"][k]]
                      + base["tags"])
     out["tags"] = tags
-    out["facts"] = facts(reply.get("facts"), text) if out["about_owner"] != "false" else []
+    out["facts"] = facts(reply.get("facts"), text)
     return out
 
 
@@ -262,5 +243,5 @@ def ask(rel: str, text: str, rule: rank.Rule, *, role: str = "checker") -> dict:
             # said to hold a private answer. Raising would stop the whole ingest at this file on every carry-on.
             return {**light(rel, text, rule), "private": True}
         _note_answered()
-        return clean(reply, rel, text, rule, name)
+        return clean(reply, rel, text, rule)
     raise AssertionError("unreachable: the last try returns")

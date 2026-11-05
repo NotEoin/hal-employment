@@ -4,6 +4,10 @@ Documents go through `record.text_of`, so a file reads the same here as when it 
 Plain text, code and saved emails are read directly. Pictures are read by OCR only when they rank as a
 certificate or artwork (and `record.ocr` is on); any other picture is listed by name and date alone, since
 OCR of a holiday photo gives noise. An empty result is "no text": the caller never sends it to a model.
+
+A repository's text names who made its commits and where it is published (`_makers`), read from its `.git`
+folder's own files rather than by running git: a README rarely gives its author's name, and without it the
+person's own projects could not be told from a classmate's copy (`roles`, 2026-11-05).
 """
 from __future__ import annotations
 
@@ -27,6 +31,10 @@ DOC_HEADINGS = 40            # headings taken from a repository's docs folder
 TREE_LINES = 80              # lines of a repository's file tree
 TREE_DEPTH = 2
 LANGUAGES_SHOWN = 8
+MAKERS_SHOWN = 5             # a team project's committers; past this the list says nothing more
+# `.git/logs/HEAD` lines: "<old sha> <new sha> Name <email> <unix time> <zone>\t<message>"
+REFLOG_WHO = re.compile(r"^[0-9a-f]+ [0-9a-f]+ (.+?) <([^>]*)> \d+ [+-]\d{4}\t", re.M)
+REMOTE_URL = re.compile(r"^\s*url\s*=\s*(\S+)", re.M)
 CONVERTED = set(record.DOCUMENTS) | {".epub", ".xls", ".doc", ".ppt", ".rtf", ".odt", ".csv", ".json", ".xml"}
 PLAIN = rank.TEXT_SUFFIXES | rank.CODE_SUFFIXES | {".csv", ".tsv", ".yaml", ".yml", ".toml", ".tex", ".bib"}
 LANGUAGES = {".py": "Python", ".ipynb": "Jupyter notebooks", ".js": "JavaScript", ".jsx": "JavaScript",
@@ -130,6 +138,26 @@ def _manifest(folder: Path) -> list[str]:
     return [line for line in out if line.strip() and not line.endswith(": ")]
 
 
+def _makers(folder: Path) -> list[str]:
+    """Who made the repository's commits and where it is published, from its `.git` folder; [] for none."""
+    git = folder / ".git"
+    out = []
+    try:
+        log = (git / "logs" / "HEAD").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        log = ""
+    who = Counter(f"{name} <{mail}>" for name, mail in REFLOG_WHO.findall(log))
+    if who:
+        out.append("Commits by: " + ", ".join(w for w, _ in who.most_common(MAKERS_SHOWN)))
+    try:
+        remotes = REMOTE_URL.findall((git / "config").read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        remotes = []
+    if remotes:
+        out.append("Published at: " + ", ".join(dict.fromkeys(remotes)))
+    return out
+
+
 def repo_files(folder: Path) -> list[Path]:
     """The repository's files, without its junk folders and binaries."""
     out = []
@@ -154,6 +182,7 @@ def repo_text(folder: Path) -> str:
     """A repository as one text: its README, docs headings, manifest, language mix and file tree."""
     files = repo_files(folder)
     parts = [f"# {folder.name}", "Code repository."]
+    parts += _makers(folder)
     parts += _manifest(folder)
     langs = languages(files)
     if langs:

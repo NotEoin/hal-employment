@@ -22,7 +22,7 @@ const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden
 const STAGE_WORDS = { discovered: "Found", converted: "Turned into text", understood: "Read by Hal",
   written: "Saved to your record" };
 const STATE_WORDS = { done: "read", duplicate: "copies of files already read", no_text: "with no text to read",
-  skipped: "skipped", error: "could not be read", pending: "still to read" };
+  skipped: "skipped", not_mine: "someone else's", error: "could not be read", pending: "still to read" };
 const LEFT_OUT_WORDS = { "junk folder": "hidden folders and folders of program files", link: "shortcuts",
   "program or data file": "programs and data files", "settings or tool file": "settings files and bundled code",
   unreadable: "files Hal could not open" };
@@ -119,7 +119,7 @@ export function IngestCard() {
   }, [running]);
   if (!data || data.state === "none") return null;
   const pct = data.total ? (data.done / data.total) * 100 : 0;
-  const states = counted(data.states).filter(([s]) => s !== "not_downloaded");
+  const states = counted(data.states).filter(([s]) => s !== "not_downloaded" && s !== "not_mine");
   const leftOut = counted(data.left_out);
   const title = data.again
     ? (running ? "Reading the rest with the AI" : data.state === "done" ? "The rest was read with the AI" : "Hal stopped reading the rest")
@@ -141,6 +141,10 @@ export function IngestCard() {
       Download them first (in OneDrive, choose "Always keep on this device"), then add them again.
       <ul class="rec-paths">${data.not_downloaded_paths.map(p => html`<li>${p}</li>`)}</ul>
       ${data.not_downloaded > data.not_downloaded_paths.length && html`<span class="small">and ${data.not_downloaded - data.not_downloaded_paths.length} more</span>`}<//>`}
+    ${data.not_mine > 0 && html`<${Note} tone="info"><b>${plural(data.not_mine, "file looks", "files look")} like someone else's,</b>
+      ${" "}such as another person's CV or a paper you downloaded, so Hal left ${data.not_mine === 1 ? "it" : "them"} out of your record.
+      <ul class="rec-paths">${data.not_mine_paths.map(p => html`<li>${p}</li>`)}</ul>
+      ${data.not_mine > data.not_mine_paths.length && html`<span class="small">and ${data.not_mine - data.not_mine_paths.length} more</span>`}<//>`}
     ${data.errors.length > 0 && html`<div><div class="small sub">Could not be read</div><ul class="rec-paths small">
       ${data.errors.map(e => html`<li><b>${e.path}</b>: ${e.error}</li>`)}</ul></div>`}
     ${leftOut.length > 0 && html`<p class="small sub rec-line">Left out on purpose: ${leftOut.map(([w, n]) => n + " " + (LEFT_OUT_WORDS[w] || w)).join(", ")}.</p>`}

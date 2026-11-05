@@ -52,7 +52,7 @@ STATE_WORDS = {"hal": "Found by Hal", "confirmed": "Checked by you", "edited": "
                "hidden": "Hidden"}
 HOURS = {"full time": "full_time", "fulltime": "full_time", "full_time": "full_time",
          "part time": "part_time", "parttime": "part_time", "part_time": "part_time"}
-EVIDENCE_KEYS = {"source_rel", "quote", "field", "doc_type", "verified"}
+EVIDENCE_KEYS = {"source_rel", "quote", "field", "doc_type", "verified", "role"}
 QUOTE_MAX = 600            # a quote is a sentence or two; a longer one is cut, never refused
 
 
@@ -175,7 +175,7 @@ def _evidence(evidence: dict) -> dict:
             "quote": " ".join(str(evidence.get("quote") or "").split())[:QUOTE_MAX],
             "field": str(evidence.get("field") or "").strip(),
             "doc_type": merge.doc_group(str(evidence.get("doc_type") or "")),
-            "verified": bool(evidence.get("verified", True))}
+            "verified": bool(evidence.get("verified", True)), "role": str(evidence.get("role") or "")}
 
 
 def _row_fields(row: sqlite3.Row) -> dict:
@@ -237,9 +237,9 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, 
         else:
             item_id = row["id"]
         con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, verified, "
-                    "found_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "role, found_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (item_id, ev["source_rel"], ev["quote"], ev["field"], ev["doc_type"], json.dumps(said),
-                     int(ev["verified"]), now))
+                     int(ev["verified"]), ev["role"], now))
         refold(con, item_id)
         if refresh:
             conflicts.refresh(con)
@@ -253,7 +253,7 @@ def rebuild_found(con: sqlite3.Connection) -> int:
     and new facts still merge into it. Conflicts are worked out again; ones the person settled about rebuilt
     items are found afresh.
     """
-    rows = con.execute("""SELECT i.kind, e.source_rel, e.quote, e.field, e.doc_type, e.said, e.verified
+    rows = con.execute("""SELECT i.kind, e.source_rel, e.quote, e.field, e.doc_type, e.said, e.verified, e.role
                           FROM profile_evidence e JOIN profile_items i ON i.id = e.item_id
                           WHERE i.state = 'hal' AND i.origin = 'found' ORDER BY e.id""").fetchall()
     with con:
@@ -262,12 +262,35 @@ def rebuild_found(con: sqlite3.Connection) -> int:
         try:
             add_found(con, r["kind"], json.loads(r["said"]),
                       {"source_rel": r["source_rel"], "quote": r["quote"], "field": r["field"],
-                       "doc_type": r["doc_type"], "verified": bool(r["verified"])}, refresh=False)
+                       "doc_type": r["doc_type"], "verified": bool(r["verified"]), "role": r["role"]},
+                      refresh=False)
         except ValueError:  # a fact the rules now refuse, such as a module filed as a qualification, stays out
             continue
     with con:
         conflicts.refresh(con)
     return con.execute("SELECT COUNT(*) FROM profile_items").fetchone()[0]
+
+
+def forget_source(con: sqlite3.Connection, source_rel: str) -> int:
+    """Takes every fact a file gave out of the profile, before the file is read again or left out; returns how
+    many items lost one.
+
+    A found item left with no source is removed; one the person checked, edited, hid or added keeps its
+    values, as the person's word does not depend on a file. Reading a note again added its new facts beside
+    the old ones, so a document since judged someone else's still gave the person its projects (2026-11-05).
+    """
+    with con:
+        ids = [r[0] for r in con.execute("SELECT DISTINCT item_id FROM profile_evidence WHERE source_rel = ?",
+                                         (source_rel,))]
+        con.execute("DELETE FROM profile_evidence WHERE source_rel = ?", (source_rel,))
+        for item_id in ids:
+            if con.execute("SELECT 1 FROM profile_evidence WHERE item_id = ? LIMIT 1", (item_id,)).fetchone():
+                refold(con, item_id)
+            else:
+                con.execute("DELETE FROM profile_items WHERE id = ? AND state = 'hal' AND origin = 'found'",
+                            (item_id,))
+        conflicts.refresh(con)
+    return len(ids)
 
 
 def _row(con: sqlite3.Connection, item_id) -> sqlite3.Row:
@@ -350,18 +373,18 @@ def delete(con: sqlite3.Connection, item_id) -> None:
 
 
 def evidence_of(con: sqlite3.Connection, item_ids: list[int]) -> dict[int, list[dict]]:
-    """Each item's sources, oldest first: {item_id: [{id, source_rel, quote, field, doc_type, verified,
+    """Each item's sources, oldest first: {item_id: [{id, source_rel, quote, field, doc_type, verified, role,
     found_at}]}."""
     out: dict[int, list[dict]] = {i: [] for i in item_ids}
     if not item_ids:
         return out
     marks = ",".join("?" * len(item_ids))
-    for e in con.execute(f"SELECT id, item_id, source_rel, quote, field, doc_type, verified, found_at "
+    for e in con.execute(f"SELECT id, item_id, source_rel, quote, field, doc_type, verified, role, found_at "
                          f"FROM profile_evidence "
                          f"WHERE item_id IN ({marks}) ORDER BY id", item_ids):
         out[e["item_id"]].append({"id": e["id"], "source_rel": e["source_rel"], "quote": e["quote"],
                                   "field": e["field"], "doc_type": e["doc_type"], "verified": bool(e["verified"]),
-                                  "found_at": e["found_at"]})
+                                  "role": e["role"], "found_at": e["found_at"]})
     return out
 
 

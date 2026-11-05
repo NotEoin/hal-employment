@@ -501,14 +501,22 @@ runner starts the action again with the same batch and only pending items are re
 5. **Convert** (`convert.py`). `record.text_of`, the record's own conversion. An empty result is `no_text`
    and is never sent to a model, because a model given no text invents a document and its author.
 6. **Understand** (`understand.py`). Rich documents get the `ingest_doc` prompt (role checker), cleaned in
-   code: fixed categories and doc types, 12 to 30 tags, `about_owner` held to "unsure" when the text never
-   names `you.name`, and every fact's quote checked against the text; a quote not found marks the fact
-   "Check this" and the note `hal: needs-review`. An organisation or place that neither the text nor the
-   file's path names is dropped, with its tag, so a guess gets no entity note. A document that is someone
-   else's gives no facts. Light
-   documents, and every document while the AI is unavailable, get tags from the path, headings, frequent
-   words and years. Facts go to `jobhunt.profile.store.add_found(con, kind, fields, evidence)` with
-   evidence `{source_rel, quote, field, doc_type, verified}`; the ingest keeps no profile of its own. A fact
+   code: fixed categories and doc types, 12 to 30 tags, and every fact's quote checked against the text; a
+   quote not found marks the fact "Check this" and the note `hal: needs-review`. An organisation or place
+   that neither the text nor the file's path names is dropped, with its tag, so a guess gets no entity note.
+   Light documents, and every document while the AI is unavailable, get tags from the path, headings,
+   frequent words and years. The engine then judges the document's role on its own thread (`roles.py`):
+   `own`, `taught`, `others` or `unsure`. The AI's "role" is taken for taught and someone else's; its
+   "own" holds only when the text or path names the person (`roles.identity`: `you.name`'s parts,
+   `you.other_names`, and usernames and emails from links and basics their CVs and letters gave). A
+   repository's text lists its committers and remotes from `.git/logs/HEAD` and `.git/config`. Without the
+   AI, slides and a course unit's files are `taught`, the rest `unsure`. `roles.allowed` keeps the facts
+   each role may give: everything for `own` (contact details and links only from a CV or a letter), skills
+   for `taught`, nothing otherwise. An `others` document gets state `not_mine`: no note, no copy, no facts,
+   and `items.summary` names the first few. Facts go to
+   `jobhunt.profile.store.add_found(con, kind, fields, evidence)` with evidence
+   `{source_rel, quote, field, doc_type, verified, role}`; the ingest keeps no profile of its own. Reading a
+   note again first takes its old facts out (`store.forget_source`). A fact
    the store refuses (`ValueError`) is left out and logged, not the whole document. When the profile holds
    anything, the run ends by writing the Profile notes and publishing one `profile` event.
 7. **Write and link** (`notes.py`). `Sources/<Category>/<Title>.md` with YAML-list frontmatter

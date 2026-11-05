@@ -4,6 +4,10 @@
 is resumable) finds the batch's rows and goes on with those still pending; files already hashed are not
 hashed again. One file that cannot be read is an error on its own row and never stops the rest.
 
+Each document's role (`roles`: the person's own, taught, someone else's or unsure) is judged on this thread,
+which holds the database the person's names come from. Someone else's document is not filed at all and gives
+nothing; the others give only the facts their role may.
+
 Duplicates are found by SHA-256 against every item read before, in this batch or an earlier one: the copy
 gets no note of its own, and its path is added once to the first copy's note under "Also at".
 
@@ -27,7 +31,7 @@ from pathlib import Path
 
 from jobhunt import profile, record
 from jobhunt.core import events
-from jobhunt.ingest import convert, discover, group, items, notes, rank, sources, understand
+from jobhunt.ingest import convert, discover, group, items, notes, rank, roles, sources, understand
 
 log = logging.getLogger(__name__)
 
@@ -195,6 +199,17 @@ def _also_at(vault_dir: Path, note_rel: str, where: str) -> None:
     notes.write(path, text)
 
 
+def _judge(con: sqlite3.Connection, row: sqlite3.Row, desc: dict, text: str) -> None:
+    """Sets the document's role and keeps only the facts that role may give (`roles`)."""
+    from jobhunt.core import settings
+
+    words = roles.identity(understand.owner(), str(settings.get("you.other_names") or ""), con)
+    role = roles.decide(desc.get("said"), doc_type=desc["doc_type"], text=f"{row['rel']}\n{text}", words=words,
+                        in_course=bool(row["unit"]))
+    desc["role"], desc["about_owner"] = role, roles.ABOUT_OWNER[role]
+    desc["facts"] = [f for f in desc["facts"] if roles.allowed(role, f["kind"], desc["doc_type"])]
+
+
 def _give_facts(con: sqlite3.Connection, desc: dict, note_rel: str) -> int:
     from jobhunt.profile import store
 
@@ -203,7 +218,7 @@ def _give_facts(con: sqlite3.Connection, desc: dict, note_rel: str) -> int:
         try:
             store.add_found(con, f["kind"], f["fields"], {"source_rel": note_rel, "quote": f["quote"],
                                                          "field": f["field"], "doc_type": desc["doc_type"],
-                                                         "verified": f["verified"]})
+                                                         "verified": f["verified"], "role": desc["role"]})
         except ValueError as e:  # one malformed fact from the model is left out, not the whole document
             log.info("left out a fact from %s: %s", note_rel, e)
             continue
@@ -276,9 +291,17 @@ def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Pa
         # the AI did not answer, or the note is gone: the note stays as it was, to be read again next time
         items.update(con, row["id"], state="done")
         return None
+    from jobhunt.profile import store
+
+    desc = {**read.desc, "category": row["category"] or read.desc["category"]}   # the note stays in its folder
+    _judge(con, row, desc, read.text)
+    store.forget_source(con, row["note"])
+    if desc["role"] == roles.OTHERS:
+        path.unlink()
+        items.update(con, row["id"], stage="understood", state="not_mine", model=1, role=desc["role"], note=None)
+        return None
     old = path.read_text(encoding="utf-8", errors="replace")
     fm, _ = notes.frontmatter.parse(old)
-    desc = {**read.desc, "category": row["category"] or read.desc["category"]}   # the note stays in its folder
     notes.write_source(vault_dir, desc, text=read.text, source=str(fm.get("source") or row["path"]),
                        sha256=row["sha256"] or "", original=None, at=path)
     if kept := _kept(old):
@@ -286,7 +309,8 @@ def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Pa
         notes.write(path, text.replace("\n## Original\n", f"\n{kept}## Original\n", 1))
     notes.add_mentions(vault_dir, desc, row["note"])
     _give_facts(con, desc, row["note"])
-    items.update(con, row["id"], stage="written", state="done", model=1, doc_type=desc["doc_type"])
+    items.update(con, row["id"], stage="written", state="done", model=1, doc_type=desc["doc_type"],
+                 role=desc["role"])
     return row["note"]
 
 
@@ -300,7 +324,12 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
         items.update(con, row["id"], state="no_text")
         return None
     desc = read.desc
-    items.update(con, row["id"], stage="understood", model=int(desc.get("by") == "model"))
+    _judge(con, row, desc, read.text)
+    items.update(con, row["id"], stage="understood", model=int(desc.get("by") == "model"), role=desc["role"])
+    if desc["role"] == roles.OTHERS:
+        # someone else's document is not the person's record: no note, no copy, no facts; the page names it
+        items.update(con, row["id"], state="not_mine")
+        return None
     path = Path(row["path"])
     moving = drop_root is not None and drop_root in path.parents
     original = None
@@ -311,7 +340,7 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
     notes.add_mentions(vault_dir, desc, note_rel)
     _give_facts(con, desc, note_rel)
     items.update(con, row["id"], stage="written", state="done", note=note_rel, category=desc["category"],
-                 doc_type=desc["doc_type"])
+                 doc_type=desc["doc_type"], role=desc["role"])
     return note_rel
 
 

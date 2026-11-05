@@ -125,7 +125,7 @@ def profile_source(rel: str, quote: str, field: str, doc_type: str, n: int) -> d
     """One made-up source of a profile item, with the file id the real server gives it."""
     fid = base64.urlsafe_b64encode(rel.encode("utf-8")).decode("ascii").rstrip("=")
     return {"id": n, "source_rel": rel, "quote": quote, "field": field, "doc_type": doc_type,
-            "verified": True, "found_at": "2026-11-05T09:00:00Z", "file_id": fid}
+            "verified": True, "role": "own", "found_at": "2026-11-05T09:00:00Z", "file_id": fid}
 
 
 def profile_item(n: int, kind: str, fields: dict, title: str, sub: str = "", when: str = "", state: str = "hal",
@@ -303,7 +303,8 @@ MADE_UP_PAGES = {
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
-                       "not_downloaded_paths": [], "errors": [], "left_out": {}, "by_rules": 0, "again": False},
+                       "not_downloaded_paths": [], "not_mine": 0, "not_mine_paths": [], "errors": [],
+                       "left_out": {}, "by_rules": 0, "again": False},
     "/profile": MADE_UP_PROFILE,
     **MADE_UP_PROFILE_KINDS,
     # My CV; the parse report is the real server's answer before any CV is added

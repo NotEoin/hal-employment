@@ -294,6 +294,17 @@ class RecordPage(unittest.TestCase):
         self.assertTrue(queued[0]["again"])
         self.assertEqual(self.errors(p), [])
 
+    def test_someone_elses_files_are_named_as_left_out(self) -> None:
+        finished_ingest()
+        with closing(db.connect()) as con, con:
+            ingest_items.add(con, "b0", path="/made/up/Friend CV.pdf", rel="Downloads/Friend CV.pdf",
+                             state="not_mine")
+        p = self.page()
+        card = p.page.locator(".rec-ingest")
+        p.shows(card.get_by_text("1 file looks like someone else's"), "the note")
+        p.shows(card.get_by_text("Downloads/Friend CV.pdf"), "its name")
+        self.assertEqual(self.errors(p), [])
+
     def test_pasted_links_start_a_read(self) -> None:
         queued = []
         self.enterContext(mock.patch.object(ingest_actions, "queue",

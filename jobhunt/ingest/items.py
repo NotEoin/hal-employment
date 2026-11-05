@@ -13,7 +13,7 @@ import sqlite3
 
 from jobhunt.core import clock
 
-FINAL = ("done", "duplicate", "not_downloaded", "no_text", "skipped", "error")
+FINAL = ("done", "duplicate", "not_downloaded", "no_text", "skipped", "not_mine", "error")
 FIRST_PATHS = 10            # not-downloaded files named on the page; the rest are counted
 RECENT_ERRORS = 10
 STAGES = ("discovered", "converted", "understood", "written")
@@ -116,12 +116,13 @@ def _eta(con: sqlite3.Connection, batch: str, action: sqlite3.Row, left: int) ->
 
 
 def summary(con: sqlite3.Connection) -> dict:
-    """The latest ingest for the page: state, done, total, eta_s, counts, current item, not downloaded, errors."""
+    """The latest ingest for the page: state, done, total, eta_s, counts, current item, not downloaded, someone
+    else's documents left out (`not_mine`), errors."""
     action = latest_action(con)
     if action is None:
         return {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {}, "by_rules": 0,
                 "states": {}, "categories": {}, "current": "", "not_downloaded": 0, "not_downloaded_paths": [],
-                "errors": [], "left_out": {}}
+                "not_mine": 0, "not_mine_paths": [], "errors": [], "left_out": {}}
     params = json.loads(action["params"] or "{}")
     batch = params.get("batch") or ""
     c = counts(con, batch)
@@ -129,6 +130,8 @@ def summary(con: sqlite3.Connection) -> dict:
     left = c["states"].get("pending", 0)
     missing = [r[0] for r in con.execute("""SELECT rel FROM ingest_items WHERE batch = ? AND state = 'not_downloaded'
                                             ORDER BY rel LIMIT ?""", (batch, FIRST_PATHS))]
+    not_mine = [r[0] for r in con.execute("""SELECT rel FROM ingest_items WHERE batch = ? AND state = 'not_mine'
+                                             ORDER BY rel LIMIT ?""", (batch, FIRST_PATHS))]
     errors = [{"path": r["rel"], "error": r["error"]} for r in con.execute(
         """SELECT rel, error FROM ingest_items WHERE batch = ? AND state = 'error'
            ORDER BY updated DESC LIMIT ?""", (batch, RECENT_ERRORS))]
@@ -138,5 +141,6 @@ def summary(con: sqlite3.Connection) -> dict:
             "total": total, "eta_s": _eta(con, batch, action, left), "stages": c["stages"], "states": c["states"],
             "categories": c["categories"], "current": (action["message"] or "") if action["state"] == "running" else "",
             "not_downloaded": c["states"].get("not_downloaded", 0), "not_downloaded_paths": missing,
+            "not_mine": c["states"].get("not_mine", 0), "not_mine_paths": not_mine,
             "errors": errors, "by_rules": by_rules(con), "again": bool(params.get("again")),
             "left_out": result.get("left_out", {}), "started": action["started"], "ended": action["ended"]}

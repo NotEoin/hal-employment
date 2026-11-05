@@ -20,6 +20,10 @@ What changed in each version, in plain words.
   Notes and slides are filed by their words unless **Read every document with the AI** is on, and
   **Read them with the AI** on the Overview reads the ones already filed, in place. Hal reads as many
   documents at once as **AI calls at once** allows.
+- **Whose each document is.** Hal sorts what it reads into your own documents, course material and someone
+  else's. Course material only shows what you studied, your contact details come only from your CVs and
+  letters, and someone else's documents (a friend's CV, a downloaded paper) are left out of your record.
+  Add usernames or a student number under **Other names you go by** so Hal knows a file is yours.
 - **Your profile.** Hal keeps the facts it finds in your record as a profile: jobs, education with its
   modules and marks, skills with the words that show them, projects, certificates, achievements and links.
   Each fact names the files it came from. The same job in two CVs is one entry, written the same way in

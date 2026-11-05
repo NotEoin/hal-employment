@@ -22,7 +22,7 @@ from support.fake_ai import fake_ai
 from jobhunt import db, record
 from jobhunt.core import paths, runner, settings
 from jobhunt.ingest import actions as ingest_actions
-from jobhunt.ingest import discover, engine, frontmatter, items, notes, rank, sources, understand
+from jobhunt.ingest import discover, engine, frontmatter, items, notes, rank, roles, sources, understand
 
 OWNER = "Avery Quillon"
 CV_TEXT = f"""# {OWNER}
@@ -442,24 +442,90 @@ class Understanding(unittest.TestCase):
                           ("basic", {"key": "name", "value": "Avery Quillon"}),
                           ("basic", {"key": "email", "value": "avery@example.org"})])
 
-    def test_someone_elses_document_gives_no_owner_facts(self):
+    def test_someone_elses_document_is_not_filed_and_gives_nothing(self):
         other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
         found = []
-        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps({**REPLY, "about_owner": False})}), \
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps({**REPLY, "role": "others"})}), \
                 mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e: found.append(k)):
             settings.set("you.name", OWNER)
             put(files, "Friend CV.md", other)
             run(con, [files])
-            note = (vault / rows(con)["Files/Friend CV.md"]["note"]).read_text(encoding="utf-8")
+            row = rows(con)["Files/Friend CV.md"]
+            self.assertEqual((row["state"], row["role"], row["note"]), ("not_mine", "others", None))
+            self.assertEqual([p for p in vault.rglob("*.md") if p.stem != "Index"], [])
         self.assertEqual(found, [])
-        self.assertEqual(frontmatter.parse(note)[0]["about_owner"], "false")
-        self.assertNotIn("## Key facts", note)
 
-    def test_a_document_the_model_calls_theirs_but_never_names_them_is_unsure(self):
+    def test_a_document_the_ai_calls_theirs_is_theirs_only_when_it_names_them(self):
         other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
-        self.assertEqual(understand.judge_owner(True, OWNER, other), "unsure")
-        self.assertEqual(understand.judge_owner(True, OWNER, CV_TEXT), "true")
-        self.assertEqual(understand.judge_owner("maybe", OWNER, CV_TEXT), "unsure")
+        words = roles.identity(OWNER)
+        self.assertEqual(roles.decide("own", doc_type="cv", text=other, words=words), "unsure")
+        self.assertEqual(roles.decide(True, doc_type="cv", text=CV_TEXT, words=words), "own")
+        self.assertEqual(roles.decide("maybe", doc_type="cv", text=CV_TEXT, words=words), "unsure")
+        self.assertEqual(roles.decide("taught", doc_type="slides", text=other, words=words), "taught")
+        self.assertEqual(roles.decide(None, doc_type="slides", text="", words=words), "taught")
+        self.assertEqual(roles.decide(None, doc_type="notes", text="", words=words), "unsure")
+        self.assertEqual(roles.decide(None, doc_type="notes", text="", words=words, in_course=True), "taught")
+
+    def test_another_name_or_a_username_from_their_cv_makes_a_document_theirs(self):
+        with home() as (con, _vault, _files):
+            from jobhunt.profile import store
+            store.add_found(con, "link", {"label": "GitHub", "url": "https://github.com/aquill0n"},
+                            {"source_rel": "Sources/CV.md", "doc_type": "cv"})
+            store.add_found(con, "link", {"label": "Blog", "url": "https://github.com/someoneelse"},
+                            {"source_rel": "Sources/Notes.md", "doc_type": "notes"})
+            words = roles.identity(OWNER, "c9912345, Al", con)
+        self.assertIn("aquill0n", words)
+        self.assertIn("c9912345", words)
+        self.assertNotIn("someoneelse", words, "only links from the person's own CVs and letters")
+        self.assertNotIn("Al", words, "too short to match safely")
+        self.assertTrue(roles.names_person("Submitted by c9912345 for module GEO101", words))
+        self.assertTrue(roles.names_person("Commits by: aquill0n <a@example.org>", words))
+        self.assertFalse(roles.names_person("Avery-ish things", ["Avery Quillon"]))
+
+    def test_a_repository_says_who_made_its_commits_so_the_persons_code_is_theirs(self):
+        with home() as (_con, _vault, files):
+            repo = files / "tide-gauge"
+            put(repo, "README.md", "# Tide gauge\n\nReads a made-up sensor.")
+            put(repo, "pyproject.toml", "[project]\nname = 'tide-gauge'\n")
+            put(repo, ".git/logs/HEAD", "0000000 1111111 Avery Quillon <avery@example.org> 1700000000 +0000"
+                                        "\tcommit (initial): start\n")
+            put(repo, ".git/config", '[remote "origin"]\n\turl = https://github.com/aquill0n/tide-gauge.git\n')
+            text = engine.convert.repo_text(repo)
+        self.assertIn("Commits by: Avery Quillon <avery@example.org>", text)
+        self.assertIn("Published at: https://github.com/aquill0n/tide-gauge.git", text)
+        self.assertEqual(roles.decide("own", doc_type="repository", text=text, words=roles.identity(OWNER)), "own")
+
+    def test_course_material_gives_only_the_skills_it_teaches(self):
+        slides = "# Lecture 3: Rivers\n\nDr Pell, pell@example.org. Meanders, oxbow lakes, fieldwork methods."
+        reply = {**NOTE_REPLY, "doc_type": "slides", "role": "taught",
+                 "facts": [{"kind": "basic", "fields": {"key": "email", "value": "pell@example.org"},
+                            "field": "value", "quote": "pell@example.org"},
+                           {"kind": "job", "fields": {"title": "Lecturer", "employer": "Dr Pell"},
+                            "field": "title", "quote": "Dr Pell"},
+                           {"kind": "skill", "fields": {"name": "Fieldwork methods"}, "field": "name",
+                            "quote": "fieldwork methods"}]}
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(reply)}):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            put(files, "GEO101/Lecture 3.md", slides)
+            run(con, [files])
+            got = con.execute("SELECT i.kind, e.role FROM profile_items i JOIN profile_evidence e "
+                              "ON e.item_id = i.id").fetchall()
+        self.assertEqual([tuple(r) for r in got], [("skill", "taught")])
+
+    def test_contact_details_come_only_from_a_cv_or_a_letter(self):
+        report = f"# Group report\n\nBy {OWNER} and Sam Pike (sam.pike@example.org)."
+        reply = {**REPLY, "doc_type": "report", "category": "Coursework", "role": "own",
+                 "facts": [{"kind": "basic", "fields": {"key": "email", "value": "sam.pike@example.org"},
+                            "field": "value", "quote": "sam.pike@example.org"},
+                           {"kind": "project", "fields": {"name": "Group report"}, "field": "name",
+                            "quote": "Group report"}]}
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(reply)}):
+            settings.set("you.name", OWNER)
+            put(files, "Group report.md", report)
+            run(con, [files])
+            kinds = [r[0] for r in con.execute("SELECT kind FROM profile_items")]
+        self.assertEqual(kinds, ["project"])
 
     def test_notes_have_list_tags_and_links_to_entity_notes(self):
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}):
@@ -584,6 +650,28 @@ class ReadingEverything(unittest.TestCase):
                 run(con, [], batch="b2", again=True)
             self.assertEqual((vault / note).read_text(encoding="utf-8"), before)
             self.assertEqual(items.by_rules(con), 1, "it is read again next time")
+
+    def test_reading_a_note_again_replaces_the_facts_it_gave(self):
+        # a note read again kept its first reading's facts beside the new ones, so a document since judged
+        # someone else's still gave the person its project (2026-11-05)
+        poster = f"# Poster\n\n{OWNER}. Tide gauges along the made-up bay."
+        mine = {**REPLY, "doc_type": "report", "role": "own",
+                "facts": [{"kind": "project", "fields": {"name": "Tide gauges"}, "field": "name",
+                           "quote": "Tide gauges"}]}
+        with home() as (con, vault, files):
+            settings.set("you.name", OWNER)
+            with fake_ai({"ingest_doc": json.dumps(mine)}):
+                put(files, "Tide report.md", poster)
+                run(con, [files])
+            self.assertEqual([r[0] for r in con.execute("SELECT kind FROM profile_items")], ["project"])
+            con.execute("UPDATE ingest_items SET model = 0")
+            con.commit()
+            with fake_ai({"ingest_doc": json.dumps({**mine, "role": "others"})}):
+                run(con, [], batch="b2", again=True)
+            self.assertEqual(con.execute("SELECT count(*) FROM profile_items").fetchone()[0], 0)
+            row = rows(con, "b2")["Files/Tide report.md"]
+            self.assertEqual((row["state"], row["note"]), ("not_mine", None))
+            self.assertEqual([p for p in (vault / "Sources").rglob("*.md") if p.stem != "Index"], [])
 
     def test_several_documents_are_with_the_ai_at_once_up_to_the_limit(self):
         lock, now, most = threading.Lock(), [0], [0]

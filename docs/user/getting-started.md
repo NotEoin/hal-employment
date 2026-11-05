@@ -203,8 +203,21 @@ Some files are listed rather than read:
 - **Copies** of a file Hal has already read are named in the first copy's note, not read again.
 
 Each fact Hal takes from a document comes with the document's own words. When those words are not in the
-document, the fact is marked **Check this**. A document that is someone else's, such as a friend's CV,
-gives no facts about you. If Hal closes part way through, it carries on from the next file when it opens.
+document, the fact is marked **Check this**. If Hal closes part way through, it carries on from the next
+file when it opens.
+
+Hal sorts every document by whose it is, and that decides what it can learn from it:
+
+- **Yours**: your CV, letters, coursework, reports and projects. These give your jobs, education,
+  projects, skills and achievements. Your email, phone, address and links come only from your CVs and
+  letters, so a classmate's email in a group report never becomes yours.
+- **Course material**: slides, handouts, lecture notes and module pages. These show what you studied, so
+  they give skills and nothing else: never a lecturer's email, and never a lecture's example as your project.
+- **Someone else's**: another person's CV, a paper you downloaded, a classmate's poster. Hal leaves these out
+  of your record and names them when it finishes.
+
+Hal only counts a document as yours when it names you. If your files use another name for you, such as a
+username or a student number, add it under **Settings > You > Other names you go by**.
 
 ## Your record
 
