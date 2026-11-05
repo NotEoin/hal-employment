@@ -391,6 +391,19 @@ class Understanding(unittest.TestCase):
             self.assertEqual(rows(con)["Files/CV.md"]["state"], "done")
         self.assertEqual(kinds, ["job"])
 
+    def test_skills_and_basics_reach_the_profile_in_its_own_shape(self):
+        # the model wrote skills with "evidence" and basics as {name, email, ...}; the profile refused all of
+        # them and a whole ingest found no skills (2026-11-05)
+        got = understand.facts([
+            {"kind": "skill", "fields": {"name": "Archival research", "level": "", "evidence": "Catalogued"},
+             "quote": "Catalogued", "field": "name"},
+            {"kind": "basic", "fields": {"name": "Avery Quillon", "email": "avery@example.org", "phone": ""},
+             "quote": "Avery Quillon", "field": "name"}], "Avery Quillon. Catalogued letters.")
+        self.assertEqual([(f["kind"], f["fields"]) for f in got],
+                         [("skill", {"name": "Archival research"}),
+                          ("basic", {"key": "name", "value": "Avery Quillon"}),
+                          ("basic", {"key": "email", "value": "avery@example.org"})])
+
     def test_someone_elses_document_gives_no_owner_facts(self):
         other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
         found = []

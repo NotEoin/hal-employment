@@ -176,6 +176,24 @@ def clean(reply: dict, rel: str, text: str, rule: rank.Rule, owner: str) -> dict
     return out
 
 
+BASIC_KEYS = ("name", "email", "phone", "location")
+
+
+def shaped(kind: str, fields: dict) -> list[dict]:
+    """A model's fact in the profile's shape: only fields the profile keeps, a basics fact one per key.
+
+    The model wrote skills with an "evidence" field and basics as {name, email, phone, location}, and the
+    profile refused every one of them, so a whole ingest found no skills at all (2026-11-05).
+    """
+    from jobhunt.profile import store
+
+    if kind == "basic" and "key" not in fields:
+        return [{"key": k, "value": fields[k]} for k in BASIC_KEYS if str(fields.get(k) or "").strip()]
+    known = set(store.KINDS[kind]) | ({"period"} if kind in ("job", "education") else set())
+    kept = {k: v for k, v in fields.items() if k in known and v not in (None, "", [])}
+    return [kept] if kept else []
+
+
 def facts(raw, text: str) -> list[dict]:
     """The model's facts with their quotes checked: each {kind, fields, field, quote, verified}."""
     out = []
@@ -183,8 +201,8 @@ def facts(raw, text: str) -> list[dict]:
         if not isinstance(f, dict) or f.get("kind") not in FACT_KINDS or not isinstance(f.get("fields"), dict):
             continue
         quote = " ".join(str(f.get("quote") or "").split())
-        out.append({"kind": f["kind"], "fields": f["fields"], "field": str(f.get("field") or ""), "quote": quote,
-                    "verified": quote_found(quote, text)})
+        out += [{"kind": f["kind"], "fields": fields, "field": str(f.get("field") or ""), "quote": quote,
+                 "verified": quote_found(quote, text)} for fields in shaped(f["kind"], f["fields"])]
     return out
 
 

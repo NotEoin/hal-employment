@@ -24,8 +24,9 @@ Reply with JSON only:
    that state it, copied exactly, at most 25 words}]}
 Fields by kind: job {title, employer, location, start, end, duties: [...], achievements: [...]};
 education {qualification, subject, institution, start, end, grade, modules: [{name, mark}]};
-skill {name, level, evidence}; project {name, summary, role, tools: [...], link, period};
-achievement {title, date, detail}; certificate {name, issuer, date}; basic {name, email, phone, location};
+skill {name, level, category}; project {name, summary, role, tools: [...], link, period};
+achievement {title, date, detail, issuer}; certificate {name, issuer, date, grade};
+basic {key: one of "name", "email", "phone", "location", value};
 link {label, url}.
 List facts only when about_owner is true, and only facts the text states; never infer one. People are
 named only when the document names them; otherwise give their role, such as "supervisor".
