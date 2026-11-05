@@ -90,6 +90,9 @@ def text_of(path: Path, rule: rank.Rule) -> str:
     else:
         return ""
     text = re.sub(r"\n{3,}", "\n\n", text.replace("\r\n", "\n")).strip()
+    # PDF text can hold lone surrogates, which no UTF-8 file can store: a poster PDF's note failed to write
+    # (2026-11-05). Each becomes "?", so the rest of the note survives.
+    text = text.encode("utf-8", "replace").decode("utf-8")
     return text[:READ_CHARS]
 
 

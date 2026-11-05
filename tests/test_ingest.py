@@ -261,6 +261,14 @@ class Ranking(unittest.TestCase):
             text = convert.text_of(pdf, rank.rule_for("Reading/Some book.pdf"))
         self.assertIn("Quillfeather", text)
 
+    def test_text_with_lone_surrogates_from_a_pdf_can_still_be_written(self):
+        from jobhunt.ingest import convert
+
+        with mock.patch.object(convert.pdfread, "first_pages_text", return_value="Poster \ud835 text"):
+            text = convert.text_of(Path("Reading/poster.pdf"), rank.rule_for("Reading/poster.pdf"))
+        self.assertEqual(text, "Poster ? text")
+        text.encode("utf-8")
+
     def test_a_project_copied_without_its_version_control_is_still_one_unit(self):
         self.assertTrue(discover.is_repo(["README.md", "LICENSE", "docs", "media"]))
         self.assertTrue(discover.is_repo(["README.md", "main.lua", "util.lua"]))
