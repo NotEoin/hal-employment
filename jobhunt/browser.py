@@ -410,8 +410,11 @@ BROWSER = Browser()
 # A job board's own job search and its job-alert sign-up sit beside the advert, and are never the application:
 # Adzuna's "What?", "Where?", "Salaries" and "Receive similar jobs by email" were filled as the form (testers,
 # 2026-11-04). The search words match whole labels only, so a form's own "Where are you based?" stays.
-SITE_SEARCH = re.compile(r"^\s*((what|where)\s*\??|keywords?|search( for)?( jobs)?|job title,? (skills|keywords).*|"
-                         r"salaries|distance|radius|sort( by)?|date posted)\s*$", re.I)
+# A job board's own search: "Job title, skill or company" and "Town, city or postcode" on Totaljobs (testers,
+# 2026-11-05).
+SITE_SEARCH = re.compile(r"^\s*((what|where)\s*\??|keywords?|search( for)?( jobs)?|"
+                         r"job title,? (skills?|keywords?|company)\b.*|(town|city)[ ,/]*((town|city)[ ,/]*)?or "
+                         r"(post|zip) ?code|salaries|distance|radius|sort( by)?|date posted)\s*$", re.I)
 JOB_ALERT = re.compile(r"job alerts?|similar (new )?(jobs|roles|vacancies)|jobs like this|newsletter|"
                        r"(send|email) me (new |similar |more )?(jobs|roles|vacancies)|new jobs by email", re.I)
 

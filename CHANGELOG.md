@@ -25,6 +25,8 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A job board's own search boxes are left alone.** Totaljobs' "Job title, skill or company" and "Town, city or
+  postcode" were taken for an application's questions.
 - **"This listing went offline" closes the job.** An expired Totaljobs advert saying "This listing went offline"
   was reported as a form of two questions, which were the site's own search boxes. Hal now reads it as closed.
 - **A high school or second subject is not given your degree.** "What year did you graduate high school?" and
