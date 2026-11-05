@@ -9,7 +9,7 @@ Documents dropped in (PDF, Word, PowerPoint, Excel, web pages, saved emails) are
 beside them, keeping their headings and tables, so they can be searched in sensible sections: by
 Microsoft's MarkItDown when it is installed, else by pypdfium2 for PDFs (`cvstudio/pdfread.py`) and by
 reading a Word file's XML. Photos and scans are read by OCR when tesseract is installed and `record.ocr`
-is on.
+is on. Frontmatter is read with YAML lists as lists (`ingest/frontmatter.py`), as Obsidian writes tags.
 
 Search is by words (BM25) over passages split at each heading, in pure Python, so it needs no AI, no
 graphics card and no internet; the index is one JSON file in the data folder. A passage's score is the share
@@ -36,6 +36,7 @@ from datetime import date
 from pathlib import Path
 
 from .core import paths
+from .ingest import frontmatter
 
 log = logging.getLogger(__name__)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # Windows: no console flashes up for tesseract
@@ -223,22 +224,19 @@ def _walk(suffixes: tuple) -> list[Path]:
 # Passages -----------------------------------------------------------------------------------
 
 def _frontmatter(text: str) -> tuple[dict, str]:
-    fm, body = {}, text
-    if text.startswith("---"):
-        end = text.find("\n---", 3)
-        if end != -1:
-            for line in text[3:end].splitlines():
-                m = re.match(r"^([A-Za-z0-9_]+):\s*(.*)$", line)
-                if m:
-                    fm[m.group(1)] = m.group(2).strip()
-            body = text[end + 4:]
-    return fm, body
+    """A note's frontmatter, with YAML lists as lists (`ingest/frontmatter.py`), and its body."""
+    return frontmatter.parse(text)
+
+
+def _one(value) -> str:
+    """A frontmatter value as one string: a list's items joined, as a person may type `type: [index]`."""
+    return " ".join(value) if isinstance(value, list) else str(value or "")
 
 
 def should_index(text: str) -> bool:
     """False for navigation notes (index, topic, dashboard) and empty stubs."""
     fm, _ = _frontmatter(text)
-    return fm.get("type", "").strip().lower() not in SKIP_TYPE and fm.get("status", "").strip().lower() != "stub"
+    return _one(fm.get("type")).strip().lower() not in SKIP_TYPE and _one(fm.get("status")).strip().lower() != "stub"
 
 
 def chunks(rel: str, text: str) -> list[dict]:
@@ -250,7 +248,7 @@ def chunks(rel: str, text: str) -> list[dict]:
     fm, body = _frontmatter(text)
     body = "\n".join(line for line in body.splitlines() if not line.strip().startswith("<!--"))
     found = re.search(r"^#\s+(.*)$", body, re.M)
-    title = fm.get("title") or (found.group(1).strip() if found else Path(rel).stem)
+    title = _one(fm.get("title")) or (found.group(1).strip() if found else Path(rel).stem)
     out, heading, buf = [], title, []
 
     def flush():
