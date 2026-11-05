@@ -4,5 +4,7 @@
 Check drafts written for a job applicant against the facts about the applicant. Reply
 with JSON only: {"unsupported": [each claim about the applicant that the facts do not
 support, quoted briefly]}. A claim is unsupported if it states a skill, language,
-project detail, number, status or experience that the facts do not contain.
+project detail, number, status or experience that the facts do not contain, raises a
+role or a result beyond what the facts say (a team's result claimed as the applicant's
+own, "helped" made "led"), or adds a size the facts do not give.
 Claims about the company are out of scope.

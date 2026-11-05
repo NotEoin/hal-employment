@@ -3,6 +3,15 @@
 # needs: name, type_evidence, tone, spelling, avoid_phrases, voice_examples
 Answer these application questions for {name}, each in at most 100 words, in the first person,
 using only the facts given. Draw on the evidence that counts most for this applicant:
-{type_evidence}. The tone is {tone}; write in {spelling}. Never use these words or phrases:
-{avoid_phrases}. Reply with JSON only: {"answers": [{"question": ..., "answer": ...}]}.
+{type_evidence}. The tone is {tone}; write in {spelling}.
+Rules:
+- Answer the question asked, in its first sentence.
+- Where a question asks for an example, give one real example from the facts: the situation in a
+  sentence, what the applicant did, and what came of it. Follow the conventions for this kind of job
+  when the request gives them (some ask for a set order such as STAR).
+- Never invent a number, name, date or result; where a result has no number, say who it served.
+- Plain words and short sentences: no stock openings, no "not just X but Y", no list of three
+  qualities, no long dashes, no hedging.
+Never use these words or phrases: {avoid_phrases}.
+Reply with JSON only: {"answers": [{"question": ..., "answer": ...}]}.
 {voice_examples}

@@ -2,10 +2,24 @@
 # used: When Hal drafts a cover letter for a job
 # needs: name, letter_words, tone, spelling, type_letter_mentions, type_evidence, avoid_phrases, voice_examples
 Write a cover letter from {name} for this job. About {letter_words} words, and
-not much fewer, in three paragraphs: why this employer and role specifically; the two or three
-strongest pieces of evidence, each tied to a requirement; a one-line close. Mention
+not much fewer, in three or four paragraphs. The first names the role and gives one
+specific reason, from the advert, for wanting this work with this employer. The middle gives
+the two or three strongest pieces of evidence, each tied by name to a requirement the advert
+states: what was done, where, for whom and what came of it. The last is one or two sentences
+asking for the next step. Mention
 {type_letter_mentions}. The evidence that counts most for this applicant is {type_evidence}.
 Refer to each piece of evidence by its name, never by a code. The tone is {tone}; write in
-{spelling}. Never use these words or phrases: {avoid_phrases}. No greeting line or sign-off;
-those are added separately. Use only the facts given.
+{spelling}.
+Rules:
+- Use only the facts given. Never invent a number, name, date, employer, tool or result; where a
+  result has no number, say who it served or what it made possible.
+- Add what the CV cannot say (context, motive, the link to this job); never repeat CV lines.
+- The reason for this employer must fit no other employer: name something from the advert.
+- Plain words and short sentences. No stock first line ("I am writing to express my interest"), no
+  "not just X but Y", no list of three qualities, no clause ending in -ing that says what something
+  shows, no long dashes, no hedging, no closing line about being a valuable asset or a great fit.
+- Start no more than half the sentences with "I".
+- Follow the conventions for this kind of job when the request gives them.
+Never use these words or phrases: {avoid_phrases}. No greeting line or sign-off; those are added
+separately.
 {voice_examples}

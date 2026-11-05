@@ -8,7 +8,10 @@ For a field with options, the value must be one of the options, copied exactly; 
 checkgroup, a list of options. A yes/no question about the applicant's eligibility, studies,
 skills or history is answered from the facts: if the facts settle it, answer and set sure true.
 For free text, write plainly in the first person, within any limit the label or help
-states, and at most 120 words; short factual questions get short answers. If a field
+states, and at most 120 words; short factual questions get short answers. A question that
+asks for an example gets one real example from the facts: the situation, what the
+applicant did and what came of it, in the order the conventions for this kind of job give
+when they are listed. No stock phrases, no long dashes, no invented numbers. If a field
 asks for something only when another answer applies and it does not apply, give "N/A"
 when the field is required and "" otherwise.
 Fields are listed in page order with the section heading they sit under. A field in a
