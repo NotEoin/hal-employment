@@ -600,12 +600,14 @@ available yet.
   CV, letter and notes. An education item's modules come from its transcripts and certificates when any
   lists modules, else from its CVs, never from notes, slides or coursework; they are one per module code
   (`merge.module_code`: "CSC1032", or a bare "1032" when that code is already listed) with the fullest name
-  and the best source's mark, and modules without a code merge by close name. Confirmed and edited items
-  keep the person's values, and no later ingest changes them; a hidden item stays hidden when its file is
-  read again. A note rewritten in place (`store.replace_source`) has its evidence replaced: each item it
-  spoke for is worked out again, an unchecked found item nothing speaks for any more is deleted, and a
-  confirmed item whose facts from that note changed goes back to `hal`, so the review shows it again; an
-  edited item keeps its values. Only items added by hand can be deleted.
+  and the best source's mark, and modules without a code merge by close name. An end date before this month
+  (`merge.ended`) makes a job or course not current, even where another source said "present"; "present" with
+  no end date stays current. Confirmed and edited items keep the person's values, and no later ingest changes
+  them; a hidden item stays hidden when its file is read again. A note rewritten in place
+  (`store.replace_source`) has its evidence replaced: each item it spoke for is worked out again, an unchecked
+  found item nothing speaks for any more is deleted, and a confirmed item whose facts from that note changed
+  goes back to `hal`, so the review shows it again; an edited item keeps its values. Only items added by hand
+  can be deleted.
 - `conflicts.py` lists what does not add up: two sources giving one field different values (each value
   with its files), an end before a start, two jobs not marked part-time that share more than a month, and
   a gap of more than `GAP_MONTHS` (6) months. Each conflict has a fingerprint, so finding it again keeps

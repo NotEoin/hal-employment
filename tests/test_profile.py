@@ -54,6 +54,31 @@ class Store(unittest.TestCase):
         self.assertEqual(got["when"], "September 2023 to now")
         self.assertEqual(self.open_conflicts(), [])
 
+    def test_a_degree_that_ended_in_the_past_is_not_current_though_an_old_cv_said_present(self):
+        # a degree that ended in June 2026 showed "September 2023 to now" (2026-11-05)
+        degree = {"qualification": "BSc Computing", "institution": "University of Wexley"}
+        a = store.add_found(self.con, "education", {**degree, "period": "Sept 2023 - present"},
+                            ev(CV_A, "cv", "2023 - present"))
+        self.assertTrue(store.item(self.con, a)["fields"].get("current"), "present with no end stays current")
+        store.add_found(self.con, "education", {**degree, "period": "2023-26"}, ev(TRANSCRIPT, "transcript", "2023-26"))
+        got = store.item(self.con, a)
+        self.assertNotIn("current", got["fields"])
+        self.assertEqual(got["when"], "September 2023 to June 2026")
+
+    def test_a_job_with_a_past_end_is_not_current_and_a_future_end_stays_current(self):
+        a = self.job(CV_A, period="Sept 2023 - present")
+        self.job(CV_B, start="Sep 2023", end="Jan 2025")
+        self.assertEqual(store.item(self.con, a)["when"], "September 2023 to January 2025")
+        b = self.job(CV_A, employer="Saltmarsh Cross Library", start="Jan 2026", current=True)
+        self.job(CV_B, employer="Saltmarsh Cross Library", start="Jan 2026", end="Dec 2027")
+        self.assertTrue(store.item(self.con, b)["fields"].get("current"))
+
+    def test_one_fact_with_a_past_end_and_current_keeps_the_end(self):
+        self.assertEqual(store.clean("job", {"start": "2023-09", "end": "June 2026", "current": True}),
+                         {"start": "2023-09", "end": "2026-06"})
+        self.assertEqual(store.clean("job", {"start": "2023-09", "end": "present"}),
+                         {"start": "2023-09", "current": True})
+
     def test_a_job_with_another_title_at_the_same_employer_and_touching_dates_is_merged(self):
         a = self.job(CV_A, title="Visitor assistant", start="May 2022", end="Aug 2023")
         b = self.job(CV_B, title="Front of house assistant", start="Sep 2023", end="Jun 2024")

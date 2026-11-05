@@ -137,7 +137,9 @@ def clean(kind: str, fields: dict) -> dict:
                 value = HOURS.get(value.lower().replace("-", " "), value)
         if value not in ("", []):
             out[field] = value
-    if out.get("current"):
+    if out.get("current") and merge.ended(out):
+        del out["current"]          # a past end date is a fact; "current" beside it is a slip
+    elif out.get("current"):
         out.pop("end", None)
     return out
 

@@ -19,6 +19,8 @@ Design decisions, each with its reason:
   the same skill ("MS Excel" is "Excel"), covering office, research and writing skills as well as code.
 - A found item's fields come from its sources in rank order (transcript, certificate, CV, letter, notes):
   each field takes the value of the best-ranked source that gives one, so a transcript's grade beats a CV's.
+  An end date before this month makes the item not current, even when another source said "present"; a
+  "present" with no end date anywhere stays current.
   Lists (duties, tools) are joined across sources.
 - An education item's modules come from its transcripts and certificates when any lists modules, else from
   its CVs, and never from notes, slides or coursework, which name lectures and practicals as well as
@@ -206,6 +208,12 @@ def this_month() -> int:
     """Today as a count of months, so "present" can be compared."""
     today = clock.local_day()
     return today.year * 12 + today.month - 1
+
+
+def ended(fields: dict) -> bool:
+    """True when the item's end date is a month before this one, so it is not current whatever a source said."""
+    end = month_index(fields.get("end") or "", "end")
+    return end is not None and end < this_month()
 
 
 def span(fields: dict) -> tuple[int, int] | None:
@@ -506,4 +514,7 @@ def fold(sources: list[tuple[int, dict]]) -> dict:
         joined = _modules(_module_sources(ranked)) if field == "modules" else _join([s.get(field) for s in ordered])
         if joined:
             out[field] = joined
+    if out.get("current") and ended(out):
+        # an old CV's "2023 - present" beside the transcript's June 2026 end showed "to now" (2026-11-05)
+        del out["current"]
     return out
