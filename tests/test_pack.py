@@ -478,6 +478,67 @@ class CommandLine(unittest.TestCase):
         self.assertIn("checked Riverside Heritage Trust", out.getvalue())
 
 
+CIVIL_SERVICE = ("Executive Officer", "Department for Made-up Affairs",
+                 "An Executive Officer post in the Civil Service. You will be assessed against the Success "
+                 "Profiles behaviours Working Together and Communicating and Influencing. Write a personal "
+                 "statement of up to 750 words.")
+TECH_WORDS = ("key skills", "code", "python", "technical", "software", "tools", "non-technical")
+
+
+def add_advert(con, job_id: str, advert: tuple[str, str, str]) -> dict:
+    """Adds one made-up advert and returns its row."""
+    title, company, text = advert
+    con.execute("""INSERT INTO jobs (id, source, company, title, location, url, description, first_seen,
+                   last_seen, status) VALUES (?, 'test', ?, ?, 'Made-up Town', ?, ?, ?, ?, 'shortlisted')""",
+                (job_id, company, title, f"https://jobs.example.org/{job_id}", text, db.now(), db.now()))
+    con.commit()
+    return dict(con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone())
+
+
+def conventions(request: str) -> str:
+    """The conventions section of a request."""
+    found = re.search(r"Conventions for this kind of job \((.*?)\):\n((?:- .*\n?)+)", request)
+    return found.group(0) if found else ""
+
+
+class Fields(unittest.TestCase):
+    """Each letter and answer is written to the conventions of its kind of job, never another field's."""
+
+    def test_a_humanities_letter_gets_humanities_conventions_and_no_technical_advice(self):
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad")
+            pack.build(a.con, job["id"], use_web=False)
+        block = conventions(a.writer.asked("letter")[0]["user"])
+        self.assertIn("(Humanities, heritage and the written word)", block)
+        self.assertIn("research project", block)
+        for word in TECH_WORDS:
+            self.assertNotIn(word, block.lower())
+
+    def test_a_civil_service_form_gets_star_and_the_behaviours(self):
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_advert(a.con, "test:civil", CIVIL_SERVICE)
+            pack.build(a.con, job["id"], use_web=False)
+        answers = conventions(a.writer.asked("answers")[0]["user"])
+        self.assertIn("(Civil Service and public sector)", answers)
+        self.assertIn("STAR", answers)
+        self.assertIn("behaviour", answers)
+        self.assertIn("transferable skill", answers, "the humanities background adds its own advice")
+        letter = conventions(a.writer.asked("letter")[0]["user"])
+        self.assertIn("essential criterion", letter)
+
+    def test_a_technical_letter_gets_the_technical_conventions(self):
+        with as_applicant(people.TECHNICAL) as a:
+            job = add_job(a.con, "technical_grad")
+            pack.build(a.con, job["id"], use_web=False)
+        self.assertIn("(Software, data and IT)", conventions(a.writer.asked("letter")[0]["user"]))
+
+    def test_a_job_hal_cannot_place_gets_general_advice(self):
+        with as_applicant(people.CHANGER) as a:
+            job = add_job(a.con, "career_changer")
+            pack.build(a.con, job["id"], use_web=False)
+        self.assertIn("(General)", conventions(a.writer.asked("letter")[0]["user"]))
+
+
 class Requests(unittest.TestCase):
     """The writing routes start their actions; the actions keep the person's words and check the letter."""
 

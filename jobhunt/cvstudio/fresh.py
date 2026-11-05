@@ -156,7 +156,8 @@ def _ai_profile(doc, type_, answers: dict) -> str | None:
     if not suggest.ai_ready():
         return None
     try:
-        got = ai.chat_json(prompts.text("cv_compose"), json.dumps({"facts": answers, "cv_type": type_.name},
+        got = ai.chat_json(prompts.text("cv_compose"), json.dumps({"facts": answers, "cv_type": type_.name,
+                                                                  "conventions": suggest.field_conventions()},
                                                                   ensure_ascii=True),
                            role="writer", purpose="cv_compose", priority=suggest.AI_PRIORITY)
     except ai.LLMUnavailable as e:

@@ -313,6 +313,16 @@ class Guards(CvCase):
                          ["Ran the history table and wrote weekly recommendations"])
 
 
+    def test_the_ai_is_told_each_lines_writing_problems_and_the_fields_conventions(self):
+        with fake_ai({"cv_suggest": json.dumps({"none": True})}) as backend:
+            suggest.look_again(self.con)
+        asked = [json.loads(r.user) for r in backend.requests("cv_suggest")]
+        problems = [p for a in asked for p in a["writing_problems"]]
+        self.assertTrue(any(p.startswith(VISITORS) and "duty" in p for p in problems), problems)
+        self.assertTrue(all("Show the dissertation as a research project" in " ".join(a["field_conventions"])
+                            for a in asked), "the humanities type's field conventions reach every request")
+
+
 class TryAnother(CvCase):
     def test_try_another_way_gives_new_wording(self):
         first = "Chose stock for the local history table and wrote weekly recommendations"

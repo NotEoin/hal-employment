@@ -30,6 +30,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
+from .writing import fields
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -107,7 +108,16 @@ def _analyse(job, who: dict) -> dict:
     text = _job_text(job)[:12000]
     analysis = llm.chat_json(prompt("analyse", who), text, role="main")
     analysis["questions"] = written_out(analysis.get("questions") or [], text)
+    resolved = fields.resolve(job["title"], text, who)
+    analysis.update(field=resolved.field, background=resolved.background)
     return analysis
+
+
+def field_of(job, who: dict, analysis: dict) -> fields.Resolved:
+    """The kind of job this is, as the advert reading found it, else read from the advert now."""
+    if analysis.get("field") in fields.rules.BY_FIELD:
+        return fields.Resolved(analysis["field"], analysis.get("background") or "")
+    return fields.resolve(job["title"], _job_text(job), who)
 
 
 def _words(text: str) -> list[str]:
@@ -260,6 +270,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     kept = kept if kept is not None else _kept(analysis)
     fit = fit if fit is not None else _fit(who, analysis, facts, kept)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
+    text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
     if request:
         text += f"\n\nThe applicant asked for this change: {request}"
     letter = _letter(who, text)
@@ -361,8 +372,9 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     message = drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip()))
     message = untitled(message, analysis, job_text)
     questions = analysis.get("questions") or []
-    answers = _answers(who, [*questions, *COMMON_QUESTIONS], context, facts=facts, kept=kept,
-                       sources=(job_text, about))
+    answers = _answers(who, [*questions, *COMMON_QUESTIONS],
+                       f"{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}", facts=facts,
+                       kept=kept, sources=(job_text, about))
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)

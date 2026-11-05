@@ -544,6 +544,32 @@ def ai_ready() -> bool:
     return ai.ready(AI_PRIORITY, "cv_suggest") is None
 
 
+def writing_problems(block: str, type_) -> list[str]:
+    """What the writing checker finds in a section's bullet lines, as "<target>: <problem>" lines."""
+    from jobhunt.writing import check as writing_check
+
+    out = []
+    spelling = str((type_.writing or {}).get("spelling") or "")
+    for row in block.splitlines():
+        target, _, text = row.partition("\t")
+        if "/b:" not in target:
+            continue
+        out += [f"{target}: {h.flag}. {h.message}" for h in writing_check.flagged(writing_check.check(text, "cv",
+                                                                                           spelling=spelling))]
+    return out
+
+
+def field_conventions(job: dict | None = None) -> list[str]:
+    """The CV conventions of the person's field, or of the job's when one is given (`writing.fields`)."""
+    from jobhunt.writing import fields
+
+    if not job:
+        return fields.conventions(fields.resolve("", "", fields.person_now()), "cv")
+    advert = " ".join([str(job.get("description") or ""), *(str(r) for r in job.get("requirements") or [])])
+    resolved = fields.resolve(str(job.get("title") or ""), advert, fields.person_now())
+    return fields.conventions(resolved, "cv")
+
+
 def ask_ai(con: sqlite3.Connection, doc, type_, sids: list[str], failing: list[Draft], passages: list[dict],
            *, job: dict | None = None) -> Draft | None:
     """At most one suggestion for these sections from the `cv_suggest` prompt; None for `{"none": true}`."""
@@ -557,7 +583,8 @@ def ask_ai(con: sqlite3.Connection, doc, type_, sids: list[str], failing: list[D
     system = prompts.text("cv_suggest", con=con) + (f"\n{extra}\n" if extra else "")
     user = json.dumps({
         "cv_type": type_.name, "writing": type_.writing, "lines": block,
-        "failing_checks": [d.title for d in failing], "preferences": _prefs_words(con),
+        "failing_checks": [d.title for d in failing], "writing_problems": writing_problems(block, type_),
+        "field_conventions": field_conventions(job), "preferences": _prefs_words(con),
         "record": [{"label": f"{p.get('path', '')} > {p.get('heading', '')}", "text": p.get("text", "")}
                    for p in passages],
         "job": {"title": job.get("title"), "requirements": job.get("requirements")} if job else None,

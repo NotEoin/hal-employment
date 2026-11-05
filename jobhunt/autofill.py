@@ -971,6 +971,13 @@ def mark_written(fields: list[dict]) -> list[dict]:
     return fields
 
 
+def _conventions(job) -> str:
+    """The conventions for answers in this kind of job (`writing.fields`): STAR for a Civil Service form."""
+    from .writing import fields
+
+    return fields.block(fields.for_job(job), "answer")
+
+
 def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
     """What the AI may know when it fills a form: the profile, the CV, saved answers this job may use, and the
     free-words notes about this job site."""
@@ -1006,6 +1013,7 @@ def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
     told_notes = _site_facts(notes)
     if told_notes:
         parts.append("Notes about this job site (follow them):\n" + "\n".join(f"- {t}" for t in told_notes))
+    parts.append(_conventions(job))
     if docs.get("answers"):
         parts.append("Drafted answers:\n" + "\n".join(f"- {a['question']}: {a['answer']}" for a in docs["answers"]))
     if docs.get("letter"):

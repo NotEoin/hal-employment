@@ -7,7 +7,7 @@ import unittest
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt.writing import check, rules
+from jobhunt.writing import check, fields, rules
 
 PLAIN_LETTER = """Dear Ada Penhallow,
 
@@ -134,6 +134,31 @@ class Checker(unittest.TestCase):
         note = check.revision_note(hits)
         self.assertIn('"passionate"', note)
         self.assertIn("Revise the draft once", note)
+
+
+class Fields(unittest.TestCase):
+    def test_the_advert_decides_the_field_and_the_title_counts_most(self):
+        found = fields.resolve("Archive Assistant", "Catalogue the collections of a made-up library.")
+        self.assertEqual(found.field, "humanities")
+        self.assertEqual(fields.resolve("Graduate Developer", "Python and SQL.").field, "tech")
+        self.assertEqual(fields.resolve("Staff Nurse", "Band 5 on a made-up NHS ward.").field, "healthcare")
+
+    def test_with_nothing_to_go_on_the_field_is_general_never_a_guess(self):
+        self.assertEqual(fields.resolve("Coordinator", "Keep projects on time.").field, "general")
+        self.assertEqual(fields.conventions(fields.Resolved(), "letter"), list(rules.GENERAL.letter))
+
+    def test_the_persons_own_field_stands_in_for_an_advert_that_shows_none(self):
+        person = {"cv_type_id": "humanities_grad"}
+        self.assertEqual(fields.resolve("Coordinator", "Keep projects on time.", person).field, "humanities")
+        civil = fields.resolve("Executive Officer", "Civil Service behaviours.", person)
+        self.assertEqual((civil.field, civil.background), ("public_sector", "humanities"))
+        self.assertTrue(set(rules.BY_FIELD["humanities"].background) <= set(fields.conventions(civil, "answer")))
+
+    def test_every_field_has_conventions_for_each_kind_of_document(self):
+        for field in (rules.GENERAL, *rules.FIELDS):
+            for kind in rules.KINDS:
+                with self.subTest(field=field.id, kind=kind):
+                    self.assertTrue(fields.conventions(fields.Resolved(field.id), kind))
 
 
 if __name__ == "__main__":

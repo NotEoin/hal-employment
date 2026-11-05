@@ -22,6 +22,7 @@ from .. import contacts, documents, llm, pack, prep
 from ..apply import actions as apply_actions
 from ..apply.queries import _job
 from ..core import runner
+from ..writing import fields
 
 WORDS_SHOWN = 200   # characters of the person's request kept in the action's parameters and its why
 
@@ -70,6 +71,7 @@ def _answers(job, who: dict, docs: dict, words: str) -> list[dict]:
         return []
     listing = "\n".join(f"- {a.get('question', '')}\n  As it stands: {a.get('answer', '')}" for a in given)
     request = (f"Job: {job['title']} at {job['company']}\n\nQuestions:\n{listing}"
+               f"\n\n{fields.block(fields.for_job(job, who), 'answer')}"
                f"\n\nThe applicant asked for this change: {words}")
     reply = llm.chat_json(pack.prompt("answers", who), request, role="writer").get("answers") or []
     by_question = {a.get("question", ""): llm.undash(a.get("answer", "")) for a in reply if isinstance(a, dict)}
