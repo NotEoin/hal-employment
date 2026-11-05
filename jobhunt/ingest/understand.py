@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 PURPOSE = "ingest_doc"
 TAGS_MIN, TAGS_MAX = 12, 30
+TAG_FOLDERS = 2              # a note's own folder and the one above it name its subject
 PROMPT_CHARS = 60_000        # about 15K tokens: a CV whole, a long report's first chapters, inside a 64K context
 TIMEOUT_S = 300
 # Waits before asking again when the AI itself is down mid-ingest (a gateway restart, a model loading); a
@@ -92,7 +93,9 @@ def judge_owner(said, owner: str, text: str) -> str:
 def light_tags(rel: str, text: str, rule: rank.Rule) -> list[str]:
     """Tags without a model: the kind, the folders, headings, frequent words and years of a document."""
     out = [tag(rule.doc_type), tag(rule.category)]
-    out += [tag(part) for part in PurePosixPath(rel).parent.parts]
+    # Only the nearest folders: the ones above say where the files were dumped ("Downloads", "OneDrive"),
+    # which tagged every note in a dump alike (2026-11-05).
+    out += [tag(part) for part in PurePosixPath(rel).parent.parts[-TAG_FOLDERS:]]
     out += [tag(h) for h in HEADING.findall(text)[:FREQUENT_TERMS]]
     counts = Counter(w for w in re.findall(r"[a-z][a-z-]{3,}", text.lower()) if w not in record.STOP)
     out += [w for w, _ in counts.most_common(FREQUENT_TERMS)]

@@ -211,9 +211,13 @@ def write_indexes(vault: Path) -> list[str]:
 
 
 def known_titles(vault: Path) -> dict[str, str]:
-    """Every entity and source note's title (lower case) and its path inside the record."""
+    """Every entity note's title (lower case) and its path inside the record.
+
+    Source notes are left out: they are named after files ("Notes", "Slides (5)", "tags"), and linking those
+    names linked ordinary words all over a 9,000-note record (2026-11-05).
+    """
     out = {}
-    folders = [vault / f for f in ENTITY_FOLDERS.values()] + [vault / SOURCES]
+    folders = [vault / f for f in ENTITY_FOLDERS.values()]
     for folder in folders:
         if not folder.is_dir():
             continue

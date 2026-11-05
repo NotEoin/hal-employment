@@ -19,7 +19,7 @@ Real folders are messy (checked on a 37,000-file dump, 2026-11-05), so a word al
 - Project boilerplate (`NOT_DOCUMENTS`: LICENSE, CHANGELOG and the like) is never a certificate or a report.
 - A text file named as a CV must read like one (`PEEK_CV_SECTIONS`), so a "resume" command file is not; one
   named as a certificate must say what it certifies (`PEEK_CERTIFICATE`), so a study note on TLS
-  certificates is not.
+  certificates is not, and one named as a reference must read like a referee's letter (`PEEK_REFERENCE`).
 """
 from __future__ import annotations
 
@@ -104,6 +104,8 @@ ACADEMIC_NAME = re.compile(r"\d|year|stage|semester|term|university|college|scho
 PEEK_CERTIFICATE = re.compile(r"this is to certify|has (?:successfully )?completed|is awarded|awarded to|"
                               r"certificate of (?:completion|achievement|attendance|participation)", re.I)
 WEAK_RICH = {"report", "project", "writing"}
+PEEK_REFERENCE = re.compile(r"to whom it may concern|i have known|pleased to (?:recommend|support)|"
+                            r"reference for|in my capacity as|without hesitation|i (?:would )?recommend", re.I)
 NOT_DOCUMENTS = re.compile(r"(?:licen[cs]e|copying|notice|third[ _-]?party[ _-]?notices|changelog|history|"
                            r"code[ _-]?of[ _-]?conduct|contributing|security|authors|maintainers)", re.I)
 
@@ -179,6 +181,8 @@ def rule_for(rel: str, path: Path | None = None) -> Rule:
         hit = None
     if hit is RULES[3] and suffix in TEXT_SUFFIXES and not PEEK_CERTIFICATE.search(f"{name}\n{start or ''}"):
         hit = None
+    if hit is RULES[4] and suffix in TEXT_SUFFIXES and not (start and PEEK_REFERENCE.search(start)):
+        hit = None      # "12. Reference Types" was a programming lecture, not a referee's letter
     if start is not None and (hit is None or not hit.rich):
         if PEEK_CV.search(start):
             return RULES[0]

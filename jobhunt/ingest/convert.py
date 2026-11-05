@@ -18,7 +18,7 @@ from pathlib import Path
 
 from jobhunt import record
 from jobhunt.cvstudio import pdfread
-from jobhunt.ingest import discover, rank
+from jobhunt.ingest import discover, frontmatter, rank
 
 READ_CHARS = 400_000         # a 150-page document; past this the note keeps the start and says so
 LIGHT_PDF_PAGES = 20         # a light PDF's tags come from its first pages; the note links the whole file
@@ -79,6 +79,10 @@ def text_of(path: Path, rule: rank.Rule) -> str:
         text = _notebook(path)
     elif suffix in PLAIN and suffix != ".html":
         text = _plain(path)
+        if suffix in (".md", ".markdown"):
+            # A note's own properties are the old vault's bookkeeping; copied into the new note's text they
+            # read as a second, broken frontmatter that the link pass then linked into (2026-11-05).
+            text = frontmatter.parse(text)[1]
     elif suffix == ".pdf" and not rule.rich:
         # A light note needs words for its tags, not a full conversion: a book-length PDF took MarkItDown a
         # minute and more, and a 37,000-file dump held hundreds of them (2026-11-05).

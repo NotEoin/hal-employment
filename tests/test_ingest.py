@@ -269,6 +269,29 @@ class Ranking(unittest.TestCase):
         self.assertEqual(text, "Poster ? text")
         text.encode("utf-8")
 
+    def test_notes_are_tagged_and_linked_by_their_subject_not_by_the_dump(self):
+        # a 37,000-file dump gave every note its outer folders as tags ("dump", "onedrive"), copied a markdown
+        # note's own frontmatter into its text, linked file-named titles such as "tags", and took a lecture
+        # called "Reference Types" for a referee's letter (2026-11-05)
+        from jobhunt.ingest import convert
+
+        tags = understand.light_tags("Downloads/OneDrive/Areas/Year 2/History of Art/week 3.md", "Paintings.",
+                                     rank.RULES[9])
+        self.assertIn("history-of-art", tags)
+        self.assertNotIn("onedrive", tags)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = put(Path(tmp), "week 3.md", "---\ntags: [study]\ndate: 2026-06-10\n---\n# Week 3\n\nPaintings.")
+            text = convert.text_of(path, rank.RULES[9])
+            self.assertTrue(text.startswith("# Week 3"))
+            vault = Path(tmp) / "Record"
+            put(vault, "Sources/Study notes/tags.md", "---\ntitle: tags\n---\n")
+            put(vault, "Organisations/Brindle Arts Centre.md", "---\ntitle: Brindle Arts Centre\n---\n")
+            self.assertEqual(set(notes.known_titles(vault)), {"brindle arts centre"})
+            lecture = put(Path(tmp), "12. Reference Types.md", "# Reference types\n\nA reference points at a value.")
+            self.assertEqual(rank.rule_for("Programming/12. Reference Types.md", lecture).doc_type, "notes")
+            letter = put(Path(tmp), "Reference.md", "To whom it may concern,\n\nI have known Avery for two years.")
+            self.assertEqual(rank.rule_for("Jobs/Reference.md", letter).doc_type, "reference")
+
     def test_a_project_copied_without_its_version_control_is_still_one_unit(self):
         self.assertTrue(discover.is_repo(["README.md", "LICENSE", "docs", "media"]))
         self.assertTrue(discover.is_repo(["README.md", "main.lua", "util.lua"]))
