@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A job board's account page is left to you.** Adzuna's register page (email, password and the password again)
+  was filled with your email address as the application's last page. Through the browser helper, as in Hal's own
+  window, a short page with a password box is now a sign-in for you.
 - **A job board you are signed in to waits for you to press Apply.** Totaljobs shows "My jobs" and "My account"
   rather than "Sign out", so Hal did not see that you were signed in and pressed its Apply, which can send your
   saved CV at once. An account's own links now count as signed in, as "Sign out" does.

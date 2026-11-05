@@ -83,6 +83,7 @@ SIGN_IN = re.compile(r"\b(sign|log)[ -]?in\b|\blogin\b|\bregister\b|create (an |
 # only for an email address, and Hal typed it in and pressed on (testers, 2026-11-05).
 SIGN_IN_HOST = re.compile(r"^(accounts?|login|auth|signin|sso|id|identity)\.", re.I)
 SIGN_IN_TEXT = 600   # characters of the page's opening words that may say it is for signing in
+REGISTER_FIELDS = 5  # questions beyond which a page with a password box is an application, not an account page
 # A session on the page's site: "Sign out", or an account's own pages, which Totaljobs shows in place of it; its
 # plain Apply then sent the saved CV at once (testers, 2026-11-05).
 SIGN_OUT = re.compile(r"^\s*((sign|log) ?out|my (account|profile|jobs|applications|dashboard))\s*$", re.I)
@@ -685,7 +686,7 @@ def _needs(survey: dict, fields: list[dict]) -> str:
         return "code"
     if survey["password"]:
         # A registration form that also asks the usual questions is filled in, apart from its password.
-        return "" if form and len(fields) > 5 else "sign-in"
+        return "" if form and len(fields) > REGISTER_FIELDS else "sign-in"
     if not form and 0 < len(fields) <= 3 and CODE_WALL.search(survey["text"][:3000]):
         return "code"
     if form:

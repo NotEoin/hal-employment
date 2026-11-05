@@ -429,6 +429,15 @@ class Fixes:
         self.assertTrue(self.on_page(job_id, page, lambda tab: tab.url.endswith(page)))
         self.assertEqual(self.site.sent(), 0)
 
+    def test_a_boards_account_page_with_a_password_is_left_to_the_person(self):
+        """Regression (testers, 2026-11-05): Adzuna's register page (email, password, confirm) was filled with the
+        email address as the application's last page."""
+        page = "join-board.html"
+        job_id, found = self.opened("join", page)
+        self.assertEqual((found["needs"], found["fields"]), ("sign-in", []))
+        self.assertEqual(self.on_page(job_id, page, lambda tab: tab.input_value("#em")), "")
+        self.assertEqual(self.site.sent(), 0)
+
     def test_a_searched_list_is_typed_into_until_it_offers_the_answer(self):
         """Regression (testers, 2026-11-04): the helper was never told a list could be typed into, so Ashby's
         location list, which offers places only once you type, was left empty: "no option matching"."""

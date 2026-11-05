@@ -35,6 +35,7 @@ from .browser import (
     FORM_FRAME,
     MAX_PRESSES,
     NEXT_BUTTON,
+    REGISTER_FIELDS,
     SIGN_IN,
     SIGN_OUT,
     SUBMIT_BUTTON,
@@ -321,12 +322,15 @@ def _needs(facts: dict) -> str:
     fields = facts["fields"]
     if only_code_boxes(fields, facts["text"][:3000]):
         return "code"
+    if facts["password"] and not (_is_form(fields) and len(fields) > REGISTER_FIELDS):
+        # An account page (email, password, confirm) is a sign-in, form or not; Adzuna's register page was filled
+        # as the form's last page (testers, 2026-11-05). A registration form that also asks the usual questions
+        # is filled in, apart from its password, as in Hal's own window.
+        return "sign-in"
     if _is_form(fields):
         return ""
     if BOT_CHECK.search(facts["title"]) or BOT_CHECK.search(facts["text"][:400]):
         return "check"
-    if facts["password"]:
-        return "sign-in"
     if 0 < len(fields) <= 3 and CODE_WALL.search(facts["text"][:3000]):
         return "code"
     # Sign-in pages that ask for the email address first show no password box yet.
