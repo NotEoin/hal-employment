@@ -153,11 +153,16 @@ class SiteKeys(unittest.TestCase):
 
     def test_an_upload_that_appears_later_does_not_get_a_second_cv(self):
         """Regression (testers, 2026-11-04): after an Ashby form rebuilt itself, its new upload box was taken for
-        the CV's on its own, so the CV went in twice."""
+        the CV's on its own, so the CV went in twice; Lever's, relabelled after each upload, took it four times
+        (2026-11-05)."""
         placed = [{"hid": "h1", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf"}]
         guessed = [{"hid": "h9", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf",
                     "note": "taken to be the CV upload; check this"}]
         self.assertTrue(driver._one_cv(placed, [dict(guessed[0])])[0]["skip"])
+        # Lever relabels its upload after each file, and the relabelled box names the CV itself.
+        named = {"hid": "h7", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf", "note": "",
+                 "label": "Resume/CV EOIN EXAMPLE CV.PDF Success!"}
+        self.assertTrue(driver._one_cv(placed, [named])[0]["skip"])
         self.assertEqual(driver._one_cv([], [dict(guessed[0])])[0]["value"], "/made/up/cv.pdf")
 
     def test_the_tab_is_brought_forward_for_work_but_never_for_a_watch(self):

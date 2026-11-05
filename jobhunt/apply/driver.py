@@ -256,10 +256,11 @@ def _fill_uploads_first(job_id: str, todo: list[dict]) -> dict:
 
 def _one_cv(fields: list[dict], fresh: list[dict]) -> list[dict]:
     """Leaves a new upload alone when the form already has its CV: one that appeared after a form rebuilt
-    itself was taken for the CV upload on its own (Ashby, testers 2026-11-04)."""
+    itself was taken for the CV upload on its own (Ashby, testers 2026-11-04), and Lever's, relabelled
+    "Resume/CV ... Success!" after each upload, took the CV four times (testers, 2026-11-05)."""
     has_cv = any(f["kind"] == "file" and f.get("source") == "documents: CV" and not f.get("skip") for f in fields)
     for f in fresh:
-        if has_cv and f["kind"] == "file" and f.get("source") == "documents: CV" and f.get("note"):
+        if has_cv and f["kind"] == "file" and f.get("source") == "documents: CV":
             f.update(value=None, skip=True, source="skipped", note="not a CV or cover letter upload")
     return fresh
 
@@ -451,7 +452,7 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
     docs = documents.load(con, job)
     notes = browser.notes_for(found["url"], job_id)
     new = [f for f in found["fields"] if f["sig"] not in known]
-    fresh = autofill.propose(job, new, docs, documents.files(job), con, notes=notes)
+    fresh = _one_cv(form["fields"], autofill.propose(job, new, docs, documents.files(job), con, notes=notes))
     form["fields"].extend(fresh)
     autofill.ask_model(job, form["fields"], docs, con, notes=notes)
     by_sig = {f["sig"]: f for f in found["fields"]}

@@ -25,6 +25,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The CV goes in once.** Lever relabels its upload box after each file ("Resume/CV ... Success!"), and Hal took
+  the relabelled box for a new upload question, so a Spotify form got the CV four times. Once a form has its
+  CV, an upload box that appears later is left alone.
 - **Sign-in pages are left to you.** A sign-in page that asks for the email address first, and says so only in
   its words or its address (Y Combinator's account.ycombinator.com), was filled in with your email address and
   Continue was pressed. Hal now stops there for you to sign in yourself.
