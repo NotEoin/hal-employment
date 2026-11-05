@@ -44,4 +44,12 @@ register(
                 ("words", "By words"), ("meaning", "By meaning (needs the AI on this computer)"))),
     Setting("record.private_folders", "tags", ["Private"], "Folders in your record never sent to the AI",
             group="cvdocs", order=160),
+    Setting("record.drop_folder", "path", "", "Drop folder for your record", group="cvdocs", machine=True,
+            remote="local_only", order=170,
+            help="Anything you put here is read into your record. Leave empty for the +Inbox folder in it."),
+    Setting("record.copy_originals", "bool", True, "Keep a copy of each file Hal reads in", group="cvdocs",
+            order=180, help="Copies go in Attachments in your record. Very large files are linked, not copied."),
+    Setting("record.ingest_vision", "bool", False, "Read certificates and artwork in pictures with the AI",
+            group="cvdocs", advanced=True, order=190,
+            help="The words in them are read first. Other pictures are listed by name and date only."),
 )

@@ -1,10 +1,319 @@
-"""The bulk ingest: folders and zips read into the record as notes, safely, in order, and resumably."""
+"""The bulk ingest: folders and zips read into the record as notes, safely, in order, and resumably.
+
+Every test builds made-up files in its own temporary home; the people, employers and documents are
+invented. The AI is the fake one, answering the `ingest_doc` prompt with canned JSON, or none at all.
+"""
+import contextlib
+import io
+import json
+import tempfile
 import unittest
+import zipfile
+from pathlib import Path
+from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
+from support.actions import finished
+from support.fake_ai import fake_ai
 
-from jobhunt import record
-from jobhunt.ingest import frontmatter
+from jobhunt import db, record
+from jobhunt.core import paths, runner, settings
+from jobhunt.ingest import actions as ingest_actions
+from jobhunt.ingest import engine, frontmatter, items, notes, rank, sources, understand
+
+OWNER = "Avery Quillon"
+CV_TEXT = f"""# {OWNER}
+
+Curriculum vitae
+
+## Experience
+
+Gallery assistant, Brindle Arts Centre, Norwich, June 2023 to August 2024. Led weekend tours for 40 visitors.
+
+## Education
+
+BA History of Art, University of Elsewhere, 2020 to 2023, First class.
+"""
+REPLY = {"doc_type": "cv", "category": "CVs and letters", "title": "Avery Quillon CV", "period": "2020..2024",
+         "summary": "A CV listing gallery work and a history of art degree.",
+         "tags": ["cv", "history-of-art", "gallery", "tours", "visitor-experience", "norwich", "arts",
+                  "public-speaking", "education", "first-class", "2023", "heritage"],
+         "entities": {"organisations": ["Brindle Arts Centre", "University of Elsewhere"], "places": ["Norwich"],
+                      "people": [], "projects": [], "courses": ["BA History of Art"], "skills": ["Public speaking"]},
+         "about_owner": True,
+         "facts": [{"kind": "job", "fields": {"title": "Gallery assistant", "employer": "Brindle Arts Centre"},
+                    "field": "title", "quote": "Gallery assistant, Brindle Arts Centre"},
+                   {"kind": "achievement", "fields": {"title": "Won the Wexley Prize"}, "field": "title",
+                    "quote": "Won the Wexley Prize in 2022"}]}
+
+
+@contextlib.contextmanager
+def home():
+    """A temporary home with a migrated database and an empty record; yields (connection, record, files)."""
+    with tempfile.TemporaryDirectory(prefix="hal-ingest-") as tmp, paths.set_override(Path(tmp)):
+        paths.ensure()
+        vault, files = Path(tmp) / "Record", Path(tmp) / "Files"
+        vault.mkdir()
+        files.mkdir()
+        con = db.connect()
+        try:
+            with mock.patch.object(record, "VAULT", vault, create=True), \
+                    mock.patch.object(record, "INDEX", Path(tmp) / "index.json", create=True):
+                yield con, vault, files
+        finally:
+            runner.idle(10)
+            con.close()
+            record._CACHE.clear()
+
+
+def put(folder: Path, rel: str, data: str | bytes) -> Path:
+    """Writes a made-up file at `rel` under `folder`."""
+    path = folder / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(data, bytes):
+        path.write_bytes(data)
+    else:
+        path.write_text(data, encoding="utf-8")
+    return path
+
+
+def run(con, folders=(), **kw) -> dict:
+    """One ingest of `folders`, in this thread."""
+    return engine.run(con, kw.pop("batch", "b1"), folders=[str(f) for f in folders], step=lambda text: None,
+                      progress=lambda done, total, text: None, **kw)
+
+
+def rows(con, batch="b1") -> dict:
+    """The batch's items by their path inside the folder given."""
+    return {r["rel"]: r for r in con.execute("SELECT * FROM ingest_items WHERE batch = ?", (batch,))}
+
+
+def zip_bytes(members: dict[str, bytes]) -> bytes:
+    """A zip holding `members`, names as given (even unsafe ones)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data in members.items():
+            z.writestr(name, data)
+    return buf.getvalue()
+
+
+class Sources(unittest.TestCase):
+    def test_a_zip_slip_member_is_refused_and_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "uni.zip"
+            bad.write_bytes(zip_bytes({"../escaped.txt": b"x", "/abs.txt": b"y", "C:/win.txt": b"z",
+                                       "Year 1/essay.txt": b"An essay on the Brindle collection."}))
+            out = sources.unpack(bad, Path(tmp) / "out")
+            self.assertEqual(out.written, 1)
+            self.assertEqual(len(out.refused), 3)
+            self.assertFalse((Path(tmp) / "escaped.txt").exists())
+            self.assertTrue((Path(tmp) / "out" / "Year 1" / "essay.txt").exists())
+            self.assertTrue(any("points outside the zip" in p for p in out.problems()))
+
+    def test_a_symlink_in_a_zip_is_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as z:
+                info = zipfile.ZipInfo("link")
+                info.external_attr = (0o120777 << 16)
+                z.writestr(info, "/etc/passwd")
+            (Path(tmp) / "l.zip").write_bytes(buf.getvalue())
+            out = sources.unpack(Path(tmp) / "l.zip", Path(tmp) / "out")
+            self.assertEqual((out.written, out.links), (0, ["l.zip/link"]))
+
+    def test_a_member_past_its_cap_is_dropped_even_when_its_stated_size_lies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "big.zip").write_bytes(zip_bytes({"big.txt": b"a" * 5000}))
+            with mock.patch.object(sources, "ZIP_FILE_MAX", 1000):
+                out = sources.unpack(Path(tmp) / "big.zip", Path(tmp) / "out")
+            self.assertEqual(out.too_big, ["big.zip/big.txt"])
+            self.assertFalse((Path(tmp) / "out" / "big.txt").exists())
+
+    def test_nested_zips_are_unpacked_down_to_the_depth_cap(self):
+        inner = zip_bytes({"deepest.txt": b"three down"})
+        for _ in range(sources.ZIP_DEPTH_MAX - 1):
+            inner = zip_bytes({"inner.zip": inner})
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "a.zip").write_bytes(zip_bytes({"top.txt": b"top", "inner.zip": inner}))
+            out = sources.unpack(Path(tmp) / "a.zip", Path(tmp) / "out")
+            found = sorted(p.relative_to(Path(tmp) / "out").as_posix() for p in (Path(tmp) / "out").rglob("*.txt"))
+            self.assertIn("top.txt", found)
+            self.assertEqual(len(out.too_deep), 1, "the zip at depth four is named, not unpacked")
+            self.assertFalse(list((Path(tmp) / "out").rglob("*.zip")))
+
+
+class Discovery(unittest.TestCase):
+    def test_an_all_zero_file_is_reported_not_downloaded_and_never_read(self):
+        with home() as (con, vault, files), fake_ai({}) as backend:
+            put(files, "Cloud/CV.pdf", bytes(4096))
+            run(con, [files])
+            self.assertEqual(rows(con)["Files/Cloud/CV.pdf"]["state"], "not_downloaded")
+            self.assertEqual(backend.requests(), [])
+            self.assertFalse(list(vault.rglob("*.md")), "no note is written for a file not downloaded")
+
+    def test_duplicates_are_linked_once_to_the_first_copy(self):
+        with home() as (con, vault, files), fake_ai({}):
+            put(files, "CV.md", CV_TEXT)
+            put(files, "Backup/old.md", CV_TEXT)
+            put(files, "Backup again/old.md", CV_TEXT)
+            run(con, [files])
+            found = rows(con)
+            states = sorted(r["state"] for r in found.values())
+            self.assertEqual(states, ["done", "duplicate", "duplicate"])
+            first = next(r for r in found.values() if r["state"] == "done")
+            note = (vault / first["note"]).read_text(encoding="utf-8")
+            also = note.split("## Also at", 1)[1].split("## Original", 1)[0]
+            self.assertEqual(note.count("## Also at"), 1)
+            self.assertEqual(also.count("\n- `"), 2, "each other copy is named once")
+            run(con, [files], batch="b2")
+            self.assertEqual({r["state"] for r in rows(con, "b2").values()}, {"duplicate"},
+                             "a second ingest of the same files reads none of them again")
+            self.assertEqual(note, (vault / first["note"]).read_text(encoding="utf-8"))
+
+    def test_junk_folders_and_binaries_are_left_out(self):
+        with home() as (con, _vault, files), fake_ai({}):
+            put(files, "Thesis/node_modules/x/readme.md", "# Not mine")
+            put(files, "Thesis/model.safetensors", b"\x01\x02")
+            put(files, "Thesis/thesis.md", "# My thesis\n\nOn rivers.")
+            out = run(con, [files])
+            self.assertEqual(list(rows(con)), ["Files/Thesis/thesis.md"])
+            self.assertEqual(out["left_out"], {"junk folder": 1, "program or data file": 1})
+
+    def test_a_repository_becomes_one_unit_summarised_from_its_readme(self):
+        with home() as (con, vault, files), fake_ai({}):
+            put(files, "tidewatch/.git/HEAD", "ref: refs/heads/main")
+            put(files, "tidewatch/README.md", "# Tidewatch\n\nPredicts tides for a made-up harbour.")
+            put(files, "tidewatch/pyproject.toml", '[project]\nname = "tidewatch"\ndescription = "Tide tables"\n')
+            for n in range(5):
+                put(files, f"tidewatch/src/mod{n}.py", f"def f{n}():\n    return {n}\n")
+            run(con, [files])
+            found = rows(con)
+            self.assertEqual([(r["kind"], r["state"]) for r in found.values()], [("repo", "done")])
+            note = (vault / found["Files/tidewatch"]["note"]).read_text(encoding="utf-8")
+            self.assertTrue(found["Files/tidewatch"]["note"].startswith("Sources/Code/"))
+            self.assertIn("Predicts tides", note)
+            self.assertIn("Python (5 files)", note)
+
+    def test_a_folder_of_one_courses_notes_is_a_course_unit(self):
+        with home() as (con, vault, files), fake_ai({}):
+            for n in range(1, 4):
+                put(files, f"HIS201/week {n} notes.md", f"# Week {n}\n\nSeminar on the medieval wool trade.")
+            run(con, [files])
+            found = rows(con)
+            course = found["Files/HIS201"]
+            self.assertEqual((course["kind"], course["state"]), ("course", "done"))
+            text = (vault / course["note"]).read_text(encoding="utf-8")
+            self.assertEqual(text.count("- [[Sources/Study notes/Week"), 3)
+            member = (vault / found["Files/HIS201/week 1 notes.md"]["note"]).read_text(encoding="utf-8")
+            self.assertIn("## Part of", member)
+
+
+class Ranking(unittest.TestCase):
+    def test_ranking_puts_a_cv_before_notes(self):
+        self.assertLess(rank.rule_for("Docs/My CV 2024.pdf").rank, rank.rule_for("Docs/lecture notes.pdf").rank)
+        self.assertEqual(rank.rule_for("Docs/Transcript.pdf").category, "Education")
+        self.assertEqual(rank.rule_for("Year 2/Lecture notes/CV.docx").doc_type, "cv")
+
+    def test_the_cv_is_read_first_whatever_its_folder_order(self):
+        with home() as (con, _vault, files), fake_ai({}):
+            put(files, "a notes/week 1 notes.md", "# Week 1\n\nNotes.")
+            put(files, "z/Robin CV.md", CV_TEXT)
+            order = []
+            engine.run(con, "b1", folders=[str(files)], step=lambda t: None,
+                       progress=lambda done, total, text: order.append(text))
+            self.assertEqual(order[0], "Files/z/Robin CV.md")
+
+    def test_a_plain_text_cv_with_a_dull_name_ranks_as_a_cv_by_its_first_words(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = put(Path(tmp), "notes.txt", "Curriculum vitae\n\nAvery Quillon")
+            self.assertEqual(rank.rule_for("notes.txt", path).doc_type, "cv")
+
+
+class Understanding(unittest.TestCase):
+    def test_an_empty_conversion_never_reaches_the_model(self):
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}) as backend:
+            put(files, "Scanned CV.pdf", b"%PDF-1.4\n%%EOF\n")
+            run(con, [files])
+            self.assertEqual(rows(con)["Files/Scanned CV.pdf"]["state"], "no_text")
+            self.assertEqual(backend.requests("ingest_doc"), [])
+        with self.assertRaises(ValueError):
+            understand.ask("x.md", "   ", rank.RULES[0])
+
+    def test_a_quote_not_in_the_text_marks_the_fact_check_this(self):
+        found = []
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}), \
+                mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e: found.append((k, e))):
+            settings.set("you.name", OWNER)
+            put(files, "CV.md", CV_TEXT)
+            run(con, [files])
+            note = (vault / rows(con)["Files/CV.md"]["note"]).read_text(encoding="utf-8")
+            fm, _ = frontmatter.parse(note)
+        self.assertIn("**Check this:** Achievement: Won the Wexley Prize.", note)
+        self.assertNotIn("Check this:** Job", note)
+        self.assertEqual(fm["hal"], "needs-review")
+        self.assertEqual([(k, e["verified"]) for k, e in found], [("job", True), ("achievement", False)])
+        self.assertTrue(found[0][1]["source_rel"].startswith("Sources/CVs and letters/"))
+        self.assertEqual(found[0][1]["quote"], "Gallery assistant, Brindle Arts Centre")
+
+    def test_someone_elses_document_gives_no_owner_facts(self):
+        other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
+        found = []
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps({**REPLY, "about_owner": False})}), \
+                mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e: found.append(k)):
+            settings.set("you.name", OWNER)
+            put(files, "Friend CV.md", other)
+            run(con, [files])
+            note = (vault / rows(con)["Files/Friend CV.md"]["note"]).read_text(encoding="utf-8")
+        self.assertEqual(found, [])
+        self.assertEqual(frontmatter.parse(note)[0]["about_owner"], "false")
+        self.assertNotIn("## Key facts", note)
+
+    def test_a_document_the_model_calls_theirs_but_never_names_them_is_unsure(self):
+        other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
+        self.assertEqual(understand.judge_owner(True, OWNER, other), "unsure")
+        self.assertEqual(understand.judge_owner(True, OWNER, CV_TEXT), "true")
+        self.assertEqual(understand.judge_owner("maybe", OWNER, CV_TEXT), "unsure")
+
+    def test_notes_have_list_tags_and_links_to_entity_notes(self):
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}):
+            settings.set("you.name", OWNER)
+            put(files, "CV.md", CV_TEXT)
+            run(con, [files])
+            rel = rows(con)["Files/CV.md"]["note"]
+            text = (vault / rel).read_text(encoding="utf-8")
+            fm, body = frontmatter.parse(text)
+            self.assertIn("tags:\n  - cv\n  - history-of-art\n", text)
+            self.assertIsInstance(fm["tags"], list)
+            self.assertGreaterEqual(len(fm["tags"]), understand.TAGS_MIN)
+            self.assertEqual(fm["organisations"], ["Brindle Arts Centre", "University of Elsewhere"])
+            self.assertTrue(fm["ingested"].endswith("Z"))
+            self.assertIn("[[Organisations/Brindle Arts Centre|Brindle Arts Centre]]", body)
+            entity = (vault / "Organisations" / "Brindle Arts Centre.md").read_text(encoding="utf-8")
+            self.assertIn("type: entity", entity)
+            self.assertIn(f"- {notes.link(rel, 'Avery Quillon CV')}", entity)
+            index = (vault / "Sources" / "CVs and letters" / "Index.md").read_text(encoding="utf-8")
+            self.assertIn("Avery Quillon CV", index)
+            self.assertFalse(record.should_index(entity), "entity notes are links, not content to search")
+            self.assertTrue(record.sync()["notes"] >= 1)
+
+    def test_a_light_note_gets_tags_without_any_model(self):
+        with home() as (con, vault, files), fake_ai({}) as backend:
+            put(files, "Revision/week 3 notes.md", "# Rivers\n\nMeanders and oxbow lakes, 2022 fieldwork.")
+            run(con, [files])
+            fm, _ = frontmatter.parse((vault / rows(con)["Files/Revision/week 3 notes.md"]["note"])
+                                      .read_text(encoding="utf-8"))
+            self.assertEqual(backend.requests(), [])
+            self.assertIn("year-2022", fm["tags"])
+            self.assertIn("revision", fm["tags"])
+
+    def test_the_link_pass_links_a_known_title_once_outside_headings_and_code(self):
+        titles = {"brindle arts centre": "Organisations/Brindle Arts Centre.md"}
+        text = ("---\ntitle: x\n---\n# Brindle Arts Centre\n\nAt Brindle Arts Centre. Again Brindle Arts Centre.\n"
+                "`Brindle Arts Centre`\n")
+        out = notes.link_note(text, titles, "Sources/Other/x.md")
+        self.assertEqual(out.count("[[Organisations/Brindle Arts Centre|Brindle Arts Centre]]"), 1)
+        self.assertIn("# Brindle Arts Centre\n", out)
+        self.assertIn("`Brindle Arts Centre`", out)
 
 
 class Frontmatter(unittest.TestCase):
@@ -16,11 +325,42 @@ class Frontmatter(unittest.TestCase):
         self.assertEqual(body, "# Body\n")
         self.assertEqual(frontmatter.parse("---\ntags: [x, \"y, z\"]\n---\n")[0], {"tags": ["x", "y, z"]})
 
-    def test_the_record_reads_a_list_of_tags_and_a_quoted_title(self):
-        note = '---\ntitle: "Report: phase 2"\ntags:\n  - a\n  - b\n---\n# Report\n\n' + "Long enough text. " * 4
-        self.assertEqual(record._frontmatter(note)[0]["tags"], ["a", "b"])
-        self.assertEqual(record.chunks("x.md", note)[0]["title"], "Report: phase 2")
-        self.assertFalse(record.should_index("---\ntype: [index]\n---\n# Start\n"))
+
+class Progress(unittest.TestCase):
+    def test_the_ingest_carries_on_after_a_restart_without_reading_items_twice(self):
+        with home() as (con, vault, files), fake_ai({}):
+            for n in range(4):
+                put(files, f"Essays/essay {n}.md", f"# Essay {n}\n\nOn the made-up town of Wexley, part {n}.")
+            calls = []
+
+            def stop_after_two(done, total, text):
+                calls.append(text)
+                if len(calls) == 3:
+                    raise runner.Stopped()
+            with self.assertRaises(runner.Stopped):
+                engine.run(con, "b1", folders=[str(files)], step=lambda t: None, progress=stop_after_two)
+            self.assertEqual(sorted(r["state"] for r in rows(con).values()), ["done", "done", "pending", "pending"])
+            again = []
+            engine.run(con, "b1", folders=[str(files)], step=lambda t: None,
+                       progress=lambda done, total, text: again.append((done, total, text)))
+            self.assertEqual([a[:2] for a in again], [(2, 4), (3, 4), (4, 4)])
+            self.assertEqual({r["state"] for r in rows(con).values()}, {"done"})
+            self.assertEqual(len(list((vault / "Sources").rglob("essay *.md"))) +
+                             len(list((vault / "Sources").rglob("Essay *.md"))), 4)
+
+    def test_the_action_reports_done_total_and_the_page_summary(self):
+        with home() as (con, _vault, files), fake_ai({}):
+            put(files, "CV.md", CV_TEXT)
+            put(files, "Cloud/Offer letter.pdf", bytes(100))
+            done = finished(ingest_actions.queue(folders=[files]))
+            self.assertEqual(done["state"], "done", done["error"])
+            self.assertEqual((done["done_n"], done["done_total"]), (2, 2))
+            shown = items.summary(con)
+            self.assertEqual((shown["state"], shown["done"], shown["total"], shown["not_downloaded"]),
+                             ("done", 2, 2, 1))
+            self.assertEqual(shown["not_downloaded_paths"], ["Files/Cloud/Offer letter.pdf"])
+            self.assertEqual(shown["categories"], {"CVs and letters": 1})
+
 
 
 if __name__ == "__main__":

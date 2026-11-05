@@ -76,6 +76,10 @@ register(
             order=50),
     Setting("ai.model.embed", "text", "nomic-embed-text", "For searching your record by meaning", advanced=True,
             visible_if="ai.provider == 'local'", order=60),
+    # Kept for a model that looks at pictures; developer-only until the AI layer can send one a picture.
+    Setting("ai.model.vision", "text", "", "For looking at pictures in your record", advanced=True, dev_only=True,
+            visible_if="ai.provider == 'local'", remote="local_only", order=65,
+            help="Leave empty to use the model for writing."),
     Setting("ai.ollama_url", "url", OLLAMA_URL, "Address of the AI on this computer", advanced=True, order=70),
     # where the owner token is read from and sent to: only someone at this computer may change either
     Setting("ai.hal_url", "url", "http://127.0.0.1:8741/v1", "Address of Hal's model gateway", advanced=True,

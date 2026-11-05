@@ -9,7 +9,9 @@ Documents dropped in (PDF, Word, PowerPoint, Excel, web pages, saved emails) are
 beside them, keeping their headings and tables, so they can be searched in sensible sections: by
 Microsoft's MarkItDown when it is installed, else by pypdfium2 for PDFs (`cvstudio/pdfread.py`) and by
 reading a Word file's XML. Photos and scans are read by OCR when tesseract is installed and `record.ocr`
-is on. Frontmatter is read with YAML lists as lists (`ingest/frontmatter.py`), as Obsidian writes tags.
+is on. Two folders are left to the bulk ingest (`jobhunt.ingest`), which writes their notes in `Sources/`:
+the drop folder (`record.drop_folder`) and its copies of originals (`ORIGINALS`). Frontmatter is read with
+YAML lists as lists (`ingest/frontmatter.py`), as Obsidian writes tags.
 
 Search is by words (BM25) over passages split at each heading, in pure Python, so it needs no AI, no
 graphics card and no internet; the index is one JSON file in the data folder. A passage's score is the share
@@ -75,8 +77,10 @@ DOCUMENTS = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".epub", ".msg"
 IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff")
 MIN_SCORE = 0.5  # below half the query's weight a passage is about something else
 SKIP_DIRS = {".obsidian", ".trash"}
-# Navigation notes, not content: the "Start Here" note setup writes is one.
-SKIP_TYPE = {"topic", "dashboard", "index"}
+# Navigation notes, not content: the "Start Here" note setup writes is one, as are the ingest's entity notes,
+# which hold only links to the notes that mention them.
+SKIP_TYPE = {"topic", "dashboard", "index", "entity"}
+ORIGINALS = "Attachments/Sources"   # the ingest's copies of the files it read (`ingest/notes.py`)
 MAX_CHARS = 1200  # a passage's size: a paragraph or two, enough to quote from
 # BM25's usual constants (Robertson and Zaragoza, 2009).
 K1, B = 1.5, 0.75
@@ -195,6 +199,16 @@ def _text_of(path: Path) -> str:
     return text
 
 
+def text_of(path: Path) -> str:
+    """A document's text as its note holds it: Markdown with line ends and blank runs tidied; "" for none.
+
+    The bulk ingest (`jobhunt.ingest`) reads documents through this too, so a file reads the same either way.
+    """
+    # Runs of spaces inside a line are kept: in pdftotext's layout they are what keeps columns apart.
+    text = re.sub(r"[ \t]+\n", "\n", _text_of(path).replace("\r\n", "\n").replace("\f", "\n"))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 def convert() -> list[Path]:
     """Writes a note beside each document that has none, or whose document changed; returns the notes written."""
     written = []
@@ -202,9 +216,7 @@ def convert() -> list[Path]:
         note = doc.with_name(f"{doc.stem} ({doc.suffix[1:].upper()}).md")
         if note.exists() and note.stat().st_mtime >= doc.stat().st_mtime:
             continue
-        # Runs of spaces inside a line are kept: in pdftotext's layout they are what keeps columns apart.
-        text = re.sub(r"[ \t]+\n", "\n", _text_of(doc).replace("\r\n", "\n").replace("\f", "\n"))
-        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        text = text_of(doc)
         if not text:
             continue
         note.write_text(f"---\ntype: document\nsource: \"[[{doc.name}]]\"\nconverted: {date.today().isoformat()}\n---\n"
@@ -213,10 +225,24 @@ def convert() -> list[Path]:
     return written
 
 
+def _ingest_owned(vault: Path) -> set[Path]:
+    """Folders of the record whose documents the bulk ingest reads, so `convert` leaves them alone.
+
+    The drop folder's files are read into `Sources/` notes, and the copies of originals in `ORIGINALS`
+    already have theirs; a second note beside each would put every passage in the index twice.
+    """
+    from .ingest import sources
+
+    return {(vault / ORIGINALS).resolve(), sources.drop_folder().expanduser().resolve()}
+
+
 def _walk(suffixes: tuple) -> list[Path]:
     found = []
-    for folder, dirs, files in os.walk(_live("VAULT")):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
+    vault = Path(_live("VAULT"))
+    owned = _ingest_owned(vault)
+    for folder, dirs, files in os.walk(vault):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")
+                   and (Path(folder) / d).resolve() not in owned]
         found += [Path(folder) / f for f in files if f.lower().endswith(suffixes)]
     return sorted(found)
 
@@ -234,7 +260,7 @@ def _one(value) -> str:
 
 
 def should_index(text: str) -> bool:
-    """False for navigation notes (index, topic, dashboard) and empty stubs."""
+    """False for navigation notes (index, topic, dashboard, entity) and empty stubs."""
     fm, _ = _frontmatter(text)
     return _one(fm.get("type")).strip().lower() not in SKIP_TYPE and _one(fm.get("status")).strip().lower() != "stub"
 
