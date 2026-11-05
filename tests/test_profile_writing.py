@@ -73,6 +73,14 @@ class Writing(unittest.TestCase):
         self.assertIn("Education: BA History", block)
         self.assertLessEqual(max(len(x) for x in block.splitlines()), writing.LINE_MAX + len(" ..."))
 
+    def test_the_projects_closest_to_the_advert_come_first(self):
+        src = {"source_rel": "Sources/Projects/a.md", "quote": "x", "field": "name", "doc_type": "notes"}
+        for name in ("Pottery stall accounts", "Oral history of the Wexley mills", "Choir rota"):
+            store.add_found(self.con, "project", {"name": name}, src)
+        block = profile.context_block(self.con, queries=["Recording oral history interviews for a heritage trust"])
+        projects = [x for x in block.splitlines() if x.startswith("- Project")]
+        self.assertTrue(projects[0].startswith("- Project: Oral history"))
+
     def test_checked_facts_come_before_found_ones_and_contact_details_are_left_out(self):
         humanities_profile(self.con)
         block = profile.context_block(self.con)

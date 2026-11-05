@@ -83,12 +83,25 @@ def line(kind: str, fields: dict, quote: str = "") -> str:
     return f"Link: {f.get('label') or f.get('url', '')}" + (f" {f['url']}" if f.get("label") else "")
 
 
-def _lines(con: sqlite3.Connection, states: tuple[str, ...]) -> list[str]:
+# Kinds a person has many of: shown most relevant to the job first, as the block cannot hold them all
+# (89 projects filled it in a real profile, 2026-11-05).
+RANKED_KINDS = ("project", "skill", "certificate", "achievement")
+
+
+def _relevance(item: dict, wanted: set[str]) -> int:
+    words = set(merge.text_key(" ".join(str(v) for v in item["fields"].values())).split())
+    return len(words & wanted)
+
+
+def _lines(con: sqlite3.Connection, states: tuple[str, ...], queries: list[str] | None = None) -> list[str]:
     out = []
+    wanted = set(merge.text_key(" ".join(queries or [])).split()) - QUERY_STOP
     for kind in KIND_ORDER:
         found = store.items(con, kind, hidden=False)
         if kind == "basic":
             found = _one_location(found)
+        if kind in RANKED_KINDS and wanted:
+            found = sorted(found, key=lambda it: -_relevance(it, wanted))
         for it in found:
             if it["state"] not in states:
                 continue
@@ -116,14 +129,19 @@ def _one_location(basics: list[dict]) -> list[dict]:
     return [b for b in basics if b["fields"].get("key") != "location" or b is best]
 
 
-def context_block(con: sqlite3.Connection, limit: int = LIMIT) -> str:
+QUERY_STOP = {"and", "or", "the", "a", "an", "of", "to", "in", "for", "with", "on", "at", "by", "is", "are", "be",
+              "you", "your", "we", "our", "will", "experience", "ability", "able", "skills", "knowledge", "good",
+              "strong", "excellent", "work", "working", "role"}
+
+
+def context_block(con: sqlite3.Connection, limit: int = LIMIT, queries: list[str] | None = None) -> str:
     """The "Profile" block for a writing prompt: checked and edited facts, then found ones; never hidden ones,
     and never a found one whose every quote was missing from its document.
 
     "" when the profile holds nothing to say.
     """
-    checked = _lines(con, ("confirmed", "edited"))
-    found = _lines(con, ("hal",))
+    checked = _lines(con, ("confirmed", "edited"), queries)
+    found = _lines(con, ("hal",), queries)
     if not checked and not found:
         return ""
     parts = [HEADING]
@@ -144,12 +162,12 @@ def context_block(con: sqlite3.Connection, limit: int = LIMIT) -> str:
     return "\n".join(out)
 
 
-def block() -> str:
+def block(queries: list[str] | None = None) -> str:
     """The Profile block from Hal's own database, for callers that hold no connection."""
     with closing(db.connect()) as con:
-        return context_block(con)
+        return context_block(con, queries=queries)
 
 
 def with_record(queries: list[str]) -> str:
     """The Profile block above the record's passages for `queries`; "" when both are empty."""
-    return "\n\n".join(p for p in (block(), record.context(queries)) if p)
+    return "\n\n".join(p for p in (block(queries), record.context(queries)) if p)
