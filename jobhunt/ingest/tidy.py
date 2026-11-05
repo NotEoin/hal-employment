@@ -8,8 +8,9 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
 2. Each note already filed is judged again by rules alone: whose it is (`note_role`: the role it was given, or
    from its old `about_owner` and kind), whether it looks private (`privacy.reason`), whether it is a settings
    or tool file (`discover.is_tool_file`), and whether it is slides the person's own notes cover
-   (`lectures.Covered`). Facts its role may not give leave the profile; course material loses contact
-   details; code text is fenced. Copies of one project keep only the newest copy's note (`versions`).
+   (`lectures.Covered`). Facts its role may not give leave the profile and the note's key facts; course
+   material loses contact details; code text is fenced. Copies of one project keep only the newest copy's
+   note (`versions`).
 3. Notes the AI should read again are put back in the batch, to be rewritten in place (`engine._again`):
    converted course material, for a lecture note, and documents whose role the rules cannot settle, such
    as a report no AI has judged as the person's or someone else's. Each is read once.
@@ -43,6 +44,8 @@ KEPT_ENTITY_FOLDERS = {"Organisations": "organisations", "Projects": "projects",
 JUDGED_BY_AI = ("cv", "letter", "personal_statement", "report", "coursework", "dissertation", "project",
                 "repository", "essay", "writing", "other", "certificate", "transcript", "reference")
 TEXT = "\n## Text\n\n"
+FACTS = "## Key facts\n\n"
+FACT_KIND = re.compile(r"^- (?:\*\*Check this:\*\* )?([A-Za-z]+):")     # as `notes._fact_line` writes it
 LINK = re.compile(r"\[\[([^\]|#]+)(?:\|([^\]]*))?\]\]")
 
 
@@ -113,9 +116,22 @@ def _unlink_gone(text: str) -> str:
     return LINK.sub(plain, text)
 
 
+def _given_facts(body: str, role: str, doc_type: str) -> str:
+    """`body` with only the key facts its role gives; an older read listed a lecturer's email too."""
+    if FACTS not in body:
+        return body
+    head, rest = body.split(FACTS, 1)
+    block, sep, tail = rest.partition("\n\n")
+    kept = [line for line in block.splitlines()
+            if (m := FACT_KIND.match(line)) and roles.allowed(role, m.group(1).lower(), doc_type)]
+    return head + FACTS + "\n".join(kept) + sep + tail if kept else head + tail
+
+
 def _rewrite(path: Path, fm: dict, body: str, role: str, source: str) -> None:
-    """Writes the note again with its role, course material without contact details, code text fenced."""
+    """Writes the note again with its role and only the facts it gives, course material without contact
+    details, code text fenced."""
     fm = {**fm, "role": role, "about_owner": roles.ABOUT_OWNER[role]}
+    body = _given_facts(body, role, str(fm.get("doc_type") or ""))
     if role == roles.TAUGHT:
         body = lectures.scrub(_unlink_gone(body))
     suffix = PurePosixPath(source.split("?")[0]).suffix.lower()
