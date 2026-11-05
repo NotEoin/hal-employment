@@ -1,4 +1,4 @@
-"""Passwords and keys: the email app password, job-site keys, the phone alert code.
+"""Passwords and keys: the email app password, job-site keys, the phone alert code, a GitHub token.
 
 The first choice is the system keyring (`keyring`, service "Hal Employment", user name = the secret's
 name): Windows Credential Manager, or the desktop's Secret Service on Linux. When no keyring works (a
@@ -39,7 +39,8 @@ from .. import paths
 log = logging.getLogger(__name__)
 
 SERVICE = "Hal Employment"
-NAMES = ("email.app_password", "sites.adzuna_key", "sites.reed_key", "notify.ntfy_topic", "ai.openai_key")
+NAMES = ("email.app_password", "sites.adzuna_key", "sites.reed_key", "notify.ntfy_topic", "ai.openai_key",
+         "record.github_token")
 FILE_NAME = "secrets.json"
 FILE_MODE = 0o600
 KEYRING_TIMEOUT_S = 10          # a healthy keyring answers in well under a second

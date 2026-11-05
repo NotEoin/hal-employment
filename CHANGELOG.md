@@ -6,6 +6,10 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Read your web links into your record.** Hal can read your own site or blog (up to 30 pages under the
+  link you give), your GitHub profile and repositories with their READMEs, and Google Docs and Slides
+  shared with anyone. Sites such as Instagram and LinkedIn need you signed in, so Hal asks you to save the
+  page and drop the file in instead.
 - **Choose several career areas.** The goal step's career areas are now toggles: press every area you are
   interested in, such as Heritage and museums and Creative and media, and their example roles are joined.
 - **Queue jobs, then approve them together.** **Add to queue** (or Q) beside **Apply with Hal** puts a job

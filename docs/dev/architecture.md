@@ -395,6 +395,28 @@ runs: tests use `tests/support/fake_claude/`.
 - `docs/write_routes.py` serves the document change, letter rewrite, interview prep and contacts routes;
   each starts its kind in `docs/write_actions.py` and returns `{action_id}`.
 
+### Web links for the record (`ingest/web.py`)
+
+`web.fetch(urls, page_cap=None, progress=None)` returns a list of `Page` (url, title, Markdown text, kind
+`page`, `repo`, `profile` or `doc`, meta, error). It never raises for a link: a link it cannot read gives
+one `Page` with `error` in plain words. Every request has a 20 s timeout, a size cap and Hal's user agent.
+
+- **Own sites and blogs:** read breadth first from the given page, on the same host and under its folder
+  only, up to `record.web_pages` pages (default 30), where robots.txt allows. Assets are skipped, and a
+  page is read once (fragment stripped, canonical link honoured). Markdown comes from MarkItDown when the
+  documents extra is installed, else from a stdlib reader that keeps headings and lists. Both keep only
+  `<main>` or the `<article>`s when the page has them, and drop the nav, header, footer and aside.
+- **GitHub:** a profile link reads the profile and the person's own repositories (forks skipped) through
+  the REST API; a repository link reads that one. Each repository gives its description, topics,
+  languages, stars, homepage, last push and README. `record.github_token` (a secret) is sent when set. A
+  used-up rate limit stops that link and the batch's later GitHub links with the reset time on the Page.
+- **Google Docs and Slides:** read through the plain-text export address, which works only for a link
+  shared with anyone; a private one asks the person to download it and drop the file in.
+- **Instagram, LinkedIn, Facebook, X, TikTok and Threads** are never fetched: their Page says the site
+  needs the person signed in.
+
+`tests/test_ingest_web.py` serves a made-up site, GitHub API and Google export from 127.0.0.1.
+
 ## Sources (`find/sources_registry.py`, `find/detect.py`, `find/source_routes.py`)
 
 - Every place Hal searches is a `sources` row. Built-ins come from `find/seed/sources.toml` and follow the
