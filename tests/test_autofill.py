@@ -239,6 +239,15 @@ class Answers(unittest.TestCase):
         self.assertEqual(self.propose(label="What is your desired salary?")["source"], "profile: salary")
         self.assertIsNone(autofill.left_to_you({"label": "Have you worked with Python before?"}, "Practice Ltd"))
 
+    def test_a_high_school_or_second_subject_is_not_given_the_university_degree(self):
+        """Regression (testers, 2026-11-05): "What year did you graduate high school?" and "High School" were given
+        the university, and "Secondary Major" the degree."""
+        autofill.profile = lambda: {**PROFILE, "university": "Southbrook University", "degree": "BSc Made-up Studies"}
+        for label in ("What year did you graduate high school?", "High School", "Secondary Major"):
+            self.assertNotIn(self.propose(label=label)["source"], ("profile: university", "profile: degree",
+                                                                   "profile: grad_year"), label)
+        self.assertEqual(self.propose(label="University")["value"], "Southbrook University")
+
     def test_an_optional_follow_up_to_a_different_answer_is_left_empty(self):
         """Regression (testers, 2026-11-04): after "No" to sponsorship, the model answered "If you answered yes to
         the above, confirm your visa" with "A"."""

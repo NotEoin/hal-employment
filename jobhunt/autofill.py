@@ -316,6 +316,11 @@ OTHER_PERSON = re.compile(r"referee|references?\b|emergency|next of kin|employme
 HISTORY = re.compile(r"education|qualification|academic|employment|experience|training|course", re.I)
 # Answers about the job applied for, which a dated history section is not asking.
 ABOUT_THIS_JOB = {"start", "notice", "salary", "office", "relocate", "how_heard"}
+HIGH_SCHOOL = re.compile(r"high ?school|secondary school|sixth form|\bgcses?\b|\ba[- ]?levels?\b", re.I)
+# Labels a rule's words match that ask about something else (Jane Street, testers 2026-11-05): "What year did you
+# graduate high school?" was given the university, and "Secondary Major" the degree.
+NOT_FOR = {"university": HIGH_SCHOOL, "grad_year": HIGH_SCHOOL,
+           "degree": re.compile(r"secondary|second|minor|double", re.I)}
 HEARD_SITE = [re.compile(r"(company|careers?|our) (web)?(site|page)|^website", re.I)]
 HEARD_BOARD = [re.compile(r"job ?board|job (site|website|search)|online (job|search)", re.I)]
 # Shortest option or answer matched inside the other; shorter ones ("UK", "No") match too much by accident.
@@ -500,7 +505,7 @@ def _rule(f: dict, prof: dict) -> tuple[object, str] | None:
         # answered as that; the sponsorship rule answered it "No" (ComplyAdvantage, testers 2026-11-05).
         rules = [r for r in RULES if r[1] != "sponsorship"]
     for pattern, key, preferred in rules:
-        if not re.search(pattern, label, re.I):
+        if not re.search(pattern, label, re.I) or (key in NOT_FOR and NOT_FOR[key].search(label)):
             continue
         if key in ABOUT_THIS_JOB and HISTORY.search(section):
             return None

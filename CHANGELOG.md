@@ -25,6 +25,8 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A high school or second subject is not given your degree.** "What year did you graduate high school?" and
+  "High School" were answered with your university, and "Secondary Major" with your degree subject.
 - **Hal leaves your current pay and your past with an employer to you.** The expected salary went into "What is
   your current salary?", and Hal's model answered "Yes" to "Have you interviewed with Jane Street before?". Both
   kinds of question are now left for you, and never sent to the model.
