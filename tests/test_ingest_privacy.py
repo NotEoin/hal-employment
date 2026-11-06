@@ -69,6 +69,12 @@ class Rules(unittest.TestCase):
         self.assertEqual(reason("Use the test card 4242 4242 4242 4242 in the sandbox."), "")
         self.assertEqual(reason("Order 4929123456789015 was shipped."), "", "no card words and not grouped")
 
+    def test_a_decimal_or_a_rounded_id_beside_card_words_is_not_a_card(self):
+        # a results table's "0.4929123456789015" and a tweet ID next to "card" kept data files out (2026-11-06)
+        self.assertEqual(reason("Card size,0.4929123456789015,0.05"), "")
+        self.assertEqual(reason("Used my visa card again,4550000000000006,2014-12-31"), "")
+        self.assertEqual(reason("Visa card 4929123456789015, expires 09/28"), privacy.BANK)
+
     def test_an_nhs_number_with_a_valid_check_digit_beside_nhs_is_medical(self):
         self.assertEqual(reason("NHS number: 943 476 5919"), privacy.MEDICAL)
         self.assertEqual(reason("NHS number: 943 476 5918"), "")

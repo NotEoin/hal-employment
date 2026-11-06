@@ -62,7 +62,10 @@ IBAN_LEN = (15, 34)
 
 # Card numbers of 13 to 19 digits, alone or in groups, from the networks' own ranges (Visa 4, Mastercard
 # 51 to 55 and 2221 to 2720, Amex 34 and 37, Discover 6011 and 65).
-CARD = re.compile(r"(?<![\d-])(\d{4}(?:[ -]?\d{3,4}){2,3}(?:[ -]?\d{1,3})?)(?![\d-])")
+# Never the digits after a decimal point: a results table's "0.2719458330027242" was a card (2026-11-06).
+CARD = re.compile(r"(?<![\d.-])(\d{4}(?:[ -]?\d{3,4}){2,3}(?:[ -]?\d{1,3})?)(?![\d-]|\.\d)")
+# A run this long of one digit is a rounded ID or a placeholder, such as a tweet's 550335000000000000
+CARD_RUN = re.compile(r"(\d)\1{5}")
 CARD_PREFIX = re.compile(r"^(?:4|5[1-5]|2(?:2[2-9]|[3-6]\d|7[01]|720)|3[47]|6011|65)")
 CARD_DIGITS = (13, 19)
 CARD_GROUPED = re.compile(r"^\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{4}$")
@@ -208,7 +211,7 @@ def _bank(text: str) -> bool:
 def _card(text: str) -> bool:
     for m in CARD.finditer(text):
         digits = re.sub(r"\D", "", m.group(1))
-        if not CARD_DIGITS[0] <= len(digits) <= CARD_DIGITS[1] or digits in TEST_CARDS:
+        if not CARD_DIGITS[0] <= len(digits) <= CARD_DIGITS[1] or digits in TEST_CARDS or CARD_RUN.search(digits):
             continue
         if CARD_PREFIX.match(digits) and luhn(digits) and (CARD_GROUPED.match(m.group(1))
                                                            or _near(CARD_LABEL, text, m.start())):
