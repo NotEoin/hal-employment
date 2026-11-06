@@ -91,6 +91,10 @@ def serve(spec, master=None):
     try:
         srv.bind((lhost, int(lport)))
     except OSError:
+        # OpenSSH's words when -L cannot listen, with ExitOnForwardFailure
+        sys.stderr.write(f"bind [{{lhost}}]:{{lport}}: Address already in use\n"
+                         f"channel_setup_fwd_listener_tcpip: cannot listen to port: {{lport}}\n"
+                         "Could not request local forwarding.\n")
         sys.exit(255)
     srv.listen(16)
 
@@ -346,6 +350,15 @@ class EndToEnd(unittest.TestCase):
         self.assertGreater(urlport(seen["url"]), taken)
         self.assertEqual((seen["open"], seen["session"]), (302, 200))
         self.assertTrue(seen["body"]["remote"])
+
+    def test_a_port_that_refuses_connections_but_cannot_be_listened_on_is_skipped(self):
+        """The next port answered nothing but was held by a connection, and the launcher gave up (2026-11-05)."""
+        with socket.socket() as busy:
+            busy.bind(("127.0.0.1", 0))      # bound, not listening: a connection to it is refused
+            taken = busy.getsockname()[1]
+            seen = self.run_launcher(taken)
+        self.assertGreater(urlport(seen["url"]), taken)
+        self.assertEqual((seen["open"], seen["session"]), (302, 200))
 
     def test_install_adds_a_menu_entry_that_opens_in_a_terminal(self):
         done = subprocess.run([str(self.script), "--install"], env=self.env, capture_output=True, text=True,

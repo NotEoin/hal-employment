@@ -16,6 +16,7 @@ SSH_BASE=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o Serve
 SSH_OPTS=("${SSH_BASE[@]}" -o ControlMaster=auto)
 HEALTH_TRIES=80   # 80 x 0.25 s: the tunnel gets 20 s to carry Hal's first answer
 MASTER_TRIES=240  # 240 x 0.25 s: a minute to log in (a passphrase is typed here) before the other calls go alone
+PORT_TRIES=20     # local ports tried in turn when the tunnel cannot listen on one
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
 install_entry() {
@@ -59,17 +60,33 @@ while (exec 3<>"/dev/tcp/127.0.0.1/${LOCAL_PORT}") 2>/dev/null; do LOCAL_PORT=$(
 # The tunnel is the control master, so this window lives exactly as long as the tunnel. An `ssh -N -L`
 # that joins an existing master hands its forward over and exits at once, which closed the window as soon
 # as it opened (checked with OpenSSH 10.2, 2026-11-03).
-ssh "${SSH_BASE[@]}" -o ControlMaster=yes -o ControlPersist=no -o ExitOnForwardFailure=yes \
-  -N -L "127.0.0.1:${LOCAL_PORT}:127.0.0.1:${PORT}" "$HOST" &
-TUNNEL=$!
-cleanup() { kill "$TUNNEL" 2>/dev/null; }
+TUNNEL_ERR="$(mktemp)"
+open_tunnel() {
+  ssh "${SSH_BASE[@]}" -o ControlMaster=yes -o ControlPersist=no -o ExitOnForwardFailure=yes \
+    -N -L "127.0.0.1:${LOCAL_PORT}:127.0.0.1:${PORT}" "$HOST" 2>"$TUNNEL_ERR" &
+  TUNNEL=$!
+}
+cleanup() { kill "$TUNNEL" 2>/dev/null; rm -f "$TUNNEL_ERR"; }
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
-for _ in $(seq 1 "$MASTER_TRIES"); do
-  kill -0 "$TUNNEL" 2>/dev/null || fail "Could not connect to $HOST. Is the desktop on and awake, and does your SSH key log in?"
-  ssh "${SSH_BASE[@]}" -O check "$HOST" 2>/dev/null && break
-  sleep 0.25
+# A port nothing answers on can still be held by another program's connection, so ssh cannot listen on it
+# and says so; the next port is tried then (a CI run hit this, 2026-11-05).
+for _ in $(seq 1 "$PORT_TRIES"); do
+  open_tunnel
+  for _ in $(seq 1 "$MASTER_TRIES"); do
+    kill -0 "$TUNNEL" 2>/dev/null || break
+    ssh "${SSH_BASE[@]}" -O check "$HOST" 2>/dev/null && break
+    sleep 0.25
+  done
+  kill -0 "$TUNNEL" 2>/dev/null && break
+  wait "$TUNNEL" 2>/dev/null
+  grep -qE "cannot listen to port|Address already in use" "$TUNNEL_ERR" || {
+    cat "$TUNNEL_ERR" >&2
+    fail "Could not connect to $HOST. Is the desktop on and awake, and does your SSH key log in?"
+  }
+  LOCAL_PORT=$((LOCAL_PORT + 1))
 done
+kill -0 "$TUNNEL" 2>/dev/null || fail "Could not find a free port on this computer for the connection to $HOST."
 
 # refresh the helper files when the desktop's version changed (a visible folder, so any browser can load it)
 HELPER_DIR="$HOME/Hal Employment/Browser helper"

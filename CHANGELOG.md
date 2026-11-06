@@ -107,6 +107,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Opening Hal from another computer finds a free port.** The desktop launcher gave up with "Could
+  not connect" when the port it picked was in use by another program's connection, even though the desktop
+  was fine. It now moves on to the next port.
 - **Everything Hal writes keeps to your spelling.** CVs, CV suggestions, letters, messages, form answers
   and interview notes now all follow **Spelling** in Settings (UK English unless you choose US English).
   Before, a new CV's profile was always written in British English, CV suggestions followed the CV type
