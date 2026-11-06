@@ -33,6 +33,8 @@ PAY = "a payslip or tax form"
 BIRTH_AND_ID = "a date of birth with an ID number"
 SECRETS = "passwords or secret keys"
 SAID_BY_AI = "the AI said it looks private"
+# The reasons the rules give; any other reason came from the AI, which then saw the text already.
+RULE_REASONS = (SECRETS, ID_DOCUMENT, PAY, BANK, MEDICAL, BIRTH_AND_ID, ID_NUMBER)
 
 NEAR_CHARS = 200          # a label counts for a number this far before or after it
 LABEL_GAP = 60            # "Sort code:" to its digits, "Date of birth" to its date, and the like

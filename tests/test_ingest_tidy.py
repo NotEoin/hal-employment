@@ -177,6 +177,27 @@ class Tidy(unittest.TestCase):
             got = [json.loads(r[0]) for r in con.execute("SELECT fields FROM profile_items WHERE kind = 'education'")]
         self.assertEqual(got, [{"qualification": "BA Geography", "start": "2023"}])
 
+    def test_a_file_a_rule_held_back_is_read_when_todays_rules_let_it_through(self):
+        # a results table's decimals were taken for a card number (2026-11-06)
+        with home() as (con, _vault, files):
+            settings.set("you.name", OWNER)
+            with fake_ai({}):
+                put(files, "dice.csv", "case,card,dice\ncase 1,card 2,0.4929123456789015\n")
+                put(files, "card.md", "My visa card 4929 1234 5678 9015, expires 09/28.")
+                put(files, "told.md", "# Tide gauges\n\nA report on tide gauges.")
+                run(con, [files])
+            for rel, why in (("Files/dice.csv", "bank details"), ("Files/told.md", "the AI said it looks private")):
+                con.execute("UPDATE ingest_items SET state = 'private', private = ?, note = NULL WHERE rel = ?",
+                            (why, rel))
+            con.commit()
+            with fake_ai({}) as backend:
+                run(con, [], batch="t", tidy=True)
+            states = {rel: r["state"] for rel, r in rows(con).items()} | {
+                rel: r["state"] for rel, r in rows(con, "t").items()}
+        self.assertEqual((states["Files/dice.csv"], states["Files/card.md"], states["Files/told.md"]),
+                         ("done", "private", "private"))
+        self.assertEqual(backend.requests("ingest_doc"), [], "a file held on the AI's word is not sent again")
+
     def test_a_typed_note_is_judged_by_rules_and_never_sent_to_the_ai(self):
         with home() as (con, _vault, files):
             settings.set("you.name", OWNER)

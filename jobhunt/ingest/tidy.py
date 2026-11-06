@@ -17,7 +17,8 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
    as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
    under these rules says so (`read_by: ai`, and `lecture_note` for course material), so a second tidy
    sends it to the AI only if its lecture note could not be written. Files called someone else's before
-   the AI had to name who made them (`roles.decide`) are read again too, once.
+   the AI had to name who made them (`roles.decide`) are read again too, once, and files a rule held as
+   private that today's rules let through (`_private_again`).
 
 `finish` runs at the end of every tidy run, and is safe to run again: notes no item points at any more are
 deleted with their facts and copied originals, entity notes outside `notes.noted` go (all of People and
@@ -229,8 +230,29 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
                         (batch, row["id"]))
             done["again"] += 1
     done["not_mine_again"] = _not_mine_again(con, batch)
+    done["private_again"] = _private_again(con, batch)
     con.commit()
     return done
+
+
+def _private_again(con: sqlite3.Connection, batch: str) -> int:
+    """Puts back in the batch the files a rule held as private that today's rules let through.
+
+    A results table's decimals were taken for a card number (2026-11-06). Files held on the AI's word stay
+    held: reading them again would send their text to the AI.
+    """
+    from jobhunt.ingest import convert, engine
+
+    again = 0
+    for row in con.execute("""SELECT * FROM ingest_items WHERE state = 'private' AND allowed = 0
+                              AND private IN ({})""".format(",".join("?" * len(privacy.RULE_REASONS))),
+                           privacy.RULE_REASONS).fetchall():
+        path = Path(row["path"])
+        if path.is_file() and not privacy.reason(row["rel"], convert.text_of(path, engine._rule(row))):
+            con.execute("""UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered', private = NULL
+                           WHERE id = ?""", (batch, row["id"]))
+            again += 1
+    return again
 
 
 def _not_mine_again(con: sqlite3.Connection, batch: str) -> int:
