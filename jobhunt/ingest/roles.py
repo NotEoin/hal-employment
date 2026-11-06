@@ -88,9 +88,14 @@ def identity(owner: str, other_names: str = "", con: sqlite3.Connection | None =
 
 
 def names_person(text: str, words: list[str]) -> bool:
-    """True when `text` holds one of `words` as a whole word, ignoring case."""
+    """True when `text` holds one of `words` as a whole word, ignoring case.
+
+    An underscore parts words, as paths join them with one: "230466043_cs1035" names the student number,
+    which a folder of the person's own practicals did and was missed (2026-11-06).
+    """
     folded = text.lower()
-    return any(re.search(rf"(?<![\w.@-]){re.escape(w.lower())}(?![\w@-])", folded) for w in words)
+    return any(re.search(rf"(?<![^\W_])(?<![.@-]){re.escape(w.lower())}(?![^\W_])(?![@-])", folded)
+               for w in words)
 
 
 def decide(said, *, doc_type: str, text: str, words: list[str], in_course: bool = False,

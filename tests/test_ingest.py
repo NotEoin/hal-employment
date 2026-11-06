@@ -522,6 +522,9 @@ class Understanding(unittest.TestCase):
         self.assertEqual(decide(text=CV_TEXT, author=OWNER), "unsure", "the person made it")
         self.assertEqual(decide(text=f"{OWNER}/practical-1\nStarter code by Morwenna Tregarth",
                                 author="Morwenna Tregarth"), "unsure", "the path names the person")
+        words = roles.identity(OWNER, "230466099")
+        self.assertTrue(roles.names_person("Java/230466099_cs1035_practicals/part1", words), "underscores part words")
+        self.assertFalse(roles.names_person("Java/1230466099_cs1035/part1", words))
 
     def test_a_project_naming_no_maker_is_filed_and_gives_nothing(self):
         reply = {**REPLY, "doc_type": "project", "role": "others", "author": "",
