@@ -540,14 +540,16 @@ runner starts the action again with the same batch and only pending items are re
    that neither the text nor the file's path names is dropped, with its tag, so a guess gets no entity note.
    Light documents, and every document while the AI is unavailable, get tags from the path, headings,
    frequent words and years. The engine then judges the document's role on its own thread (`roles.py`):
-   `own`, `taught`, `others` or `unsure`. The AI's "role" is taken for taught and someone else's; its
-   "own" holds only when the text or path names the person (`roles.identity`: `you.name`'s parts,
+   `own`, `taught`, `others` or `unsure`. The AI's "role" is taken for taught; its "others" holds only
+   when its "author" is named in the text and is not the person; its "own" holds only when the text or
+   path names the person (`roles.identity`: `you.name`'s parts,
    `you.other_names`, and usernames and emails from links and basics their CVs and letters gave). A
    repository's text lists its committers and remotes from `.git/logs/HEAD` and `.git/config`. Without the
    AI, slides and a course unit's files are `taught`, the rest `unsure`. `roles.allowed` keeps the facts
    each role may give: everything for `own` (contact details and links only from a CV or a letter), skills
-   for `taught`, nothing otherwise. An `others` document gets state `not_mine`: no note, no copy, no facts,
-   and `items.summary` names the first few. Facts go to
+   for `taught`, nothing otherwise. An `others` document gets state `not_mine` and the error column
+   `made by <author>`: no note, no copy, no facts, and `items.summary` names the first few with their maker.
+   A tidy reads `not_mine` items without a maker once more (`tidy._not_mine_again`). Facts go to
    `jobhunt.profile.store.add_found(con, kind, fields, evidence)` with evidence
    `{source_rel, quote, field, doc_type, verified, role}`; the ingest keeps no profile of its own. Reading a
    note again replaces its old facts (`store.replace_source`). A fact

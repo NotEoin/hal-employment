@@ -163,8 +163,9 @@ def summary(con: sqlite3.Connection) -> dict:
     left = c["states"].get("pending", 0)
     missing = [r[0] for r in con.execute("""SELECT rel FROM ingest_items WHERE batch = ? AND state = 'not_downloaded'
                                             ORDER BY rel LIMIT ?""", (batch, FIRST_PATHS))]
-    not_mine = [r[0] for r in con.execute("""SELECT rel FROM ingest_items WHERE batch = ? AND state = 'not_mine'
-                                             ORDER BY rel LIMIT ?""", (batch, FIRST_PATHS))]
+    not_mine = [f"{r['rel']}, {r['error']}" if r["error"] else r["rel"] for r in con.execute(
+        """SELECT rel, error FROM ingest_items WHERE batch = ? AND state = 'not_mine'
+           ORDER BY rel LIMIT ?""", (batch, FIRST_PATHS))]
     errors = [{"path": r["rel"], "error": r["error"]} for r in con.execute(
         """SELECT rel, error FROM ingest_items WHERE batch = ? AND state = 'error'
            ORDER BY updated DESC LIMIT ?""", (batch, RECENT_ERRORS))]

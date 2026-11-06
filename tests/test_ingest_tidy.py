@@ -97,11 +97,11 @@ class Tidy(unittest.TestCase):
                     "facts": [{"kind": "project", "fields": {"name": "Tide gauges"}, "field": "name",
                                "quote": "Tide gauges"}]}
             with fake_ai({"ingest_doc": json.dumps(mine)}):
-                put(files, "Tide report.md", f"{REPORT}\n\nBy {OWNER}.")
+                put(files, "Tide report.md", f"{REPORT}\n\nBy Sam Pike, with {OWNER}.")
                 run(con, [files])
             note = rows(con)["Files/Tide report.md"]["note"]
             make_old(vault, note, about_owner="unsure")
-            with fake_ai({"ingest_doc": json.dumps({**mine, "role": "others"})}) as backend:
+            with fake_ai({"ingest_doc": json.dumps({**mine, "role": "others", "author": "Sam Pike"})}) as backend:
                 run(con, [], batch="t", tidy=True)
             row = rows(con, "t")["Files/Tide report.md"]
             projects = con.execute("SELECT count(*) FROM profile_items").fetchone()[0]
@@ -140,6 +140,25 @@ class Tidy(unittest.TestCase):
                     run(con, [], batch=batch, tidy=True)
                 asked.append(len(backend.requests("ingest_doc")))
         self.assertEqual(asked, [2, 0])
+
+    def test_a_file_called_someone_elses_before_makers_were_named_is_read_again_once(self):
+        with home() as (con, _vault, files):
+            settings.set("you.name", OWNER)
+            with fake_ai({"ingest_doc": json.dumps({**REPLY, "doc_type": "report", "role": "others",
+                                                     "author": "Sam Pike"})}):
+                put(files, "Tide report.md", f"{REPORT}\n\nBy Sam Pike.")
+                run(con, [files])
+            con.execute("UPDATE ingest_items SET error = NULL")      # as an older Hal left it
+            con.commit()
+            unsure = {**REPLY, "doc_type": "report", "role": "others", "author": ""}
+            asked = []
+            for batch in ("t1", "t2"):
+                with fake_ai({"ingest_doc": json.dumps(unsure)}) as backend:
+                    run(con, [], batch=batch, tidy=True)
+                asked.append(len(backend.requests("ingest_doc")))
+            row = rows(con, "t1")["Files/Tide report.md"]
+        self.assertEqual(asked, [1, 0])
+        self.assertEqual((row["state"], row["role"]), ("done", "unsure"))
 
     def test_a_typed_note_is_judged_by_rules_and_never_sent_to_the_ai(self):
         with home() as (con, _vault, files):

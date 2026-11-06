@@ -237,7 +237,8 @@ Hal sorts every document by whose it is, and that decides what it can learn from
   all course material. Slides of a lecture you already have your own notes on are not filed again: your
   notes list them under **Also at**.
 - **Someone else's**: another person's CV, a paper you downloaded, a classmate's poster. Hal leaves these out
-  of your record and names them when it finishes.
+  of your record and names them, with who made each one, when it finishes. A file has to name someone else
+  as its maker to count: a file that names no one stays in your record, but Hal takes no facts from it.
 
 Hal only counts a document as yours when it names you. If your files use another name for you, such as a
 username or a student number, add it under **Settings > You > Other names you go by**.

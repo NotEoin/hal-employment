@@ -4,6 +4,7 @@ Every test builds made-up files in its own temporary home; the people, employers
 invented. The AI is the fake one, answering the `ingest_doc` prompt with canned JSON, or none at all.
 """
 import contextlib
+import functools
 import io
 import json
 import tempfile
@@ -468,7 +469,8 @@ class Understanding(unittest.TestCase):
     def test_someone_elses_document_is_not_filed_and_gives_nothing(self):
         other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
         found = []
-        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps({**REPLY, "role": "others"})}), \
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps({**REPLY, "role": "others",
+                                                                                "author": "Morwenna Tregarth"})}), \
                 mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e: found.append(k)):
             settings.set("you.name", OWNER)
             put(files, "Friend CV.md", other)
@@ -488,6 +490,29 @@ class Understanding(unittest.TestCase):
         self.assertEqual(roles.decide(None, doc_type="slides", text="", words=words), "taught")
         self.assertEqual(roles.decide(None, doc_type="notes", text="", words=words), "unsure")
         self.assertEqual(roles.decide(None, doc_type="notes", text="", words=words, in_course=True), "taught")
+
+    def test_a_document_is_someone_elses_only_when_it_names_who_made_it(self):
+        """A project folder naming no one was called someone else's and left the record (2026-11-06)."""
+        other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
+        words = roles.identity(OWNER)
+        decide = functools.partial(roles.decide, "others", doc_type="cv", words=words)
+        self.assertEqual(decide(text=other, author="Morwenna Tregarth"), "others")
+        self.assertEqual(decide(text=other, author=""), "unsure", "no maker named")
+        self.assertEqual(decide(text=other, author="Ifan Rhys"), "unsure", "a maker the text does not name")
+        self.assertEqual(decide(text=CV_TEXT, author=OWNER), "unsure", "the person made it")
+
+    def test_a_project_naming_no_maker_is_filed_and_gives_nothing(self):
+        reply = {**REPLY, "doc_type": "project", "role": "others", "author": "",
+                 "facts": [{"kind": "project", "fields": {"name": "Tide gauge bot"}, "field": "name",
+                            "quote": "Tide gauge bot"}]}
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(reply)}):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            put(files, "bot/README.md", "# Tide gauge bot\n\nReads the made-up bay's gauges every hour.")
+            run(con, [files])
+            row = rows(con)["Files/bot/README.md"]
+            facts = con.execute("SELECT count(*) FROM profile_items").fetchone()[0]
+        self.assertEqual((row["state"], row["role"], facts), ("done", "unsure", 0))
 
     def test_another_name_or_a_username_from_their_cv_makes_a_document_theirs(self):
         with home() as (con, _vault, _files):
@@ -678,7 +703,7 @@ class ReadingEverything(unittest.TestCase):
     def test_reading_a_note_again_replaces_the_facts_it_gave(self):
         # a note read again kept its first reading's facts beside the new ones, so a document since judged
         # someone else's still gave the person its project (2026-11-05)
-        poster = f"# Poster\n\n{OWNER}. Tide gauges along the made-up bay."
+        poster = f"# Poster\n\nBy Sam Pike, with {OWNER}. Tide gauges along the made-up bay."
         mine = {**REPLY, "doc_type": "report", "role": "own",
                 "facts": [{"kind": "project", "fields": {"name": "Tide gauges"}, "field": "name",
                            "quote": "Tide gauges"}]}
@@ -690,7 +715,7 @@ class ReadingEverything(unittest.TestCase):
             self.assertEqual([r[0] for r in con.execute("SELECT kind FROM profile_items")], ["project"])
             con.execute("UPDATE ingest_items SET model = 0")
             con.commit()
-            with fake_ai({"ingest_doc": json.dumps({**mine, "role": "others"})}):
+            with fake_ai({"ingest_doc": json.dumps({**mine, "role": "others", "author": "Sam Pike"})}):
                 run(con, [], batch="b2", again=True)
             self.assertEqual(con.execute("SELECT count(*) FROM profile_items").fetchone()[0], 0)
             row = rows(con, "b2")["Files/Tide report.md"]

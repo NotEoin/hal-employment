@@ -126,8 +126,8 @@ def light(rel: str, text: str, rule: rank.Rule) -> dict:
     first = next((p.strip() for p in re.split(r"\n\s*\n", text) if p.strip() and not p.startswith("#")), "")
     return {"doc_type": rule.doc_type, "category": rule.category, "title": _title(rel, text),
             "period": _period(text), "summary": first[:SUMMARY_CHARS], "tags": light_tags(rel, text, rule),
-            "entities": {k: [] for k in ENTITY_KINDS}, "said": None, "role": "unsure", "about_owner": "unsure",
-            "sensitive": "", "facts": [], "by": "rules"}
+            "entities": {k: [] for k in ENTITY_KINDS}, "said": None, "author": "", "role": "unsure",
+            "about_owner": "unsure", "sensitive": "", "facts": [], "by": "rules"}
 
 
 def _strings(value) -> list[str]:
@@ -158,7 +158,8 @@ def clean(reply: dict, rel: str, text: str, rule: rank.Rule) -> dict:
            "summary": " ".join(str(reply.get("summary") or "").split())[:SUMMARY_CHARS] or base["summary"],
            "entities": {k: _strings(entities.get(k)) for k in ENTITY_KINDS},
            "said": reply.get("role", reply.get("about_owner", "")), "role": "unsure", "about_owner": "unsure",
-           "sensitive": " ".join(str(reply.get("sensitive") or "").split()), "by": "model"}
+           "sensitive": " ".join(str(reply.get("sensitive") or "").split()),
+           "author": " ".join(str(reply.get("author") or "").split()), "by": "model"}
     # People are named in a note only when the document names them; a role the model made up stays a role.
     out["entities"]["people"] = [p for p in out["entities"]["people"] if quote_found(p, text) or " " not in p]
     # An organisation or place gets a note and a tag only when the document or its path names it: a module

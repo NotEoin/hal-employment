@@ -221,7 +221,7 @@ def _judge(con: sqlite3.Connection, row: sqlite3.Row, desc: dict, text: str) -> 
 
     words = roles.identity(understand.owner(), str(settings.get("you.other_names") or ""), con)
     role = roles.decide(desc.get("said"), doc_type=desc["doc_type"], text=f"{row['rel']}\n{text}", words=words,
-                        in_course=bool(row["unit"]))
+                        in_course=bool(row["unit"]), author=str(desc.get("author") or ""))
     desc["role"], desc["about_owner"] = role, roles.ABOUT_OWNER[role]
     if role == roles.TAUGHT:
         desc["summary"] = lectures.scrub(desc["summary"])
@@ -347,7 +347,8 @@ def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Pa
     if desc["role"] == roles.OTHERS:
         store.replace_source(con, row["note"], lambda: None)
         path.unlink()
-        items.update(con, row["id"], stage="understood", state="not_mine", model=1, role=desc["role"], note=None)
+        items.update(con, row["id"], stage="understood", state="not_mine", model=1, role=desc["role"], note=None,
+                     error=roles.MADE_BY + desc["author"])
         return None
     old = path.read_text(encoding="utf-8", errors="replace")
     fm, _ = notes.frontmatter.parse(old)
@@ -381,7 +382,7 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
     items.update(con, row["id"], stage="understood", model=int(desc.get("by") == "model"), role=desc["role"])
     if desc["role"] == roles.OTHERS:
         # someone else's document is not the person's record: no note, no copy, no facts; the page names it
-        items.update(con, row["id"], state="not_mine")
+        items.update(con, row["id"], state="not_mine", error=roles.MADE_BY + desc["author"])
         return None
     path = Path(row["path"])
     moving = drop_root is not None and drop_root in path.parents

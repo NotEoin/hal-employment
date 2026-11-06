@@ -15,7 +15,8 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
    converted course material, for a lecture note, and documents whose role the rules cannot settle, such
    as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
    under these rules says so (`read_by: ai`, and `lecture_note` for course material), so a second tidy
-   sends it to the AI only if its lecture note could not be written.
+   sends it to the AI only if its lecture note could not be written. Files called someone else's before
+   the AI had to name who made them (`roles.decide`) are read again too, once.
 
 `finish` runs at the end of every tidy run, and is safe to run again: notes no item points at any more are
 deleted with their facts and copied originals, entity notes outside `notes.noted` go (all of People and
@@ -219,8 +220,21 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
             con.execute("UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered' WHERE id = ?",
                         (batch, row["id"]))
             done["again"] += 1
+    done["not_mine_again"] = _not_mine_again(con, batch)
     con.commit()
     return done
+
+
+def _not_mine_again(con: sqlite3.Connection, batch: str) -> int:
+    """Puts back in the batch the files called someone else's before the AI had to say who made them."""
+    again = 0
+    for row in con.execute("""SELECT id, path FROM ingest_items WHERE state = 'not_mine'
+                              AND (error IS NULL OR error NOT LIKE ?)""", (f"{roles.MADE_BY}%",)).fetchall():
+        if Path(row["path"]).exists():
+            con.execute("""UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered', role = '',
+                           error = NULL WHERE id = ?""", (batch, row["id"]))
+            again += 1
+    return again
 
 
 def _ask_again(row: sqlite3.Row, role: str, doc_type: str, fm: dict) -> bool:

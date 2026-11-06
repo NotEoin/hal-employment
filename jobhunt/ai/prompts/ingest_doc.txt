@@ -22,6 +22,7 @@ Reply with JSON only:
    lecture, a module page, a lab sheet, an exam paper), whoever's notes it is in; "others" when it is someone
    else's (another person's CV, a published or downloaded paper, a classmate's or a stranger's work, a
    model or design from a sharing site); "unsure" when the text does not say,
+ "author": the name of the person or group the text says made it, copied exactly, or "" when it names none,
  "sensitive": "" or a few words when the document holds private details that do not belong in a record
    for employers (bank or card details, an ID or passport number, a date of birth with an ID number,
    medical information, a payslip or tax form, passwords or keys),
