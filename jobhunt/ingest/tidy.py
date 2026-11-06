@@ -17,7 +17,8 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
    as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
    under these rules says so (`read_by: ai`, and `lecture_note` for course material), so a second tidy
    sends it to the AI only if its lecture note could not be written. Files called someone else's before
-   the AI had to name who made them (`roles.decide`) are read again too, once, and files a rule held as
+   the AI had to name who made them, or whose path names the person (`roles.decide`), are read again too,
+   once, and files a rule held as
    private that today's rules let through (`_private_again`).
 
 `finish` runs at the end of every tidy run, and is safe to run again: notes no item points at any more are
@@ -229,7 +230,7 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
             con.execute("UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered' WHERE id = ?",
                         (batch, row["id"]))
             done["again"] += 1
-    done["not_mine_again"] = _not_mine_again(con, batch)
+    done["not_mine_again"] = _not_mine_again(con, batch, words)
     done["private_again"] = _private_again(con, batch)
     con.commit()
     return done
@@ -255,12 +256,13 @@ def _private_again(con: sqlite3.Connection, batch: str) -> int:
     return again
 
 
-def _not_mine_again(con: sqlite3.Connection, batch: str) -> int:
-    """Puts back in the batch the files called someone else's before the AI had to say who made them."""
+def _not_mine_again(con: sqlite3.Connection, batch: str, words: list[str]) -> int:
+    """Puts back in the batch the files called someone else's before the AI had to say who made them, or
+    whose path names the person (`words`), which `roles.decide` no longer lets be someone else's."""
     again = 0
-    for row in con.execute("""SELECT id, path FROM ingest_items WHERE state = 'not_mine'
-                              AND (error IS NULL OR error NOT LIKE ?)""", (f"{roles.MADE_BY}%",)).fetchall():
-        if Path(row["path"]).exists():
+    for row in con.execute("""SELECT id, rel, path, error FROM ingest_items WHERE state = 'not_mine'""").fetchall():
+        old = not str(row["error"] or "").startswith(roles.MADE_BY)
+        if (old or (words and roles.names_person(row["rel"], words))) and Path(row["path"]).exists():
             con.execute("""UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered', role = '',
                            error = NULL WHERE id = ?""", (batch, row["id"]))
             again += 1

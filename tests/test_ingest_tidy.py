@@ -148,8 +148,12 @@ class Tidy(unittest.TestCase):
             with fake_ai({"ingest_doc": json.dumps({**REPLY, "doc_type": "report", "role": "others",
                                                      "author": "Sam Pike"})}):
                 put(files, "Tide report.md", f"{REPORT}\n\nBy Sam Pike.")
+                put(files, f"{OWNER}/practical.md", "# Practical 1\n\nStarter code by Sam Pike.")
                 run(con, [files])
-            con.execute("UPDATE ingest_items SET error = NULL")      # as an older Hal left it
+            con.execute("UPDATE ingest_items SET error = NULL WHERE rel = 'Files/Tide report.md'")   # an older Hal
+            # a practical in a folder named for the person, judged before that kept it theirs
+            con.execute("UPDATE ingest_items SET state = 'not_mine', error = 'made by Sam Pike', note = NULL "
+                        "WHERE rel LIKE '%practical.md'")
             con.commit()
             unsure = {**REPLY, "doc_type": "report", "role": "others", "author": ""}
             asked = []
@@ -158,8 +162,10 @@ class Tidy(unittest.TestCase):
                     run(con, [], batch=batch, tidy=True)
                 asked.append(len(backend.requests("ingest_doc")))
             row = rows(con, "t1")["Files/Tide report.md"]
+            practical = rows(con, "t1")[f"Files/{OWNER}/practical.md"]
         self.assertEqual(asked, [1, 0])
         self.assertEqual((row["state"], row["role"]), ("done", "unsure"))
+        self.assertEqual(practical["state"], "done", "its path names the person")
 
     def test_a_place_of_study_the_document_never_names_leaves_its_fact(self):
         # a module report naming no university gave a degree from "Trinity College" (2026-11-06)
