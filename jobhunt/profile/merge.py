@@ -297,6 +297,7 @@ ABBREVIATIONS = {"he": "higher education", "hons": "honours", "uni": "university
 # UK degree classes written in words or figures ("Upper Second", "2:1", "2.1")
 GRADE_PHRASES = (("upper second", "2 1"), ("lower second", "2 2"), ("second upper", "2 1"),
                  ("second lower", "2 2"))
+GRADE_WORDS = {"distinction", "merit", "pass", "fail", "credit", "first", "1st", "2nd", "3rd", "starred"}
 FILLER_WORDS = {"the", "a", "an", "at", "of", "and", "with", "in"}
 GRADE_FILLER = {"class", "honours", "degree", "grade", "overall", "classification"}
 PLURAL_MIN = 4             # "units" is "unit"; "is", "bus" and "class" are left alone
@@ -329,6 +330,27 @@ def fact_key(text: str, grade: bool = False) -> str:
     words = [w[:-1] if len(w) >= PLURAL_MIN and w.endswith("s") and not w.endswith("ss") else w
              for w in _number(words) if w not in skip]
     return " ".join(words)
+
+
+def grade_marks(text: str) -> list[str]:
+    """The figures and grade words of a grade, in order: "Year 1: 81.5% (1st)" gives 1, 81, 5, 1st."""
+    return [w for w in fact_key(text, grade=True).split() if any(c.isdigit() for c in w) or w in GRADE_WORDS]
+
+
+def says_less(field: str, a: str, b: str) -> bool:
+    """True when value `a` of `field` is `b` told with less detail, so the two are no conflict.
+
+    A grade whose figures and grade words come, in order, within the other's ("1st" in "Year 1: 81.5%
+    (1st); Year 2: 73.3% (1st)"); a qualification naming no level whose words are all in the other's
+    ("Computer Science" in "Computer Science BSc").
+    """
+    if field == "grade":
+        small, big = grade_marks(a), iter(grade_marks(b))
+        return bool(small) and all(w in big for w in small)
+    if field == "qualification":
+        words = set(fact_key(a).split())
+        return not level(a) and bool(words) and words <= set(fact_key(b).split())
+    return False
 
 
 def qualification_key(text: str) -> str:

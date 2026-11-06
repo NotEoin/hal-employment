@@ -94,8 +94,10 @@ class Store(unittest.TestCase):
         c = found[0]
         self.assertEqual((c["field"], c["item_ids"]), ("start", [a]))
         self.assertEqual([v["words"] for v in c["values"]], ["May 2024", "June 2024"])
-        self.assertIn(CV_A, c["why"])
-        self.assertIn(CV_B, c["why"])
+        self.assertEqual([[s["source_rel"] for s in v["sources"]] for v in c["values"]], [[CV_A], [CV_B]])
+        # the text named eleven files in one sentence and the card listed them again (2026-11-06)
+        self.assertNotIn(CV_A, c["why"])
+        self.assertIn("2 different start dates", c["why"])
 
     def test_a_date_written_two_ways_is_no_conflict(self):
         self.job(CV_A, start="May 2024", current=True)
@@ -121,6 +123,27 @@ class Store(unittest.TestCase):
         self.job(CV_A, title="Sales Assistants", start="May 2024", location="Wexley")
         self.job(CV_B, title="sales assistant", start="May 2024", location="Wexley, Fenshire")
         self.assertEqual(self.open_conflicts("field"), [])
+
+    def test_a_grade_or_qualification_told_with_less_detail_is_no_inconsistency(self):
+        # "1st" beside "Year 1: 81.5% (1st)", "30 units at Distinction, 15 at Merit" beside "30 Units at
+        # Distinction (A); 15 Units at Merit (C)", and "Computer Science" beside "Computer Science BSc" were
+        # inconsistencies (2026-11-06)
+        degree = {"institution": "University of Wexley", "subject": "History", "period": "2021-24"}
+        years = "Year 1: 81.5% (1st); Year 2: 73.3% (1st)"
+        for source, fields in ((CV_A, {"qualification": "History BA", "grade": "1st"}),
+                               (CV_B, {"qualification": "History BA", "grade": years}),
+                               (NOTES, {"qualification": "History", "grade": "On track for a First"})):
+            store.add_found(self.con, "education", {**degree, **fields}, ev(source, "cv", "x"))
+        access = {"institution": "Saltmarsh Cross College", "qualification": "Access to HE Diploma",
+                  "period": "2020-21"}
+        store.add_found(self.con, "education", {**access, "grade": "30 Units at Distinction (A); 15 Units at "
+                                                                     "Merit (C)"}, ev(CV_A, "cv", "x"))
+        store.add_found(self.con, "education", {**access, "grade": "30 units at Distinction, 15 at Merit"},
+                        ev(CV_B, "cv", "x"))
+        self.assertEqual(self.open_conflicts("field"), [])
+        store.add_found(self.con, "education", {**access, "grade": "15 units at Distinction, 30 at Merit"},
+                        ev(NOTES, "cv", "x"))
+        self.assertEqual([c["field"] for c in self.open_conflicts("field")], ["grade"], "other figures differ")
 
     def test_facts_that_differ_are_still_inconsistencies(self):
         # an end of January 2025 in some CVs and May 2025 in others; "Team Member" and "Bartender / Team

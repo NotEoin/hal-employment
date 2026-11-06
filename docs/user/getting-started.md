@@ -277,7 +277,8 @@ Each job, qualification or skill is a card:
 
 When your files disagree, the card shows each value and the files that give it, for example a start date of
 September 2023 in your CV and October 2023 in a letter. Hal lists dates, grades, employers, job titles and
-qualifications that differ, not the same thing in other words ("Thirty units" and "30 units"). Press
+qualifications that differ, not the same thing in other words ("Thirty units" and "30 units") or with less
+detail ("1st" and "Year 1: 81.5% (1st)"). Press
 **Use** on the right one, or **Keep it as it is**. Two jobs at once can be **Both are right**, or you can
 keep one and Hal hides the other. The **Inconsistencies** tab lists everything still to sort out, with the
 settled ones folded away below.

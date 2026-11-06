@@ -6,7 +6,9 @@
   "June 2024" in another, a grade on the transcript that is not the one on the CV). Each value is listed
   with the files that gave it; the item shows the best-ranked source's value (see `merge.RANKS`). Values
   are compared by `merge.value_key`, so wording alone ("Thirty units", "30 units"; "GCSE", "GCSEs") is no
-  conflict, and only fields that are facts (`CHECKED_FIELDS`) are compared.
+  conflict, nor a value that says the same with less detail (`merge.says_less`: "1st" beside "Year 2:
+  73.3% (1st)"), and only fields that are facts (`CHECKED_FIELDS`) are compared. The text says what
+  differs; the card lists each value with the files that give it.
 - `dates`: an item ends before it starts.
 - `overlap`: two jobs that are not marked part-time share more than a month.
 - `gap`: more than `GAP_MONTHS` months between one job or course ending and the next starting.
@@ -37,8 +39,6 @@ CHECKED_FIELDS = {
     "basic": ("value",),
 }
 FIELD_WORDS = {"start": "start date", "end": "end date", "date": "date", "value": "value"}
-GROUP_WORDS = {"transcript": "transcript", "certificate": "certificate", "cv": "CV", "letter": "letter",
-               "notes": "notes"}
 CHOICES = {"field": ["value", "keep_all"], "dates": ["value", "keep_all"], "overlap": ["keep_item", "keep_all"],
            "gap": ["keep_all"]}
 TIMELINE = ("job", "education")
@@ -47,11 +47,6 @@ DATE_FIELDS = ("start", "end", "date", "expires")
 
 def _words(field: str, value: str) -> str:
     return merge.date_words(value) if field in DATE_FIELDS else str(value)
-
-
-def _source_words(doc_type: str, source_rel: str) -> str:
-    group = GROUP_WORDS.get(doc_type)
-    return f"your {group} {source_rel}" if group else source_rel
 
 
 def _items(con: sqlite3.Connection) -> list[dict]:
@@ -81,6 +76,7 @@ def _field_conflicts(con: sqlite3.Connection, item: dict) -> list[dict]:
                                          "quote": s["quote"]})
         if field in DATE_FIELDS:
             _fold_years(groups)
+        _fold_less(field, groups)
         if len(groups) < 2:
             continue
         values = sorted(groups.values(), key=lambda g: -g["rank"])
@@ -101,18 +97,28 @@ def _fold_years(groups: dict[str, dict]) -> None:
             groups[month]["rank"] = max(groups[month]["rank"], year["rank"])
 
 
+def _fold_less(field: str, groups: dict[str, dict]) -> None:
+    """A value that says another with less detail joins it (`merge.says_less`), keeping the fuller words."""
+    for key in sorted(groups, key=lambda k: len(str(groups[k]["value"]))):
+        into = next((k for k in groups if k != key and merge.says_less(field, str(groups[key]["value"]),
+                                                                       str(groups[k]["value"]))), None)
+        if into is not None:
+            less = groups.pop(key)
+            groups[into]["sources"] += [x for x in less["sources"] if x not in groups[into]["sources"]]
+            groups[into]["rank"] = max(groups[into]["rank"], less["rank"])
+
+
 def _field_why(item: dict, field: str, values: list[dict]) -> str:
-    said = "; ".join(f"{g['words']} in " + " and ".join(_source_words(s["doc_type"], s["source_rel"])
-                                                        for s in g["sources"]) for g in values)
     label = FIELD_WORDS.get(field, field)
     name = _name(item)
     best = values[0]
     if field == "grade" and any(s["doc_type"] == "transcript" for s in best["sources"]):
-        return (f"The grade for {name} on your transcript is not the one elsewhere: {said}. Hal uses the "
-                "transcript's until you choose.")
+        return (f"The grade for {name} on your transcript is not the one elsewhere. Hal uses the transcript's "
+                "until you choose.")
     if best["rank"] > values[1]["rank"]:
-        return f"Your files give {name} different {label}s: {said}. Hal uses {best['words']} until you choose."
-    return f"Your files give {name} different {label}s: {said}. Choose the right one."
+        return (f"Your files give {name} {len(values)} different {label}s. Hal uses {best['words']} until "
+                "you choose.")
+    return f"Your files give {name} {len(values)} different {label}s. Choose the right one."
 
 
 def _name(item: dict) -> str:
