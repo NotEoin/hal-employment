@@ -18,6 +18,10 @@ Design decisions, each with its reason:
 - For the Inconsistencies list, titles and grades are compared without case, punctuation, plurals,
   number words ("Thirty" is "30") or common abbreviations ("HE" is "Higher Education"), and a qualification
   by its level, so only facts that differ are raised.
+- A project is one with another when they share a link, when one's name is the other's link, or when
+  their names match once a tagline after " - " or ":" and words such as "app" or "system" are left out:
+  "Hatch", "Hatch - AI desktop companion" and "Hatch - desktop companion and wellbeing app" were three
+  cards (2026-11-06). "Hal" and "Hal Employment" stay two: a name is not cut at a plain space.
 - Skills are compared without case, spaces, hyphens and dots, and through a small table of other names for
   the same skill ("MS Excel" is "Excel"), covering office, research and writing skills as well as code.
 - A found item's fields come from its sources in rank order (transcript, certificate, CV, letter, notes):
@@ -382,6 +386,10 @@ LEVEL_WORDS = {"bsc", "ba", "beng", "bed", "bmus", "msc", "ma", "mres", "mphil",
 ORG_SUBSET_MIN = 2
 # "Fire Marshal" and "The Fire Marshall" are one certificate; "Food Safety Level 2" and "Level 3" are not
 NAME_CLOSE = 0.9
+# A tagline after a spaced dash or a colon: "Hatch - AI desktop companion", "QuizMaster: a Java quiz app"
+TAGLINE = re.compile(r"\s+[-\u2013\u2014]\s+.*$|:\s.*$")
+PROFILE_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "huggingface.co", "kaggle.com", "linkedin.com"}
+PROJECT_WORDS = {"app", "application", "system", "project", "tool", "program", "programme", "website", "site"}
 
 
 def level(qualification: str) -> str:
@@ -447,8 +455,32 @@ def same_item(kind: str, a: dict, b: dict) -> bool:
             "value", b.get("value"))
     if kind == "link":
         return _same(_url_key, a, b, "url")
+    if kind == "project":
+        return _same_project(a, b)
     field = "title" if kind == "achievement" else "name"
     return _name_close(a.get(field, ""), b.get(field, ""))
+
+
+def project_key(name: str) -> str:
+    """A project's name as compared: no tagline after " - " or ":", no words such as "app" or "system"."""
+    words = _plain(TAGLINE.sub("", name or "")).split()
+    return " ".join(w for w in words if w not in PROJECT_WORDS) or " ".join(words)
+
+
+def _project_link(url: str) -> str:
+    """A link that names one project; "" for none or a profile page ("github.com/alexdoe") many share."""
+    key = _url_key(url)
+    host, _, path = key.partition("/")
+    return "" if host in PROFILE_HOSTS and "/" not in path.strip("/") else key
+
+
+def _same_project(a: dict, b: dict) -> bool:
+    la, lb = _project_link(a.get("link", "")), _project_link(b.get("link", ""))
+    if la and la == lb:
+        return True
+    if (lb and _url_key(a.get("name", "")) == lb) or (la and _url_key(b.get("name", "")) == la):
+        return True                        # "alexdoe.dev" is the site whose link it is
+    return _name_close(project_key(a.get("name", "")), project_key(b.get("name", "")))
 
 
 SINGLE_BASICS = {"name"}      # basics a person has one of; others (emails, phones, links) can be several

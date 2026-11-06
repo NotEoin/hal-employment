@@ -161,6 +161,9 @@ GENERIC_EMPLOYERS = {"bar", "pub", "shop", "store", "cafe", "coffee shop", "rest
                      "warehouse", "supermarket", "agency", "charity", "organisation", "organization"}
 EMPLOYER_SKIP = {"the", "a", "an", "local", "my", "our", "small"}
 JOB_NAMES = {"title", "employer"}
+# A CV's "Projects: GitHub" line and a practical's "quadratic-solver.c" were filed as projects (2026-11-06).
+SITE_NAMES = {"github", "gitlab", "bitbucket", "linkedin", "kaggle", "hugging face", "huggingface"}
+CODE_FILE = re.compile(r"[\w.-]+\.(?:c|cc|cpp|h|hpp|py|java|js|ts|go|rs|lua|cs|rb|php|sh|kt|swift)", re.I)
 # A training course from a certificate provider ("CITI Program Training") is found as a certificate from
 # the certificate itself; filed as education it showed as a second course of study (2026-11-05).
 TRAINING = re.compile(r"\b(?:training|course|certification|workshop|webinar|e-?learning|induction)\b", re.I)
@@ -179,6 +182,11 @@ def _named(kind: str, fields: dict) -> None:
         raise ValueError(f"A {kind} needs {' or '.join(NAMED_BY[kind])}.")
     if kind == "job" and _generic_employer(str(fields.get("employer") or "")) and set(fields) <= JOB_NAMES:
         raise ValueError(f"{fields['employer']} is a kind of place, not an employer.")
+    name = str(fields.get("name") or "").strip()
+    if kind == "project" and merge.text_key(name) in SITE_NAMES:
+        raise ValueError(f"{name} is a site, not a project.")
+    if kind == "project" and CODE_FILE.fullmatch(name):
+        raise ValueError(f"{name} is one file, not a project.")
     qualification = str(fields.get("qualification") or "")
     if kind == "education" and not merge.level(qualification) and NOT_QUALIFICATION.search(qualification):
         raise ValueError(f"{qualification} is a piece of work or a module, not a qualification.")

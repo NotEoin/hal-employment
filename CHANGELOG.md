@@ -41,7 +41,9 @@ What changed in each version, in plain words.
 - **Your profile.** Hal keeps the facts it finds in your record as a profile: jobs, education with its
   modules and marks, skills with the words that show them, projects, certificates, achievements and links.
   Each fact names the files it came from. The same job in two CVs is one entry, written the same way in
-  both or not ("Sept 2023 - present", "09/2023"), and "MS Excel" and "Excel" are one skill. A degree's
+  both or not ("Sept 2023 - present", "09/2023"), and "MS Excel" and "Excel" are one skill. A project is one
+  entry under several names ("Hatch" and "Hatch - AI desktop companion") or with one link, and a line such
+  as "GitHub" or a single file such as "solver.c" is not a project. A degree's
   modules come from your transcript (or your CV when there is no transcript), one per module code with its
   mark, never lecture titles from your notes or slides. A module code on its own is not a course, a
   training course is a certificate rather than education, and "supervisor at a bar" with nothing more is

@@ -428,6 +428,32 @@ class Store(unittest.TestCase):
             with self.subTest(fields=fields), self.assertRaises(ValueError):
                 store.add_found(self.con, kind, fields, ev(NOTES, "notes", "x"))
 
+    def test_a_site_or_one_code_file_is_not_a_project(self):
+        # a CV's "Projects: GitHub" line and a practical's "quadratic-solver.c" were projects (2026-11-06)
+        for name in ("GitHub", "quadratic-solver.c", "Main.java"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                store.add_found(self.con, "project", {"name": name}, ev(CV_A, "cv", "x"))
+        for name in ("Tide gauge bot", "alexdoe.github.io", "Node.js chat server"):
+            with self.subTest(name=name):
+                store.add_found(self.con, "project", {"name": name}, ev(CV_A, "cv", "x"))
+
+    def test_one_project_under_several_names_or_one_link_is_one_item(self):
+        # "Hatch", "Hatch - AI desktop companion" and "Hatch - desktop companion and wellbeing app" were three
+        # cards, and a portfolio site four (2026-11-06)
+        def add(source, **fields):
+            return store.add_found(self.con, "project", fields, ev(source, "cv", "x"))
+        hatch = add(CV_A, name="Hatch")
+        self.assertEqual(add(CV_B, name="Hatch - AI desktop companion"), hatch)
+        self.assertEqual(add(CV_B, name="Hatch: a desktop companion and wellbeing app"), hatch)
+        self.assertEqual(add(CV_A, name="Tide gauge app"), add(CV_B, name="Tide-Gauge"))
+        site = add(CV_A, name="Portfolio website", link="https://alexdoe.dev")
+        self.assertEqual(add(CV_B, name="alexdoe-portfolio", link="alexdoe.dev/"), site)
+        self.assertEqual(add(CV_B, name="alexdoe.dev"), site)
+        self.assertNotEqual(add(CV_A, name="Hatch Employment"), hatch, "a name is not cut at a plain space")
+        one = add(CV_A, name="Tide gauge bot", link="https://github.com/alexdoe")
+        self.assertNotEqual(add(CV_B, name="Parish map", link="https://github.com/alexdoe"), one,
+                            "a profile page is shared by many projects")
+
     def test_a_named_employer_a_dated_job_and_a_course_of_study_are_kept(self):
         src = ev(CV_A, "cv", "x")
         for kind, fields in (("education", {"subject": "CSC1034 Databases", "start": "2023-24"}),
