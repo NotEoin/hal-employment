@@ -101,6 +101,7 @@ class Tidy(unittest.TestCase):
                 run(con, [files])
             note = rows(con)["Files/Tide report.md"]["note"]
             make_old(vault, note, about_owner="unsure")
+            put(files, "Tide report.md", f"{REPORT}\n\nBy Sam Pike.")
             with fake_ai({"ingest_doc": json.dumps({**mine, "role": "others", "author": "Sam Pike"})}) as backend:
                 run(con, [], batch="t", tidy=True)
             row = rows(con, "t")["Files/Tide report.md"]

@@ -10,8 +10,10 @@ Every document read into the record gets one role:
   filed as the person's, and a lecture's examples as their projects (2026-11-05).
 - `others`: someone else's document: another person's CV, a downloaded paper, a classmate's poster, a model
   from a sharing site. It is not filed in the record at all and gives nothing, so the AI must say who made
-  it (`ingest_doc`'s "author"), the text must name them, and they must not be the person. A project folder
-  naming no one was called someone else's and left the record (2026-11-06).
+  it (`ingest_doc`'s "author"), the text must name them, and they must not be the person, whose name or
+  student number must not be in the file or its path either. A project folder naming no one, and a
+  practical in a folder named with the person's student number but naming the lecturer, were called
+  someone else's and left the record (2026-11-06).
 - `unsure`: read by rules alone, or the AI could not tell. It is filed and gives nothing.
 
 The AI says which role it thinks (`ingest_doc`'s "role"). A document it calls the person's own must name
@@ -96,15 +98,16 @@ def decide(said, *, doc_type: str, text: str, words: list[str], in_course: bool 
     """The document's role from the AI's answer (`said`, or None when no AI read it) and the rules.
 
     Taught is taken as the AI says; the person's own only when the text names them; someone else's only
-    when the text names its `author` and that is not the person. Without the AI, slides and the files of a
-    course are taught, and the rest unsure.
+    when the text names its `author`, that is not the person, and the text does not name the person.
+    Without the AI, slides and the files of a course are taught, and the rest unsure.
     """
     if said is None:
         return TAUGHT if doc_type in TAUGHT_TYPES or in_course else UNSURE
     role = said_role(said)
     if role == OWN and not (words and names_person(text, words)):
         return UNSURE
-    if role == OTHERS and not (author and names_person(text, [author]) and not names_person(author, words)):
+    if role == OTHERS and not (author and names_person(text, [author]) and not names_person(author, words)
+                               and not (words and names_person(text, words))):
         return UNSURE
     return role
 

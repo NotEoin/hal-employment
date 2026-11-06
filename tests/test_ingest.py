@@ -520,6 +520,8 @@ class Understanding(unittest.TestCase):
         self.assertEqual(decide(text=other, author=""), "unsure", "no maker named")
         self.assertEqual(decide(text=other, author="Ifan Rhys"), "unsure", "a maker the text does not name")
         self.assertEqual(decide(text=CV_TEXT, author=OWNER), "unsure", "the person made it")
+        self.assertEqual(decide(text=f"{OWNER}/practical-1\nStarter code by Morwenna Tregarth",
+                                author="Morwenna Tregarth"), "unsure", "the path names the person")
 
     def test_a_project_naming_no_maker_is_filed_and_gives_nothing(self):
         reply = {**REPLY, "doc_type": "project", "role": "others", "author": "",
@@ -735,6 +737,7 @@ class ReadingEverything(unittest.TestCase):
             self.assertEqual([r[0] for r in con.execute("SELECT kind FROM profile_items")], ["project"])
             con.execute("UPDATE ingest_items SET model = 0")
             con.commit()
+            put(files, "Tide report.md", "# Poster\n\nBy Sam Pike. Tide gauges along the made-up bay.")
             with fake_ai({"ingest_doc": json.dumps({**mine, "role": "others", "author": "Sam Pike"})}):
                 run(con, [], batch="b2", again=True)
             self.assertEqual(con.execute("SELECT count(*) FROM profile_items").fetchone()[0], 0)
