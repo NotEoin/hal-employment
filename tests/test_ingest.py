@@ -453,6 +453,12 @@ class Understanding(unittest.TestCase):
             self.assertEqual(rows(con)["Files/CV.md"]["state"], "done")
         self.assertEqual(kinds, ["job"])
 
+    def test_the_reading_prompt_says_a_score_in_their_own_work_is_no_achievement(self):
+        # "The final iteration achieved a peak fitness of 0.981" became a "Peak Fitness Achievement" (2026-11-06)
+        from jobhunt.ai import prompts
+        text = prompts.text(understand.PURPOSE, name=OWNER)
+        self.assertIn(f"recognition given to {OWNER}, never a result or score in their own work", text)
+
     def test_an_organisation_the_document_never_names_is_left_out_of_a_fact(self):
         # a module report naming no university gave a degree from "Trinity College Dublin" (2026-11-06)
         text = "Coursework for GEO101 by Avery Quillon, Wexley Museum placement."

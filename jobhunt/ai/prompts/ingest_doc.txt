@@ -32,7 +32,9 @@ Reply with JSON only:
 Fields by kind: job {title, employer, location, start, end, duties: [...], achievements: [...]};
 education {qualification, subject, institution, start, end, grade, modules: [{name, mark}]};
 skill {name, level, category}; project {name, summary, role, tools: [...], link, period};
-achievement {title, date, detail, issuer}; certificate {name, issuer, date, grade};
+achievement {title, date, detail, issuer}: an award, prize, scholarship, place in a competition or other
+recognition given to {name}, never a result or score in their own work;
+certificate {name, issuer, date, grade};
 basic {key: one of "name", "email", "phone", "location", value};
 link {label, url}.
 List facts when role is "own": only what {name} did, made, studied or holds, as the text states it; never a
