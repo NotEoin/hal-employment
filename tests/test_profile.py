@@ -472,7 +472,10 @@ class Store(unittest.TestCase):
         site = add(CV_A, name="Portfolio website", link="https://alexdoe.dev")
         self.assertEqual(add(CV_B, name="alexdoe-portfolio", link="alexdoe.dev/"), site)
         self.assertEqual(add(CV_B, name="alexdoe.dev"), site)
-        self.assertNotEqual(add(CV_A, name="Hatch Employment"), hatch, "a name is not cut at a plain space")
+        self.assertNotEqual(add(CV_A, name="Hatch Employment"), hatch, "one word is too little")
+        drone = add(CV_A, name="Recovery drone")
+        self.assertEqual(add(CV_B, name="Autonomous Recovery Drone"), drone)
+        self.assertNotEqual(add(CV_B, name="Delivery drone"), drone)
         one = add(CV_A, name="Tide gauge bot", link="https://github.com/alexdoe")
         self.assertNotEqual(add(CV_B, name="Parish map", link="https://github.com/alexdoe"), one,
                             "a profile page is shared by many projects")

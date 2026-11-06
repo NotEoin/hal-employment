@@ -21,7 +21,8 @@ Design decisions, each with its reason:
 - A project is one with another when they share a link, when one's name is the other's link, or when
   their names match once a tagline after " - " or ":" and words such as "app" or "system" are left out:
   "Hatch", "Hatch - AI desktop companion" and "Hatch - desktop companion and wellbeing app" were three
-  cards (2026-11-06). "Hal" and "Hal Employment" stay two: a name is not cut at a plain space.
+  cards (2026-11-06). So is a name of two or more words whose words are all in the other's ("Recovery
+  drone", "Autonomous Recovery Drone"). "Hal" and "Hal Employment" stay two: one word is too little.
 - Skills are compared without case, spaces, hyphens and dots, and through a small table of other names for
   the same skill ("MS Excel" is "Excel"), covering office, research and writing skills as well as code.
 - A found item's fields come from its sources in rank order (transcript, certificate, CV, letter, notes):
@@ -411,6 +412,7 @@ NAME_CLOSE = 0.9
 # A tagline after a spaced dash or a colon: "Hatch - AI desktop companion", "QuizMaster: a Java quiz app"
 TAGLINE = re.compile(r"\s+[-\u2013\u2014]\s+.*$|:\s.*$")
 PROFILE_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "huggingface.co", "kaggle.com", "linkedin.com"}
+PROJECT_WORDS_MIN = 2      # words a shorter project name needs to match a longer one by its words
 PROJECT_WORDS = {"app", "application", "system", "project", "tool", "program", "programme", "website", "site"}
 
 
@@ -502,7 +504,9 @@ def _same_project(a: dict, b: dict) -> bool:
         return True
     if (lb and _url_key(a.get("name", "")) == lb) or (la and _url_key(b.get("name", "")) == la):
         return True                        # "alexdoe.dev" is the site whose link it is
-    return _name_close(project_key(a.get("name", "")), project_key(b.get("name", "")))
+    ka, kb = project_key(a.get("name", "")), project_key(b.get("name", ""))
+    small, big = sorted((set(ka.split()), set(kb.split())), key=len)
+    return _name_close(ka, kb) or (len(small) >= PROJECT_WORDS_MIN and small <= big)
 
 
 SINGLE_BASICS = {"name"}      # basics a person has one of; others (emails, phones, links) can be several
