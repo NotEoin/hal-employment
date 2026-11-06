@@ -537,7 +537,9 @@ runner starts the action again with the same batch and only pending items are re
 6. **Understand** (`understand.py`). Rich documents get the `ingest_doc` prompt (role checker), cleaned in
    code: fixed categories and doc types, 12 to 30 tags, and every fact's quote checked against the text; a
    quote not found marks the fact "Check this" and the note `hal: needs-review`. An organisation or place
-   that neither the text nor the file's path names is dropped, with its tag, so a guess gets no entity note.
+   that neither the text nor the file's path names is dropped, with its tag, so a guess gets no entity note,
+   and so is a fact's employer, institution or issuer (`understand.ORG_FIELDS`); a tidy takes it out of
+   facts filed before.
    Light documents, and every document while the AI is unavailable, get tags from the path, headings,
    frequent words and years. The engine then judges the document's role on its own thread (`roles.py`):
    `own`, `taught`, `others` or `unsure`. The AI's "role" is taken for taught; its "others" holds only

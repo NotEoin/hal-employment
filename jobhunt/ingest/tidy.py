@@ -8,9 +8,10 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
 2. Each note already filed is judged again by rules alone: whose it is (`note_role`: the role it was given, or
    from its old `about_owner` and kind), whether it looks private (`privacy.reason`), whether it is a settings
    or tool file (`discover.is_tool_file`), and whether it is slides the person's own notes cover
-   (`lectures.Covered`). Facts its role may not give leave the profile and the note's key facts; course
-   material loses contact details; code text is fenced. Copies of one project keep only the newest copy's
-   note (`versions`).
+   (`lectures.Covered`). Facts its role may not give leave the profile and the note's key facts, and an
+   employer, institution or issuer the document never names leaves its fact; course material loses
+   contact details; code text is fenced. Copies of one project keep only the newest copy's note
+   (`versions`).
 3. Notes the AI should read again are put back in the batch, to be rewritten in place (`engine._again`):
    converted course material, for a lecture note, and documents whose role the rules cannot settle, such
    as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
@@ -95,14 +96,21 @@ def drop_note(con: sqlite3.Connection, vault: Path, note_rel: str) -> None:
     store.replace_source(con, note_rel, lambda: None)
 
 
-def _keep_allowed_facts(con: sqlite3.Connection, note_rel: str, role: str) -> None:
-    """Takes out of the profile the facts this note gave that its role may not give; marks the rest's role."""
-    for e in con.execute("""SELECT e.id, i.kind, e.doc_type FROM profile_evidence e JOIN profile_items i
+def _keep_allowed_facts(con: sqlite3.Connection, note_rel: str, role: str, named: str) -> None:
+    """Takes out of the profile the facts this note gave that its role may not give; marks the rest's role,
+    and leaves out of each an employer, institution or issuer the document (`named`: its path and text)
+    never names (`understand.ORG_FIELDS`)."""
+    from jobhunt.ingest import understand
+
+    for e in con.execute("""SELECT e.id, i.kind, e.doc_type, e.said FROM profile_evidence e JOIN profile_items i
                             ON i.id = e.item_id WHERE e.source_rel = ?""", (note_rel,)).fetchall():
-        if roles.allowed(role, e["kind"], e["doc_type"]):
-            con.execute("UPDATE profile_evidence SET role = ? WHERE id = ?", (role, e["id"]))
-        else:
+        if not roles.allowed(role, e["kind"], e["doc_type"]):
             con.execute("DELETE FROM profile_evidence WHERE id = ?", (e["id"],))
+            continue
+        said = json.loads(e["said"] or "{}")
+        kept = {k: v for k, v in said.items()
+                if k not in understand.ORG_FIELDS or understand.quote_found(str(v), named)}
+        con.execute("UPDATE profile_evidence SET role = ?, said = ? WHERE id = ?", (role, json.dumps(kept), e["id"]))
 
 
 def _unlink_gone(text: str) -> str:
@@ -210,7 +218,7 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
             done["covered"] += 1
             continue
         role = note_role(fm, f"{row['rel']}\n{body}", words, bool(row["unit"]) or "\n## Part of\n" in body)
-        _keep_allowed_facts(con, row["note"], role)
+        _keep_allowed_facts(con, row["note"], role, f"{row['rel']}\n{body.split(TEXT, 1)[-1]}")
         _rewrite(path, fm, body, role, str(fm.get("source") or row["path"]))
         items.update(con, row["id"], role=role)
         if role == roles.TAUGHT and doc_type in lectures.NOTE_TYPES and lectures.is_typed(row["rel"]):

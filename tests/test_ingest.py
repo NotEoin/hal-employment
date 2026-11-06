@@ -453,6 +453,20 @@ class Understanding(unittest.TestCase):
             self.assertEqual(rows(con)["Files/CV.md"]["state"], "done")
         self.assertEqual(kinds, ["job"])
 
+    def test_an_organisation_the_document_never_names_is_left_out_of_a_fact(self):
+        # a module report naming no university gave a degree from "Trinity College Dublin" (2026-11-06)
+        text = "Coursework for GEO101 by Avery Quillon, Wexley Museum placement."
+        got = understand.facts([
+            {"kind": "education", "fields": {"qualification": "BA Geography", "institution": "Trinity College"},
+             "quote": "GEO101", "field": "qualification"},
+            {"kind": "job", "fields": {"title": "Placement", "employer": "Wexley Museum"}, "quote": "placement",
+             "field": "title"}], text, "Uni of Fenwick/year 2/report.md")
+        self.assertEqual([f["fields"] for f in got], [{"qualification": "BA Geography"},
+                                                      {"title": "Placement", "employer": "Wexley Museum"}])
+        got = understand.facts([{"kind": "education", "fields": {"institution": "Uni of Fenwick"}, "quote": "x"}],
+                               text, "Uni of Fenwick/year 2/report.md")
+        self.assertEqual(got[0]["fields"], {"institution": "Uni of Fenwick"}, "the path names it")
+
     def test_skills_and_basics_reach_the_profile_in_its_own_shape(self):
         # the model wrote skills with "evidence" and basics as {name, email, ...}; the profile refused all of
         # them and a whole ingest found no skills (2026-11-05)

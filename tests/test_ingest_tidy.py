@@ -160,6 +160,23 @@ class Tidy(unittest.TestCase):
         self.assertEqual(asked, [1, 0])
         self.assertEqual((row["state"], row["role"]), ("done", "unsure"))
 
+    def test_a_place_of_study_the_document_never_names_leaves_its_fact(self):
+        # a module report naming no university gave a degree from "Trinity College" (2026-11-06)
+        mine = {**REPLY, "doc_type": "report", "category": "Coursework", "role": "own"}
+        with home() as (con, _vault, files):
+            settings.set("you.name", OWNER)
+            with fake_ai({"ingest_doc": json.dumps(mine)}):
+                put(files, "Tide report.md", f"{REPORT}\n\nBy {OWNER}, for GEO101.")
+                run(con, [files])
+            note = rows(con)["Files/Tide report.md"]["note"]
+            store.add_found(con, "education", {"qualification": "BA Geography", "institution": "Trinity College",
+                                                "start": "2023"},
+                            {"source_rel": note, "doc_type": "report", "quote": "GEO101", "role": "own"})
+            with fake_ai({}):
+                run(con, [], batch="t", tidy=True)
+            got = [json.loads(r[0]) for r in con.execute("SELECT fields FROM profile_items WHERE kind = 'education'")]
+        self.assertEqual(got, [{"qualification": "BA Geography", "start": "2023"}])
+
     def test_a_typed_note_is_judged_by_rules_and_never_sent_to_the_ai(self):
         with home() as (con, _vault, files):
             settings.set("you.name", OWNER)

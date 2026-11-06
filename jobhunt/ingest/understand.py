@@ -48,6 +48,9 @@ DOC_TYPES = ("cv", "transcript", "letter", "personal_statement", "certificate", 
 ENTITY_KINDS = ("organisations", "places", "people", "projects", "courses", "skills")
 NAMED_KINDS = ("organisations", "places")  # named in the document itself; skills and projects may be described
 FACT_KINDS = ("job", "education", "skill", "project", "achievement", "certificate", "basic", "link")
+# A fact's organisation must be named in the document or its path, like an entity's: a module report naming
+# no university gave a degree from "Trinity College Dublin" (2026-11-06).
+ORG_FIELDS = ("employer", "institution", "issuer")
 YEAR = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
 HEADING = re.compile(r"^#{1,3}\s+(.+?)\s*#*$", re.M)
 # Typographic marks a converter or the model may use in place of plain ones; matched by code point.
@@ -173,7 +176,7 @@ def clean(reply: dict, rel: str, text: str, rule: rank.Rule) -> dict:
         tags = _tags(tags + [tag(e) for k in ("skills", "organisations", "places") for e in out["entities"][k]]
                      + base["tags"])
     out["tags"] = tags
-    out["facts"] = facts(reply.get("facts"), text)
+    out["facts"] = facts(reply.get("facts"), text, rel)
     return out
 
 
@@ -195,15 +198,22 @@ def shaped(kind: str, fields: dict) -> list[dict]:
     return [kept] if kept else []
 
 
-def facts(raw, text: str) -> list[dict]:
-    """The model's facts with their quotes checked: each {kind, fields, field, quote, verified}."""
+def facts(raw, text: str, rel: str = "") -> list[dict]:
+    """The model's facts with their quotes checked: each {kind, fields, field, quote, verified}.
+
+    An employer, institution or issuer the document and its path (`rel`) never name is left out.
+    """
+    named = f"{rel}\n{text}"
     out = []
     for f in raw if isinstance(raw, list) else []:
         if not isinstance(f, dict) or f.get("kind") not in FACT_KINDS or not isinstance(f.get("fields"), dict):
             continue
         quote = " ".join(str(f.get("quote") or "").split())
-        out += [{"kind": f["kind"], "fields": fields, "field": str(f.get("field") or ""), "quote": quote,
-                 "verified": quote_found(quote, text)} for fields in shaped(f["kind"], f["fields"])]
+        for fields in shaped(f["kind"], f["fields"]):
+            fields = {k: v for k, v in fields.items()
+                      if k not in ORG_FIELDS or quote_found(str(v), named)}
+            out.append({"kind": f["kind"], "fields": fields, "field": str(f.get("field") or ""), "quote": quote,
+                        "verified": quote_found(quote, text)})
     return out
 
 
