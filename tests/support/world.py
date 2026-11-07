@@ -281,7 +281,7 @@ class World:
             mock.patch.object(cv, "tailor", lambda text: ({}, None)),
             mock.patch.object(cv, "render", self._render_cv),
             mock.patch.object(record, "context", lambda queries, per_query=3, limit=6000: ""),
-            mock.patch.object(reputation, "check", lambda company: ([], "")),
+            mock.patch.object(reputation, "check", lambda company, advert=None: ([], "")),
             mock.patch.object(research, "company_pages", lambda company, max_pages=2: []),
         ]
         if self.imap:

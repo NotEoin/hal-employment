@@ -161,6 +161,11 @@ What changed in each version, in plain words.
   whether your course has ended and when you can start, and a draft that talks about finishing an ended
   course is rewritten once. Each project also says whether it was part of your degree, done at work or
   your own, so a personal project is no longer called degree work.
+- **The company check finds the right company.** It listed any company with the employer's name, such as a
+  solar firm, a fungicide and a closed company for a lender. Hal now shows a Wikipedia article only when
+  it also names the advert's town, links to the employer's website or is about the same trade, and a
+  Companies House entry only when the company is active and in the advert's trade. Otherwise the pack
+  says "No reliable match found".
 - **The AI's own reason when it cannot answer.** When Hal's model was switched off, commands such as
   `jobhunt pack` stopped with a long error ending in "(503)". They now say in one line what the AI said,
   such as "Hal is off; run `hal on`".

@@ -78,7 +78,7 @@ def cmd_check(args):
     for r in rows:
         pack_md = _pack_md(r)
         if pack_md is not None:
-            pack.add_company_check(pack_md, r["company"])
+            pack.add_company_check(pack_md, r["company"], r)
             print(f"checked {r['company']}")
 
 

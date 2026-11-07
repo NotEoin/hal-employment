@@ -459,7 +459,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
     employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]
-    company_flags, company_md = reputation.check(employer)
+    company_flags, company_md = reputation.check(employer, reputation.advert_of(job))
     flagged += company_flags
     history = previous_applications(con, job)
     if history:
@@ -506,9 +506,10 @@ def previous_applications(con, job) -> str:
     return "; ".join(parts)
 
 
-def add_company_check(pack_md: Path, company: str) -> None:
-    """Adds or refreshes the company check in an existing pack, and says the pack changed."""
-    flags, section = reputation.check(company)
+def add_company_check(pack_md: Path, company: str, job=None) -> None:
+    """Adds or refreshes the company check in an existing pack, and says the pack changed; `job` is the job row
+    whose advert ties a lookup's hit to the employer (`reputation.Advert`)."""
+    flags, section = reputation.check(company, reputation.advert_of(job))
     text = re.sub(r"## Company check\n.*?(?=\n## )", "", pack_md.read_text(), flags=re.S)
     if flags:
         bullets = "".join(f"- {f}\n" for f in flags)

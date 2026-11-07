@@ -415,6 +415,13 @@ runs: tests use `tests/support/fake_claude/`.
   and one claim check per form, with the advert as the employer's words; a flagged answer gets a "Hal is
   unsure; check this: ..." note and is not rewritten. Answers and letters drafted for the job earlier
   reach the form filler only as examples of style (`autofill.STYLE_LABEL`), never as facts.
+- The pack's company check (`reputation.check(company, advert)`, also `jobhunt check`) keeps a Wikipedia
+  article only when its title holds every word of the employer's name and it names the advert's town,
+  links to the employer's own site (the advert's link or an address in its text, never a job board's), or
+  shares `INDUSTRY_SHARED` trade words with the advert. It keeps a Companies House registration only when
+  its name starts with the employer's, its company page says Active, and its SIC codes (with their
+  division's words, `SIC_DIVISIONS`) share a trade word with the advert. Anything else reads "No reliable
+  match found". `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The pack's `## Letter notes` section says Tone, Length,
   Evidence and Checked; the application page reads them back.

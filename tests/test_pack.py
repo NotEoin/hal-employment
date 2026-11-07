@@ -589,7 +589,7 @@ class CommandLine(unittest.TestCase):
             made, opened = [], []
             connect = db.connect
             with mock.patch.object(letter, "render", lambda body, out, *a, **k: made.append((body, out)) or out), \
-                    mock.patch.object(pack, "add_company_check", lambda md, company: made.append(md)), \
+                    mock.patch.object(pack, "add_company_check", lambda md, company, job=None: made.append(md)), \
                     mock.patch.object(db, "connect", lambda *a, **k: opened.append(connect(*a, **k)) or opened[-1]):
                 out = io.StringIO()
                 with redirect_stdout(out):
