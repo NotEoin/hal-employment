@@ -28,17 +28,6 @@ class Markers(unittest.TestCase):
         self.assertEqual(read[2].text, "I logged river levels every ten minutes.")
         self.assertEqual(cites.normalise("It worked. [E4]"), "It worked [E4].")
 
-    def test_a_sentence_about_you_with_no_evidence_fails_and_a_reason_for_the_employer_does_not(self):
-        draft = ("I built the whole planner alone. I am interested in your timetables [M]. I spent three years "
-                 "building tools [M]. I would welcome a conversation [M]. The role starts in 2027 [M].")
-        self.assertEqual(cites.failures(draft, {"E1"}, "The role starts in 2027."),
-                         [f"I built the whole planner alone. ({cites.NO_EVIDENCE})",
-                          f"I spent three years building tools. ({cites.NO_EVIDENCE})"])
-
-    def test_a_sentence_citing_evidence_the_plan_does_not_hold_fails(self):
-        self.assertEqual(cites.failures("I logged river levels [E1, E9].", {"E1"}),
-                         ["I logged river levels. (cites E9, which the evidence plan does not hold)"])
-
     def test_what_counts_as_about_you(self):
         about = ["I led the weekly tours.", "My team won the regional prize.", "We wrote 12 reports.",
                  "The archive holds 400 letters."]

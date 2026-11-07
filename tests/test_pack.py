@@ -57,6 +57,7 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "fit": "Match a candidate's evidence", "letter": "Write a cover letter", "message": "Write a short message",
     "answers": "Answer these application questions", "verify": "Check drafts written",
     "prep": "Prepare ", "contacts_pick": "You choose who", "plan": "Choose the evidence",
+    "sentence_check": "Check one sentence", "sentence_fix": "Rewrite one sentence",
 }
 WAIT_S = 10.0
 POLL_S = 0.05
@@ -99,6 +100,10 @@ class FakeWriter:
             return {"unsupported": []}
         if pid == "plan":
             return {"evidence": self.plan}
+        if pid == "sentence_check":
+            return {"supported": True, "unsupported": [], "context_ok": True, "role_ok": True}
+        if pid == "sentence_fix":
+            return {"sentence": ""}
         if pid == "contacts_pick":
             return {"picks": [{"n": 1, "why": "Leads the team that is hiring.", "sure": True}]}
         if pid == "prep":
@@ -466,7 +471,8 @@ class MarkedWriter(FakeWriter):
         if pid == "message":
             return "Hello,\n\nI guided visitors at a made-up heritage centre [E2]. What does the team catalogue [M]?"
         if pid == "answers":
-            return {"answers": [{"question": "Why this role?", "answer": "I guided visitors for two years [E2]."}]}
+            return {"answers": [{"question": "Why this role?", "answer": "I guided visitors at a made-up heritage "
+                                                                     "centre [E2]."}]}
         return super().reply(system, user)
 
 
@@ -486,20 +492,51 @@ class Cited(unittest.TestCase):
                       "role.", section(md, "Cover letter"))
         self.assertIn("I guided visitors at a made-up heritage centre. What does the team catalogue?",
                       section(md, "Message to the hiring manager"))
-        self.assertIn("I guided visitors for two years.", section(md, "Form answers"))
+        self.assertIn("I guided visitors at a made-up heritage centre.", section(md, "Form answers"))
+        self.assertEqual(writer.asked("verify"), [], "a marked draft is checked sentence by sentence")
         self.assertNotRegex(md, r"\[(E\d|M)", "no marker reaches the pack")
 
-    def test_a_sentence_about_you_that_cites_no_evidence_is_rewritten_once(self):
+    def test_a_sentence_about_you_that_cites_no_evidence_is_rewritten_once_then_taken_out(self):
         # a local model added "to ensure patient data remained local and secure" to fit an advert (2026-11-07)
         writer = MarkedWriter(first=f"I kept every visitor record local and secure. {CITED}")
         with as_applicant(people.HUMANITIES, writer) as a:
             job = add_job(a.con, "humanities_grad")
             written = pack.write_letter(a.con, job)
-        letters = writer.asked("letter")
-        self.assertEqual(len(letters), 2)
-        self.assertIn(f"- I kept every visitor record local and secure. ({cites.NO_EVIDENCE})", letters[1]["user"])
-        self.assertEqual(written["text"], cites.strip(CITED))
+        fixes = writer.asked("sentence_fix")
+        self.assertEqual(len(writer.asked("letter")), 1, "only the sentence is rewritten, never the letter")
+        self.assertEqual(len(fixes), 1)
+        self.assertIn(f"Sentence: I kept every visitor record local and secure.\nWhat is wrong: {cites.NO_EVIDENCE}",
+                      fixes[0]["user"])
+        self.assertEqual(written["text"], cites.strip(CITED), "the rewrite found nothing true to say, so it is cut")
         self.assertEqual(written["flags"], [])
+        self.assertTrue(written["notes"]["checked"].startswith(pack.SOFTENED))
+
+    def test_check_before_sending_lists_only_sentences_still_failing_never_free_form_flags(self):
+        # one verify call over every draft listed about 20 false alarms for 10 real problems in five packs
+        # (2026-11-07); a marked draft is checked sentence by sentence, against its own evidence only
+        added = "I catalogued visitor feedback for the centre's new exhibition [E2]."
+        writer = MarkedWriter(first=f"{CITED}\n\n{added}")
+        plain = writer.reply
+
+        def reply(system: str, user: str) -> object:
+            if prompt_id(system) == "verify":
+                return {"unsupported": ["Dissertation on river trade", "a made-up heritage centre", "the role"]}
+            if prompt_id(system) == "sentence_check" and "exhibition" in user:
+                return {"supported": False, "unsupported": ["for the centre's new exhibition", "visitor"],
+                        "context_ok": True, "role_ok": True}
+            return plain(system, user)
+
+        writer.reply = reply
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(writer.asked("verify"), [])
+        self.assertEqual(written["flags"], ["unsupported claim: I catalogued visitor feedback for the centre's new "
+                                            "exhibition. (its evidence does not say: \"for the centre's new "
+                                            "exhibition\")"])
+        checked = writer.asked("sentence_check")
+        self.assertEqual(len(checked), 1, "the sentence restating its evidence needs no call")
+        self.assertNotIn("Dissertation", checked[0]["user"], "a sentence sees only the evidence it cites")
 
     def test_a_sentence_citing_evidence_the_plan_does_not_hold_is_listed_when_it_stays(self):
         stubborn = "I led every tour of the heritage centre [E7]."

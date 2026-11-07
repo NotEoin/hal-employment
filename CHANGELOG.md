@@ -10,8 +10,10 @@ What changed in each version, in plain words.
   rest on, each quoted word for word from your CV, the facts you checked or your own documents, with where
   the work was done and your part in it (a team of seven, the features you built) when your files say so.
   The letter's notes list them under **Evidence**. The letter, the message and the answers mark which fact
-  each sentence rests on, and a sentence about you that rests on none of them, such as a detail added to
-  fit the advert, is rewritten once. You never see the marks.
+  each sentence rests on (you never see the marks), and Hal checks each sentence about you against only
+  those facts: a detail added to fit the advert, a personal project placed in your degree, or a team's work
+  written as yours alone is rewritten once, then taken out, or listed when the draft needs it. **Check
+  before sending** no longer lists a whole-pack check's guesses, which were mostly false alarms.
 - **Read your web links into your record.** Hal can read your own site or blog (up to 30 pages under the
   link you give), your GitHub profile and repositories with their READMEs, and Google Docs and Slides
   shared with anyone. Sites such as Instagram and LinkedIn need you signed in, so Hal asks you to save the

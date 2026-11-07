@@ -4,8 +4,8 @@ on, and the markers are checked and taken out before anyone sees the draft.
 A sentence that states something about the person ends with the ids of its evidence, "[E2]" or "[E2,E5]",
 before its full stop; a reason for wanting the job or a closing request ends with "[M]", which states no fact
 about the person. `cited(text)` reads each sentence with its marker, `strip(text)` is the draft as the person
-sees it, and `failures(text, ids, allowed)` lists the sentences that state something about the person with no
-evidence, or cite an id the plan does not hold.
+sees it, and `about_person(sentence, allowed)` says whether a sentence states something about the person, so
+needs evidence; `writing.grounded` checks each sentence against what it cites.
 
 Design decisions, each with its reason:
 
@@ -118,17 +118,4 @@ def about_person(sentence: str, allowed: str = "") -> bool:
         return True
     held = set(numbers(allowed))
     return any(n not in held for n in numbers(sentence))
-
-
-def failures(text: str, ids: set[str], allowed: str = "") -> list[str]:
-    """The sentences of a marked draft that state something about the person with no evidence (no marker, or
-    only [M]), or cite an id not in `ids`, each with what is wrong."""
-    out = []
-    for c in cited(text):
-        unknown = [i for i in c.ids if i not in ids]
-        if unknown:
-            out.append(f"{c.text} ({NOT_IN_PLAN.format(ids=', '.join(unknown))})")
-        elif not c.ids and about_person(c.text, allowed):
-            out.append(f"{c.text} ({NO_EVIDENCE})")
-    return out
 

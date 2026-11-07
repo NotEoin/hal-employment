@@ -90,8 +90,11 @@ number, "not just X but Y") is rewritten once, and anything still wrong is liste
 sending**. Before it writes a letter, Hal picks the facts it will rest on: up to eight short quotes
 from your CV, the facts you checked and your own documents, each with where the work was done and your part
 in it when your files say so. The letter's notes list them under **Evidence**. The letter, the message
-and the answers say which of these facts each sentence rests on (you never see these marks), and a
-sentence about you that rests on none of them is rewritten once.
+and the answers say which of these facts each sentence rests on (you never see these marks), and Hal
+checks each sentence about you against only the facts it rests on: a number, tool or detail they do not
+give, a project placed somewhere else (your degree instead of your own time), or a team's work written as
+yours alone. Such a sentence is rewritten once; if it is still wrong, Hal takes it out, or lists it under
+**Check before sending** when the draft needs it.
 Hal also checks what each letter, message and answer says about you against your CV, the facts
 you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed.

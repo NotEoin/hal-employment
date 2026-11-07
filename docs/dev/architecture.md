@@ -421,12 +421,29 @@ runs: tests use `tests/support/fake_claude/`.
   (`pack._plan_part`), and their prompts ask for each sentence about the person to end with the ids it
   rests on ("[E2]", "[E2,E5]") and a reason for the employer or a closing request with "[M]".
   `cites.normalise` moves a marker written after a full stop before it, and every writing check reads the
-  draft without markers (`cites.strip`). For a marked draft `pack.unsupported_claims` adds
-  `cites.failures`: a sentence about the person (`cites.about_person`: the first person with a past tense,
-  or a number neither the employer's words nor the stage line hold) that cites no id, or one citing an id
-  the plan does not hold. The markers are taken out before a draft is returned, shown or saved. An empty
-  plan, or a draft with no marker at all, is checked as before.
-- The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts against the CV, the checked
+  draft without markers (`cites.strip`). The markers are taken out before a draft is returned, shown or
+  saved. An empty plan, or a draft with no marker at all, is checked whole as before (`pack.fix_claims`).
+- Sentence checks (`writing/grounded.py`): `pack.settle` (letter, message) and `pack.settle_answers` check a
+  marked draft one sentence at a time against only the items it cites (`pack.grounds` gathers them). With no
+  AI first (`grounded.problems`): a sentence about the person (`cites.about_person`: the first person with a
+  past tense, or a number neither the employer's words nor the stage line hold) that cites nothing, an id
+  the plan does not hold, a number (figures or words) or a known tool its items lack, degree or own-time
+  words its cards' contexts disagree with (the rules of `drafts.wrong_context`, through the markers), "I
+  built" of a team's card with no word of the team and under `PART_SHARE` of the person's part, and the
+  draft-wide checks (`stage.ended_course`, `drafts.misplaced_tools`, `drafts.wrong_context`,
+  `taught.unsupported`) on that sentence. A sentence passing them and not restating its items
+  (`drafts.stated_in`) gets one call (prompt `sentence_check`, `grounded.verdict`) with only the sentence
+  and its items: {supported, unsupported, context_ok, role_ok}. Quoted words its items or the employer's
+  words hold are dropped, and a reply that is not JSON fails nothing. One sentence per call, never a batch:
+  a batch would put other sentences' evidence beside it, as the single verify call did. A failing sentence
+  is rewritten once with its own items (prompt `sentence_fix`, `grounded.fix`), checked again, then taken out
+  unless the draft needs it (`only_in_paragraph`, an answer's `first_of_answer`), when it is kept and
+  listed. "Check before sending" lists those, the eligibility lines, cut-offs and the checks with no AI on
+  style; the verify call is not made for a marked draft. `tests/fixtures/grounded_flags.json` holds
+  sentences of each kind a local model wrote, and `tests/test_writing_grounded.py` requires each judged
+  right.
+- The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts with no markers, and form
+  answers, against the CV, the checked
   profile and the passages of the person's own documents. The advert and the company brief go in a fenced
   `EMPLOYER` block as the employer's own words, never flagged for being restated; the fit map is not a
   fact, as the AI wrote it. A claim the AI quotes that one CV line or sentence states (`drafts.stated_in`:

@@ -1,0 +1,17 @@
+# name: Checking one sentence
+# used: After Hal drafts a letter, message or answers: each sentence about you is checked against only the facts it rests on
+# needs:
+Check one sentence of a job application against the evidence it rests on. You get the sentence and its
+evidence items, each with where the work was done and the applicant's part in it when known. Judge only
+what the sentence says about the applicant; what it says about the employer or about why the applicant
+wants the job is never a problem.
+Reply with JSON only:
+{"supported": true | false, "unsupported": [the words of the sentence no evidence item supports, quoted
+  exactly], "context_ok": true | false, "role_ok": true | false}
+- "supported" is false when the sentence adds something about the applicant that no item says: a detail,
+  tool, number, purpose, result, length of time or size. Plain rewording of an item is supported.
+- "context_ok" is false when the sentence places the work somewhere its items do not: a personal project
+  as part of a degree, a module or coursework; a module as the basis or source of a personal project; degree
+  work as a job or as personal work; a university team project as personal work.
+- "role_ok" is false when the sentence gives the applicant more of the work than the items do: a team's
+  work written as their own, the whole project when they built a part, "helped" made "led".

@@ -19,10 +19,10 @@ Design notes:
 - Every draft goes through the writing checker (`writing.check`). A high-severity break (an invented number,
   a machine-made word, a staged contrast) makes the writer revise once with the problems quoted; what is
   left is listed under "Check before sending", never fixed in a loop.
-- The claim check (`unsupported_claims`) works the same way (`fix_claims`): the letter, the message and the
-  answers are each rewritten once without the claims about the person their facts do not support, checked
-  again, and only what is left is listed. The advert and the brief are the employer's own words, never
-  flagged for being restated.
+- The claim check (`unsupported_claims`) works the same way (`fix_claims`) for a draft with no evidence
+  markers: the letter, the message and the answers are each rewritten once without the claims about the
+  person their facts do not support, checked again, and only what is left is listed. The advert and the
+  brief are the employer's own words, never flagged for being restated.
 - The letter's first paragraph and the "why do you want to work here" answers are checked, with no AI, for
   sentences that restate the advert or the brief (`drafts.echoes`) and rewritten once to tie something of
   the applicant's own to the employer (`fix_echoes`), before the claim check reads them: 26 generic
@@ -38,8 +38,9 @@ Design notes:
   of the CV, the Profile block and the record, each with its card's context and the person's part, as a
   local model framed projects in the wrong place and wrote team work as solo when it wrote freely
   (2026-11-07). The letter, the message and the answers mark each sentence with the items it rests on
-  (`writing.cites`); a sentence about the person citing none is a claim for `fix_claims`, and the markers
-  are taken out before a draft is returned.
+  (`writing.cites`), and each sentence is checked against only what it cites (`settle`, `writing.grounded`)
+  in place of the whole-draft claim check, whose single call over every draft listed about 20 false alarms
+  for 10 real problems in five packs (2026-11-07). The markers are taken out before a draft is returned.
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -53,7 +54,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import cites, drafts, eligibility, fields, relocation, repeats, spelling, stage, taught
+from .writing import cites, drafts, eligibility, fields, grounded, relocation, repeats, spelling, stage, taught
 from .writing import plan as planning
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
@@ -445,8 +446,7 @@ def drop_notes(text: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"\1", "\n\n".join(paras))
 
 
-def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employer: tuple[str, ...],
-                       plan: list[planning.Item] = ()) -> list[str]:
+def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employer: tuple[str, ...]) -> list[str]:
     """The claims about the person in the drafts (`written`) that their facts do not support, as the verify
     prompt quotes them.
 
@@ -459,11 +459,11 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     has ended (`stage.ended_course`), a tool given to a project whose own facts never name it
     (`drafts.misplaced_tools`), a project placed in a degree or in the person's own time against its
     card's context (`drafts.wrong_context`), and what a named module covered when no source naming the module
-    says it (`taught.unsupported`). With an evidence `plan`, a marked draft's sentences that state something
-    about the person with no evidence, or cite an id the plan does not hold, are claims too
-    (`cites.failures`). Each goes into the one rewrite `fix_claims` asks for.
+    says it (`taught.unsupported`). Each goes into the one rewrite `fix_claims` asks for. A draft that cites an
+    evidence plan is checked sentence by sentence instead (`settle`); this whole-draft check is for drafts
+    with no markers, and for form filling.
     """
-    marked, written = written, cites.strip(written)
+    written = cites.strip(written)
     now = stage.current()
     cards = profile_writing.cards()
     shown = profile_writing.cards_block(cards)
@@ -476,11 +476,9 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
     claims = [c for c in claims if not drafts.stated_in(c, facts)]
     known = known_tools(cards)
-    uncited = cites.failures(marked, {i.id for i in plan}, f"{words}\n{stage.today_lines(now)}") \
-        if plan and cites.has_markers(marked) else []
     return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
-        + taught.unsupported(written, profile_writing.module_names(), (facts, kept)) + uncited
+        + taught.unsupported(written, profile_writing.module_names(), (facts, kept))
 
 
 def claims_note(claims: list[str]) -> str:
@@ -510,21 +508,57 @@ def fix_echoes(draft, echoed_in, rewrite):
     return (again or draft), bool(again)
 
 
-def fix_claims(who: dict, draft, rewrite, *, facts: str, kept: str, employer: tuple[str, ...], as_text=str,
-               plan: list[planning.Item] = ()):
+def fix_claims(who: dict, draft, rewrite, *, facts: str, kept: str, employer: tuple[str, ...], as_text=str):
     """The draft rewritten once by `rewrite(note)` when it makes claims about the person their facts do not
     support, then checked again; returns (draft, the claims still unsupported, whether it was rewritten).
 
     One rewrite, never a loop, as with `revise_once`. `as_text` turns a draft (the answers are a list) into
     the text that is checked.
     """
-    claims = unsupported_claims(who, as_text(draft), facts=facts, kept=kept, employer=employer, plan=plan)
+    claims = unsupported_claims(who, as_text(draft), facts=facts, kept=kept, employer=employer)
     if not claims:
         return draft, [], False
     again = rewrite(claims_note(claims))
     if not again:
         return draft, claims, False
-    return again, unsupported_claims(who, as_text(again), facts=facts, kept=kept, employer=employer, plan=plan), True
+    return again, unsupported_claims(who, as_text(again), facts=facts, kept=kept, employer=employer), True
+
+
+def grounds(who: dict, plan: list[planning.Item], *, facts: str, kept: str,
+            employer: tuple[str, ...]) -> grounded.Facts:
+    """What each sentence of a marked draft is checked against (`writing.grounded`): the plan, the cards and
+    tools, the employer's words and the stage line (numbers there are not claims), modules and sources."""
+    cards, now = profile_writing.cards(), stage.current()
+    words = "\n\n".join(e for e in employer if e)
+    return grounded.Facts({i.id: i for i in plan}, cards, known_tools(cards), f"{words}\n{stage.today_lines(now)}",
+                          now, profile_writing.module_names(), (facts, kept), who)
+
+
+def settle(who: dict, draft: str, rewrite, *, plan: list[planning.Item], essential: grounded.Essential, facts: str,
+           kept: str, employer: tuple[str, ...]) -> tuple[str, list[str], bool]:
+    """A letter or message checked for what it says about the person: (draft, what is still wrong, whether it
+    was changed). One that cites the evidence `plan` is checked sentence by sentence (`grounded.ground`); one
+    with no markers is checked whole and rewritten once (`fix_claims`)."""
+    if plan and cites.has_markers(draft):
+        done = grounded.ground(draft, grounds(who, plan, facts=facts, kept=kept, employer=employer), essential)
+        return done.text, done.failed, bool(done.rewrites or done.removed)
+    return fix_claims(who, draft, rewrite, facts=facts, kept=kept, employer=employer)
+
+
+def settle_answers(who: dict, answers: list[dict], rewrite, *, plan: list[planning.Item], facts: str, kept: str,
+                   employer: tuple[str, ...]) -> tuple[list[dict], list[str]]:
+    """The answers checked as `settle` checks a letter, each answer on its own when they cite the plan (an
+    answer's first sentence answers the question, so it is never cut); returns (answers, what is still
+    wrong)."""
+    if not (plan and any(cites.has_markers(str(a.get("answer") or "")) for a in answers)):
+        return fix_claims(who, answers, rewrite, facts=facts, kept=kept, employer=employer, as_text=_answers_text)[:2]
+    against = grounds(who, plan, facts=facts, kept=kept, employer=employer)
+    out, failed = [], []
+    for a in answers:
+        done = grounded.ground(str(a.get("answer") or ""), against, grounded.first_of_answer)
+        out.append({**a, "answer": done.text})
+        failed += done.failed
+    return out, failed
 
 
 def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, sources: tuple[str, ...], kind: str = "letter",
@@ -601,9 +635,10 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
 
     letter, _ = fix_echoes(letter, echoed_in,
                            lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed))
-    letter, claims, softened = fix_claims(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}"
-                                                                            f"\n\n{note}", trimmed),
-                                          facts=facts, kept=kept, employer=sources, plan=plan)
+    letter, claims, softened = settle(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}"
+                                                                        f"\n\n{note}", trimmed),
+                                      plan=plan, essential=grounded.only_in_paragraph, facts=facts, kept=kept,
+                                      employer=sources)
     cut = letter in trimmed
     letter = relocation.without_own_move(cites.strip(letter), eligibility.person(con))
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
@@ -672,8 +707,7 @@ def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[s
                           lambda note: ask(f"{request}\n\nYour first answers:\n{_answers_text(answers)}\n\n{note}"))[0]
     answers, _ = fix_echoes(answers, lambda found: echoed_answers(found, sources, names), again)
     answers, _ = fix_repeats(answers, again)
-    answers, claims, _ = fix_claims(who, answers, again, facts=facts, kept=kept, employer=sources,
-                                    as_text=_answers_text, plan=plan)
+    answers, claims = settle_answers(who, answers, again, plan=plan, facts=facts, kept=kept, employer=sources)
     return answers, claims, echoed_answers(answers, sources, names)
 
 
@@ -710,8 +744,8 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
         return _message(who, f"{message_request}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text, trimmed)
 
     message = _message(who, message_request, analysis, job_text, trimmed)
-    message, message_claims, _ = fix_claims(who, message, rewrite_message, facts=facts, kept=kept,
-                                            employer=their_words, plan=plan)
+    message, message_claims, _ = settle(who, message, rewrite_message, plan=plan, essential=grounded.only_in_paragraph,
+                                        facts=facts, kept=kept, employer=their_words)
     message = to_recipient(who, message, analysis, rewrite_message, job_text)
     answers, answer_claims, answer_echoes = _answers(
         who, answers_request, facts=facts, kept=kept, sources=their_words,
