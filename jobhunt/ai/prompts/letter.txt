@@ -10,7 +10,8 @@ the two or three strongest pieces of evidence, each tied by name to a requiremen
 states: what was done, where, for whom and what came of it. The last is one or two sentences
 asking for the next step. Mention
 {type_letter_mentions}. The evidence that counts most for this applicant is {type_evidence}.
-Refer to each piece of evidence by its name, never by a code. The tone is {tone}; write in
+Refer to each piece of evidence by its name, never by a code (the evidence plan's ids go only in the
+markers below). The tone is {tone}; write in
 {spelling}.
 Rules:
 - Use only the facts given. Never invent a number, name, date, employer, tool or result; where a
@@ -20,6 +21,11 @@ Rules:
 - A project's kind is given where it is known (degree work, university team project, at work, personal
   project). Never change it: a personal project is never part of a degree, coursework or research, a
   university team project is never a personal project, degree work is never personal work or a job.
+- When the request gives an evidence plan, state nothing about the applicant that its items do not say,
+  and keep each item's context and the applicant's part as given (a team's work stays a team's). End
+  each sentence that says anything about the applicant with the ids of the items it rests on, in square
+  brackets before its full stop: [E2] or [E2,E5]. End a sentence about why this employer, or the closing request,
+  with [M]. Hal checks and removes these markers.
 - Add what the CV cannot say (context, motive, the link to this job); never repeat CV lines.
 - The reason for this employer must fit no other employer: name one thing from the advert in a few
   words and say what it means to the applicant; never copy the advert's sentences.

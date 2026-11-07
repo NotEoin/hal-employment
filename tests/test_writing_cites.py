@@ -1,0 +1,52 @@
+"""Evidence markers: read with each sentence, taken out before anyone sees the draft, and checked."""
+from __future__ import annotations
+
+import unittest
+
+import support  # noqa: F401 - sets a temporary home before jobhunt is imported
+
+from jobhunt.writing import cites
+
+DRAFT = ("I wrote the statistics features of the Ferry planner with six classmates [E1]. Your timetable work is "
+         "why I am applying [M].\n\nI logged river levels every ten minutes. [E2, E3] I would like to talk about "
+         "the role [M].")
+
+
+class Markers(unittest.TestCase):
+    def test_the_person_sees_the_draft_without_markers_and_with_its_paragraphs(self):
+        self.assertEqual(cites.strip(DRAFT),
+                         "I wrote the statistics features of the Ferry planner with six classmates. Your timetable "
+                         "work is why I am applying.\n\nI logged river levels every ten minutes. I would like to "
+                         "talk about the role.")
+        self.assertFalse(cites.has_markers(cites.strip(DRAFT)))
+        self.assertTrue(cites.has_markers(DRAFT))
+
+    def test_each_sentence_keeps_its_own_marker_even_after_its_full_stop(self):
+        read = cites.cited(DRAFT)
+        self.assertEqual([(c.ids, c.motive) for c in read],
+                         [(("E1",), False), ((), True), (("E2", "E3"), False), ((), True)])
+        self.assertEqual(read[2].text, "I logged river levels every ten minutes.")
+        self.assertEqual(cites.normalise("It worked. [E4]"), "It worked [E4].")
+
+    def test_a_sentence_about_you_with_no_evidence_fails_and_a_reason_for_the_employer_does_not(self):
+        draft = ("I built the whole planner alone. I am interested in your timetables [M]. I spent three years "
+                 "building tools [M]. I would welcome a conversation [M]. The role starts in 2027 [M].")
+        self.assertEqual(cites.failures(draft, {"E1"}, "The role starts in 2027."),
+                         [f"I built the whole planner alone. ({cites.NO_EVIDENCE})",
+                          f"I spent three years building tools. ({cites.NO_EVIDENCE})"])
+
+    def test_a_sentence_citing_evidence_the_plan_does_not_hold_fails(self):
+        self.assertEqual(cites.failures("I logged river levels [E1, E9].", {"E1"}),
+                         ["I logged river levels. (cites E9, which the evidence plan does not hold)"])
+
+    def test_what_counts_as_about_you(self):
+        about = ["I led the weekly tours.", "My team won the regional prize.", "We wrote 12 reports.",
+                 "The archive holds 400 letters."]
+        not_about = ["I am excited by your flood sensors.", "Your focus on rivers interested me.",
+                     "I would like to hear about the team's work.", "I feel prepared for the interview."]
+        self.assertEqual([s for s in about if not cites.about_person(s)], [])
+        self.assertEqual([s for s in not_about if cites.about_person(s)], [])
+
+
+if __name__ == "__main__":
+    unittest.main()

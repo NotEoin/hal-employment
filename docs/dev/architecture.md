@@ -414,7 +414,18 @@ runs: tests use `tests/support/fake_claude/`.
   source is about (a Project or Job line of the Profile block, a CV line naming one card, a passage of one of
   the card's `files`), the card's context (`profile.contexts.current`, never the reply's) and the person's
   part (`profile.writing.card_role`: the card's Role field and its team words, `stage.team_words`). The
-  letter's Evidence line names the plan's quotes, else the record passages as before.
+  letter's Evidence line names the plan's quotes, else the record passages as before. The pack picks one
+  plan for the letter, the message and the answers (with `COMMON_QUESTIONS`); `docs.change` picks one for
+  the message and answers.
+- Evidence markers (`writing/cites.py`): the letter, message and answers requests carry the plan
+  (`pack._plan_part`), and their prompts ask for each sentence about the person to end with the ids it
+  rests on ("[E2]", "[E2,E5]") and a reason for the employer or a closing request with "[M]".
+  `cites.normalise` moves a marker written after a full stop before it, and every writing check reads the
+  draft without markers (`cites.strip`). For a marked draft `pack.unsupported_claims` adds
+  `cites.failures`: a sentence about the person (`cites.about_person`: the first person with a past tense,
+  or a number neither the employer's words nor the stage line hold) that cites no id, or one citing an id
+  the plan does not hold. The markers are taken out before a draft is returned, shown or saved. An empty
+  plan, or a draft with no marker at all, is checked as before.
 - The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts against the CV, the checked
   profile and the passages of the person's own documents. The advert and the company brief go in a fenced
   `EMPLOYER` block as the employer's own words, never flagged for being restated; the fit map is not a

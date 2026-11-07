@@ -87,9 +87,11 @@ the top. When Hal cannot tell the field from the advert or your goal, it uses ge
 another field's. It uses only your facts and never invents a number: where a result has none, it says who
 the work served instead. A first draft that breaks one of Hal's writing rules (a stock phrase, an invented
 number, "not just X but Y") is rewritten once, and anything still wrong is listed under **Check before
-sending**. Before it writes a letter, Hal picks the facts the letter will rest on: up to eight short quotes
+sending**. Before it writes a letter, Hal picks the facts it will rest on: up to eight short quotes
 from your CV, the facts you checked and your own documents, each with where the work was done and your part
-in it when your files say so. The letter's notes list them under **Evidence**.
+in it when your files say so. The letter's notes list them under **Evidence**. The letter, the message
+and the answers say which of these facts each sentence rests on (you never see these marks), and a
+sentence about you that rests on none of them is rewritten once.
 Hal also checks what each letter, message and answer says about you against your CV, the facts
 you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed.

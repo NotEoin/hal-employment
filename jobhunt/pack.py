@@ -34,10 +34,12 @@ Design notes:
   use other evidence (`fix_repeats`, `repeats.repeated`), and the fit map lists each gap once
   (`repeats.unique_gaps`): two answers of a real pack gave the same details and a gap was listed twice
   (2026-11-07).
-- Each letter rests on an evidence plan picked before it is written (`evidence_plan`, `writing.plan`): quotes
+- Each draft rests on an evidence plan picked before it is written (`evidence_plan`, `writing.plan`): quotes
   of the CV, the Profile block and the record, each with its card's context and the person's part, as a
   local model framed projects in the wrong place and wrote team work as solo when it wrote freely
-  (2026-11-07).
+  (2026-11-07). The letter, the message and the answers mark each sentence with the items it rests on
+  (`writing.cites`); a sentence about the person citing none is a claim for `fix_claims`, and the markers
+  are taken out before a draft is returned.
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -51,7 +53,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import drafts, eligibility, fields, relocation, repeats, spelling, stage, taught
+from .writing import cites, drafts, eligibility, fields, relocation, repeats, spelling, stage, taught
 from .writing import plan as planning
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
@@ -354,6 +356,11 @@ def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, .
                          profile_writing.cards())
 
 
+def _plan_part(plan: list[planning.Item]) -> str:
+    """The evidence plan's section of a writing request; "" for an empty plan, which leaves the draft unmarked."""
+    return f"\n\n{planning.block(plan)}" if plan else ""
+
+
 def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, kept: str, history: str) -> str:
     """The request text every drafted document shares: the job, the evidence and the person's dates."""
     return (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
@@ -388,14 +395,14 @@ def _draft(who: dict, prompt_id: str, user: str, trimmed: set[str]) -> str:
     mid-sentence (`drafts.cut_off`); when that one stops too it is kept to its last full sentence and added
     to `trimmed`, so "Check before sending" can say so if it is the draft that is kept."""
     def ask(text: str, ctx: int | None = None) -> str:
-        return spelt(drop_notes(llm.undash(llm.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx).strip())),
-                     who)
+        said = llm.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx).strip()
+        return cites.normalise(spelt(drop_notes(llm.undash(said)), who))
 
     draft = ask(user)
-    if not drafts.cut_off(draft):
+    if not drafts.cut_off(cites.strip(draft)):
         return draft
     again = ask(f"{user}\n\n{CUT_NOTE}", ROOM_CTX)
-    if not drafts.cut_off(again):
+    if not drafts.cut_off(cites.strip(again)):
         return again
     kept = drafts.last_full_sentence(again)
     trimmed.add(kept)
@@ -407,9 +414,10 @@ def _letter(who: dict, context: str, trimmed: set[str] | None = None) -> str:
 
 
 def _hits(who: dict, text: str, kind: str, *, facts: str, kept: str, sources: tuple[str, ...]) -> list:
-    """What the writing checker finds in a draft, against every fact it may draw on."""
-    return writing_check.check(text, kind, sources=(facts, kept, *sources), spelling=who.get("spelling_code", ""),
-                               cv_text=facts if kind == "letter" else "",
+    """What the writing checker finds in a draft, without its evidence markers, against every fact it may draw
+    on."""
+    return writing_check.check(cites.strip(text), kind, sources=(facts, kept, *sources),
+                               spelling=who.get("spelling_code", ""), cv_text=facts if kind == "letter" else "",
                                target_words=who.get("letter_words") if kind == "letter" else None,
                                allowed=who.get("own_words") or ())
 
@@ -437,7 +445,8 @@ def drop_notes(text: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"\1", "\n\n".join(paras))
 
 
-def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employer: tuple[str, ...]) -> list[str]:
+def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employer: tuple[str, ...],
+                       plan: list[planning.Item] = ()) -> list[str]:
     """The claims about the person in the drafts (`written`) that their facts do not support, as the verify
     prompt quotes them.
 
@@ -450,8 +459,11 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     has ended (`stage.ended_course`), a tool given to a project whose own facts never name it
     (`drafts.misplaced_tools`), a project placed in a degree or in the person's own time against its
     card's context (`drafts.wrong_context`), and what a named module covered when no source naming the module
-    says it (`taught.unsupported`). Each goes into the one rewrite `fix_claims` asks for.
+    says it (`taught.unsupported`). With an evidence `plan`, a marked draft's sentences that state something
+    about the person with no evidence, or cite an id the plan does not hold, are claims too
+    (`cites.failures`). Each goes into the one rewrite `fix_claims` asks for.
     """
+    marked, written = written, cites.strip(written)
     now = stage.current()
     cards = profile_writing.cards()
     shown = profile_writing.cards_block(cards)
@@ -464,9 +476,11 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
     claims = [c for c in claims if not drafts.stated_in(c, facts)]
     known = known_tools(cards)
+    uncited = cites.failures(marked, {i.id for i in plan}, f"{words}\n{stage.today_lines(now)}") \
+        if plan and cites.has_markers(marked) else []
     return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
-        + taught.unsupported(written, profile_writing.module_names(), (facts, kept))
+        + taught.unsupported(written, profile_writing.module_names(), (facts, kept)) + uncited
 
 
 def claims_note(claims: list[str]) -> str:
@@ -496,20 +510,21 @@ def fix_echoes(draft, echoed_in, rewrite):
     return (again or draft), bool(again)
 
 
-def fix_claims(who: dict, draft, rewrite, *, facts: str, kept: str, employer: tuple[str, ...], as_text=str):
+def fix_claims(who: dict, draft, rewrite, *, facts: str, kept: str, employer: tuple[str, ...], as_text=str,
+               plan: list[planning.Item] = ()):
     """The draft rewritten once by `rewrite(note)` when it makes claims about the person their facts do not
     support, then checked again; returns (draft, the claims still unsupported, whether it was rewritten).
 
     One rewrite, never a loop, as with `revise_once`. `as_text` turns a draft (the answers are a list) into
     the text that is checked.
     """
-    claims = unsupported_claims(who, as_text(draft), facts=facts, kept=kept, employer=employer)
+    claims = unsupported_claims(who, as_text(draft), facts=facts, kept=kept, employer=employer, plan=plan)
     if not claims:
         return draft, [], False
     again = rewrite(claims_note(claims))
     if not again:
         return draft, claims, False
-    return again, unsupported_claims(who, as_text(again), facts=facts, kept=kept, employer=employer), True
+    return again, unsupported_claims(who, as_text(again), facts=facts, kept=kept, employer=employer, plan=plan), True
 
 
 def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, sources: tuple[str, ...], kind: str = "letter",
@@ -517,6 +532,7 @@ def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, sources: tupl
     """What to check before sending: numbers no source holds, claims the facts do not support (`claims` when
     `fix_claims` already found them, else `unsupported_claims`), the writing rules a draft breaks
     (`writing.check`) and the person's never-use phrases."""
+    drafts = cites.strip(drafts)
     hits = _hits(who, drafts, kind, facts=facts, kept=kept, sources=sources)
     flagged = [h.flag for h in hits if h.rule == "T1"]
     if claims is None:
@@ -553,21 +569,23 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], 
 
 
 def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = None, about: str = "",
-                 kept: str | None = None, fit: dict | None = None, request: str = "") -> dict:
+                 kept: str | None = None, fit: dict | None = None, request: str = "",
+                 plan: list[planning.Item] | None = None) -> dict:
     """Writes and checks a cover letter for one job: {text, flags, used, notes, plan}.
 
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
-    the fit map made (each unless given), the evidence plan picked (`evidence_plan`), then the letter and its
-    checks. `request` holds the person's own words when they asked for a rewrite.
+    the fit map made and the evidence plan picked (`evidence_plan`), each unless given, then the letter and its
+    checks. `request` holds the person's own words when they asked for a rewrite. The letter cites the plan's
+    items (`writing.cites`); its markers are checked with its claims and taken out before it is returned.
     """
     who = who or person(job)
     facts = cv.facts_text()
     analysis = analysis if analysis is not None else _analyse(job, who)
     kept = kept if kept is not None else _kept(analysis)
     fit = fit if fit is not None else _fit(who, analysis, facts, kept, job)
-    plan = evidence_plan(analysis, facts, kept)
+    plan = plan if plan is not None else evidence_plan(analysis, facts, kept)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
-    text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
+    text += _plan_part(plan) + "\n\n" + fields.block(field_of(job, who, analysis), "letter")
     if request:
         text += f"\n\nThe applicant asked for this change: {request}"
     trimmed: set[str] = set()
@@ -579,17 +597,18 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     names = (job["title"], job["company"])
 
     def echoed_in(draft: str) -> list[str]:
-        return drafts.echoed(drafts.first_paragraph(draft), *sources, names)
+        return drafts.echoed(drafts.first_paragraph(cites.strip(draft)), *sources, names)
 
     letter, _ = fix_echoes(letter, echoed_in,
                            lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed))
     letter, claims, softened = fix_claims(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}"
                                                                             f"\n\n{note}", trimmed),
-                                          facts=facts, kept=kept, employer=sources)
-    letter = relocation.without_own_move(letter, eligibility.person(con))
+                                          facts=facts, kept=kept, employer=sources, plan=plan)
+    cut = letter in trimmed
+    letter = relocation.without_own_move(cites.strip(letter), eligibility.person(con))
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in echoed_in(letter)]
-    if letter in trimmed:
+    if cut:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["letter"]))
     used = passages(kept)
     shown = [i.text for i in plan] or used or [m.get("evidence", "") for m in fit.get("matches", [])
@@ -605,12 +624,12 @@ def _answers_text(answers: list[dict]) -> str:
 def echoed_answers(answers: list[dict], sources: tuple[str, ...], names: tuple[str, ...]) -> list[str]:
     """The sentences of the "why do you want to work here" answers that restate the advert or brief."""
     return [s for a in answers if drafts.why_question(str(a.get("question") or ""))
-            for s in drafts.echoed(str(a.get("answer") or ""), *sources, names)]
+            for s in drafts.echoed(cites.strip(str(a.get("answer") or "")), *sources, names)]
 
 
 def repeated_answers(answers: list[dict]) -> list[tuple[int, str, int]]:
     """Each sentence of a later answer that repeats an earlier answer (`repeats.repeated`)."""
-    return repeats.repeated([str(a.get("answer") or "") for a in answers])
+    return repeats.repeated([cites.strip(str(a.get("answer") or "")) for a in answers])
 
 
 def repeat_note(answers: list[dict], found: list[tuple[int, str, int]]) -> str:
@@ -633,14 +652,16 @@ def fix_repeats(answers: list[dict], rewrite):
 
 
 def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[str, ...],
-             names: tuple[str, ...] = ()) -> tuple[list[dict], list[str], list[str]]:
+             names: tuple[str, ...] = (), plan: list[planning.Item] = ()) -> tuple[list[dict], list[str], list[str]]:
     """Answers to the questions `request` lists, revised once together when one breaks a high-severity rule,
     once when a "why here" answer restates the advert (`echoed_answers`) and once more when they make claims
     the facts do not support, after once more when a later answer repeats an earlier one (`fix_repeats`);
-    returns (answers, the claims still unsupported, the sentences still restating the advert)."""
+    returns (answers, the claims still unsupported, the sentences still restating the advert), the answers
+    still carrying their evidence markers."""
     def ask(text: str) -> list[dict]:
         found = llm.chat_json(prompt("answers", who), text, role="writer").get("answers", [])
-        return [{**a, "answer": spelt(llm.undash(a.get("answer", "")), who)} for a in found if isinstance(a, dict)]
+        return [{**a, "answer": cites.normalise(spelt(llm.undash(a.get("answer", "")), who))}
+                for a in found if isinstance(a, dict)]
 
     def again(note: str) -> list[dict]:
         return ask(f"{request}\n\nYour answers:\n{_answers_text(answers)}\n\n{note}")
@@ -652,7 +673,7 @@ def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[s
     answers, _ = fix_echoes(answers, lambda found: echoed_answers(found, sources, names), again)
     answers, _ = fix_repeats(answers, again)
     answers, claims, _ = fix_claims(who, answers, again, facts=facts, kept=kept, employer=sources,
-                                    as_text=_answers_text)
+                                    as_text=_answers_text, plan=plan)
     return answers, claims, echoed_answers(answers, sources, names)
 
 
@@ -668,37 +689,44 @@ def answers_request(job, who: dict, analysis: dict, questions: list[str], contex
 
 
 def write_others(who: dict, job, analysis: dict, about: str, *, message_request: str, answers_request: str,
-                 facts: str, kept: str) -> dict:
+                 facts: str, kept: str, plan: list[planning.Item] | None = None) -> dict:
     """The message to the person hiring and the form answers, written from their requests and checked as a
     pack checks them: {message, answers, flags}. `answers_request` "" writes no answers.
 
     The message is asked for again when it stops mid-sentence, rewritten once without claims the facts do not
     support (project contexts and misplaced tools included) and once to greet the person it goes to; the
     answers are revised for the writing rules, for restating the advert and for claims (`_answers`). The pack
-    and a change the person asks for (`docs.change`) both write them here, so neither skips a check.
+    and a change the person asks for (`docs.change`) both write them here, so neither skips a check. Both
+    cite the evidence `plan` (the pack's, else one picked here for the advert's and the common questions);
+    their markers are taken out before they are returned.
     """
     job_text = _job_text(job)
     their_words, trimmed = (job_text, about), set()
+    plan = plan if plan is not None else evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
+    message_request += _plan_part(plan)
+    answers_request += _plan_part(plan) if answers_request else ""
 
     def rewrite_message(note: str) -> str:
         return _message(who, f"{message_request}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text, trimmed)
 
     message = _message(who, message_request, analysis, job_text, trimmed)
     message, message_claims, _ = fix_claims(who, message, rewrite_message, facts=facts, kept=kept,
-                                            employer=their_words)
+                                            employer=their_words, plan=plan)
     message = to_recipient(who, message, analysis, rewrite_message, job_text)
     answers, answer_claims, answer_echoes = _answers(
         who, answers_request, facts=facts, kept=kept, sources=their_words,
-        names=(job["title"], job["company"])) if answers_request else ([], [], [])
+        names=(job["title"], job["company"]), plan=plan) if answers_request else ([], [], [])
     you = eligibility.person()
-    message = relocation.without_own_move(message, you)
-    answers = [{**a, "answer": relocation.without_own_move(str(a.get("answer") or ""), you)} for a in answers]
+    cut = message in trimmed
+    message = relocation.without_own_move(cites.strip(message), you)
+    answers = [{**a, "answer": relocation.without_own_move(cites.strip(str(a.get("answer") or "")), you)}
+               for a in answers]
     written = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
     flags = check_drafts(who, written, facts=facts, kept=kept, sources=their_words, kind="answer",
                          claims=message_claims + answer_claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in answer_echoes]
     flags += [f"{REPEAT_FLAG}: {s}" for _, s, _ in repeated_answers(answers)]
-    if message in trimmed:
+    if cut:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
     return {"message": message, "answers": answers, "flags": flags}
 
@@ -826,13 +854,14 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
                      role="main")
     kept = _kept(analysis)
     fit = _fit(who, analysis, facts, kept, job)
-    written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit)
+    plan = evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
+    written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit, plan=plan)
     letter = written["text"]
     context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     questions = [*(analysis.get("questions") or []), *COMMON_QUESTIONS]
     others = write_others(who, job, analysis, about, message_request=context,
                           answers_request=answers_request(job, who, analysis, questions, context),
-                          facts=facts, kept=kept)
+                          facts=facts, kept=kept, plan=plan)
     message, answers = others["message"], others["answers"]
 
     variant, track = cv.tailor(job_text)

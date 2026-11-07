@@ -28,6 +28,7 @@ from support.world import World
 
 from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
 from jobhunt.core import runner, settings
+from jobhunt.writing import cites
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.
 ADVERTS = {
@@ -444,6 +445,73 @@ class Claims(unittest.TestCase):
         self.assertEqual((len(writer.asked("message")), len(writer.asked("answers"))), (2, 2))
         self.assertNotIn(CLAIM, md)
         self.assertNotIn("unsupported claim", section(md, "Check before sending"))
+
+
+PICKS = [{"source": "S1", "quote": "Dissertation on river trade in an invented port town"},
+         {"source": "S2", "quote": "A made-up note about guiding visitors"}]
+CITED = "My dissertation was on river trade in an invented port town [E1]. I would like to talk about the role [M]."
+
+
+class MarkedWriter(FakeWriter):
+    """A fake writer that cites the evidence plan as the prompts ask; `first` is the letter's first draft."""
+
+    def __init__(self, first: str = CITED):
+        super().__init__(plan=PICKS)
+        self.first = first
+
+    def reply(self, system: str, user: str) -> object:
+        pid = prompt_id(system)
+        if pid == "letter":
+            return CITED if "Your draft:" in user else self.first
+        if pid == "message":
+            return "Hello,\n\nI guided visitors at a made-up heritage centre [E2]. What does the team catalogue [M]?"
+        if pid == "answers":
+            return {"answers": [{"question": "Why this role?", "answer": "I guided visitors for two years [E2]."}]}
+        return super().reply(system, user)
+
+
+class Cited(unittest.TestCase):
+    def test_every_draft_cites_the_plan_and_is_shown_without_its_markers(self):
+        writer = MarkedWriter()
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertEqual(len(writer.asked("plan")), 1, "one plan for the letter, the message and the answers")
+        for pid in ("letter", "message", "answers"):
+            self.assertIn('E1: "Dissertation on river trade in an invented port town" (from the CV)',
+                          writer.asked(pid)[0]["user"], pid)
+            self.assertIn("When the request gives an evidence plan", " ".join(writer.asked(pid)[0]["system"].split()),
+                          pid)
+        self.assertIn("My dissertation was on river trade in an invented port town. I would like to talk about the "
+                      "role.", section(md, "Cover letter"))
+        self.assertIn("I guided visitors at a made-up heritage centre. What does the team catalogue?",
+                      section(md, "Message to the hiring manager"))
+        self.assertIn("I guided visitors for two years.", section(md, "Form answers"))
+        self.assertNotRegex(md, r"\[(E\d|M)", "no marker reaches the pack")
+
+    def test_a_sentence_about_you_that_cites_no_evidence_is_rewritten_once(self):
+        # a local model added "to ensure patient data remained local and secure" to fit an advert (2026-11-07)
+        writer = MarkedWriter(first=f"I kept every visitor record local and secure. {CITED}")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        letters = writer.asked("letter")
+        self.assertEqual(len(letters), 2)
+        self.assertIn(f"- I kept every visitor record local and secure. ({cites.NO_EVIDENCE})", letters[1]["user"])
+        self.assertEqual(written["text"], cites.strip(CITED))
+        self.assertEqual(written["flags"], [])
+
+    def test_a_sentence_citing_evidence_the_plan_does_not_hold_is_listed_when_it_stays(self):
+        stubborn = "I led every tour of the heritage centre [E7]."
+        writer = MarkedWriter(first=stubborn)
+        writer.reply = lambda system, user, original=writer.reply: (
+            stubborn if prompt_id(system) == "letter" else original(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(written["text"], "I led every tour of the heritage centre.")
+        self.assertEqual(written["flags"], ["unsupported claim: I led every tour of the heritage centre. (cites E7, "
+                                            "which the evidence plan does not hold)"])
 
 
 class Today(unittest.TestCase):
