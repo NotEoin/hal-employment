@@ -400,7 +400,8 @@ runs: tests use `tests/support/fake_claude/`.
 - Writing reads only the person's own documents from the record: `record.context` and `record.writing_hits`
   (the pack, form filling, interview prep, the CV score and CV suggestions) keep a passage only when
   `record.for_writing` allows it: its note's `role` is `own`, or the note has no `hal` key and no role (the
-  person wrote it), and its `tier` is not `archive`. Course material, someone else's documents and notes
+  person wrote it), its `tier` is not `archive`, and its `doc_type` is not a CV or letter
+  (`NOT_FOR_WRITING_TYPES`: every writer is given the current CV whole). Course material, someone else's documents and notes
   Hal is unsure about are never used. Each passage in the index carries its note's `role`, `hal`, `tier` and
   `doc_type`; an index of another `record.INDEX_VERSION` is read again in full on the next sync, and until
   then its passages are not used. `record.ask` still searches every passage. Requests label the passages

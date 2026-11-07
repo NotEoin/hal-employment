@@ -96,6 +96,10 @@ MAX_CHARS = 1200  # a passage's size: a paragraph or two, enough to quote from
 INDEX_VERSION = 2
 OWN_ROLE = "own"          # `ingest/roles.py`'s role for the person's own documents
 ARCHIVE_TIER = "archive"  # a note kept in the record but never used for writing
+# CVs and letters reach a writer only as the person's current CV, which every writer is given whole: older CV
+# drafts held claims the person had dropped (an unfinished project), and a letter to another employer is
+# tailored to that employer, yet both were passages a letter used as evidence (2026-11-07).
+NOT_FOR_WRITING_TYPES = ("cv", "letter", "personal_statement")
 # How a writing request labels these passages. Never "true": they are what the person's own documents say,
 # and passages a prompt called true became claims a letter made about the person (2026-11-06).
 OWN_DOCUMENTS = "from the applicant's own documents"
@@ -320,11 +324,14 @@ def chunks(rel: str, text: str) -> list[dict]:
 
 
 def for_writing(passage: dict) -> bool:
-    """True when a passage may be used to write for the person: from their own document, and not archived.
+    """True when a passage may be used to write for the person: from their own document, not archived, and
+    not a CV or a letter (`NOT_FOR_WRITING_TYPES`).
 
     A passage from an index made before passages kept their note's role is never used.
     """
     if "role" not in passage or passage.get("tier") == ARCHIVE_TIER:
+        return False
+    if passage.get("doc_type") in NOT_FOR_WRITING_TYPES:
         return False
     role = passage["role"]
     return role == OWN_ROLE or (not role and not passage.get("hal"))

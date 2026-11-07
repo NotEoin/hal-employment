@@ -274,6 +274,22 @@ class Record(unittest.TestCase):
         self.assertIn("Sources/Study notes/Lecture.md", everything)
         self.assertIn("My notes/Old robot.md", everything)
 
+    def test_old_cvs_and_letters_to_other_employers_never_feed_writing(self):
+        # an older CV draft's unfinished project and other employers' letters were a letter's evidence (2026-11-07)
+        own = ("---\ntype: source\nhal: ingested\nrole: own\ndoc_type: {kind}\n---\n# {title}\n\n"
+               "The robot arm {words}, with a gripper, two servos and a made-up controller board on a bench.\n")
+        self.note("Sources/CVs and letters/Old CV.md",
+                  own.format(kind="cv", title="Old CV", words="I am building"))
+        self.note("Sources/CVs and letters/Letter.md", own.format(kind="letter", title="Letter", words="at your firm"))
+        self.note("Sources/Projects/Arm.md", own.format(kind="project", title="Arm", words="I built in Python"))
+        for n in range(4):               # other notes, so the words being searched for are not in every note
+            self.note(f"My notes/Other {n}.md", f"# Other {n}\n\nA made-up note about river tides and the moon's "
+                                                f"pull on the made-up bay, number {n}.\n")
+        record.sync()
+        used = {h["path"] for hits in record.writing_hits(["robot arm"], per_query=10) for h in hits}
+        self.assertEqual(used, {"Sources/Projects/Arm.md"})
+        self.assertIn("Sources/CVs and letters/Old CV.md", {h["path"] for h in record.search("robot arm", k=10)})
+
     def test_only_the_persons_own_documents_feed_writing_when_searching_by_meaning(self):
         self.settings["record.search"] = "meaning"
         self.whose_notes()

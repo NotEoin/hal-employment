@@ -275,7 +275,9 @@ Hal sorts every document by whose it is, and that decides what it can learn from
 When Hal writes a letter, a form answer, interview notes or a CV suggestion, it reads only your own
 documents and the notes you wrote yourself. Course material, someone else's documents and files Hal is not
 sure about stay in your record, and **Ask your record** still searches them, but they never become claims
-about you.
+about you. Your CV in CV Studio is given to the writer whole, so older CVs and your letters to other
+employers are left out of what it reads: they can hold claims you have since dropped, or ones written for
+another job.
 
 Unless it came from a folder you said holds your own work, Hal only counts a document as yours when it
 names you: your name, your email, or a username from your GitHub or LinkedIn link in **Settings > You**.
