@@ -184,6 +184,10 @@ What changed in each version, in plain words.
   lists AWS, because only the projects that fit in the letter's notes were read. The fit table now reads
   the tools of every project and job you checked, and a requirement that names one of them is never listed
   as a gap.
+- **Fewer false alarms under Check before sending.** It listed twice as many false alarms as real
+  problems. A claim your CV states is no longer listed as unsupported, an "-ing" ending is flagged only
+  when it claims what something shows (", showcasing my care"), not when it states a fact, and a letter
+  sentence is flagged for repeating your CV only when it copies a whole CV line nearly word for word.
 - **The fit table is complete and agrees with itself.** A requirement the advert lists as essential could
   be missing from the table; Hal now asks once more for any it left out, and lists one still missing as a
   gap. A row that says there is no evidence is now a gap, never "partial". Office days or a place of work

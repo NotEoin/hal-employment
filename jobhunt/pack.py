@@ -361,7 +361,8 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     passages of their own documents (`kept`); the fit map is not one, since the AI wrote it from the same
     facts. The advert and the company brief (`employer`) are given as the employer's own words, never to be
     flagged for being restated: most of the "unsupported" claims in real packs were the employer's own facts
-    (2026-11-06). Three kinds are found with no AI as well: a sentence that speaks of finishing a course that
+    (2026-11-06). A claim one CV line states (`drafts.stated_in`) is supported, whatever the AI said. Three
+    kinds are found with no AI as well: a sentence that speaks of finishing a course that
     has ended (`stage.ended_course`), a tool given to a project whose own facts never name it
     (`drafts.misplaced_tools`), and a project placed in a degree or in the person's own time against its
     card's context (`drafts.wrong_context`). Each goes into the one rewrite `fix_claims` asks for.
@@ -376,6 +377,7 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
                + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept) + f"\n\nDrafts:\n{written}")
     found = llm.chat_json(prompt("verify", who), request, role="main").get("unsupported", [])
     claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
+    claims = [c for c in claims if not drafts.stated_in(c, facts)]
     known = [t for c in cards for t in c["tools"]] + profile_writing.skill_names()
     return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards)

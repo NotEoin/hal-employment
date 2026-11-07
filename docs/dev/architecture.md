@@ -409,7 +409,10 @@ runs: tests use `tests/support/fake_claude/`.
 - The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts against the CV, the checked
   profile and the passages of the person's own documents. The advert and the company brief go in a fenced
   `EMPLOYER` block as the employer's own words, never flagged for being restated; the fit map is not a
-  fact, as the AI wrote it. `pack.fix_claims` rewrites the letter, the message and the answers (all of them
+  fact, as the AI wrote it. A claim the AI quotes that one CV line or sentence states (`drafts.stated_in`:
+  `CV_SHARE` of the claim's own words) is dropped. `tests/fixtures/check_flags.json` holds made-up
+  sentences of each kind the checks flagged, rightly and wrongly, and `tests/test_writing.py` requires
+  every one judged right. `pack.fix_claims` rewrites the letter, the message and the answers (all of them
   in one call) once each when the check finds a claim, then checks again; only claims still there are
   listed under "Check before sending", and the letter's Checked line starts with `pack.SOFTENED`. Form
   filling (`autofill.check_written`) runs the numbers check on each AI answer of `CHECKED_WORDS` or more
@@ -499,9 +502,11 @@ runs: tests use `tests/support/fake_claude/`.
   fashionable words two to a paragraph (L2), evaluative words by density (L3), filler, `-ing` tails,
   puffery, staged contrasts, stacked qualities, the other spelling, dashes, bold, chatbot words and
   placeholders, stock openings and closings, hedges, weak bullet openers, first person in CV lines, bullets
-  over 35 words, a letter sentence that repeats a CV line, greeting and sign-off pairing ("Dear" and a name
-  with "Yours sincerely", a team or "Sir or Madam" with "Yours faithfully"), numbers no source holds and
-  length limits. It replaced `pack.CLICHES`; every word that list flagged is still flagged. An L10 hit
+  over 35 words, a letter sentence copied nearly word for word from a whole CV line (`VERBATIM_SHARE`),
+  greeting and sign-off pairing ("Dear" and a name with "Yours sincerely", a team or "Sir or Madam" with
+  "Yours faithfully"), numbers no source holds and length limits. An `-ing` tail (L5) counts only when its
+  verb is followed by a quality or significance word (`SIGNIFICANCE`) or by "how", "that" or "why", so a
+  factual tail (", ensuring each record keeps its own ID") is not flagged. It replaced `pack.CLICHES`; every word that list flagged is still flagged. An L10 hit
   carries its fix (`Hit.fix`), and the flag reads `... : color (write "colour")`.
 - `spelling.py` is the one source of UK and US spelling. `find(text, code)` returns each word spelt the
   other way with the form to write instead, and `respell` applies them all. It matches only words with

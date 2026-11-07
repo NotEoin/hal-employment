@@ -1,0 +1,32 @@
+{
+  "about": "Made-up sentences of the kinds Check before sending flagged in five real packs (2026-11-07), each marked flagged or not as a careful reader would. ing_tail is rule L5, cv_copy is rule C5 against the cv lines, cv_claim is a claim the verify step quoted, checked against the cv.",
+  "cv": "Built Tide gauge, a sensor logger in Lua that records river levels every ten minutes\nCatalogued four hundred letters from a made-up parish archive for the online index\nWrote a data pipeline for anonymised patient records with assertion-checked patient-ID separation\nVolunteer guide at a made-up heritage centre, 2024 to 2026",
+  "ing_tail": [
+    {"text": "I sorted the letters, showcasing my care.", "flagged": true},
+    {"text": "I led the weekly tours, demonstrating my commitment to visitors.", "flagged": true},
+    {"text": "I rebuilt the index, highlighting how much accuracy matters to me.", "flagged": true},
+    {"text": "I ran the stall for two years, reflecting a real passion for local history.", "flagged": true},
+    {"text": "I joined the society, contributing to its growth.", "flagged": true},
+    {"text": "I wrote the pipeline in Python, ensuring patient-ID separation with assertion checks.", "flagged": false},
+    {"text": "I wrote the pipeline, with assertion-checked patient-ID separation.", "flagged": false},
+    {"text": "I gave a talk to the team, demonstrating the prototype on real river data.", "flagged": false},
+    {"text": "I logged levels every ten minutes, ensuring no flood warning was missed.", "flagged": false},
+    {"text": "I checked each record twice, ensuring the index matched the archive.", "flagged": false},
+    {"text": "I moved the data to a new server, reflecting the change in the trust's budget.", "flagged": false}
+  ],
+  "cv_copy": [
+    {"text": "I catalogued four hundred letters from a made-up parish archive for the online index.", "flagged": true},
+    {"text": "Built Tide gauge, a sensor logger in Lua that records river levels every ten minutes.", "flagged": true},
+    {"text": "Cataloguing four hundred letters for the online index taught me how a small archive is ordered.", "flagged": false},
+    {"text": "Tide gauge, the Lua logger I built, records river levels every ten minutes, so I know how fragile field data is.", "flagged": false},
+    {"text": "As a volunteer guide at a made-up heritage centre, I answered visitors' questions on every shift.", "flagged": false}
+  ],
+  "cv_claim": [
+    {"text": "wrote a data pipeline for anonymised patient records", "flagged": false},
+    {"text": "assertion-checked patient-ID separation", "flagged": false},
+    {"text": "built Tide gauge, a sensor logger in Lua", "flagged": false},
+    {"text": "led a team of five on Tide gauge", "flagged": true},
+    {"text": "deployed Tide gauge to twelve rivers across the county", "flagged": true},
+    {"text": "catalogued letters in three national archives", "flagged": true}
+  ]
+}

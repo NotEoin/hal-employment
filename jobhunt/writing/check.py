@@ -18,6 +18,7 @@ Design decisions, each with its reason:
 """
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import asdict, dataclass
 
@@ -32,7 +33,12 @@ DENSITY_MIN = 3               # uses of one evaluative word before L3 can flag i
 DENSITY_SHARE = 0.03          # ... and at least this share of the words
 I_OPENER_SHARE = 0.5          # share of sentences starting with "I" before C11 flags it
 I_OPENER_MIN = 4              # sentences a letter needs before that share means anything
-REPEAT_SHARE = 0.8            # share of a CV line's words a letter sentence holds before C5 calls it a repeat
+# C5: a letter sentence that holds, in order, `VERBATIM_SHARE` of one whole CV line's words and adds at most
+# `ADDED_WORDS_MAX` of its own is a copy of that line. A letter that uses a CV line's facts in a sentence of
+# its own is what a letter is for: the old rule (80% of a line's words, in any order) flagged those
+# (2026-11-07). Five added words still catch a pasted bullet with "In my last role I" in front.
+VERBATIM_SHARE = 0.9
+ADDED_WORDS_MAX = 5
 REPEAT_MIN_WORDS = 6          # CV lines shorter than this are too short to be repeated meaningfully
 LETTER_OVER = 1.5             # a letter longer than this times the set length is too long
 LETTER_PAGE_WORDS = 450       # about one A4 page of letter; never longer than this
@@ -60,9 +66,19 @@ FILLER = re.compile(
     r"\b(in order to|due to the fact that|at this point in time|in the event that|on a (daily|regular) basis|"
     r"in a timely manner|going forward|at the end of the day|it is worth noting|it's worth noting|"
     r"when it comes to|in terms of|for the purpose of|with a view to)\b", re.I)
+# L5: an -ing tail that claims what something means (", showcasing my care"), not one that states a fact:
+# ", ensuring patient-ID separation with assertion checks" was flagged (2026-11-07). A tail counts only when
+# its verb is followed by a quality or a significance word, or by "how", "that" or "why".
+MEANING_VERBS = (r"showcasing|highlighting|demonstrating|reflecting|underscoring|emphasi[sz]ing|illustrating|"
+                 r"solidifying|cementing|signall?ing")
+SIGNIFICANCE = (r"care|commitment|dedication|ability|abilities|skills?|passion|interest|enthusiasm|eagerness|value|"
+                r"values|importance|significance|strengths?|potential|readiness|capacity|understanding|knowledge|"
+                r"expertise|experience|growth|impact|success|excellence|versatility|adaptability|competence|"
+                r"proficiency|capabilit(y|ies)|talents?|drive|role|attention|aptitude|suitability|fit")
 ING_TAIL = re.compile(
-    r",\s+(thereby\s+)?(showcasing|highlighting|demonstrating|reflecting|underscoring|emphasi[sz]ing|"
-    r"illustrating|solidifying|cementing|fostering|ensuring|contributing to)\b[^.!?]*", re.I)
+    rf",\s+(thereby\s+)?(({MEANING_VERBS}|fostering|ensuring|contributing to)\s+((my|our|their|its|a|an|the|this|"
+    rf"real|strong|genuine|deep|clear|lasting|key)\s+){{0,3}}({SIGNIFICANCE})\b|({MEANING_VERBS})\s+(how|that|why)\b)"
+    rf"[^.!?]*", re.I)
 PUFFERY = re.compile(
     r"\b(a testament to|plays? an? (vital|key|crucial|pivotal) role|pivotal moment|deeply committed|"
     r"invaluable experience|unique opportunity|rich (history|heritage) of|commitment to excellence)\b", re.I)
@@ -204,14 +220,18 @@ def _triads(text: str, allowed: set[str]) -> list[str]:
 
 
 def _repeats(text: str, cv_text: str) -> list[str]:
-    """C5: letter sentences that hold most of the words of one CV line."""
-    cv_lines = [set(words_of(line)) for line in re.split(r"[\n.;]", cv_text or "")]
-    cv_lines = [s for s in cv_lines if len(s) >= REPEAT_MIN_WORDS]
+    """C5: letter sentences that are a near word-for-word copy of one whole CV line (`VERBATIM_SHARE`)."""
+    cv_lines = [words_of(line) for line in (cv_text or "").splitlines()]
+    cv_lines = [w for w in cv_lines if len(w) >= REPEAT_MIN_WORDS]
     out = []
     for sentence in sentences(text):
-        held = set(words_of(sentence))
-        if any(len(line & held) >= REPEAT_SHARE * len(line) for line in cv_lines):
-            out.append(sentence)
+        said = words_of(sentence)
+        for line in cv_lines:
+            blocks = difflib.SequenceMatcher(None, line, said, autojunk=False).get_matching_blocks()
+            held = sum(b.size for b in blocks)
+            if held >= VERBATIM_SHARE * len(line) and len(said) - held <= ADDED_WORDS_MAX:
+                out.append(sentence)
+                break
     return out
 
 

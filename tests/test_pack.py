@@ -395,6 +395,19 @@ class Claims(unittest.TestCase):
         self.assertEqual(len(writer.asked("letter")), 2)
         self.assertEqual(written["flags"], [f"unsupported claim: {CLAIM}"])
 
+    def test_a_claim_your_cv_states_is_never_flagged_or_rewritten(self):
+        # a sentence from the person's own CV was listed as an unsupported claim (2026-11-07)
+        said = "I was a volunteer guide at a made-up heritage centre."
+        writer = FakeWriter(letter=said)
+        plain = writer.reply
+        writer.reply = lambda system, user: ({"unsupported": ["volunteer guide at a made-up heritage centre"]}
+                                             if prompt_id(system) == "verify" else plain(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(len(writer.asked("letter")), 1)
+        self.assertEqual((written["text"], written["flags"]), (said, []))
+
     def test_the_message_and_answers_are_each_rewritten_once_without_the_claim(self):
         writer = ClaimWriter()
         with as_applicant(people.HUMANITIES, writer) as a:

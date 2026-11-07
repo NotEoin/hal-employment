@@ -3,7 +3,9 @@
 The drafts are made up for the tests. The checker reads nothing but its arguments, so these tests need no
 home, no AI and no database.
 """
+import json
 import unittest
+from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
@@ -26,6 +28,31 @@ Marnie"""
 
 def rule_ids(hits) -> list[str]:
     return sorted({h.rule for h in hits})
+
+
+FLAGS = json.loads((Path(__file__).parent / "fixtures" / "check_flags.json").read_text(encoding="utf-8"))
+
+
+class FalseAlarms(unittest.TestCase):
+    """Check before sending listed 22 false alarms against 11 real problems in five packs (2026-11-07); each
+    kind of false alarm and real problem is in `fixtures/check_flags.json`, and every one must be judged right.
+    """
+
+    def judged(self, kind: str, flags) -> None:
+        wrong = [c["text"] for c in FLAGS[kind] if flags(c["text"]) != c["flagged"]]
+        real = sum(c["flagged"] for c in FLAGS[kind])
+        self.assertEqual(wrong, [], f"{kind}: {len(wrong)} judged wrong of {len(FLAGS[kind])} ({real} real)")
+
+    def test_an_ing_tail_is_flagged_only_when_it_claims_meaning(self):
+        self.judged("ing_tail", lambda text: "L5" in rule_ids(check.check(text, "letter")))
+
+    def test_a_letter_sentence_is_flagged_only_when_it_copies_a_whole_cv_line(self):
+        self.judged("cv_copy", lambda text: "C5" in rule_ids(check.check(text, "letter", cv_text=FLAGS["cv"])))
+
+    def test_a_claim_the_cv_states_is_never_flagged(self):
+        from jobhunt.writing import drafts
+
+        self.judged("cv_claim", lambda text: not drafts.stated_in(text, FLAGS["cv"]))
 
 
 class Checker(unittest.TestCase):

@@ -107,8 +107,9 @@ RULES = (
     Rule("C2", "a stock first line",
          "Open with the role and one reason from the advert, never \"I am writing to express my interest\".",
          (LETTER,), HIGH),
-    Rule("C5", "a sentence that repeats the CV",
-         "Add context the CV cannot give; never repeat a CV line in the letter.", (LETTER,), MEDIUM),
+    Rule("C5", "a sentence copied from the CV",
+         "Use the CV's facts in your own sentences and add what the CV cannot give; never copy a CV line word "
+         "for word.", (LETTER,), MEDIUM),
     Rule("C6", "a stock closing line",
          "Close by asking for the next step in one short sentence, not with \"I would be a valuable asset\".",
          (LETTER,), MEDIUM),

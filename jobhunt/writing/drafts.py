@@ -171,6 +171,20 @@ def echoed(text: str, advert: str, brief: str = "", names: tuple[str, ...] = ())
     return [s for s in check.sentences(text) if echoes(s, advert, brief, names)]
 
 
+CV_SHARE = 0.8             # share of a claim's own words one CV line must hold for the CV to state it
+CV_MIN_WORDS = 3           # a claim needs this many own words before the CV can be said to state it
+
+
+def stated_in(claim: str, cv_text: str) -> bool:
+    """True when one line or sentence of the CV holds at least `CV_SHARE` of a claim's own words: the CV
+    states it, so it is supported (a CV sentence was flagged as unsupported, 2026-11-07)."""
+    own = {w for w in _tokens(claim) if w not in LITTLE_WORDS}
+    if len(own) < CV_MIN_WORDS:
+        return False
+    parts = [set(_tokens(p)) for p in re.split(r"\n|(?<=[.!?;])\s+", cv_text or "") if p.strip()]
+    return any(len(own & part) >= CV_SHARE * len(own) for part in parts)
+
+
 def why_question(question: str) -> bool:
     """True for a form question that asks why the person wants this job or employer."""
     return bool(WHY_QUESTION.search(question or ""))
