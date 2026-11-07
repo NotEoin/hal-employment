@@ -16,6 +16,10 @@ Design decisions, each with its reason:
 - The end date is the most precise one given: the setting `goal.study_end` or the newest education fact the
   person checked (`profile.writing.USED_STATES`), a month before a bare year. Facts Hal found and nobody
   checked never decide.
+- Future or pending words about an ended course count too: "available to start immediately following my
+  graduation in June 2026" was written on 2026-11-07, after the person graduated. "Following my graduation"
+  also opens true sentences about the past, so it counts only beside words of what is to come and none of
+  what has been.
 - A draft that speaks of finishing an ended course is found by words, with no AI, so the same draft always
   gets the same answer; the sentences found are treated as unsupported claims (`pack.unsupported_claims`).
 - A project's kind comes from its evidence: coursework, a dissertation or a module code make it degree work;
@@ -52,7 +56,17 @@ FINISHING = re.compile(
     r"\b((upon|on|after|once|when) (completing|finishing|completion of|graduating|I (complete|finish|graduate))|"
     r"(will|due to|expect(ed|ing)? to|about to|set to) (graduate|complete (my|the)|finish (my|the))|"
     r"final[- ]year (student|of)|(am|I'm) (currently |now )?(studying|in (my|the) final year)|"
-    r"currently (studying|enrolled)|graduating (in|this))\b", re.I)
+    r"currently (studying|enrolled)|graduating (in|this|on)|"
+    r"once I('ve| have) (graduated|completed|finished)|(once|when|after) my (degree|course|studies) "
+    r"(ends?|finish(es)?|is (complete|completed|finished|over)))\b", re.I)
+# A graduation spoken of as an event to come: "available to start immediately following my graduation in June".
+# The same words also open a sentence about the past ("Following my graduation, I have worked ..."), so they
+# count only beside words of what is to come (`PENDING`) and with none of what has been (`DONE`).
+AFTER_GRADUATION = re.compile(r"\b(following|after|upon|on|from|post[- ]?) ?(my |the )?(graduation|"
+                              r"completion of (my|the) (degree|course|studies))\b", re.I)
+PENDING = re.compile(r"\b(will|shall|available|availability|start|starting|begin|beginning|commence|join|"
+                     r"joining|ready to|able to|free to)\b|'ll\b", re.I)
+DONE = re.compile(r"\b(have|has|had|since|was|were|spent|went)\b|'ve\b", re.I)
 DEGREE_TYPES = ("coursework", "dissertation")
 PERSONAL_TYPES = ("repository", "project")
 DEGREE_WORDS = re.compile(r"\b(coursework|dissertation|thesis|module|assignment|lab report|final[- ]year project|"
@@ -179,7 +193,13 @@ def ended_course(text: str, stage: Stage) -> list[str]:
         return []
     from jobhunt.writing import check
 
-    return [s for s in check.sentences(text) if FINISHING.search(s)]
+    return [s for s in check.sentences(text) if FINISHING.search(s) or _pending_graduation(s)]
+
+
+def _pending_graduation(sentence: str) -> bool:
+    """True when a sentence speaks of a graduation still to come ("available to start following my
+    graduation"), not of one that has happened ("Since my graduation I have ...")."""
+    return bool(AFTER_GRADUATION.search(sentence)) and bool(PENDING.search(sentence)) and not DONE.search(sentence)
 
 
 def project_kind(texts: list[str], doc_types: list[str] = (), employers: list[str] = ()) -> str:

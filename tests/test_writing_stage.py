@@ -76,6 +76,25 @@ class Stage(unittest.TestCase):
                          ["I can start in 2026 upon completing my degree."])
         self.assertEqual(stage.ended_course(LETTER, stage.current(self.con, date(2026, 3, 1))), [])
 
+    def test_a_graduation_spoken_of_as_still_to_come_is_found_once_the_course_has_ended(self):
+        # "available to start immediately following my graduation in June 2026", written on 2026-11-07
+        settings.set("goal.study_end", "2026-06", by="you")
+        self.degree("2026-06")
+        now = stage.current(self.con, date(2026, 11, 7))
+        for said in ("I am available to start immediately following my graduation in June 2026.",
+                     "I can join after my graduation.",
+                     "Once I have graduated I will be free to relocate.",
+                     "I will be ready to start once my degree ends.",
+                     "Upon completion of my degree I can begin at once.",
+                     "I am graduating in June 2026."):
+            with self.subTest(said):
+                self.assertEqual(stage.ended_course(said, now), [said])
+        for said in ("Following my graduation in June 2026, I have built two made-up tools.",
+                     "Since my graduation I spent a summer cataloguing letters.",
+                     "I graduated in June 2026 and am available now."):
+            with self.subTest(said):
+                self.assertEqual(stage.ended_course(said, now), [])
+
 
 class ProjectKind(unittest.TestCase):
     def test_each_project_says_the_kind_its_evidence_shows(self):

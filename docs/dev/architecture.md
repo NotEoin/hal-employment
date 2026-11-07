@@ -564,7 +564,9 @@ runs: tests use `tests/support/fake_claude/`.
   whether the course has ended. `today_lines()` gives the "Today: 2026-11-07" and "Stage: Finished BSc ... in
   2026-06; available now." lines that the fit, letter, message, answers, verify, prep and form-filling
   requests carry (CV suggestions get `today` and `stage` in their JSON). `ended_course(text, stage)` finds,
-  with no AI, the sentences of a draft that speak of finishing a course that has ended, and
+  with no AI, the sentences of a draft that speak of finishing a course that has ended (`FINISHING`, and
+  "following my graduation" and the like beside words of what is to come (`PENDING`) and none of what has
+  been (`DONE`)), and
   `pack.unsupported_claims` adds them to the claims a draft is rewritten without. `project_kind` names a
   project "personal project" when its words say own time ("own time", "side project", "personal project",
   "extends my dissertation"), else "degree work" (coursework or dissertation evidence, degree words such as

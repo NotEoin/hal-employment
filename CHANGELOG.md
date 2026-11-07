@@ -187,6 +187,11 @@ What changed in each version, in plain words.
   and Matplotlib when neither project lists them. A tool the fit table gives to a project whose own facts
   (or your CV's line about it) never name it is now taken out of the row; a row left with no evidence is
   listed as a gap, and one that lost some is no longer rated strong.
+- **No future tense about a finished degree.** A letter written in November offered to start "following
+  my graduation in June". Words that put your graduation still to come ("after my graduation", "once I
+  graduate", "on completing my degree") are now found once your course has ended, and the sentence is
+  rewritten like any other claim your facts do not support. A sentence about what you did after graduating
+  is left alone.
 - **The company check finds the right company.** It listed any company with the employer's name, such as a
   solar firm, a fungicide and a closed company for a lender, and a Wikipedia page listing everything of
   that name. Hal now shows a Wikipedia article only when it links to the employer's website or is about
