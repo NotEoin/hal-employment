@@ -26,6 +26,9 @@ Rules:
   each sentence that says anything about the applicant with the ids of the items it rests on, in square
   brackets before its full stop: [E2] or [E2,E5]. End a sentence about why this employer, or the closing request,
   with [M]. Hal checks and removes these markers.
+- When the request gives a motivation pairing, the sentences on why this employer use that pairing alone:
+  its fact about the employer and the applicant's item, in your own words, each ending with [M]. When it
+  says there is none, name the role and give no reason beyond it.
 - Add what the CV cannot say (context, motive, the link to this job); never repeat CV lines.
 - The reason for this employer must fit no other employer: name one thing from the advert in a few
   words and say what it means to the applicant; never copy the advert's sentences.

@@ -28,7 +28,7 @@ from support.world import World
 
 from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
 from jobhunt.core import runner, settings
-from jobhunt.writing import cites
+from jobhunt.writing import cites, motive
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.
 ADVERTS = {
@@ -58,6 +58,7 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "answers": "Answer these application questions", "verify": "Check drafts written",
     "prep": "Prepare ", "contacts_pick": "You choose who", "plan": "Choose the evidence",
     "sentence_check": "Check one sentence", "sentence_fix": "Rewrite one sentence",
+    "pairing": "Find the applicant's own reason",
 }
 WAIT_S = 10.0
 POLL_S = 0.05
@@ -77,6 +78,7 @@ class FakeWriter:
 
     letter: str = ""                                   # a fixed letter instead of the echoing one
     plan: list = field(default_factory=list)           # the evidence plan's picks; none takes the unplanned path
+    pairing: dict = field(default_factory=lambda: {"employer_fact": "", "item": "", "reason": ""})
     log: list[dict] = field(default_factory=list)
 
     def reply(self, system: str, user: str) -> object:
@@ -104,6 +106,8 @@ class FakeWriter:
             return {"supported": True, "unsupported": [], "context_ok": True, "role_ok": True}
         if pid == "sentence_fix":
             return {"sentence": ""}
+        if pid == "pairing":
+            return self.pairing
         if pid == "contacts_pick":
             return {"picks": [{"n": 1, "why": "Leads the team that is hiring.", "sure": True}]}
         if pid == "prep":
@@ -567,8 +571,8 @@ class Cited(unittest.TestCase):
             job = add_job(a.con, "humanities_grad")
             pack.build(a.con, job["id"], use_web=False)
         counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
-        self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "letter": 1, "message": 1,
-                                  "sentence_check": 2, "answers": 1})
+        self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "letter": 1,
+                                  "message": 1, "sentence_check": 2, "answers": 1})
 
     def test_the_letter_and_message_are_drafted_cooler_than_other_prose(self):
         writer = MarkedWriter()
@@ -578,6 +582,33 @@ class Cited(unittest.TestCase):
         self.assertEqual({e["id"]: e["temperature"] for e in writer.log if e["id"] in ("letter", "message", "brief")},
                          {"letter": pack.DRAFT_TEMPERATURE, "message": pack.DRAFT_TEMPERATURE, "brief": None})
         self.assertLess(pack.DRAFT_TEMPERATURE, 0.7)
+
+    def test_the_letters_reason_for_the_employer_comes_from_a_pairing_that_holds(self):
+        pairing = {"employer_fact": "answer enquiries from visitors", "item": "E2",
+                   "reason": "guiding visitors is the same work"}
+        writer = MarkedWriter()
+        writer.pairing = pairing
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job, about="A made-up trust that looks after river boats.")
+        asked = writer.asked("pairing")[0]["user"]
+        self.assertIn("Advert:\nCollections Assistant", asked)
+        self.assertIn("Company brief:\nA made-up trust that looks after river boats.", asked)
+        self.assertIn('E2: "A made-up note about guiding visitors"', asked)
+        self.assertIn('Motivation pairing (write why this employer from this alone, in [M] sentences): the '
+                      'employer\'s "answer enquiries from visitors" and the applicant\'s E2',
+                      writer.asked("letter")[0]["user"])
+        self.assertEqual((written["pairing"].item.id, written["pairing"].fact),
+                         ("E2", "answer enquiries from visitors"))
+
+    def test_with_no_honest_pairing_the_letter_is_told_to_give_no_reason(self):
+        writer = MarkedWriter()
+        writer.pairing = {"employer_fact": "a culture of innovation", "item": "E1", "reason": "it is exciting"}
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertIsNone(written["pairing"], "a fact the advert never says is no pairing")
+        self.assertIn(motive.NONE_SAID, writer.asked("letter")[0]["user"])
 
     def test_a_sentence_citing_evidence_the_plan_does_not_hold_is_listed_when_it_stays(self):
         stubborn = "I led every tour of the heritage centre [E7]."

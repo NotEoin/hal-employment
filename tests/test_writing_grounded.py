@@ -113,6 +113,25 @@ class WithAI(unittest.TestCase):
             self.assertEqual(fake.checks(), [], text)
 
 
+class Reason(unittest.TestCase):
+    def setUp(self):
+        self.facts = grounded.Facts(**{**FACTS.__dict__, "motive": ITEMS["E2"]})
+
+    def test_a_reason_stating_a_fact_about_you_is_checked_against_the_pairings_item(self):
+        found = grounded.problems(one("I spent three years building a river logger, which is why I applied [M]."),
+                                  self.facts)
+        self.assertEqual(found, ["the number 3 is not in its evidence"])
+        fake = FakeChecker()
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            grounded.check(one("Your flood work is why I built a logger in my own time [M]."), self.facts)
+        self.assertIn('E2: "a sensor logger in Lua', fake.checks()[0])
+
+    def test_with_no_pairing_a_reason_stating_a_fact_about_you_cites_nothing(self):
+        found = grounded.problems(one("Your flood work is why I built a logger in my own time [M]."), FACTS)
+        self.assertEqual(found, [grounded.NO_EVIDENCE])
+        self.assertEqual(grounded.problems(one("I am interested in your flood work [M]."), FACTS), [])
+
+
 LETTER = ("I wrote the statistics features of Ferry planner [E1]. I scored 75 in the Databases module [E3]. My "
           "logger records river levels every ten minutes [E2].\n\nI would welcome a call [M].")
 

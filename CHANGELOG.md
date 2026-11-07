@@ -15,7 +15,10 @@ What changed in each version, in plain words.
   written as yours alone is rewritten once, then taken out, or listed when the draft needs it. **Check
   before sending** no longer lists a whole-pack check's guesses, which were mostly false alarms. When the
   first letter needed such a fix, Hal writes a second and keeps the one with fewer problems, and letters
-  and messages are written in a steadier style that adds fewer details of its own.
+  and messages are written in a steadier style that adds fewer details of its own. The letter's reason for
+  wanting the job comes from one specific thing about the employer, in the advert's or the company's own
+  words, paired with one of your facts; when nothing connects, the letter gives no reason rather than
+  a generic one.
 - **Read your web links into your record.** Hal can read your own site or blog (up to 30 pages under the
   link you give), your GitHub profile and repositories with their READMEs, and Google Docs and Slides
   shared with anyone. Sites such as Instagram and LinkedIn need you signed in, so Hal asks you to save the

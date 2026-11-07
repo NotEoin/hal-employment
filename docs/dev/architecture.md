@@ -508,6 +508,15 @@ runs: tests use `tests/support/fake_claude/`.
   letter, or all the answers in one call, once with the instruction to tie one specific thing of the
   applicant's to one specific thing about the employer, before the claim check; a sentence still echoing
   is listed as `pack.ECHO_FLAG`. The letter and answers prompts ask for this up front.
+- The letter's reason for the employer (`writing/motive.py`, prompt `motive_pair`): with a plan,
+  `pack.write_letter` asks once (`motive.make`) for one fact of the advert or the company brief, one plan
+  item and a one-line reason. `motive.checked` keeps the pairing only when the fact is in the advert or the
+  brief word for word (`plan.quoted`), at least `MIN_SPECIFIC` (2) of its own words are not words any
+  employer uses of itself (`GENERIC`, the little words, the job title and the employer's name), the item
+  is the plan's and there is a reason. The letter request then gives the pairing for its [M] sentences, or
+  `motive.NONE_SAID`: name the role and give no reason beyond it. A reason sentence ([M]) that states a fact
+  about the person is checked against the pairing's item (`grounded.cited_items`), and fails as citing
+  nothing when there is no pairing; `drafts.echoes` still reads the first paragraph.
 - `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
   (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer. `pack.fix_repeats`
   rewrites the answers once, in one call, asking for other evidence in the later ones, after the echo

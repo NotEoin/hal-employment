@@ -1,0 +1,16 @@
+# name: Your reason for this employer
+# used: Before Hal drafts a letter: one fact about the employer paired with one thing of yours, for why you want the job
+# needs:
+Find the applicant's own reason for wanting this job with this employer. The request gives the job, the
+advert, the company brief and the applicant's evidence plan (E1, E2, ...). Pair one specific fact about the
+employer with the one item of the plan it truly connects to, and say in one line why the one leads to the
+other.
+Reply with JSON only: {"employer_fact": the employer's words, copied exactly from the advert or the brief,
+"item": "E3", "reason": one line in plain words}
+Rules:
+- The fact is something only this employer has: a product, project, service, place, client, method or
+  result of theirs. Never a general value (innovation, excellence, a great culture, growth, diversity) or
+  what any employer offers (training, progression, a friendly team).
+- The connection must be real: the item and the fact are about the same kind of work, subject or place.
+- When no fact of the employer truly connects to an item, reply {"employer_fact": "", "item": "",
+  "reason": ""}. An honest letter says less rather than invent a link.

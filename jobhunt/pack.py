@@ -41,6 +41,8 @@ Design notes:
   (`writing.cites`), and each sentence is checked against only what it cites (`settle`, `writing.grounded`)
   in place of the whole-draft claim check, whose single call over every draft listed about 20 false alarms
   for 10 real problems in five packs (2026-11-07). The markers are taken out before a draft is returned.
+  The letter's reason for the employer comes from a pairing of one employer fact with one plan item
+  (`writing.motive`), or it gives none, as letters gave generic motivation that echoed the advert.
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -54,7 +56,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import cites, drafts, eligibility, fields, grounded, relocation, repeats, spelling, stage, taught
+from .writing import cites, drafts, eligibility, fields, grounded, motive, relocation, repeats, spelling, stage, taught
 from .writing import plan as planning
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
@@ -534,23 +536,26 @@ def fix_claims(who: dict, draft, rewrite, *, facts: str, kept: str, employer: tu
     return again, unsupported_claims(who, as_text(again), facts=facts, kept=kept, employer=employer), True
 
 
-def grounds(who: dict, plan: list[planning.Item], *, facts: str, kept: str,
-            employer: tuple[str, ...]) -> grounded.Facts:
+def grounds(who: dict, plan: list[planning.Item], *, facts: str, kept: str, employer: tuple[str, ...],
+            pairing: motive.Pairing | None = None) -> grounded.Facts:
     """What each sentence of a marked draft is checked against (`writing.grounded`): the plan, the cards and
-    tools, the employer's words and the stage line (numbers there are not claims), modules and sources."""
+    tools, the employer's words and the stage line (numbers there are not claims), modules and sources, and
+    the motivation `pairing`'s item for a letter's reason."""
     cards, now = profile_writing.cards(), stage.current()
     words = "\n\n".join(e for e in employer if e)
     return grounded.Facts({i.id: i for i in plan}, cards, known_tools(cards), f"{words}\n{stage.today_lines(now)}",
-                          now, profile_writing.module_names(), (facts, kept), who)
+                          now, profile_writing.module_names(), (facts, kept), who,
+                          pairing.item if pairing else None)
 
 
 def settle(who: dict, draft: str, rewrite, *, plan: list[planning.Item], essential: grounded.Essential, facts: str,
-           kept: str, employer: tuple[str, ...]) -> grounded.Grounded:
+           kept: str, employer: tuple[str, ...], pairing: motive.Pairing | None = None) -> grounded.Grounded:
     """A letter or message checked for what it says about the person: its text, what is still wrong and what
     was done. One that cites the evidence `plan` is checked sentence by sentence (`grounded.ground`); one with
     no markers is checked whole and rewritten once (`fix_claims`)."""
     if plan and cites.has_markers(draft):
-        return grounded.ground(draft, grounds(who, plan, facts=facts, kept=kept, employer=employer), essential)
+        return grounded.ground(draft, grounds(who, plan, facts=facts, kept=kept, employer=employer,
+                                              pairing=pairing), essential)
     text, claims, again = fix_claims(who, draft, rewrite, facts=facts, kept=kept, employer=employer)
     return grounded.Grounded(text, claims, int(again), marked=False)
 
@@ -615,11 +620,12 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], 
 def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = None, about: str = "",
                  kept: str | None = None, fit: dict | None = None, request: str = "",
                  plan: list[planning.Item] | None = None) -> dict:
-    """Writes and checks a cover letter for one job: {text, flags, used, notes, plan}.
+    """Writes and checks a cover letter for one job: {text, flags, used, notes, plan, pairing}.
 
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
     the fit map made and the evidence plan picked (`evidence_plan`), each unless given, then the letter and its
-    checks. `request` holds the person's own words when they asked for a rewrite. The letter cites the plan's
+    checks. `request` holds the person's own words when they asked for a rewrite. Its reason for the employer
+    comes from a motivation pairing (`writing.motive`), or it gives none. The letter cites the plan's
     items (`writing.cites`), each sentence is checked against its own (`settle`), and when the first draft
     needed a rewrite a second is drafted and the better kept (`LETTER_DRAFTS`, `grounded.Grounded.key`); its
     markers are taken out before it is returned.
@@ -630,13 +636,15 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     kept = kept if kept is not None else _kept(analysis)
     fit = fit if fit is not None else _fit(who, analysis, facts, kept, job)
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept)
+    names = (job["title"], job["company"])
+    pairing = motive.make(names, _job_text(job), about, plan)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
-    text += _plan_part(plan) + "\n\n" + fields.block(field_of(job, who, analysis), "letter")
+    text += _plan_part(plan) + (f"\n\n{motive.block(pairing)}" if plan else "")
+    text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
     if request:
         text += f"\n\nThe applicant asked for this change: {request}"
     trimmed: set[str] = set()
     sources = (_job_text(job), about)
-    names = (job["title"], job["company"])
 
     def echoed_in(draft: str) -> list[str]:
         return drafts.echoed(drafts.first_paragraph(cites.strip(draft)), *sources, names)
@@ -651,7 +659,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
                                lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed))
         return settle(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed),
                       plan=plan, essential=grounded.only_in_paragraph, facts=facts, kept=kept,
-                      employer=sources), revised
+                      employer=sources, pairing=pairing), revised
 
     best, revised = one_letter()
     for _ in range(LETTER_DRAFTS - 1):
@@ -671,6 +679,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     shown = [i.text for i in plan] or used or [m.get("evidence", "") for m in fit.get("matches", [])
                                                if m.get("strength") == "strong"]
     return {"text": letter, "flags": flags, "used": used, "revised": revised, "softened": softened, "plan": plan,
+            "pairing": pairing,
             "notes": letter_notes(who, letter, shown, flags, revised=revised, softened=softened)}
 
 

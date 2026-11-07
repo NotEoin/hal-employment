@@ -24,6 +24,8 @@ Design decisions, each with its reason:
 - The AI's "unsupported" words are dropped when the cited items or the employer's words hold them: a reply
   quoting what the evidence says is a false alarm. "supported": false with every quoted word dropped is
   read as supported; a reply that is not JSON says nothing, so it fails no sentence.
+- A reason for the employer ([M]) that states something about the person rests on the letter's motivation
+  pairing's item (`writing.motive`), and is checked against it as if it cited it.
 - A failing sentence is rewritten once with its own items (or the whole plan when it cited none), then
   checked again. One still failing is taken out unless the draft needs it (`essential`): a paragraph's only
   sentence, or an answer's first, which answers the question. A needed one is kept and listed.
@@ -80,6 +82,7 @@ class Facts:
     modules: list[str] = field(default_factory=list)
     sources: tuple[str, ...] = ()      # the CV and the passages, for what a module covered
     values: dict = field(default_factory=dict)            # the person's prompt values (spelling)
+    motive: Item | None = None         # the letter's motivation pairing's item (`writing.motive`), if any
 
 
 @dataclass
@@ -141,12 +144,21 @@ def _alone_problem(text: str, items: list[Item]) -> str:
     return ALONE.format(card=first.card or "it", part=f"; your part: {part}" if part else "")
 
 
+def cited_items(c: cites.Cited, facts: Facts) -> list[Item]:
+    """The items a sentence rests on: those it cites, or for a reason sentence ([M]) that states something
+    about the person, the motivation pairing's item."""
+    items = [facts.items[i] for i in c.ids if i in facts.items]
+    if not items and c.motive and facts.motive is not None and cites.about_person(c.text, facts.allowed):
+        return [facts.motive]
+    return items
+
+
 def problems(c: cites.Cited, facts: Facts) -> list[str]:
     """What is wrong with one sentence, with no AI (see the module notes); [] when nothing is."""
     unknown = [i for i in c.ids if i not in facts.items]
     if unknown:
         return [NOT_IN_PLAN.format(ids=", ".join(unknown))]
-    items = [facts.items[i] for i in c.ids]
+    items = cited_items(c, facts)
     text = c.text
     out = []
     if not items and cites.about_person(text, facts.allowed):
@@ -175,8 +187,8 @@ def _request(c: cites.Cited, items: list[Item]) -> str:
 
 
 def verdict(c: cites.Cited, facts: Facts) -> list[str]:
-    """What the AI finds wrong with one sentence, given only the items it cites; [] when nothing is."""
-    items = [facts.items[i] for i in c.ids if i in facts.items]
+    """What the AI finds wrong with one sentence, given only the items it rests on; [] when nothing is."""
+    items = cited_items(c, facts)
     reply = llm.chat_json(prompts.text(CHECK_PROMPT), _request(c, items), role="main")
     if not isinstance(reply, dict):
         return []
@@ -198,11 +210,11 @@ def verdict(c: cites.Cited, facts: Facts) -> list[str]:
 
 def check(c: cites.Cited, facts: Facts) -> list[str]:
     """What is wrong with one sentence: the checks with no AI, then, when they find nothing and the sentence
-    cites evidence it does not simply restate, one AI call."""
+    rests on evidence (`cited_items`) it does not simply restate, one AI call."""
     found = problems(c, facts)
-    if found or not c.ids:
+    items = cited_items(c, facts)
+    if found or not items:
         return found
-    items = [facts.items[i] for i in c.ids]
     if drafts.stated_in(c.text, "\n".join(i.text for i in items)):
         return []
     return verdict(c, facts)
@@ -247,7 +259,7 @@ def first_of_answer(text: str, sentence: str) -> bool:
 def fix(c: cites.Cited, found: list[str], text: str, facts: Facts) -> str:
     """One sentence rewritten once by the AI with its evidence (the whole plan when it cited none); "" when the
     reply says its evidence supports nothing it was there to say."""
-    items = [facts.items[i] for i in c.ids if i in facts.items] or list(facts.items.values())
+    items = cited_items(c, facts) or list(facts.items.values())
     request = (f"Sentence: {c.raw}\nWhat is wrong: {'; '.join(found)}\n\nEvidence:\n"
                + "\n".join(i.words() for i in items) + f"\n\nThe paragraph:\n{cites.strip(paragraph_of(text, c.raw))}")
     reply = llm.chat_json(prompts.text(FIX_PROMPT, spelling=facts.values.get("spelling", "")), request, role="writer")

@@ -103,10 +103,13 @@ A form answer that repeats an earlier answer nearly word for word is rewritten o
 evidence. A draft may say what one of your modules covered only when your CV, the facts you checked or your own
 documents say it too, as a module's name alone does not say what it taught.
 The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
-to work here?", should be your own: a sentence that only repeats the advert or what the company says about
-itself is rewritten once to link something of yours (a project, a module, an interest) to something about
-the employer, and listed if it still repeats the advert. On a
-form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**. When you
+to work here?", should be your own. Before writing a letter, Hal pairs one specific thing about the employer,
+in the advert's or the company's own words (a product, a project, a place; never "innovation" or "a great
+culture"), with one of the facts it picked, and the letter's reason comes from that pairing. When nothing
+of yours connects to it, the letter names the role and gives no reason rather than invent one. A sentence
+that only repeats the advert or what the company says about itself is rewritten once to link something of
+yours (a project, a module, an interest) to something about the employer, and listed if it still repeats
+the advert. On a form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**. When you
 ask Hal for changes, the new letter, message and answers get the same checks as the first drafts.
 
 The message to the person hiring goes to the person the advert names as your contact for the job. An
