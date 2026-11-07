@@ -135,8 +135,10 @@ TOKENS = re.compile(r"\b(sk-(?:ant-|proj-)?[A-Za-z0-9_\-]{20,}|gh[pousr]_[A-Za-z
                     r"|AKIA[0-9A-Z]{16}|hf_[A-Za-z0-9]{30,}|xox[abprs]-[A-Za-z0-9\-]{10,}|AIza[0-9A-Za-z_\-]{35})")
 ASSIGNED = re.compile(r"\b(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)\b"
                       r"[\"']?\s*[:=]\s*[\"']([^\"'\s]+)[\"']", re.I)
-ENV_LINE = re.compile(r"^\s*(?:export\s+)?[A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY)[A-Z0-9_]*"
-                      r"=([^\s\"'#]+)\s*$", re.M)
+# A secret set in a shell, a Windows batch file or PowerShell: `export X=v`, `set "X=v"`, `$env:X = "v"`. A
+# batch file's `set "..."` hid a client secret from the rule, which only knew `export` (2026-11-07).
+ENV_LINE = re.compile(r"^\s*(?:export\s+|set\s+\"?|\$env:)?[A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY)"
+                      r"[A-Z0-9_]*\s*=\s*[\"']?([^\s\"'#]+)[\"']?\s*$", re.M)
 SECRET_MIN = 8            # shorter values are examples such as "abc123" or "secret"
 SECRET_DISTINCT_MIN = 5   # "aaaaaaaa" or "12121212" is a placeholder
 TOKEN_DISTINCT_MIN = 10

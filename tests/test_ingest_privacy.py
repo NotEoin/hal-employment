@@ -140,6 +140,14 @@ class Rules(unittest.TestCase):
         self.assertEqual(reason("PASSWORD=Xk9mQ2vLp7w"), privacy.SECRETS)
         self.assertEqual(reason('db = connect(user="app", password="Xk9#mQ2vLp")'), privacy.SECRETS)
 
+    def test_a_secret_set_in_a_windows_batch_or_powershell_file_is_a_secret(self):
+        # a batch file's `set "..._CLIENT_SECRET=..."` passed the rule, which only knew `export` (2026-11-07)
+        value = RANDOM[:30]
+        for line in (f'set "APP_CLIENT_SECRET={value}"', f"set APP_CLIENT_SECRET={value}",
+                     f'$env:APP_CLIENT_SECRET = "{value}"', f"export APP_CLIENT_SECRET={value}"):
+            self.assertEqual(reason(f"@echo off\n{line}\n", rel="Files/run.bat"), privacy.SECRETS, line)
+        self.assertEqual(reason('set "APP_CLIENT_SECRET=your-secret-here"\n', rel="Files/run.bat"), "")
+
     def test_empty_keys_placeholders_and_code_that_names_a_variable_pass(self):
         self.assertEqual(reason("API_KEY=\nSECRET_KEY=\nDB_PASSWORD=${DB_PASSWORD}\n"), "")
         self.assertEqual(reason('password = request.form["password"]\ntoken = get_token()\n'), "")
