@@ -166,6 +166,10 @@ What changed in each version, in plain words.
   it also names the advert's town, links to the employer's website or is about the same trade, and a
   Companies House entry only when the company is active and in the advert's trade. Otherwise the pack
   says "No reliable match found".
+- **The fit table sees all your projects.** It said "No evidence of AWS" although one of your projects
+  lists AWS, because only the projects that fit in the letter's notes were read. The fit table now reads
+  the tools of every project and job you checked, and a requirement that names one of them is never listed
+  as a gap.
 - **The AI's own reason when it cannot answer.** When Hal's model was switched off, commands such as
   `jobhunt pack` stopped with a long error ending in "(503)". They now say in one line what the AI said,
   such as "Hal is off; run `hal on`".

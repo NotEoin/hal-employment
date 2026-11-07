@@ -44,6 +44,9 @@ LINE_MAX = 450
 QUOTE_CHARS = 160          # a skill's evidence quote, cut so it never crowds out the other facts
 HEADING = "Profile (facts about the applicant from their files, each checked by them):"
 USED_STATES = ("confirmed", "edited")
+CARD_KINDS = ("project", "job")    # the cards whose tools and work the fit map sees in full (`cards`)
+CARDS_HEADING = "Profile cards (every project and job the applicant checked, with its tools):"
+CARD_SUMMARY = 200        # characters of a card's summary: enough to say what it was, short enough for all
 
 
 def _period(fields: dict) -> str:
@@ -197,3 +200,41 @@ def block(queries: list[str] | None = None) -> str:
 def with_record(queries: list[str]) -> str:
     """The Profile block above the record's passages for `queries`; "" when both are empty."""
     return "\n\n".join(p for p in (block(queries), record.context(queries)) if p)
+
+
+def cards(con: sqlite3.Connection | None = None) -> list[dict]:
+    """Every project and job card the person checked, for the fit map: {kind, name, tools, summary}.
+
+    All of them, never ranked or cut like the Profile block: a project listing AWS was cut from the block,
+    and the fit table said there was no evidence of AWS (2026-11-06). Hal's own database unless `con`.
+    """
+    if con is None:
+        with closing(db.connect()) as own:
+            return cards(own)
+    worked_for = employers(con)
+    out = []
+    for kind in CARD_KINDS:
+        for it in store.items(con, kind, hidden=False):
+            if it["state"] not in USED_STATES:
+                continue
+            f = it["fields"]
+            if kind == "project":
+                made = kind_of(it, worked_for)
+                out.append({"kind": f"project{f' ({made})' if made else ''}", "name": f.get("name", ""),
+                            "tools": list(f.get("tools") or []), "summary": f.get("summary") or ""})
+            else:
+                out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
+                            "tools": [], "summary": "; ".join(f.get("duties") or [])})
+    return out
+
+
+def cards_block(found: list[dict]) -> str:
+    """The cards as a block for the fit request, one line each with its tools; "" when there are none."""
+    if not found:
+        return ""
+    lines = [CARDS_HEADING]
+    for c in found:
+        summary = c["summary"][:CARD_SUMMARY].rsplit(" ", 1)[0] if len(c["summary"]) > CARD_SUMMARY else c["summary"]
+        lines.append(f"- {c['kind'].capitalize()}: {c['name']}" + (f". Tools: {', '.join(c['tools'])}" if c["tools"]
+                                                                  else "") + (f". {summary}" if summary else ""))
+    return "\n".join(lines)

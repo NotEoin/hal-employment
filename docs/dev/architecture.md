@@ -415,6 +415,10 @@ runs: tests use `tests/support/fake_claude/`.
   and one claim check per form, with the advert as the employer's words; a flagged answer gets a "Hal is
   unsure; check this: ..." note and is not rewritten. Answers and letters drafted for the job earlier
   reach the form filler only as examples of style (`autofill.STYLE_LABEL`), never as facts.
+- The fit map (`pack._fit`) also gets every project and job card the person checked
+  (`profile.writing.cards`, each with its kind, tools and summary), never ranked or cut like the Profile
+  block. `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that names a
+  card's tool into a partial match citing the card (`project (personal project): Tide gauge (tools: AWS)`).
 - The pack's company check (`reputation.check(company, advert)`, also `jobhunt check`) keeps a Wikipedia
   article only when its title holds every word of the employer's name and it names the advert's town,
   links to the employer's own site (the advert's link or an address in its text, never a job board's), or

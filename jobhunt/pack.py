@@ -170,11 +170,53 @@ def passages(kept: str) -> list[str]:
 
 
 def _fit(who: dict, analysis: dict, facts: str, kept: str) -> dict:
+    """The fit map: each requirement matched to evidence from the CV, every checked card and the record."""
     conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
-    return llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in _requirements(analysis))
-                         + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
-                         + _record_part("Employment record", kept),
-                         role="main")
+    cards = profile_writing.cards()
+    shown = profile_writing.cards_block(cards)
+    fit = llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in _requirements(analysis))
+                        + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
+                        + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept),
+                        role="main")
+    return with_card_tools(fit, cards)
+
+
+NO_EVIDENCE = re.compile(r"^\s*(no|none|not)\b|\bno (evidence|mention)\b", re.I)   # a fit row that found nothing
+SHORT_TOOL = 2            # a tool this short ("R", "Go") is matched only with its own capitals
+
+
+def _names_tool(requirement: str, tool: str) -> bool:
+    flags = 0 if len(tool) <= SHORT_TOOL else re.I
+    return bool(tool.strip()) and re.search(rf"(?<![\w+#]){re.escape(tool.strip())}(?![\w+#])", requirement,
+                                            flags) is not None
+
+
+def with_card_tools(fit: dict, cards: list[dict]) -> dict:
+    """The fit map with every requirement that names a checked card's tool given that card as evidence.
+
+    A gap or a "no evidence" row naming a tool a card lists becomes a partial match citing the card: the
+    fit table said "No evidence of AWS" although a project card lists AWS (2026-11-06).
+    """
+    def card_for(requirement: str) -> str:
+        for c in cards:
+            tool = next((t for t in c["tools"] if _names_tool(requirement, t)), None)
+            if tool:
+                return f"{c['kind']}: {c['name']} (tools: {tool})"
+        return ""
+
+    matches = [dict(m) for m in fit.get("matches") or [] if isinstance(m, dict)]
+    for m in matches:
+        found = card_for(str(m.get("requirement") or "")) if NO_EVIDENCE.search(str(m.get("evidence") or "")) else ""
+        if found:
+            m.update(evidence=found, strength="partial")
+    gaps = []
+    for gap in fit.get("gaps") or []:
+        found = card_for(str(gap))
+        if found:
+            matches.append({"requirement": str(gap), "evidence": found, "strength": "partial"})
+        else:
+            gaps.append(gap)
+    return {**fit, "matches": matches, "gaps": gaps}
 
 
 def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, kept: str, history: str) -> str:

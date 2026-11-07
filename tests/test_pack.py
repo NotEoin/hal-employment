@@ -435,6 +435,50 @@ class Today(unittest.TestCase):
                          "the fixed fake letter keeps it, so it is listed")
 
 
+class FitWriter(FakeWriter):
+    """A fake writer whose fit map finds no evidence of the tools a card lists."""
+
+    def reply(self, system: str, user: str) -> object:
+        if prompt_id(system) == "fit":
+            return {"matches": [{"requirement": "Docker", "evidence": "No evidence of Docker", "strength": "partial"},
+                                {"requirement": "Writing reports", "evidence": "a made-up report",
+                                 "strength": "strong"}],
+                    "gaps": ["Experience with AWS", "Spreadsheets"], "eligible": True, "eligibility_notes": ""}
+        return super().reply(system, user)
+
+
+class Fit(unittest.TestCase):
+    def cards(self, con) -> None:
+        """A checked project card listing AWS and Docker, and one nobody checked listing Kafka."""
+        from jobhunt.profile import store
+
+        ev = {"source_rel": "Sources/Code/Tide gauge.md", "quote": "", "field": "", "doc_type": "repository"}
+        store.confirm(con, store.add_found(con, "project", {"name": "Tide gauge", "summary": "Logs made-up tides.",
+                                                            "tools": ["AWS", "Docker"]}, ev))
+        store.add_found(con, "project", {"name": "Queue toy", "tools": ["Kafka"]}, {**ev, "source_rel": "q.md"})
+
+    def test_the_fit_map_sees_the_tools_of_every_checked_card(self):
+        with as_applicant(people.TECHNICAL) as a:
+            self.cards(a.con)
+            job = add_job(a.con, "technical_grad")
+            pack.build(a.con, job["id"], use_web=False)
+        asked = a.writer.asked("fit")[0]["user"]
+        self.assertIn("- Project (personal project): Tide gauge. Tools: AWS, Docker. Logs made-up tides.", asked)
+        self.assertNotIn("Kafka", asked, "a card nobody checked never reaches the fit map")
+
+    def test_a_requirement_naming_a_cards_tool_is_never_a_gap(self):
+        # the fit table said "No evidence of AWS" although a project card lists AWS (2026-11-06)
+        with as_applicant(people.TECHNICAL, FitWriter()) as a:
+            self.cards(a.con)
+            job = add_job(a.con, "technical_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        fit = section(md, "Fit")
+        self.assertIn("| Experience with AWS | project (personal project): Tide gauge (tools: AWS) | partial |", fit)
+        self.assertIn("| Docker | project (personal project): Tide gauge (tools: Docker) | partial |", fit)
+        self.assertIn("| Writing reports | a made-up report | strong |", fit)
+        self.assertIn("Gaps to address or accept: Spreadsheets\n", fit)
+
+
 class Checklist(unittest.TestCase):
     def test_the_checklist_never_says_to_open_a_command_line(self):
         for person in people.PEOPLE:
