@@ -13,7 +13,7 @@ from support.api import HalServer
 from support.ui import AppPage, chromium, skip_unless_browser
 
 from jobhunt import db
-from jobhunt.profile import store
+from jobhunt.profile import contexts, store
 
 CV = "Sources/CVs and letters/Alex Doe CV.md"
 LETTER = "Sources/CVs and letters/Museum letter.md"
@@ -180,6 +180,22 @@ class CheckPage(unittest.TestCase):
         p.shows(best.locator(f"li[data-best='{letters}']"), "the project back in the list")
         with closing(db.connect()) as con:
             self.assertEqual(store.item(con, letters)["tier"], "supporting")
+
+    def test_the_person_says_where_a_best_experience_was_done_in_one_plain_choice(self) -> None:
+        letters = found("project", {"name": "Mill town letters"}, PROJECT, "repository", "mill town letters", "own")
+        judged(letters, "core", "Work in the field you want")
+        with closing(db.connect()) as con:
+            contexts.refresh(con)              # as the sort after each read does
+        p = self.page("check", "narrow")
+        where = p.page.locator(f"li[data-best='{letters}']").get_by_label("Where was this done?")
+        p.shows(where, "the choice on the card")
+        self.assertEqual(where.input_value(), "personal", "Hal's reading of a repository")
+        self.clean(p)
+        where.select_option(label="University team project")
+        p.shows(p.page.get_by_text("Saved. Hal will describe it this way."), "the choice saved")
+        with closing(db.connect()) as con:
+            item = store.item(con, letters)
+        self.assertEqual((item["context"], item["context_by"]), ("team", "person"))
 
     def test_at_phone_width_the_buttons_are_large_and_the_keyboard_moves_on(self) -> None:
         found("basic", {"key": "name", "value": "Alex Doe"}, quote="Alex Doe")

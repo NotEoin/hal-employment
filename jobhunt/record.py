@@ -640,14 +640,17 @@ def context(queries: list[str], per_query: int = 3, limit: int = 6000) -> str:
 
 
 def passage_kind(hit: dict) -> str:
-    """The kind of project a passage's note is (`writing.stage.project_kind`), read from its document type, path
-    and title; "" for a note that is not a project, coursework or dissertation."""
+    """The context of the project a passage's note is, in a prompt's words (`writing.stage.CONTEXT_WORDS`),
+    read from its document type, path and title; "" for a note that is not a project, coursework or
+    dissertation. A project card resting on the note says its own context instead
+    (`profile.writing.with_contexts`)."""
     from .writing import stage
 
     doc_type = hit.get("doc_type") or ""
     if doc_type not in (*stage.DEGREE_TYPES, *stage.PERSONAL_TYPES):
         return ""
-    return stage.project_kind([hit.get("path", ""), hit.get("title", "")], [doc_type])
+    kind = stage.project_kind([hit.get("path", ""), hit.get("title", "")], [doc_type])
+    return stage.CONTEXT_WORDS.get(stage.context_of(kind), "")
 
 
 def notes_for_ai() -> list[tuple[str, str]]:

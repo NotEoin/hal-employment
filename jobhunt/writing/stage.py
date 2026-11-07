@@ -5,7 +5,8 @@
 2027-06; available from 2027-07-01". `today_lines()` is the "Today" and "Stage" lines a request starts its facts
 with, and `ended_course(text, stage)` finds the sentences of a draft that speak of finishing a course that
 has ended. `project_kind` says whether a project was degree work, done at work or a personal project, and
-whether it was a team's.
+whether it was a team's; `context_of` turns that into one of the four contexts a profile card keeps
+(`CONTEXTS`: degree, team, work, personal), and `CONTEXT_WORDS` says each in a prompt's words.
 
 Design decisions, each with its reason:
 
@@ -21,6 +22,9 @@ Design decisions, each with its reason:
   a placement or a job's employer named in it make it work; a repository or project with neither is a
   personal project. A letter called a personal project "degree work" (2026-11-06), so the prompts say never
   to change a kind. With no sign either way the kind is left unsaid rather than guessed.
+- A team project with no sign of work is a university team project: "group project" and "team project" are
+  how courses name their team work, and a university team project was called a personal project
+  (2026-11-07). The person can change any card's context (`profile.contexts`).
 """
 from __future__ import annotations
 
@@ -45,8 +49,8 @@ FINISHING = re.compile(
     r"currently (studying|enrolled)|graduating (in|this))\b", re.I)
 DEGREE_TYPES = ("coursework", "dissertation")
 PERSONAL_TYPES = ("repository", "project")
-DEGREE_WORDS = re.compile(r"\b(coursework|dissertation|thesis|module|assignment|lab report|final[- ]year project)\b",
-                          re.I)
+DEGREE_WORDS = re.compile(r"\b(coursework|dissertation|thesis|module|assignment|lab report|final[- ]year project|"
+                          r"semester|class project|student project)\b", re.I)
 COURSEWORK_PATH = "Sources/Coursework/"   # the ingest's category folder for coursework (`ingest/notes.py`)
 MODULE_CODE = re.compile(r"\b[A-Z]{2,5}\d{3,5}[A-Z]?\b")   # "COMP2001", "CS310": how courses name a module
 WORK_WORDS = re.compile(r"\b(placement|internship|intern|at work|in my job|for (my|the) employer|client project)\b",
@@ -54,6 +58,11 @@ WORK_WORDS = re.compile(r"\b(placement|internship|intern|at work|in my job|for (
 TEAM_WORDS = re.compile(r"\b(team project|group project|in a team of|team of \d+|with (\d+|two|three|four|five|six) "
                         r"(others|teammates|classmates))\b", re.I)
 EMPLOYER_MIN = 3          # an employer's name shorter than this matches ordinary words
+# Where an experience was done, as a profile card keeps it (`profile.contexts`), and as a prompt says it.
+DEGREE, TEAM, WORK, PERSONAL = "degree", "team", "work", "personal"
+CONTEXTS = (DEGREE, TEAM, WORK, PERSONAL)
+CONTEXT_WORDS = {DEGREE: "degree work", TEAM: "university team project", WORK: "at work",
+                 PERSONAL: "personal project"}
 
 
 @dataclass(frozen=True)
@@ -170,3 +179,15 @@ def project_kind(texts: list[str], doc_types: list[str] = (), employers: list[st
     if TEAM_WORDS.search(text):
         kinds.append("team project")
     return ", ".join(kinds)
+
+
+def context_of(kind: str) -> str:
+    """The context (`CONTEXTS`) a `project_kind` answer names: work first, then a team's, then degree work,
+    then a personal project; "" when it names none."""
+    if "at work" in kind:
+        return WORK
+    if "team project" in kind:
+        return TEAM
+    if "degree work" in kind:
+        return DEGREE
+    return PERSONAL if "personal project" in kind else ""

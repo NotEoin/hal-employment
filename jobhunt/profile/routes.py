@@ -17,7 +17,8 @@ An item (`ITEM`):
                    "verified": true, "found_at": "2026-11-05T09:00:00Z"}],
      "conflicts": [CONFLICT, ...], "can_delete": false,
      "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",
-     "tier": "core", "tier_by": "hal", "tier_why": "Your main work in your field", "tier_words": "Lead with this"}
+     "tier": "core", "tier_by": "hal", "tier_why": "Your main work in your field", "tier_words": "Lead with this",
+     "context": "work", "context_by": "hal", "context_words": "At work"}
 
 `state` is hal | confirmed | edited | hidden (`state_words`: Found by Hal, Checked by you, Edited by you,
 Hidden); `origin` is found | you; `fields` hold only the fields that have a value, with dates as `YYYY-MM` or
@@ -29,6 +30,9 @@ modules[{name, mark}]), skill (name, level, category), project (name, summary, r
 achievement (title, date, detail, issuer), certificate (name, issuer, date, expires, grade), basic (key,
 value) and link (label, url). `tier` is core | supporting | archive | "" (not sorted yet), only for jobs,
 education, projects, achievements and certificates (`profile.tiers`); `tier_by` is hal | person | "".
+`context` is degree | team | work | personal | "" (not known), for the same kinds (`profile.contexts`), with
+`context_by` hal | person | "" and `context_words` the page's words for it ("Part of my degree",
+"University team project", "At work", "In my own time").
 
 A conflict (`CONFLICT`):
 
@@ -69,6 +73,8 @@ Routes:
   (`store.is_studied`), shown apart; `done` of `total` is the progress bar.
 - `PUT /api/v2/profile/items/{id}/tier` {"tier": "archive"}: the person's tier for an experience, which Hal
   never changes; ITEM. A tier that is not core, supporting or archive, or an item with no tier, is 400.
+- `PUT /api/v2/profile/items/{id}/context` {"context": "personal"}: where the person says an experience was
+  done, which Hal never changes; ITEM. A context that is not one of the four, or an item with none, is 400.
 - `POST /api/v2/profile/tiers`: starts sorting the experiences again (action `profile.tiers`);
   {"action_id"}, or 409 while one is running.
 - `POST /api/v2/profile/confirm-many` and `.../hide-many` {"ids": [3, 4]}: changes them all with one event;
@@ -78,7 +84,7 @@ from __future__ import annotations
 
 from jobhunt.core import events, runner
 from jobhunt.evidence.routes import file_id
-from jobhunt.profile import actions, check, conflicts, store, tiers
+from jobhunt.profile import actions, check, conflicts, contexts, store, tiers
 from jobhunt.web.router import BadRequest, Conflict, NotFound, Request, route
 
 PREFIX = "/api/v2/profile"
@@ -186,6 +192,16 @@ def set_tier(req: Request) -> dict:
         return _changed(tiers.set_tier(req.con, req.params["item_id"], tier))
     except ValueError as e:
         raise BadRequest(str(e), field="tier") from e
+
+
+@route("PUT", PREFIX + "/items/{item_id}/context")
+def set_context(req: Request) -> dict:
+    """The person says where an experience was done; Hal never changes it after this."""
+    context = str((req.body or {}).get("context") or "") if isinstance(req.body, dict) else ""
+    try:
+        return _changed(contexts.set_context(req.con, req.params["item_id"], context))
+    except ValueError as e:
+        raise BadRequest(str(e), field="context") from e
 
 
 @route("POST", PREFIX + "/tiers")

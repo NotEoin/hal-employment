@@ -1,6 +1,7 @@
 /* Check your record, "Your best experiences": the jobs, courses, projects, achievements and certificates Hal
-   would tell an employer first (`check.best` on the server), each with why, and Confirm, Edit and Move to
-   archive. The archived ones are folded away below, each with Move up a tier.
+   would tell an employer first (`check.best` on the server), each with why, where it was done (a plain
+   choice the person can change), and Confirm, Edit and Move to archive. The archived ones are folded away
+   below, each with Move up a tier.
 
    Every choice goes to the profile routes, which publish a `profile` event, so the list is read again and a
    moved card leaves it at once. Moving a card sets the person's own tier, which Hal never changes. */
@@ -12,8 +13,22 @@ import { ItemForm } from "./fields.js";
 import { KIND_NAME, act } from "./check.js";
 
 const CHECKED = ["confirmed", "edited"];
+// Where an experience was done, as `profile.contexts` keeps it, in the person's words.
+const CONTEXTS = [["degree", "Part of my degree"], ["team", "University team project"], ["work", "At work"],
+  ["personal", "In my own time"]];
 
 const tierPath = item => "/profile/items/" + encodeURIComponent(item.id) + "/tier";
+
+/** Where the experience was done: one plain choice, which Hal keeps to when it writes and never changes. */
+function WhereDone({ item, busy, choose }) {
+  const id = "best-ctx-" + item.id;
+  const pick = value => choose(() => put("/profile/items/" + encodeURIComponent(item.id) + "/context", { context: value }),
+    "Saved. Hal will describe it this way.");
+  return html`<div class="rec-best-where"><label class="small" for=${id}>Where was this done?</label>
+    <select class="input" id=${id} value=${item.context || ""} disabled=${busy} onChange=${e => pick(e.target.value)}>
+      ${!item.context && html`<option value="">Not sure yet</option>`}
+      ${CONTEXTS.map(([v, w]) => html`<option value=${v}>${w}</option>`)}</select></div>`;
+}
 
 /** One best experience: what it is, why Hal puts it here, and the three choices. */
 function BestCard({ item }) {
@@ -30,6 +45,7 @@ function BestCard({ item }) {
     <h3 class="h3 rec-line" id=${hid}>${item.title}</h3>
     ${(item.sub || item.when) && html`<p class="sub rec-line">${[item.sub, item.when].filter(Boolean).join(", ")}</p>`}
     ${item.tier_why && html`<p class="small rec-line rec-best-why">${item.tier_why}</p>`}
+    <${WhereDone} item=${item} busy=${busy} choose=${choose} />
     ${editing ? html`<${ItemForm} kind=${item.kind} item=${item} uid=${"best" + item.id} onSave=${save} onCancel=${() => setEditing(false)} />`
       : html`<div class="rec-check-btns">
         ${CHECKED.includes(item.state) ? html`<span class="small rec-best-done"><${Icon} n="check" c="s" />${item.state_words}</span>`

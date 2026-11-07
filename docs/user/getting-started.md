@@ -95,8 +95,10 @@ form, an answer with a claim or a number Hal cannot find in your facts is marked
 Hal tells the writer today's date and where you are: still studying or finished, from **When your course
 ends or ended** and the course you checked on Your record, and when you can start, from **When you can
 start** in Settings. A draft never talks about finishing a course that has already ended. Each project
-says what kind it was (part of your degree, done at work, or your own project), and a draft keeps it that
-way.
+says where it was done (part of your degree, a university team project, at work, or in your own time), and
+a draft keeps it that way. A sentence that calls a project something else, such as "my degree included"
+for a project you did in your own time, is rewritten once, and listed under **Check before sending** if it
+is still there.
 
 Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
 English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the
@@ -336,7 +338,13 @@ from **Check your record** on Your record's Overview, or from **Check them** on 
 The page opens with **Your best experiences**: the jobs, courses, projects, achievements and certificates
 Hal would tell an employer about first, with a few words on why each one is there. Hal sorts them after it
 reads your files, putting what you would lead with first, then what is useful when a job asks for it. It
-shows about 25, so you can check them in one sitting. Each has three buttons:
+shows about 25, so you can check them in one sitting.
+
+Each one also says where it was done: **Part of my degree**, **University team project**, **At work** or
+**In my own time**. Hal fills this in from your files; if it is wrong, pick the right one. Hal writes about
+the experience that way and never changes your choice.
+
+Each has three buttons:
 
 - **Confirm** says it is right, and Hal can use it.
 - **Edit** lets you fix it.

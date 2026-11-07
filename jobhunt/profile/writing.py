@@ -21,18 +21,22 @@ Design decisions, each with its reason:
   person's settings already hold them where they belong.
 - No line of the block is a bracketed "[file > heading]" label, because `pack.passages` counts those lines
   as record passages the letter used.
-- A project's line names its kind ("degree work", "at work", "personal project") when its evidence shows it
-  (`writing.stage.project_kind`), since a letter called a personal project degree work (2026-11-06).
+- A project's line names its context ("degree work", "university team project", "at work", "personal
+  project"), the person's choice or else what its evidence shows (`profile.contexts`), since letters called a
+  personal project degree work (2026-11-06) and a team project a personal one (2026-11-07). Another card
+  names its context only when it is not its kind's own (a job done as part of a degree). A record passage
+  from a project card's file says the card's context on its "(Kind: ...)" line (`passage_contexts`).
 - The block is cut at a whole line when it reaches `limit`, kind by kind in `KIND_ORDER`, so the basics and
   jobs are the last to go.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from contextlib import closing
 
 from jobhunt import db, record
-from jobhunt.profile import merge, store, tiers
+from jobhunt.profile import contexts, merge, store, tiers
 from jobhunt.writing import stage
 
 KIND_ORDER = ("basic", "job", "education", "project", "skill", "certificate", "achievement", "link")
@@ -47,6 +51,8 @@ USED_STATES = ("confirmed", "edited")
 CARD_KINDS = ("project", "job")    # the cards whose tools and work the fit map sees in full (`cards`)
 CARDS_HEADING = "Profile cards (every project and job the applicant checked, with its tools):"
 CARD_SUMMARY = 200        # characters of a card's summary: enough to say what it was, short enough for all
+# A passage's "[file > heading]" line and its "(Kind: ...)" line, as `record.context` writes them.
+PASSAGE_HEAD = re.compile(r"^(\[(.+?) > [^\n]*\]\n)(\(Kind: [^\n]*\)\n)?", re.M)
 
 
 def _period(fields: dict) -> str:
@@ -54,8 +60,17 @@ def _period(fields: dict) -> str:
     return f" ({words})" if words else ""
 
 
-def line(kind: str, fields: dict, quote: str = "", project_kind: str = "") -> str:
-    """One item as a line of plain words for a prompt; a project names its kind when known (`project_kind`)."""
+def line(kind: str, fields: dict, quote: str = "", context: str = "") -> str:
+    """One item as a line of plain words for a prompt; a project names its `context` (`writing.stage.CONTEXTS`)
+    when known, and another card when it is not its kind's own."""
+    said = _plain(kind, fields, quote, stage.CONTEXT_WORDS.get(context, "") if kind == "project" else "")
+    if context and kind != "project" and context != contexts.BY_KIND.get(kind):
+        label, _, rest = said.partition(": ")
+        said = f"{label} ({stage.CONTEXT_WORDS[context]}): {rest}"
+    return said
+
+
+def _plain(kind: str, fields: dict, quote: str, project_kind: str) -> str:
     f = fields
     if kind == "job":
         where = ", ".join(p for p in (f.get("employer"), f.get("location")) if p)
@@ -111,15 +126,6 @@ def _relevance(item: dict, wanted: set[str]) -> int:
     return len(words & wanted)
 
 
-def kind_of(project: dict, employers: list[str]) -> str:
-    """A project item's kind from its fields and evidence (`writing.stage.project_kind`); "" when unknown."""
-    f, evidence = project["fields"], project.get("evidence") or []
-    texts = [f.get("name"), f.get("summary"), f.get("role"), f.get("link"), f.get("period"),
-             *(e.get("quote") for e in evidence), *(e.get("source_rel") for e in evidence)]
-    return stage.project_kind([str(t) for t in texts if t], [str(e.get("doc_type") or "") for e in evidence],
-                              employers)
-
-
 def employers(con: sqlite3.Connection) -> list[str]:
     """The employers of the jobs the person checked, which make a project that names one work."""
     return [it["fields"]["employer"] for it in store.items(con, "job", hidden=False)
@@ -145,7 +151,7 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
             if kind == "basic" and it["fields"].get("key", "").lower() in CONTACT_KEYS:
                 continue
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
-            made = kind_of(it, worked_for) if kind == "project" else ""
+            made = contexts.current(it, worked_for) if kind in contexts.CONTEXT_KINDS else ""
             out.append("- " + line(kind, it["fields"], quote, made))
     return out
 
@@ -197,13 +203,37 @@ def block(queries: list[str] | None = None) -> str:
         return context_block(con, queries=queries)
 
 
+def passage_contexts(con: sqlite3.Connection) -> dict[str, str]:
+    """The context, in a prompt's words, of each file a project card rests on: {file in the record: words}."""
+    worked_for = employers(con)
+    out: dict[str, str] = {}
+    for it in store.items(con, "project", hidden=False):
+        context = contexts.current(it, worked_for)
+        for e in it["evidence"] if context else []:
+            out.setdefault(e["source_rel"], stage.CONTEXT_WORDS[context])
+    return out
+
+
+def with_contexts(passages: str, by_file: dict[str, str]) -> str:
+    """The record's passages, each one from a project card's file saying that card's context."""
+    def kind_line(m: re.Match) -> str:
+        words = by_file.get(m.group(2))
+        return f"{m.group(1)}(Kind: {words})\n" if words else m.group(0)
+
+    return PASSAGE_HEAD.sub(kind_line, passages or "")
+
+
 def with_record(queries: list[str]) -> str:
-    """The Profile block above the record's passages for `queries`; "" when both are empty."""
-    return "\n\n".join(p for p in (block(queries), record.context(queries)) if p)
+    """The Profile block above the record's passages for `queries`, each passage from a project card's file
+    saying its context; "" when both are empty."""
+    with closing(db.connect()) as con:
+        by_file = passage_contexts(con)
+    return "\n\n".join(p for p in (block(queries), with_contexts(record.context(queries), by_file)) if p)
 
 
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
-    """Every project and job card the person checked, for the fit map: {kind, name, tools, summary}.
+    """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
+    tools, summary, context}.
 
     All of them, never ranked or cut like the Profile block: a project listing AWS was cut from the block,
     and the fit table said there was no evidence of AWS (2026-11-06). Hal's own database unless `con`.
@@ -217,14 +247,15 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
         for it in store.items(con, kind, hidden=False):
             if it["state"] not in USED_STATES:
                 continue
-            f = it["fields"]
+            f, context = it["fields"], contexts.current(it, worked_for)
             if kind == "project":
-                made = kind_of(it, worked_for)
-                out.append({"kind": f"project{f' ({made})' if made else ''}", "name": f.get("name", ""),
-                            "tools": list(f.get("tools") or []), "summary": f.get("summary") or ""})
+                said = stage.CONTEXT_WORDS.get(context, "")
+                out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),
+                            "tools": list(f.get("tools") or []), "summary": f.get("summary") or "",
+                            "context": context})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
-                            "tools": [], "summary": "; ".join(f.get("duties") or [])})
+                            "tools": [], "summary": "; ".join(f.get("duties") or []), "context": context})
     return out
 
 

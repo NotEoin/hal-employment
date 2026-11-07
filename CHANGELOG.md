@@ -162,6 +162,12 @@ What changed in each version, in plain words.
   whether your course has ended and when you can start, and a draft that talks about finishing an ended
   course is rewritten once. Each project also says whether it was part of your degree, done at work or
   your own, so a personal project is no longer called degree work.
+- **Each project keeps to where it was done.** Letters called a personal project part of a degree, a
+  university team project a personal project, and coursework "personal work". Each of your best
+  experiences on Check your record now says where it was done (**Part of my degree**, **University team
+  project**, **At work** or **In my own time**). Hal fills it in from your files, you can change it, and Hal
+  never changes your choice. A letter, message or answer that says otherwise is rewritten once, and listed
+  under **Check before sending** if it still does.
 - **The company check finds the right company.** It listed any company with the employer's name, such as a
   solar firm, a fungicide and a closed company for a lender. Hal now shows a Wikipedia article only when
   it also names the advert's town, links to the employer's website or is about the same trade, and a

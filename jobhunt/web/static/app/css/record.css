@@ -54,6 +54,8 @@
 .rec-best-item { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
 .rec-best-item .h3 { margin: 0; }
 .rec-best-why { color: var(--ink-2); }
+.rec-best-where { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rec-best-where .input { width: auto; max-width: 100%; min-height: 44px; }
 .rec-best-done { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-weight: 700; }
 .rec-best-archived { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .rec-best-archived li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }

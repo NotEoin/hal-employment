@@ -24,8 +24,8 @@ Passages from the applicant's employment record come from their own documents: u
 leaves out. Drafts written for this job earlier (answers, a cover letter) show the applicant's style only:
 never take a fact from them.
 Today's date and the applicant's stage are given: never write of finishing, completing or graduating from a
-course that has already ended. A project's kind is given where it is known (degree work, at work, personal
-project, team project): never change it.
+course that has already ended. A project's kind is given where it is known (degree work, university team
+project, at work, personal project): never change it.
 Never invent personal details (addresses, dates of birth, reference numbers, names of
 people) or claim experience, skills or circumstances the facts do not state: if the
 facts do not answer a field, give "" and sure false. Set sure false for anything a

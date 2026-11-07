@@ -128,6 +128,11 @@ def profile_source(rel: str, quote: str, field: str, doc_type: str, n: int) -> d
             "verified": True, "role": "own", "found_at": "2026-11-05T09:00:00Z", "file_id": fid}
 
 
+# Where a made-up experience was done, by kind: (context, the page's words for it).
+CONTEXTS = {"job": ("work", "At work"), "education": ("degree", "Part of my degree"),
+            "project": ("degree", "Part of my degree")}
+
+
 def profile_item(n: int, kind: str, fields: dict, title: str, sub: str = "", when: str = "", state: str = "hal",
                  evidence: list | None = None, conflicts: list | None = None, origin: str = "found",
                  tier: tuple[str, str] = ("", "")) -> dict:
@@ -141,7 +146,9 @@ def profile_item(n: int, kind: str, fields: dict, title: str, sub: str = "", whe
             "conflicts": conflicts or [], "can_delete": origin == "you",
             "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",
             "tier": tier[0], "tier_by": "hal" if tier[0] else "", "tier_why": tier[1],
-            "tier_words": tier_words[tier[0]] if tiered else ""}
+            "tier_words": tier_words[tier[0]] if tiered else "",
+            "context": CONTEXTS.get(kind, ("", ""))[0], "context_by": "hal" if kind in CONTEXTS else "",
+            "context_words": CONTEXTS.get(kind, ("", ""))[1]}
 
 
 PROFILE_CONFLICT = {

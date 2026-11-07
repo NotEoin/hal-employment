@@ -180,8 +180,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 26)))
-        self.assertEqual(migrate.LATEST, 25)
+        self.assertEqual(numbers, list(range(1, 27)))
+        self.assertEqual(migrate.LATEST, 26)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

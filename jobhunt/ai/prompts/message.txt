@@ -9,5 +9,5 @@ with "Hello," when the advert names no one; never greet {name}, who is the one w
 named person by the name the advert gives, never with a title (Mr, Ms) it does not give. The tone is
 {tone}; write in {spelling}. Never use these words or phrases: {avoid_phrases}. No flattery and no
 request for a referral. Never write of finishing a course that has ended by today's date, and never
-change a project's kind (degree work, at work, personal project). Reply with the message only, with no
+change a project's kind (degree work, university team project, at work, personal project). Reply with the message only, with no
 notes about it.

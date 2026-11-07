@@ -500,8 +500,8 @@ def evidence_of(con: sqlite3.Connection, item_ids: list[int]) -> dict[int, list[
 
 
 def _shape(row: sqlite3.Row, evidence: list[dict], open_conflicts: list[dict]) -> dict:
-    # tiers reads the store's items, so it is imported when first needed
-    from jobhunt.profile import tiers
+    # tiers and contexts read the store's items, so they are imported when first needed
+    from jobhunt.profile import contexts, tiers
 
     fields = _row_fields(row)
     out = {"id": row["id"], "kind": row["kind"], "state": row["state"], "state_words": STATE_WORDS[row["state"]],
@@ -509,7 +509,7 @@ def _shape(row: sqlite3.Row, evidence: list[dict], open_conflicts: list[dict]) -
            "sub": subtitle(row["kind"], fields), "when": when(fields), "evidence": evidence,
            "conflicts": [c for c in open_conflicts if row["id"] in c["item_ids"]],
            "can_delete": row["origin"] == "you", "created": row["created"], "updated": row["updated"]}
-    return {**out, **tiers.shown(out, row)}
+    return {**out, **tiers.shown(out, row), **contexts.shown(out, row)}
 
 
 def item(con: sqlite3.Connection, item_id) -> dict:

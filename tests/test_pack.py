@@ -574,6 +574,40 @@ class Drafts(unittest.TestCase):
         self.assertEqual(written["flags"], [f"unsupported claim: {claim}"])
         self.assertIn("- Project (personal project): Tide gauge. Tools: Lua", writer.asked("verify")[0]["user"])
 
+    def test_a_personal_project_placed_in_a_degree_is_rewritten_once_then_listed(self):
+        # "My first-class Computer Science degree includes building a local RAG assistant", a personal project
+        # (2026-11-07)
+        from jobhunt.profile import store
+
+        writer = FakeWriter(letter="My History degree included building Tide gauge.")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            ev = {"source_rel": "Sources/Code/Tide gauge.md", "quote": "", "field": "", "doc_type": "repository"}
+            store.confirm(a.con, store.add_found(a.con, "project", {"name": "Tide gauge", "tools": ["Lua"]}, ev))
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        claim = ("My History degree included building Tide gauge. (Tide gauge is a personal project, not part of "
+                 "a degree)")
+        self.assertEqual(len(writer.asked("letter")), 2, "one rewrite, never a loop")
+        self.assertIn(f"- {claim}", writer.asked("letter")[1]["user"])
+        self.assertEqual(written["flags"], [f"unsupported claim: {claim}"], "the fixed fake letter keeps it")
+
+    def test_the_message_and_answers_keep_to_each_projects_context(self):
+        from jobhunt.profile import contexts, store
+
+        writer = replying("message", "Hello,\n\nFerry planner was my own personal project. Who leads the team?",
+                          "Hello,\n\nFerry planner was a team project for my degree. Who leads the team?")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            ev = {"source_rel": "Sources/Code/Ferry planner.md", "quote": "", "field": "", "doc_type": "repository"}
+            ferry = store.add_found(a.con, "project", {"name": "Ferry planner", "tools": ["Lua"]}, ev)
+            store.confirm(a.con, ferry)
+            contexts.set_context(a.con, ferry, "team")
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertEqual(len(writer.asked("message")), 2)
+        self.assertIn("Ferry planner is a university team project", writer.asked("message")[1]["user"])
+        self.assertIn("a team project for my degree", section(md, "Message to the hiring manager"))
+        self.assertNotIn("Ferry planner", section(md, "Check before sending"))
+
 
 class Checklist(unittest.TestCase):
     def test_the_checklist_never_says_to_open_a_command_line(self):

@@ -428,6 +428,11 @@ runs: tests use `tests/support/fake_claude/`.
   or "Hello," if it still does. `misplaced_tools` turns a sentence that gives one project card a tool its
   own tools, name and summary never name (but another card or a checked skill does) into an unsupported
   claim, and the verify request lists every card with its tools so the AI checks claims per project.
+  `wrong_context` does the same for a sentence that names one project card with degree words ("degree",
+  "university", "coursework", "dissertation", "my studies", "my research", module work) or own-time words
+  ("personal project", "own time", "side project", "hobby") that disagree with the card's context; a
+  sentence that also says words agreeing with it is left alone. Both go into the one rewrite per draft that
+  `pack.fix_claims` asks for, and what is left is listed.
 - `writing/eligibility.py`: `blockers(must_haves, person())` finds, with no AI, a degree level above the
   person's highest (checked education and `you.education.degree`), more years than
   `goal.experience_years`, and no sponsorship when `you.right_to_work` needs it. Each is an
@@ -509,8 +514,10 @@ runs: tests use `tests/support/fake_claude/`.
   `pack.unsupported_claims` adds them to the claims a draft is rewritten without. `project_kind` names a
   project "degree work" (coursework or dissertation evidence, a module code, a `Sources/Coursework/` file),
   "at work" (a placement, or the employer of a checked job named in it) or "personal project" (a repository
-  or project with neither), plus "team project"; the Profile block (`Project (degree work): ...`) and a
-  project's record passages (a `(Kind: ...)` line under the label) say it, and the letter, answers,
+  or project with neither), plus "team project". `context_of` turns that into one of `CONTEXTS` (degree,
+  team, work, personal): work first, then a team's (a university team project), then degree work. A card's
+  context (`profile.contexts`, below) is said in the Profile block (`Project (degree work): ...`) and on the
+  `(Kind: ...)` line of the record passages from its files, in `CONTEXT_WORDS`, and the letter, answers,
   message and form prompts say never to change it.
 - Sources. The rules and conventions are Hal's own wording, drawn from UK careers guidance read on
   2026-11-05: Prospects (CVs, cover letters, example, academic and creative CVs), the National Careers
@@ -826,6 +833,14 @@ available yet.
   (`tiers.shown`), with the rules applied again on read, so a card the person confirms leaves the archive
   at once. The ingest action runs the pass after each read (`profile.actions.sort`), and
   `POST /api/v2/profile/tiers` starts it as the action `profile.tiers`.
+- Contexts (`contexts.py`, migration 0026): each card of the tiered kinds has a `context` (`degree`,
+  `team`, `work`, `personal`, or '' when nothing shows it) and `context_by` (`hal` or `person`). A job is
+  work and a course degree work by their kind; a project, achievement or certificate is read from its fields
+  and evidence with `writing.stage.project_kind`. The sort pass stores Hal's reading (`contexts.refresh`),
+  and writing reads it afresh (`contexts.current`) unless the person chose one with
+  `PUT /api/v2/profile/items/{id}/context`, which Hal never changes. Shaped items carry `context`,
+  `context_by` and `context_words`, the page's words ("Part of my degree", "University team project",
+  "At work", "In my own time"), and `record/best.js` shows them as one choice on each best card.
 - `profile.write_notes(folder)` writes the `Profile/` notes in the record folder (`Profile.md`,
   `Work history.md`, `Education.md`, `Skills.md`, `Projects.md`, `Inconsistencies.md`), each
   `type: dashboard` so search leaves them out. A note whose text has not changed is not written again.

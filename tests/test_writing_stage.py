@@ -88,6 +88,15 @@ class ProjectKind(unittest.TestCase):
         self.assertEqual(kind(["A group project on tides"], ["coursework"]), "degree work, team project")
         self.assertEqual(kind(["Tide gauge"], ["cv"]), "", "no sign either way is left unsaid")
 
+    def test_each_kind_gives_one_context_and_a_team_project_is_a_university_ones(self):
+        # a university team project kept in a repository was called a personal project (2026-11-07)
+        context = stage.context_of
+        self.assertEqual([context(k) for k in ("degree work", "at work", "personal project", "")],
+                         ["degree", "work", "personal", ""])
+        self.assertEqual(context("degree work, team project"), "team")
+        self.assertEqual(context("personal project, team project"), "team")
+        self.assertEqual(context("at work, team project"), "work")
+
     def test_the_profile_block_names_each_projects_kind(self):
         home = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.enterContext(paths.set_override(home))

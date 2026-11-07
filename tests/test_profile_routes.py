@@ -123,6 +123,17 @@ class ProfileRoutes(unittest.TestCase):
         self.assertEqual(r.status, 200)
         self.assertTrue(r.json()["action_id"])
 
+    def test_the_person_says_where_an_experience_was_done(self):
+        ids = self.seed()
+        r = self.c.request("PUT", f"/api/v2/profile/items/{ids['project']}/context", {"context": "personal"})
+        self.assertEqual((r.status, r.json()["context"], r.json()["context_by"], r.json()["context_words"]),
+                         (200, "personal", "person", "In my own time"))
+        r = self.c.request("PUT", f"/api/v2/profile/items/{ids['project']}/context", {"context": "hobby"})
+        self.assertEqual((r.status, r.json()["error"]["field"]), (400, "context"))
+        r = self.c.request("PUT", f"/api/v2/profile/items/{ids['skill']}/context", {"context": "work"})
+        self.assertEqual(r.status, 400, "a skill has no context")
+        self.assertEqual(self.c.request("PUT", "/api/v2/profile/items/999/context", {"context": "work"}).status, 404)
+
     def test_a_bad_field_or_kind_is_a_plain_400(self):
         ids = self.seed()
         r = self.c.request("PUT", f"/api/v2/profile/items/{ids['job']}", {"fields": {"company": "Fenwick"}})
