@@ -469,6 +469,12 @@ runs: tests use `tests/support/fake_claude/`.
   letter, or all the answers in one call, once with the instruction to tie one specific thing of the
   applicant's to one specific thing about the employer, before the claim check; a sentence still echoing
   is listed as `pack.ECHO_FLAG`. The letter and answers prompts ask for this up front.
+- `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
+  (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer. `pack.fix_repeats`
+  rewrites the answers once, in one call, asking for other evidence in the later ones, after the echo
+  rewrite and before the claim check; a sentence still repeating is listed as `pack.REPEAT_FLAG`. The fit
+  map's gaps are kept once each (`unique_gaps`: the same words, case, order and "(no evidence found)"
+  aside).
 - `writing/eligibility.py`: `blockers(must_haves, person())` finds, with no AI, a degree level above the
   person's highest (checked education and `you.education.degree`), more years than
   `goal.experience_years`, and no sponsorship when `you.right_to_work` needs it. Each is an

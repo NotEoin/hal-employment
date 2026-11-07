@@ -207,6 +207,9 @@ What changed in each version, in plain words.
   of one name. A Companies House entry must be active, carry the employer's whole name and be in the
   advert's trade, or in its town when its records name no trade. Otherwise the pack says "No reliable
   match found" and lists no sections to read.
+- **No repeated answers.** Two form answers gave the same details nearly word for word, and the fit table
+  listed one gap twice. A later answer that repeats an earlier one is now rewritten once to use other
+  evidence, and listed under **Check before sending** if it still repeats; each gap is listed once.
 - **The company check skips namesakes it still let through.** A London lender's pack still showed an
   American solar maker's Wikipedia article, with its "Environmental controversy" section to read, and a
   finance company of the same name set up ten days earlier. An article whose title adds a word to the

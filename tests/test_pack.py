@@ -796,10 +796,39 @@ class Echoes(unittest.TestCase):
         with as_applicant(people.HUMANITIES, writer) as a:
             job = add_job(a.con, "humanities_grad")
             md = pack.build(a.con, job["id"], use_web=False).read_text()
-        self.assertEqual(len(writer.asked("answers")), 2, "the answers are rewritten once together")
+        self.assertEqual(len(writer.asked("answers")), 3, "the answers are rewritten once together for the echo, "
+                                                          "and once more as the second repeats the first")
         listed = section(md, "Check before sending")
         self.assertEqual(listed.count(f"- {pack.ECHO_FLAG}: {ECHO}"), 2,
                          "the letter's and the why-here answer's, never the fit answer's")
+
+    def test_a_later_answer_that_repeats_an_earlier_one_is_rewritten_once_and_gaps_are_listed_once(self):
+        # two form answers repeated the same pipeline details, and a gap was listed twice (2026-11-07)
+        same = "I guided visitors round a made-up heritage centre and wrote short reports on each tour group."
+        own = "My dissertation on river trade taught me to read old shipping records closely."
+        writer = FakeWriter()
+        plain, asked = writer.reply, []
+
+        def reply(system: str, user: str) -> object:
+            pid = prompt_id(system)
+            if pid == "answers":
+                asked.append(user)
+                second = own if "repeat what an earlier answer already says" in user else same
+                return {"answers": [{"question": "Why this role?", "answer": same},
+                                    {"question": "Why are you a good fit for this role?", "answer": second}]}
+            if pid == "fit":
+                return {**plain(system, user), "gaps": ["Spreadsheets", "spreadsheets (no evidence found)"]}
+            return plain(system, user)
+
+        writer.reply = reply
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertEqual(len(asked), 2, "one rewrite, never a loop")
+        self.assertIn(f'- In the answer to "Why are you a good fit for this role?": {same}', asked[1])
+        self.assertIn(own, section(md, "Form answers"))
+        self.assertNotIn(pack.REPEAT_FLAG, md)
+        self.assertIn("Gaps to address or accept: Spreadsheets\n", section(md, "Fit"))
 
     def test_the_prompts_ask_for_your_own_reason_up_front(self):
         with as_applicant(people.HUMANITIES):

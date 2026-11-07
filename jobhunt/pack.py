@@ -30,6 +30,10 @@ Design notes:
 - An offer to relocate to the town the person lives in is taken out of the letter, the message and the
   answers with no AI (`relocation.without_own_move`): a letter offered to relocate to the London office of a
   person living in London (2026-11-07).
+- A form answer that repeats an earlier one nearly word for word is rewritten once, with the others, to
+  use other evidence (`fix_repeats`, `repeats.repeated`), and the fit map lists each gap once
+  (`repeats.unique_gaps`): two answers of a real pack gave the same details and a gap was listed twice
+  (2026-11-07).
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -43,7 +47,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import drafts, eligibility, fields, relocation, spelling, stage, taught
+from .writing import drafts, eligibility, fields, relocation, repeats, spelling, stage, taught
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -104,6 +108,7 @@ ROOM_CTX = 16384          # tokens for the second ask after a cut-off reply, as 
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
 ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its rewrite
+REPEAT_FLAG = "repeats an earlier answer"   # a sentence of an answer still repeating another after its rewrite
 # The recipient's greeting when the message greeted the applicant: the advert's named person, else this.
 HELLO = "Hello,"
 GREETING_NOTE = ("Your draft greets the applicant, who is the one writing it. Greet the person it goes to "
@@ -211,7 +216,8 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
 
     fit = complete_fit(ask(_requirements(analysis)), analysis.get("must_have") or [], ask)
     fit = consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
-    return checked_fit_tools(fit, cards, known_tools(cards), facts)
+    fit = checked_fit_tools(fit, cards, known_tools(cards), facts)
+    return {**fit, "gaps": repeats.unique_gaps(fit.get("gaps") or [])}
 
 
 def known_tools(cards: list[dict]) -> list[str]:
@@ -588,12 +594,36 @@ def echoed_answers(answers: list[dict], sources: tuple[str, ...], names: tuple[s
             for s in drafts.echoed(str(a.get("answer") or ""), *sources, names)]
 
 
+def repeated_answers(answers: list[dict]) -> list[tuple[int, str, int]]:
+    """Each sentence of a later answer that repeats an earlier answer (`repeats.repeated`)."""
+    return repeats.repeated([str(a.get("answer") or "") for a in answers])
+
+
+def repeat_note(answers: list[dict], found: list[tuple[int, str, int]]) -> str:
+    """The request to rewrite each later answer that repeats an earlier one, using other evidence."""
+    listed = "\n".join(f"- In the answer to \"{answers[i].get('question', '')}\": {s} (already said in the answer "
+                       f"to \"{answers[j].get('question', '')}\")" for i, s, j in found)
+    return (f"These sentences repeat what an earlier answer already says:\n{listed}\nRewrite only those later "
+            "answers so each one uses a different piece of evidence from the applicant's facts (another project, "
+            "job, module or result). Keep the other answers as they are.")
+
+
+def fix_repeats(answers: list[dict], rewrite):
+    """The answers rewritten once by `rewrite(note)` when a later one repeats an earlier one; returns (answers,
+    whether they were rewritten). One rewrite, never a loop: what still repeats is listed by the caller."""
+    found = repeated_answers(answers)
+    if not found:
+        return answers, False
+    again = rewrite(repeat_note(answers, found))
+    return (again or answers), bool(again)
+
+
 def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[str, ...],
              names: tuple[str, ...] = ()) -> tuple[list[dict], list[str], list[str]]:
     """Answers to the questions `request` lists, revised once together when one breaks a high-severity rule,
     once when a "why here" answer restates the advert (`echoed_answers`) and once more when they make claims
-    the facts do not support; returns (answers, the claims still unsupported, the sentences still restating
-    the advert)."""
+    the facts do not support, after once more when a later answer repeats an earlier one (`fix_repeats`);
+    returns (answers, the claims still unsupported, the sentences still restating the advert)."""
     def ask(text: str) -> list[dict]:
         found = llm.chat_json(prompt("answers", who), text, role="writer").get("answers", [])
         return [{**a, "answer": spelt(llm.undash(a.get("answer", "")), who)} for a in found if isinstance(a, dict)]
@@ -606,6 +636,7 @@ def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[s
     answers = revise_once(answers, hits,
                           lambda note: ask(f"{request}\n\nYour first answers:\n{_answers_text(answers)}\n\n{note}"))[0]
     answers, _ = fix_echoes(answers, lambda found: echoed_answers(found, sources, names), again)
+    answers, _ = fix_repeats(answers, again)
     answers, claims, _ = fix_claims(who, answers, again, facts=facts, kept=kept, employer=sources,
                                     as_text=_answers_text)
     return answers, claims, echoed_answers(answers, sources, names)
@@ -652,6 +683,7 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     flags = check_drafts(who, written, facts=facts, kept=kept, sources=their_words, kind="answer",
                          claims=message_claims + answer_claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in answer_echoes]
+    flags += [f"{REPEAT_FLAG}: {s}" for _, s, _ in repeated_answers(answers)]
     if message in trimmed:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
     return {"message": message, "answers": answers, "flags": flags}
