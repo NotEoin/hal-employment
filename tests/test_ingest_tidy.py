@@ -11,11 +11,11 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.api import HalServer
 from support.fake_ai import fake_ai
-from test_ingest import NOTE_REPLY, OWNER, REPLY, home, module_folder, put, rows, run
+from test_ingest import FROM_SLIDES, NOTE_REPLY, OWNER, REPLY, STUB, home, module_folder, put, rows, run
 
 from jobhunt.core import settings
 from jobhunt.ingest import actions as ingest_actions
-from jobhunt.ingest import attach, engine, frontmatter
+from jobhunt.ingest import attach, engine, frontmatter, vaultnotes
 from jobhunt.profile import store
 
 SLIDES = "# Rivers\n\nDr Ama Pell, ama.pell@example.org. Meanders and oxbow lakes."
@@ -299,6 +299,27 @@ class Tidy(unittest.TestCase):
                          ("skipped", "a picture with no words"))
         self.assertEqual(left, {report["note"]})
         self.assertEqual((out["tidied"]["attached"], out["tidied"]["skipped"]), (1, 1))
+
+    def test_empty_notes_and_notes_from_slides_an_older_read_filed_are_held_to_todays_rules(self):
+        with home() as (con, vault, files):
+            with fake_ai({}), mock.patch.object(vaultnotes, "is_empty", return_value=False), \
+                    mock.patch.object(vaultnotes, "taught_from_source", return_value=False):   # an older Hal
+                put(files, "Vault/Recursion.md", STUB)
+                put(files, "Vault/Lecture 4 Recursion.md", FROM_SLIDES)
+                run(con, [files])
+            old = rows(con)
+            stub, derived = old["Files/Vault/Recursion.md"], old["Files/Vault/Lecture 4 Recursion.md"]
+            self.assertEqual((derived["role"], bool(stub["note"])), ("unsure", True))
+            with fake_ai({}) as backend:
+                out = run(con, [], batch="t", tidy=True)
+            got = rows(con)
+            asked = backend.requests("ingest_doc")
+        self.assertEqual((got["Files/Vault/Recursion.md"]["state"], got["Files/Vault/Recursion.md"]["note"]),
+                         ("skipped", None))
+        self.assertFalse((vault / stub["note"]).exists())
+        self.assertEqual((got["Files/Vault/Lecture 4 Recursion.md"]["role"],
+                          got["Files/Vault/Lecture 4 Recursion.md"]["model"]), ("taught", 2))
+        self.assertEqual((out["tidied"]["empty"], asked), (1, []))
 
 
 class Route(unittest.TestCase):

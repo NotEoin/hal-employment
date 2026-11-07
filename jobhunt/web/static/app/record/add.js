@@ -27,6 +27,10 @@ const STAGE_WORDS = { discovered: "Found", converted: "Turned into text", unders
 const STATE_WORDS = { done: "read", duplicate: "copies of files already read", no_text: "with no text to read",
   skipped: "skipped", attached: "data files, figures and photos listed with their project or course", older_version: "older copies of a project", covered: "slides your notes already cover", not_mine: "someone else's", error: "could not be read",
   pending: "still to read", private: "kept out because they look private" };
+// Why files were skipped (the error column: ingest/vaultnotes.py, attach.py, tidy.py), counted in plain words.
+const SKIP_WORDS = { "an empty note": "empty notes", "a picture with no words": "pictures with no words",
+  "a data, log or design file with no project around it": "data and design files outside any project",
+  "settings or tool file": "settings files" };
 const LEFT_OUT_WORDS = { "junk folder": "hidden folders and folders of program files", link: "shortcuts",
   "program or data file": "programs and data files", "settings or tool file": "settings files and bundled code",
   unreadable: "files Hal could not open" };
@@ -154,7 +158,12 @@ export function IngestCard() {
   }, [running]);
   if (!data || data.state === "none") return null;
   const pct = data.total ? (data.done / data.total) * 100 : 0;
-  const states = counted(data.states).filter(([s]) => !["not_downloaded", "not_mine", "private"].includes(s));
+  // skipped files are counted by why, when the page knows why
+  const why = counted(data.skipped);
+  const states = counted(data.states).filter(([s]) => !["not_downloaded", "not_mine", "private"].includes(s)
+    && !(s === "skipped" && why.length))
+    .map(([s, n]) => n + " " + (STATE_WORDS[s] || s))
+    .concat(why.map(([w, n]) => n + " " + (SKIP_WORDS[w] || "skipped")));
   const leftOut = counted(data.left_out);
   const title = data.tidy
     ? (running ? "Tidying your record" : data.state === "done" ? "Your record was tidied" : "Hal stopped tidying your record")
@@ -172,7 +181,7 @@ export function IngestCard() {
       ${counted(data.stages).map(([s, n]) => html`<${Chip} tone="line">${STAGE_WORDS[s] || s}: ${n}<//>`)}</div></div>`}
     ${counted(data.categories).length > 0 && html`<div><div class="small sub">What Hal found</div><div class="chips">
       ${counted(data.categories).map(([c, n]) => html`<${Chip} tone="info">${c}: ${n}<//>`)}</div></div>`}
-    ${states.length > 0 && html`<p class="small sub rec-line">${states.map(([s, n]) => n + " " + (STATE_WORDS[s] || s)).join(", ")}.</p>`}
+    ${states.length > 0 && html`<p class="small sub rec-line">${states.join(", ")}.</p>`}
     ${data.not_downloaded > 0 && html`<${Note} tone="warn"><b>${plural(data.not_downloaded, "file is", "files are")} not downloaded.</b>
       ${" "}They are kept online only (for example in OneDrive, Dropbox or iCloud), so this computer has an empty copy and Hal cannot read it.
       Download them first (in OneDrive, choose "Always keep on this device"), then add them again.

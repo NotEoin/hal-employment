@@ -627,6 +627,19 @@ With no unit it is `skipped` with "a picture with no words" or "a data, log or d
 around it". It gives no facts. `tidy.prepare` drops the notes an older read made of such files and places
 them the same way (`attach.place`).
 
+Notes from a person's vault (`vaultnotes.py`). In `engine._prepare`, before the privacy check, a text or
+Markdown file with fewer than `EMPTY_WORDS` (2) words of its own, once headings and tag lines, lines of
+links, embeds, code and query blocks and placeholder lines (`_(empty ...)_`, a short line saying a tool made a
+stub) are taken out, is `skipped` with "an empty note": no note, no AI call. A file with no text at all is
+still `no_text`. A Markdown note whose frontmatter names a slide deck, PDF or Word file (`source_file`,
+`source_path`, `source`, `original` ...; never in a Hal note, which has `hal`) and whose source is slides or
+lecture notes by `rank.rule_for`, or whose `role` or `type` says lecture, exam, handout, solution, exercise or
+tutorial, is described by rules with `said` taught, so it is taught for every origin, and gets `model` 2
+(`items.BY_SOURCE`), which `mark_again` and `items.by_rules` leave out. Its source deck in the same read is
+handled as any deck: covered when the note shares its module code and title words (`lectures.Covered`), else
+read as course material. `tidy.prepare` skips empty notes an older read filed and makes notes from slides
+taught. `items.summary` counts skipped files by reason (`skipped`), which the Overview shows in words.
+
 Private files (`privacy.py`). In `engine._prepare`, after conversion and before any AI call,
 `privacy.held_back` runs `privacy.reason(rel, text)` unless `record.privacy_check` is off or the row is
 `allowed`; after the AI's answer it runs again with the reply's `sensitive` field as `said`, which counts only

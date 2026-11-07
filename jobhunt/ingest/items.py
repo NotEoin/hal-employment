@@ -24,6 +24,9 @@ PRIVATE_SHOWN = 50          # private files named on the page, newest first; eac
 RECENT_ERRORS = 10
 STAGES = ("discovered", "converted", "understood", "written")
 KIND = "record.ingest"
+# `model`: 0 read by rules (the AI may read it later), 1 read by the AI, and this for a note made from a document
+# whose source settles it (`vaultnotes`), which the AI need not read.
+BY_SOURCE = 2
 
 
 def add(con: sqlite3.Connection, batch: str, *, path: str, rel: str, kind: str = "file", unit: str | None = None,
@@ -155,12 +158,13 @@ def _eta(con: sqlite3.Connection, batch: str, action: sqlite3.Row, left: int) ->
 
 def summary(con: sqlite3.Connection) -> dict:
     """The latest ingest for the page: state, done, total, eta_s, counts, current item, not downloaded, someone
-    else's documents left out (`not_mine`), errors, and the files kept out as private."""
+    else's documents left out (`not_mine`), errors, the files kept out as private, and how many were skipped
+    for each reason (`skipped`: an empty note, a picture with no words ...)."""
     action = latest_action(con)
     if action is None:
         return {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {}, "by_rules": 0,
                 "states": {}, "categories": {}, "current": "", "not_downloaded": 0, "not_downloaded_paths": [],
-                "not_mine": 0, "not_mine_paths": [], "errors": [], "left_out": {}, "private": []}
+                "not_mine": 0, "not_mine_paths": [], "errors": [], "left_out": {}, "private": [], "skipped": {}}
     params = json.loads(action["params"] or "{}")
     batch = params.get("batch") or ""
     c = counts(con, batch)
@@ -171,6 +175,8 @@ def summary(con: sqlite3.Connection) -> dict:
     not_mine = [f"{r['rel']}, {r['error']}" if r["error"] else r["rel"] for r in con.execute(
         """SELECT rel, error FROM ingest_items WHERE batch = ? AND state = 'not_mine'
            ORDER BY rel LIMIT ?""", (batch, FIRST_PATHS))]
+    skipped = dict(con.execute("""SELECT coalesce(error, ''), count(*) FROM ingest_items WHERE batch = ?
+                                   AND state = 'skipped' GROUP BY 1""", (batch,)).fetchall())
     errors = [{"path": r["rel"], "error": r["error"]} for r in con.execute(
         """SELECT rel, error FROM ingest_items WHERE batch = ? AND state = 'error'
            ORDER BY updated DESC LIMIT ?""", (batch, RECENT_ERRORS))]
@@ -183,5 +189,6 @@ def summary(con: sqlite3.Connection) -> dict:
             "not_mine": c["states"].get("not_mine", 0), "not_mine_paths": not_mine,
             "errors": errors, "by_rules": by_rules(con), "again": bool(params.get("again")),
             "tidy": bool(params.get("tidy")),
-            "left_out": result.get("left_out", {}), "private": private(con), "started": action["started"],
+            "left_out": result.get("left_out", {}), "private": private(con), "skipped": skipped,
+            "started": action["started"],
             "ended": action["ended"]}

@@ -9,7 +9,8 @@ which holds the database the person's names come from, with where the person sai
 item's `origin`). Someone else's document is not filed at all and gives
 nothing; the others give only the facts their role may. Supporting files (data, figures, logs, models,
 camera photos) are never read: once the documents and course notes are written, `attach.settle` lists each
-in the note of the unit it belongs to, or skips it.
+in the note of the unit it belongs to, or skips it. An empty note is skipped, and a note made from slides is
+course material by rules (`vaultnotes`).
 
 Duplicates are found by SHA-256 against every item read before, in this batch or an earlier one: the copy
 gets no note of its own, and its path is added once to the first copy's note under "Also at".
@@ -49,6 +50,7 @@ from jobhunt.ingest import (
     roles,
     sources,
     understand,
+    vaultnotes,
     versions,
 )
 from jobhunt.ingest import tidy as tidy_pass
@@ -60,6 +62,7 @@ ERROR_CHARS = 300
 ALSO_AT = "## Also at"
 KEPT_SECTIONS = ("## Part of", ALSO_AT, versions.EARLIER, attach.FILES)   # added after a note was written
 NEVER_BY_MODEL = ("code", "image", "media")
+BY_SOURCE = "source"         # a description settled by the document a note was made from (`vaultnotes`)
 AHEAD = 2                    # items handed to workers per worker, so none waits while this thread writes
 NO_WEB = "Reading web links is not available in this version of Hal yet."
 
@@ -309,12 +312,19 @@ class _Read:
 
     `private` is why the item is kept out of the record (`privacy.reason`); then there is no text either.
     `redacted` is true when something was taken out of the text (`privacy.redact`), so the file is not copied.
+    `skip` is why the item is skipped without a note (`vaultnotes.EMPTY`).
     """
 
     text: str
     desc: dict | None
     private: str = ""
     redacted: bool = False
+    skip: str = ""
+
+
+def _model(desc: dict) -> int:
+    """The item's `model` column for a description: read by the AI, settled by its source, or by rules."""
+    return {"model": 1, BY_SOURCE: items.BY_SOURCE}.get(str(desc.get("by")), 0)
 
 
 def _prepare(row: dict, rule: rank.Rule) -> _Read:
@@ -325,12 +335,19 @@ def _prepare(row: dict, rule: rank.Rule) -> _Read:
     path = Path(row["path"])
     text = convert.repo_text(path) if row["kind"] == "repo" else convert.text_of(path, rule)
     is_picture = path.suffix.lower() in rank.IMAGE_SUFFIXES | rank.MEDIA_SUFFIXES
+    if row["kind"] == "file" and text.strip() and vaultnotes.is_empty(row["rel"], text):
+        return _Read("", None, skip=vaultnotes.EMPTY)
     if why := privacy.held_back(row, text):        # checked before any AI call, so the text never reaches it
         return _Read("", None, why)
     clean = privacy.redact(text)
     redacted, text = clean != text, clean
     if not text.strip() and not is_picture:
         return _Read(text, None)
+    if row["kind"] == "file" and vaultnotes.taught_from_source(vaultnotes.front(path)):
+        # a note made from slides is course material whatever the AI would say of it, so it is not asked
+        desc = understand.light(row["rel"], text, rule)
+        desc["said"], desc["by"] = roles.TAUGHT, BY_SOURCE
+        return _Read(text, desc, redacted=redacted)
     if text.strip() and by_model(rule, is_picture, every=bool(row["note"])):
         desc = understand.ask(row["rel"], text, rule)
         if why := privacy.held_back(row, "", str(desc.get("sensitive") or "")):
@@ -387,7 +404,7 @@ def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Pa
         notes.write(path, text.replace("\n## Original\n", f"\n{kept}## Original\n", 1))
     notes.add_mentions(vault_dir, desc, row["note"])
     store.replace_source(con, row["note"], lambda: _give_facts(con, desc, row["note"]))
-    items.update(con, row["id"], stage="written", state="done", model=int(desc.get("by") == "model"),
+    items.update(con, row["id"], stage="written", state="done", model=_model(desc),
                  doc_type=desc["doc_type"], role=desc["role"])
     return row["note"]
 
@@ -400,6 +417,9 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
     vault_dir = vault()
     if row["note"]:
         return _again(con, row, read, vault_dir, batch)
+    if read.skip:
+        items.update(con, row["id"], stage="converted", state="skipped", error=read.skip)
+        return None
     items.update(con, row["id"], stage="converted")
     if read.desc is None:
         items.update(con, row["id"], state="no_text")
@@ -408,7 +428,7 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
         return None          # left pending: listed with its unit, or skipped, once the units are written
     desc = read.desc
     _judge(con, row, desc, read.text)
-    items.update(con, row["id"], stage="understood", model=int(desc.get("by") == "model"), role=desc["role"])
+    items.update(con, row["id"], stage="understood", model=_model(desc), role=desc["role"])
     if desc["role"] == roles.OTHERS:
         # someone else's document is not the person's record: no note, no copy, no facts; the page names it
         items.update(con, row["id"], state="not_mine", error=roles.MADE_BY + desc["author"])

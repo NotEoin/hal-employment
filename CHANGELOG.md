@@ -44,6 +44,10 @@ What changed in each version, in plain words.
   and camera photos no longer become notes of their own. Each is listed in the note of the project, report
   or module it belongs to, and a loose one is skipped. **Tidy my record** does the same for notes an older
   Hal made of them.
+- **Empty notes and notes made from slides.** Notes with no words of their own, such as the stubs a
+  note-taking tool makes, are skipped and counted on the Overview. A note that says which slides or handout
+  it was made from is filed as course material without the AI. **Tidy my record** applies both to notes
+  an older Hal filed.
 - **The newest copy of each project.** When a folder holds several copies of one code project ("Robot",
   "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same

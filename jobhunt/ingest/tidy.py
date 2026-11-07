@@ -12,7 +12,8 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
    words) goes, and the file is listed in its unit's note or skipped (`attach`). Facts its role may not
    give leave the profile and the note's key facts, and an employer, institution or issuer the document
    never names leaves its fact; course material loses contact details; code text is fenced. Copies of one
-   project keep only the newest copy's note (`versions`).
+   project keep only the newest copy's note (`versions`). An empty note goes, and a note made from slides is
+   course material (`vaultnotes`).
 3. Notes the AI should read again are put back in the batch, to be rewritten in place (`engine._again`):
    converted course material, for a lecture note, and documents whose role the rules cannot settle, such
    as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
@@ -38,7 +39,19 @@ import sqlite3
 import tarfile
 from pathlib import Path, PurePosixPath
 
-from jobhunt.ingest import attach, discover, frontmatter, items, lectures, notes, privacy, rank, roles, versions
+from jobhunt.ingest import (
+    attach,
+    discover,
+    frontmatter,
+    items,
+    lectures,
+    notes,
+    privacy,
+    rank,
+    roles,
+    vaultnotes,
+    versions,
+)
 
 log = logging.getLogger(__name__)
 
@@ -192,7 +205,7 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
                            own=roles.own_links())
     covered = lectures.Covered(con)
     done = {"left_out": 0, "private": 0, "covered": 0, "again": 0, "older_version": 0, "judged": 0,
-            attach.STATE: 0, "skipped": 0}
+            attach.STATE: 0, "skipped": 0, "empty": 0}
     units: attach.Units | None = None
     done["older_version"] = _versions(con, vault)
     rows = con.execute("""SELECT * FROM ingest_items WHERE state = 'done' AND note IS NOT NULL
@@ -216,6 +229,11 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
             units = units or attach.Units(con)
             done[attach.place(con, vault, row, units)] += 1
             continue
+        if row["kind"] == "file" and vaultnotes.is_empty(row["rel"], body.split(TEXT, 1)[1] if TEXT in body else ""):
+            drop_note(con, vault, row["note"])
+            items.update(con, row["id"], state="skipped", error=vaultnotes.EMPTY, note=None)
+            done["empty"] += 1
+            continue
         if why := privacy.held_back(dict(row), body):
             drop_note(con, vault, row["note"])
             privacy.hold(con, row["id"], why)
@@ -229,14 +247,16 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
             items.update(con, row["id"], state="covered", dup_of=hit[0], note=hit[1], role=roles.TAUGHT)
             done["covered"] += 1
             continue
-        role = note_role(fm, f"{row['rel']}\n{body}", words, bool(row["unit"]) or "\n## Part of\n" in body)
+        derived = row["kind"] == "file" and vaultnotes.taught_from_source(vaultnotes.front(Path(row["path"])))
+        role = roles.TAUGHT if derived else note_role(fm, f"{row['rel']}\n{body}", words,
+                                                     bool(row["unit"]) or "\n## Part of\n" in body)
         _keep_allowed_facts(con, row["note"], role, f"{row['rel']}\n{body.split(TEXT, 1)[-1]}")
         _rewrite(path, fm, body, role, str(fm.get("source") or row["path"]))
-        items.update(con, row["id"], role=role)
+        items.update(con, row["id"], role=role, **({"model": items.BY_SOURCE} if derived else {}))
         if role == roles.TAUGHT and doc_type in lectures.NOTE_TYPES and lectures.is_typed(row["rel"]):
             covered.add(row["id"], row["rel"], Path(row["rel"]).stem, row["note"])
         done["judged"] += 1
-        if _ask_again(row, role, doc_type, fm):
+        if not derived and _ask_again(row, role, doc_type, fm):
             con.execute("UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered' WHERE id = ?",
                         (batch, row["id"]))
             done["again"] += 1

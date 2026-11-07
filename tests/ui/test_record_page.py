@@ -316,6 +316,19 @@ class RecordPage(unittest.TestCase):
         p.shows(card.get_by_text("3 data files, figures and photos listed with their project or course"), "the count")
         self.assertEqual(self.errors(p), [])
 
+    def test_skipped_files_are_counted_by_why(self) -> None:
+        finished_ingest()
+        with closing(db.connect()) as con, con:
+            for n, why in enumerate(("an empty note", "an empty note", "a picture with no words")):
+                row = ingest_items.add(con, "b0", path=f"/made/up/stub{n}.md", rel=f"Vault/stub{n}.md", state="skipped")
+                ingest_items.update(con, row, error=why)
+        p = self.page()
+        card = p.page.locator(".rec-ingest")
+        p.shows(card.get_by_text("2 empty notes", exact=False), "the counts")
+        self.assertIn("1 pictures with no words", card.inner_text())
+        self.assertNotIn("skipped", card.inner_text())
+        self.assertEqual(self.errors(p), [])
+
     def test_files_kept_out_as_private_are_named_and_can_be_added_anyway(self) -> None:
         finished_ingest()
         kept = self.hal.home / "Old laptop" / "statement.txt"

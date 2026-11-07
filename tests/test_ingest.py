@@ -26,7 +26,19 @@ from support.fake_ai import fake_ai
 from jobhunt import db, record
 from jobhunt.core import paths, runner, settings
 from jobhunt.ingest import actions as ingest_actions
-from jobhunt.ingest import attach, discover, engine, frontmatter, items, notes, rank, roles, sources, understand
+from jobhunt.ingest import (
+    attach,
+    discover,
+    engine,
+    frontmatter,
+    items,
+    notes,
+    rank,
+    roles,
+    sources,
+    understand,
+    vaultnotes,
+)
 
 OWNER = "Avery Quillon"
 CV_TEXT = f"""# {OWNER}
@@ -1058,6 +1070,80 @@ class SupportingFiles(unittest.TestCase):
             text = (vault / report["note"]).read_text(encoding="utf-8")
         self.assertEqual(report["model"], 1)
         self.assertIn("- `results.csv`", text)
+
+
+STUB = """---
+type: topic
+status: stub
+---
+# Recursion
+
+Concept stub, auto-created by a made-up tool.
+
+## Notes
+
+_(empty section)_
+
+```dataview
+LIST FROM [[Recursion]]
+```
+"""
+FROM_SLIDES = """---
+source_file: Course/CSC101/Slides/Lecture_4.pdf
+role: lecture
+---
+# Lecture 4: Recursion
+
+A function that calls itself, a base case that stops it, and the call stack that holds each call.
+"""
+
+
+class VaultNotes(unittest.TestCase):
+    """A vault's tool-made notes: thousands of concept stubs and notes made from slides each became a note of
+    the record and buried the rest (2026-11-07)."""
+
+    def test_a_note_with_no_words_of_its_own_is_empty(self):
+        self.assertTrue(vaultnotes.is_empty("Vault/Recursion.md", STUB))
+        self.assertTrue(vaultnotes.is_empty("Vault/Index.md", "# Index\n\n- [[A]]\n- [[B]], [[C]]\n![[map.png]]\n"))
+        self.assertFalse(vaultnotes.is_empty("Vault/Todo.md", "# Todo\n\nRing the placement office on Monday."))
+        self.assertFalse(vaultnotes.is_empty("Vault/report.pdf", "Two words"), "only text and Markdown files")
+
+    def test_a_note_names_the_slides_it_was_made_from(self):
+        fm = frontmatter.parse(FROM_SLIDES)[0]
+        self.assertEqual(vaultnotes.source_of(fm), "Course/CSC101/Slides/Lecture_4.pdf")
+        self.assertTrue(vaultnotes.taught_from_source(fm))
+        self.assertTrue(vaultnotes.taught_from_source({"source": "[[Week 3 slides.pptx]]"}))
+        self.assertTrue(vaultnotes.taught_from_source({"source_path": "Uni/Exam 2022.pdf", "type": "exam"}))
+        self.assertFalse(vaultnotes.taught_from_source({"source": "My dissertation.pdf"}), "not course material")
+        self.assertFalse(vaultnotes.taught_from_source({"source": "Slides/Lecture_4.pdf", "hal": "ingested"}),
+                         "a note Hal wrote names its source too")
+        self.assertFalse(vaultnotes.taught_from_source({"source": "https://example.org/page"}))
+
+    def test_stubs_are_skipped_and_notes_from_slides_are_course_material_without_the_ai(self):
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(NOTE_REPLY)}) as backend:
+            settings.set("record.read_all", True)
+            put(files, "Vault/Recursion.md", STUB)
+            put(files, "Vault/Lecture 4 Recursion.md", FROM_SLIDES)
+            put(files, "Vault/Rivers.md", "# Rivers\n\nMeanders and oxbow lakes from the 2022 fieldwork trip.")
+            run(con, [files])
+            got = rows(con)
+            asked = len(backend.requests("ingest_doc"))
+            shown = items.counts(con, "b1")["states"]
+            again = items.by_rules(con)
+        stub, derived = got["Files/Vault/Recursion.md"], got["Files/Vault/Lecture 4 Recursion.md"]
+        self.assertEqual((stub["state"], stub["error"], stub["note"]), ("skipped", "an empty note", None))
+        self.assertEqual((derived["state"], derived["role"], derived["model"]), ("done", "taught", items.BY_SOURCE))
+        self.assertEqual(asked, 1, "only the person's own note goes to the AI")
+        self.assertEqual(shown["skipped"], 1)
+        self.assertEqual(again, 0, "a note settled by its source is not offered to the AI again")
+
+    def test_the_page_counts_empty_notes_in_plain_words(self):
+        with home() as (con, _vault, files), fake_ai({}):
+            put(files, "Vault/Recursion.md", STUB)
+            done = finished(ingest_actions.queue(folders=[files]))
+            self.assertEqual(done["state"], "done", done["error"])
+            shown = items.summary(con)
+        self.assertEqual(shown["skipped"], {"an empty note": 1})
 
 
 class Origins(unittest.TestCase):
