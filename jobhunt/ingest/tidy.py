@@ -141,10 +141,10 @@ def _given_facts(body: str, role: str, doc_type: str) -> str:
 
 
 def _rewrite(path: Path, fm: dict, body: str, role: str, source: str) -> None:
-    """Writes the note again with its role and only the facts it gives, course material without contact
-    details, code text fenced."""
+    """Writes the note again with its role and only the facts it gives, without a date of birth, course
+    material without contact details, code text fenced."""
     fm = {**fm, "role": role, "about_owner": roles.ABOUT_OWNER[role]}
-    body = _given_facts(body, role, str(fm.get("doc_type") or ""))
+    body = privacy.redact(_given_facts(body, role, str(fm.get("doc_type") or "")))
     if role == roles.TAUGHT:
         body = lectures.scrub(_unlink_gone(body))
     suffix = PurePosixPath(source.split("?")[0]).suffix.lower()

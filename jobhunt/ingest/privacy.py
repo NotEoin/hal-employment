@@ -14,8 +14,12 @@ Design decisions:
 - Teaching and coursework that only discuss these things (a lecture on cryptography, a payroll seminar, a
   nursing essay) pass: the clusters of words and the `password = "..."` rule do not count in a text with
   several teaching or coursework markers. Structured hits still count there.
-- The AI's own verdict (`said`, the reply's `sensitive` field) is a reason too, for what rules cannot see;
-  by then the text was with the AI, but the note, the copy and the facts are still left out.
+- The AI's own verdict (`said`, the reply's `sensitive` field) is a reason too, for what rules cannot see,
+  when it names a kind of detail the rules keep out (`SAID_KINDS`); by then the text was with the AI, but the
+  note, the copy and the facts are still left out.
+- A date of birth is taken out of the text (`redact`) rather than keeping the file out, as transcripts and
+  certificates carry one beside their grades; only beside a passport, licence or ID card number is the whole
+  file private. A file with something taken out is never copied into the record whole.
 - A file allowed once is remembered by its SHA-256 with its path or its name in the folder or zip, so the
   same bytes read again are not held again; a changed file is checked again.
 """
@@ -39,7 +43,17 @@ RULE_REASONS = (SECRETS, ID_DOCUMENT, PAY, BANK, MEDICAL, BIRTH_AND_ID, ID_NUMBE
 NEAR_CHARS = 200          # a label counts for a number this far before or after it
 LABEL_GAP = 60            # "Sort code:" to its digits, "Date of birth" to its date, and the like
 SAID_CHARS = 80           # the AI's own reason is shown to the person, so it stays one short line
-YES_WORDS = {"true", "yes", "1", "sensitive", "private"}
+REMOVED = "[removed]"
+# A date of birth beside the number of one of these proves who someone is, so the file stays out; beside a
+# student or staff number (a transcript, a certificate) the date is only taken out of the text.
+ID_DOCUMENT_LABELS = ("passport", "licence", "license", "identity")
+# The AI's word counts only when it names a kind of detail the rules keep out. Contact details, nationality
+# and student numbers are on every CV and transcript, and a fresh read held four CVs for "phone number,
+# email address" (2026-11-06).
+SAID_KINDS = re.compile(r"\bbank|account\s+number|sort\s+code|\biban\b|\bcard\b|passport|identity|driv\w*\s+licen|"
+                        r"national\s+insurance|social\s+security|\bssn\b|medical|health|diagnos|prescri|\bnhs\b|"
+                        r"payslip|pay\s+slip|salary|\btax\b|\bp60\b|\bp45\b|password|secret|private\s+key|api\s+key|"
+                        r"\btoken|credential", re.I)
 
 # National Insurance numbers (HMRC National Insurance Manual): two prefix letters, six digits, suffix A to
 # D. D, F, I, Q, U and V are never used, O never second, and these prefixes are never issued.
@@ -82,9 +96,11 @@ NHS_LABEL = re.compile(r"\bNHS\b")
 NHS_WEIGHTS = range(10, 1, -1)
 NHS_MOD = 11
 
-BIRTH = re.compile(rf"(?:date\s+of\s+birth|\bD\.?O\.?B\b\.?|\bborn\s+on)[^\n\d]{{0,{LABEL_GAP}}}"
-                   r"(\d{1,4}[/.\- ](?:\d{1,2}|[A-Za-z]{3,9})[/.\- ]\d{2,4})", re.I)
-ID_LABEL = re.compile(rf"\b(?:student|staff|employee|candidate|passport|licen[cs]e|identity|ID|registration|"
+# A date as people write one: 01/02/2000, 2000-02-01, 1 Feb 2000, 9th October 2000, October 9, 2000.
+DATE = (r"(\d{1,4}[/.\- ](?:\d{1,2}|[A-Za-z]{3,9})[/.\- ]\d{2,4}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\.?,?\s+\d{4}"
+        r"|[A-Za-z]{3,9}\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})")
+BIRTH = re.compile(rf"(?:date\s+of\s+birth|\bD\.?O\.?B\b\.?|\bborn\s+on)[^\n\d]{{0,{LABEL_GAP}}}{DATE}", re.I)
+ID_LABEL = re.compile(rf"\b(?P<label>student|staff|employee|candidate|passport|licen[cs]e|identity|ID|registration|"
                       rf"matriculation|personnel|payroll)\s*(?:number|no\b\.?|num|#|ID\b)?[^\n\w]{{0,{LABEL_GAP}}}"
                       r"([A-Z]{0,3}\d[A-Z0-9]{5,})\b", re.I)
 
@@ -232,7 +248,13 @@ def _medical(rel: str, text: str) -> bool:
 
 
 def _birth_and_id(text: str) -> bool:
-    return bool(BIRTH.search(text)) and bool(ID_LABEL.search(text))
+    return bool(BIRTH.search(text)) and any(m.group("label").lower() in ID_DOCUMENT_LABELS
+                                            for m in ID_LABEL.finditer(text))
+
+
+def redact(text: str) -> str:
+    """`text` with each date of birth taken out, its label kept: a birth date never belongs in a record."""
+    return BIRTH.sub(lambda m: m.group(0)[:m.start(1) - m.start(0)] + REMOVED, text)
 
 
 def _id_number(text: str) -> bool:
@@ -243,17 +265,16 @@ def _id_number(text: str) -> bool:
 
 def _said(said: str) -> str:
     words = " ".join(str(said or "").split())
-    if not words or words.lower() in {"false", "no", "0", "none", "null"}:
+    if not SAID_KINDS.search(words):
         return ""
-    if words.lower() in YES_WORDS or len(words) > SAID_CHARS:
-        return SAID_BY_AI
-    return words
+    return SAID_BY_AI if len(words) > SAID_CHARS else words
 
 
 def reason(rel: str, text: str, said: str = "") -> str:
     """Why the file at `rel` with this text looks private, in a few plain words, or "" when it does not.
 
-    `said` is the AI's own verdict on the file; anything but empty or a plain "no" counts as a reason.
+    `said` is the AI's own verdict on the file; it counts when it names a kind of detail the rules keep out
+    (`SAID_KINDS`), so "phone number, email address" on a CV does not.
     """
     checks = ((SECRETS, lambda: _secrets(rel, text)), (ID_DOCUMENT, lambda: _passport(text)),
               (PAY, lambda: _pay(rel, text)), (BANK, lambda: _bank(text) or _card(text)),

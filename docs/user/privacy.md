@@ -74,15 +74,19 @@ look like any of these are kept out:
 - a National Insurance or social security number;
 - a payslip, P60, P45 or other tax form;
 - medical information: a fit note, a letter about a diagnosis, or an NHS number;
-- a date of birth together with a student, staff or other ID number;
+- a date of birth together with a passport, driving licence or ID card number;
 - passwords or secret keys, such as a settings file with a real password in it.
 
 A file kept out is not filed in your record, no copy of it is kept, it is not sent to the AI, and Hal takes
-no facts from it. Hal keeps only its name and the reason. If the AI is reading a document and says it looks
-private, Hal keeps that one out too, with the AI's reason.
+no facts from it. Hal keeps only its name and the reason. If the AI is reading a document and says it holds
+one of the kinds of detail above, Hal keeps that one out too, with the AI's reason.
 
 Teaching material about these things, such as a lecture on cryptography or a payroll seminar, is not kept
 out, and neither is a CV with your own email address and phone number.
+
+A date of birth anywhere else, such as on a transcript or a certificate, is taken out of the words Hal
+files, and the rest of the document is read as usual. Hal then keeps no copy of the original file, as the
+copy would still have the date.
 
 After a read, the Overview on Your record says how many files were kept out, with each one's name and
 reason. If Hal got one wrong, press **Add it anyway** beside it. Hal reads it in and remembers your choice,

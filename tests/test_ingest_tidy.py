@@ -205,6 +205,22 @@ class Tidy(unittest.TestCase):
                          ("done", "private", "private"))
         self.assertEqual(backend.requests("ingest_doc"), [], "a file held on the AI's word is not sent again")
 
+    def test_a_date_of_birth_an_older_read_filed_is_taken_out_of_its_note(self):
+        with home() as (con, vault, files):
+            settings.set("you.name", OWNER)
+            with fake_ai({"ingest_doc": json.dumps(REPLY)}):
+                put(files, "Transcript.md", f"# Transcript\n\n{OWNER}, HIS101: 68.")
+                run(con, [files])
+            note = rows(con)["Files/Transcript.md"]["note"]
+            path = vault / note
+            path.write_text(path.read_text(encoding="utf-8") + "\nDate of birth: 01/02/2000\n", encoding="utf-8")
+            make_old(vault, note, about_owner="true")
+            with fake_ai({"ingest_doc": json.dumps(REPLY)}):
+                run(con, [], batch="t", tidy=True)
+            text = path.read_text(encoding="utf-8")
+        self.assertNotIn("01/02/2000", text)
+        self.assertIn("HIS101: 68", text)
+
     def test_a_typed_note_is_judged_by_rules_and_never_sent_to_the_ai(self):
         with home() as (con, _vault, files):
             settings.set("you.name", OWNER)

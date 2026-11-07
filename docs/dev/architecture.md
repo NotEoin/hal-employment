@@ -595,7 +595,11 @@ the row stays `model = 0` for next time. `items.by_rules` counts those notes for
 
 Private files (`privacy.py`). In `engine._prepare`, after conversion and before any AI call,
 `privacy.held_back` runs `privacy.reason(rel, text)` unless `record.privacy_check` is off or the row is
-`allowed`; after the AI's answer it runs again with the reply's `sensitive` field as `said`. A reason sends
+`allowed`; after the AI's answer it runs again with the reply's `sensitive` field as `said`, which counts only
+when it names a kind the rules keep out (`SAID_KINDS`: never contact details, which every CV has). A date of
+birth beside a passport, licence or ID card number holds the file; any other date of birth is cut from the
+text by `privacy.redact` before the AI call (and by tidy's rewrite), and the item's `_Read.redacted` keeps
+`notes.keep_original` from copying the file. A reason sends
 the item to `_finish` with no text, which sets state `private` and the reason in `ingest_items.private`
 (migration 0023) and writes no note, no copy and no facts. The rules want a hit that checks out (NI number
 or SSN beside its label, a passport machine-readable zone, sort code with account number, an IBAN by mod 97,

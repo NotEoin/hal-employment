@@ -288,11 +288,13 @@ class _Read:
     """What a worker made of one item: its text and description, or no description for a file with no text.
 
     `private` is why the item is kept out of the record (`privacy.reason`); then there is no text either.
+    `redacted` is true when something was taken out of the text (`privacy.redact`), so the file is not copied.
     """
 
     text: str
     desc: dict | None
     private: str = ""
+    redacted: bool = False
 
 
 def _prepare(row: dict, rule: rank.Rule) -> _Read:
@@ -305,6 +307,8 @@ def _prepare(row: dict, rule: rank.Rule) -> _Read:
     is_picture = path.suffix.lower() in rank.IMAGE_SUFFIXES | rank.MEDIA_SUFFIXES
     if why := privacy.held_back(row, text):        # checked before any AI call, so the text never reaches it
         return _Read("", None, why)
+    clean = privacy.redact(text)
+    redacted, text = clean != text, clean
     if not text.strip() and not is_picture:
         return _Read(text, None)
     if text.strip() and by_model(rule, is_picture, every=bool(row["note"])):
@@ -318,7 +322,7 @@ def _prepare(row: dict, rule: rank.Rule) -> _Read:
         desc = understand.light(row["rel"], text, rule)
         if is_picture and not text.strip():
             desc["title"] = path.stem
-    return _Read(text, desc)
+    return _Read(text, desc, redacted=redacted)
 
 
 def _kept(note_text: str) -> str:
@@ -387,7 +391,8 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
     path = Path(row["path"])
     moving = drop_root is not None and drop_root in path.parents
     original = None
-    if row["kind"] == "file" and desc["role"] != roles.TAUGHT:   # a deck's copy would keep what `scrub` took out
+    # a deck's copy would keep what `scrub` took out, and a redacted file's what `redact` took out
+    if row["kind"] == "file" and desc["role"] != roles.TAUGHT and not read.redacted:
         original = notes.keep_original(vault_dir, path, desc["category"], move=moving)
     note_rel = notes.write_source(vault_dir, desc, text=_shown_text(desc, read.text), source=_source(row, batch),
                                   sha256=row["sha256"] or "", original=original)

@@ -92,9 +92,24 @@ class Rules(unittest.TestCase):
                  "medication and treatment plan followed NHS guidance.")
         self.assertEqual(reason(essay), "")
 
-    def test_a_date_of_birth_with_a_student_number_is_private(self):
-        self.assertEqual(reason("Name: Alex Doe\nDate of birth: 01/02/2000\nStudent number: 20481234"),
+    def test_a_date_of_birth_with_a_passport_or_licence_number_is_private(self):
+        self.assertEqual(reason("Name: Alex Doe\nDate of birth: 01/02/2000\nPassport number: 20481234"),
                          privacy.BIRTH_AND_ID)
+        self.assertEqual(reason("Date of birth 9th October 2000\nLicence number: DOE99901020AB9CD"),
+                         privacy.BIRTH_AND_ID)
+
+    def test_a_transcripts_date_of_birth_is_taken_out_and_the_transcript_kept(self):
+        # a fresh read held two of a person's transcripts for a birth date in their details table (2026-11-06)
+        text = ("Student Details\n  Name             Alex Doe\n  Date of Birth    9th October 2000\n"
+                "  University Student Number    20481234\nModule HIS101: 68")
+        self.assertEqual(reason(text), "")
+        clean = privacy.redact(text)
+        self.assertNotIn("October 2000", clean)
+        self.assertIn("Date of Birth    [removed]", clean)
+        self.assertIn("20481234", clean, "the student number names the person, so it stays")
+        for written in ("Date of birth: 01/02/2000", "DOB 2000-02-01", "Born on 1 Feb 2000",
+                        "Date of birth: October 9, 2000"):
+            self.assertNotIn("2000", privacy.redact(written), written)
 
     def test_a_transcript_with_a_student_number_but_no_birth_date_passes(self):
         self.assertEqual(reason("Transcript\nStudent number: 20481234\nModule HIS101: 68"), "")
@@ -142,10 +157,16 @@ class Rules(unittest.TestCase):
         cv = CV_TEXT + "\nEmail: avery@example.org  Phone: 07700 900123\nLinkedIn: example.org/in/avery"
         self.assertEqual(reason(cv, rel="CV.docx"), "")
 
-    def test_the_ais_own_verdict_counts_and_a_plain_no_does_not(self):
+    def test_the_ais_own_verdict_counts_when_it_names_a_kind_the_rules_keep_out(self):
         self.assertEqual(reason("Just a letter.", said="a bank statement"), "a bank statement")
-        self.assertEqual(reason("Just a letter.", said="true"), privacy.SAID_BY_AI)
-        self.assertEqual(reason("Just a letter.", said="x " * 60), privacy.SAID_BY_AI, "too long to show")
+        self.assertEqual(reason("Just a letter.", said="medical " * 30), privacy.SAID_BY_AI, "too long to show")
+        self.assertEqual(reason("Just a letter.", said="true"), "", "names no kind")
+
+    def test_contact_details_the_ai_calls_sensitive_never_keep_a_cv_out(self):
+        # a fresh read held four of a person's CVs for "phone number, email address" (2026-11-06)
+        for said in ("phone number, email address", "phone number, email address, location, citizenship",
+                     "Date of Birth, Student HESA Number, University Student Number"):
+            self.assertEqual(reason(CV_TEXT, rel="CV.docx", said=said), "", said)
         self.assertEqual(reason("Just a letter.", said="no"), "")
         self.assertEqual(reason("Just a letter."), "")
 
@@ -189,14 +210,26 @@ class Ingest(unittest.TestCase):
 
     def test_a_file_the_ai_calls_sensitive_is_kept_out_after_its_answer(self):
         def described(rel, text, rule):
-            return {**understand.light(rel, text, rule), "by": "model", "sensitive": "a tenancy agreement"}
+            return {**understand.light(rel, text, rule), "by": "model", "sensitive": "medical information"}
 
         with home() as (con, vault, files), fake_ai({}), mock.patch.object(understand, "ask", described):
             put(files, "CV.md", CV_TEXT)
             run(con, [files])
             row = rows(con)["Files/CV.md"]
-            self.assertEqual((row["state"], row["private"], row["note"]), ("private", "a tenancy agreement", None))
+            self.assertEqual((row["state"], row["private"], row["note"]), ("private", "medical information", None))
             self.assertFalse(list(vault.rglob("CV*")))
+
+    def test_a_transcript_is_read_without_its_birth_date_and_never_copied_whole(self):
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}) as backend:
+            settings.set("record.copy_originals", True)
+            put(files, "Transcript.txt", "Transcript\nName: Alex Doe\nDate of birth: 01/02/2000\n"
+                                         "Student number: 20481234\nModule HIS101: 68\n")
+            run(con, [files])
+            row = rows(con)["Files/Transcript.txt"]
+            self.assertEqual(row["state"], "done")
+            self.assertNotIn("01/02/2000", (vault / row["note"]).read_text())
+            self.assertNotIn("01/02/2000", json.dumps(backend.requests("ingest_doc")))
+            self.assertFalse([p for p in vault.rglob("Transcript*") if p.suffix == ".txt"], "no copy of the file")
 
     def test_a_file_let_in_is_read_and_not_held_again_when_read_later(self):
         with home() as (con, vault, files), fake_ai({}):

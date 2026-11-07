@@ -34,9 +34,11 @@ What changed in each version, in plain words.
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same
   note, and a fact you checked that it changes goes back to unchecked for you to look at again.
 - **Private files stay out of your record.** When Hal reads a folder or zip, files that look like bank
-  details, a passport or ID card, a payslip or tax form, medical information, a date of birth with an ID
-  number, or passwords and keys are not filed, not sent to the AI and give no facts. The Overview lists
-  them by name with the reason, and **Add it anyway** reads one in. **Keep private documents out of your
+  details, a passport or ID card, a payslip or tax form, medical information, a date of birth with a
+  passport or licence number, or passwords and keys are not filed, not sent to the AI and give no facts.
+  Any other date of birth, such as on a transcript, is taken out of the words Hal files. CVs with your
+  contact details are always read. The Overview lists them by name with the reason, and **Add it anyway**
+  reads one in. **Keep private documents out of your
   record** in Settings, CV and documents turns the check off.
 - **Your profile.** Hal keeps the facts it finds in your record as a profile: jobs, education with its
   modules and marks, skills with the words that show them, projects, certificates, achievements and links.
