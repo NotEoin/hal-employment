@@ -19,8 +19,9 @@ Design decisions:
   values the rules check; by then the text was with the AI, but the
   note, the copy and the facts are still left out.
 - A date of birth is taken out of the text (`redact`) rather than keeping the file out, as transcripts and
-  certificates carry one beside their grades; only beside a passport, licence or ID card number is the whole
-  file private. A file with something taken out is never copied into the record whole.
+  certificates carry one beside their grades; beside a passport, licence or ID card number, or beside any ID
+  number on a page with no results (a page of personal details), the whole file is private. A file with
+  something taken out is never copied into the record whole.
 - A file allowed once is remembered by its SHA-256 with its path or its name in the folder or zip, so the
   same bytes read again are not held again; a changed file is checked again.
 """
@@ -48,6 +49,11 @@ REMOVED = "[removed]"
 # A date of birth beside the number of one of these proves who someone is, so the file stays out; beside a
 # student or staff number (a transcript, a certificate) the date is only taken out of the text.
 ID_DOCUMENT_LABELS = ("passport", "licence", "license", "identity")
+# Words of results; a page with a birth date and an ID number but none of these is a page of personal details
+# (a registration confirmation), which a person marked private (2026-11-07).
+RESULTS = re.compile(r"\b(?:modules?|marks?|grades?|credits?|classification|results?|transcript|GPA|"
+                     r"examination|assessment|pass(?:ed)?|merit|distinction)\b", re.I)
+RESULTS_MIN = 2           # distinct words of results that make a page a record of study, not of details
 # The AI's word counts only when it names a kind of detail the rules keep out and that only reading can see.
 # Contact details, nationality and student numbers are on every CV and transcript, and a fresh read held four
 # CVs for "phone number, email address" (2026-11-06). Keys and passwords are left to the rules, which check a
@@ -250,8 +256,13 @@ def _medical(rel: str, text: str) -> bool:
 
 
 def _birth_and_id(text: str) -> bool:
-    return bool(BIRTH.search(text)) and any(m.group("label").lower() in ID_DOCUMENT_LABELS
-                                            for m in ID_LABEL.finditer(text))
+    if not BIRTH.search(text):
+        return False
+    labels = [m.group("label").lower() for m in ID_LABEL.finditer(text)]
+    if any(label in ID_DOCUMENT_LABELS for label in labels):
+        return True
+    results = {w.lower() for w in RESULTS.findall(text)}
+    return bool(labels) and len(results) < RESULTS_MIN
 
 
 def redact(text: str) -> str:

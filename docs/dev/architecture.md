@@ -597,7 +597,8 @@ Private files (`privacy.py`). In `engine._prepare`, after conversion and before 
 `privacy.held_back` runs `privacy.reason(rel, text)` unless `record.privacy_check` is off or the row is
 `allowed`; after the AI's answer it runs again with the reply's `sensitive` field as `said`, which counts only
 when it names a kind the rules keep out (`SAID_KINDS`: never contact details, which every CV has, nor keys and passwords, whose values the rules check). A date of
-birth beside a passport, licence or ID card number holds the file; any other date of birth is cut from the
+birth beside a passport, licence or ID card number, or beside any ID number with fewer than `RESULTS_MIN`
+words of results (a page of personal details), holds the file; any other date of birth is cut from the
 text by `privacy.redact` before the AI call (and by tidy's rewrite), and the item's `_Read.redacted` keeps
 `notes.keep_original` from copying the file. A reason sends
 the item to `_finish` with no text, which sets state `private` and the reason in `ingest_items.private`

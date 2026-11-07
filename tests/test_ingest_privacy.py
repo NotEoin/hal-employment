@@ -101,7 +101,7 @@ class Rules(unittest.TestCase):
     def test_a_transcripts_date_of_birth_is_taken_out_and_the_transcript_kept(self):
         # a fresh read held two of a person's transcripts for a birth date in their details table (2026-11-06)
         text = ("Student Details\n  Name             Alex Doe\n  Date of Birth    9th October 2000\n"
-                "  University Student Number    20481234\nModule HIS101: 68")
+                "  University Student Number    20481234\nModule HIS101   Credits 20   Mark 68")
         self.assertEqual(reason(text), "")
         clean = privacy.redact(text)
         self.assertNotIn("October 2000", clean)
@@ -168,6 +168,12 @@ class Rules(unittest.TestCase):
         self.assertEqual(reason(plan, said="SSH private key, client secret, OAuth token"), "")
         self.assertEqual(reason(f"-----BEGIN RSA PRIVATE KEY-----\n{KEY_BODY}\n-----END RSA PRIVATE KEY-----",
                                 said="SSH private key"), privacy.SECRETS)
+
+    def test_a_page_of_personal_details_with_a_birth_date_and_an_id_number_is_private(self):
+        # a registration confirmation (name, birth date, nationality, student number) was let in (2026-11-07)
+        page = ("Student Number 20481234\nLast Name Doe\nFirst Name(s) Alex\nDate of Birth 01/02/2000\n"
+                "Nationality Made-up\nThis document confirms that you have now registered.")
+        self.assertEqual(reason(page), privacy.BIRTH_AND_ID)
 
     def test_contact_details_the_ai_calls_sensitive_never_keep_a_cv_out(self):
         # a fresh read held four of a person's CVs for "phone number, email address" (2026-11-06)

@@ -74,7 +74,8 @@ look like any of these are kept out:
 - a National Insurance or social security number;
 - a payslip, P60, P45 or other tax form;
 - medical information: a fit note, a letter about a diagnosis, or an NHS number;
-- a date of birth together with a passport, driving licence or ID card number;
+- a date of birth together with a passport, driving licence or ID card number, or a page of
+  personal details (a date of birth and an ID number with no results on it);
 - passwords or secret keys, such as a settings file with a real password in it.
 
 A file kept out is not filed in your record, no copy of it is kept, it is not sent to the AI, and Hal takes
