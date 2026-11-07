@@ -207,6 +207,12 @@ What changed in each version, in plain words.
   of one name. A Companies House entry must be active, carry the employer's whole name and be in the
   advert's trade, or in its town when its records name no trade. Otherwise the pack says "No reliable
   match found" and lists no sections to read.
+- **The company check skips namesakes it still let through.** A London lender's pack still showed an
+  American solar maker's Wikipedia article, with its "Environmental controversy" section to read, and a
+  finance company of the same name set up ten days earlier. An article whose title adds a word to the
+  employer's name now needs a link to the employer's website or the advert's town, and a company set up in
+  the last year is shown only when its name is exactly the employer's and its record gives the advert's
+  website.
 - **The fit table sees all your projects.** It said "No evidence of AWS" although one of your projects
   lists AWS, because only the projects that fit in the letter's notes were read. The fit table now reads
   the tools of every project and job you checked, and a requirement that names one of them is never listed

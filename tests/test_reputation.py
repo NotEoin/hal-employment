@@ -36,20 +36,24 @@ LENDER_ADVERT = reputation.Advert(
          "decide each loan, keep default rates low and help customers borrow fairly.")
 
 
-def fake_get(articles: dict[str, tuple], registrations: dict[str, tuple], addresses: dict[str, str] | None = None):
+def fake_get(articles: dict[str, tuple], registrations: dict[str, tuple], addresses: dict[str, str] | None = None,
+             born: dict[str, str] | None = None, pages: dict[str, str] | None = None):
     """A stand-in for `reputation.get`: article title -> (summary, links[, a disambiguation page]); number ->
-    (name, status, SIC codes); `addresses` give a registration's address on the results page."""
-    addresses = addresses or {}
+    (name, status, SIC codes); `addresses` give a registration's address on the results page, `born` its day
+    of incorporation ("28 October 2026") and `pages` more text on its company page."""
+    addresses, born, pages = addresses or {}, born or {}, pages or {}
 
     def get(url: str, **kw) -> str:
         if url.startswith(reputation.COMPANIES_HOUSE):
             return "".join(f'<li class="type-company"><h3><a href="/company/{n}">{name}</a></h3>'
-                           f'<p>{n} - Incorporated on 2 May 1990</p><p>{addresses.get(n, "1 Made-up Street")}</p>'
-                           f'</li>' for n, (name, _, _) in registrations.items())
+                           f'<p>{n} - Incorporated on {born.get(n, "2 May 1990")}</p>'
+                           f'<p>{addresses.get(n, "1 Made-up Street")}</p></li>'
+                           for n, (name, _, _) in registrations.items())
         if url.startswith(f"{reputation.COMPANIES_HOUSE_SITE}/company/"):
-            _, status, sic = registrations[url.rsplit("/", 1)[1]]
+            number = url.rsplit("/", 1)[1]
+            _, status, sic = registrations[number]
             return (f'<dd class="text data" id="company-status">{status}</dd>'
-                    + "".join(f'<span id="sic{i}">{s}</span>' for i, s in enumerate(sic)))
+                    + "".join(f'<span id="sic{i}">{s}</span>' for i, s in enumerate(sic)) + pages.get(number, ""))
         query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
         if query.get("list") == "search":
             return json.dumps({"query": {"search": [{"title": t} for t in articles]}})
@@ -63,10 +67,27 @@ def fake_get(articles: dict[str, tuple], registrations: dict[str, tuple], addres
     return get
 
 
+# A made-up London consumer lender hiring a junior engineer through a job board, in the shape of the live
+# advert: lending words, then software words, and a "London / Remote" location.
+LIVE_LENDER_ADVERT = reputation.Advert(
+    location="London / Remote", url="https://jobs.example.org/brightvale/5",
+    text="We are changing consumer lending. Our credit decisions use open banking data, so fair personal loans "
+         "reach more people, and our default rates stay low. Join our engineering team in London to build the "
+         "lending platform: backend services in Python, a React frontend, Postgres databases and cloud "
+         "software, from onboarding customers to paying out loans. Find out more at www.brightvale-loans.co.uk.")
+SOLAR_ARTICLE = {"Brightvale Solar": ("Brightvale Solar was a solar technology company that made thin film panels "
+                                      "in a made-up American town. It drew a federal loan guarantee before it went "
+                                      "bankrupt.", [])}
+NOW = "2026-11-07T09:00:00Z"
+
+
 class CompanyCheck(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(mock.patch.dict("os.environ", {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+
     def check(self, company: str, advert: reputation.Advert, articles: dict, registrations: dict,
-              addresses: dict | None = None):
-        with mock.patch.object(reputation, "get", fake_get(articles, registrations, addresses)):
+              addresses: dict | None = None, **more):
+        with mock.patch.object(reputation, "get", fake_get(articles, registrations, addresses, **more)):
             return reputation.check(company, advert)
 
     def test_a_namesake_is_never_shown_as_the_employer(self):
@@ -158,6 +179,38 @@ class CompanyCheck(unittest.TestCase):
         flags, md = self.check(LENDER, LENDER_ADVERT, articles, registrations,
                                {"22222222": "4 Made-up Road, Leeds"})
         self.no_match(md, flags, "Solar", "SOLAR", "22222222", "CONSULTING")
+
+    def test_a_namesake_whose_title_adds_a_word_needs_the_employers_site_or_town(self):
+        # despite the last fix, a London lender's advert still matched a US solar maker's article with the same
+        # first word, and its "Environmental controversy" section became a check item (2026-11-07). Each rule's
+        # verdict, logged: the article's "technology" names the software trade the advert has too, so the
+        # trade rule alone said yes.
+        summary, links = SOLAR_ARTICLE["Brightvale Solar"]
+        said = reputation.article_verdicts(LIVE_LENDER_ADVERT, LENDER, summary, links, "Brightvale Solar")
+        self.assertEqual(said, {"site": False, "adds_words": True, "trade": True, "town": False})
+        self.assertFalse(reputation.plausible_article(LIVE_LENDER_ADVERT, LENDER, summary, links, "Brightvale Solar"))
+        with self.assertLogs("jobhunt.reputation", "INFO") as logged:
+            flags, md = self.check(LENDER, LIVE_LENDER_ADVERT, SOLAR_ARTICLE, {})
+        self.assertIn("'adds_words': True, 'trade': True, 'town': False", "\n".join(logged.output))
+        self.no_match(md, flags, "Solar")
+        linked = {"Brightvale Solar": (summary, ["https://www.brightvale-loans.co.uk/about"])}
+        _, md = self.check(LENDER, LIVE_LENDER_ADVERT, linked, {})
+        self.assertIn("[Brightvale Solar]", md, "the employer's own site still ties it")
+
+    def test_a_company_incorporated_this_year_is_never_the_employer_by_name_and_trade(self):
+        # Companies House matched a finance company of the same name incorporated 10 days before the run
+        # (2026-11-07)
+        registrations = {"44444441": ("BRIGHTVALE FINANCE LTD", "Active", ["64999 - Financial intermediation"]),
+                         "44444442": ("BRIGHTVALE LIMITED", "Active", ["64929 - Other credit granting n.e.c."])}
+        born = {"44444441": "28 October 2026", "44444442": "1 March 2026"}
+        flags, md = self.check(LENDER, LIVE_LENDER_ADVERT, {}, registrations, born=born)
+        self.no_match(md, flags, "44444441", "44444442")
+        _, md = self.check(LENDER, LIVE_LENDER_ADVERT, {}, registrations, born=born,
+                           pages={"44444442": "<p>Website: brightvale-loans.co.uk</p>"})
+        self.assertIn("- Companies House: BRIGHTVALE LIMITED 44444442", md, "its exact name and the advert's site")
+        self.assertNotIn("FINANCE", md)
+        _, md = self.check(LENDER, LIVE_LENDER_ADVERT, {}, registrations, born={"44444441": "2 May 2019"})
+        self.assertIn("- Companies House: BRIGHTVALE FINANCE LTD 44444441", md, "an older one in the trade is")
 
     def test_a_registration_in_the_adverts_trade_or_town_is_the_employer(self):
         registrations = {"33333331": ("BRIGHTVALE FINANCE LIMITED", "Active", ["64929 - Other credit granting n.e.c."]),

@@ -18,11 +18,21 @@ Design decisions, each with its reason:
   first sentences (`LEAD_SENTENCES`) name a trade, that trade must be one of the advert's; else when it names
   the advert's town. A disambiguation page is never the employer (its page property, a "(disambiguation)"
   title or "may refer to"): one pack showed a disambiguation page as the employer (2026-11-07).
+- An article whose title adds words to the employer's name ("Brightvale Solar" for "Brightvale") is
+  another company until shown otherwise, so it needs the site link, or the advert's town and no other
+  trade; a shared trade alone is not enough. A London lender's pack showed a US solar maker's article, as
+  "technology" in its first sentence named the software trade every tech advert has (2026-11-07).
+  `article_verdicts` gives each rule's verdict, and `wikipedia` logs them.
 - A Companies House registration is the employer when it is active, its name starts with the employer's
   whole words ("KESTRELMARKS PROPERTY" is not "Kestrelmark"), a word its name adds names no other trade
   ("SOLAR"), and its SIC codes' divisions share a trade with the advert. Codes that name no trade
   (`NO_TRADE_SIC`: holding companies, head offices, dormant, "other business support") instead need the
   advert's town in its address.
+- A company incorporated within `NEW_COMPANY_DAYS` of today is never the employer unless its name is the
+  employer's exactly and the advert's own web address is on its company page: an employer advertising
+  graduate jobs has traded for longer than that, and a lender's pack showed a finance company of the same
+  name incorporated ten days before (2026-11-07). A new company of a known name is as likely a namesake or
+  an imitation as the employer.
 - Anything else reads "No reliable match found", with no sections to read.
 - Sector words are compared whole, with a plural "s" dropped (`_forms`), so "loans" meets "loan" but
   "markets" never meets "marketing".
@@ -32,12 +42,16 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import re
 import urllib.parse
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date, datetime
 
 from .http import get
+
+log = logging.getLogger(__name__)
 
 WIKI_API = "https://en.wikipedia.org/w/api.php?"
 WIKI_PAGE = "https://en.wikipedia.org/wiki/"
@@ -56,6 +70,10 @@ SECTOR_SHARE = 0.5        # an advert's sector counts when it has at least this 
 LEAD_SENTENCES = 1        # an article's first sentence says what its subject is; later ones give its history
 SHORT_WORD = 3            # a word this short keeps a final "s" ("gas", "bus")
 SUMMARY_WORDS = 80        # of an article's first section, shown in the pack
+NEW_COMPANY_DAYS = 365   # a company younger than a year has no trading history to check (see the module notes)
+INCORPORATED = re.compile(r"Incorporated on (\d{1,2} [A-Za-z]+ \d{4})")
+# Words a Wikipedia title adds to a name that say only that it is a company: "Brightvale (company)".
+COMPANY_WORDS = {"company", "companies", "corporation", "corp", "inc", "llc", "co", "incorporated"}
 DISAMBIGUATION = re.compile(r"\b(may|can|might) (also )?(refer|be used to refer) to\b|\(disambiguation\)", re.I)
 # SIC codes that say nothing of a company's trade (UK SIC 2007): holding companies, head offices, dormant and
 # non-trading companies, and "other business support service activities n.e.c.".
@@ -198,11 +216,16 @@ def _site_name(host: str) -> str:
     return labels[-1]
 
 
+def hosts(advert: Advert) -> set[str]:
+    """The employer's own web addresses the advert gives (its link, addresses in its text), "www." taken off,
+    never a job board's."""
+    found = [urllib.parse.urlparse(advert.url).hostname or "", *WEB_ADDRESS.findall((advert.text or "").lower())]
+    return {h.lower().removeprefix("www.") for h in found if _site_name(h)}
+
+
 def domains(advert: Advert) -> set[str]:
     """The employer's own web names the advert gives: its link, and addresses in its text, never a job board's."""
-    hosts = [urllib.parse.urlparse(advert.url).hostname or "",
-             *WEB_ADDRESS.findall((advert.text or "").lower())]
-    return {n for n in (_site_name(h) for h in hosts) if n}
+    return {_site_name(h) for h in hosts(advert)}
 
 
 def lead(summary: str) -> str:
@@ -215,16 +238,28 @@ def disambiguation(title: str, summary: str, props: Mapping | None = None) -> bo
     return "disambiguation" in (props or {}) or bool(DISAMBIGUATION.search(f"{title}\n{lead(summary)}"))
 
 
-def plausible_article(advert: Advert, company: str, summary: str, links: list[str], title: str = "") -> bool:
-    """True when an article named like the employer links to the employer's site, or else is in one of the
-    advert's trades, or else (naming no trade) names the advert's town."""
+def article_verdicts(advert: Advert, company: str, summary: str, links: list[str], title: str = "") -> dict:
+    """Each rule's verdict on an article named like the employer: `site` (it links to the employer's own site),
+    `adds_words` (its title adds words to the employer's name), `trade` (its title and lead name one of the
+    advert's trades; None when either names none) and `town` (it names the advert's town)."""
     names = domains(advert)
-    if names and any(_site_name(urllib.parse.urlparse(u).hostname or "") in names for u in links):
-        return True
     theirs, ours = sectors(f"{title}. {lead(summary)}"), advert_sectors(advert, company)
-    if theirs and ours:
-        return bool(theirs & ours)
-    return _named_in(summary, towns(advert))
+    return {"site": bool(names) and any(_site_name(urllib.parse.urlparse(u).hostname or "") in names for u in links),
+            "adds_words": bool(set(_name_words(title)) - set(_name_words(company)) - COMPANY_WORDS),
+            "trade": bool(theirs & ours) if theirs and ours else None,
+            "town": _named_in(summary, towns(advert))}
+
+
+def plausible_article(advert: Advert, company: str, summary: str, links: list[str], title: str = "") -> bool:
+    """True when an article named like the employer links to the employer's site; else, when its title adds
+    words to the name, names the advert's town and no other trade; else is in one of the advert's trades, or
+    (naming no trade) names the advert's town (`article_verdicts`)."""
+    said = article_verdicts(advert, company, summary, links, title)
+    if said["site"]:
+        return True
+    if said["adds_words"]:
+        return said["town"] and said["trade"] is not False
+    return said["town"] if said["trade"] is None else said["trade"]
 
 
 def _article(title: str) -> tuple[str, list[str], dict]:
@@ -244,6 +279,8 @@ def wikipedia(company: str, advert: Advert | None = None) -> dict:
     hits = _wiki({"action": "query", "list": "search", "srsearch": f"{company} company", "srlimit": WIKI_HITS})
     for title in [h["title"] for h in hits.get("query", {}).get("search", []) if names(company, h["title"])]:
         summary, links, props = _article(title)
+        log.info("company check: Wikipedia %r: disambiguation %s, %s", title, disambiguation(title, summary, props),
+                 article_verdicts(advert, company, summary, links, title))
         if disambiguation(title, summary, props) or not plausible_article(advert, company, summary, links, title):
             continue
         sections = _wiki({"action": "parse", "page": title, "prop": "sections"}).get("parse", {}).get("sections", [])
@@ -262,13 +299,35 @@ def registration(number: str) -> dict:
                timeout=LOOKUP_TIMEOUT_S)
     status = re.search(r'id="company-status"[^>]*>(.*?)<', page, re.S)
     sic = [html.unescape(" ".join(s.split())) for s in re.findall(r'id="sic\d+"[^>]*>(.*?)<', page, re.S)]
-    return {"status": " ".join(status.group(1).split()) if status else "", "sic": sic}
+    text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split()).lower()
+    return {"status": " ".join(status.group(1).split()) if status else "", "sic": sic, "text": text}
 
 
-def companies_house(company: str, advert: Advert | None = None) -> list[str]:
+def incorporated(text: str) -> date | None:
+    """The day a Companies House result says the company was incorporated, or None."""
+    m = INCORPORATED.search(text or "")
+    try:
+        return datetime.strptime(m.group(1), "%d %B %Y").date() if m else None
+    except ValueError:
+        return None
+
+
+def young_namesake(text: str, held: list[str], wanted: list[str], record: str, advert: Advert, today: date) -> bool:
+    """True when a registration incorporated within `NEW_COMPANY_DAYS` of `today` is not plainly the employer:
+    its name adds words to the employer's, or the advert's own web address is not on its record."""
+    born = incorporated(text)
+    if born is None or (today - born).days > NEW_COMPANY_DAYS:
+        return False
+    return held != wanted or not any(h in record for h in hosts(advert))
+
+
+def companies_house(company: str, advert: Advert | None = None, today: date | None = None) -> list[str]:
     """The Companies House registrations that are plausibly the advert's employer, as one-line descriptions:
-    named like it, active, and in one of the advert's trades or its town (see the module notes)."""
-    advert = advert or Advert()
+    named like it, active, in one of the advert's trades or its town, and not a new namesake (see the module
+    notes)."""
+    from .core import clock
+
+    advert, today = advert or Advert(), today or clock.local_day()
     page = get(COMPANIES_HOUSE + urllib.parse.quote_plus(company), headers=BROWSER, timeout=LOOKUP_TIMEOUT_S)
     wanted, ours, results = _name_words(company), advert_sectors(advert, company), []
     for block in re.findall(r'<li class="type-company">(.*?)</li>', page, re.S)[:REGISTRATIONS * 3]:
@@ -286,6 +345,9 @@ def companies_house(company: str, advert: Advert | None = None) -> list[str]:
         found = registration(number.group(1))
         theirs = code_sectors(found["sic"])
         fits = bool(theirs & ours) if theirs and ours else _named_in(text, towns(advert))
+        if young_namesake(text, held, wanted, found["text"], advert, today):
+            log.info("company check: Companies House %r is new and not plainly the employer", text[:80])
+            continue
         if found["status"].lower() == "active" and fits:
             results.append(f"{text[:160]} ({found['status']}; {'; '.join(found['sic'])})")
         if len(results) == REGISTRATIONS:

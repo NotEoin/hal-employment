@@ -492,10 +492,15 @@ runs: tests use `tests/support/fake_claude/`.
   its title holds every word of the employer's name, it is not a disambiguation page (its `disambiguation`
   page property, the title, or "may refer to"), and it links to the employer's own site (the advert's link
   or an address in its text, never a job board's), or else its title and first sentence name one of the
-  advert's sectors, or else, naming none, it names the advert's town. It keeps a Companies House
+  advert's sectors, or else, naming none, it names the advert's town. An article whose title adds words
+  to the employer's name ("Brightvale Solar") needs the site link, or the advert's town and no other
+  sector; a shared sector alone is not enough (`article_verdicts` gives each rule's verdict, and the lookup
+  logs them). It keeps a Companies House
   registration only when its name starts with the employer's whole words, a word the name adds names no
   other sector, its company page says Active, and its SIC divisions share a sector with the advert; codes
-  that name no trade (`NO_TRADE_SIC`) need the advert's town in its address instead. Anything else reads
+  that name no trade (`NO_TRADE_SIC`) need the advert's town in its address instead. A registration
+  incorporated within `NEW_COMPANY_DAYS` (365) of today is kept only when its name is the employer's
+  exactly and one of the advert's own web addresses (`hosts`) is on its company page. Anything else reads
   "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The pack's `## Letter notes` section says Tone, Length,
