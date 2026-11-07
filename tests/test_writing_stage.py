@@ -88,6 +88,26 @@ class ProjectKind(unittest.TestCase):
         self.assertEqual(kind(["A group project on tides"], ["coursework"]), "degree work, team project")
         self.assertEqual(kind(["Tide gauge"], ["cv"]), "", "no sign either way is left unsaid")
 
+    def test_the_words_of_the_evidence_decide_before_the_kind_of_file(self):
+        # a CV line naming a team of developers at a university was called personal, a project named with a
+        # module code got no kind, and a README extending a dissertation in the author's own time was called
+        # degree work (2026-11-07)
+        kind = stage.project_kind
+        self.assertEqual(kind(["Back-end developer, 7 developers, Ferryapp, Wexley University"], ["cv"]),
+                         "team project")
+        self.assertEqual(kind(["Ferryapp", "Built with the Wexley University app team"], ["repository"]),
+                         "personal project, team project")
+        self.assertEqual(kind(["Software engineer, team project (7 developers), Ferryapp, Wexley University"],
+                              ["cv"]), "team project")
+        self.assertEqual(kind(["IMAG2031blog"], ["repository"]), "degree work")
+        self.assertEqual(kind(["Tide gauge", "Submitted for the second-year practical 3"], ["repository"]),
+                         "degree work")
+        self.assertEqual(kind(["Tide gauge", "This extends my dissertation on tides, built in my own time."],
+                              ["repository"]), "personal project")
+        self.assertEqual(kind(["Tide gauge", "A side project"], ["coursework"]), "personal project")
+        self.assertEqual(kind(["Tide gauge", "A practical tool for sailors"], ["repository"]), "personal project",
+                         "practical as a plain word is no module")
+
     def test_each_kind_gives_one_context_and_a_team_project_is_a_university_ones(self):
         # a university team project kept in a repository was called a personal project (2026-11-07)
         context = stage.context_of

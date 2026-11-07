@@ -107,7 +107,7 @@ start** in Settings. A draft never talks about finishing a course that has alrea
 says where it was done (part of your degree, a university team project, at work, or in your own time), and
 a draft keeps it that way. A sentence that calls a project something else, such as "my degree included"
 for a project you did in your own time, is rewritten once, and listed under **Check before sending** if it
-is still there.
+is still there. This also works when the draft calls the project by a shorter name or its folder's name.
 
 Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
 English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the

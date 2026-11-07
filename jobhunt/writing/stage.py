@@ -22,9 +22,15 @@ Design decisions, each with its reason:
   a placement or a job's employer named in it make it work; a repository or project with neither is a
   personal project. A letter called a personal project "degree work" (2026-11-06), so the prompts say never
   to change a kind. With no sign either way the kind is left unsaid rather than guessed.
-- A team project with no sign of work is a university team project: "group project" and "team project" are
-  how courses name their team work, and a university team project was called a personal project
-  (2026-11-07). The person can change any card's context (`profile.contexts`).
+- A team project with no sign of work is a university team project: "group project", "team project", "team
+  of 7", "7 developers", or a university named with a team word in one quote, are how courses and CVs name
+  their team work, and a university team project was called a personal project (2026-11-07). The person can
+  change any card's context (`profile.contexts`).
+- What the words say comes before what kind of file it is: a README saying it extends the author's
+  dissertation in their own time was called degree work, so own-time words ("own time", "side project",
+  "personal project", "extends my dissertation") make a personal project whatever else it names. A module
+  code joined to a word ("IMAG2031blog") still names a module, as repositories are often named that way
+  (2026-11-07). The document type (coursework, repository) decides only when no words do.
 """
 from __future__ import annotations
 
@@ -50,13 +56,26 @@ FINISHING = re.compile(
 DEGREE_TYPES = ("coursework", "dissertation")
 PERSONAL_TYPES = ("repository", "project")
 DEGREE_WORDS = re.compile(r"\b(coursework|dissertation|thesis|module|assignment|lab report|final[- ]year project|"
-                          r"semester|class project|student project)\b", re.I)
+                          r"semester|class project|student project|submitted (for|as)|practicals? \d+|"
+                          r"(lab|weekly|module|course|assessed|marked) practicals?|"
+                          r"for (a|the|my|this) practical(?=[.,;:)]|\s+(in|on|for|at)\b|$))\b", re.I)
+# Words that put a project in the person's own time, whatever else it names: "extends my dissertation in my own
+# time" is a personal project built on degree work, not degree work.
+PERSONAL_WORDS = re.compile(r"\b(own time|spare time|side project|personal project|hobby project|for fun|"
+                            r"(extend(s|ed|ing)?|build(s|ing)? on|built on|continu(es|ed|ing)|follow[- ]?up to) "
+                            r"(my|the|her|his|their|the author's) (dissertation|thesis|final[- ]year project))\b",
+                            re.I)
 COURSEWORK_PATH = "Sources/Coursework/"   # the ingest's category folder for coursework (`ingest/notes.py`)
 MODULE_CODE = re.compile(r"\b[A-Z]{2,5}\d{3,5}[A-Z]?\b")   # "COMP2001", "CS310": how courses name a module
+GLUED = re.compile(r"(?<=\d)(?=[a-z])")    # where a code meets a word: "IMAG2031blog"
 WORK_WORDS = re.compile(r"\b(placement|internship|intern|at work|in my job|for (my|the) employer|client project)\b",
                         re.I)
-TEAM_WORDS = re.compile(r"\b(team project|group project|in a team of|team of \d+|with (\d+|two|three|four|five|six) "
-                        r"(others|teammates|classmates))\b", re.I)
+FEW = r"(\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+TEAM_WORDS = re.compile(rf"\b(team project|group project|in a team of|(team|group) of {FEW}|with {FEW} "
+                        rf"(others|teammates|classmates)|{FEW}[- ](developers|engineers|programmers|students|"
+                        rf"members|people))\b", re.I)
+PLACE_OF_STUDY = re.compile(r"\b(university|college)\b", re.I)
+TEAM_WORD = re.compile(r"\b(team|group|teammates|squad|developers)\b", re.I)
 EMPLOYER_MIN = 3          # an employer's name shorter than this matches ordinary words
 # Where an experience was done, as a profile card keeps it (`profile.contexts`), and as a prompt says it.
 DEGREE, TEAM, WORK, PERSONAL = "degree", "team", "work", "personal"
@@ -165,18 +184,25 @@ def ended_course(text: str, stage: Stage) -> list[str]:
 
 def project_kind(texts: list[str], doc_types: list[str] = (), employers: list[str] = ()) -> str:
     """What kind of project the words and document types of its evidence show: "degree work", "at work" or
-    "personal project", with ", team project" for a team's; "" when nothing shows it."""
-    text = " ".join(t for t in texts if t)
+    "personal project", with ", team project" for a team's; "" when nothing shows it.
+
+    Own-time words first, then degree words or a module code (or a coursework file), then work, then a
+    repository or project file; a team's when one text says so or names a university with a team word.
+    """
+    parts = [t for t in texts if t]
+    text = " ".join(parts)
     named = [e for e in employers if len(e) >= EMPLOYER_MIN]
     kinds = []
-    if any(d in DEGREE_TYPES for d in doc_types) or DEGREE_WORDS.search(text) or MODULE_CODE.search(text) \
-            or COURSEWORK_PATH in text:
+    if PERSONAL_WORDS.search(text):
+        kinds.append("personal project")
+    elif any(d in DEGREE_TYPES for d in doc_types) or DEGREE_WORDS.search(text) \
+            or MODULE_CODE.search(GLUED.sub(" ", text)) or COURSEWORK_PATH in text:
         kinds.append("degree work")
     elif WORK_WORDS.search(text) or any(re.search(rf"\b{re.escape(e)}\b", text, re.I) for e in named):
         kinds.append("at work")
     elif any(d in PERSONAL_TYPES for d in doc_types):
         kinds.append("personal project")
-    if TEAM_WORDS.search(text):
+    if TEAM_WORDS.search(text) or any(PLACE_OF_STUDY.search(p) and TEAM_WORD.search(p) for p in parts):
         kinds.append("team project")
     return ", ".join(kinds)
 

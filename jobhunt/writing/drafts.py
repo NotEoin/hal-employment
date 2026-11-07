@@ -21,6 +21,12 @@ Design decisions, each with its reason:
   on purpose ("module" only as course work, "personal" only as personal work or project), as "a Lua module"
   or "personal data" say nothing about where the work was done. A sentence that also says words agreeing
   with the card ("alongside my degree, in my own time") is left alone.
+- A sentence names a project card by its name, by another name the card carries (`aliases`: the names of
+  hidden cards resting on the same file, and its repository's or folder's name), or by a distinctive word
+  of its name used as a name ("LIDAR" in "the LIDAR Autonavigation project" for "LIDAR Autonomous
+  Navigation"): a letter placed a personal project in a degree under a shorter name and was not caught
+  (2026-11-07). A distinctive word is an acronym or a word with inner capitals that no other card's names
+  hold, and it counts only before another capitalised word or "project", so "about LIDAR" names nothing.
 - A sentence echoes the employer when at least `ECHO_SHARE` of its own words sit in runs of `ECHO_RUN` words
   found in the advert or the company brief: "I am drawn to the challenge of maintaining low default rates"
   and "the role offers full in-house training" restated the advert as a reason (2026-11-07). Runs of three
@@ -75,17 +81,44 @@ def names_tool(text: str, tool: str) -> bool:
     return bool(tool) and re.search(rf"(?<![\w+#]){re.escape(tool)}(?![\w+#])", text or "", flags) is not None
 
 
+# A word of a card's name distinctive enough to stand for the card: an acronym ("LIDAR") or a word with
+# inner capitals ("FerryApp").
+DISTINCT = re.compile(r"[A-Z]{3,}\d*|[A-Z]?[a-z]+[A-Z]\w*")
+
+
+def card_names(card: dict) -> list[str]:
+    """Every name a card goes by: its own and its `aliases`, each also with "-" and "_" read as spaces."""
+    names = [card["name"], *card.get("aliases", [])]
+    return [n for n in dict.fromkeys(f for name in names if name.strip()
+                                      for f in (name.strip(), re.sub(r"[-_]+", " ", name).strip()))]
+
+
+def _distinct_words(card: dict, cards: list[dict]) -> list[str]:
+    """The distinctive words of a card's name that no other card's names hold."""
+    others = {w for c in cards if c is not card for n in card_names(c) for w in re.findall(r"\w+", n)}
+    return [w for w in re.findall(r"\w+", card["name"]) if DISTINCT.fullmatch(w) and w not in others]
+
+
+def names_card(sentence: str, card: dict, cards: list[dict] = ()) -> bool:
+    """True when a sentence names a project card: by a name of `card_names`, or by a distinctive word of its
+    name used as a name (see the module notes); `cards` are all the cards, to tell what is distinctive."""
+    if any(names_tool(sentence, n) for n in card_names(card)):
+        return True
+    return any(re.search(rf"(?<![\w-]){re.escape(w)}(?=\s+([A-Z]\w*|projects?\b))", sentence)
+               for w in _distinct_words(card, cards))
+
+
 def misplaced_tools(draft: str, cards: list[dict], known: list[str]) -> list[str]:
     """Sentences that give a project card a tool from `known` that the card's own facts never name, each
     with the tool and the project: "The Lua tide gauge needed C++. (C++ is not among Tide gauge's tools)"."""
     projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
     out = []
     for sentence in check.sentences(draft):
-        named = [c for c in projects if names_tool(sentence, c["name"])]
+        named = [c for c in projects if names_card(sentence, c, projects)]
         if len(named) != 1:
             continue
         card = named[0]
-        own = " ".join([card["name"], card["summary"], *card["tools"]])
+        own = " ".join([*card_names(card), card["summary"], *card["tools"]])
         for tool in dict.fromkeys(known):
             if names_tool(sentence, tool) and not names_tool(own, tool):
                 out.append(f"{sentence} ({tool} is not among {card['name']}'s tools)")
@@ -114,11 +147,11 @@ def wrong_context(draft: str, cards: list[dict]) -> list[str]:
     """Sentences that place one project card in a degree or in the person's own time against its `context`,
     each with what the card says: "My degree includes Tide gauge. (Tide gauge is a personal project, not part
     of a degree)"."""
-    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()
-                and c.get("context") in CLASHES]
+    every = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    projects = [c for c in every if c.get("context") in CLASHES]
     out = []
     for sentence in check.sentences(draft):
-        named = [c for c in projects if names_tool(sentence, c["name"])]
+        named = [c for c in projects if names_card(sentence, c, every)]
         if len(named) != 1:
             continue
         card = named[0]

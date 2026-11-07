@@ -173,6 +173,11 @@ What changed in each version, in plain words.
   of yours tied to one thing about the employer, rewrites a sentence that repeats the advert or the
   company's description once, and lists it under **Check before sending** if it still does. Naming the
   role or the company is fine.
+- **Better guesses of where each project was done.** Hal called a team project on a CV ("7 developers")
+  a personal project, gave no answer for a project named with a module code, and called a project that
+  builds on a dissertation in your own time part of your degree. It now reads team, course and own-time
+  words before the kind of file. A draft that calls a project by a shorter name, its folder's name or a
+  hidden copy's name is now checked against where it was done too.
 - **The company check finds the right company.** It listed any company with the employer's name, such as a
   solar firm, a fungicide and a closed company for a lender, and a Wikipedia page listing everything of
   that name. Hal now shows a Wikipedia article only when it links to the employer's website or is about

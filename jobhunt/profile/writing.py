@@ -26,6 +26,11 @@ Design decisions, each with its reason:
   personal project degree work (2026-11-06) and a team project a personal one (2026-11-07). Another card
   names its context only when it is not its kind's own (a job done as part of a degree). A record passage
   from a project card's file says the card's context on its "(Kind: ...)" line (`passage_contexts`).
+- A project card carries the other names a draft may call it by (`aliases`): the names of hidden cards
+  resting on one of its project files, its repository's or folder's name and the end of its link. A letter
+  placed a personal project in a degree under a hidden copy's shorter name, and the check, reading only the
+  card's own name, missed it (2026-11-07). A CV names every project, so only a file of one project ties
+  two cards together.
 - The block is cut at a whole line when it reaches `limit`, kind by kind in `KIND_ORDER`, so the basics and
   jobs are the last to go.
 """
@@ -231,17 +236,57 @@ def with_record(queries: list[str]) -> str:
     return "\n\n".join(p for p in (block(queries), with_contexts(record.context(queries), by_file)) if p)
 
 
+# File names that name no project: a repository's note is named after its folder, but these are not.
+GENERIC_FILES = {"readme", "index", "notes", "main", "untitled", "project", "code", "src", "app", "cv"}
+ALIAS_MIN = 3              # a file name this short ("ui", "v2") names no project
+# Document types that hold one project: `writing.stage` PERSONAL_TYPES and DEGREE_TYPES, written out because
+# `stage` is still loading when the profile package is.
+PROJECT_FILES = ("repository", "project", "coursework", "dissertation")
+FOLDER_DEPTH = 4           # "Sources/<category>/<folder>/<file>": a file inside a project's own folder
+
+
+def _file_name(source_rel: str) -> str:
+    """The name a project's file goes by: its note's name, or its folder's when the note is a README inside
+    one ("Sources/Code/<repository>/README.md"); "" when it names no project."""
+    parts = [p for p in source_rel.replace("\\", "/").split("/") if p]
+    stems = [p.rsplit(".", 1)[0] if "." in p else p for p in parts[-1:]]
+    if len(parts) >= FOLDER_DEPTH:
+        stems.append(parts[-2])
+    return next((s for s in stems if s.lower() not in GENERIC_FILES and len(s) >= ALIAS_MIN), "")
+
+
+def aliases(item: dict, hidden: list[dict]) -> list[str]:
+    """The other names a project card goes by: the names of hidden project cards (`hidden`) resting on one of
+    its project files, the name of its repository or project file, and the last part of its link.
+
+    Only a file of one project (`PROJECT_FILES`) ties two cards together: a CV names every project.
+    """
+    def files(it: dict) -> set[str]:
+        return {e["source_rel"] for e in it["evidence"] if e["doc_type"] in PROJECT_FILES}
+
+    own = files(item)
+    found = [h["fields"].get("name", "") for h in hidden if own & files(h)]
+    found += [_file_name(e["source_rel"]) for e in item["evidence"] if e["doc_type"] in stage.PERSONAL_TYPES]
+    link = str(item["fields"].get("link") or "").rstrip("/")
+    if link:
+        found.append(_file_name(link.rsplit("/", 1)[-1]))
+    name = item["fields"].get("name", "").lower()
+    return [a for a in dict.fromkeys(a.strip() for a in found) if a and a.lower() != name]
+
+
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
-    tools, summary, context}.
+    tools, summary, context, aliases}.
 
     All of them, never ranked or cut like the Profile block: a project listing AWS was cut from the block,
-    and the fit table said there was no evidence of AWS (2026-11-06). Hal's own database unless `con`.
+    and the fit table said there was no evidence of AWS (2026-11-06). A project's `aliases` are the other
+    names a draft may call it by (`aliases`). Hal's own database unless `con`.
     """
     if con is None:
         with closing(db.connect()) as own:
             return cards(own)
     worked_for = employers(con)
+    hidden = [it for it in store.items(con, "project") if it["state"] == "hidden"]
     out = []
     for kind in CARD_KINDS:
         for it in store.items(con, kind, hidden=False):
@@ -252,7 +297,7 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                 said = stage.CONTEXT_WORDS.get(context, "")
                 out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),
                             "tools": list(f.get("tools") or []), "summary": f.get("summary") or "",
-                            "context": context})
+                            "context": context, "aliases": aliases(it, hidden)})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
                             "tools": [], "summary": "; ".join(f.get("duties") or []), "context": context})

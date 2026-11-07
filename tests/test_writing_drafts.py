@@ -76,6 +76,21 @@ class Contexts(unittest.TestCase):
                                  "Harbour survey was personal work. (Harbour survey is degree work, not a "
                                  "personal project)"])
 
+    def test_a_project_is_caught_under_its_other_names(self):
+        # "During my degree, I built a real-time autopilot for the LIDAR Autonavigation project" of a personal
+        # project whose card is named "LIDAR Autonomous Navigation" (2026-11-07)
+        cards = [*PLACED, {"kind": "project (personal project)", "name": "LIDAR Autonomous Navigation",
+                           "tools": [], "summary": "", "context": "personal", "aliases": ["lidar-autonav"]},
+                 {"kind": "project (personal project)", "name": "Kelp counter", "tools": [], "summary": "",
+                  "context": "personal", "aliases": ["Seaweed tally"]}]
+        for said in ("During my degree, I built a real-time autopilot for the LIDAR Autonavigation project.",
+                     "My degree included the lidar autonav repository.",
+                     "Seaweed tally was coursework for my degree."):
+            with self.subTest(said):
+                self.assertEqual(len(drafts.wrong_context(said, cards)), 1)
+        self.assertEqual(drafts.wrong_context("My degree taught me about LIDAR.", cards), [],
+                         "a word of the name used as a plain word names no project")
+
     def test_words_that_agree_or_say_nothing_of_where_it_was_done_are_left_alone(self):
         for said in ("Alongside my degree, I built Tide gauge in my own time.",
                      "Tide gauge loads a Lua module and keeps personal data out of its logs.",

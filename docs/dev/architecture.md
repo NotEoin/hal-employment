@@ -428,8 +428,8 @@ runs: tests use `tests/support/fake_claude/`.
   office days for a person happy in an office), also when the requirement names their own town and the
   advert's location names none.
 - The fit map (`pack._fit`) also gets every project and job card the person checked
-  (`profile.writing.cards`, each with its kind, tools and summary), never ranked or cut like the Profile
-  block. `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that names a
+  (`profile.writing.cards`, each with its kind, tools, summary and other names), never ranked or cut like
+  the Profile block. `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that names a
   card's tool into a partial match citing the card (`project (personal project): Tide gauge (tools: AWS)`).
 - Checks with no AI on finished drafts (`writing/drafts.py`): a letter or message whose last line is a
   sentence with no closing punctuation is asked for once more with room to finish (`pack.CUT_NOTE`, a
@@ -442,8 +442,12 @@ runs: tests use `tests/support/fake_claude/`.
   `wrong_context` does the same for a sentence that names one project card with degree words ("degree",
   "university", "coursework", "dissertation", "my studies", "my research", module work) or own-time words
   ("personal project", "own time", "side project", "hobby") that disagree with the card's context; a
-  sentence that also says words agreeing with it is left alone. Both go into the one rewrite per draft that
-  `pack.fix_claims` asks for, and what is left is listed.
+  sentence that also says words agreeing with it is left alone. A sentence names a card
+  (`drafts.names_card`) by its name, by one of its `aliases` (`profile.writing.aliases`: the names of hidden
+  project cards resting on one of its project files, its repository's or folder's name, the end of its
+  link), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
+  ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). Both go into the one rewrite per
+  draft that `pack.fix_claims` asks for, and what is left is listed.
 - `drafts.echoes(sentence, advert, brief, names)` finds a sentence that restates the employer: at least
   `ECHO_SHARE` (half) of its own words sit in runs of `ECHO_RUN` (three) words found in the advert or the
   brief, with little words and the words of the job title and employer's name (`names`) never counted, and
@@ -549,9 +553,13 @@ runs: tests use `tests/support/fake_claude/`.
   requests carry (CV suggestions get `today` and `stage` in their JSON). `ended_course(text, stage)` finds,
   with no AI, the sentences of a draft that speak of finishing a course that has ended, and
   `pack.unsupported_claims` adds them to the claims a draft is rewritten without. `project_kind` names a
-  project "degree work" (coursework or dissertation evidence, a module code, a `Sources/Coursework/` file),
-  "at work" (a placement, or the employer of a checked job named in it) or "personal project" (a repository
-  or project with neither), plus "team project". `context_of` turns that into one of `CONTEXTS` (degree,
+  project "personal project" when its words say own time ("own time", "side project", "personal project",
+  "extends my dissertation"), else "degree work" (coursework or dissertation evidence, degree words such as
+  "assignment", "practical 3" or "submitted for", a module code, also one joined to a word as in
+  "IMAG2031blog", a `Sources/Coursework/` file), else "at work" (a placement, or the employer of a checked job
+  named in it), else "personal project" for a repository or project file, plus "team project" ("team
+  project", "group project", "team of 7", "7 developers", or a university named with a team word in one
+  quote). `context_of` turns that into one of `CONTEXTS` (degree,
   team, work, personal): work first, then a team's (a university team project), then degree work. A card's
   context (`profile.contexts`, below) is said in the Profile block (`Project (degree work): ...`) and on the
   `(Kind: ...)` line of the record passages from its files, in `CONTEXT_WORDS`, and the letter, answers,

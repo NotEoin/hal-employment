@@ -52,6 +52,28 @@ class Contexts(unittest.TestCase):
         self.assertEqual(shown[own]["context_by"], "hal")
         self.assertEqual(contexts.refresh(self.con), 0, "a second pass with nothing new changes nothing")
 
+    def test_a_card_reads_where_it_was_done_from_its_own_words(self):
+        # three cards guessed wrong where their own words said it (2026-11-07)
+        team = self.project("Ferryapp", "Sources/CVs and letters/CV.md", "cv",
+                            "Back-end developer, 7 developers, Ferryapp, Wexley University")
+        degree = self.project("IMAG2031blog", "Sources/Code/IMAG2031blog.md", "repository")
+        own = self.project("Tide gauge", "Sources/Code/Tide gauge.md", "repository",
+                           "Tide gauge builds on my dissertation, in my own time.")
+        self.assertEqual([contexts.found(store.item(self.con, i), []) for i in (team, degree, own)],
+                         ["team", "degree", "personal"])
+
+    def test_a_project_card_carries_the_other_names_a_draft_may_use(self):
+        # a letter called a personal project by a hidden copy's name and was not caught (2026-11-07)
+        self.project("LIDAR Autonomous Navigation", "Sources/Code/lidar-autonav.md", "repository")
+        copy = store.add_found(self.con, "project", {"name": "LIDAR Autonavigation"},
+                               ev("Sources/Code/lidar-autonav.md", "repository", "LIDAR Autonavigation"))
+        store.hide(self.con, copy)
+        other = store.add_found(self.con, "project", {"name": "Lamp list"}, ev("Sources/CVs and letters/CV.md", "cv"))
+        store.hide(self.con, other)
+        shown = next(c for c in writing.cards(self.con) if c["name"] == "LIDAR Autonomous Navigation")
+        self.assertEqual(shown["aliases"], ["LIDAR Autonavigation", "lidar-autonav"])
+        self.assertEqual(set(writing.PROJECT_FILES), {*stage.PERSONAL_TYPES, *stage.DEGREE_TYPES})
+
     def test_a_context_the_person_chose_is_never_changed_by_hal(self):
         own = self.project("Tide gauge", "Sources/Code/Tide gauge.md", "repository")
         chosen = contexts.set_context(self.con, own, "degree")
