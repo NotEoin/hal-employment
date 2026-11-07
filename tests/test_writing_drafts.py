@@ -44,6 +44,18 @@ class Tools(unittest.TestCase):
         self.assertEqual(drafts.misplaced_tools("Tide gauge and Harbour survey used Lua and C++.", CARDS,
                                                 ["Lua", "C++"]), [])
 
+    def test_a_tool_is_taken_out_of_the_list_it_stands_in(self):
+        self.assertEqual(drafts.without_tools("Tide gauge uses Lua, Pandas and SQL.", ["Pandas"]),
+                         "Tide gauge uses Lua and SQL.")
+        self.assertEqual(drafts.without_tools("Pandas, Lua, and SQL", ["Pandas", "SQL"]), "Lua")
+        self.assertEqual(drafts.without_tools("Tide gauge (tools: Pandas)", ["Pandas"]), "Tide gauge")
+
+    def test_a_tool_is_backed_by_the_cards_own_facts_or_a_cv_line_naming_both(self):
+        self.assertTrue(drafts.backed("Lua", CARDS[:1]))
+        self.assertFalse(drafts.backed("C++", CARDS[:1]))
+        self.assertTrue(drafts.backed("C++", CARDS[:1], "Project, Tide gauge (Lua, C++): logs tides."))
+        self.assertFalse(drafts.backed("C++", CARDS[:1], "Skills: C++\nProject, Tide gauge (Lua): logs tides."))
+
     def test_short_tools_match_only_in_their_capitals(self):
         self.assertTrue(drafts.names_tool("Written in R and C#", "R"))
         self.assertFalse(drafts.names_tool("a r value", "R"))

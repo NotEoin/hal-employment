@@ -183,6 +183,10 @@ What changed in each version, in plain words.
   introduced is now checked against your CV, the facts you checked and your own documents that name that
   module. It is rewritten once when none of them say it, and listed under **Check before sending** if it is
   still there.
+- **The fit table's evidence is checked too.** A row said two of your projects used Pandas, Scikit-learn
+  and Matplotlib when neither project lists them. A tool the fit table gives to a project whose own facts
+  (or your CV's line about it) never name it is now taken out of the row; a row left with no evidence is
+  listed as a gap, and one that lost some is no longer rated strong.
 - **The company check finds the right company.** It listed any company with the employer's name, such as a
   solar firm, a fungicide and a closed company for a lender, and a Wikipedia page listing everything of
   that name. Hal now shows a Wikipedia article only when it links to the employer's website or is about

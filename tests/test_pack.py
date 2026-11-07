@@ -492,6 +492,44 @@ class Fit(unittest.TestCase):
         self.assertIn("Gaps to address or accept: Spreadsheets\n", fit)
 
 
+class ToolsWriter(FakeWriter):
+    """A fake writer whose fit map gives two projects tools neither card lists, as a real one did (2026-11-07)."""
+
+    def reply(self, system: str, user: str) -> object:
+        if prompt_id(system) == "fit":
+            return {"matches": [
+                {"requirement": "Python data libraries",
+                 "evidence": "Tide gauge and Ferry planner use Pandas, Scikit-learn and Matplotlib.",
+                 "strength": "strong"},
+                {"requirement": "Data cleaning", "evidence": "Tide gauge cleans sensor logs with Lua and Pandas.",
+                 "strength": "strong"},
+                {"requirement": "Writing reports", "evidence": "a made-up report", "strength": "strong"}],
+                "gaps": ["Spreadsheets"], "eligible": True, "eligibility_notes": ""}
+        return super().reply(system, user)
+
+
+class FitTools(unittest.TestCase):
+    def test_a_tool_a_fit_row_gives_to_a_project_that_never_used_it_is_taken_out(self):
+        # a fit row said two projects used Pandas, Scikit-learn and Matplotlib; no source had either using them
+        # (2026-11-07)
+        from jobhunt.profile import store
+
+        with as_applicant(people.TECHNICAL, ToolsWriter()) as a:
+            ev = {"source_rel": "Sources/Code/Tide gauge.md", "quote": "", "field": "", "doc_type": "repository"}
+            store.confirm(a.con, store.add_found(a.con, "project", {"name": "Tide gauge", "tools": ["Lua"]}, ev))
+            store.confirm(a.con, store.add_found(a.con, "project", {"name": "Ferry planner", "tools": ["Go"]},
+                                                 {**ev, "source_rel": "Sources/Code/Ferry planner.md"}))
+            for skill in ("Pandas", "Scikit-learn", "Matplotlib"):
+                store.confirm(a.con, store.add_found(a.con, "skill", {"name": skill}, {**ev, "source_rel": "cv.md"}))
+            job = add_job(a.con, "technical_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        fit = section(md, "Fit")
+        self.assertNotIn("| Python data libraries |", fit)
+        self.assertIn("| Data cleaning | Tide gauge cleans sensor logs with Lua. | partial |", fit)
+        self.assertIn("| Writing reports | a made-up report | strong |", fit)
+        self.assertIn("Gaps to address or accept: Spreadsheets; Python data libraries\n", fit)
+
+
 class TableWriter(FakeWriter):
     """A fake writer whose fit map leaves out a must-have, rates a row with no evidence partial, and calls
     office days in the person's town partial, as a real model replied (2026-11-07); asked again for the

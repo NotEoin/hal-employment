@@ -126,6 +126,32 @@ def misplaced_tools(draft: str, cards: list[dict], known: list[str]) -> list[str
     return out
 
 
+def backed(tool: str, named: list[dict], facts: str = "") -> bool:
+    """True when one of the `named` project cards names `tool` in its own facts (names, summary, tools), or a
+    line of `facts` (the CV) names the card and the tool together."""
+    lines = (facts or "").splitlines()
+    for card in named:
+        if names_tool(" ".join([*card_names(card), card["summary"], *card["tools"]]), tool):
+            return True
+        if any(names_tool(line, tool) and any(names_tool(line, n) for n in card_names(card)) for line in lines):
+            return True
+    return False
+
+
+def without_tools(text: str, tools: list[str]) -> str:
+    """`text` with each of `tools` taken out of the list it stands in: "Lua, Pandas and SQL" without Pandas is
+    "Lua and SQL"."""
+    for tool in tools:
+        word = rf"(?<![\w+#]){re.escape(tool)}(?![\w+#])"
+        flags = 0 if len(tool.strip()) <= SHORT_TOOL else re.I
+        text = re.sub(rf"\s*,\s*{word}|{word}\s*,\s*|\s+(and|or|&)\s+{word}|{word}\s+(and|or|&)\s+|{word}", "", text,
+                      flags=flags)
+    text = re.sub(r",\s+(and|or)\s+", r" \1 ", text)
+    text = re.sub(r",(?=\s*([.;:)]|$))", "", text)
+    text = re.sub(r"\(\s*(tools:\s*)?\)", "", text)
+    return re.sub(r"\s+([.,;:)])", r"\1", " ".join(text.split()))
+
+
 # Words a sentence uses to place a project in a degree, in the person's own time, or at work.
 SAID_DEGREE = re.compile(r"\b(degree(?! of)|university|coursework|dissertation|my studies|(my|our) research|"
                          r"research project|(as|for|in) (a|my|the|one) module|module (work|assignment|project))\b",

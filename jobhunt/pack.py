@@ -207,7 +207,13 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
             + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept), role="main"), cards)
 
     fit = complete_fit(ask(_requirements(analysis)), analysis.get("must_have") or [], ask)
-    return consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
+    fit = consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
+    return checked_fit_tools(fit, cards, known_tools(cards), facts)
+
+
+def known_tools(cards: list[dict]) -> list[str]:
+    """Every tool a checked card or skill names: what a draft or fit row may wrongly give to a project."""
+    return [t for c in cards for t in c["tools"]] + profile_writing.skill_names()
 
 
 NO_EVIDENCE = re.compile(r"^\s*(no|none|not)\b|\bno (evidence|mention)\b", re.I)   # a fit row that found nothing
@@ -262,6 +268,40 @@ def consistent_fit(fit: dict, you, towns: list[str], facts: str) -> dict:
             matches.append({"requirement": str(gap), "evidence": reason, "strength": "strong"})
         else:
             gaps.append(gap)
+    return {**fit, "matches": matches, "gaps": gaps}
+
+
+def checked_fit_tools(fit: dict, cards: list[dict], known: list[str], facts: str) -> dict:
+    """The fit map with every tool a row gives to a project card that never used it taken out of the row.
+
+    Each part of a row's evidence (a sentence or a ";" clause) that names project cards is read as
+    `drafts.misplaced_tools` reads a draft: a tool from `known` that none of the named cards' own facts, nor a
+    CV line naming the card, names (`drafts.backed`) is taken out (`drafts.without_tools`), and a part left
+    with no tool is dropped. A row that lost evidence is partial at best, and one left with none is a gap. A
+    fit row said two projects used Pandas, Scikit-learn and Matplotlib when no source had either using them
+    (2026-11-07).
+    """
+    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    matches, gaps = [], list(fit.get("gaps") or [])
+    for m in (dict(m) for m in fit.get("matches") or [] if isinstance(m, dict)):
+        parts, dropped = [], False
+        for part in re.split(r"(?<=[.;])\s+", str(m.get("evidence") or "")):
+            named = [c for c in projects if drafts.names_card(part, c, projects)]
+            wrong = [t for t in dict.fromkeys(known) if named and drafts.names_tool(part, t)
+                     and not drafts.backed(t, named, facts)]
+            if wrong:
+                dropped = True
+                part = drafts.without_tools(part, wrong)
+                if not any(drafts.names_tool(part, t) for t in known):
+                    continue
+            parts.append(part)
+        if not dropped:
+            matches.append(m)
+        elif parts:
+            matches.append({**m, "evidence": " ".join(parts),
+                            "strength": "partial" if m.get("strength") == "strong" else m.get("strength")})
+        else:
+            gaps.append(str(m.get("requirement") or ""))
     return {**fit, "matches": matches, "gaps": gaps}
 
 
@@ -402,7 +442,7 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     found = llm.chat_json(prompt("verify", who), request, role="main").get("unsupported", [])
     claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
     claims = [c for c in claims if not drafts.stated_in(c, facts)]
-    known = [t for c in cards for t in c["tools"]] + profile_writing.skill_names()
+    known = known_tools(cards)
     return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
         + taught.unsupported(written, profile_writing.module_names(), (facts, kept))
