@@ -1,8 +1,9 @@
 """The "This computer" backend: Ollama's HTTP API on `ai.ollama_url`.
 
 From the old `llm.chat`: `think` is off, and a JSON request asks for `format: "json"` at temperature 0.1
-(extraction wants determinism; prose keeps the model's own settings). `num_ctx` is sent only when a caller
-asks for a wider window. Nothing leaves this computer, so `online` is false and the GPU gate applies.
+(extraction wants determinism; prose keeps the model's own settings unless the request names a temperature).
+`num_ctx` is sent only when a caller asks for a wider window. Nothing leaves this computer, so `online` is
+false and the GPU gate applies.
 """
 from __future__ import annotations
 
@@ -59,6 +60,8 @@ class OllamaBackend:
         if req.json_out:
             payload["format"] = "json"
             payload["options"] = {"temperature": JSON_TEMPERATURE}
+        if req.temperature is not None:
+            payload["options"] = {**payload.get("options", {}), "temperature": req.temperature}
         if req.ctx:
             payload["options"] = {**payload.get("options", {}), "num_ctx": req.ctx}
         start = time.monotonic()

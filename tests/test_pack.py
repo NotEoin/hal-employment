@@ -113,7 +113,8 @@ class FakeWriter:
     def chat(self, system: str, user: str, **kw) -> str:
         out = self.reply(system, user)
         text = out if isinstance(out, str) else json.dumps(out)
-        self.log.append({"id": prompt_id(system), "system": system, "user": user, "reply": text})
+        self.log.append({"id": prompt_id(system), "system": system, "user": user, "reply": text,
+                         "temperature": kw.get("temperature")})
         return text
 
     def chat_json(self, system: str, user: str, **kw) -> dict:
@@ -458,16 +459,19 @@ CITED = "My dissertation was on river trade in an invented port town [E1]. I wou
 
 
 class MarkedWriter(FakeWriter):
-    """A fake writer that cites the evidence plan as the prompts ask; `first` is the letter's first draft."""
+    """A fake writer that cites the evidence plan as the prompts ask; `first` is each letter's first draft, or
+    the drafts in turn when it is a list."""
 
-    def __init__(self, first: str = CITED):
+    def __init__(self, first: str | list[str] = CITED):
         super().__init__(plan=PICKS)
         self.first = first
 
     def reply(self, system: str, user: str) -> object:
         pid = prompt_id(system)
         if pid == "letter":
-            return CITED if "Your draft:" in user else self.first
+            if "Your draft:" in user:
+                return CITED
+            return self.first.pop(0) if isinstance(self.first, list) else self.first
         if pid == "message":
             return "Hello,\n\nI guided visitors at a made-up heritage centre [E2]. What does the team catalogue [M]?"
         if pid == "answers":
@@ -503,8 +507,10 @@ class Cited(unittest.TestCase):
             job = add_job(a.con, "humanities_grad")
             written = pack.write_letter(a.con, job)
         fixes = writer.asked("sentence_fix")
-        self.assertEqual(len(writer.asked("letter")), 1, "only the sentence is rewritten, never the letter")
-        self.assertEqual(len(fixes), 1)
+        letters = writer.asked("letter")
+        self.assertEqual(len(letters), 2, "the first needed a rewrite, so a second is drafted; neither is rewritten")
+        self.assertNotIn("Your draft:", letters[1]["user"], "the second is drafted afresh")
+        self.assertEqual(len(fixes), 2, "one sentence rewrite in each draft")
         self.assertIn(f"Sentence: I kept every visitor record local and secure.\nWhat is wrong: {cites.NO_EVIDENCE}",
                       fixes[0]["user"])
         self.assertEqual(written["text"], cites.strip(CITED), "the rewrite found nothing true to say, so it is cut")
@@ -535,8 +541,43 @@ class Cited(unittest.TestCase):
                                             "exhibition. (its evidence does not say: \"for the centre's new "
                                             "exhibition\")"])
         checked = writer.asked("sentence_check")
-        self.assertEqual(len(checked), 1, "the sentence restating its evidence needs no call")
+        self.assertEqual(len(checked), 2, "one call in each of the two drafts; restating its evidence needs none")
         self.assertNotIn("Dissertation", checked[0]["user"], "a sentence sees only the evidence it cites")
+
+    def test_of_two_letters_the_one_with_fewer_sentences_still_failing_is_kept(self):
+        writer = MarkedWriter(first=["I led every tour of the heritage centre [E7].", CITED])
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(len(writer.asked("letter")), 2)
+        self.assertEqual((written["text"], written["flags"]), (cites.strip(CITED), []))
+
+    def test_of_two_letters_as_good_as_each_other_the_first_is_kept(self):
+        writer = MarkedWriter(first=["I led every tour of the heritage centre [E7].", "I ran the shop [E8]."])
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(written["text"], "I led every tour of the heritage centre.")
+
+    def test_a_pack_with_a_letter_needing_no_rewrite_makes_these_calls(self):
+        # the count a local model at about 200 tokens a second answers in a few minutes (2026-11-07); a letter
+        # needing a rewrite adds one letter, and each sentence checked adds one call
+        writer = MarkedWriter()
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            pack.build(a.con, job["id"], use_web=False)
+        counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
+        self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "letter": 1, "message": 1,
+                                  "sentence_check": 2, "answers": 1})
+
+    def test_the_letter_and_message_are_drafted_cooler_than_other_prose(self):
+        writer = MarkedWriter()
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            pack.build(a.con, job["id"], use_web=False)
+        self.assertEqual({e["id"]: e["temperature"] for e in writer.log if e["id"] in ("letter", "message", "brief")},
+                         {"letter": pack.DRAFT_TEMPERATURE, "message": pack.DRAFT_TEMPERATURE, "brief": None})
+        self.assertLess(pack.DRAFT_TEMPERATURE, 0.7)
 
     def test_a_sentence_citing_evidence_the_plan_does_not_hold_is_listed_when_it_stays(self):
         stubborn = "I led every tour of the heritage centre [E7]."

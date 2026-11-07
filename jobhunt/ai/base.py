@@ -38,6 +38,7 @@ class ChatRequest:
     purpose: str = ""                   # the prompt id, e.g. "letter"
     priority: int | None = None         # default: the current action's priority, else 2
     job_id: str | None = None
+    temperature: float | None = None    # default: the backend's own (low for JSON); the Claude CLI takes none
 
 
 @dataclass(frozen=True)

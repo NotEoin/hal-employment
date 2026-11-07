@@ -29,9 +29,10 @@ def __getattr__(name):  # old constant, read live (PEP 562)
 
 
 def chat(system: str, user: str, *, role: str = "main", json_out: bool = False, timeout: float = OLD_TIMEOUT_S,
-         ctx: int | None = None) -> str:
-    """Asks the AI; `ctx` widens a local model's context window, in tokens, for long material."""
-    return ai.chat(system, user, role=role, json_out=json_out, timeout=timeout, ctx=ctx)
+         ctx: int | None = None, temperature: float | None = None) -> str:
+    """Asks the AI; `ctx` widens a local model's context window, in tokens, for long material, and
+    `temperature` replaces the backend's own for this request."""
+    return ai.chat(system, user, role=role, json_out=json_out, timeout=timeout, ctx=ctx, temperature=temperature)
 
 
 def chat_json(system: str, user: str, **kw) -> dict:

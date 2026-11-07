@@ -209,6 +209,14 @@ class Servers(unittest.TestCase):
         self.assertTrue(be.status().ready)
         self.assertEqual(be.embed(["a", "b"], "made-up-embed"), [[0.1, 0.2], [0.1, 0.2]])
 
+    def test_a_request_that_names_a_temperature_is_sent_at_it(self):
+        OllamaBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5, temperature=0.4), "big:30b")
+        OpenAICompatBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5, temperature=0.4), "m")
+        OpenAICompatBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "m")
+        bodies = [b for _, b in _Handler.seen]
+        self.assertEqual(bodies[0]["options"], {"temperature": 0.4})
+        self.assertEqual([b["temperature"] for b in bodies[1:]], [0.4, 0.7], "other prose keeps 0.7")
+
     def test_a_stopped_ollama_is_reported_in_words(self):
         status = OllamaBackend("http://127.0.0.1:9").status()
         self.assertFalse(status.ready)

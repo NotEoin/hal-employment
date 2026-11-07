@@ -81,7 +81,8 @@ class OpenAICompatBackend:
 
     def chat(self, req: ChatRequest, model: str) -> ChatResult:
         """Asks `model` through /chat/completions."""
-        payload: dict = {"model": model, "temperature": JSON_TEMPERATURE if req.json_out else PROSE_TEMPERATURE,
+        default = JSON_TEMPERATURE if req.json_out else PROSE_TEMPERATURE
+        payload: dict = {"model": model, "temperature": default if req.temperature is None else req.temperature,
                          "messages": [{"role": "system", "content": req.system}, {"role": "user", "content": req.user}]}
         if req.json_out:
             payload["response_format"] = {"type": "json_object"}

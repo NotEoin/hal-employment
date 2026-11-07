@@ -305,7 +305,9 @@ down gateway is an error in words, never a call to Claude. Local calls also hold
 `gpu_light` client is installed; the gateway makes its own claims, so `hal` never claims twice. `ai.provider` is stored once, at the first server start or first AI call, and
 never changes by itself, because which AI sees the person's data is their choice. In a test run the
 backend is a made-up AI that is never ready. One classifier, `autofill.private_question(field)`, keeps
-private questions out of every AI request.
+private questions out of every AI request. A request's `temperature` (`ChatRequest.temperature`, through
+`ai.chat` and `llm.chat`) replaces the backend's own: 0.1 for JSON and 0.7 for prose on a local server,
+the model's own prose setting on Ollama; the Claude CLI takes none.
 
 ### Claude Code (`ai/claude_setup.py`)
 
@@ -546,7 +548,11 @@ runs: tests use `tests/support/fake_claude/`.
   exactly and one of the advert's own web addresses (`hosts`) is on its company page. Anything else reads
   "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
-  drafted at form time and the writing actions. The pack's `## Letter notes` section says Tone, Length,
+  drafted at form time and the writing actions. The letter and the message are drafted at
+  `pack.DRAFT_TEMPERATURE` (0.4), cooler than other prose. When the first letter's sentence checks needed a
+  rewrite, a second is drafted on its own (`pack.LETTER_DRAFTS`, 2), and the one with fewer sentences still
+  failing is kept, then the one with fewer rewrites, then the first (`grounded.Grounded.key`); a draft with
+  no markers is never drafted twice. The message and the answers are drafted once. The pack's `## Letter notes` section says Tone, Length,
   Evidence and Checked; the application page reads them back.
 - The advert reading keeps only the questions the advert writes out, so a model's own note about questions
   is never answered. When the advert states no requirement, its main duties stand in, so the fit map is

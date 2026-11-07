@@ -90,6 +90,12 @@ class Grounded:
     failed: list[str] = field(default_factory=list)
     rewrites: int = 0
     removed: int = 0
+    marked: bool = True        # False for a draft with no markers, checked whole instead
+
+    def key(self) -> tuple[bool, int, int]:
+        """How a draft ranks against another of the same document, lowest best: marked first, then fewer
+        sentences still failing, then fewer rewrites."""
+        return (not self.marked, len(self.failed), self.rewrites)
 
 
 def numbers(text: str) -> set[str]:

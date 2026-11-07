@@ -113,6 +113,16 @@ REVISED = "Hal revised it once for its writing rules. "   # before the Checked l
 SOFTENED = "Hal rewrote it once to take out claims your facts do not support. "   # ... when it made such claims
 CUT_NOTE = "Your last reply stopped mid-sentence. Write the whole draft again, and end it with a full sentence."
 ROOM_CTX = 16384          # tokens for the second ask after a cut-off reply, as for the CV score and critique
+# The letter and the message are drafted cooler than other prose (0.7, `ai.openai_compat.PROSE_TEMPERATURE`): at
+# 0.7 a local model added plausible details to fit the advert in every graded run (2026-11-07), and 0.4 still
+# leaves two drafts of one letter different enough to be worth comparing (`LETTER_DRAFTS`). The Claude CLI
+# takes no temperature, so there it changes nothing.
+DRAFT_TEMPERATURE = 0.4
+# Letters drafted independently, the one with the fewest sentences still failing kept (`write_letter`); the
+# second is skipped when the first needed no rewrite, as it could only tie. Two keep a pack within a few
+# minutes on a local model: each draft adds one call and a call per sentence checked (`tests/test_pack.py`
+# counts them).
+LETTER_DRAFTS = 2
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
 ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its rewrite
@@ -392,11 +402,11 @@ def spelt(text: str, who: dict) -> str:
 
 
 def _draft(who: dict, prompt_id: str, user: str, trimmed: set[str]) -> str:
-    """A text draft (letter or message), asked for again once with more room when the reply stops
-    mid-sentence (`drafts.cut_off`); when that one stops too it is kept to its last full sentence and added
-    to `trimmed`, so "Check before sending" can say so if it is the draft that is kept."""
+    """A text draft (letter or message) at `DRAFT_TEMPERATURE`, asked for again once with more room when the
+    reply stops mid-sentence (`drafts.cut_off`); when that one stops too it is kept to its last full sentence
+    and added to `trimmed`, so "Check before sending" can say so if it is the draft that is kept."""
     def ask(text: str, ctx: int | None = None) -> str:
-        said = llm.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx).strip()
+        said = llm.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx, temperature=DRAFT_TEMPERATURE).strip()
         return cites.normalise(spelt(drop_notes(llm.undash(said)), who))
 
     draft = ask(user)
@@ -535,14 +545,14 @@ def grounds(who: dict, plan: list[planning.Item], *, facts: str, kept: str,
 
 
 def settle(who: dict, draft: str, rewrite, *, plan: list[planning.Item], essential: grounded.Essential, facts: str,
-           kept: str, employer: tuple[str, ...]) -> tuple[str, list[str], bool]:
-    """A letter or message checked for what it says about the person: (draft, what is still wrong, whether it
-    was changed). One that cites the evidence `plan` is checked sentence by sentence (`grounded.ground`); one
-    with no markers is checked whole and rewritten once (`fix_claims`)."""
+           kept: str, employer: tuple[str, ...]) -> grounded.Grounded:
+    """A letter or message checked for what it says about the person: its text, what is still wrong and what
+    was done. One that cites the evidence `plan` is checked sentence by sentence (`grounded.ground`); one with
+    no markers is checked whole and rewritten once (`fix_claims`)."""
     if plan and cites.has_markers(draft):
-        done = grounded.ground(draft, grounds(who, plan, facts=facts, kept=kept, employer=employer), essential)
-        return done.text, done.failed, bool(done.rewrites or done.removed)
-    return fix_claims(who, draft, rewrite, facts=facts, kept=kept, employer=employer)
+        return grounded.ground(draft, grounds(who, plan, facts=facts, kept=kept, employer=employer), essential)
+    text, claims, again = fix_claims(who, draft, rewrite, facts=facts, kept=kept, employer=employer)
+    return grounded.Grounded(text, claims, int(again), marked=False)
 
 
 def settle_answers(who: dict, answers: list[dict], rewrite, *, plan: list[planning.Item], facts: str, kept: str,
@@ -610,7 +620,9 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
     the fit map made and the evidence plan picked (`evidence_plan`), each unless given, then the letter and its
     checks. `request` holds the person's own words when they asked for a rewrite. The letter cites the plan's
-    items (`writing.cites`); its markers are checked with its claims and taken out before it is returned.
+    items (`writing.cites`), each sentence is checked against its own (`settle`), and when the first draft
+    needed a rewrite a second is drafted and the better kept (`LETTER_DRAFTS`, `grounded.Grounded.key`); its
+    markers are taken out before it is returned.
     """
     who = who or person(job)
     facts = cv.facts_text()
@@ -623,24 +635,34 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     if request:
         text += f"\n\nThe applicant asked for this change: {request}"
     trimmed: set[str] = set()
-    letter = _letter(who, text, trimmed)
     sources = (_job_text(job), about)
-    letter, revised = revise_once(letter, _hits(who, letter, "letter", facts=facts, kept=kept, sources=sources),
-                                  lambda note: _letter(who, f"{text}\n\nYour first draft:\n{letter}\n\n{note}",
-                                                       trimmed))
     names = (job["title"], job["company"])
 
     def echoed_in(draft: str) -> list[str]:
         return drafts.echoed(drafts.first_paragraph(cites.strip(draft)), *sources, names)
 
-    letter, _ = fix_echoes(letter, echoed_in,
-                           lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed))
-    letter, claims, softened = settle(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}"
-                                                                        f"\n\n{note}", trimmed),
-                                      plan=plan, essential=grounded.only_in_paragraph, facts=facts, kept=kept,
-                                      employer=sources)
-    cut = letter in trimmed
-    letter = relocation.without_own_move(cites.strip(letter), eligibility.person(con))
+    def one_letter() -> tuple[grounded.Grounded, bool]:
+        """One letter drafted, revised for the writing rules and the advert's words, and checked: (it, revised)."""
+        letter = _letter(who, text, trimmed)
+        letter, revised = revise_once(letter, _hits(who, letter, "letter", facts=facts, kept=kept, sources=sources),
+                                      lambda note: _letter(who, f"{text}\n\nYour first draft:\n{letter}\n\n{note}",
+                                                           trimmed))
+        letter, _ = fix_echoes(letter, echoed_in,
+                               lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed))
+        return settle(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed),
+                      plan=plan, essential=grounded.only_in_paragraph, facts=facts, kept=kept,
+                      employer=sources), revised
+
+    best, revised = one_letter()
+    for _ in range(LETTER_DRAFTS - 1):
+        if not best.marked or (not best.failed and not best.rewrites):
+            break
+        again, again_revised = one_letter()
+        if again.key() < best.key():
+            best, revised = again, again_revised
+    claims, softened = best.failed, bool(best.rewrites or best.removed)
+    cut = best.text in trimmed
+    letter = relocation.without_own_move(cites.strip(best.text), eligibility.person(con))
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in echoed_in(letter)]
     if cut:
@@ -744,8 +766,9 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
         return _message(who, f"{message_request}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text, trimmed)
 
     message = _message(who, message_request, analysis, job_text, trimmed)
-    message, message_claims, _ = settle(who, message, rewrite_message, plan=plan, essential=grounded.only_in_paragraph,
-                                        facts=facts, kept=kept, employer=their_words)
+    settled = settle(who, message, rewrite_message, plan=plan, essential=grounded.only_in_paragraph, facts=facts,
+                     kept=kept, employer=their_words)
+    message, message_claims = settled.text, settled.failed
     message = to_recipient(who, message, analysis, rewrite_message, job_text)
     answers, answer_claims, answer_echoes = _answers(
         who, answers_request, facts=facts, kept=kept, sources=their_words,
