@@ -672,6 +672,18 @@ class Drafts(unittest.TestCase):
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         self.assertNotIn("ELIGIBILITY", md)
 
+    def test_an_offer_to_relocate_to_your_own_town_never_reaches_a_draft(self):
+        # "happy to relocate to your London office" for a person living in London (2026-11-07)
+        offer = "I catalogued letters, and I am happy to relocate to your Made-up Town office."
+        writer = replying("message", f"Hello,\n\n{offer} Who leads the team?", writer=FakeWriter(letter=offer))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("you.city", "Made-up Town", by="you")
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertNotIn("relocate", md)
+        self.assertIn("I catalogued letters.", section(md, "Cover letter"))
+        self.assertIn("I catalogued letters. Who leads the team?", section(md, "Message to the hiring manager"))
+
     def test_office_days_in_the_town_you_live_in_are_never_a_gap(self):
         # a fit map called office attendance unmet for a person living in that city (2026-11-07)
         writer = FakeWriter()

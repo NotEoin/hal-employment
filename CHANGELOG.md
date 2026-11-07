@@ -197,6 +197,9 @@ What changed in each version, in plain words.
   years is now an **ELIGIBILITY** line only when the advert states it as a condition ("must", "required",
   "essential", "you will need", "minimum", or a list under such a heading), never when it says it would
   also consider, welcome or love to hear from people who have it.
+- **No offer to move to where you live.** A letter offered to relocate to the London office for a person
+  who lives in London. An offer to relocate or move to the town in your settings is now taken out of the
+  letter, the message and the answers.
 - **The company check finds the right company.** It listed any company with the employer's name, such as a
   solar firm, a fungicide and a closed company for a lender, and a Wikipedia page listing everything of
   that name. Hal now shows a Wikipedia article only when it links to the employer's website or is about

@@ -27,6 +27,9 @@ Design notes:
   sentences that restate the advert or the brief (`drafts.echoes`) and rewritten once to tie something of
   the applicant's own to the employer (`fix_echoes`), before the claim check reads them: 26 generic
   sentences in five real packs were the advert's words given back as a reason (2026-11-07).
+- An offer to relocate to the town the person lives in is taken out of the letter, the message and the
+  answers with no AI (`relocation.without_own_move`): a letter offered to relocate to the London office of a
+  person living in London (2026-11-07).
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -40,7 +43,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import drafts, eligibility, fields, spelling, stage, taught
+from .writing import drafts, eligibility, fields, relocation, spelling, stage, taught
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -564,6 +567,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     letter, claims, softened = fix_claims(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}"
                                                                             f"\n\n{note}", trimmed),
                                           facts=facts, kept=kept, employer=sources)
+    letter = relocation.without_own_move(letter, eligibility.person(con))
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in echoed_in(letter)]
     if letter in trimmed:
@@ -641,6 +645,9 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     answers, answer_claims, answer_echoes = _answers(
         who, answers_request, facts=facts, kept=kept, sources=their_words,
         names=(job["title"], job["company"])) if answers_request else ([], [], [])
+    you = eligibility.person()
+    message = relocation.without_own_move(message, you)
+    answers = [{**a, "answer": relocation.without_own_move(str(a.get("answer") or ""), you)} for a in answers]
     written = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
     flags = check_drafts(who, written, facts=facts, kept=kept, sources=their_words, kind="answer",
                          claims=message_claims + answer_claims)

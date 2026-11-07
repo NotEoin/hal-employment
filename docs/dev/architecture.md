@@ -482,6 +482,10 @@ runs: tests use `tests/support/fake_claude/`.
   (`unfounded_degree`). `where_you_live_settles` meets a fit row or gap, and drops a fit eligibility note, about
   the job's place when the person lives in the advert's town (settings or CV), will relocate, or is happy
   in an office.
+- `writing/relocation.py`: `without_own_move(text, person)` takes out of the letter, the message and each
+  answer, with no AI, an offer to relocate or move to a town of the person's settings (`own_places`, the
+  parts of `eligibility.Person.places`; the CV's location line comes from the same settings): the clause
+  when "and", "but" or "while" joins it to another, else its sentence. "I moved to ..." is a fact and stays.
 - The pack's company check (`reputation.check(company, advert)`, also `jobhunt check`) compares trades as
   sectors of `SIC_DIVISIONS`: the advert's are its leading ones (`advert_sectors`, at least `SECTOR_SHARE`
   of the top sector's words, whole words with a plural "s" dropped). It keeps a Wikipedia article only when
