@@ -94,7 +94,12 @@ The reason you give for wanting the job, in the letter's first paragraph and in 
 to work here?", should be your own: a sentence that only repeats the advert or what the company says about
 itself is rewritten once to link something of yours (a project, a module, an interest) to something about
 the employer, and listed if it still repeats the advert. On a
-form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**.
+form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**. When you
+ask Hal for changes, the new letter, message and answers get the same checks as the first drafts.
+
+The message to the person hiring goes to the person the advert names as your contact for the job. An
+address the advert gives only for questions about applying, or a careers or recruitment mailbox, is never
+used; with no named contact, Hal suggests a LinkedIn search for the person hiring instead.
 
 Hal tells the writer today's date and where you are: still studying or finished, from **When your course
 ends or ended** and the course you checked on Your record, and when you can start, from **When you can

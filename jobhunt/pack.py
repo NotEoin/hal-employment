@@ -80,6 +80,16 @@ CHECKLIST = ("Read every draft and correct anything that is not true", "Attach t
              "Press Submit on the employer's site yourself, then press \"I sent it myself\" if Hal has not seen it",
              "Send the message to the person hiring the same day")
 FIND_PREFIX = "find the person hiring"   # the start of the To line when the advert names nobody
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")
+# A shared mailbox for applications, never a person hiring: careers@, recruitment@, jobs@, hr@ and the like.
+PROCESS_MAILBOX = re.compile(r"^(careers?|recruit\w*|jobs?|talent\w*|hr|hiring|apply|applications?|vacanc\w*|"
+                             r"resourcing|people|graduates?|early[-_.]?careers|internships?|enquiries|info)"
+                             r"([-_.][\w.-]*)?@", re.I)
+# Words an advert uses for a contact who answers questions about applying, not about the work.
+PROCESS_WORDS = re.compile(r"\b(application process|the process|questions about applying|how to apply|questions "
+                           r"about (the|your|this|an) application|application (queries|questions|enquiries)|"
+                           r"recruitment|recruiter|careers? team|talent (team|acquisition|partner)|human resources|"
+                           r"hr|technical (issues|problems|difficulties)|reasonable adjustments)\b", re.I)
 NOTES_HEADING = "Letter notes"
 NOTE_KEYS = {"Tone": "tone", "Length": "length", "Evidence": "evidence", "Checked": "checked"}
 TONE_LABELS = {"plain": "Plain", "formal": "Formal", "warm": "Warm"}   # the setting's choices (catalog/cvdocs.py)
@@ -292,6 +302,19 @@ def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, 
             f"flexible; for a fixed intake, refer to that intake instead.\n"
             f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
             + _record_part(f"Employment record ({record.OWN_DOCUMENTS}; use it where the CV is silent)", kept))
+
+
+def read_job(job, who: dict, facts: str) -> dict:
+    """What one job's documents are written from, as `write_letter` takes it: {analysis, kept, fit}."""
+    analysis = _analyse(job, who)
+    kept = _kept(analysis)
+    return {"analysis": analysis, "kept": kept, "fit": _fit(who, analysis, facts, kept, job)}
+
+
+def shared_context(con, job, who: dict, read: dict, about: str, facts: str) -> str:
+    """The request text the letter, message and answers share (`_context`) for a `read_job` reading."""
+    return _context(job, who, read["analysis"], about, read["fit"], facts, read["kept"],
+                    previous_applications(con, job))
 
 
 def spelt(text: str, who: dict) -> str:
@@ -519,14 +542,12 @@ def echoed_answers(answers: list[dict], sources: tuple[str, ...], names: tuple[s
             for s in drafts.echoed(str(a.get("answer") or ""), *sources, names)]
 
 
-def _answers(who: dict, questions: list[str], context: str, *, facts: str, kept: str,
-             sources: tuple[str, ...], names: tuple[str, ...] = ()) -> tuple[list[dict], list[str], list[str]]:
-    """Answers to the advert's questions, revised once together when one breaks a high-severity rule, once when
-    a "why here" answer restates the advert (`echoed_answers`) and once more when they make claims the facts
-    do not support; returns (answers, the claims still unsupported, the sentences still restating the advert).
-    """
-    request = "Questions:\n" + "\n".join(f"- {q}" for q in questions) + f"\n\n{context}"
-
+def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[str, ...],
+             names: tuple[str, ...] = ()) -> tuple[list[dict], list[str], list[str]]:
+    """Answers to the questions `request` lists, revised once together when one breaks a high-severity rule,
+    once when a "why here" answer restates the advert (`echoed_answers`) and once more when they make claims
+    the facts do not support; returns (answers, the claims still unsupported, the sentences still restating
+    the advert)."""
     def ask(text: str) -> list[dict]:
         found = llm.chat_json(prompt("answers", who), text, role="writer").get("answers", [])
         return [{**a, "answer": spelt(llm.undash(a.get("answer", "")), who)} for a in found if isinstance(a, dict)]
@@ -549,6 +570,44 @@ def _message(who: dict, context: str, analysis: dict, job_text: str, trimmed: se
     return untitled(_draft(who, "message", context, trimmed), analysis, job_text)
 
 
+def answers_request(job, who: dict, analysis: dict, questions: list[str], context: str) -> str:
+    """The request for answers to `questions`: each question, the shared context and the field's conventions."""
+    return ("Questions:\n" + "\n".join(f"- {q}" for q in questions)
+            + f"\n\n{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}")
+
+
+def write_others(who: dict, job, analysis: dict, about: str, *, message_request: str, answers_request: str,
+                 facts: str, kept: str) -> dict:
+    """The message to the person hiring and the form answers, written from their requests and checked as a
+    pack checks them: {message, answers, flags}. `answers_request` "" writes no answers.
+
+    The message is asked for again when it stops mid-sentence, rewritten once without claims the facts do not
+    support (project contexts and misplaced tools included) and once to greet the person it goes to; the
+    answers are revised for the writing rules, for restating the advert and for claims (`_answers`). The pack
+    and a change the person asks for (`docs.change`) both write them here, so neither skips a check.
+    """
+    job_text = _job_text(job)
+    their_words, trimmed = (job_text, about), set()
+
+    def rewrite_message(note: str) -> str:
+        return _message(who, f"{message_request}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text, trimmed)
+
+    message = _message(who, message_request, analysis, job_text, trimmed)
+    message, message_claims, _ = fix_claims(who, message, rewrite_message, facts=facts, kept=kept,
+                                            employer=their_words)
+    message = to_recipient(who, message, analysis, rewrite_message, job_text)
+    answers, answer_claims, answer_echoes = _answers(
+        who, answers_request, facts=facts, kept=kept, sources=their_words,
+        names=(job["title"], job["company"])) if answers_request else ([], [], [])
+    written = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
+    flags = check_drafts(who, written, facts=facts, kept=kept, sources=their_words, kind="answer",
+                         claims=message_claims + answer_claims)
+    flags += [f"{ECHO_FLAG}: {s}" for s in answer_echoes]
+    if message in trimmed:
+        flags.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
+    return {"message": message, "answers": answers, "flags": flags}
+
+
 def applicant_names(who: dict) -> list[str]:
     """The names the applicant goes by in the prompts: full, first and preferred."""
     full = str(who.get("name") or "")
@@ -556,13 +615,14 @@ def applicant_names(who: dict) -> list[str]:
             if n and n != SOMEONE]
 
 
-def to_recipient(who: dict, message: str, analysis: dict, rewrite) -> str:
+def to_recipient(who: dict, message: str, analysis: dict, rewrite, advert: str = "") -> str:
     """The message greeting the person it goes to, never the applicant: rewritten once by `rewrite(note)` when
-    its greeting names the applicant, and given the recipient's greeting if it still does."""
+    its greeting names the applicant, and given the recipient's greeting (the advert's hiring contact, else
+    "Hello,") if it still does."""
     names = applicant_names(who)
     if not drafts.greets_applicant(message, names):
         return message
-    contacts = contact_names(analysis)
+    contacts = [c["name"] for c in hiring_contacts(analysis, advert)]
     greeting = f"Dear {contacts[0]}," if contacts else HELLO
     again = rewrite(GREETING_NOTE.format(greeting=greeting)) or message
     return drafts.regreet(again, greeting) if drafts.greets_applicant(again, names) else again
@@ -579,12 +639,46 @@ def _eligibility_flag(job, who: dict, fit: dict, conditions: list) -> str:
     return ""
 
 
+def _contact(c) -> dict:
+    """One contact the advert reading gave, as {name, email, role}; a bare string is a name or an address."""
+    if isinstance(c, dict):
+        text = {k: str(c.get(k) or "").strip() for k in ("name", "email", "role")}
+    else:
+        first, _, rest = str(c).partition(",")
+        text = {"name": first.strip(), "email": "", "role": rest.strip()}
+    found = EMAIL.search(" ".join(text.values()))
+    email = found.group(0) if found else ""
+    name = "" if "@" in text["name"] else text["name"]
+    return {"name": name, "email": email, "role": text["role"]}
+
+
+def _for_the_process(contact: dict, advert: str) -> bool:
+    """True when the advert gives this contact for questions about applying rather than about the work."""
+    if PROCESS_WORDS.search(contact["role"]):
+        return True
+    said = [s for s in writing_check.sentences(advert or "")
+            if any(k and k.lower() in s.lower() for k in (contact["email"], contact["name"]))]
+    return any(PROCESS_WORDS.search(s) for s in said)
+
+
+def hiring_contacts(analysis: dict, advert: str = "") -> list[dict]:
+    """The named people the advert gives as hiring contacts, each {name, email, role}: never an address or a
+    person it gives for questions about the application process, and never a careers or recruitment
+    mailbox. A pack's "To:" line was the advert's address for questions about applying (2026-11-07)."""
+    out = []
+    for c in (_contact(c) for c in analysis.get("contacts") or []):
+        if c["name"] and not _for_the_process(c, advert):
+            out.append({**c, "email": "" if PROCESS_MAILBOX.match(c["email"]) else c["email"]})
+    return out
+
+
 def message_to(job, analysis: dict, who: dict) -> str:
-    """Who the message goes to: the people the advert names, else where to find a title the CV type names."""
-    contacts = [", ".join(str(v) for v in c.values() if v) if isinstance(c, dict) else str(c)
-                for c in analysis.get("contacts") or []]
-    if contacts:
-        return "; ".join(contacts)
+    """Who the message goes to: the hiring contacts the advert names (`hiring_contacts`), else where to find
+    a title the CV type names."""
+    advert = str(job["description"] or "") if "description" in job.keys() else ""
+    named = [", ".join(p for p in (c["name"], c["role"], c["email"]) if p) for c in hiring_contacts(analysis, advert)]
+    if named:
+        return "; ".join(named)
     title = (who.get("hiring_titles") or ["hiring manager"])[0]
     return f"{FIND_PREFIX} on LinkedIn (search \"{job['company']} {title}\")"
 
@@ -639,29 +733,15 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit)
     letter = written["text"]
     context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
-    their_words = (job_text, about)
-    trimmed: set[str] = set()
-
-    def rewrite_message(note: str) -> str:
-        return _message(who, f"{context}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text, trimmed)
-
-    message = _message(who, context, analysis, job_text, trimmed)
-    message, message_claims, _ = fix_claims(who, message, rewrite_message, facts=facts, kept=kept,
-                                            employer=their_words)
-    message = to_recipient(who, message, analysis, rewrite_message)
-    questions = analysis.get("questions") or []
-    answers, answer_claims, answer_echoes = _answers(
-        who, [*questions, *COMMON_QUESTIONS], f"{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}",
-        facts=facts, kept=kept, sources=their_words, names=(job["title"], job["company"]))
+    questions = [*(analysis.get("questions") or []), *COMMON_QUESTIONS]
+    others = write_others(who, job, analysis, about, message_request=context,
+                          answers_request=answers_request(job, who, analysis, questions, context),
+                          facts=facts, kept=kept)
+    message, answers = others["message"], others["answers"]
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
-    others = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
-    flagged = written["flags"] + check_drafts(who, others, facts=facts, kept=kept, sources=their_words, kind="answer",
-                                              claims=message_claims + answer_claims)
-    flagged += [f"{ECHO_FLAG}: {s}" for s in answer_echoes]
-    if message in trimmed:
-        flagged.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
+    flagged = written["flags"] + others["flags"]
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
     employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]

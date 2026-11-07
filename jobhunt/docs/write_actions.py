@@ -10,6 +10,10 @@ Design decisions, each with its reason:
 
 - A rewritten letter takes the pack's letter path (`pack.write_letter`), so it is checked like the first
   draft, and its record passages are noted under the Activity row's "Used".
+- A changed message and changed answers go through the pack's own path (`pack.write_others`), with the
+  same advert reading, record passages and fit map as the letter, so a change is checked for claims,
+  project contexts, the greeting, a cut-off reply and restating the advert: the change used to save the
+  AI's words with none of these checks (2026-11-07).
 - Results are saved through `apply.actions.save_documents`, the rule every edit follows: a form already
   filled with the old documents is marked out of date.
 - G9 runs every kind from its example without an AI or a search engine: the examples stand a recording
@@ -19,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import contacts, documents, llm, pack, prep
+from .. import contacts, cv, documents, pack, prep
 from ..apply import actions as apply_actions
 from ..apply.queries import _job
 from ..core import runner
@@ -49,10 +53,11 @@ def _used(ctx, written: dict) -> None:
         ctx.used("record", label)
 
 
-def rewrite_letter_now(ctx, job, words: str) -> dict:
-    """Rewrites one job's letter as asked, checks it and saves it; returns what was written."""
+def rewrite_letter_now(ctx, job, words: str, **read) -> dict:
+    """Rewrites one job's letter as asked, checks it and saves it; returns what was written. `read` holds the
+    advert reading, record passages, fit map and brief (`pack.write_letter`'s) when the caller has them."""
     ctx.step("Reading the advert and your evidence")
-    written = pack.write_letter(ctx.con, job, request=words)
+    written = pack.write_letter(ctx.con, job, request=words, **read)
     _used(ctx, written)
     ctx.step("Checking every fact and number")
     docs = documents.load(ctx.con, job)
@@ -61,46 +66,45 @@ def rewrite_letter_now(ctx, job, words: str) -> dict:
     return written
 
 
-def _message(job, who: dict, docs: dict, words: str) -> str:
-    request = (f"Job: {job['title']} at {job['company']}\n\nThe message as it stands:\n{docs.get('message') or ''}"
-               f"\n\nThe applicant asked for this change: {words}")
-    return pack.spelt(pack.drop_notes(llm.undash(llm.chat(pack.prompt("message", who), request,
-                                                          role="writer").strip())), who)
-
-
-def _answers(job, who: dict, docs: dict, words: str) -> list[dict]:
+def _changed_others(ctx, job, who: dict, docs: dict, words: str, read: dict, about: str, facts: str) -> dict:
+    """The message and answers rewritten as the person asked and checked as the pack checks them
+    (`pack.write_others`): {message, answers, flags}. Each answer keeps its question, and one the AI left out
+    keeps its old words."""
+    context = pack.shared_context(ctx.con, job, who, read, about, facts)
+    asked = f"The applicant asked for this change: {words}"
     given = docs.get("answers") or []
-    if not given:
-        return []
     listing = "\n".join(f"- {a.get('question', '')}\n  As it stands: {a.get('answer', '')}" for a in given)
-    request = (f"Job: {job['title']} at {job['company']}\n\nQuestions:\n{listing}"
-               f"\n\n{fields.block(fields.for_job(job, who), 'answer')}"
-               f"\n\nThe applicant asked for this change: {words}")
-    reply = llm.chat_json(pack.prompt("answers", who), request, role="writer").get("answers") or []
-    by_question = {a.get("question", ""): pack.spelt(llm.undash(a.get("answer", "")), who)
-                   for a in reply if isinstance(a, dict)}
-    return [{"question": a.get("question", ""), "answer": by_question.get(a.get("question", "")) or a.get("answer", "")}
-            for a in given]
+    conventions = fields.block(pack.field_of(job, who, read["analysis"]), "answer")
+    ctx.step("Changing the message and the answers, and checking them")
+    out = pack.write_others(
+        who, job, read["analysis"], about, facts=facts, kept=read["kept"],
+        message_request=f"{context}\n\nThe message as it stands:\n{docs.get('message') or ''}\n\n{asked}",
+        answers_request=f"Questions:\n{listing}\n\n{context}\n\n{conventions}\n\n{asked}" if given else "")
+    by_question = {a.get("question", ""): a.get("answer", "") for a in out["answers"]}
+    answers = [{"question": a.get("question", ""),
+                "answer": by_question.get(a.get("question", "")) or a.get("answer", "")} for a in given]
+    return {**out, "answers": answers}
 
 
 @runner.action("docs.change", area="documents", label="Changing your documents for {title} at {company}",
                why="You asked: {words}", priority=1, example=_letter_example)
 def change(ctx, job_id: str, words: str) -> dict:
-    """Rewrites the letter, the message and the answers in the way the person asked; nothing is sent."""
+    """Rewrites the letter, the message and the answers in the way the person asked, each checked as the pack's
+    drafts are; nothing is sent."""
     words = (words or "").strip()[:WORDS_SHOWN]
     if not words:
         raise ValueError("Say what you want changed first.")
     job = _job(ctx.con, job_id)
-    written = rewrite_letter_now(ctx, job, words)
-    who = pack.person(job)
+    who, facts = pack.person(job), cv.facts_text()
+    ctx.step("Reading the advert and your evidence")
+    read, about = pack.read_job(job, who, facts), documents.summary(job).get("company", "")
+    written = rewrite_letter_now(ctx, job, words, who=who, about=about, **read)
     docs = documents.load(ctx.con, job)
-    ctx.step("Changing the message")
-    message = _message(job, who, docs, words)
-    ctx.step("Changing the answers")
-    answers = _answers(job, who, docs, words)
-    out = apply_actions.save_documents(ctx.con, job_id, {"message": message, "answers": answers})
+    others = _changed_others(ctx, job, who, docs, words, read, about, facts)
+    flags = list(dict.fromkeys(written["flags"] + others["flags"]))
+    out = apply_actions.save_documents(ctx.con, job_id, {"message": others["message"], "answers": others["answers"]})
     ctx.changed("Hal rewrote the letter, the message and the answers as you asked. Read them before you approve.")
-    return {"letter": written["text"], "flags": written["flags"], **out}
+    return {"letter": written["text"], "flags": flags, **out}
 
 
 @runner.action("docs.rewrite_letter", area="documents", label="Rewriting the letter for {title} at {company}",

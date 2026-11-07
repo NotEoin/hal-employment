@@ -478,6 +478,17 @@ runs: tests use `tests/support/fake_claude/`.
   is never answered. When the advert states no requirement, its main duties stand in, so the fit map is
   never empty. The letter greets the first person the advert names, else "Hiring Team", and never adds a
   title the advert does not give.
+- The message's "To:" line (`pack.message_to`) and its fallback greeting name only the advert's hiring
+  contacts (`pack.hiring_contacts`): a named person whose role or sentence in the advert is not about the
+  application process (`PROCESS_WORDS`), with a careers or recruitment mailbox address (`PROCESS_MAILBOX`)
+  left off. With none, the line is the LinkedIn search hint.
+- One path for the message and the answers, `pack.write_others(who, job, analysis, about, message_request,
+  answers_request, facts, kept)`, returns {message, answers, flags}: cut-off, claims (with project
+  contexts and misplaced tools), greeting, writing rules and restating the advert. The pack and
+  `docs.change` both use it; `docs.change` reads the job once (`pack.read_job`), passes the reading to
+  `pack.write_letter`, and gives the message and answers the same shared context
+  (`pack.shared_context`) with the current draft and the person's words. The action's result `flags` holds
+  the letter's and the others'.
 - `docs/write_routes.py` serves the document change, letter rewrite, interview prep and contacts routes;
   each starts its kind in `docs/write_actions.py` and returns `{action_id}`.
 - Critique as a recruiter: `POST /applications/{id}/documents/critique` starts `docs.critique` (priority 0,

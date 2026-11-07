@@ -184,6 +184,11 @@ What changed in each version, in plain words.
   lists AWS, because only the projects that fit in the letter's notes were read. The fit table now reads
   the tools of every project and job you checked, and a requirement that names one of them is never listed
   as a gap.
+- **The message goes to the right person, and changes are checked.** The message's **To:** line could be
+  the advert's address for questions about applying. It now names the hiring contact the advert gives, or
+  suggests a LinkedIn search, never a careers or recruitment mailbox. When you ask Hal for changes, the new
+  message and answers now get every check the first drafts get (claims, where each project was done, the
+  greeting, a cut-off ending and repeating the advert); before, only the letter was checked.
 - **Fewer false alarms under Check before sending.** It listed twice as many false alarms as real
   problems. A claim your CV states is no longer listed as unsupported, an "-ing" ending is flagged only
   when it claims what something shows (", showcasing my care"), not when it states a fact, and a letter

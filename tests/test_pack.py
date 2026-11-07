@@ -716,6 +716,31 @@ class Echoes(unittest.TestCase):
                 self.assertIn("tie one specific thing about the applicant", pack.prompt(pid))
 
 
+class To(unittest.TestCase):
+    """The message's "To:" line names a hiring contact, never the advert's address for questions about applying."""
+
+    ADVERT = ("Build internal tools with Ada Penhallow, Head of Platform. For questions about the application "
+              "process, email talent@brightwater.example.org or call Sam Reedly in our recruitment team.")
+
+    def to(self, contacts: list) -> str:
+        job = {"company": "Brightwater Tools", "title": "Graduate Developer", "description": self.ADVERT}
+        return pack.message_to(job, {"contacts": contacts}, {"hiring_titles": ["engineering manager"]})
+
+    def test_an_address_or_person_for_questions_about_applying_is_never_the_recipient(self):
+        # a pack's To: was the advert's address for questions about the application process (2026-11-07)
+        hint = f"{pack.FIND_PREFIX} on LinkedIn (search \"Brightwater Tools engineering manager\")"
+        self.assertEqual(self.to([{"email": "talent@brightwater.example.org",
+                                   "role": "questions about the application process"}]), hint)
+        self.assertEqual(self.to(["careers@brightwater.example.org"]), hint)
+        self.assertEqual(self.to([{"name": "Sam Reedly", "role": ""}]), hint, "the advert gives him for applying")
+
+    def test_a_named_hiring_contact_is_the_recipient_without_a_mailbox(self):
+        found = self.to([{"name": "Sam Reedly", "role": "Recruiter"},
+                         {"name": "Ada Penhallow", "role": "Head of Platform",
+                          "email": "jobs@brightwater.example.org"}])
+        self.assertEqual(found, "Ada Penhallow, Head of Platform")
+
+
 class Checklist(unittest.TestCase):
     def test_the_checklist_never_says_to_open_a_command_line(self):
         for person in people.PEOPLE:
@@ -989,6 +1014,32 @@ class Requests(unittest.TestCase):
         self.assertIn("Volunteering/guide.md > Role", why["used"])
         docs = documents.load(self.a.con, self.job)
         self.assertIn("letter_notes", docs)
+
+    def test_a_changed_message_and_answers_get_the_packs_checks(self):
+        # docs.change saved the AI's message and answers with no claim, greeting or project check (2026-11-07)
+        plain = self.a.writer.reply
+
+        def reply(system: str, user: str) -> object:
+            pid, rewrite = prompt_id(system), "not in their facts" in user or "Greet the person" in user
+            if pid == "message":
+                return "Hello,\n\nI guided visitors. Who leads the team?" if rewrite else \
+                    f"Hi Marnie,\n\nI {CLAIM}. Who leads the team?"
+            if pid == "answers":
+                return {"answers": [{"question": "Why this role?", "answer": "I guided visitors." if rewrite
+                                     else f"I {CLAIM}."}]}
+            if pid == "verify":
+                return {"unsupported": [CLAIM] if CLAIM in user.split("\n\nDrafts:\n", 1)[1] else []}
+            return plain(system, user)
+
+        self.a.writer.reply = reply
+        r = self.c.post(self.url("/documents/change"), {"words": "Mention my guiding work"})
+        self.assertEqual(self.wait(r.json()["action_id"])["state"], "done")
+        docs = documents.load(self.a.con, self.job)
+        self.assertEqual(docs["message"], "Hello,\n\nI guided visitors. Who leads the team?")
+        self.assertNotIn(CLAIM, json.dumps(docs["answers"]))
+        changed = [e for e in self.a.writer.log if "Mention my guiding work" in e["user"]]
+        self.assertEqual([e["id"] for e in changed].count("message"), 2, "one rewrite, never a loop")
+        self.assertIn("Today: ", changed[-1]["user"], "the change reads the same facts as the pack")
 
     def test_a_change_you_ask_for_comes_back_in_your_spelling(self):
         # the changed message and answers were saved as the AI wrote them, never checked for spelling
