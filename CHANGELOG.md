@@ -174,10 +174,12 @@ What changed in each version, in plain words.
   company's description once, and lists it under **Check before sending** if it still does. Naming the
   role or the company is fine.
 - **The company check finds the right company.** It listed any company with the employer's name, such as a
-  solar firm, a fungicide and a closed company for a lender. Hal now shows a Wikipedia article only when
-  it also names the advert's town, links to the employer's website or is about the same trade, and a
-  Companies House entry only when the company is active and in the advert's trade. Otherwise the pack
-  says "No reliable match found".
+  solar firm, a fungicide and a closed company for a lender, and a Wikipedia page listing everything of
+  that name. Hal now shows a Wikipedia article only when it links to the employer's website or is about
+  the advert's trade (or, when it names no trade, the advert's town), never a page listing several things
+  of one name. A Companies House entry must be active, carry the employer's whole name and be in the
+  advert's trade, or in its town when its records name no trade. Otherwise the pack says "No reliable
+  match found" and lists no sections to read.
 - **The fit table sees all your projects.** It said "No evidence of AWS" although one of your projects
   lists AWS, because only the projects that fit in the letter's notes were read. The fit table now reads
   the tools of every project and job you checked, and a requirement that names one of them is never listed

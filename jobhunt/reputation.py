@@ -7,13 +7,25 @@ exists and is active.
 Design decisions, each with its reason:
 
 - A hit is kept only when it plausibly is the advert's employer (`Advert`): its name holds every word of the
-  employer's name, and something else ties it to the advert. For a Wikipedia article that is the advert's
-  town, the employer's web domain among the article's links, or `INDUSTRY_SHARED` words of the advert's
-  trade in its summary. For a Companies House registration it is an active company whose nature of business
-  (its SIC codes, with the words of each code's division in `SIC_DIVISIONS`) shares a word with the advert.
-  A name alone matched a solar company, a fungicide and a dissolved company for one employer (2026-11-06).
-  Anything else reads "No reliable match found".
-- Words are compared as `record.words` stems, so "banking" in the advert meets "bank" in a summary.
+  employer's name, and the advert's trade or place ties it to the advert. A name alone matched a solar
+  company, a fungicide and a dissolved company for one employer (2026-11-06).
+- Trades are the sectors of `SIC_DIVISIONS`, never loose shared words: two chance words ("loan" and
+  "credit" in a solar maker's history) tied a solar company to a lender, and "financial" in "management
+  consultancy other than financial management" tied a consultancy to it (2026-11-07). The advert's trades
+  are its leading sectors (`advert_sectors`: those with at least `SECTOR_SHARE` of the top one's words), as
+  every advert also mentions data, training or health insurance.
+- A Wikipedia article is the employer when it links to the employer's own site; else when its title and
+  first sentences (`LEAD_SENTENCES`) name a trade, that trade must be one of the advert's; else when it names
+  the advert's town. A disambiguation page is never the employer (its page property, a "(disambiguation)"
+  title or "may refer to"): one pack showed a disambiguation page as the employer (2026-11-07).
+- A Companies House registration is the employer when it is active, its name starts with the employer's
+  whole words ("KESTRELMARKS PROPERTY" is not "Kestrelmark"), a word its name adds names no other trade
+  ("SOLAR"), and its SIC codes' divisions share a trade with the advert. Codes that name no trade
+  (`NO_TRADE_SIC`: holding companies, head offices, dormant, "other business support") instead need the
+  advert's town in its address.
+- Anything else reads "No reliable match found", with no sections to read.
+- Sector words are compared whole, with a plural "s" dropped (`_forms`), so "loans" meets "loan" but
+  "markets" never meets "marketing".
 - Every lookup has a timeout; a lookup that fails says so and never stops a pack.
 """
 from __future__ import annotations
@@ -40,18 +52,14 @@ LOOKUP_TIMEOUT_S = 20
 WIKI_HITS = 3             # search results read for an article naming the employer
 REGISTRATIONS = 3         # Companies House results named like the employer that are looked at, and shown
 NO_MATCH = "No reliable match found"
-INDUSTRY_SHARED = 2       # trade words an article's summary must share with the advert; one is often chance
-SIC_SHARED = 1            # a registration's nature of business is a few words, so one shared word is a match
+SECTOR_SHARE = 0.5        # an advert's sector counts when it has at least this share of the top sector's words
+LEAD_SENTENCES = 1        # an article's first sentence says what its subject is; later ones give its history
+SHORT_WORD = 3            # a word this short keeps a final "s" ("gas", "bus")
 SUMMARY_WORDS = 80        # of an article's first section, shown in the pack
-# Words in nearly every advert and company summary, which say nothing about the trade.
-GENERIC = set("""company companies business businesses service services team teams people role roles work working
-experience skills skill opportunity opportunities candidate candidates salary benefits apply application
-applications including based limited group international global leading years year support join within
-across great looking organisation organization offer offers provide provides provided provider providers
-help helps client clients customer customers product products range across further include includes
-founded headquartered headquarters known largest large small first public private part member members
-employees staff staffing ensure ensuring responsible responsibilities develop development manage
-management new well also high level levels make makes made world worldwide british kingdom united""".split())
+DISAMBIGUATION = re.compile(r"\b(may|can|might) (also )?(refer|be used to refer) to\b|\(disambiguation\)", re.I)
+# SIC codes that say nothing of a company's trade (UK SIC 2007): holding companies, head offices, dormant and
+# non-trading companies, and "other business support service activities n.e.c.".
+NO_TRADE_SIC = {"64201", "64202", "64203", "64204", "64205", "64209", "70100", "74990", "82990", "99999"}
 NOT_PLACES = {"uk", "united kingdom", "england", "scotland", "wales", "northern ireland", "remote", "hybrid",
               "home", "home based", "office", "flexible", "multiple locations", "various", "nationwide",
               "anywhere", "not stated", "gb", "great britain"}
@@ -68,25 +76,26 @@ DOMAIN_ENDINGS = {"uk", "com", "org", "net", "io", "co", "ai", "dev", "eu", "ac"
 # words an advert uses. Each entry: (first division, last division, words).
 SIC_DIVISIONS = (
     (1, 3, "farming agriculture farm crops forestry fishing"),
-    (10, 12, "food drink beverages manufacturing"),
+    (10, 12, "food drink beverages manufacturing manufacturer"),
     (19, 22, "chemicals chemical pharmaceutical plastics fungicide pesticide medicines"),
-    (26, 28, "electronics engineering machinery manufacturing hardware"),
+    (26, 28, "electronics engineering machinery manufacturing manufacturer hardware"),
     (29, 30, "automotive vehicles aerospace aircraft"),
     (35, 35, "energy electricity power gas solar renewable wind"),
     (36, 39, "water waste recycling environmental"),
     (41, 43, "construction building civil engineering"),
-    (45, 47, "retail shop shops store sales ecommerce wholesale"),
+    (45, 47, "retail retailer shop store sales ecommerce wholesale"),
     (49, 53, "transport logistics delivery freight rail aviation shipping"),
     (55, 56, "hospitality hotel restaurant catering"),
     (58, 60, "publishing media broadcasting film television books"),
     (61, 61, "telecommunications network broadband mobile"),
     (62, 63, "software technology digital data computing developer cloud web platform"),
-    (64, 66, "bank banking finance financial lending credit payments insurance investment fintech mortgage loans"),
+    (64, 66, "bank banking finance financial lending lender credit payments insurance investment fintech mortgage "
+             "loans derivatives securities brokerage"),
     (68, 68, "property housing estate letting homes"),
     (69, 69, "legal law solicitors accounting accountancy audit tax"),
     (70, 70, "consultancy consulting strategy"),
     (71, 71, "engineering architecture surveying design"),
-    (72, 72, "research science scientific laboratory"),
+    (72, 72, "research researcher science scientific laboratory"),
     (73, 73, "advertising marketing"),
     (74, 74, "design photography translation"),
     (75, 75, "veterinary animals"),
@@ -122,15 +131,54 @@ def _wiki(params: dict) -> dict:
     return json.loads(get(WIKI_API + urllib.parse.urlencode({**params, "format": "json"}), timeout=LOOKUP_TIMEOUT_S))
 
 
-def _stems(text: str) -> set[str]:
-    from . import record
+def _sector_counts(text: str) -> dict[int, int]:
+    """How many of a text's words name each sector (an index of `SIC_DIVISIONS`); sectors it never names are
+    left out."""
+    said = _forms(text)
+    counts = {}
+    for i, (_, _, words) in enumerate(SIC_DIVISIONS):
+        held = set(_forms(words))
+        n = sum(w in held for w in said)
+        if n:
+            counts[i] = n
+    return counts
 
-    return set(record.words(text)) - set(record.words(" ".join(GENERIC)))
+
+def _forms(text: str) -> list[str]:
+    """A text's words in lower case with a plural "s" dropped. Whole words, not `record.words` stems: the
+    stems of "markets" and "marketing", or "hospital" and "hospitality", are one (2026-11-07)."""
+    return [w[:-1] if len(w) > SHORT_WORD and w.endswith("s") and not w.endswith("ss") else w
+            for w in re.findall(r"[a-z]+", (text or "").lower())]
 
 
-def trade_words(advert: Advert, company: str) -> set[str]:
-    """The advert's words that may name its trade: its stems less common ones and the employer's own name."""
-    return _stems(advert.text) - _stems(company)
+def sectors(text: str) -> set[int]:
+    """Every sector (an index of `SIC_DIVISIONS`) whose words the text uses."""
+    return set(_sector_counts(text))
+
+
+def advert_sectors(advert: Advert, company: str) -> set[int]:
+    """The advert's leading sectors: those with at least `SECTOR_SHARE` of the top sector's words, the
+    employer's own name aside."""
+    counts = _sector_counts(" ".join(w for w in re.findall(r"\S+", advert.text or "")
+                                     if w.lower().strip(".,;:'") not in _name_words(company)))
+    top = max(counts.values(), default=0)
+    return {i for i, n in counts.items() if n >= SECTOR_SHARE * top}
+
+
+def code_sectors(codes: list[str]) -> set[int]:
+    """The sectors SIC codes name by their division; a code in `NO_TRADE_SIC` names none."""
+    out = set()
+    for code in codes:
+        m = re.match(r"\s*(\d{5}|\d{2})", code)
+        if not m or m.group(1) in NO_TRADE_SIC:
+            continue
+        division = int(m.group(1)[:2])
+        out |= {i for i, (first, last, _) in enumerate(SIC_DIVISIONS) if first <= division <= last}
+    return out
+
+
+def _named_in(text: str, places: list[str]) -> bool:
+    return any(re.search(rf"\b{re.escape(p)}\b", text, re.I) for p in places)
 
 
 def towns(advert: Advert) -> list[str]:
@@ -157,23 +205,36 @@ def domains(advert: Advert) -> set[str]:
     return {n for n in (_site_name(h) for h in hosts) if n}
 
 
-def plausible_article(advert: Advert, company: str, summary: str, links: list[str]) -> bool:
-    """True when an article named like the employer also names the advert's town, links to the employer's
-    site, or shares `INDUSTRY_SHARED` trade words with the advert."""
-    if any(re.search(rf"\b{re.escape(p)}\b", summary, re.I) for p in towns(advert)):
-        return True
+def lead(summary: str) -> str:
+    """An article's opening `LEAD_SENTENCES` sentences, which say what its subject is."""
+    return " ".join(re.split(r"(?<=[.!?])\s+", (summary or "").strip())[:LEAD_SENTENCES])
+
+
+def disambiguation(title: str, summary: str, props: Mapping | None = None) -> bool:
+    """True for a Wikipedia page that lists several things of one name rather than being about one."""
+    return "disambiguation" in (props or {}) or bool(DISAMBIGUATION.search(f"{title}\n{lead(summary)}"))
+
+
+def plausible_article(advert: Advert, company: str, summary: str, links: list[str], title: str = "") -> bool:
+    """True when an article named like the employer links to the employer's site, or else is in one of the
+    advert's trades, or else (naming no trade) names the advert's town."""
     names = domains(advert)
     if names and any(_site_name(urllib.parse.urlparse(u).hostname or "") in names for u in links):
         return True
-    return len(trade_words(advert, company) & _stems(summary)) >= INDUSTRY_SHARED
+    theirs, ours = sectors(f"{title}. {lead(summary)}"), advert_sectors(advert, company)
+    if theirs and ours:
+        return bool(theirs & ours)
+    return _named_in(summary, towns(advert))
 
 
-def _article(title: str) -> tuple[str, list[str]]:
-    """An article's first section as plain text, and its external links."""
-    found = _wiki({"action": "query", "prop": "extracts|extlinks", "exintro": 1, "explaintext": 1,
-                   "ellimit": "max", "titles": title}).get("query", {}).get("pages", {})
+def _article(title: str) -> tuple[str, list[str], dict]:
+    """An article's first section as plain text, its external links and its page properties (a disambiguation
+    page has `disambiguation`)."""
+    found = _wiki({"action": "query", "prop": "extracts|extlinks|pageprops", "ppprop": "disambiguation",
+                   "exintro": 1, "explaintext": 1, "ellimit": "max", "titles": title}).get("query", {}).get("pages", {})
     page = next(iter(found.values()), {})
-    return page.get("extract", ""), [next(iter(e.values()), "") for e in page.get("extlinks", []) if e]
+    return (page.get("extract", ""), [next(iter(e.values()), "") for e in page.get("extlinks", []) if e],
+            page.get("pageprops") or {})
 
 
 def wikipedia(company: str, advert: Advert | None = None) -> dict:
@@ -182,8 +243,8 @@ def wikipedia(company: str, advert: Advert | None = None) -> dict:
     advert = advert or Advert()
     hits = _wiki({"action": "query", "list": "search", "srsearch": f"{company} company", "srlimit": WIKI_HITS})
     for title in [h["title"] for h in hits.get("query", {}).get("search", []) if names(company, h["title"])]:
-        summary, links = _article(title)
-        if not plausible_article(advert, company, summary, links):
+        summary, links, props = _article(title)
+        if disambiguation(title, summary, props) or not plausible_article(advert, company, summary, links, title):
             continue
         sections = _wiki({"action": "parse", "page": title, "prop": "sections"}).get("parse", {}).get("sections", [])
         return {
@@ -193,17 +254,6 @@ def wikipedia(company: str, advert: Advert | None = None) -> dict:
             "concerns": [s["line"] for s in sections if CONCERN.search(s["line"])],
         }
     return {}
-
-
-def sic_words(codes: list[str]) -> str:
-    """The trade a registration's SIC codes name: each code's own words and its division's (`SIC_DIVISIONS`)."""
-    out = []
-    for code in codes:
-        out.append(code)
-        m = re.match(r"\s*(\d{2})", code)
-        if m:
-            out += [words for first, last, words in SIC_DIVISIONS if first <= int(m.group(1)) <= last]
-    return " ".join(out)
 
 
 def registration(number: str) -> dict:
@@ -217,28 +267,30 @@ def registration(number: str) -> dict:
 
 def companies_house(company: str, advert: Advert | None = None) -> list[str]:
     """The Companies House registrations that are plausibly the advert's employer, as one-line descriptions:
-    named like it, active, and in a trade the advert's words share."""
+    named like it, active, and in one of the advert's trades or its town (see the module notes)."""
     advert = advert or Advert()
     page = get(COMPANIES_HOUSE + urllib.parse.quote_plus(company), headers=BROWSER, timeout=LOOKUP_TIMEOUT_S)
-    key, trade, results = _key(company), trade_words(advert, company), []
+    wanted, ours, results = _name_words(company), advert_sectors(advert, company), []
     for block in re.findall(r'<li class="type-company">(.*?)</li>', page, re.S)[:REGISTRATIONS * 3]:
         text = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", block))).strip()
         number = re.search(r'href="/company/([A-Z0-9]+)"', block)
-        # Only registrations whose name starts with the employer's name may be the employer.
-        if "{{" in text or not key or not _key(text).startswith(key) or not number:
+        name = re.search(r"<a [^>]*>(.*?)</a>", block, re.S)
+        # the whole words of the name: a 12-letter key matched "Riverside Heritage Joinery" for "Riverside
+        # Heritage Trust" (made-up employer, 2026-10-23), and a prefix "Kestrelmarks" for "Kestrelmark"
+        held = _name_words(html.unescape(name.group(1))) if name else []
+        if "{{" in text or not wanted or held[:len(wanted)] != wanted or not number:
             continue
+        added = sectors(" ".join(held[len(wanted):]))
+        if added and ours and not added & ours:
+            continue                       # "BRIGHTVALE SOLAR" is in another trade by its name alone
         found = registration(number.group(1))
-        if found["status"].lower() == "active" and len(trade & _stems(sic_words(found["sic"]))) >= SIC_SHARED:
+        theirs = code_sectors(found["sic"])
+        fits = bool(theirs & ours) if theirs and ours else _named_in(text, towns(advert))
+        if found["status"].lower() == "active" and fits:
             results.append(f"{text[:160]} ({found['status']}; {'; '.join(found['sic'])})")
         if len(results) == REGISTRATIONS:
             break
     return results
-
-
-def _key(name: str) -> str:
-    # the whole name: a 12-letter key matched "Riverside Heritage Joinery" for "Riverside Heritage Trust"
-    # (made-up employer, 2026-10-23)
-    return "".join(_name_words(name))
 
 
 def _name_words(name: str) -> list[str]:

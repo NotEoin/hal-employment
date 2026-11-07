@@ -448,13 +448,17 @@ runs: tests use `tests/support/fake_claude/`.
   that allows "or equivalent", is desirable or names a lower degree too is not plain, and an unknown level
   says nothing. `where_you_live_settles` drops a fit gap or a fit eligibility note about the job's place
   when the person lives in the advert's town (settings or CV), will relocate, or is happy in an office.
-- The pack's company check (`reputation.check(company, advert)`, also `jobhunt check`) keeps a Wikipedia
-  article only when its title holds every word of the employer's name and it names the advert's town,
-  links to the employer's own site (the advert's link or an address in its text, never a job board's), or
-  shares `INDUSTRY_SHARED` trade words with the advert. It keeps a Companies House registration only when
-  its name starts with the employer's, its company page says Active, and its SIC codes (with their
-  division's words, `SIC_DIVISIONS`) share a trade word with the advert. Anything else reads "No reliable
-  match found". `tests/test_reputation.py` fakes every lookup.
+- The pack's company check (`reputation.check(company, advert)`, also `jobhunt check`) compares trades as
+  sectors of `SIC_DIVISIONS`: the advert's are its leading ones (`advert_sectors`, at least `SECTOR_SHARE`
+  of the top sector's words, whole words with a plural "s" dropped). It keeps a Wikipedia article only when
+  its title holds every word of the employer's name, it is not a disambiguation page (its `disambiguation`
+  page property, the title, or "may refer to"), and it links to the employer's own site (the advert's link
+  or an address in its text, never a job board's), or else its title and first sentence name one of the
+  advert's sectors, or else, naming none, it names the advert's town. It keeps a Companies House
+  registration only when its name starts with the employer's whole words, a word the name adds names no
+  other sector, its company page says Active, and its SIC divisions share a sector with the advert; codes
+  that name no trade (`NO_TRADE_SIC`) need the advert's town in its address instead. Anything else reads
+  "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The pack's `## Letter notes` section says Tone, Length,
   Evidence and Checked; the application page reads them back.
