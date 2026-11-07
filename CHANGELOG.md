@@ -151,6 +151,11 @@ What changed in each version, in plain words.
   wrote, so lecture notes, other people's files and files it was unsure about could turn up in a letter as
   your own work. Letters, form answers, interview notes and CV suggestions now read only your own documents
   and the notes you wrote yourself. Your record is read again once to note whose each file is.
+- **Check before sending lists what needs you.** Most of its items were the employer's own words from the
+  advert. Hal now checks only what a draft says about you, against your CV, the facts you checked and your
+  own documents. It takes out or tones down a claim it cannot find there once, and lists only what is
+  left. Form answers get the same check, and a claim or a number Hal cannot find is marked **Check this**.
+  Hal no longer treats its earlier drafts for a job as facts when it fills in the form.
 - **The AI's own reason when it cannot answer.** When Hal's model was switched off, commands such as
   `jobhunt pack` stopped with a long error ending in "(503)". They now say in one line what the AI said,
   such as "Hal is off; run `hal on`".

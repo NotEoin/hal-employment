@@ -334,6 +334,77 @@ class Letter(unittest.TestCase):
             self.assertTrue(writer.asked(pid), pid)
             self.assertNotIn("Employment record", writer.asked(pid)[0]["user"], pid)
 
+
+CLAIM = "ran the whole made-up archive alone"   # a claim no fact of the made-up applicant supports
+
+
+class ClaimWriter(FakeWriter):
+    """A fake writer whose first drafts make `CLAIM`, and whose rewrites drop it unless `stubborn`."""
+
+    def __init__(self, stubborn: bool = False):
+        super().__init__()
+        self.stubborn = stubborn
+
+    def reply(self, system: str, user: str) -> object:
+        pid = prompt_id(system)
+        rewrite = "not in their facts" in user
+        said = f"I {CLAIM}." if self.stubborn or not rewrite else "I guided visitors at a made-up heritage centre."
+        if pid in ("letter", "message"):
+            return said
+        if pid == "answers":
+            return {"answers": [{"question": "Why this role?", "answer": said}]}
+        if pid == "verify":
+            drafts = user.split("\n\nDrafts:\n", 1)[1]
+            return {"unsupported": [CLAIM] if CLAIM in drafts else []}
+        return super().reply(system, user)
+
+
+class Claims(unittest.TestCase):
+    def test_the_check_reads_the_advert_and_brief_as_the_employers_own_words(self):
+        # most "Check before sending" items in real packs were the employer's own facts restated (2026-11-06)
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad")
+            pack.write_letter(a.con, job, about="A made-up trust that looks after river boats.")
+        asked = a.writer.asked("verify")[0]["user"]
+        employer = asked.split("<<<EMPLOYER\n", 1)[1].split("\nEMPLOYER>>>", 1)[0]
+        self.assertIn("never flag a sentence for restating them", asked)
+        self.assertIn("Help catalogue the Trust's collections", employer)
+        self.assertIn("A made-up trust that looks after river boats.", employer)
+        self.assertIn(FACTS["humanities_grad"], asked.split("EMPLOYER>>>", 1)[1])
+        self.assertIn(f"Employment record ({record.OWN_DOCUMENTS})", asked)
+        self.assertNotIn("Evidence map", asked, "the fit map is the AI's own words, not a fact")
+
+    def test_a_letter_with_an_unsupported_claim_is_rewritten_once_without_it(self):
+        writer = ClaimWriter()
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        letters = writer.asked("letter")
+        self.assertEqual(len(letters), 2, "one rewrite, never a loop")
+        self.assertIn(f"- {CLAIM}", letters[1]["user"])
+        self.assertNotIn(CLAIM, written["text"])
+        self.assertEqual(written["flags"], [], "only what still fails is listed")
+        self.assertEqual(len(writer.asked("verify")), 2, "the rewrite is checked again")
+        self.assertEqual(written["notes"]["checked"], pack.SOFTENED + pack.CHECKED_CLEAN)
+
+    def test_a_claim_the_rewrite_keeps_is_listed_for_you(self):
+        writer = ClaimWriter(stubborn=True)
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(len(writer.asked("letter")), 2)
+        self.assertEqual(written["flags"], [f"unsupported claim: {CLAIM}"])
+
+    def test_the_message_and_answers_are_each_rewritten_once_without_the_claim(self):
+        writer = ClaimWriter()
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertEqual((len(writer.asked("message")), len(writer.asked("answers"))), (2, 2))
+        self.assertNotIn(CLAIM, md)
+        self.assertNotIn("unsupported claim", section(md, "Check before sending"))
+
+
 class Checklist(unittest.TestCase):
     def test_the_checklist_never_says_to_open_a_command_line(self):
         for person in people.PEOPLE:

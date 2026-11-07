@@ -126,6 +126,12 @@ SUPPORT_WORD = 5
 SUPPORT_SHARED = 3     # content words an answer shares with a CV line or record passage it is said to use
 SUPPORT_QUOTE = 90     # characters of that line or passage quoted in the why
 CV_FACTS = "CV facts:\n"
+UNSURE_NOTE = "Hal is unsure; check this"
+CHECKED_WORDS = 6      # an answer this long makes claims; a shorter one is a fact the form asks for (a yes, a date)
+ADVERT_LABEL = "Advert (for context only, not facts about the applicant):"
+ADVERT_CHARS = 1800    # of the advert, beside the facts in one form request
+STYLE_LABEL = ("Drafts written for this job earlier, as examples of style only. They are not facts about the "
+               "applicant: never take a claim from them.")
 
 
 START_WORDS = {"now": "Immediately", "1w": "In 1 week", "1m": "In 1 month"}
@@ -1023,13 +1029,22 @@ def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
     if told_notes:
         parts.append("Notes about this job site (follow them):\n" + "\n".join(f"- {t}" for t in told_notes))
     parts.append(_conventions(job))
+    if job["description"]:
+        parts.append(f"{ADVERT_LABEL}\n{job['description'][:ADVERT_CHARS]}")
+    return "\n\n".join(parts)
+
+
+def _style_examples(docs: dict) -> str:
+    """The answers and letter drafted for this job earlier, as examples of style only; "" when there are none.
+
+    Never facts: a claim a draft made up, fed back in as a fact, came back in the form's answers (2026-11-06).
+    """
+    parts = []
     if docs.get("answers"):
-        parts.append("Drafted answers:\n" + "\n".join(f"- {a['question']}: {a['answer']}" for a in docs["answers"]))
+        parts.append("Answers:\n" + "\n".join(f"- {a['question']}: {a['answer']}" for a in docs["answers"]))
     if docs.get("letter"):
         parts.append(f"Cover letter:\n{docs['letter']}")
-    if job["description"]:
-        parts.append(f"Advert (for context only, not facts about the applicant):\n{job['description'][:1800]}")
-    return "\n\n".join(parts)
+    return f"\n\n{STYLE_LABEL}\n" + "\n\n".join(parts) if parts else ""
 
 
 def _cv_lines(facts: str) -> list[str]:
@@ -1107,9 +1122,10 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
     if reason:
         return 0, reason
     facts = _facts(job, docs, con, notes=page_notes(job, notes))
+    style = _style_examples(docs)
     cv_lines = _cv_lines(facts)
     spelt_in = spelling.chosen()
-    answered = 0
+    answered, written, passages = 0, [], []
     for start in range(0, len(open_fields), MODEL_BATCH):
         batch = open_fields[start:start + MODEL_BATCH]
         listing = "\n".join(
@@ -1128,10 +1144,11 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
             # The employment record holds what the CV leaves out: certificates, the full story of each job.
             found = record.context([f"{f.get('label') or ''} {f.get('help') or ''}" for f in batch])
             kept = f"\n\nEmployment record ({record.OWN_DOCUMENTS}):\n{found}" if found else ""
-            reply = llm.chat_json(_prompt("form_fill"), f"Fields:\n{listing}\n\n{facts}{kept}", role="main",
+            reply = llm.chat_json(_prompt("form_fill"), f"Fields:\n{listing}\n\n{facts}{kept}{style}", role="main",
                                   timeout=300)
         except llm.LLMUnavailable as e:
             return answered, str(e)
+        passages.append(found)
         by_hid = {f["hid"]: f for f in batch}
         for a in reply.get("answers", []):
             if not isinstance(a, dict):
@@ -1155,11 +1172,58 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
                 value = spelling.respell(llm.undash(value), spelt_in)
             if f.get("type") == "number" and not re.fullmatch(r"\s*-?[\d.,]+\s*", str(value)):
                 continue
-            f.update(value=value, source="hal", skip=False, note="" if a.get("sure") else "Hal is unsure; check this",
+            f.update(value=value, source="hal", skip=False, note="" if a.get("sure") else UNSURE_NOTE,
                      why=_written_why(value, cv_lines, found, sure=bool(a.get("sure"))))
             answered += 1
+            written.append(f)
+    check_written(job, written, facts, "\n\n".join(p for p in passages if p))
     mark_written(fields)
     return answered, None
+
+
+def _check_this(f: dict, what: str) -> None:
+    f["note"] = f"{UNSURE_NOTE}: {what}"
+
+
+def _makes_claims(f: dict) -> bool:
+    value = f.get("value")
+    return isinstance(value, str) and not f.get("options") and len(value.split()) >= CHECKED_WORDS
+
+
+def _answer_claiming(claim: str, prose: list[dict]) -> dict | None:
+    """The answer a quoted claim comes from: the one sharing most of its words; None when none shares any."""
+    words = _content_words(claim)
+    best = max(prose, key=lambda f: (claim.lower() in f["value"].lower(), len(words & _content_words(f["value"]))))
+    return best if claim.lower() in best["value"].lower() or words & _content_words(best["value"]) else None
+
+
+def check_written(job, answered: list[dict], facts: str, found: str) -> None:
+    """Marks the AI's written answers that hold a number no fact holds, or a claim about the person their
+    facts do not support, for the person to check.
+
+    The same checks as a pack's drafts (`pack.unsupported_numbers`, `pack.unsupported_claims`), with one
+    verify call for the whole form. The advert is the employer's own words, never flagged for being
+    restated. A marked answer is not rewritten: the person reads it on the Form step.
+    """
+    from . import pack
+
+    prose = [f for f in answered if _makes_claims(f)]
+    if not prose:
+        return
+    for f in prose:
+        numbers = pack.unsupported_numbers(f["value"], facts, found, f.get("label") or "", f.get("help") or "")
+        if numbers:
+            _check_this(f, f"{', '.join(numbers)} is in none of your facts")
+    drafts = "\n".join(f"- {f.get('label') or ''}: {f['value']}" for f in prose)
+    try:
+        claims = pack.unsupported_claims(pack.person(), drafts, facts=facts, kept=found,
+                                         employer=(str(_get(job, "description") or ""),))
+    except llm.LLMUnavailable:
+        return   # the numbers check stands alone; each answer already says to read it
+    for claim in claims:
+        f = _answer_claiming(claim, prose)
+        if f is not None:
+            _check_this(f, f"not in your facts: {claim}")
 
 
 def _review(job, fields: list[dict]) -> None:

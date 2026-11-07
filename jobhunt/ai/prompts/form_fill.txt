@@ -21,7 +21,8 @@ facts about them, else give "". Dates in an education or employment history are 
 of that course or job, not the applicant's availability. Salary: if the advert states no pay,
 never mention an advertised range.
 Passages from the applicant's employment record come from their own documents: use them for anything the CV
-leaves out.
+leaves out. Drafts written for this job earlier (answers, a cover letter) show the applicant's style only:
+never take a fact from them.
 Never invent personal details (addresses, dates of birth, reference numbers, names of
 people) or claim experience, skills or circumstances the facts do not state: if the
 facts do not answer a field, give "" and sure false. Set sure false for anything a

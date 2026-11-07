@@ -405,6 +405,16 @@ runs: tests use `tests/support/fake_claude/`.
   `doc_type`; an index of another `record.INDEX_VERSION` is read again in full on the next sync, and until
   then its passages are not used. `record.ask` still searches every passage. Requests label the passages
   `record.OWN_DOCUMENTS` ("from the applicant's own documents"), never "true".
+- The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts against the CV, the checked
+  profile and the passages of the person's own documents. The advert and the company brief go in a fenced
+  `EMPLOYER` block as the employer's own words, never flagged for being restated; the fit map is not a
+  fact, as the AI wrote it. `pack.fix_claims` rewrites the letter, the message and the answers (all of them
+  in one call) once each when the check finds a claim, then checks again; only claims still there are
+  listed under "Check before sending", and the letter's Checked line starts with `pack.SOFTENED`. Form
+  filling (`autofill.check_written`) runs the numbers check on each AI answer of `CHECKED_WORDS` or more
+  and one claim check per form, with the advert as the employer's words; a flagged answer gets a "Hal is
+  unsure; check this: ..." note and is not rewritten. Answers and letters drafted for the job earlier
+  reach the form filler only as examples of style (`autofill.STYLE_LABEL`), never as facts.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The pack's `## Letter notes` section says Tone, Length,
   Evidence and Checked; the application page reads them back.

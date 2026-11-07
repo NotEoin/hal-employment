@@ -19,6 +19,10 @@ Design notes:
 - Every draft goes through the writing checker (`writing.check`). A high-severity break (an invented number,
   a machine-made word, a staged contrast) makes the writer revise once with the problems quoted; what is
   left is listed under "Check before sending", never fixed in a loop.
+- The claim check (`unsupported_claims`) works the same way (`fix_claims`): the letter, the message and the
+  answers are each rewritten once without the claims about the person their facts do not support, checked
+  again, and only what is left is listed. The advert and the brief are the employer's own words, never
+  flagged for being restated.
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -77,6 +81,7 @@ NOTE_KEYS = {"Tone": "tone", "Length": "length", "Evidence": "evidence", "Checke
 TONE_LABELS = {"plain": "Plain", "formal": "Formal", "warm": "Warm"}   # the setting's choices (catalog/cvdocs.py)
 CHECKED_CLEAN = "Every fact is in your CV, record or the advert. No numbers were invented."
 REVISED = "Hal revised it once for its writing rules. "   # before the Checked line when the first draft broke one
+SOFTENED = "Hal rewrote it once to take out claims your facts do not support. "   # ... when it made such claims
 EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence line
 PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
 QUESTION_SHARE = 0.8      # share of a question's words the advert must hold for it to count as written out
@@ -223,17 +228,55 @@ def drop_notes(text: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"\1", "\n\n".join(paras))
 
 
-def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, fit: dict, sources: tuple[str, ...],
-                 kind: str = "letter") -> list[str]:
-    """What to check before sending: numbers no source holds, claims the facts do not support, the writing
-    rules a draft breaks (`writing.check`) and the person's never-use phrases."""
+def unsupported_claims(who: dict, drafts: str, *, facts: str, kept: str, employer: tuple[str, ...]) -> list[str]:
+    """The claims about the person in `drafts` that their facts do not support, as the verify prompt quotes them.
+
+    The facts are the CV, the checked profile and the passages of their own documents (`kept`); the fit map
+    is not one, since the AI wrote it from the same facts. The advert and the company brief (`employer`) are
+    given as the employer's own words, never to be flagged for being restated: most of the "unsupported"
+    claims in real packs were the employer's own facts (2026-11-06).
+    """
+    words = "\n\n".join(e.strip() for e in employer if e and e.strip())
+    request = (f"The employer's own words (the advert and the company brief): never flag a sentence for restating "
+               f"them.\n<<<EMPLOYER\n{words}\nEMPLOYER>>>\n\nFacts about the applicant:\nCV:\n{facts}"
+               + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept) + f"\n\nDrafts:\n{drafts}")
+    found = llm.chat_json(prompt("verify", who), request, role="main").get("unsupported", [])
+    return [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
+
+
+def claims_note(claims: list[str]) -> str:
+    """The request to rewrite a draft without the claims its facts do not support."""
+    listed = "\n".join(f"- {c}" for c in claims)
+    return (f"These claims about the applicant are not in their facts:\n{listed}\nRewrite the draft: take each "
+            "one out, or soften it to what the facts do say. Keep the rest as it is.")
+
+
+def fix_claims(who: dict, draft, rewrite, *, facts: str, kept: str, employer: tuple[str, ...], as_text=str):
+    """The draft rewritten once by `rewrite(note)` when it makes claims about the person their facts do not
+    support, then checked again; returns (draft, the claims still unsupported, whether it was rewritten).
+
+    One rewrite, never a loop, as with `revise_once`. `as_text` turns a draft (the answers are a list) into
+    the text that is checked.
+    """
+    claims = unsupported_claims(who, as_text(draft), facts=facts, kept=kept, employer=employer)
+    if not claims:
+        return draft, [], False
+    again = rewrite(claims_note(claims))
+    if not again:
+        return draft, claims, False
+    return again, unsupported_claims(who, as_text(again), facts=facts, kept=kept, employer=employer), True
+
+
+def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, sources: tuple[str, ...], kind: str = "letter",
+                 claims: list[str] | None = None) -> list[str]:
+    """What to check before sending: numbers no source holds, claims the facts do not support (`claims` when
+    `fix_claims` already found them, else `unsupported_claims`), the writing rules a draft breaks
+    (`writing.check`) and the person's never-use phrases."""
     hits = _hits(who, drafts, kind, facts=facts, kept=kept, sources=sources)
     flagged = [h.flag for h in hits if h.rule == "T1"]
-    flagged += [f"unsupported claim: {c}" for c in
-                llm.chat_json(prompt("verify", who),
-                              f"Facts:\n{facts}" + _record_part("Employment record", kept) +
-                              f"\n\nEvidence map:\n{fit.get('matches', [])}\n\nDrafts:\n{drafts}",
-                              role="main").get("unsupported", [])]
+    if claims is None:
+        claims = unsupported_claims(who, drafts, facts=facts, kept=kept, employer=sources)
+    flagged += [f"unsupported claim: {c}" for c in claims]
     flagged += [h.flag for h in writing_check.flagged(hits) if h.rule != "T1"]
     lowered = drafts.lower()
     flagged += [f"a phrase you never use: {a}" for a in avoided(who) if a.lower() in lowered]
@@ -245,9 +288,10 @@ def avoided(who: dict) -> list[str]:
     return re.findall(r'"([^"]+)"', who.get("avoid_phrases") or "")
 
 
-def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], *, revised: bool = False) -> dict:
+def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], *, revised: bool = False,
+                 softened: bool = False) -> dict:
     """The Tone, Length, Evidence and Checked lines shown beside a letter; `revised` when the writer had to
-    revise it once for the writing rules."""
+    revise it once for the writing rules, `softened` when it rewrote claims the facts do not support."""
     from .core import settings
 
     tone = TONE_LABELS.get(settings.get("cvdocs.letter_tone"), who["tone"].capitalize())
@@ -257,7 +301,7 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], 
     return {"tone": f"{tone} (your setting)",
             "length": f"{len(letter.split())} words (you prefer about {who['letter_words']})",
             "evidence": "; ".join(shown) or "None named",
-            "checked": (REVISED if revised else "") + (
+            "checked": (REVISED if revised else "") + (SOFTENED if softened else "") + (
                 CHECKED_CLEAN if not letter_flags else
                 f"{len(letter_flags)} {'thing' if len(letter_flags) == 1 else 'things'} to check before "
                 "sending: see Check before sending.")}
@@ -284,16 +328,24 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     sources = (_job_text(job), about)
     letter, revised = revise_once(letter, _hits(who, letter, "letter", facts=facts, kept=kept, sources=sources),
                                   lambda note: _letter(who, f"{text}\n\nYour first draft:\n{letter}\n\n{note}"))
-    flags = check_drafts(who, letter, facts=facts, kept=kept, fit=fit, sources=sources)
+    letter, claims, softened = fix_claims(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}"
+                                                                            f"\n\n{note}"),
+                                          facts=facts, kept=kept, employer=sources)
+    flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
     used = passages(kept)
     evidence = used or [m.get("evidence", "") for m in fit.get("matches", []) if m.get("strength") == "strong"]
-    return {"text": letter, "flags": flags, "used": used, "revised": revised,
-            "notes": letter_notes(who, letter, evidence, flags, revised=revised)}
+    return {"text": letter, "flags": flags, "used": used, "revised": revised, "softened": softened,
+            "notes": letter_notes(who, letter, evidence, flags, revised=revised, softened=softened)}
+
+
+def _answers_text(answers: list[dict]) -> str:
+    return "\n".join(f"- {a.get('question', '')}: {a.get('answer', '')}" for a in answers)
 
 
 def _answers(who: dict, questions: list[str], context: str, *, facts: str, kept: str,
-             sources: tuple[str, ...]) -> list[dict]:
-    """Answers to the advert's questions, revised once together when one breaks a high-severity rule."""
+             sources: tuple[str, ...]) -> tuple[list[dict], list[str]]:
+    """Answers to the advert's questions, revised once together when one breaks a high-severity rule and once
+    more when they make claims the facts do not support; returns (answers, the claims still unsupported)."""
     request = "Questions:\n" + "\n".join(f"- {q}" for q in questions) + f"\n\n{context}"
 
     def ask(text: str) -> list[dict]:
@@ -302,9 +354,18 @@ def _answers(who: dict, questions: list[str], context: str, *, facts: str, kept:
 
     answers = ask(request)
     hits = [h for a in answers for h in _hits(who, a["answer"], "answer", facts=facts, kept=kept, sources=sources)]
-    drafted = "\n".join(f"- {a.get('question', '')}: {a['answer']}" for a in answers)
-    return revise_once(answers, hits,
-                       lambda note: ask(f"{request}\n\nYour first answers:\n{drafted}\n\n{note}"))[0]
+    answers = revise_once(answers, hits,
+                          lambda note: ask(f"{request}\n\nYour first answers:\n{_answers_text(answers)}\n\n{note}"))[0]
+    answers, claims, _ = fix_claims(who, answers,
+                                    lambda note: ask(f"{request}\n\nYour answers:\n{_answers_text(answers)}\n\n{note}"),
+                                    facts=facts, kept=kept, employer=sources, as_text=_answers_text)
+    return answers, claims
+
+
+def _message(who: dict, context: str, analysis: dict, job_text: str) -> str:
+    """The message to the person hiring, cleaned of the model's notes and of a title the advert never gives."""
+    return untitled(spelt(drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip())),
+                          who), analysis, job_text)
 
 
 def _eligibility_flag(job, who: dict, fit: dict, conditions: list) -> str:
@@ -376,18 +437,21 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit)
     letter = written["text"]
     context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
-    message = spelt(drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip())), who)
-    message = untitled(message, analysis, job_text)
+    their_words = (job_text, about)
+    message = _message(who, context, analysis, job_text)
+    message, message_claims, _ = fix_claims(
+        who, message, lambda note: _message(who, f"{context}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text),
+        facts=facts, kept=kept, employer=their_words)
     questions = analysis.get("questions") or []
-    answers = _answers(who, [*questions, *COMMON_QUESTIONS],
-                       f"{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}", facts=facts,
-                       kept=kept, sources=(job_text, about))
+    answers, answer_claims = _answers(who, [*questions, *COMMON_QUESTIONS],
+                                      f"{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}",
+                                      facts=facts, kept=kept, sources=their_words)
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
     others = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
-    flagged = written["flags"] + check_drafts(who, others, facts=facts, kept=kept, fit=fit,
-                                              sources=(job_text, about), kind="answer")
+    flagged = written["flags"] + check_drafts(who, others, facts=facts, kept=kept, sources=their_words, kind="answer",
+                                              claims=message_claims + answer_claims)
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
     employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]

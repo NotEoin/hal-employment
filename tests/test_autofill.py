@@ -337,7 +337,49 @@ class Answers(unittest.TestCase):
         finally:
             autofill.llm.chat_json, autofill.gpu.busy = saved
         self.assertEqual(f["value"], "I organised the colour catalogue of a made-up archive.")
-        self.assertIn("in UK English, with UK spelling", " ".join(asked[-1].split()))
+        self.assertIn("in UK English, with UK spelling", " ".join(asked[0].split()))
+
+    def fill_with(self, answer: str, unsupported: list[str], docs: dict | None = None) -> tuple[dict, list]:
+        """A written answer filled by a stand-in model whose check finds `unsupported`; the field and the asks."""
+        f = {"hid": "h0", "kind": "textarea", "type": "textarea", "label": "Describe a project you are proud of",
+             "required": True}
+        asked = []
+
+        def model(system, user, **kw):
+            asked.append((system, user))
+            if system.startswith("Check drafts"):
+                return {"unsupported": unsupported}
+            return {"answers": [{"hid": "h0", "value": answer, "sure": True}]}
+        with mock.patch.object(autofill.llm, "chat_json", model), mock.patch.object(autofill.gpu, "busy", lambda: None):
+            autofill.ask_model(self.job, [f], docs or {})
+        return f, asked
+
+    def test_a_written_answer_with_a_claim_your_facts_lack_is_marked_for_you(self):
+        # autofill had no claim check at all (2026-11-06)
+        f, asked = self.fill_with("I led a made-up archive team and catalogued the river boat records.",
+                                  ["led a made-up archive team"])
+        self.assertEqual(f["note"], "Hal is unsure; check this: not in your facts: led a made-up archive team")
+        checks = [user for system, user in asked if system.startswith("Check drafts")]
+        self.assertEqual(len(checks), 1, "one check for the whole form")
+        self.assertIn("I led a made-up archive team", checks[0])
+
+    def test_a_written_answer_with_a_number_no_fact_holds_is_marked_for_you(self):
+        f, _ = self.fill_with("I catalogued 4,700 made-up river boat records for the archive.", [])
+        self.assertEqual(f["note"], "Hal is unsure; check this: 4,700 is in none of your facts")
+
+    def test_earlier_drafts_reach_the_form_filler_as_style_never_as_facts(self):
+        # earlier drafts were fed back in as facts, so a claim one made up came back on the form (2026-11-06)
+        docs = {"answers": [{"question": "Why us?", "answer": "I once ran a made-up lighthouse."}],
+                "letter": "I bring years of made-up lighthouse work."}
+        self.assertNotIn("lighthouse", autofill._facts(self.job, docs, None))
+        _, asked = self.fill_with("I catalogued made-up river boat records for an archive.", [], docs)
+        fill = next(user for system, user in asked if not system.startswith("Check drafts"))
+        style = fill.split(autofill.STYLE_LABEL, 1)
+        self.assertEqual(len(style), 2)
+        self.assertNotIn("lighthouse", style[0])
+        self.assertIn("I bring years of made-up lighthouse work.", style[1])
+        self.assertIn("never take a fact from them", next(system for system, _ in asked
+                                                          if not system.startswith("Check drafts")))
 
     def test_a_salary_typed_for_one_job_is_never_offered_to_another(self):
         con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")

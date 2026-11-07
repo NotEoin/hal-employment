@@ -87,7 +87,10 @@ the top. When Hal cannot tell the field from the advert or your goal, it uses ge
 another field's. It uses only your facts and never invents a number: where a result has none, it says who
 the work served instead. A first draft that breaks one of Hal's writing rules (a stock phrase, an invented
 number, "not just X but Y") is rewritten once, and anything still wrong is listed under **Check before
-sending**.
+sending**. Hal also checks what each letter, message and answer says about you against your CV, the facts
+you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
+what is left is listed. What the draft says about the employer, taken from the advert, is not listed. On a
+form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**.
 
 Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
 English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the
