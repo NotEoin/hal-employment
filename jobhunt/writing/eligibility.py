@@ -17,7 +17,8 @@ Design decisions, each with its reason:
   read with `profile.merge.level`; years are `goal.experience_years` and are read from the advert with
   `find.rules.min_years`.
 - A fit map called office attendance in London unmet for a person who lives in London (2026-11-07), so
-  `where_you_live_settles` is checked before a location gap or a location eligibility note is shown.
+  `where_you_live_settles` is checked before a location gap or a location eligibility note is shown, and the
+  fit table shows such a row as met with the reason (`where_you_live_reason`).
 """
 from __future__ import annotations
 
@@ -37,6 +38,7 @@ NO_SPONSOR = re.compile(r"right to work in the uk|(no|not|unable to|cannot|can't
 WHERE = re.compile(r"\b(based in|located in|live in|living in|within commut\w*|commutable|relocat\w*|on[- ]?site|"
                    r"in[- ]office|office[- ](attendance|based)|in the office|days? (a|per) week|hybrid|in person|"
                    r"attend (the|our) office)\b", re.I)
+PLACE_MIN = 3              # a part of the person's address shorter than this ("UK" aside) names no town
 OFFICE = re.compile(r"\b(on[- ]?site|in[- ]office|office|in person|hybrid|days? (a|per) week)\b", re.I)
 
 
@@ -122,16 +124,27 @@ def blockers(requirements: list[str], who: Person) -> list[str]:
     return list(dict.fromkeys(out))
 
 
-def where_you_live_settles(text: str, who: Person, towns: list[str], facts: str = "") -> bool:
-    """True when `text` asks the person to live in or come to the advert's place and they plainly can: they
-    will move, the place (`towns`) is where their settings or CV (`facts`) say they live, or it asks for office
-    days and they are happy in an office."""
+def where_you_live_reason(text: str, who: Person, towns: list[str], facts: str = "") -> str:
+    """Why the person plainly meets a requirement (`text`) to live in or come to the advert's place, in plain
+    words for the fit table; "" when it asks no such thing or they may not. They meet it when they will move,
+    the place (`towns`, or a town of their own the text names) is where their settings or CV (`facts`) say
+    they live, or it asks for office days and they are happy in an office."""
     if not WHERE.search(text or ""):
-        return False
+        return ""
     if who.relocate:
-        return True
+        return "Your settings say you will relocate"
     home = " ".join(who.places) + "\n" + (facts or "")
-    if any(t and re.search(rf"\b{re.escape(t)}\b", home, re.I) for t in towns):
-        return True
-    return who.office and OFFICE.search(text) is not None and not re.search(r"\b(live|living|based|located)\b",
-                                                                              text, re.I)
+    own = [p.strip() for place in who.places for p in place.split(",") if len(p.strip()) >= PLACE_MIN]
+    town = next((t for t in towns if t and re.search(rf"\b{re.escape(t)}\b", home, re.I)), None) or \
+        next((p for p in own if re.search(rf"\b{re.escape(p)}\b", text, re.I)), None)
+    if town:
+        return f"You live in {town}"
+    if who.office and OFFICE.search(text) and not re.search(r"\b(live|living|based|located)\b", text, re.I):
+        return "Your settings say you are happy to work in an office"
+    return ""
+
+
+def where_you_live_settles(text: str, who: Person, towns: list[str], facts: str = "") -> bool:
+    """True when the person plainly meets a requirement to live in or come to the advert's place
+    (`where_you_live_reason`)."""
+    return bool(where_you_live_reason(text, who, towns, facts))

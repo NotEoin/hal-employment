@@ -416,6 +416,14 @@ runs: tests use `tests/support/fake_claude/`.
   and one claim check per form, with the advert as the employer's words; a flagged answer gets a "Hal is
   unsure; check this: ..." note and is not rewritten. Answers and letters drafted for the job earlier
   reach the form filler only as examples of style (`autofill.STYLE_LABEL`), never as facts.
+- The fit map is checked with no AI after the fit call. `pack.complete_fit` finds each must-have no row or
+  gap speaks for (`missing_rows`: a row holding `ROW_SHARE` of the requirement's words) and asks the fit
+  prompt once more for those alone; one still missing becomes a gap ("... (no evidence found)").
+  `pack.consistent_fit` then makes a row whose evidence says there is none a gap, never partial or strong,
+  and makes a row or gap about where the job is that the person's settings settle a strong row whose
+  evidence is the reason (`eligibility.where_you_live_reason`: "You live in Made-up Town", a move, or
+  office days for a person happy in an office), also when the requirement names their own town and the
+  advert's location names none.
 - The fit map (`pack._fit`) also gets every project and job card the person checked
   (`profile.writing.cards`, each with its kind, tools and summary), never ranked or cut like the Profile
   block. `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that names a
@@ -446,8 +454,9 @@ runs: tests use `tests/support/fake_claude/`.
   `goal.experience_years`, and no sponsorship when `you.right_to_work` needs it. Each is an
   "ELIGIBILITY: ..." line at the top of "Check before sending", which no rewrite changes. A requirement
   that allows "or equivalent", is desirable or names a lower degree too is not plain, and an unknown level
-  says nothing. `where_you_live_settles` drops a fit gap or a fit eligibility note about the job's place
-  when the person lives in the advert's town (settings or CV), will relocate, or is happy in an office.
+  says nothing. `where_you_live_settles` meets a fit row or gap, and drops a fit eligibility note, about
+  the job's place when the person lives in the advert's town (settings or CV), will relocate, or is happy
+  in an office.
 - The pack's company check (`reputation.check(company, advert)`, also `jobhunt check`) compares trades as
   sectors of `SIC_DIVISIONS`: the advert's are its leading ones (`advert_sectors`, at least `SECTOR_SHARE`
   of the top sector's words, whole words with a plural "s" dropped). It keeps a Wikipedia article only when

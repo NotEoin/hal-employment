@@ -183,22 +183,76 @@ def passages(kept: str) -> list[str]:
 
 
 def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
-    """The fit map: each requirement matched to evidence from the CV, every checked card and the record; a
-    gap about where the job is, which where the person lives settles, is dropped (`eligibility`)."""
+    """The fit map: each requirement matched to evidence from the CV, every checked card and the record, then
+    made complete and consistent with no AI (`complete_fit`, `consistent_fit`); a must-have the reply left out
+    is asked for once more."""
     conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
     cards = profile_writing.cards()
     shown = profile_writing.cards_block(cards)
-    fit = llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in _requirements(analysis))
-                        + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
-                        + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept),
-                        role="main")
-    fit = with_card_tools(fit, cards)
-    you, towns = eligibility.person(), reputation.towns(reputation.advert_of(job))
-    return {**fit, "gaps": [g for g in fit["gaps"]
-                            if not eligibility.where_you_live_settles(str(g), you, towns, facts)]}
+
+    def ask(requirements: list[str]) -> dict:
+        return with_card_tools(llm.chat_json(
+            prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
+            + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
+            + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept), role="main"), cards)
+
+    fit = complete_fit(ask(_requirements(analysis)), analysis.get("must_have") or [], ask)
+    return consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
 
 
 NO_EVIDENCE = re.compile(r"^\s*(no|none|not)\b|\bno (evidence|mention)\b", re.I)   # a fit row that found nothing
+ROW_SHARE = 0.6           # share of a requirement's words a fit row must hold to be that requirement's row
+MISSING_GAP = "{requirement} (no evidence found)"   # a must-have still missing after the second ask
+
+
+def _covers(said: str, requirement: str) -> bool:
+    wanted = set(_words(requirement))
+    return bool(wanted) and len(wanted & set(_words(said))) >= ROW_SHARE * len(wanted)
+
+
+def missing_rows(fit: dict, must_haves: list[str]) -> list[str]:
+    """The must-haves no row or gap of the fit map speaks for."""
+    said = [str(m.get("requirement") or "") for m in fit.get("matches") or [] if isinstance(m, dict)]
+    said += [str(g) for g in fit.get("gaps") or []]
+    return [r for r in (str(r).strip() for r in must_haves) if r and not any(_covers(s, r) for s in said)]
+
+
+def complete_fit(fit: dict, must_haves: list[str], ask) -> dict:
+    """The fit map with a row or gap for every must-have: one more `ask(missing)` for those the reply left out,
+    and a gap for any still missing (a requirement went missing from a real fit table, 2026-11-07)."""
+    missing = missing_rows(fit, must_haves)
+    if not missing:
+        return fit
+    more = ask(missing)
+    fit = {**fit, "matches": [*(fit.get("matches") or []), *(more.get("matches") or [])],
+           "gaps": [*(fit.get("gaps") or []), *(more.get("gaps") or [])]}
+    left = missing_rows(fit, missing)
+    return {**fit, "gaps": [*fit["gaps"], *(MISSING_GAP.format(requirement=r) for r in left)]}
+
+
+def consistent_fit(fit: dict, you, towns: list[str], facts: str) -> dict:
+    """The fit map with rows that agree with their evidence and the person's settings: a row or gap about
+    where the job is that where the person lives settles is met, with the reason
+    (`eligibility.where_you_live_reason`); a row whose evidence says there is none is a gap, never partial
+    or strong. A real table rated "London office three days a week" partial, "no evidence of refusal", for a
+    person living in London (2026-11-07)."""
+    matches, gaps = [], []
+    for m in (dict(m) for m in fit.get("matches") or [] if isinstance(m, dict)):
+        requirement = str(m.get("requirement") or "")
+        reason = eligibility.where_you_live_reason(requirement, you, towns, facts)
+        if reason:
+            matches.append({**m, "evidence": reason, "strength": "strong"})
+        elif NO_EVIDENCE.search(str(m.get("evidence") or "")):
+            gaps.append(requirement)
+        else:
+            matches.append(m)
+    for gap in fit.get("gaps") or []:
+        reason = eligibility.where_you_live_reason(str(gap), you, towns, facts)
+        if reason:
+            matches.append({"requirement": str(gap), "evidence": reason, "strength": "strong"})
+        else:
+            gaps.append(gap)
+    return {**fit, "matches": matches, "gaps": gaps}
 
 
 def with_card_tools(fit: dict, cards: list[dict]) -> dict:

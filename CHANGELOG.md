@@ -184,6 +184,11 @@ What changed in each version, in plain words.
   lists AWS, because only the projects that fit in the letter's notes were read. The fit table now reads
   the tools of every project and job you checked, and a requirement that names one of them is never listed
   as a gap.
+- **The fit table is complete and agrees with itself.** A requirement the advert lists as essential could
+  be missing from the table; Hal now asks once more for any it left out, and lists one still missing as a
+  gap. A row that says there is no evidence is now a gap, never "partial". Office days or a place of work
+  you meet, because you live there, will move or are happy in an office, now read as met with the reason
+  ("You live in London"), not "partial, no evidence of refusal".
 - **Clearer packs.** The message to the person hiring could greet you instead of them; it is now rewritten,
   and starts "Hello," when the advert names no one. A letter that stopped mid-word is asked for again, and
   if it stops again Hal keeps it to its last full sentence and says so under **Check before sending**. An

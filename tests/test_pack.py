@@ -479,6 +479,62 @@ class Fit(unittest.TestCase):
         self.assertIn("Gaps to address or accept: Spreadsheets\n", fit)
 
 
+class TableWriter(FakeWriter):
+    """A fake writer whose fit map leaves out a must-have, rates a row with no evidence partial, and calls
+    office days in the person's town partial, as a real model replied (2026-11-07); asked again for the
+    missing must-have, it answers for it."""
+
+    MUST = ("Writing reports", "Familiar with statistical methodologies",
+            "Made-up Town office three days a week")
+
+    def reply(self, system: str, user: str) -> object:
+        pid = prompt_id(system)
+        if pid == "analyse":
+            return {**super().reply(system, user), "must_have": list(self.MUST), "nice_to_have": []}
+        if pid == "fit" and "- Writing reports" not in user:
+            return {"matches": [{"requirement": "Familiar with statistical methodologies",
+                                 "evidence": "record: a made-up survey of visitor numbers", "strength": "partial"}],
+                    "gaps": [], "eligible": True, "eligibility_notes": ""}
+        if pid == "fit":
+            return {"matches": [{"requirement": "Writing reports", "evidence": "No evidence in the CV",
+                                 "strength": "partial"},
+                                {"requirement": "Made-up Town office three days a week",
+                                 "evidence": "no evidence of refusal", "strength": "partial"}],
+                    "gaps": [], "eligible": True, "eligibility_notes": ""}
+        return super().reply(system, user)
+
+
+class Table(unittest.TestCase):
+    def test_every_must_have_gets_a_row_and_a_missing_one_is_asked_for_once(self):
+        # "familiar with statistical methodologies" was missing from a real fit table (2026-11-07)
+        with as_applicant(people.HUMANITIES, TableWriter()) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        asks = a.writer.asked("fit")
+        self.assertEqual(len(asks), 2, "one more ask, never a loop")
+        self.assertIn("Requirements:\n- Familiar with statistical methodologies\n\n", asks[1]["user"])
+        self.assertIn("| Familiar with statistical methodologies | record: a made-up survey of visitor numbers "
+                      "| partial |", section(md, "Fit"))
+
+    def test_a_row_with_no_evidence_is_a_gap_and_office_days_where_you_live_are_met(self):
+        # "London office three days a week" was partial, "no evidence of refusal", for a person in London, and a
+        # row with no evidence was rated partial (2026-11-07)
+        with as_applicant(people.HUMANITIES, TableWriter()) as a:
+            settings.set("you.city", "Made-up Town", by="you")
+            settings.set("you.relocate", False, by="you")
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        fit = section(md, "Fit")
+        self.assertIn("| Made-up Town office three days a week | You live in Made-up Town | strong |", fit)
+        self.assertNotIn("| Writing reports |", fit)
+        self.assertIn("Gaps to address or accept: Writing reports\n", fit)
+
+    def test_a_must_have_still_missing_after_the_second_ask_is_a_gap(self):
+        fit = pack.complete_fit({"matches": [], "gaps": []}, ["Familiar with statistical methodologies"],
+                                lambda missing: {"matches": [], "gaps": []})
+        self.assertEqual(fit["gaps"], ["Familiar with statistical methodologies (no evidence found)"])
+
+
 def replying(pid: str, *replies: str, writer: FakeWriter | None = None) -> FakeWriter:
     """A fake writer whose `pid` replies are `replies` in turn, the last one repeated."""
     writer = writer or FakeWriter()
@@ -760,7 +816,7 @@ class Advert(unittest.TestCase):
         # (2026-10-23)
         writer = FakeWriter()
         plain = writer.reply
-        matches = [{"requirement": "Cataloguing", "evidence": "Catalogued 300 letters into a spreadsheet.",
+        matches = [{"requirement": "Writing reports", "evidence": "Catalogued 300 letters into a spreadsheet.",
                     "strength": "strong"},
                    {"requirement": "Visitors", "evidence": "Guided 40 open-day tours.", "strength": "strong"}]
         writer.reply = lambda system, user: ({**plain(system, user), "matches": matches}

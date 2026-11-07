@@ -36,6 +36,17 @@ class Place(unittest.TestCase):
         self.assertFalse(eligibility.where_you_live_settles(gap, Person(places=("Other Town",)), ["Made-up Town"]))
         self.assertFalse(eligibility.where_you_live_settles("Spreadsheets", GRADUATE, ["Made-up Town"]))
 
+    def test_the_reason_says_why_in_plain_words_even_when_the_advert_gives_no_town(self):
+        # "London office three days a week" was partial, "no evidence of refusal", for a person in London
+        # (2026-11-07); the advert's location said only "Hybrid"
+        row = "Made-up Town office three days a week"
+        self.assertEqual(eligibility.where_you_live_reason(row, GRADUATE, []), "You live in Made-up Town")
+        self.assertEqual(eligibility.where_you_live_reason(row, Person(relocate=True), []),
+                         "Your settings say you will relocate")
+        self.assertEqual(eligibility.where_you_live_reason("In the office three days a week", Person(office=True), []),
+                         "Your settings say you are happy to work in an office")
+        self.assertEqual(eligibility.where_you_live_reason(row, Person(places=("Other Town",)), []), "")
+
 
 if __name__ == "__main__":
     unittest.main()
