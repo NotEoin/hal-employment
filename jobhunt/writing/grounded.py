@@ -247,12 +247,12 @@ def paragraph_of(text: str, sentence: str) -> str:
 
 def only_in_paragraph(text: str, sentence: str) -> bool:
     """True when `sentence` is the only sentence of its paragraph: a letter or message needs it."""
-    return len(writing_check.sentences(paragraph_of(text, sentence))) <= 1
+    return len(cites.sentences(paragraph_of(text, sentence))) <= 1
 
 
 def first_of_answer(text: str, sentence: str) -> bool:
     """True when `sentence` is an answer's first, which answers the question, or its only one."""
-    said = writing_check.sentences(cites.normalise(text))
+    said = cites.sentences(text)
     return not said or said[0] == sentence or len(said) == 1
 
 
@@ -274,8 +274,8 @@ def ground(draft: str, facts: Facts, essential: Essential) -> Grounded:
     """`draft` with each sentence checked against its own evidence (`check`): a failing one is rewritten once
     (`fix`) and checked again, then taken out, or kept and listed when `essential(text, sentence)` says the
     draft needs it."""
-    out = Grounded(draft)
-    for c in cites.cited(draft):
+    out = Grounded(cites.normalise(draft))
+    for c in cites.cited(out.text):
         found = check(c, facts)
         if not found:
             continue

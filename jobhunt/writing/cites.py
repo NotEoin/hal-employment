@@ -18,6 +18,11 @@ Design decisions, each with its reason:
   (`FEELINGS`) are never a fact, so a reason for the employer needs no evidence.
 - A marker written after the full stop ("... results. [E2]") is moved before it (`normalise`), so a sentence
   keeps its own marker when a draft is split or cut to its last full sentence.
+- A marker ends its sentence. A local model often left out the full stop after one ("on one consumer GPU
+  [E1] This project shows"), so taking the markers out joined two sentences and every check read them as
+  one (2026-11-07). `normalise` puts the stop in when a marker run is followed by a new sentence (a capital,
+  a quote or a digit), a line break or the end of the text, and `sentences` splits after every marker run
+  with its stop, also before a digit or a small letter.
 - Every check of style reads the draft without its markers, so "[E2]" is never read as a number.
 """
 from __future__ import annotations
@@ -30,6 +35,10 @@ from jobhunt.writing import check
 _ONE = r"\[\s*(?:M|E\d+(?:\s*[,;]\s*E?\d+)*)\s*\]"
 MARKER = re.compile(rf"[ \t]*{_ONE}", re.I)
 AFTER_STOP = re.compile(rf"([.!?])((?:[ \t]*{_ONE})+)", re.I)
+# A marker run after a word (no full stop), then a new sentence, a line break or the end of the text.
+# Case matters after the run, so only the markers are read without it: "[E1] and" goes on with the sentence.
+UNSTOPPED = re.compile(rf"(?<=[^.!?\s])((?i:[ \t]*{_ONE})+)(?=\s+[A-Z\"'\d\u2018\u201c]|[ \t]*(?:\n|$))")
+STOPPED = re.compile(rf"{_ONE}[.!?]\s+", re.I)    # a marker run's end with its stop: a sentence ends there
 MOTIVE = "M"
 FIRST_PERSON = re.compile(r"\b(I|I'm|I've|I'd|me|my|mine|we|our|us)\b", re.I)
 # Past tenses with no "-ed" ending that claim something done.
@@ -63,8 +72,10 @@ class Cited:
 
 
 def normalise(text: str) -> str:
-    """The draft with each marker written after a full stop moved before it."""
-    return AFTER_STOP.sub(lambda m: m.group(2) + m.group(1), text or "")
+    """The draft with each marker written after a full stop moved before it, and a full stop after each marker
+    run that ends a sentence without one (see the module notes)."""
+    moved = AFTER_STOP.sub(lambda m: m.group(2) + m.group(1), text or "")
+    return UNSTOPPED.sub(lambda m: m.group(1) + ".", moved)
 
 
 def strip(text: str) -> str:
@@ -84,10 +95,24 @@ def _ids(marker: str) -> list[str]:
     return [f"E{n}" for n in re.findall(r"\d+", inner)]
 
 
-def cited(text: str) -> list[Cited]:
-    """Each sentence of a draft (`writing.check.sentences`) with the evidence its markers cite."""
+def sentences(text: str) -> list[str]:
+    """The sentences of a draft, markers kept: `writing.check.sentences` of the normalised draft, each also
+    split after a marker run with its stop."""
     out = []
-    for raw in check.sentences(normalise(text)):
+    for said in check.sentences(normalise(text)):
+        start = 0
+        for m in STOPPED.finditer(said):
+            out.append(said[start:m.end()].strip())
+            start = m.end()
+        if said[start:].strip():
+            out.append(said[start:].strip())
+    return out
+
+
+def cited(text: str) -> list[Cited]:
+    """Each sentence of a draft (`sentences`) with the evidence its markers cite."""
+    out = []
+    for raw in sentences(text):
         said = [i for m in MARKER.findall(raw) for i in _ids(m)]
         ids = tuple(dict.fromkeys(i for i in said if i != MOTIVE))
         out.append(Cited(raw, MARKER.sub("", raw).strip(), ids, MOTIVE in said))

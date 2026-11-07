@@ -160,6 +160,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Sentences stay apart.** A draft whose writer left out the full stop after a sentence ("... on one
+  consumer GPU This project shows ...") came out as one long sentence, and Hal checked the two as one. Hal
+  now ends the sentence there, so each one is checked on its own and reads as it should.
 - **Letters and answers use only your own documents.** Hal searched every note in your record when it
   wrote, so lecture notes, other people's files and files it was unsure about could turn up in a letter as
   your own work. Letters, form answers, interview notes and CV suggestions now read only your own documents

@@ -422,8 +422,10 @@ runs: tests use `tests/support/fake_claude/`.
 - Evidence markers (`writing/cites.py`): the letter, message and answers requests carry the plan
   (`pack._plan_part`), and their prompts ask for each sentence about the person to end with the ids it
   rests on ("[E2]", "[E2,E5]") and a reason for the employer or a closing request with "[M]".
-  `cites.normalise` moves a marker written after a full stop before it, and every writing check reads the
-  draft without markers (`cites.strip`). The markers are taken out before a draft is returned, shown or
+  `cites.normalise` moves a marker written after a full stop before it, and puts a full stop after a marker
+  run that has none when a capital, a quote, a digit, a line break or the end of the text follows it ("on
+  one consumer GPU [E1] This project" read as one sentence, 2026-11-07); `cites.sentences` splits after
+  every marker run with its stop. Every writing check reads the draft without markers (`cites.strip`). The markers are taken out before a draft is returned, shown or
   saved. An empty plan, or a draft with no marker at all, is checked whole as before (`pack.fix_claims`).
 - Sentence checks (`writing/grounded.py`): `pack.settle` (letter, message) and `pack.settle_answers` check a
   marked draft one sentence at a time against only the items it cites (`pack.grounds` gathers them). With no
