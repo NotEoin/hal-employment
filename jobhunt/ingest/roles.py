@@ -18,9 +18,9 @@ Every document read into the record gets one role:
 
 The AI says which role it thinks (`ingest_doc`'s "role"). A document it calls the person's own must name
 them (`identity`): their name, another name they go by (`you.other_names`, such as a username or student
-number), a username from their own links, or their email. A model asked "is this theirs?" says yes too
-often, and other people's dissertations gave the person projects they never did (2026-11-05). A
-repository's text names who made its commits (`convert.repo_text`), so the person's own code counts.
+number), a username from their links (in Settings or their own CVs), or their email. A model asked "is
+this theirs?" says yes too often, and other people's dissertations gave the person projects they never did
+(2026-11-05). A repository's text names who made its commits (`convert.repo_text`), so the person's own code counts.
 """
 from __future__ import annotations
 
@@ -65,11 +65,23 @@ def _handle(url: str) -> str:
     return parts[0] if parts else ""
 
 
-def identity(owner: str, other_names: str = "", con: sqlite3.Connection | None = None) -> list[str]:
-    """The words that name the person in a document: their name's parts, the other names they gave, and the
-    usernames and email addresses their own CVs and letters list in the profile."""
+def identity(owner: str, other_names: str = "", con: sqlite3.Connection | None = None,
+             own: tuple[str, ...] = ()) -> list[str]:
+    """The words that name the person in a document: their name's parts, the other names they gave, the
+    usernames and email addresses in `own` (their settings, `own_links`), and those their own CVs and letters
+    list in the profile.
+
+    The settings count without a CV: a fresh read held the CVs back, so no repository was the person's
+    (2026-11-06).
+    """
     words = [w for w in re.findall(r"[^\W\d_]+", owner or "") if len(w) >= NAME_PART_MIN]
     words += [n.strip() for n in re.split(r"[,;\n]", other_names or "") if len(n.strip()) >= OTHER_NAME_MIN]
+    for value in own:
+        value = str(value or "").strip()
+        if "@" in value and "/" not in value:
+            words.append(value)
+        elif handle := _handle(value):
+            words.append(handle)
     if con is not None:
         rows = con.execute("""SELECT DISTINCT i.kind, i.fields FROM profile_items i JOIN profile_evidence e
                               ON e.item_id = i.id WHERE i.kind IN ('link', 'basic') AND i.state != 'hidden'
@@ -85,6 +97,14 @@ def identity(owner: str, other_names: str = "", con: sqlite3.Connection | None =
         if w.lower() not in (s.lower() for s in seen):
             seen.append(w)
     return seen
+
+
+def own_links() -> tuple[str, ...]:
+    """The person's email and profile links from their settings, for `identity`."""
+    from jobhunt.core import settings
+    from jobhunt.core.settings.catalog.you import LINKS
+
+    return tuple(str(settings.get(k) or "") for k in ("you.email", *(f"you.links.{key}" for key, _ in LINKS)))
 
 
 def names_person(text: str, words: list[str]) -> bool:

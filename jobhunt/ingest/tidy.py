@@ -187,7 +187,8 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
 
     db_copy, archive = backup(con, vault)
     log.info("tidy: backed up the database to %s and the record to %s", db_copy, archive)
-    words = roles.identity(understand.owner(), str(settings.get("you.other_names") or ""), con)
+    words = roles.identity(understand.owner(), str(settings.get("you.other_names") or ""), con,
+                           own=roles.own_links())
     covered = lectures.Covered(con)
     done = {"left_out": 0, "private": 0, "covered": 0, "again": 0, "older_version": 0, "judged": 0}
     done["older_version"] = _versions(con, vault)

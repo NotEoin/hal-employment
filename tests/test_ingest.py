@@ -555,6 +555,21 @@ class Understanding(unittest.TestCase):
         self.assertTrue(roles.names_person("Commits by: aquill0n <a@example.org>", words))
         self.assertFalse(roles.names_person("Avery-ish things", ["Avery Quillon"]))
 
+    def test_the_username_in_the_persons_settings_names_them_before_any_cv_is_read(self):
+        # a fresh read with the CVs held back called the person's own repositories unsure (2026-11-06)
+        reply = {**REPLY, "doc_type": "repository", "category": "Code", "title": "tide-gauge", "role": "own",
+                 "facts": []}
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(reply)}):
+            settings.set("you.name", OWNER)
+            settings.set("you.links.github", "https://github.com/aquill0n")
+            repo = files / "tide-gauge"
+            put(repo, "README.md", "# Tide gauge\n\nReads a made-up sensor.")
+            put(repo, ".git/logs/HEAD", "0000000 1111111 aquill0n <a@example.org> 1700000000 +0000"
+                                        "\tcommit (initial): start\n")
+            run(con, [files])
+            role = rows(con)["Files/tide-gauge"]["role"]
+        self.assertEqual(role, "own")
+
     def test_a_repository_says_who_made_its_commits_so_the_persons_code_is_theirs(self):
         with home() as (_con, _vault, files):
             repo = files / "tide-gauge"

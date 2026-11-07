@@ -241,8 +241,9 @@ Hal sorts every document by whose it is, and that decides what it can learn from
   as its maker, and not name you, to count: a file that names no one stays in your record, but Hal takes
   no facts from it.
 
-Hal only counts a document as yours when it names you. If your files use another name for you, such as a
-username or a student number, add it under **Settings > You > Other names you go by**.
+Hal only counts a document as yours when it names you: your name, your email, or a username from your
+GitHub or LinkedIn link in **Settings > You**. If your files use another name for you, such as a student
+number, add it under **Settings > You > Other names you go by**.
 
 ### Tidying your record
 

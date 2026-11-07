@@ -219,7 +219,8 @@ def _judge(con: sqlite3.Connection, row: sqlite3.Row, desc: dict, text: str) -> 
     """Sets the document's role and keeps only the facts that role may give (`roles`)."""
     from jobhunt.core import settings
 
-    words = roles.identity(understand.owner(), str(settings.get("you.other_names") or ""), con)
+    words = roles.identity(understand.owner(), str(settings.get("you.other_names") or ""), con,
+                           own=roles.own_links())
     role = roles.decide(desc.get("said"), doc_type=desc["doc_type"], text=f"{row['rel']}\n{text}", words=words,
                         in_course=bool(row["unit"]), author=str(desc.get("author") or ""))
     desc["role"], desc["about_owner"] = role, roles.ABOUT_OWNER[role]

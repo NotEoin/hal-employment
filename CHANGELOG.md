@@ -28,7 +28,8 @@ What changed in each version, in plain words.
   else's. Course material only shows what you studied, your contact details come only from your CVs and
   letters, and someone else's documents (a friend's CV, a downloaded paper) are left out of your record
   when they name who made them.
-  Add usernames or a student number under **Other names you go by** so Hal knows a file is yours.
+  Your email and the usernames in your links in Settings name you, and you can add a student number
+  under **Other names you go by** so Hal knows a file is yours.
 - **The newest copy of each project.** When a folder holds several copies of one code project ("Robot",
   "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same
