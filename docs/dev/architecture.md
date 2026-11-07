@@ -738,7 +738,12 @@ available yet.
   `GET /api/v2/profile/check` serves it with `done` and `total` for the progress bar, and
   `POST /api/v2/profile/confirm-many` and `/hide-many` {ids} change a group in one transaction with one
   conflicts refresh and one `profile` event. The page is `pages/check.js` (route `check`) with its cards
-  in `record/check.js`.
+  in `record/check.js`. Above the queue, `check.best(con)` gives "Your best experiences" (`best` in the same
+  reply): the tiered items not hidden and not archived, core then supporting then not judged
+  (`tiers.order`), each tier by `check.strength` then `check.recency`, at most `check.BEST_MAX` (25), and
+  the archived ones apart (`archived`). `record/best.js` shows them with Confirm, Edit and Move to archive
+  (`PUT .../tier` archive), the archive folded away with Move up a tier (supporting), and **Sort them
+  again** (`POST /api/v2/profile/tiers`).
 - Tiers (`tiers.py`, migration 0025): each job, education, project, achievement and certificate has a
   `tier` (`core`: what the person would lead with for the jobs they want; `supporting`: true and useful when
   a job asks; `archive`: never used for writing; '' not judged), `tier_by` (`hal` or `person`), `tier_why`

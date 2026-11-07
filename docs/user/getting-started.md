@@ -316,6 +316,23 @@ settled ones folded away below.
 **Check your record** shows what Hal found one card at a time, so you can go through it quickly. Open it
 from **Check your record** on Your record's Overview, or from **Check them** on My CV or an application.
 
+The page opens with **Your best experiences**: the jobs, courses, projects, achievements and certificates
+Hal would tell an employer about first, with a few words on why each one is there. Hal sorts them after it
+reads your files, putting what you would lead with first, then what is useful when a job asks for it. It
+shows about 25, so you can check them in one sitting. Each has three buttons:
+
+- **Confirm** says it is right, and Hal can use it.
+- **Edit** lets you fix it.
+- **Move to archive** keeps it out of your CV and letters. Use it for things not worth telling an employer,
+  such as a hobby tool or a short online course anyone can click through.
+
+Archived experiences are folded away under **Archived**. Hal puts there what you hid and what it found only
+in files that are not your own, such as course material. **Move up a tier** brings one back. Hal never
+changes a choice you made. **Sort them again** asks Hal to sort them afresh, for example after you change
+the roles you want in your goal. Without Hal's AI, only those simple rules sort them.
+
+Below, under **Check the rest**, Hal goes through everything else it found:
+
 1. When two of your files disagree, Hal asks **Which is right?** first. Press the right value, or say it
    is right as it is.
 2. Then each fact comes on its own card: your name and contact details, then jobs, education,

@@ -32,6 +32,13 @@ def found(kind: str, fields: dict, source: str = CV, doc_type: str = "cv", quote
                                                    "field": "", "role": role})
 
 
+def judged(item_id: int, tier: str, why: str) -> None:
+    """Puts an item in `tier` as Hal's AI would, with its reason."""
+    with closing(db.connect()) as con, con:
+        con.execute("UPDATE profile_items SET tier = ?, tier_by = 'hal', tier_why = ?, tier_basis = 'made-up' "
+                    "WHERE id = ?", (tier, why, item_id))
+
+
 def state(item_id: int) -> str:
     """The item's state as the store has it now."""
     with closing(db.connect()) as con:
@@ -148,6 +155,31 @@ class CheckPage(unittest.TestCase):
         studied.get_by_role("button", name="I have used this: Stream processing").click()
         p.page.get_by_text("Studied in your course (1 skill)").wait_for()
         self.assertEqual(state(stream), "confirmed")
+
+    def test_the_best_experiences_come_first_and_each_can_be_confirmed_archived_or_moved_up(self) -> None:
+        job = found("job", {"title": "Collections volunteer", "employer": EMPLOYER, "start": "2023-09",
+                            "current": True}, quote="Collections volunteer", role="own")
+        letters = found("project", {"name": "Mill town letters"}, PROJECT, "notes", "mill town letters", "own")
+        judged(job, "core", "Work in the field you want")
+        judged(letters, "supporting", "A long piece of research")
+        p = self.page()
+        best = p.page.locator("section.rec-best")
+        p.shows(best.get_by_role("heading", name="Your best experiences"), "the best experiences")
+        first = best.locator("li.rec-best-item").first
+        self.assertIn("Collections volunteer", first.inner_text())
+        self.assertIn("Work in the field you want", first.inner_text())
+        self.clean(p)
+        first.get_by_role("button", name="Confirm").click()
+        p.shows(best.locator("li.rec-best-item").first.get_by_text("Checked by you"), "the job checked")
+        self.assertEqual(state(job), "confirmed")
+        best.locator(f"li[data-best='{letters}']").get_by_role("button", name="Move to archive").click()
+        archive = p.page.locator("details.rec-best-archive")
+        p.shows(archive.get_by_text("Archived (1)"), "the project archived")
+        archive.locator("summary").click()
+        archive.get_by_role("button", name="Move up a tier: Mill town letters").click()
+        p.shows(best.locator(f"li[data-best='{letters}']"), "the project back in the list")
+        with closing(db.connect()) as con:
+            self.assertEqual(store.item(con, letters)["tier"], "supporting")
 
     def test_at_phone_width_the_buttons_are_large_and_the_keyboard_moves_on(self) -> None:
         found("basic", {"key": "name", "value": "Alex Doe"}, quote="Alex Doe")

@@ -97,6 +97,9 @@ What changed in each version, in plain words.
   what is not worth telling an employer, with a few words on why. Anything you hid, or that only appears in
   files that are not your own, is set aside, and school qualifications count as useful rather than the lead.
   Without Hal's AI only these rules are used. A choice you make yourself is never changed.
+- **Your best experiences.** Check your record opens with the experiences Hal would lead with, best first,
+  about 25 of them, each with why and **Confirm**, **Edit** and **Move to archive**. Archived ones are folded
+  away with **Move up a tier**, and **Sort them again** asks Hal to sort them afresh.
 - **Skills from your own work.** A skill that only your course material names, such as a topic from a
   lecture, is listed apart on Check your record under **Studied in your course** and never goes on your CV
   or in a letter, unless you press **I have used this**. One skill written several ways

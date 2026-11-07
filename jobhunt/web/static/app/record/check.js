@@ -13,10 +13,11 @@ import { ItemForm, basicKey } from "./fields.js";
 import { Sources, Fields, Conflict } from "./items.js";
 
 // What each kind of fact is called above its card.
-const KIND_NAME = { job: "A job", education: "Education", certificate: "A certificate", achievement: "An achievement",
+export const KIND_NAME = { job: "A job", education: "Education", certificate: "A certificate", achievement: "An achievement",
   project: "A project", link: "A link", skill: "A skill" };
 
-async function act(fn, said) {
+/** Runs one change, says `said` and reads the profile again; true when it worked, else the error is shown. */
+export async function act(fn, said) {
   try { await fn(); toast(said); invalidate("/profile*"); return true; }
   catch (err) { toast(err.message); return false; }
 }

@@ -48,6 +48,17 @@
 .rec-check-studied-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .rec-check-studied-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
 .rec-check-studied-list .btn { min-height: 44px; }
+/* Your best experiences: a ranked list above the queue, the archive folded away */
+.rec-best { display: flex; flex-direction: column; gap: 12px; overflow-wrap: anywhere; }
+.rec-best-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.rec-best-item { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.rec-best-item .h3 { margin: 0; }
+.rec-best-why { color: var(--ink-2); }
+.rec-best-done { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-weight: 700; }
+.rec-best-archived { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rec-best-archived li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.rec-best-archived .btn { min-height: 44px; }
+.rec-check-rest { margin: 8px 0 0; }
 @media (max-width: 640px) {
   .rec-check-btns .btn { flex: 1 1 100%; white-space: normal; }
   .rec-form { grid-template-columns: minmax(0, 1fr); }

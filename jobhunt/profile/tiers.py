@@ -99,6 +99,11 @@ def shown(item: dict, stored: dict) -> dict:
     return {"tier": tier, "tier_by": by, "tier_why": why, "tier_words": words}
 
 
+def order(item: dict) -> int:
+    """A shaped item's tier as a number for sorting: core, supporting, not judged, then archive."""
+    return {CORE: 0, SUPPORTING: 1, "": 2, ARCHIVE: 3}[item.get("tier", "")]
+
+
 def set_tier(con: sqlite3.Connection, item_id, tier: str) -> dict:
     """The person puts an item in `tier`; Hal never changes it after this. Returns the item.
 

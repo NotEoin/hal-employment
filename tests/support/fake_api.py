@@ -162,7 +162,7 @@ PROFILE_ITEMS = {
                          "Collections volunteer", "Fenwick Lantern Museum Trust", "September 2023 to now",
                          evidence=[profile_source(PROFILE_CV, "Collections volunteer, Sept 2023 - present", "start",
                                                   "cv", 1)],
-                         conflicts=[PROFILE_CONFLICT], tier=("core", "Work in the field you want"))],
+                         conflicts=[PROFILE_CONFLICT], tier=("archive", "Far from the work you want"))],
     "education": [profile_item(2, "education", {"qualification": "BA (Hons)",
                                                 "subject": "History and Imaginary Studies",
                                                 "institution": "University of Nowhere Fen",
@@ -212,6 +212,7 @@ MADE_UP_PROFILE_KINDS = {f"/profile/{k}": {"kind": k, "label": PROFILE_LABELS[k]
                          for k, v in PROFILE_ITEMS.items()}
 _SKILL = PROFILE_ITEMS["skill"][0]
 MADE_UP_PROFILE_CHECK = {
+    "best": [PROFILE_ITEMS["project"][0]], "archived": [PROFILE_ITEMS["job"][0]],
     "conflicts": MADE_UP_PROFILE["conflicts"],
     "cards": [{"type": "item", "key": "item:5", "source_rel": "", "file_id": None, "items": PROFILE_ITEMS["basic"],
                "best": [4]},

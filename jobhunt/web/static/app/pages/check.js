@@ -5,6 +5,7 @@
    way and coming back starts where the person stopped. Conflicts come first as "Which is right?", then the
    facts most worth checking, then skills in groups; the skills Hal is least sure of wait under "Show more",
    and the skills only course material names are listed apart as "Studied in your course".
+   Above the queue, "Your best experiences" (`record/best.js`) lists what Hal would lead with, to check first.
    When a card is answered, focus moves to the next card's heading, so the page works from the keyboard. */
 import { html, useEffect, useRef } from "../core/html.js";
 import { useApi } from "../core/store.js";
@@ -12,6 +13,7 @@ import { go } from "../core/router.js";
 import { plural } from "../core/format.js";
 import { Head, Note, Bar } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
+import { BestExperiences } from "../record/best.js";
 import { ItemCheck, SkillsCheck, ConflictCheck, StudiedSkills } from "../record/check.js";
 
 const PERCENT = 100;
@@ -50,6 +52,8 @@ export function Check() {
     ${error && html`<${Note} icon="warn" tone="warn">${error.message}<//>`}
     ${!data && !error && html`<p class="sub">Loading</p>`}
     ${data && html`<div class="stack rec-check-page">
+      ${(data.best || []).length + (data.archived || []).length > 0 && html`<${BestExperiences} best=${data.best} archived=${data.archived} />
+        <h2 class="h2 rec-check-rest">Check the rest</h2>`}
       ${data.total > 0 && html`<div class="rec-check-progress">
         <${Bar} pct=${(data.done / data.total) * PERCENT} label="Facts checked" />
         <p class="small rec-line"><b>${data.done} of ${data.total} checked.</b> ${left > 0 ? "You can stop at any time and carry on later." : ""}</p></div>`}

@@ -12,7 +12,7 @@ from unittest import mock
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt import db
-from jobhunt.profile import check, store
+from jobhunt.profile import check, store, tiers
 
 NOW = "2026-11-05T09:00:00Z"
 CV = "Sources/CVs and letters/Alex Doe CV.md"
@@ -95,6 +95,31 @@ class Queue(unittest.TestCase):
         queued = [i["id"] for c in found["cards"] + found["more"] for i in c["items"]]
         self.assertEqual(queued, [mine], "a skill from the person's own work is asked about as before")
         self.assertEqual(found["total"], 1, "studied skills are not counted as left to check")
+
+    def test_the_best_experiences_are_by_tier_then_evidence_then_recency_with_the_archive_apart(self):
+        old = self.found("job", {"title": "Lamp porter", "employer": "Glimmerholt Trust", "start": "2018",
+                                 "end": "2019"}, ev(CV, "cv", role="own"))
+        now = self.found("job", {"title": "Guide", "employer": "Brackwater Museum", "start": "2024-09",
+                                 "current": True}, ev(CV, "cv", role="own"))
+        strong = self.found("project", {"name": "Mill town letters"}, ev(PROJECT, "notes", role="own"))
+        self.found("project", {"name": "Mill town letters"}, ev(CV, "cv", role="own"))
+        cert = self.found("certificate", {"name": "Emergency first aid"}, ev(CV, "cv", role="own"))
+        unsorted = self.found("achievement", {"title": "Volunteer of the year"}, ev(CV, "cv", role="own"))
+        bot = self.found("project", {"name": "Fishing game bot"}, ev(PROJECT, "notes", role="own"))
+        hidden = self.found("project", {"name": "Tide clock"}, ev(PROJECT, "notes", role="own"))
+        store.hide(self.con, hidden)
+        for item_id in (old, now, strong):
+            tiers.set_tier(self.con, item_id, "core")
+        tiers.set_tier(self.con, cert, "supporting")
+        tiers.set_tier(self.con, bot, "archive")
+        found = check.best(self.con)
+        self.assertEqual([i["id"] for i in found["best"]], [strong, now, old, cert, unsorted])
+        self.assertEqual([i["id"] for i in found["archived"]], [bot])
+
+    def test_the_best_experiences_fit_one_short_sitting(self):
+        for n in range(check.BEST_MAX + 3):
+            self.found("project", {"name": f"Lantern survey number {n}"}, ev(PROJECT, "notes", role="own"))
+        self.assertEqual(len(check.best(self.con)["best"]), check.BEST_MAX)
 
     def test_weak_skills_and_those_past_the_first_wait_under_show_more(self):
         weak = self.skill("Palaeography", (MODULE, "notes", ""))

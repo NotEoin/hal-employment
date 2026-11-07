@@ -21,12 +21,18 @@ Design decisions, each with its reason:
 - Skills are ranked by their evidence (the person's own documents, how many files name them, how much the
   best file is trusted) before the groups are made, so the first ones asked about are the likeliest true.
 - Items added by hand are never queued: the person typed them, so they are already checked.
+
+`best(con)` gives "Your best experiences", which the page shows above the queue: the jobs, courses,
+projects, achievements and certificates in the core tier, then supporting, then not yet sorted
+(`tiers.order`), each tier ranked by its evidence (`strength`) and then by how recent it is, at most
+`BEST_MAX` of them, so the person can check what Hal would lead with in one short sitting. The archived ones
+come apart, ranked the same way, for the page to fold away. Hidden items are in neither.
 """
 from __future__ import annotations
 
 import sqlite3
 
-from jobhunt.profile import conflicts, merge, store
+from jobhunt.profile import conflicts, merge, store, tiers
 
 # The order of importance: who the person is, then their history, then the lists; skills come last.
 KIND_ORDER = ("basic", "job", "education", "certificate", "achievement", "project", "link")
@@ -51,7 +57,7 @@ def best_source(item: dict) -> dict | None:
 
 
 def strength(item: dict) -> tuple:
-    """How well a skill is shown, for sorting strongest first: own documents, files, trust, sources."""
+    """How well an item is shown, for sorting strongest first: own documents, files, trust, sources."""
     ev = item["evidence"]
     best = best_source(item)
     return (sum(e.get("role", "") == store.OWN_ROLE for e in ev), len({e["source_rel"] for e in ev}),
@@ -102,3 +108,33 @@ def queue(con: sqlite3.Connection) -> dict:
     left = sum(len(c["items"]) for c in cards)
     return {"conflicts": conflicts.listing(con), "cards": cards, "more": more, "studied": studied, "done": done,
             "total": done + left}
+
+
+# One short sitting: about twenty to thirty cards (2026-11-07); past that the person stops reading.
+BEST_MAX = 25
+NO_DATE = -1
+
+
+def recency(item: dict) -> int:
+    """The last month an item was true, as `merge.month_index` counts; "present" is this month, no date -1."""
+    fields = item["fields"]
+    found = merge.span(fields)
+    if found is not None:
+        return found[1]
+    point = merge.month_index(fields.get("end") or fields.get("date") or "", "end")
+    return point if point is not None else NO_DATE
+
+
+def ranked(items: list[dict]) -> list[dict]:
+    """Items by tier (`tiers.order`), then strongest evidence first, then most recent first."""
+    out = sorted(items, key=recency, reverse=True)
+    out.sort(key=strength, reverse=True)       # stable: equal evidence keeps the newest first
+    out.sort(key=tiers.order)
+    return out
+
+
+def best(con: sqlite3.Connection) -> dict:
+    """{"best": [ITEM], "archived": [ITEM]}: the experiences to check first, and the archived ones."""
+    order = ranked([i for kind in tiers.TIERED_KINDS for i in store.items(con, kind, hidden=False)])
+    return {"best": [i for i in order if i["tier"] != tiers.ARCHIVE][:BEST_MAX],
+            "archived": [i for i in order if i["tier"] == tiers.ARCHIVE]}

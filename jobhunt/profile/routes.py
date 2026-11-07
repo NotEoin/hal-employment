@@ -59,7 +59,8 @@ Routes:
 - `DELETE /api/v2/profile/items/{id}`: only for an item added by hand; {"ok": true}.
 - `POST /api/v2/profile/conflicts/{id}/resolve` {"value": "..."} | {"keep_item": 3} | {"keep_all": true}:
   returns CONFLICT, now resolved.
-- `GET /api/v2/profile/check`: the Check your record queue (`check.queue`): {"conflicts": [NAMED_CONFLICT],
+- `GET /api/v2/profile/check`: the best experiences (`check.best`) and the Check your record queue
+  (`check.queue`): {"best": [ITEM], "archived": [ITEM], "conflicts": [NAMED_CONFLICT],
   "cards": [CARD], "more": [CARD], "studied": [ITEM], "done": n, "total": n}. A card (`CARD`) is
   {"type": "item" | "skills", "key", "source_rel", "file_id", "items": [ITEM], "best": [evidence id]}: an item
   card holds one item and no file (`source_rel` "", `file_id` null); a skills card holds the skills that rest
@@ -124,9 +125,11 @@ def overview(req: Request) -> dict:
 # they were added.
 @route("GET", PREFIX + "/check")
 def check_queue(req: Request) -> dict:
-    """What is left to check, conflicts first, for the Check your record page."""
+    """The best experiences, then what is left to check, conflicts first, for the Check your record page."""
     found = check.queue(req.con)
-    return {"conflicts": named(req.con, found["conflicts"]), "cards": _cards(found["cards"]),
+    top = check.best(req.con)
+    return {"best": [with_files(i) for i in top["best"]], "archived": [with_files(i) for i in top["archived"]],
+            "conflicts": named(req.con, found["conflicts"]), "cards": _cards(found["cards"]),
             "more": _cards(found["more"]), "studied": [with_files(i) for i in found["studied"]],
             "done": found["done"], "total": found["total"]}
 
