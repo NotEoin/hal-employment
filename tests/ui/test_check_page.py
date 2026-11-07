@@ -25,11 +25,11 @@ NOT_YET = ("/api/v2/home",)
 FAILED_LOAD = "Failed to load resource"
 
 
-def found(kind: str, fields: dict, source: str = CV, doc_type: str = "cv", quote: str = "") -> int:
-    """Adds one fact as the ingest would; returns its item's id."""
+def found(kind: str, fields: dict, source: str = CV, doc_type: str = "cv", quote: str = "", role: str = "") -> int:
+    """Adds one fact as the ingest would, `role` saying whose its file is; returns its item's id."""
     with closing(db.connect()) as con:
         return store.add_found(con, kind, fields, {"source_rel": source, "quote": quote, "doc_type": doc_type,
-                                                   "field": ""})
+                                                   "field": "", "role": role})
 
 
 def state(item_id: int) -> str:
@@ -135,6 +135,19 @@ class CheckPage(unittest.TestCase):
         more.get_by_role("button", name="None of these").click()
         p.page.locator("details.rec-check-more").wait_for(state="detached")
         self.assertEqual(state(ids["Palaeography"]), "hidden")
+
+    def test_skills_only_course_material_names_are_listed_apart_and_one_can_be_claimed(self) -> None:
+        stream = found("skill", {"name": "Stream processing"}, MODULE, "notes", "stream processing", "taught")
+        found("skill", {"name": "Batch joins"}, MODULE, "notes", "batch joins", "taught")
+        p = self.page()
+        p.shows(p.page.get_by_text("Your record is ready"), "nothing else to check")
+        studied = p.page.locator("details.rec-check-studied")
+        self.assertIn("Studied in your course (2 skills)", studied.inner_text())
+        studied.locator("summary").click()
+        self.clean(p)
+        studied.get_by_role("button", name="I have used this: Stream processing").click()
+        p.page.get_by_text("Studied in your course (1 skill)").wait_for()
+        self.assertEqual(state(stream), "confirmed")
 
     def test_at_phone_width_the_buttons_are_large_and_the_keyboard_moves_on(self) -> None:
         found("basic", {"key": "name", "value": "Alex Doe"}, quote="Alex Doe")

@@ -97,6 +97,10 @@ What changed in each version, in plain words.
   what is not worth telling an employer, with a few words on why. Anything you hid, or that only appears in
   files that are not your own, is set aside, and school qualifications count as useful rather than the lead.
   Without Hal's AI only these rules are used. A choice you make yourself is never changed.
+- **Skills from your own work.** A skill that only your course material names, such as a topic from a
+  lecture, is listed apart on Check your record under **Studied in your course** and never goes on your CV
+  or in a letter, unless you press **I have used this**. One skill written several ways
+  ("python-scripting", "Python scripting") is one entry, shown in normal case.
 - **Profile notes in your record folder.** A Profile folder holds Work history, Education, Skills, Projects
   and Inconsistencies notes, written from your profile, for reading in Obsidian.
 - **Letters and answers written for the kind of job.** Hal reads which field a job is in from the advert

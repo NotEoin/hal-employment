@@ -318,6 +318,31 @@ class Store(unittest.TestCase):
         self.assertEqual([e["quote"] for e in got["evidence"]],
                          ["MS Excel (pivot tables)", "built the loans spreadsheet in Excel"])
 
+    def test_case_and_punctuation_variants_of_a_skill_are_one_card_named_in_normal_case(self):
+        # "python-scripting" sat next to "Python scripting" on a real profile (2026-11-07)
+        slug = store.add_found(self.con, "skill", {"name": "python-scripting"}, ev(CV_A, "cv"))
+        for name in ("Python scripting", "PYTHON (SCRIPTING)"):
+            self.assertEqual(store.add_found(self.con, "skill", {"name": name}, ev(NOTES, "notes")), slug)
+        self.assertEqual(store.item(self.con, slug)["fields"]["name"], "Python scripting")
+        c_ids = {store.add_found(self.con, "skill", {"name": n}, ev(CV_A, "cv")) for n in ("C", "C++", "C#")}
+        self.assertEqual(len(c_ids), 3, "C, C++ and C# are three skills")
+        lone = store.add_found(self.con, "skill", {"name": "machine_learning"}, ev(NOTES, "notes"))
+        self.assertEqual(store.item(self.con, lone)["fields"]["name"], "Machine learning")
+        kept = store.add_found(self.con, "skill", {"name": "scikit-learn"}, ev(NOTES, "notes"))
+        self.assertEqual(store.item(self.con, kept)["fields"]["name"], "Scikit-learn")
+
+    def test_a_skill_only_course_material_names_is_studied_until_the_person_claims_it(self):
+        def with_role(item_id: int, role: str) -> dict:
+            got = store.item(self.con, item_id)
+            return {**got, "evidence": [{**e, "role": role} for e in got["evidence"]]}
+        flink = store.add_found(self.con, "skill", {"name": "Stream processing"}, ev(NOTES, "notes"))
+        self.assertTrue(store.is_studied(with_role(flink, "taught")))
+        self.assertFalse(store.is_studied(with_role(flink, "own")))
+        self.assertFalse(store.is_studied(with_role(flink, "")), "a file of unknown role is not course material")
+        store.confirm(self.con, flink)
+        self.assertFalse(store.is_studied(with_role(flink, "taught")), "confirmed, it is the person's own")
+        self.assertFalse(store.is_studied(with_role(self.job(CV_A), "taught")), "only skills are studied")
+
     def test_a_transcripts_modules_replace_the_cvs_and_keep_their_marks(self):
         course = {"qualification": "BA (Hons)", "subject": HUMANITIES.you["education.subject"],
                   "institution": HUMANITIES.you["education.university"]}

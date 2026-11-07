@@ -9,6 +9,9 @@ Design decisions, each with its reason:
 - Only checked facts are used (2026-11-05): Hal reads hundreds of facts out of a person's files, and some are
   wrong (a lecturer's course as the person's own skill, a guessed degree). An application must say only what
   the person has seen and agreed to, so the Check your record page asks them first.
+- A skill only course material names (`store.is_studied`) is never used: a lecture's list of topics is what
+  the person studied, not what they can show. The checked-only rule already keeps it out, as a studied
+  skill is one nobody checked; once the person confirms it, it is theirs and is used.
 - Contact details (email, phone) are left out: no document a prompt writes needs them, and the CV and the
   person's settings already hold them where they belong.
 - No line of the block is a bracketed "[file > heading]" label, because `pack.passages` counts those lines

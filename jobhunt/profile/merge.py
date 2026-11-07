@@ -23,8 +23,10 @@ Design decisions, each with its reason:
   "Hatch", "Hatch - AI desktop companion" and "Hatch - desktop companion and wellbeing app" were three
   cards (2026-11-06). So is a name of two or more words whose words are all in the other's ("Recovery
   drone", "Autonomous Recovery Drone"). "Hal" and "Hal Employment" stay two: one word is too little.
-- Skills are compared without case, spaces, hyphens and dots, and through a small table of other names for
-  the same skill ("MS Excel" is "Excel"), covering office, research and writing skills as well as code.
+- Skills are compared without case, spaces or punctuation other than "+" and "#" (so "C++" and "C#" stay
+  apart), and through a small table of other names for the same skill ("MS Excel" is "Excel"), covering
+  office, research and writing skills as well as code. "python-scripting" and "Python scripting" were two
+  cards (2026-11-07); one skill shows the name its sources write in normal case (`skill_name`).
 - A found item's fields come from its sources in rank order (transcript, certificate, CV, letter, notes):
   each field takes the value of the best-ranked source that gives one, so a transcript's grade beats a CV's.
   An end date before this month makes the item not current, even when another source said "present"; a
@@ -281,9 +283,33 @@ def text_key(text: str) -> str:
 
 def skill_key(name: str) -> str:
     """A skill's name as compared: no case, spaces, hyphens or dots, and other names folded to one."""
-    parts = sorted(re.sub(r"[\s\-_.]+", "", part) for part in (name or "").lower().split("/"))
+    parts = sorted(re.sub(r"[^\w+#]|_", "", part) for part in (name or "").lower().split("/"))
     key = "/".join(p for p in parts if p)
     return SKILL_ALIASES.get(key, key)       # "TypeScript/JavaScript" is "JavaScript/TypeScript"
+
+
+ACRONYM_MAX = 5            # "SQL" and "HTML5" are written in capitals; "PYTHON SCRIPTING" is shouting
+
+
+def _name_shape(name: str) -> tuple[bool, bool, bool, bool]:
+    """How well a skill's name is written, for choosing one: higher is better."""
+    return ("_" not in name, not (name.isupper() and len(name) > ACRONYM_MAX), any(c.isupper() for c in name),
+            "-" not in name or " " in name)
+
+
+def skill_name(names: list[str]) -> str:
+    """The name to show for one skill its sources write in several ways, best-ranked source first.
+
+    The best-written name wins ("Python scripting" over "python-scripting" or "PYTHON SCRIPTING"); on a
+    tie, the earlier source's. A name written only in lower case starts with a capital, and underscores
+    become spaces; hyphens stay, as in "scikit-learn".
+    """
+    written = [" ".join(n.split()) for n in names if n and n.strip()]
+    if not written:
+        return ""
+    best = max(enumerate(written), key=lambda p: (_name_shape(p[1]), -p[0]))[1].replace("_", " ")
+    best = " ".join(best.split())
+    return best[:1].upper() + best[1:] if best == best.lower() else best
 
 
 # Wording that differs while the fact is the same: "Thirty units" and "30 units", "GCSE" and "GCSEs",

@@ -678,7 +678,9 @@ available yet.
 - The ingest calls `store.add_found(con, kind, fields, evidence)` for each fact. `merge.py` decides, in code,
   when it is an item already there: employers and institutions compared without case, "the", Ltd or word
   order; the same employer with overlapping or touching dates, or the same title, is one job; skills
-  compared without case and through other names ("MS Excel" is "Excel"). A qualification is matched by its
+  compared without case or punctuation other than "+" and "#" and through other names ("MS Excel" is
+  "Excel"), shown by the name their sources write in normal case (`merge.skill_name`: "Python scripting",
+  not "python-scripting"). A qualification is matched by its
   level (`merge.level`: bachelor, master, GCSE, Access and so on) and subject, not its wording, at
   institutions whose names hold one another ("Wexley University" is "The University of Wexley"); a BA and
   then an MA stay two. Certificate and achievement names that differ by a letter or two merge, never when
@@ -730,6 +732,9 @@ available yet.
   Skills are ranked by `check.strength`; the first `SKILLS_FIRST` (30) are queued and the rest, then the
   weak ones, go to `more` ("Show more"). `store.is_weak(item)` is the one rule for weak: a found skill that
   fewer than two files name and whose evidence has no `role` of "own" ("" is unknown and does not count).
+  A skill whose every source has the role `taught` (`store.is_studied`) is in neither: the queue lists it
+  under `studied`, which the page shows apart as "Studied in your course" with **I have used this**
+  (confirm); unconfirmed, it never reaches a writing prompt.
   `GET /api/v2/profile/check` serves it with `done` and `total` for the progress bar, and
   `POST /api/v2/profile/confirm-many` and `/hide-many` {ids} change a group in one transaction with one
   conflicts refresh and one `profile` event. The page is `pages/check.js` (route `check`) with its cards

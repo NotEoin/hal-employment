@@ -86,8 +86,18 @@ class Queue(unittest.TestCase):
         groups = [(g["source_rel"], [i["id"] for i in g["items"]]) for g in check.queue(self.con)["cards"]]
         self.assertEqual(groups, [(PROJECT, [c, b]), (CV, [a])])
 
+    def test_skills_only_course_material_names_are_listed_apart_by_name(self):
+        flink = self.skill("Stream processing", (MODULE, "notes", "taught"))
+        joins = self.skill("Batch joins", (MODULE, "notes", "taught"), (PROJECT, "notes", "taught"))
+        mine = self.skill("Oral history interviewing", (MODULE, "notes", "taught"), (PROJECT, "notes", "own"))
+        found = check.queue(self.con)
+        self.assertEqual([i["id"] for i in found["studied"]], [joins, flink])
+        queued = [i["id"] for c in found["cards"] + found["more"] for i in c["items"]]
+        self.assertEqual(queued, [mine], "a skill from the person's own work is asked about as before")
+        self.assertEqual(found["total"], 1, "studied skills are not counted as left to check")
+
     def test_weak_skills_and_those_past_the_first_wait_under_show_more(self):
-        weak = self.skill("Palaeography", (MODULE, "notes", "taught"))
+        weak = self.skill("Palaeography", (MODULE, "notes", ""))
         strong = [self.skill(f"Made-up method {n:02d}", (PROJECT, "notes", "own"))
                   for n in range(check.SKILLS_FIRST + 2)]
         found = check.queue(self.con)

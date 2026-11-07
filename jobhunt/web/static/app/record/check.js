@@ -105,6 +105,24 @@ export function SkillsCheck({ card, sub = false }) {
   </section>`;
 }
 
+/** The skills only course material names, kept apart: Hal never writes with them unless the person says they
+    used one in their own work. */
+export function StudiedSkills({ items }) {
+  const [busy, setBusy] = useState(false);
+  const claim = async it => {
+    setBusy(true);
+    await act(() => post("/profile/items/" + encodeURIComponent(it.id) + "/confirm"), "Thanks. Hal can use " + it.title + " now.");
+    setBusy(false);
+  };
+  return html`<details class="rec-hidden rec-check-studied">
+    <summary>Studied in your course (${items.length} ${items.length === 1 ? "skill" : "skills"})</summary>
+    <p class="small sub rec-line">Hal found these only in your course material, such as lecture notes and slides. They show what you studied, so Hal leaves them off your CV and out of your letters. If you have used one in your own work, press <b>I have used this</b>.</p>
+    <ul class="rec-check-studied-list">${items.map(it => html`<li key=${it.id}>
+      <span>${it.title}</span>
+      <button type="button" class="btn small" disabled=${busy} aria-label=${"I have used this: " + it.title} onClick=${() => claim(it)}>I have used this</button></li>`)}</ul>
+  </details>`;
+}
+
 /** One open conflict, asked as "Which is right?" with the choices it takes. */
 export function ConflictCheck({ c }) {
   const about = (c.items || []).map(i => i.title).join(" and ");

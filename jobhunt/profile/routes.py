@@ -60,11 +60,12 @@ Routes:
 - `POST /api/v2/profile/conflicts/{id}/resolve` {"value": "..."} | {"keep_item": 3} | {"keep_all": true}:
   returns CONFLICT, now resolved.
 - `GET /api/v2/profile/check`: the Check your record queue (`check.queue`): {"conflicts": [NAMED_CONFLICT],
-  "cards": [CARD], "more": [CARD], "done": n, "total": n}. A card (`CARD`) is
+  "cards": [CARD], "more": [CARD], "studied": [ITEM], "done": n, "total": n}. A card (`CARD`) is
   {"type": "item" | "skills", "key", "source_rel", "file_id", "items": [ITEM], "best": [evidence id]}: an item
   card holds one item and no file (`source_rel` "", `file_id` null); a skills card holds the skills that rest
   most on one file. `best` gives, for each item, the id of the source whose quote to show.
-  `more` is what the page keeps under "Show more"; `done` of `total` is the progress bar.
+  `more` is what the page keeps under "Show more"; `studied` the skills only course material names
+  (`store.is_studied`), shown apart; `done` of `total` is the progress bar.
 - `PUT /api/v2/profile/items/{id}/tier` {"tier": "archive"}: the person's tier for an experience, which Hal
   never changes; ITEM. A tier that is not core, supporting or archive, or an item with no tier, is 400.
 - `POST /api/v2/profile/tiers`: starts sorting the experiences again (action `profile.tiers`);
@@ -126,7 +127,8 @@ def check_queue(req: Request) -> dict:
     """What is left to check, conflicts first, for the Check your record page."""
     found = check.queue(req.con)
     return {"conflicts": named(req.con, found["conflicts"]), "cards": _cards(found["cards"]),
-            "more": _cards(found["more"]), "done": found["done"], "total": found["total"]}
+            "more": _cards(found["more"]), "studied": [with_files(i) for i in found["studied"]],
+            "done": found["done"], "total": found["total"]}
 
 
 def _cards(cards: list[dict]) -> list[dict]:

@@ -18,6 +18,8 @@ Design decisions, each with its reason:
   fact, never brings back what the person hid.
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
+- A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
+  apart, under "Studied in your course", and no CV or letter uses it unless the person confirms it.
 - Fields are checked against the kind's list (`KINDS`): an unknown kind or field raises `ValueError` naming
   it, so an ingest that misreads a document fails loudly instead of storing a field nothing shows.
 - Only items the person added by hand can be deleted; a found item is hidden instead, because deleting it
@@ -245,15 +247,20 @@ def _match(con: sqlite3.Connection, kind: str, fields: dict) -> sqlite3.Row | No
 
 def refold(con: sqlite3.Connection, item_id: int) -> None:
     """Works out a found item's fields again from its sources; an item the person checked is left alone."""
-    row = con.execute("SELECT state FROM profile_items WHERE id = ?", (item_id,)).fetchone()
+    row = con.execute("SELECT kind, state FROM profile_items WHERE id = ?", (item_id,)).fetchone()
     if row is None or row["state"] != "hal":
         return
     sources = [(merge.rank(e["doc_type"]), json.loads(e["said"]))
                for e in con.execute("SELECT doc_type, said FROM profile_evidence WHERE item_id = ? ORDER BY id",
                                     (item_id,))]
-    if sources:
-        con.execute("UPDATE profile_items SET fields = ?, updated = ? WHERE id = ?",
-                    (json.dumps(merge.fold(sources)), db.now(), item_id))
+    if not sources:
+        return
+    fields = merge.fold(sources)
+    if row["kind"] == "skill":
+        ranked = sorted(enumerate(sources), key=lambda p: (-p[1][0], p[0]))
+        fields["name"] = merge.skill_name([said.get("name", "") for _, (_, said) in ranked])
+    con.execute("UPDATE profile_items SET fields = ?, updated = ? WHERE id = ?",
+                (json.dumps(fields), db.now(), item_id))
 
 
 def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, *, refresh: bool = True) -> int:
@@ -460,7 +467,19 @@ def delete(con: sqlite3.Connection, item_id) -> None:
 
 
 OWN_ROLE = "own"           # evidence `role`: "own" for the person's own document, "taught" for course material
+TAUGHT_ROLE = "taught"
 STRONG_FILES = 2           # two files naming a skill is a pattern, not one lecture's list of topics
+
+
+def is_studied(item: dict) -> bool:
+    """True for a found skill whose every source is course material (evidence `role` "taught").
+
+    Such a skill is what the person studied, not what they showed they can do: 262 of a real profile's 504
+    skills came only from lectures (2026-11-07). It is never used as a CV skill or in writing. A skill the
+    person confirmed, edited or added is theirs, so it is never studied.
+    """
+    return item["kind"] == "skill" and item.get("origin") != "you" and item["state"] in ("hal", "hidden") and \
+        bool(item["evidence"]) and all(e.get("role", "") == TAUGHT_ROLE for e in item["evidence"])
 
 
 def is_weak(item: dict) -> bool:

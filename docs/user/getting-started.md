@@ -335,6 +335,11 @@ Skills Hal is less sure of wait under **Show more** at the end. These are most o
 file that is not your own writing, such as a lecture's list of topics. Hal never uses them unless you keep
 them.
 
+Skills that only your course material names, such as the topics of a lecture, are listed apart under
+**Studied in your course**. They show what you studied, not what you have done, so Hal leaves them off your
+CV and out of your letters. If you have used one in your own work, press **I have used this** beside it.
+One skill written several ways ("python-scripting", "Python scripting") is one entry, shown in normal case.
+
 ## What Hal remembers
 
 - **Waiting for you**: suggestions from your choices, for example a smaller travel distance after you hide
