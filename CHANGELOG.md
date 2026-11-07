@@ -178,6 +178,11 @@ What changed in each version, in plain words.
   builds on a dissertation in your own time part of your degree. It now reads team, course and own-time
   words before the kind of file. A draft that calls a project by a shorter name, its folder's name or a
   hidden copy's name is now checked against where it was done too.
+- **What a module covered comes from your facts.** A letter said a module "covered core statistical
+  methods" when that module was about databases and SQL. A sentence about what a module covered, taught or
+  introduced is now checked against your CV, the facts you checked and your own documents that name that
+  module. It is rewritten once when none of them say it, and listed under **Check before sending** if it is
+  still there.
 - **The company check finds the right company.** It listed any company with the employer's name, such as a
   solar firm, a fungicide and a closed company for a lender, and a Wikipedia page listing everything of
   that name. Hal now shows a Wikipedia article only when it links to the employer's website or is about

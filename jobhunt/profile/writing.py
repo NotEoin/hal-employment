@@ -304,6 +304,15 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     return out
 
 
+def module_names(con: sqlite3.Connection | None = None) -> list[str]:
+    """The names of the modules on the education facts the person checked (Hal's own database unless `con`)."""
+    if con is None:
+        with closing(db.connect()) as own:
+            return module_names(own)
+    return [m["name"] for it in store.items(con, "education", hidden=False) if it["state"] in USED_STATES
+            for m in it["fields"].get("modules") or [] if m.get("name")]
+
+
 def skill_names(con: sqlite3.Connection | None = None) -> list[str]:
     """The names of the skills the person checked (Hal's own database unless `con`)."""
     if con is None:

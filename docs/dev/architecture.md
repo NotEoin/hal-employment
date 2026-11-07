@@ -448,6 +448,14 @@ runs: tests use `tests/support/fake_claude/`.
   link), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
   ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). Both go into the one rewrite per
   draft that `pack.fix_claims` asks for, and what is left is listed.
+- `writing/taught.py`: `unsupported(draft, modules, sources)` turns a sentence that says a named module
+  (one of `profile.writing.module_names`, the modules of the education facts the person checked, or any
+  module code) covered, taught, included or introduced something into an unsupported claim, unless a CV
+  line, profile line or passage naming that module also holds at least `COVERED_SHARE` of its content words
+  (`content`: vague words such as "core" and "methods" left out, words compared by their first `STEM`
+  letters). In a source naming several modules only the words from this module's name to the next count. A
+  letter said a data science module "covered core statistical methods" when its notes covered databases
+  and SQL (2026-11-07). It goes into the same one rewrite, and the verify prompt says the same.
 - `drafts.echoes(sentence, advert, brief, names)` finds a sentence that restates the employer: at least
   `ECHO_SHARE` (half) of its own words sit in runs of `ECHO_RUN` (three) words found in the advert or the
   brief, with little words and the words of the job title and employer's name (`names`) never counted, and

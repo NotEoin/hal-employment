@@ -90,6 +90,8 @@ number, "not just X but Y") is rewritten once, and anything still wrong is liste
 sending**. Hal also checks what each letter, message and answer says about you against your CV, the facts
 you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed.
+A draft may say what one of your modules covered only when your CV, the facts you checked or your own
+documents say it too, as a module's name alone does not say what it taught.
 The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
 to work here?", should be your own: a sentence that only repeats the advert or what the company says about
 itself is rewritten once to link something of yours (a project, a module, an interest) to something about

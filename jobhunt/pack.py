@@ -40,7 +40,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import drafts, eligibility, fields, spelling, stage
+from .writing import drafts, eligibility, fields, spelling, stage, taught
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -387,8 +387,9 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     (2026-11-06). A claim one CV line states (`drafts.stated_in`) is supported, whatever the AI said. Three
     kinds are found with no AI as well: a sentence that speaks of finishing a course that
     has ended (`stage.ended_course`), a tool given to a project whose own facts never name it
-    (`drafts.misplaced_tools`), and a project placed in a degree or in the person's own time against its
-    card's context (`drafts.wrong_context`). Each goes into the one rewrite `fix_claims` asks for.
+    (`drafts.misplaced_tools`), a project placed in a degree or in the person's own time against its
+    card's context (`drafts.wrong_context`), and what a named module covered when no source naming the module
+    says it (`taught.unsupported`). Each goes into the one rewrite `fix_claims` asks for.
     """
     now = stage.current()
     cards = profile_writing.cards()
@@ -403,7 +404,8 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     claims = [c for c in claims if not drafts.stated_in(c, facts)]
     known = [t for c in cards for t in c["tools"]] + profile_writing.skill_names()
     return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(written, now)] \
-        + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards)
+        + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
+        + taught.unsupported(written, profile_writing.module_names(), (facts, kept))
 
 
 def claims_note(claims: list[str]) -> str:

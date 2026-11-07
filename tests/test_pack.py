@@ -660,6 +660,26 @@ class Drafts(unittest.TestCase):
         self.assertIn(f"- {claim}", writer.asked("letter")[1]["user"])
         self.assertEqual(written["flags"], [f"unsupported claim: {claim}"], "the fixed fake letter keeps it")
 
+    def test_what_a_module_covered_with_no_source_is_rewritten_once_then_listed(self):
+        # "the Foundations of Data Science module, which covered core statistical methods", while its notes
+        # covered databases, SQL and language processing (2026-11-07)
+        from jobhunt.profile import store
+
+        said = "The Foundations of Imaginary Data module covered core statistical methods."
+        writer = FakeWriter(letter=said)
+        with as_applicant(people.HUMANITIES, writer) as a:
+            ev = {"source_rel": "Sources/Education/Transcript.md", "quote": "", "field": "", "doc_type": "transcript"}
+            store.confirm(a.con, store.add_found(a.con, "education", {
+                "qualification": "BA", "subject": "History", "institution": "Wexley University",
+                "modules": [{"name": "Foundations of Imaginary Data", "mark": "70"}]}, ev))
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        claim = f"{said} (nothing in your facts says what Foundations of Imaginary Data covered)"
+        self.assertEqual(len(writer.asked("letter")), 2, "one rewrite, never a loop")
+        self.assertIn(f"- {claim}", writer.asked("letter")[1]["user"])
+        self.assertEqual(written["flags"], [f"unsupported claim: {claim}"], "the fixed fake letter keeps it")
+        self.assertIn("A module's name alone says nothing of its content", pack.prompt("verify"))
+
     def test_the_message_and_answers_keep_to_each_projects_context(self):
         from jobhunt.profile import contexts, store
 
