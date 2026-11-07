@@ -162,6 +162,13 @@ class Rules(unittest.TestCase):
         self.assertEqual(reason("Just a letter.", said="medical " * 30), privacy.SAID_BY_AI, "too long to show")
         self.assertEqual(reason("Just a letter.", said="true"), "", "names no kind")
 
+    def test_a_document_the_ai_says_mentions_keys_is_left_to_the_rules(self):
+        # the AI held a project plan that only talked about an SSH key and a client secret (2026-11-07)
+        plan = "# Plan\n\nStore the SSH private key and the client secret in the vault, never in the repo."
+        self.assertEqual(reason(plan, said="SSH private key, client secret, OAuth token"), "")
+        self.assertEqual(reason(f"-----BEGIN RSA PRIVATE KEY-----\n{KEY_BODY}\n-----END RSA PRIVATE KEY-----",
+                                said="SSH private key"), privacy.SECRETS)
+
     def test_contact_details_the_ai_calls_sensitive_never_keep_a_cv_out(self):
         # a fresh read held four of a person's CVs for "phone number, email address" (2026-11-06)
         for said in ("phone number, email address", "phone number, email address, location, citizenship",

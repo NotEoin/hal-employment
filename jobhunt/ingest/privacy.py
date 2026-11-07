@@ -15,7 +15,8 @@ Design decisions:
   nursing essay) pass: the clusters of words and the `password = "..."` rule do not count in a text with
   several teaching or coursework markers. Structured hits still count there.
 - The AI's own verdict (`said`, the reply's `sensitive` field) is a reason too, for what rules cannot see,
-  when it names a kind of detail the rules keep out (`SAID_KINDS`); by then the text was with the AI, but the
+  when it names a kind of detail the rules keep out (`SAID_KINDS`), but never for keys and passwords, whose
+  values the rules check; by then the text was with the AI, but the
   note, the copy and the facts are still left out.
 - A date of birth is taken out of the text (`redact`) rather than keeping the file out, as transcripts and
   certificates carry one beside their grades; only beside a passport, licence or ID card number is the whole
@@ -47,13 +48,14 @@ REMOVED = "[removed]"
 # A date of birth beside the number of one of these proves who someone is, so the file stays out; beside a
 # student or staff number (a transcript, a certificate) the date is only taken out of the text.
 ID_DOCUMENT_LABELS = ("passport", "licence", "license", "identity")
-# The AI's word counts only when it names a kind of detail the rules keep out. Contact details, nationality
-# and student numbers are on every CV and transcript, and a fresh read held four CVs for "phone number,
-# email address" (2026-11-06).
+# The AI's word counts only when it names a kind of detail the rules keep out and that only reading can see.
+# Contact details, nationality and student numbers are on every CV and transcript, and a fresh read held four
+# CVs for "phone number, email address" (2026-11-06). Keys and passwords are left to the rules, which check a
+# value is real: the AI held a project plan that only talked about an SSH key and a client secret
+# (2026-11-07).
 SAID_KINDS = re.compile(r"\bbank|account\s+number|sort\s+code|\biban\b|\bcard\b|passport|identity|driv\w*\s+licen|"
                         r"national\s+insurance|social\s+security|\bssn\b|medical|health|diagnos|prescri|\bnhs\b|"
-                        r"payslip|pay\s+slip|salary|\btax\b|\bp60\b|\bp45\b|password|secret|private\s+key|api\s+key|"
-                        r"\btoken|credential", re.I)
+                        r"payslip|pay\s+slip|salary|\btax\b|\bp60\b|\bp45\b", re.I)
 
 # National Insurance numbers (HMRC National Insurance Manual): two prefix letters, six digits, suffix A to
 # D. D, F, I, Q, U and V are never used, O never second, and these prefixes are never issued.

@@ -79,7 +79,8 @@ look like any of these are kept out:
 
 A file kept out is not filed in your record, no copy of it is kept, it is not sent to the AI, and Hal takes
 no facts from it. Hal keeps only its name and the reason. If the AI is reading a document and says it holds
-one of the kinds of detail above, Hal keeps that one out too, with the AI's reason.
+one of the kinds of detail above, Hal keeps that one out too, with the AI's reason. Passwords and keys are
+the exception: Hal checks those itself, so a document that only talks about them is read.
 
 Teaching material about these things, such as a lecture on cryptography or a payroll seminar, is not kept
 out, and neither is a CV with your own email address and phone number.

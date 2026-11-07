@@ -25,8 +25,8 @@ Reply with JSON only:
  "author": the name of the person or group the text says made it, copied exactly, or "" when it names none,
  "sensitive": "" or a few words when the document holds private details that do not belong in a record
    for employers (bank or card details, a passport, ID card or driving licence number, medical information,
-   a payslip or tax form, passwords or keys); contact details, a nationality and a student number are not
-   sensitive, as every CV and transcript has them,
+   a payslip or tax form); contact details, a nationality and a student number are not sensitive, as every
+   CV and transcript has them, and Hal checks passwords and keys itself,
  "facts": [{"kind": one of "job", "education", "skill", "project", "achievement", "certificate", "basic",
    "link", "fields": {...}, "field": the field the quote supports, "quote": the words of the document
    that state it, copied exactly, at most 25 words}]}
