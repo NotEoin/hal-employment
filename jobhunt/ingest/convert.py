@@ -8,6 +8,12 @@ OCR of a holiday photo gives noise. An empty result is "no text": the caller nev
 A repository's text names who made its commits and where it is published (`_makers`), read from its `.git`
 folder's own files rather than by running git: a README rarely gives its author's name, and without it the
 person's own projects could not be told from a classmate's copy (`roles`, 2026-11-05).
+
+A document's text starts with who its own properties say made it and last saved it (`author_lines`): marked
+coursework rarely has its author's name in the words, but the program that saved it put a name or username
+in the file (2026-11-06). Placeholders an office program or a shared computer fills in are left out
+(`PLACEHOLDER_AUTHORS`, `MACHINE_AUTHOR`), and a file with no words gets no such lines, so it is still
+"no text".
 """
 from __future__ import annotations
 
@@ -17,6 +23,8 @@ import json
 import os
 import re
 import tomllib
+import xml.etree.ElementTree as ET
+import zipfile
 from collections import Counter
 from pathlib import Path
 
@@ -45,6 +53,21 @@ LANGUAGES = {".py": "Python", ".ipynb": "Jupyter notebooks", ".js": "JavaScript"
              ".svelte": "Svelte", ".dart": "Dart", ".lua": "Lua", ".hs": "Haskell", ".ex": "Elixir",
              ".tex": "LaTeX", ".md": "Markdown"}
 README = re.compile(r"^readme(\.(md|markdown|rst|txt))?$", re.I)
+AUTHOR_LINE = "Document author: "
+SAVED_LINE = "Last saved by: "
+OFFICE_SUFFIXES = {".docx", ".pptx", ".xlsx", ".docm", ".pptm", ".xlsm"}
+OPENDOCUMENT_SUFFIXES = {".odt", ".odp", ".ods"}
+PROPERTIES_MAX = 64 * 1024     # a properties file is a few hundred bytes; past this it is not one
+PROPERTY_NS = {"dc": "http://purl.org/dc/elements/1.1/",
+               "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+               "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+               "meta": "urn:oasis:names:tc:opendocument:xmlns:meta:1.0"}
+# Names an office program, a template or a shared computer fills in, which say nothing about who wrote it.
+PLACEHOLDER_AUTHORS = {"microsoft office user", "windows user", "user", "admin", "administrator", "owner",
+                       "author", "unknown", "anonymous", "student", "guest", "default", "python-docx",
+                       "python-pptx", "openpyxl", "apache poi"}
+# No letters at all (a number), or a computer's name such as "DESKTOP-4F7G2KQ".
+MACHINE_AUTHOR = re.compile(r"^[^a-z]*$|^(?:desktop|laptop|win|pc|hp|dell|lenovo)[-_][a-z0-9]+$", re.I)
 
 
 def _plain(path: Path) -> str:
@@ -70,6 +93,71 @@ def _email(path: Path) -> str:
 def _notebook(path: Path) -> str:
     cells = json.loads(path.read_text(encoding="utf-8", errors="replace")).get("cells") or []
     return "\n\n".join("".join(c.get("source") or []) for c in cells if c.get("cell_type") in ("markdown", "code"))
+
+
+def _clean_name(value: str) -> str:
+    """A name stored in a file's properties, or "" for a placeholder an office program or computer fills in."""
+    name = " ".join(str(value or "").split())
+    if name.lower() in PLACEHOLDER_AUTHORS or MACHINE_AUTHOR.search(name):
+        return ""
+    return name
+
+
+def _xml_member(path: Path, member: str) -> ET.Element | None:
+    """One small XML file inside an Office or OpenDocument zip, parsed; None when it is missing or too big."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            info = z.getinfo(member)
+            if info.file_size > PROPERTIES_MAX:
+                return None
+            with z.open(info) as f:
+                return ET.fromstring(f.read(PROPERTIES_MAX))
+    except (OSError, KeyError, zipfile.BadZipFile, ET.ParseError, RuntimeError, ValueError,
+            NotImplementedError):     # a locked member, or one packed in a way zipfile cannot read
+        return None
+
+
+def _found(root: ET.Element | None, *tags: str) -> list[str]:
+    return [(root.findtext(t, default="", namespaces=PROPERTY_NS) if root is not None else "") for t in tags]
+
+
+def stored_by(path: Path) -> tuple[str, str]:
+    """Who the file's own properties say made it and last saved it: ("", "") for none or placeholders.
+
+    Office files keep them in `docProps/core.xml` (`dc:creator`, `cp:lastModifiedBy`), OpenDocument in
+    `meta.xml` (`meta:initial-creator`, then `dc:creator` for whoever saved it last) and a PDF in its
+    information dictionary (`/Author`).
+    """
+    suffix = path.suffix.lower()
+    if suffix in OFFICE_SUFFIXES:
+        made, saved = _found(_xml_member(path, "docProps/core.xml"), "dc:creator", "cp:lastModifiedBy")
+    elif suffix in OPENDOCUMENT_SUFFIXES:
+        first, last = _found(_xml_member(path, "meta.xml"), "office:meta/meta:initial-creator",
+                             "office:meta/dc:creator")
+        made, saved = first or last, last
+    elif suffix == ".pdf":
+        made, saved = pdfread.metadata(path).get("Author", ""), ""
+    else:
+        return "", ""
+    return _clean_name(made), _clean_name(saved)
+
+
+def author_lines(path: Path) -> str:
+    """The lines that say who made the file, as its text starts with them; "" when its properties name no one."""
+    made, saved = stored_by(path)
+    lines = [f"{AUTHOR_LINE}{made}"] if made else []
+    if saved and saved.lower() != made.lower():
+        lines.append(f"{SAVED_LINE}{saved}")
+    return "\n".join(lines)
+
+
+def without_author_lines(text: str) -> str:
+    """`text` without the lines `author_lines` put at its start."""
+    head, sep, rest = text.partition("\n\n")
+    lines = head.splitlines()
+    if sep and lines and all(line.startswith((AUTHOR_LINE, SAVED_LINE)) for line in lines):
+        return rest
+    return text
 
 
 def text_of(path: Path, rule: rank.Rule) -> str:
@@ -105,6 +193,8 @@ def text_of(path: Path, rule: rank.Rule) -> str:
     # PDF text can hold lone surrogates, which no UTF-8 file can store: a poster PDF's note failed to write
     # (2026-11-05). Each becomes "?", so the rest of the note survives.
     text = text.encode("utf-8", "replace").decode("utf-8")
+    if text and (made := author_lines(path)):
+        text = f"{made}\n\n{text}"
     return text[:READ_CHARS]
 
 

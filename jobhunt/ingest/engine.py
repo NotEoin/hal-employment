@@ -245,8 +245,9 @@ def _judge(con: sqlite3.Connection, row: sqlite3.Row, desc: dict, text: str) -> 
 
 
 def _shown_text(desc: dict, text: str) -> str:
-    """The text a note keeps: course material without contact details (`lectures.scrub`)."""
-    return lectures.scrub(text) if desc["role"] == roles.TAUGHT else text
+    """The text a note keeps: course material without contact details (`lectures.scrub`) or who saved the file
+    (`convert.author_lines`), as the record keeps no notes about lecturers."""
+    return lectures.scrub(convert.without_author_lines(text)) if desc["role"] == roles.TAUGHT else text
 
 
 def _covered(con: sqlite3.Connection, row: sqlite3.Row, batch: str, covered: lectures.Covered) -> bool:

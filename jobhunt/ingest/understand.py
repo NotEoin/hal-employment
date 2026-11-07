@@ -19,7 +19,7 @@ from pathlib import PurePosixPath
 
 from jobhunt import record
 from jobhunt.ai.base import PrivateLeak
-from jobhunt.ingest import rank
+from jobhunt.ingest import convert, rank
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +126,9 @@ def _note_answered() -> None:
 
 def light(rel: str, text: str, rule: rank.Rule) -> dict:
     """A document's description without a model: no facts, and no answer on whose it is (`said` None)."""
-    first = next((p.strip() for p in re.split(r"\n\s*\n", text) if p.strip() and not p.startswith("#")), "")
+    # the lines naming who saved the file (`convert.author_lines`) are no summary of what it says
+    first = next((p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()
+                  and not p.startswith(("#", convert.AUTHOR_LINE, convert.SAVED_LINE))), "")
     return {"doc_type": rule.doc_type, "category": rule.category, "title": _title(rel, text),
             "period": _period(text), "summary": first[:SUMMARY_CHARS], "tags": light_tags(rel, text, rule),
             "entities": {k: [] for k in ENTITY_KINDS}, "said": None, "author": "", "role": "unsure",

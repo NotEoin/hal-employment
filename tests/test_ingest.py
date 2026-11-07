@@ -792,6 +792,115 @@ DRAFT_REPLY = {**REPLY, "doc_type": "dissertation", "category": "Coursework", "t
                                             "field": "name", "quote": "transects walked at low tide"}]}
 
 
+CORE = ('<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+        'xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>{made}</dc:creator>'
+        '<cp:lastModifiedBy>{saved}</cp:lastModifiedBy></cp:coreProperties>')
+WORD = ('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{paras}'
+        '</w:body></w:document>')
+ODF_META = ('<office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+            'xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" '
+            'xmlns:dc="http://purl.org/dc/elements/1.1/"><office:meta>'
+            '<meta:initial-creator>{made}</meta:initial-creator><dc:creator>{saved}</dc:creator>'
+            '</office:meta></office:document-meta>')
+
+
+def office_file(path: Path, made: str, saved: str, words: str = "") -> Path:
+    """A made-up Word, PowerPoint or Excel file whose properties name `made` and `saved`."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    paras = "".join(f"<w:p><w:r><w:t>{line}</w:t></w:r></w:p>" for line in words.splitlines() if line)
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("docProps/core.xml", CORE.format(made=made, saved=saved))
+        z.writestr("word/document.xml", WORD.format(paras=paras))
+    return path
+
+
+def pdf_by(author: str, words: str) -> bytes:
+    """A one-page PDF of `words` whose information dictionary names `author`."""
+    content = b"BT /F1 12 Tf 72 720 Td (%s) Tj ET" % words.encode()
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> "
+               b"/Contents 5 0 R >>", b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+               b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content),
+               b"<< /Author (%s) >>" % author.encode()]
+    out, offsets = bytearray(b"%PDF-1.4\n"), []
+    for n, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n%s\nendobj\n" % (n, body)
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % o for o in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R /Info 6 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    return bytes(out)
+
+
+class StoredAuthors(unittest.TestCase):
+    """Who a file's own properties say made it starts its text, so a file naming no one in its words can name
+    the person (marked coursework rarely has its author's name in it, 2026-11-06)."""
+
+    def test_office_files_say_who_made_and_last_saved_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for suffix in (".docx", ".pptx", ".xlsx"):
+                with self.subTest(suffix=suffix):
+                    made = office_file(Path(tmp) / f"work{suffix}", OWNER, "aquill0n")
+                    self.assertEqual(engine.convert.author_lines(made),
+                                     f"Document author: {OWNER}\nLast saved by: aquill0n")
+            same = office_file(Path(tmp) / "same.docx", OWNER, OWNER.lower())
+            self.assertEqual(engine.convert.author_lines(same), f"Document author: {OWNER}")
+
+    def test_an_opendocument_file_says_who_made_and_last_saved_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            odt = Path(tmp) / "essay.odt"
+            with zipfile.ZipFile(odt, "w") as z:
+                z.writestr("meta.xml", ODF_META.format(made="Morwenna Tregarth", saved=OWNER))
+            self.assertEqual(engine.convert.stored_by(odt), ("Morwenna Tregarth", OWNER))
+
+    def test_a_pdf_says_who_made_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf = Path(tmp) / "poster.pdf"
+            pdf.write_bytes(pdf_by(OWNER, "Tides of the made-up bay"))
+            self.assertEqual(engine.convert.stored_by(pdf), (OWNER, ""))
+            text = engine.convert.text_of(pdf, rank.OTHER)
+        self.assertTrue(text.startswith(f"Document author: {OWNER}\n\n"), text)
+        self.assertIn("Tides of the made-up bay", text)
+
+    def test_names_an_office_program_or_a_computer_fills_in_are_left_out(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for made, saved in (("Microsoft Office User", "DESKTOP-4F7G2KQ"), ("12345678", "Owner"),
+                                ("", "user"), ("Author", "Administrator")):
+                with self.subTest(made=made, saved=saved):
+                    path = office_file(Path(tmp) / "x.docx", made, saved, "A made-up line.")
+                    self.assertEqual(engine.convert.author_lines(path), "")
+                    self.assertEqual(engine.convert.text_of(path, rank.RULES[6]), "A made-up line.")
+
+    def test_a_file_with_no_words_stays_no_text_whoever_saved_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = office_file(Path(tmp) / "empty.docx", OWNER, OWNER)
+            self.assertEqual(engine.convert.text_of(path, rank.RULES[6]), "")
+
+    def test_coursework_naming_no_one_in_its_words_is_theirs_by_who_saved_it(self):
+        reply = {**DRAFT_REPLY, "doc_type": "coursework", "role": "own"}
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(reply)}) as backend:
+            settings.set("you.name", OWNER)
+            office_file(files / "Coursework 2.docx", "Morwenna Tregarth", OWNER, DRAFT)
+            office_file(files / "Coursework 3.docx", "Microsoft Office User", "", DRAFT.replace("2023", "2024"))
+            run(con, [files])
+            got = rows(con)
+            sent = backend.requests("ingest_doc")
+        self.assertEqual(got["Files/Coursework 2.docx"]["role"], "own")
+        self.assertEqual(got["Files/Coursework 3.docx"]["role"], "unsure")
+        self.assertTrue(any(f"Last saved by: {OWNER}" in str(r) for r in sent), "the AI sees who saved it")
+
+    def test_course_material_keeps_no_note_of_who_saved_it(self):
+        reply = {**NOTE_REPLY, "doc_type": "notes", "role": "taught"}
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(reply)}):
+            settings.set("record.read_all", True)
+            office_file(files / "GEO101/handout.docx", "Morwenna Tregarth", "Morwenna Tregarth", "Meanders.")
+            run(con, [files])
+            note = (vault / rows(con)["Files/GEO101/handout.docx"]["note"]).read_text(encoding="utf-8")
+        self.assertNotIn("Morwenna", note)
+        self.assertIn("Meanders.", note)
+
+
 class Origins(unittest.TestCase):
     """Where the person said a folder came from settles whose its documents are (`roles.ORIGINS`).
 

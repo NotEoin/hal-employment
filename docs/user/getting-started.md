@@ -255,7 +255,10 @@ Hal sorts every document by whose it is, and that decides what it can learn from
   no facts from it.
 
 Unless it came from a folder you said holds your own work, Hal only counts a document as yours when it
-names you: your name, your email, or a username from your GitHub or LinkedIn link in **Settings > You**. If your files use another name for you, such as a student
+names you: your name, your email, or a username from your GitHub or LinkedIn link in **Settings > You**.
+The name a Word, PowerPoint, Excel, OpenDocument or PDF file keeps as its author, or as the last person to
+save it, counts too, so coursework saved under your name or university username is yours even when its
+words never name you. If your files use another name for you, such as a student
 number, add it under **Settings > You > Other names you go by**.
 
 ### Tidying your record

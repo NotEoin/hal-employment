@@ -78,6 +78,21 @@ def pages(pdf: Path | bytes) -> int:
             doc.close()
 
 
+def metadata(pdf: Path | bytes) -> dict[str, str]:
+    """The PDF's information dictionary without empty values (`Author`, `Title` ...); {} when it cannot be read."""
+    with _LOCK:
+        try:
+            doc = _open(pdf)
+        except Unreadable:
+            return {}
+        try:
+            return {str(k): str(v) for k, v in doc.get_metadata_dict(skip_empty=True).items()}
+        except pdfium.PdfiumError:
+            return {}
+        finally:
+            doc.close()
+
+
 def first_pages_text(pdf: Path | bytes, limit: int) -> str:
     """The plain text of the first `limit` pages, without layout; "" when the PDF cannot be read."""
     with _LOCK:

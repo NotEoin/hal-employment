@@ -34,6 +34,9 @@ What changed in each version, in plain words.
   was given** or **A mix of both**. Your coursework, drafts and reports in a folder of your own work count
   as yours even when they do not name you, and a folder of course material only shows what you studied.
   The drop folder has the same choice in Settings, and `jobhunt ingest` takes `--mine` and `--course`.
+- **Who saved a file.** Hal reads the author a Word, PowerPoint, Excel, OpenDocument or PDF file keeps in
+  its properties, so coursework saved under your name or username counts as yours even when its words do
+  not name you. Names such as "Microsoft Office User" or a computer's name are ignored.
 - **The newest copy of each project.** When a folder holds several copies of one code project ("Robot",
   "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same

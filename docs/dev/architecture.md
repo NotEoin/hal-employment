@@ -538,7 +538,14 @@ runner starts the action again with the same batch and only pending items are re
    then reports and coursework, projects, writing, notes, slides, email, pictures and the rest, by words in
    the name, then the folders, then the start of a plain text file.
 5. **Convert** (`convert.py`). `record.text_of`, the record's own conversion. An empty result is `no_text`
-   and is never sent to a model, because a model given no text invents a document and its author.
+   and is never sent to a model, because a model given no text invents a document and its author. Text
+   that is not empty starts with `Document author: NAME` and, when it differs, `Last saved by: NAME`
+   (`convert.author_lines`): from `docProps/core.xml` (`dc:creator`, `cp:lastModifiedBy`) in Word,
+   PowerPoint and Excel files, `meta.xml` (`meta:initial-creator`, `dc:creator`) in OpenDocument files, and
+   `/Author` (`pdfread.metadata`) in a PDF. Placeholders (`PLACEHOLDER_AUTHORS`, a value with no letters, a
+   computer's name) are left out. So `roles.names_person` finds the person there and the AI sees who made
+   the file; a taught note's text drops these lines (`convert.without_author_lines`), and so does a light
+   note's summary.
 6. **Understand** (`understand.py`). Rich documents get the `ingest_doc` prompt (role checker), cleaned in
    code: fixed categories and doc types, 12 to 30 tags, and every fact's quote checked against the text; a
    quote not found marks the fact "Check this" and the note `hal: needs-review`. An organisation or place
