@@ -691,6 +691,14 @@ available yet.
   them ("May 2024", "05/2024", "2023-24", "Sept 2023 - present", "Summer 2023"). An unknown kind or field
   raises `ValueError` naming it. `store.rebuild_found(con)` merges every unchecked found item again from its
   sources after these rules change, leaving what the person confirmed, edited, hid or added.
+- Matching scales (`index.py`): `index.match` finds the item a fact belongs to through `merge.match_keys`
+  (a skill's compared name, a job's employer or, with none, its title, a basic's key, a link's address),
+  each candidate checked with `merge.same_item`; education, projects, certificates and achievements, matched
+  by closeness, are compared with every item of their kind from memory. The index is kept per connection
+  (named by a token in a temporary table) and read afresh when `total_changes` or `PRAGMA data_version`
+  moved since the store last wrote through it. The ingest (`engine._give_facts`) adds a document's facts
+  with `refresh=False` and runs one `conflicts.refresh` per document. 2,000 synthetic facts merge in about
+  0.3 s, against 4.4 to 5.5 s before (`tests/test_profile.py`, `Scale`, measured 2026-11-07).
 - A found item (state `hal`) takes each field from its best-ranked source: transcript, then certificate,
   CV, letter and notes. An education item's modules come from its transcripts and certificates when any
   lists modules, else from its CVs, never from notes, slides or coursework; they are one per module code

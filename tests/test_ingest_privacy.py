@@ -191,7 +191,7 @@ class Ingest(unittest.TestCase):
     def test_a_private_file_gets_no_note_no_facts_and_never_reaches_the_ai(self):
         found = []
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}) as backend, \
-                mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e: found.append(k)):
+                mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e, **kw: found.append(k)):
             put(files, "Money/CV of bank details.md", BANK_TEXT)
             run(con, [files])
             row = rows(con)["Files/Money/CV of bank details.md"]

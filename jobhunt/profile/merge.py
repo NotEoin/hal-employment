@@ -511,6 +511,28 @@ def same_item(kind: str, a: dict, b: dict) -> bool:
     return _name_close(a.get(field, ""), b.get(field, ""))
 
 
+def match_keys(kind: str, fields: dict) -> set[str] | None:
+    """Keys of a fact such that `same_item(kind, a, b)` is True only when `a` and `b` share one; None for the
+    kinds matched by closeness (education, projects, certificates, achievements), which have no such key.
+
+    `store` indexes items by these keys, so a fact is compared with the few items that share one instead of
+    every item of its kind (2026-11-07).
+    """
+    if kind == "skill":
+        return {k for k in (skill_key(fields.get("name", "")),) if k}
+    if kind == "basic":
+        return {k for k in (text_key(fields.get("key", "")),) if k}
+    if kind == "link":
+        return {k for k in (_url_key(fields.get("url", "")),) if k}
+    if kind == "job":
+        employer = org_key(fields.get("employer", ""))
+        if fields.get("employer"):
+            return {"employer:" + employer} if employer else set()
+        title = text_key(fields.get("title", ""))
+        return {"title:" + title} if title else set()
+    return None
+
+
 def project_key(name: str) -> str:
     """A project's name as compared: no tagline after " - " or ":", no words such as "app" or "system"."""
     words = _plain(TAGLINE.sub("", name or "")).split()

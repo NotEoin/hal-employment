@@ -426,7 +426,7 @@ class Understanding(unittest.TestCase):
     def test_a_quote_not_in_the_text_marks_the_fact_check_this(self):
         found = []
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}), \
-                mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e: found.append((k, e))):
+                mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e, **kw: found.append((k, e))):
             settings.set("you.name", OWNER)
             put(files, "CV.md", CV_TEXT)
             run(con, [files])
@@ -454,11 +454,11 @@ class Understanding(unittest.TestCase):
 
         real, kinds = store.add_found, []
 
-        def picky(con, kind, fields, evidence):
+        def picky(con, kind, fields, evidence, **kw):
             if kind == "achievement":
                 raise ValueError("An achievement needs a title.")
             kinds.append(kind)
-            return real(con, kind, fields, evidence)
+            return real(con, kind, fields, evidence, **kw)
 
         with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(REPLY)}), \
                 mock.patch.object(store, "add_found", picky):
@@ -506,7 +506,7 @@ class Understanding(unittest.TestCase):
         found = []
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps({**REPLY, "role": "others",
                                                                                 "author": "Morwenna Tregarth"})}), \
-                mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e: found.append(k)):
+                mock.patch("jobhunt.profile.store.add_found", lambda c, k, f, e, **kw: found.append(k)):
             settings.set("you.name", OWNER)
             put(files, "Friend CV.md", other)
             run(con, [files])

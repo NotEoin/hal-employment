@@ -270,18 +270,22 @@ def _covered(con: sqlite3.Connection, row: sqlite3.Row, batch: str, covered: lec
 
 
 def _give_facts(con: sqlite3.Connection, desc: dict, note_rel: str) -> int:
-    from jobhunt.profile import store
+    """Adds a document's facts to the profile with one conflicts refresh for the whole document; how many."""
+    from jobhunt.profile import conflicts, store
 
     n = 0
     for f in desc["facts"]:
         try:
             store.add_found(con, f["kind"], f["fields"], {"source_rel": note_rel, "quote": f["quote"],
                                                          "field": f["field"], "doc_type": desc["doc_type"],
-                                                         "verified": f["verified"], "role": desc["role"]})
+                                                         "verified": f["verified"], "role": desc["role"]},
+                            refresh=False)
         except ValueError as e:  # one malformed fact from the model is left out, not the whole document
             log.info("left out a fact from %s: %s", note_rel, e)
             continue
         n += 1
+    with con:
+        conflicts.refresh(con)
     return n
 
 

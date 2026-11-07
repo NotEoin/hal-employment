@@ -105,6 +105,8 @@ What changed in each version, in plain words.
   lecture, is listed apart on Check your record under **Studied in your course** and never goes on your CV
   or in a letter, unless you press **I have used this**. One skill written several ways
   ("python-scripting", "Python scripting") is one entry, shown in normal case.
+- **Large records read faster.** Hal adds what it finds in each file to your profile much faster when your
+  record holds thousands of facts.
 - **Profile notes in your record folder.** A Profile folder holds Work history, Education, Skills, Projects
   and Inconsistencies notes, written from your profile, for reading in Obsidian.
 - **Letters and answers written for the kind of job.** Hal reads which field a job is in from the advert

@@ -24,6 +24,9 @@ Design decisions, each with its reason:
   it, so an ingest that misreads a document fails loudly instead of storing a field nothing shows.
 - Only items the person added by hand can be deleted; a found item is hidden instead, because deleting it
   would let the next ingest add it again.
+- A new fact finds its item through `index`, which keeps every item and source in memory by match key, so
+  an ingest of thousands of facts does not read the whole profile for each one. The ingest adds a
+  document's facts with `refresh=False` and refreshes the conflicts once for the document.
 - The store does not publish events: an ingest adds hundreds of facts at once. The routes publish `profile`
   after each change the person makes.
 """
@@ -35,7 +38,7 @@ import sqlite3
 from collections.abc import Callable
 
 from jobhunt import db
-from jobhunt.profile import conflicts, merge
+from jobhunt.profile import conflicts, index, merge
 
 TEXT, DATE, FLAG, LIST, MODULES = "text", "date", "bool", "list", "modules"
 # Each kind's fields and their types. `period` is also accepted for jobs and education, and split into
@@ -229,22 +232,6 @@ def _row_fields(row: sqlite3.Row) -> dict:
     return json.loads(row["fields"])
 
 
-def _match(con: sqlite3.Connection, kind: str, fields: dict) -> sqlite3.Row | None:
-    """The first item `fields` belongs to, by its own fields or by what any of its sources said.
-
-    The sources count too, so a fact the person corrected (a misspelt employer) still matches when the same
-    file is read again, instead of coming back as a second item.
-    """
-    said: dict[int, list[dict]] = {}
-    for e in con.execute("SELECT e.item_id, e.said FROM profile_evidence e JOIN profile_items i "
-                         "ON i.id = e.item_id WHERE i.kind = ? ORDER BY e.id", (kind,)):
-        said.setdefault(e["item_id"], []).append(json.loads(e["said"]))
-    for row in con.execute("SELECT * FROM profile_items WHERE kind = ? ORDER BY id", (kind,)):
-        if any(merge.same_item(kind, known, fields) for known in [_row_fields(row), *said.get(row["id"], [])]):
-            return row
-    return None
-
-
 def refold(con: sqlite3.Connection, item_id: int) -> None:
     """Works out a found item's fields again from its sources; an item the person checked is left alone."""
     row = con.execute("SELECT kind, state FROM profile_items WHERE id = ?", (item_id,)).fetchone()
@@ -281,13 +268,13 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, 
     ev = _evidence(evidence)
     now = db.now()
     with con:
-        row = _match(con, kind, said)
-        if row is None:
+        # the item's own fields or any of its sources count, so a fact the person corrected (a misspelt
+        # employer) still matches when the same file is read again, instead of coming back as a second item
+        item_id = index.match(con, kind, said)
+        if item_id is None:
             item_id = con.execute("INSERT INTO profile_items (kind, fields, state, origin, created, updated) "
                                   "VALUES (?, ?, 'hal', 'found', ?, ?)",
                                   (kind, json.dumps(said), now, now)).lastrowid
-        else:
-            item_id = row["id"]
         con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, verified, "
                     "role, found_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (item_id, ev["source_rel"], ev["quote"], ev["field"], ev["doc_type"], json.dumps(said),
@@ -295,6 +282,8 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, 
         refold(con, item_id)
         if refresh:
             conflicts.refresh(con)
+        fields_now = _row_fields(con.execute("SELECT fields FROM profile_items WHERE id = ?", (item_id,)).fetchone())
+    index.added(con, item_id, kind, said, fields_now)
     return item_id
 
 

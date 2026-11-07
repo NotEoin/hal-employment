@@ -7,6 +7,7 @@ Each test opens a fresh database in a temporary folder. The people, employers, p
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -571,6 +572,63 @@ class Store(unittest.TestCase):
         self.assertEqual(len(certs), 1)
         self.assertEqual(len(certs[0]["evidence"]), 2)
         self.assertEqual(store.item(self.con, mine)["fields"]["title"], "Collections volunteer (Saturdays)")
+
+DOCUMENTS, FACTS_EACH = 20, 100       # 2,000 facts, as a large ingest gives them
+# Merging them took 5.5 s when every fact read every item and source of its kind, and 0.3 s with the index
+# (measured on the development machine, 2026-11-07); the bound leaves room for a loaded test runner.
+MERGE_BOUND_S = 3.0
+
+
+def synthetic_fact(n: int) -> tuple[str, dict]:
+    """The `n`th made-up fact: mostly skills written two ways, then jobs, projects, certificates and links."""
+    kind = n % 10
+    if kind < 6:
+        return "skill", {"name": f"Method {n % 1000}" if n // 1000 else f"method-{n % 1000}"}
+    if kind == 6:
+        return "job", {"title": "Assistant", "employer": f"Glimmerholt Trust {n % 200}", "start": f"{2010 + n % 10}-01"}
+    if kind == 7:
+        return "project", {"name": f"Survey {n % 50} of the lanterns"}
+    if kind == 8:
+        return "certificate", {"name": f"Award level {n % 50}"}
+    return "link", {"url": f"https://example.org/p{n % 100}"}
+
+
+class Scale(unittest.TestCase):
+    def setUp(self):
+        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+        self.con = db.connect(self.folder / "jobs.db")
+        self.addCleanup(self.con.close)
+
+    def test_two_thousand_facts_merge_in_a_few_seconds(self):
+        started = time.monotonic()
+        for doc in range(DOCUMENTS):
+            src = ev(f"Sources/Projects/Survey {doc}.md", "notes")
+            for n in range(doc * FACTS_EACH, (doc + 1) * FACTS_EACH):
+                store.add_found(self.con, *synthetic_fact(n), src, refresh=False)
+            with self.con:
+                conflicts.refresh(self.con)     # once per document, as the ingest does
+        took = time.monotonic() - started
+        self.assertLess(took, MERGE_BOUND_S)
+        expected = {"skill": 600, "job": 20, "project": 5, "certificate": 5, "link": 10}   # as before the index
+        self.assertEqual({k: v["total"] for k, v in store.counts(self.con).items() if v["total"]}, expected)
+        self.assertEqual(store.items(self.con, "skill")[0]["fields"]["name"], "Method 0")
+
+    def test_a_fact_another_connection_added_is_matched(self):
+        other = db.connect(self.folder / "jobs.db")
+        self.addCleanup(other.close)
+        mine = store.add_found(self.con, "skill", {"name": "Bookbinding"}, ev(CV_A, "cv"))
+        theirs = store.add_found(other, "skill", {"name": "Gilding"}, ev(CV_B, "cv"))
+        self.assertEqual(store.add_found(self.con, "skill", {"name": "gilding"}, ev(NOTES, "notes")), theirs)
+        self.assertEqual(store.add_found(other, "skill", {"name": "BOOKBINDING"}, ev(NOTES, "notes")), mine)
+
+    def test_a_fact_matches_the_employer_the_person_typed_since_the_last_one(self):
+        job = store.add_found(self.con, "job", {"title": "Guide", "employer": "Fenwik Museum"}, ev(CV_A, "cv"))
+        store.edit(self.con, job, {"employer": "Fenwick Lantern Museum"})
+        again = store.add_found(self.con, "job", {"title": "Guide", "employer": "Fenwick Lantern Museum"},
+                                ev(CV_B, "cv"))
+        self.assertEqual(again, job)
+
 
 class Dates(unittest.TestCase):
     def test_uk_ways_of_writing_a_date_are_read(self):
