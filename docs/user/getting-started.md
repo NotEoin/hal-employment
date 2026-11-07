@@ -263,6 +263,11 @@ Hal sorts every document by whose it is, and that decides what it can learn from
   as its maker, and not name you, to count: a file that names no one stays in your record, but Hal takes
   no facts from it.
 
+When Hal writes a letter, a form answer, interview notes or a CV suggestion, it reads only your own
+documents and the notes you wrote yourself. Course material, someone else's documents and files Hal is not
+sure about stay in your record, and **Ask your record** still searches them, but they never become claims
+about you.
+
 Unless it came from a folder you said holds your own work, Hal only counts a document as yours when it
 names you: your name, your email, or a username from your GitHub or LinkedIn link in **Settings > You**.
 The name a Word, PowerPoint, Excel, OpenDocument or PDF file keeps as its author, or as the last person to

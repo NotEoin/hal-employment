@@ -21,6 +21,14 @@ computer when it answers, and falls back to words when it does not.
 
 Files in the folders `record.private_folders` names (default "Private") are never sent to any AI: they are
 left out of `context`, `ask`, `notes_for_ai` and the vectors, and only the person's own search shows them.
+
+Only the person's own documents feed writing (`context` and `writing_hits`): a passage counts when its
+note's `role` is `own`, or when the person wrote the note themselves (no `hal` frontmatter key and no
+role), and never when its `tier` is `archive`. Lecture notes, someone else's documents and notes Hal could
+not place were used as the person's own work in letters (2026-11-06). Each passage keeps its note's `role`,
+`hal` and `tier` in the index for this; an index made before that (`INDEX_VERSION`) is read again in full
+on the next `sync`. `ask` still searches every passage: a question about the record may be about course
+material too.
 """
 import hashlib
 import json
@@ -34,6 +42,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
@@ -82,6 +91,14 @@ SKIP_DIRS = {".obsidian", ".trash"}
 SKIP_TYPE = {"topic", "dashboard", "index", "entity"}
 ORIGINALS = "Attachments/Sources"   # the ingest's copies of the files it read (`ingest/notes.py`)
 MAX_CHARS = 1200  # a passage's size: a paragraph or two, enough to quote from
+# The index's layout. 2: each passage carries its note's `role`, `hal`, `tier` and `doc_type` (2026-11-07);
+# an index of another version is read again in full by `sync`.
+INDEX_VERSION = 2
+OWN_ROLE = "own"          # `ingest/roles.py`'s role for the person's own documents
+ARCHIVE_TIER = "archive"  # a note kept in the record but never used for writing
+# How a writing request labels these passages. Never "true": they are what the person's own documents say,
+# and passages a prompt called true became claims a letter made about the person (2026-11-06).
+OWN_DOCUMENTS = "from the applicant's own documents"
 # BM25's usual constants (Robertson and Zaragoza, 2009).
 K1, B = 1.5, 0.75
 STOP = set("""a about above after again all also am an and any are as at be been being below between both but by
@@ -269,18 +286,21 @@ def chunks(rel: str, text: str) -> list[dict]:
     """A note's passages, each under its nearest heading and no longer than MAX_CHARS.
 
     No passage carries text from the one before: a carried tail would file one year's
-    module marks under the next year's heading.
+    module marks under the next year's heading. Each passage keeps its note's `role`, `tier` and `doc_type`
+    (lower case, "" when unset) and whether Hal wrote the note (`hal`), for `for_writing`.
     """
     fm, body = _frontmatter(text)
     body = "\n".join(line for line in body.splitlines() if not line.strip().startswith("<!--"))
     found = re.search(r"^#\s+(.*)$", body, re.M)
     title = _one(fm.get("title")) or (found.group(1).strip() if found else Path(rel).stem)
+    whose = {"role": _one(fm.get("role")).strip().lower(), "hal": bool(fm.get("hal")),
+             "tier": _one(fm.get("tier")).strip().lower(), "doc_type": _one(fm.get("doc_type")).strip().lower()}
     out, heading, buf = [], title, []
 
     def flush():
         passage = "\n".join(buf).strip()
         if len(passage) >= 40:  # a fragment shorter than this is a stray label, not a fact
-            out.append({"path": rel, "title": title, "heading": heading, "text": passage})
+            out.append({"path": rel, "title": title, "heading": heading, "text": passage, **whose})
         buf.clear()
 
     for para in re.split(r"\n\s*\n", body):
@@ -297,6 +317,17 @@ def chunks(rel: str, text: str) -> list[dict]:
         buf.append(para)
     flush()
     return out
+
+
+def for_writing(passage: dict) -> bool:
+    """True when a passage may be used to write for the person: from their own document, and not archived.
+
+    A passage from an index made before passages kept their note's role is never used.
+    """
+    if "role" not in passage or passage.get("tier") == ARCHIVE_TIER:
+        return False
+    role = passage["role"]
+    return role == OWN_ROLE or (not role and not passage.get("hal"))
 
 
 def _stem(word: str) -> str:
@@ -344,6 +375,9 @@ def sync() -> dict:
         raise RecordUnavailable(f"no employment record at {_live('VAULT')}")
     converted = convert()
     index = _load()
+    rebuilt = index.get("version") != INDEX_VERSION
+    if rebuilt:   # passages without their note's role: read every note again
+        index = {**index, "manifest": {}, "chunks": []}
     notes, hashes = {}, {}
     for path in _walk((".md",)):
         try:
@@ -364,7 +398,7 @@ def sync() -> dict:
         index["manifest"] = {rel: h for rel, h in index["manifest"].items() if rel not in gone} | \
             {rel: hashes[rel] for rel in changed}
     vectors_changed = _embed_new(index)
-    if changed or gone or vectors_changed:
+    if changed or gone or vectors_changed or rebuilt:
         index["read"] = _now()
         _save(index)
     return {"notes": len(notes), "passages": len(index["chunks"]), "changed": len(changed), "removed": len(gone),
@@ -378,6 +412,7 @@ def _now() -> str:
 
 
 def _save(index: dict) -> None:
+    index["version"] = INDEX_VERSION
     _live("INDEX").parent.mkdir(parents=True, exist_ok=True)
     tmp = _live("INDEX").with_suffix(".tmp")
     tmp.write_text(json.dumps(index), encoding="utf-8")
@@ -453,8 +488,8 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / size if size else 0.0
 
 
-def _meaning_search(queries: list[str], k: int) -> list[list[dict]] | None:
-    """Passages ranked by meaning, or None when there are no vectors or the AI does not answer."""
+def _meaning_search(queries: list[str], k: int, keep: Callable[[dict], bool]) -> list[list[dict]] | None:
+    """Passages `keep` allows, ranked by meaning; None when there are no vectors or the AI does not answer."""
     index = _searcher()["raw"]
     vectors = index.get("vectors") or {}
     if not vectors or index.get("vector_model") != _embed_model():
@@ -464,7 +499,7 @@ def _meaning_search(queries: list[str], k: int) -> list[list[dict]] | None:
     except RecordUnavailable as e:
         log.info("searching by words: %s", e)
         return None
-    keyed = [(c, vectors.get(_passage_key(c))) for c in index["chunks"]]
+    keyed = [(c, vectors.get(_passage_key(c))) for c in index["chunks"] if keep(c)]
     out = []
     for q in asked:
         scored = sorted(((_cosine(q, v), c) for c, v in keyed if v is not None), key=lambda x: -x[0])
@@ -499,14 +534,25 @@ def search(query: str, k: int = 5, min_score: float = MIN_SCORE, include_private
     Passages in private folders are left out unless `include_private`, which only the person's own search
     (the command line) sets.
     """
-    return search_many([query], k, min_score, include_private)[0]
+    return search_many([query], k, min_score, keep=(lambda c: True) if include_private else shared)[0]
+
+
+def shared(passage: dict) -> bool:
+    """True for a passage outside the private folders: one Hal may give the AI."""
+    return not is_private(passage["path"])
+
+
+def usable(passage: dict) -> bool:
+    """True for a passage writing may use: outside the private folders and allowed by `for_writing`."""
+    return shared(passage) and for_writing(passage)
 
 
 def search_many(queries: list[str], k: int = 5, min_score: float = MIN_SCORE,
-                include_private: bool = False) -> list[list[dict]]:
-    """One search per query: by meaning when chosen and the AI answers, else by words (BM25)."""
+                keep: Callable[[dict], bool] = shared) -> list[list[dict]]:
+    """One search per query over the passages `keep` allows (`shared` ones unless told otherwise; `usable`
+    ones for writing): by meaning when chosen and the AI answers, else by words (BM25)."""
     if _by_meaning():
-        found = _meaning_search(queries, k)
+        found = _meaning_search(queries, k, keep)
         if found is not None:
             return found
     s = _searcher()
@@ -518,7 +564,7 @@ def search_many(queries: list[str], k: int = 5, min_score: float = MIN_SCORE,
         total = sum(weight.values())
         hits = []
         for i, bag in enumerate(s["bags"]):
-            if not include_private and is_private(s["chunks"][i]["path"]):
+            if not keep(s["chunks"][i]):
                 continue
             held = [t for t in terms if t in bag]
             if not held or not total:
@@ -551,21 +597,29 @@ def weight(path: str) -> float:
     return 1.0
 
 
-def context(queries: list[str], per_query: int = 3, limit: int = 6000) -> str:
-    """Passages of the record relevant to the queries, as text for a prompt; "" when the record cannot be read.
+def writing_hits(queries: list[str], per_query: int = 3) -> list[list[dict]]:
+    """For each query, the passages of the person's own documents that writing may use, best first.
 
-    Never holds a passage from a private folder. Each query's passages are ranked by score times `weight`.
+    Only passages `usable` allows; each query's passages are ranked by score times `weight`. Raises what
+    `search_many` raises.
     """
+    found = search_many(queries, per_query * CANDIDATES, keep=usable)
+    return [sorted((h for h in hits if shared(h)),
+                   key=lambda h: -h.get("score", 0) * weight(h["path"]))[:per_query] for hits in found]
+
+
+def context(queries: list[str], per_query: int = 3, limit: int = 6000) -> str:
+    """Passages of the person's own documents relevant to the queries, as text for a prompt, each under a
+    "[file > heading]" line (`writing_hits` chooses them); "" when the record cannot be read."""
     try:
-        found = search_many([q for q in queries if q.strip()][:20], per_query * CANDIDATES)
+        found = writing_hits([q for q in queries if q.strip()][:20], per_query)
     except (OSError, ValueError, KeyError, TypeError):
         return ""
     seen, lines = set(), []
     for hits in found:
-        hits = sorted(hits, key=lambda h: -h.get("score", 0) * weight(h["path"]))[:per_query]
         for h in hits:
             key = (h["path"], h["heading"], h["text"][:80])
-            if key in seen or is_private(h["path"]):
+            if key in seen:
                 continue
             seen.add(key)
             lines.append(f"[{h['path']} > {h['heading']}]\n{h['text']}")

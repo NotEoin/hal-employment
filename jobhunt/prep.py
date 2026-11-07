@@ -24,7 +24,7 @@ def request(job, who: dict) -> str:
             f"Tests the advert names: {who['test_kinds_line']}\n\n"
             f"Advert:\n{(job['description'] or '')[:ADVERT_CHARS]}\n\nFit map:\n{fit}\n"
             f"Gaps: {s['gaps']}\n\nCV facts:\n{cv.facts_text()}"
-            + (f"\n\nEmployment record (true; fuller than the CV):\n{kept}" if kept else ""))
+            + (f"\n\nEmployment record ({record.OWN_DOCUMENTS}; fuller than the CV):\n{kept}" if kept else ""))
 
 
 def build(con, job) -> str:

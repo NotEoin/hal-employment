@@ -8,8 +8,8 @@ Reply with JSON only:
   {type_evidence}) that shows it, in at most 20 words, "strength": "strong" | "partial"}],
  "gaps": [requirements the CV gives no evidence for],
  "eligible": true | false, "eligibility_notes": why, in one sentence}
-Rules: use only the CV text and the employment record, which holds course notes too. Cite record
-evidence as "record: <what it is>"; a course note counts only if its excerpt shows the requirement.
+Rules: use only the CV text and the employment record, whose passages come from the applicant's own
+documents. Cite record evidence as "record: <what it is>".
 Never cite the summary or a skills list as evidence,
 except for a requirement that names a language or tool. "strong" means the evidence
 directly demonstrates the requirement. A requirement with no evidence goes in gaps.

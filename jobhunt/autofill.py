@@ -1127,7 +1127,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
         try:
             # The employment record holds what the CV leaves out: certificates, the full story of each job.
             found = record.context([f"{f.get('label') or ''} {f.get('help') or ''}" for f in batch])
-            kept = f"\n\nFrom the applicant's employment record (as true as the CV):\n{found}" if found else ""
+            kept = f"\n\nEmployment record ({record.OWN_DOCUMENTS}):\n{found}" if found else ""
             reply = llm.chat_json(_prompt("form_fill"), f"Fields:\n{listing}\n\n{facts}{kept}", role="main",
                                   timeout=300)
         except llm.LLMUnavailable as e:

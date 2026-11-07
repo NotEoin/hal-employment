@@ -248,6 +248,68 @@ class Record(unittest.TestCase):
         self.assertEqual(record.status()["read"], "2026-10-22T09:00:00Z")
         self.assertEqual(json.loads(Path(record.INDEX).read_text())["read"], "2026-10-22T09:00:00Z")
 
+    def whose_notes(self) -> None:
+        """One note about a made-up robot arm for each kind of owner, each naming who it belongs to."""
+        hal = "---\ntype: source\nhal: ingested\nrole: {role}\n---\n# {title}\n\nThe robot arm {words}, made-up text.\n"
+        self.note("Sources/Projects/Mine.md", hal.format(role="own", title="Mine", words="I built in Python"))
+        self.note("Sources/Study notes/Lecture.md",
+                  hal.format(role="taught", title="Lecture", words="a lecture showed"))
+        self.note("Sources/Other/Unsure.md", hal.format(role="unsure", title="Unsure", words="someone described"))
+        self.note("Sources/Other/Theirs.md", hal.format(role="others", title="Theirs", words="a classmate built"))
+        self.note("Sources/Other/Older.md", "---\nhal: ingested\n---\n# Older\n\nThe robot arm an older read filed, "
+                                            "made-up text.\n")
+        self.note("My notes/Robot.md", "# Robot\n\nThe robot arm I wired up myself at home, made-up text.\n")
+        self.note("My notes/Old robot.md", "---\ntier: archive\n---\n# Old robot\n\nThe robot arm from years ago, "
+                                           "made-up text.\n")
+
+    def test_only_the_persons_own_documents_feed_writing(self):
+        # lecture notes, unsure notes and other people's notes were passages a letter called true (2026-11-06)
+        self.whose_notes()
+        record.sync()
+        used = set(re.findall(r"^\[(.*?) >", record.context(["robot arm"]), re.M))
+        self.assertEqual(used, {"Sources/Projects/Mine.md", "My notes/Robot.md"})
+        self.assertEqual({h["path"] for hits in record.writing_hits(["robot arm"], per_query=10) for h in hits}, used)
+        # Asking the record may still search everything, course material too.
+        everything = {h["path"] for h in record.search("robot arm", k=10)}
+        self.assertIn("Sources/Study notes/Lecture.md", everything)
+        self.assertIn("My notes/Old robot.md", everything)
+
+    def test_only_the_persons_own_documents_feed_writing_when_searching_by_meaning(self):
+        self.settings["record.search"] = "meaning"
+        self.whose_notes()
+        with ai.use(WordVectors()):
+            record.sync()
+            hits = record.writing_hits(["robot arm made-up text"], per_query=10)[0]
+        self.assertEqual({h["by"] for h in hits}, {"meaning"})
+        self.assertEqual({h["path"] for h in hits}, {"Sources/Projects/Mine.md", "My notes/Robot.md"})
+
+    def test_cv_suggestions_read_only_the_persons_own_documents(self):
+        from types import SimpleNamespace
+
+        from jobhunt.cvstudio import suggest
+
+        self.whose_notes()
+        record.sync()
+        entry = SimpleNamespace(heading="Robot arm", org="", hidden=False)
+        doc = SimpleNamespace(sections=[SimpleNamespace(id="s:projects", entries=[entry])])
+        self.assertTrue({p["path"] for p in suggest.passages_for(doc, ["s:projects"])}
+                        <= {"Sources/Projects/Mine.md", "My notes/Robot.md"})
+        self.assertTrue(suggest.passages_for(doc, ["s:projects"]))
+
+    def test_an_index_made_before_passages_kept_their_role_is_read_again(self):
+        self.whose_notes()
+        record.sync()
+        index = json.loads(Path(record.INDEX).read_text())
+        old = {**index, "chunks": [{k: c[k] for k in ("path", "title", "heading", "text")} for c in index["chunks"]]}
+        del old["version"]
+        Path(record.INDEX).write_text(json.dumps(old), encoding="utf-8")
+        record._CACHE.clear()
+        self.assertEqual(record.context(["robot arm"]), "", "a passage whose role is unknown is never used")
+        self.assertEqual(record.sync()["changed"], 7)
+        self.assertEqual(json.loads(Path(record.INDEX).read_text())["version"], record.INDEX_VERSION)
+        self.assertIn("[Sources/Projects/Mine.md > Mine]", record.context(["robot arm"]))
+        self.assertEqual(record.sync()["changed"], 0)
+
 
 class Health(unittest.TestCase):
     """Regression: the record check was a plain dict, so "Is Hal working?" showed it as a broken check."""

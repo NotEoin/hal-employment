@@ -26,7 +26,7 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from . import cv, db, llm, reputation, research
+from . import cv, db, llm, record, reputation, research
 from .ai import prompts
 from .core import events, paths
 from .cvstudio import context as cv_context
@@ -180,7 +180,7 @@ def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, 
             f"{who['status_line']}. Mention availability only if the advert's start date is "
             f"flexible; for a fixed intake, refer to that intake instead.\n"
             f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
-            + _record_part("Employment record (true; use it where the CV is silent)", kept))
+            + _record_part(f"Employment record ({record.OWN_DOCUMENTS}; use it where the CV is silent)", kept))
 
 
 def spelt(text: str, who: dict) -> str:

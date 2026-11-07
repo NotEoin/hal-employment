@@ -498,7 +498,8 @@ def _profile() -> dict:
 # -- the AI reviewer --------------------------------------------------------------------------------------
 
 def passages_for(doc, sids: list[str]) -> list[dict]:
-    """Record passages about these sections' entries; none when the record cannot be searched."""
+    """Passages of the person's own documents about these sections' entries (`record.writing_hits`); none when
+    the record cannot be searched."""
     from jobhunt import record
 
     queries = []
@@ -509,7 +510,7 @@ def passages_for(doc, sids: list[str]) -> list[dict]:
     if not queries:
         return []
     try:
-        found = record.search_many(queries, k=2)
+        found = record.writing_hits(queries, per_query=2)
     except Exception as e:  # a missing or unreadable record means fewer facts, not no suggestions
         log.info("record search for CV suggestions failed: %r", e)
         return []

@@ -397,6 +397,14 @@ runs: tests use `tests/support/fake_claude/`.
   usual openings and words, words they take out of drafts); 2 or 3 exemplars of the closest kind are cut to
   80 words and 1,500 characters in all. Checker-list words the person uses themselves (`own_words`) are
   never flagged for them.
+- Writing reads only the person's own documents from the record: `record.context` and `record.writing_hits`
+  (the pack, form filling, interview prep, the CV score and CV suggestions) keep a passage only when
+  `record.for_writing` allows it: its note's `role` is `own`, or the note has no `hal` key and no role (the
+  person wrote it), and its `tier` is not `archive`. Course material, someone else's documents and notes
+  Hal is unsure about are never used. Each passage in the index carries its note's `role`, `hal`, `tier` and
+  `doc_type`; an index of another `record.INDEX_VERSION` is read again in full on the next sync, and until
+  then its passages are not used. `record.ask` still searches every passage. Requests label the passages
+  `record.OWN_DOCUMENTS` ("from the applicant's own documents"), never "true".
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The pack's `## Letter notes` section says Tone, Length,
   Evidence and Checked; the application page reads them back.

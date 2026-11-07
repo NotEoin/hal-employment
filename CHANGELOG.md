@@ -147,6 +147,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Letters and answers use only your own documents.** Hal searched every note in your record when it
+  wrote, so lecture notes, other people's files and files it was unsure about could turn up in a letter as
+  your own work. Letters, form answers, interview notes and CV suggestions now read only your own documents
+  and the notes you wrote yourself. Your record is read again once to note whose each file is.
 - **The AI's own reason when it cannot answer.** When Hal's model was switched off, commands such as
   `jobhunt pack` stopped with a long error ending in "(503)". They now say in one line what the AI said,
   such as "Hal is off; run `hal on`".
