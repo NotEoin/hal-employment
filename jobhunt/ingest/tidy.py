@@ -37,7 +37,7 @@ import sqlite3
 import tarfile
 from pathlib import Path, PurePosixPath
 
-from jobhunt.ingest import discover, frontmatter, items, lectures, notes, privacy, roles, versions
+from jobhunt.ingest import discover, frontmatter, items, lectures, notes, privacy, rank, roles, versions
 
 log = logging.getLogger(__name__)
 
@@ -272,9 +272,12 @@ def _not_mine_again(con: sqlite3.Connection, batch: str, words: list[str]) -> in
 
 def _ask_again(row: sqlite3.Row, role: str, doc_type: str, fm: dict) -> bool:
     """True when the AI should read a filed note again: course material from a converted file, for its
-    lecture note, or a document of a kind whose role only the AI can settle and no AI has judged yet."""
+    lecture note, or a document of a kind whose role only the AI can settle and no AI has judged yet, such as
+    coursework in a course folder, which older reads filed by rules (`rank.in_unit`)."""
     if row["kind"] == "page" or not Path(row["path"]).exists():
         return False
+    if row["unit"] and rank.in_unit(row["rel"], rank.RULES[9]).rich and fm.get("read_by") != "ai":
+        return True
     if role == roles.TAUGHT:
         return not lectures.is_typed(row["rel"]) and row["kind"] == "file" and fm.get("lecture_note") != "true"
     return role == roles.UNSURE and doc_type in JUDGED_BY_AI and fm.get("read_by") != "ai"

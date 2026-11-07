@@ -204,7 +204,8 @@ becomes one note, and each module gets one course note linking its lectures, how
 came from. With **Keep a copy of each file Hal reads in** on, the original is copied to `Attachments`
 beside the notes.
 
-The AI reads the rich documents in full. Notes and slides are filed by their headings and words, which is
+The AI reads the rich documents in full, including coursework, reports, projects and essays kept in a
+module's folder beside its lectures. Notes and slides are filed by their headings and words, which is
 quick but gives them no AI summary and adds nothing to your profile. To have the AI read those too:
 
 - **For the next files you add:** turn on **Read every document with the AI** in Settings, CV and

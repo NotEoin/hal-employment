@@ -37,6 +37,9 @@ What changed in each version, in plain words.
 - **Who saved a file.** Hal reads the author a Word, PowerPoint, Excel, OpenDocument or PDF file keeps in
   its properties, so coursework saved under your name or username counts as yours even when its words do
   not name you. Names such as "Microsoft Office User" or a computer's name are ignored.
+- **Coursework in a module's folder.** Coursework, reports, projects and essays kept beside a module's
+  lectures are read by the AI like your other work, and stay linked from the module's note. **Tidy my
+  record** reads the ones an older Hal filed by their words alone.
 - **The newest copy of each project.** When a folder holds several copies of one code project ("Robot",
   "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same

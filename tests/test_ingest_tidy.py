@@ -11,7 +11,7 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.api import HalServer
 from support.fake_ai import fake_ai
-from test_ingest import NOTE_REPLY, OWNER, REPLY, home, put, rows, run
+from test_ingest import NOTE_REPLY, OWNER, REPLY, home, module_folder, put, rows, run
 
 from jobhunt.core import settings
 from jobhunt.ingest import actions as ingest_actions
@@ -257,6 +257,23 @@ class Tidy(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         self.assertIn("## Earlier versions", text)
         self.assertIn("older_version", states)
+
+    def test_coursework_an_older_read_filed_by_rules_in_a_module_folder_is_read_by_the_ai(self):
+        reply = {**REPLY, "doc_type": "coursework", "category": "Coursework", "title": "River survey",
+                 "role": "own", "facts": []}
+        with home() as (con, _vault, files):
+            settings.set("you.name", OWNER)
+            with fake_ai({}):
+                module_folder(files)
+                run(con, [files])
+            work = rows(con)["Files/GEO101/Week 4 coursework.md"]
+            self.assertEqual((work["model"], work["role"]), (0, "taught"))
+            with fake_ai({"ingest_doc": json.dumps(reply)}) as backend:
+                run(con, [], batch="t", tidy=True)
+            again = con.execute("SELECT model, role FROM ingest_items WHERE id = ?", (work["id"],)).fetchone()
+            asked = [str(r) for r in backend.requests("ingest_doc")]
+        self.assertEqual(tuple(again), (1, "own"))
+        self.assertEqual(len(asked), 1, "only the coursework, not the typed lecture notes")
 
 
 class Route(unittest.TestCase):

@@ -514,9 +514,13 @@ runner starts the action again with the same batch and only pending items are re
    in any batch, is a `duplicate` named once under "Also at" in the first copy's note.
 3. **Group** (`group.py`). A repository (a `.git` folder or a manifest at its top) is one `repo` item,
    summarised from its README, docs headings, manifest, language mix and file tree, never file by file. A
-   folder whose own files are mostly notes or slides (three or more) is a `course` unit: light notes per
-   file and one summary note linking them, one per module code (`engine._courses`: a unit whose code
-   already has a course note adds its files to it).
+   folder whose own files are mostly notes or slides (three or more) is a `course` unit: a note per file
+   and one summary note linking them, one per module code (`engine._courses`: a unit whose code
+   already has a course note adds its files to it). A unit's files are light (`rank.in_unit`), except a
+   document whose own name says it is work (`rank.work_named`: the report and project rules' words, essay
+   or writing, and no lecture, slides or handout word), such as "Week 4 coursework.md": it is read as that
+   rich kind, by the AI, and keeps its "Part of" link. A tidy sends such a note an older read filed by rules
+   to the AI (`tidy._ask_again`). With `record.read_all` on, every unit file goes to the AI as before.
    Course material goes through `lectures.py`. Within a rank, typed notes are read before converted decks
    and handouts, and a deck or handout whose module code and title words match typed notes already written
    (`lectures.Covered`) gets state `covered`: no note, no AI call, its path under "Also at" in those notes.

@@ -901,6 +901,57 @@ class StoredAuthors(unittest.TestCase):
         self.assertIn("Meanders.", note)
 
 
+COURSEWORK = f"# Coursework 2: river survey\n\nBy {OWNER}. Transects of the made-up river, measured in 2023."
+
+
+def module_folder(files: Path) -> Path:
+    """A module's folder of three lecture notes, a handout and coursework named as the week's notes are."""
+    folder = files / "GEO101"
+    for n, topic in enumerate(("Rivers", "Coasts", "Glaciers"), start=1):
+        put(folder, f"Week {n} notes.md", f"# {topic}\n\nMade-up notes on {topic.lower()}.")
+    put(folder, "Week 4 handout.md", "# Fieldwork safety\n\nA made-up handout.")
+    put(folder, "Week 4 coursework.md", COURSEWORK)
+    return folder
+
+
+class CourseWork(unittest.TestCase):
+    """Coursework kept in a module's folder reaches the AI: a course folder's files were all filed by rules, so
+    a dump's reports and practicals there never did (2026-11-06)."""
+
+    def test_a_course_folders_coursework_is_read_as_work_and_its_notes_stay_light(self):
+        self.assertIs(rank.in_unit("GEO101/Week 4 coursework.md", rank.RULES[9]), rank.RULES[6])
+        self.assertIs(rank.in_unit("GEO101/Final project.pdf", rank.RULES[9]), rank.RULES[7])
+        self.assertIs(rank.in_unit("GEO101/Essay plan.docx", rank.RULES[9]), rank.RULES[8])
+        self.assertIs(rank.in_unit("GEO101/Lecture 5 writing reports.pdf", rank.RULES[9]), rank.RULES[9])
+        self.assertIs(rank.in_unit("GEO101/Project slides.pptx", rank.RULES[10]), rank.RULES[10])
+        self.assertIs(rank.in_unit("GEO101/Week 2 notes.md", rank.RULES[9]), rank.RULES[9])
+
+    def test_coursework_in_a_module_folder_is_read_by_the_ai_and_keeps_its_course_link(self):
+        reply = {**REPLY, "doc_type": "coursework", "category": "Coursework", "title": "River survey",
+                 "role": "own", "facts": []}
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(reply)}) as backend:
+            settings.set("you.name", OWNER)
+            module_folder(files)
+            run(con, [files])
+            got = rows(con)
+            asked = len(backend.requests("ingest_doc"))
+            work = got["Files/GEO101/Week 4 coursework.md"]
+            note = (vault / work["note"]).read_text(encoding="utf-8")
+            course = (vault / got["Files/GEO101"]["note"]).read_text(encoding="utf-8")
+        self.assertEqual((work["model"], work["role"], work["unit"] is not None), (1, "own", True))
+        self.assertEqual(asked, 1, "the notes and the handout are still filed by rules")
+        self.assertEqual({got[f"Files/GEO101/Week {n} notes.md"]["model"] for n in (1, 2, 3)}, {0})
+        self.assertIn("## Part of", note)
+        self.assertIn(work["note"].removesuffix(".md"), course)
+
+    def test_with_read_all_on_every_file_of_the_folder_is_read_once(self):
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(NOTE_REPLY)}) as backend:
+            settings.set("record.read_all", True)
+            module_folder(files)
+            run(con, [files])
+        self.assertEqual(len(backend.requests("ingest_doc")), 5)
+
+
 class Origins(unittest.TestCase):
     """Where the person said a folder came from settles whose its documents are (`roles.ORIGINS`).
 

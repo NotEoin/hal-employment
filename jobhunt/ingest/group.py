@@ -4,7 +4,8 @@
   docs, manifest, language mix and file tree (`convert.repo_text`), because a hundred source files read one
   by one say less about the person than the README does, and cost a hundred model calls.
 - A folder whose own files are mostly notes or slides, `COURSE_MIN` or more of them, is a course unit:
-  each file still gets a light note, and the unit gets one summary note linking them.
+  each file still gets a note, light unless its name says it is work such as coursework or a report
+  (`rank.in_unit`), and the unit gets one summary note linking them.
 """
 from __future__ import annotations
 

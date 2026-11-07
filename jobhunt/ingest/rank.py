@@ -113,6 +113,35 @@ NOT_DOCUMENTS = re.compile(r"(?:licen[cs]e|copying|notice|third[ _-]?party[ _-]?
                            r"code[ _-]?of[ _-]?conduct|contributing|security|authors|maintainers)", re.I)
 
 
+# The kinds of work a person makes, as a file's or folder's own name says them: coursework and reports,
+# projects, essays. The writing rule's other words (articles, reviews, stories) name a module's readings too.
+WORK_NAMES = ((RULES[6], RULES[6].words), (RULES[7], RULES[7].words), (RULES[8], _w(r"essays?|writing")))
+# Names of course material, which a work word beside them does not make work: "Lecture 5 writing reports".
+MATERIAL_NAMES = _w(r"lectures?|lecs?|slides?|handouts?|seminars?|tutorials?|reading[ _-]?lists?|"
+                    r"presentation|deck")
+
+
+def work_named(name: str) -> Rule | None:
+    """The kind of work `name` (a file's stem or a folder's name) says it is, or None; course material
+    named as such ("Lecture 5 writing reports") is no work."""
+    if MATERIAL_NAMES.search(name):
+        return None
+    return next((rule for rule, words in WORK_NAMES if words.search(name)), None)
+
+
+def in_unit(rel: str, rule: Rule) -> Rule:
+    """The rule for a file of a course unit: a document named as work (coursework, a report, a project, an
+    essay) is read as one, as in any folder; the rest are light, whatever their names say.
+
+    A course folder's files were all light, so a module folder's coursework never reached the AI and a dump's
+    reports and practicals in module folders stayed unsure (2026-11-06).
+    """
+    p = Path(rel)
+    if p.suffix.lower() in DOC_SUFFIXES and not NOT_DOCUMENTS.fullmatch(p.stem) and (work := work_named(p.stem)):
+        return work
+    return RULES[9] if rule.rich else rule
+
+
 def _peek(path: Path, chars: int = PEEK_CHARS) -> str:
     try:
         with path.open(encoding="utf-8", errors="replace") as f:

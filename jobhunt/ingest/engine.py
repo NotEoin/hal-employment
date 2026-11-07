@@ -121,6 +121,8 @@ class _Finder:
                 continue
             discover.fill(f)
             rule = rank.rule_for(f.rel, f.path)
+            if f.path in unit_of:
+                rule = rank.in_unit(f.rel, rule)
             items.add(self.con, self.batch, path=str(f.path), rel=f.rel, unit=str(unit_of[f.path])
                       if f.path in unit_of else None, size=f.size, sha256=f.sha256, mtime=_iso(f.mtime),
                       magic=f.magic, rank=rule.rank, category=rule.category, doc_type=rule.doc_type, state=f.state,
@@ -201,9 +203,7 @@ def _rule(row: sqlite3.Row) -> rank.Rule:
     rule = rank.rule_for(row["rel"], Path(row["path"]) if row["kind"] == "file" else None)
     if row["kind"] == "page":
         return next((r for r in (*rank.RULES, rank.REPO) if r.doc_type == row["doc_type"]), rule)
-    if row["unit"] and rule.rich:   # a course's files are light, whatever their names say
-        return rank.RULES[9]
-    return rule
+    return rank.in_unit(row["rel"], rule) if row["unit"] else rule
 
 
 def _source(row: sqlite3.Row, batch: str) -> str:
