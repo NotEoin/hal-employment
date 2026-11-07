@@ -237,3 +237,16 @@ def context_of(kind: str) -> str:
     if "degree work" in kind:
         return DEGREE
     return PERSONAL if "personal project" in kind else ""
+
+
+def team_words(text: str) -> str:
+    """The words of `text` that say a project was a team's ("team of 7", "group project"); "" when none.
+    "in a team of 7" reads as "team of 7", so a card and its quote say a team the same way."""
+    found = TEAM_WORDS.search(text or "")
+    if not found:
+        return ""
+    said = found.group(0)
+    if said.lower() == "in a team of":
+        size = re.match(rf"\s+{FEW}\b", text[found.end():], re.I)
+        said = "team of" + (size.group(0) if size else "")
+    return said

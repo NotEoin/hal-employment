@@ -26,6 +26,8 @@ from pathlib import Path
 from unittest import mock
 
 from jobhunt import config, cv, db, gmail, llm, pack, record, replenish, reputation, research, tasks, vault
+from jobhunt.ai import prompts
+from jobhunt.writing import plan
 
 from .actions import wait_for_actions
 
@@ -218,7 +220,8 @@ def fake_chat_json(system: str, user: str, **kw) -> dict:
               pack.FIT: {"matches": [{"requirement": "Python", "evidence": "a made-up project", "strength": "strong"}],
                          "gaps": ["SQL"], "eligible": True, "eligibility_notes": "No conditions."},
               pack.ANSWERS: {"answers": [{"question": "Why do you want this role?", "answer": "A made-up answer."}]},
-              pack.VERIFY: {"unsupported": []}}
+              pack.VERIFY: {"unsupported": []},
+              prompts.text(plan.PROMPT): {"evidence": []}}
     if system in canned:
         return json.loads(json.dumps(canned[system]))
     if system.startswith(SCREEN_OPENING):

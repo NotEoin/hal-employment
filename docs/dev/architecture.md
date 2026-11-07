@@ -406,6 +406,15 @@ runs: tests use `tests/support/fake_claude/`.
   `doc_type`; an index of another `record.INDEX_VERSION` is read again in full on the next sync, and until
   then its passages are not used. `record.ask` still searches every passage. Requests label the passages
   `record.OWN_DOCUMENTS` ("from the applicant's own documents"), never "true".
+- The evidence plan (`writing/plan.py`, prompt `evidence_plan`): before the letter is written,
+  `pack.evidence_plan` asks once for up to `plan.MAX_ITEMS` (8) quotes from numbered sources
+  (`plan.sources`: each CV line, each Profile block line and each record passage of `kept`). A pick is kept
+  only when its source exists and its quote is in that source word for word, spaces and case aside, and the
+  text kept is the source's own (`plan.quoted`). Each item (`plan.Item`, E1, E2, ...) carries the card its
+  source is about (a Project or Job line of the Profile block, a CV line naming one card, a passage of one of
+  the card's `files`), the card's context (`profile.contexts.current`, never the reply's) and the person's
+  part (`profile.writing.card_role`: the card's Role field and its team words, `stage.team_words`). The
+  letter's Evidence line names the plan's quotes, else the record passages as before.
 - The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts against the CV, the checked
   profile and the passages of the person's own documents. The advert and the company brief go in a fenced
   `EMPLOYER` block as the employer's own words, never flagged for being restated; the fit map is not a

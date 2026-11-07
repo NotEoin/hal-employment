@@ -55,7 +55,7 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "analyse": "You analyse a job advert", "brief": "Summarise what this company does",
     "fit": "Match a candidate's evidence", "letter": "Write a cover letter", "message": "Write a short message",
     "answers": "Answer these application questions", "verify": "Check drafts written",
-    "prep": "Prepare ", "contacts_pick": "You choose who",
+    "prep": "Prepare ", "contacts_pick": "You choose who", "plan": "Choose the evidence",
 }
 WAIT_S = 10.0
 POLL_S = 0.05
@@ -74,6 +74,7 @@ class FakeWriter:
     """A fake AI for the document prompts that keeps every request and reply."""
 
     letter: str = ""                                   # a fixed letter instead of the echoing one
+    plan: list = field(default_factory=list)           # the evidence plan's picks; none takes the unplanned path
     log: list[dict] = field(default_factory=list)
 
     def reply(self, system: str, user: str) -> object:
@@ -95,6 +96,8 @@ class FakeWriter:
             return {"answers": [{"question": "Why this role?", "answer": "It matches the work I have done."}]}
         if pid == "verify":
             return {"unsupported": []}
+        if pid == "plan":
+            return {"evidence": self.plan}
         if pid == "contacts_pick":
             return {"picks": [{"n": 1, "why": "Leads the team that is hiring.", "sure": True}]}
         if pid == "prep":
@@ -175,6 +178,31 @@ class Letter(unittest.TestCase):
         self.assertIn(pack.CHECKED_CLEAN, notes)
         self.assertEqual(shown["tone"], "Formal (your setting)")
         self.assertEqual(shown["checked"], pack.CHECKED_CLEAN)
+
+    def test_the_letter_names_the_evidence_its_plan_picked(self):
+        writer = FakeWriter(plan=[{"source": "S2", "quote": "Volunteer guide at a made-up heritage centre"},
+                                  {"source": "S1", "quote": "a quote no source holds"}])
+        with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("cvdocs.letter_tone", "formal", by="you")
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        asked = writer.asked("plan")
+        self.assertEqual(len(asked), 1, "one plan per letter")
+        self.assertIn("Requirements:\n- Writing reports\n- Spreadsheets\n", asked[0]["user"])
+        self.assertIn("S1 (CV): " + FACTS["humanities_grad"], asked[0]["user"])
+        self.assertIn("(Volunteering/guide.md > Role): A made-up note about guiding visitors.", asked[0]["user"])
+        self.assertEqual([i.text for i in written["plan"]], [])
+        self.assertEqual(written["notes"]["evidence"], "Volunteering/guide.md > Role",
+                         "with no pick that holds, the record passages are named as before")
+
+    def test_the_letters_evidence_line_names_the_picks_that_quote_a_source(self):
+        writer = FakeWriter(plan=[{"source": "S1", "quote": "Dissertation on river trade in an invented port town"}])
+        with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("cvdocs.letter_tone", "formal", by="you")
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual([(i.id, i.source) for i in written["plan"]], [("E1", "CV")])
+        self.assertEqual(written["notes"]["evidence"], "Dissertation on river trade in an invented port town")
 
     def test_the_application_page_shows_what_the_letter_used_and_what_was_checked(self):
         # the page's letter Tone, Evidence and Checked were always empty

@@ -276,7 +276,8 @@ def aliases(item: dict, hidden: list[dict]) -> list[str]:
 
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
-    tools, summary, context, aliases}.
+    tools, summary, context, aliases, role, files}; `role` is the person's part (`card_role`) and `files` the
+    record files it rests on.
 
     All of them, never ranked or cut like the Profile block: a project listing AWS was cut from the block,
     and the fit table said there was no evidence of AWS (2026-11-06). A project's `aliases` are the other
@@ -297,11 +298,26 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                 said = stage.CONTEXT_WORDS.get(context, "")
                 out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),
                             "tools": list(f.get("tools") or []), "summary": f.get("summary") or "",
-                            "context": context, "aliases": aliases(it, hidden)})
+                            "context": context, "aliases": aliases(it, hidden), "role": card_role(it),
+                            "files": [e["source_rel"] for e in it["evidence"] if e["source_rel"]]})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
-                            "tools": [], "summary": "; ".join(f.get("duties") or []), "context": context})
+                            "tools": [], "summary": "; ".join(f.get("duties") or []), "context": context,
+                            "role": "", "files": []})
     return out
+
+
+def card_role(item: dict) -> str:
+    """The person's part in a project, as its card or evidence says it: its Role field, and the words that say
+    it was a team's ("team of 7"); "" when neither says. A letter wrote "I built the React frontend and Flask
+    backend" of a seven-person project where the person built the statistics features (2026-11-07)."""
+    f = item["fields"]
+    said = [str(f.get("role") or "").strip()]
+    texts = [str(f.get("summary") or ""), said[0], *(str(e.get("quote") or "") for e in item["evidence"])]
+    team = next((t for t in map(stage.team_words, texts) if t), "")
+    if team and team.lower() not in said[0].lower():
+        said.append(team)
+    return "; ".join(s for s in said if s)
 
 
 def module_names(con: sqlite3.Connection | None = None) -> list[str]:

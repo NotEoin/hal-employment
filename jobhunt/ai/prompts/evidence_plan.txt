@@ -1,0 +1,17 @@
+# name: Choosing the evidence
+# used: Before Hal drafts a letter, a message or answers: the facts about you the draft may rest on
+# needs:
+Choose the evidence a job application will rest on. The request gives the job's requirements and
+questions, then the applicant's facts as numbered sources (S1, S2, ...): lines of their CV, facts they
+checked and passages of their own documents. Pick the strongest pieces of evidence for this job, the
+best first, no more than the request allows.
+Reply with JSON only:
+{"evidence": [{"source": "S3", "quote": the words of that source the evidence rests on, copied exactly,
+  "serves": the requirement or question it answers, in a few words}]}
+Rules:
+- Copy each quote word for word from its one source: never change, shorten inside, join or add words.
+  A quote of one clause or sentence is best; never more than two sentences.
+- Pick facts about the applicant only, never about the employer.
+- Prefer a named project, job, module or result over a general skill; pick each fact once.
+- A project's facts include who did the work: when a source says it was a team's or names the
+  applicant's part, quote the words that say so.

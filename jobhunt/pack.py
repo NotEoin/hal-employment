@@ -34,6 +34,10 @@ Design notes:
   use other evidence (`fix_repeats`, `repeats.repeated`), and the fit map lists each gap once
   (`repeats.unique_gaps`): two answers of a real pack gave the same details and a gap was listed twice
   (2026-11-07).
+- Each letter rests on an evidence plan picked before it is written (`evidence_plan`, `writing.plan`): quotes
+  of the CV, the Profile block and the record, each with its card's context and the person's part, as a
+  local model framed projects in the wrong place and wrote team work as solo when it wrote freely
+  (2026-11-07).
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -48,6 +52,7 @@ from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
 from .writing import drafts, eligibility, fields, relocation, repeats, spelling, stage, taught
+from .writing import plan as planning
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -342,6 +347,13 @@ def with_card_tools(fit: dict, cards: list[dict]) -> dict:
     return {**fit, "matches": matches, "gaps": gaps}
 
 
+def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, ...] = ()) -> list[planning.Item]:
+    """The evidence the drafts for one job may rest on (`writing.plan`): picked once from the CV, the Profile
+    block and the record passages for the advert's requirements and `questions`."""
+    return planning.make(_requirements(analysis), [*(analysis.get("questions") or []), *questions], facts, kept,
+                         profile_writing.cards())
+
+
 def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, kept: str, history: str) -> str:
     """The request text every drafted document shares: the job, the evidence and the person's dates."""
     return (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
@@ -542,17 +554,18 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], 
 
 def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = None, about: str = "",
                  kept: str | None = None, fit: dict | None = None, request: str = "") -> dict:
-    """Writes and checks a cover letter for one job: {text, flags, used, notes}.
+    """Writes and checks a cover letter for one job: {text, flags, used, notes, plan}.
 
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
-    the fit map made (each unless given), then the letter and its checks. `request` holds the person's own
-    words when they asked for a rewrite.
+    the fit map made (each unless given), the evidence plan picked (`evidence_plan`), then the letter and its
+    checks. `request` holds the person's own words when they asked for a rewrite.
     """
     who = who or person(job)
     facts = cv.facts_text()
     analysis = analysis if analysis is not None else _analyse(job, who)
     kept = kept if kept is not None else _kept(analysis)
     fit = fit if fit is not None else _fit(who, analysis, facts, kept, job)
+    plan = evidence_plan(analysis, facts, kept)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
     if request:
@@ -579,9 +592,10 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     if letter in trimmed:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["letter"]))
     used = passages(kept)
-    evidence = used or [m.get("evidence", "") for m in fit.get("matches", []) if m.get("strength") == "strong"]
-    return {"text": letter, "flags": flags, "used": used, "revised": revised, "softened": softened,
-            "notes": letter_notes(who, letter, evidence, flags, revised=revised, softened=softened)}
+    shown = [i.text for i in plan] or used or [m.get("evidence", "") for m in fit.get("matches", [])
+                                               if m.get("strength") == "strong"]
+    return {"text": letter, "flags": flags, "used": used, "revised": revised, "softened": softened, "plan": plan,
+            "notes": letter_notes(who, letter, shown, flags, revised=revised, softened=softened)}
 
 
 def _answers_text(answers: list[dict]) -> str:

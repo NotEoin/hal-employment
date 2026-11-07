@@ -74,6 +74,18 @@ class Contexts(unittest.TestCase):
         self.assertEqual(shown["aliases"], ["LIDAR Autonavigation", "lidar-autonav"])
         self.assertEqual(set(writing.PROJECT_FILES), {*stage.PERSONAL_TYPES, *stage.DEGREE_TYPES})
 
+    def test_a_project_card_says_the_persons_part_and_the_team_its_evidence_names(self):
+        # a letter wrote a team's whole app as the person's own work; they built the statistics features
+        # (2026-11-07)
+        item = store.add_found(self.con, "project", {"name": "Ferry planner", "role": "built the statistics features"},
+                               ev("Sources/CVs and letters/CV.md", "cv", "Ferry planner, a team of 7, Python"))
+        store.confirm(self.con, item)
+        self.project("Tide gauge", "Sources/Code/Tide gauge.md", "repository")
+        shown = {c["name"]: c for c in writing.cards(self.con)}
+        self.assertEqual(shown["Ferry planner"]["role"], "built the statistics features; team of 7")
+        self.assertEqual((shown["Tide gauge"]["role"], shown["Tide gauge"]["files"]),
+                         ("", ["Sources/Code/Tide gauge.md"]))
+
     def test_a_context_the_person_chose_is_never_changed_by_hal(self):
         own = self.project("Tide gauge", "Sources/Code/Tide gauge.md", "repository")
         chosen = contexts.set_context(self.con, own, "degree")
