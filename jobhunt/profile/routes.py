@@ -16,7 +16,8 @@ An item (`ITEM`):
                    "quote": "Collections volunteer, Sept 2023 - present", "field": "start", "doc_type": "cv",
                    "verified": true, "found_at": "2026-11-05T09:00:00Z"}],
      "conflicts": [CONFLICT, ...], "can_delete": false,
-     "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z"}
+     "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",
+     "tier": "core", "tier_by": "hal", "tier_why": "Your main work in your field", "tier_words": "Lead with this"}
 
 `state` is hal | confirmed | edited | hidden (`state_words`: Found by Hal, Checked by you, Edited by you,
 Hidden); `origin` is found | you; `fields` hold only the fields that have a value, with dates as `YYYY-MM` or
@@ -26,7 +27,8 @@ are `store.KINDS`: job (title, employer, location, start, end, current, hours: f
 duties[], achievements[]), education (qualification, subject, institution, start, end, current, grade,
 modules[{name, mark}]), skill (name, level, category), project (name, summary, role, tools[], link, period),
 achievement (title, date, detail, issuer), certificate (name, issuer, date, expires, grade), basic (key,
-value) and link (label, url).
+value) and link (label, url). `tier` is core | supporting | archive | "" (not sorted yet), only for jobs,
+education, projects, achievements and certificates (`profile.tiers`); `tier_by` is hal | person | "".
 
 A conflict (`CONFLICT`):
 
@@ -63,15 +65,19 @@ Routes:
   card holds one item and no file (`source_rel` "", `file_id` null); a skills card holds the skills that rest
   most on one file. `best` gives, for each item, the id of the source whose quote to show.
   `more` is what the page keeps under "Show more"; `done` of `total` is the progress bar.
+- `PUT /api/v2/profile/items/{id}/tier` {"tier": "archive"}: the person's tier for an experience, which Hal
+  never changes; ITEM. A tier that is not core, supporting or archive, or an item with no tier, is 400.
+- `POST /api/v2/profile/tiers`: starts sorting the experiences again (action `profile.tiers`);
+  {"action_id"}, or 409 while one is running.
 - `POST /api/v2/profile/confirm-many` and `.../hide-many` {"ids": [3, 4]}: changes them all with one event;
   {"ids": [3, 4]}. An empty list is 400; an unknown id is 404 and changes nothing.
 """
 from __future__ import annotations
 
-from jobhunt.core import events
+from jobhunt.core import events, runner
 from jobhunt.evidence.routes import file_id
-from jobhunt.profile import check, conflicts, store
-from jobhunt.web.router import BadRequest, NotFound, Request, route
+from jobhunt.profile import actions, check, conflicts, store, tiers
+from jobhunt.web.router import BadRequest, Conflict, NotFound, Request, route
 
 PREFIX = "/api/v2/profile"
 LABELS = {"job": "Work history", "education": "Education", "skill": "Skills", "project": "Projects",
@@ -165,6 +171,26 @@ def edit(req: Request) -> dict:
 def confirm(req: Request) -> dict:
     """The person checked this item and it is right."""
     return _changed(store.confirm(req.con, req.params["item_id"]))
+
+
+@route("PUT", PREFIX + "/items/{item_id}/tier")
+def set_tier(req: Request) -> dict:
+    """The person puts an experience in a tier; Hal never changes it after this."""
+    tier = str((req.body or {}).get("tier") or "") if isinstance(req.body, dict) else ""
+    try:
+        return _changed(tiers.set_tier(req.con, req.params["item_id"], tier))
+    except ValueError as e:
+        raise BadRequest(str(e), field="tier") from e
+
+
+@route("POST", PREFIX + "/tiers")
+def sort_tiers(req: Request) -> dict:
+    """Starts sorting the experiences again; {"action_id"}. 409 while a sort is already running."""
+    try:
+        return {"action_id": runner.start(actions.KIND, session_id=getattr(req.session, "id", None),
+                                          remote=req.remote)}
+    except RuntimeError as e:
+        raise Conflict("Hal is sorting your experiences already.") from e
 
 
 @route("POST", PREFIX + "/items/{item_id}/hide")

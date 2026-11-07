@@ -112,6 +112,17 @@ class ProfileRoutes(unittest.TestCase):
         seen = iter(lambda: sub.get(timeout=EVENT_WAIT_S), None)
         self.assertIn("profile", [e.type for e in seen])
 
+    def test_the_person_moves_an_experience_to_another_tier_and_asks_hal_to_sort_them(self):
+        ids = self.seed()
+        r = self.c.request("PUT", f"/api/v2/profile/items/{ids['job']}/tier", {"tier": "archive"})
+        self.assertEqual((r.status, r.json()["tier"], r.json()["tier_by"]), (200, "archive", "person"))
+        r = self.c.request("PUT", f"/api/v2/profile/items/{ids['skill']}/tier", {"tier": "core"})
+        self.assertEqual((r.status, r.json()["error"]["field"]), (400, "tier"))
+        self.assertEqual(self.c.request("PUT", "/api/v2/profile/items/999/tier", {"tier": "core"}).status, 404)
+        r = self.c.post("/api/v2/profile/tiers")
+        self.assertEqual(r.status, 200)
+        self.assertTrue(r.json()["action_id"])
+
     def test_a_bad_field_or_kind_is_a_plain_400(self):
         ids = self.seed()
         r = self.c.request("PUT", f"/api/v2/profile/items/{ids['job']}", {"fields": {"company": "Fenwick"}})

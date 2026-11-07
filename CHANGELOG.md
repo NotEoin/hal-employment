@@ -92,6 +92,11 @@ What changed in each version, in plain words.
   asks **Which is right?** first. Skills come in groups from one file to keep or drop together, and the
   ones Hal is less sure of wait under **Show more**. A bar shows how many you have checked, and you can stop
   and carry on later. A fact you said is not you stays hidden when another file names it.
+- **Hal sorts your experiences.** After reading your files, Hal sorts each job, course, project,
+  achievement and certificate into what you would lead with, what is useful when a job asks for it, and
+  what is not worth telling an employer, with a few words on why. Anything you hid, or that only appears in
+  files that are not your own, is set aside, and school qualifications count as useful rather than the lead.
+  Without Hal's AI only these rules are used. A choice you make yourself is never changed.
 - **Profile notes in your record folder.** A Profile folder holds Work history, Education, Skills, Projects
   and Inconsistencies notes, written from your profile, for reading in Obsidian.
 - **Letters and answers written for the kind of job.** Hal reads which field a job is in from the advert

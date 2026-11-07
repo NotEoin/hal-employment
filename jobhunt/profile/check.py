@@ -37,14 +37,15 @@ def _basic_order(item: dict) -> int:
     return store.BASIC_KEYS.index(key) if key in store.BASIC_KEYS else len(store.BASIC_KEYS)
 
 
-def _source_strength(e: dict) -> tuple:
+def source_strength(e: dict) -> tuple:
+    """How far one piece of evidence is trusted, for sorting: the person's own, rank, verified, quoted."""
     return (e.get("role", "") == store.OWN_ROLE, merge.rank(e["doc_type"]), bool(e["verified"]), bool(e["quote"]))
 
 
 def best_source(item: dict) -> dict | None:
     """The evidence an item rests on most: the person's own document, then the most trusted file, then a quote
     found in its file; None when it has no evidence."""
-    return max(item["evidence"], key=_source_strength, default=None)
+    return max(item["evidence"], key=source_strength, default=None)
 
 
 def strength(item: dict) -> tuple:
@@ -52,7 +53,7 @@ def strength(item: dict) -> tuple:
     ev = item["evidence"]
     best = best_source(item)
     return (sum(e.get("role", "") == store.OWN_ROLE for e in ev), len({e["source_rel"] for e in ev}),
-            _source_strength(best) if best else (), len(ev))
+            source_strength(best) if best else (), len(ev))
 
 
 def _groups(skills: list[dict], part: str) -> list[dict]:

@@ -734,6 +734,20 @@ available yet.
   `POST /api/v2/profile/confirm-many` and `/hide-many` {ids} change a group in one transaction with one
   conflicts refresh and one `profile` event. The page is `pages/check.js` (route `check`) with its cards
   in `record/check.js`.
+- Tiers (`tiers.py`, migration 0025): each job, education, project, achievement and certificate has a
+  `tier` (`core`: what the person would lead with for the jobs they want; `supporting`: true and useful when
+  a job asks; `archive`: never used for writing; '' not judged), `tier_by` (`hal` or `person`), `tier_why`
+  and `tier_basis`. `tiers.refresh(con)` applies the rules first (hidden is archive; a found card nobody
+  checked with no evidence of role `own` is archive; a GCSE, O level, school-leaving or secondary school
+  qualification is supporting), then sends the other cards to the `profile_tier` prompt (checker role,
+  JSON, `tiers.BATCH` (20) cards a call) with the person's aim (`goal.roles` and `goal.interests`, else the
+  CV's headline, else their course). The prompt says `leave_out` for archive, because its words reach
+  every person's prompts. A tier the person set (`PUT /api/v2/profile/items/{id}/tier`) is never changed;
+  Hal judges a card again only when the fingerprint of its evidence (`tier_basis`) changes. Without an AI
+  only the rules run. Every shaped item carries `tier`, `tier_by`, `tier_why` and `tier_words`
+  (`tiers.shown`), with the rules applied again on read, so a card the person confirms leaves the archive
+  at once. The ingest action runs the pass after each read (`profile.actions.sort`), and
+  `POST /api/v2/profile/tiers` starts it as the action `profile.tiers`.
 - `profile.write_notes(folder)` writes the `Profile/` notes in the record folder (`Profile.md`,
   `Work history.md`, `Education.md`, `Skills.md`, `Projects.md`, `Inconsistencies.md`), each
   `type: dashboard` so search leaves them out. A note whose text has not changed is not written again.

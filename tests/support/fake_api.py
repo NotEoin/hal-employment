@@ -129,13 +129,19 @@ def profile_source(rel: str, quote: str, field: str, doc_type: str, n: int) -> d
 
 
 def profile_item(n: int, kind: str, fields: dict, title: str, sub: str = "", when: str = "", state: str = "hal",
-                 evidence: list | None = None, conflicts: list | None = None, origin: str = "found") -> dict:
-    """One made-up profile item."""
+                 evidence: list | None = None, conflicts: list | None = None, origin: str = "found",
+                 tier: tuple[str, str] = ("", "")) -> dict:
+    """One made-up profile item; `tier` is (tier, why), Hal's, for the kinds that have one."""
     words = {"hal": "Found by Hal", "confirmed": "Checked by you", "edited": "Edited by you", "hidden": "Hidden"}
+    tier_words = {"core": "Lead with this", "supporting": "Useful when a job asks", "archive": "Archived",
+                  "": "Not sorted yet"}
+    tiered = kind in ("job", "education", "project", "achievement", "certificate")
     return {"id": n, "kind": kind, "state": state, "state_words": words[state], "origin": origin,
             "fields": fields, "title": title, "sub": sub, "when": when, "evidence": evidence or [],
             "conflicts": conflicts or [], "can_delete": origin == "you",
-            "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z"}
+            "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",
+            "tier": tier[0], "tier_by": "hal" if tier[0] else "", "tier_why": tier[1],
+            "tier_words": tier_words[tier[0]] if tiered else ""}
 
 
 PROFILE_CONFLICT = {
@@ -156,7 +162,7 @@ PROFILE_ITEMS = {
                          "Collections volunteer", "Fenwick Lantern Museum Trust", "September 2023 to now",
                          evidence=[profile_source(PROFILE_CV, "Collections volunteer, Sept 2023 - present", "start",
                                                   "cv", 1)],
-                         conflicts=[PROFILE_CONFLICT])],
+                         conflicts=[PROFILE_CONFLICT], tier=("core", "Work in the field you want"))],
     "education": [profile_item(2, "education", {"qualification": "BA (Hons)",
                                                 "subject": "History and Imaginary Studies",
                                                 "institution": "University of Nowhere Fen",
@@ -164,7 +170,7 @@ PROFILE_ITEMS = {
                                                 "modules": [{"name": "Early Modern Letters", "mark": "72"},
                                                             {"name": "Oral History in Practice", "mark": ""}]},
                                "BA (Hons) History and Imaginary Studies", "University of Nowhere Fen, 2:1",
-                               "September 2022 to June 2025", state="confirmed",
+                               "September 2022 to June 2025", state="confirmed", tier=("core", "Your degree"),
                                evidence=[profile_source(PROFILE_TRANSCRIPT, "Early Modern Letters 72", "modules",
                                                         "transcript", 2)])],
     "skill": [profile_item(3, "skill", {"name": "Archival research", "category": "research"}, "Archival research",
@@ -172,7 +178,8 @@ PROFILE_ITEMS = {
                                                                 "name", "cv", 3)])],
     "project": [profile_item(4, "project", {"name": "Dissertation: letters of a made-up mill town",
                                             "summary": "Read 300 letters in a record office.", "period": "2024-25"},
-                             "Dissertation: letters of a made-up mill town", origin="you", state="edited")],
+                             "Dissertation: letters of a made-up mill town", origin="you", state="edited",
+                             tier=("supporting", "A long piece of research"))],
     "achievement": [], "certificate": [],
     "basic": [profile_item(5, "basic", {"key": "name", "value": "Marnie Quillfeather"}, "name",
                            "Marnie Quillfeather",
