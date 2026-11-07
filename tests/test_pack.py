@@ -646,10 +646,31 @@ class Drafts(unittest.TestCase):
         with as_applicant(people.HUMANITIES, writer) as a:
             settings.set("you.education.degree", "BA", by="you")
             job = add_job(a.con, "humanities_grad")
+            a.con.execute("UPDATE jobs SET description = description || ' You must hold a Master''s degree in "
+                          "History.' WHERE id = ?", (job["id"],))
+            a.con.commit()
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         first = section(md, "Check before sending").strip().splitlines()[0]
         self.assertEqual(first, "- ELIGIBILITY: the advert requires a Master's degree (\"A Master's degree or PhD in "
                                 "History\"); your highest is a bachelor's degree")
+
+    def test_a_degree_the_advert_only_also_considers_is_never_an_eligibility_line(self):
+        # "ELIGIBILITY: requires a Master's" for an advert that would "also consider" Master's holders
+        # (2026-11-07)
+        writer = reading(must_have=["A Master's degree in History", "Writing reports"],
+                         eligibility=["Master's holders also considered"])
+        plain = writer.reply
+        writer.reply = lambda system, user: ({**plain(system, user), "eligible": False,
+                                              "eligibility_notes": "Requires a Master's degree"}
+                                             if prompt_id(system) == "fit" else plain(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("you.education.degree", "BA", by="you")
+            job = add_job(a.con, "humanities_grad")
+            a.con.execute("UPDATE jobs SET description = description || ' We will also consider those with a "
+                          "Master''s in History.' WHERE id = ?", (job["id"],))
+            a.con.commit()
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertNotIn("ELIGIBILITY", md)
 
     def test_office_days_in_the_town_you_live_in_are_never_a_gap(self):
         # a fit map called office attendance unmet for a person living in that city (2026-11-07)

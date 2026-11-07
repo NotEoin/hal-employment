@@ -28,6 +28,41 @@ class Blockers(unittest.TestCase):
         self.assertEqual(eligibility.blockers(["A Master's degree"], Person()), [], "an unknown level says nothing")
 
 
+# A made-up graduate scheme's advert, paraphrasing the shape of a real one: a degree asked for, other
+# graduates and Master's holders "also considered".
+SCHEME = ("Coastal Code Graduate Scheme\n\nAbout you\n- You should have a degree in Computing or a related subject "
+          "by the time you start.\n- We will also consider graduates in Maths or Physics, or those with a "
+          "Master's, who can show strong coding skills.\n\nNice to have\n- A PhD in tide modelling.\n"
+          "We'd love to hear from you if you have a Master's in Sea Science.")
+SCHEME_READING = ["A degree in Computing or a related subject",
+                  "Maths or Physics graduates, or a Master's, with strong coding skills", "A PhD in tide modelling"]
+
+
+class Conditions(unittest.TestCase):
+    def test_a_degree_the_advert_only_also_considers_is_never_a_blocker(self):
+        # an advert that asked for a relevant degree and "also considers" Master's holders was flagged
+        # "ELIGIBILITY: requires a Master's" (2026-11-07)
+        self.assertEqual(eligibility.blockers(SCHEME_READING, GRADUATE, SCHEME), [])
+        self.assertTrue(eligibility.unfounded_degree("Requires a Master's degree", SCHEME))
+
+    def test_softening_words_are_never_a_condition(self):
+        for said in ("Master's holders will also be considered", "A PhD is welcome", "A Master's would be nice to have",
+                     "We'd love to hear from you if you have a PhD", "An MSc is desirable"):
+            with self.subTest(said):
+                self.assertEqual(eligibility.blockers([said], GRADUATE), [])
+                self.assertEqual(eligibility.conditions(said + "."), [])
+
+    def test_requirement_phrasing_or_an_essential_heading_makes_a_condition(self):
+        advert = ("Tide Analyst\n\nA PhD in tide modelling is essential.\n\nEssential criteria\n"
+                  "- At least 3 years of experience in a made-up trade\n\nAbout the team\n- An MSc in Sea Science")
+        found = eligibility.blockers(["PhD in tide modelling", "3 years of experience in a made-up trade",
+                                      "An MSc in Sea Science"], GRADUATE, advert)
+        self.assertEqual([f.split(" (")[0] for f in found],
+                         ["ELIGIBILITY: the advert requires a PhD",
+                          "ELIGIBILITY: the advert requires 3 years of experience"])
+        self.assertFalse(eligibility.unfounded_degree("Requires a PhD", advert))
+
+
 class Place(unittest.TestCase):
     def test_office_days_where_you_live_or_will_move_are_settled(self):
         gap = "Office attendance in Made-up Town three days a week"

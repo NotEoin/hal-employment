@@ -672,9 +672,10 @@ def to_recipient(who: dict, message: str, analysis: dict, rewrite, advert: str =
 
 def _eligibility_flag(job, who: dict, fit: dict, conditions: list) -> str:
     # with no condition to judge, Claude still answered "eligible": false ("nothing to match", 2026-10-23)
+    note = str(fit.get("eligibility_notes") or "")
     if fit.get("eligible") is False and conditions and not eligibility.where_you_live_settles(
-            str(fit.get("eligibility_notes") or ""), eligibility.person(), reputation.towns(reputation.advert_of(job)),
-            cv.facts_text()):
+            note, eligibility.person(), reputation.towns(reputation.advert_of(job)), cv.facts_text()) \
+            and not eligibility.unfounded_degree(note, _job_text(job)):
         return f"ELIGIBILITY: {fit.get('eligibility_notes', 'may not be eligible')}"
     if who.get("not_eligible"):
         return f"ELIGIBILITY: {who.get('eligibility_line') or 'the advert may not be open to you'}"
@@ -793,7 +794,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     if history:
         flagged.insert(0, f"REAPPLICATION: you applied here before: {history}")
     plain = eligibility.blockers([*(analysis.get("must_have") or []), *(analysis.get("eligibility") or [])],
-                                 eligibility.person(con))
+                                 eligibility.person(con), job_text)
     found = _eligibility_flag(job, who, fit, analysis.get("eligibility") or [])
     flagged[:0] = plain + ([found] if found else [])   # first, and never softened by a rewrite
     if ctx is not None:

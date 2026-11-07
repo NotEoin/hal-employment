@@ -474,7 +474,12 @@ runs: tests use `tests/support/fake_claude/`.
   `goal.experience_years`, and no sponsorship when `you.right_to_work` needs it. Each is an
   "ELIGIBILITY: ..." line at the top of "Check before sending", which no rewrite changes. A requirement
   that allows "or equivalent", is desirable or names a lower degree too is not plain, and an unknown level
-  says nothing. `where_you_live_settles` meets a fit row or gap, and drops a fit eligibility note, about
+  says nothing. The pack passes the advert's text, and a degree level or a number of years then counts
+  only when one of the advert's `conditions` names it: a sentence in requirement phrasing (`REQUIRED`:
+  must, required, essential, you will need, minimum) or a bullet under a heading that is, never one with
+  softening words (`SOFT`: "also consider", "welcome", "nice to have", "We'd love to hear from you if").
+  The fit map's eligibility note is dropped when it names a degree level no condition states
+  (`unfounded_degree`). `where_you_live_settles` meets a fit row or gap, and drops a fit eligibility note, about
   the job's place when the person lives in the advert's town (settings or CV), will relocate, or is happy
   in an office.
 - The pack's company check (`reputation.check(company, advert)`, also `jobhunt check`) compares trades as
