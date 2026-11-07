@@ -609,6 +609,44 @@ class Drafts(unittest.TestCase):
         self.assertNotIn("Ferry planner", section(md, "Check before sending"))
 
 
+ECHO = "I want to help catalogue the Trust's collections and answer enquiries from visitors."
+OWN_REASON = "My dissertation on river trade made me curious about how a port's objects reach a museum."
+
+
+class Echoes(unittest.TestCase):
+    def test_a_letter_that_restates_the_advert_is_rewritten_once_to_give_your_own_reason(self):
+        # "drawn to the challenge of maintaining low default rates" restated the advert as a reason (2026-11-07)
+        writer = replying("letter", ECHO, OWN_REASON)
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        letters = writer.asked("letter")
+        self.assertEqual(len(letters), 2, "one rewrite, never a loop")
+        self.assertIn(f"- {ECHO}", letters[1]["user"])
+        self.assertIn("tie one specific thing about the applicant", letters[1]["user"])
+        self.assertEqual((written["text"], written["flags"]), (OWN_REASON, []))
+
+    def test_an_echo_the_rewrite_keeps_is_listed_and_a_why_answer_is_checked_too(self):
+        writer = replying("letter", ECHO)
+        plain = writer.reply
+        writer.reply = lambda system, user: ({"answers": [
+            {"question": "Why do you want to work here?", "answer": ECHO},
+            {"question": "Why are you a good fit for this role?", "answer": ECHO}]}
+            if prompt_id(system) == "answers" else plain(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertEqual(len(writer.asked("answers")), 2, "the answers are rewritten once together")
+        listed = section(md, "Check before sending")
+        self.assertEqual(listed.count(f"- {pack.ECHO_FLAG}: {ECHO}"), 2,
+                         "the letter's and the why-here answer's, never the fit answer's")
+
+    def test_the_prompts_ask_for_your_own_reason_up_front(self):
+        with as_applicant(people.HUMANITIES):
+            for pid in ("letter", "answers"):
+                self.assertIn("tie one specific thing about the applicant", pack.prompt(pid))
+
+
 class Checklist(unittest.TestCase):
     def test_the_checklist_never_says_to_open_a_command_line(self):
         for person in people.PEOPLE:

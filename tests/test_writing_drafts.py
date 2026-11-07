@@ -1,5 +1,5 @@
 """Checks on finished drafts with no AI: a reply cut off, a greeting to the applicant, a tool on the wrong project,
-a project placed where it was not done.
+a project placed where it was not done, a sentence that restates the advert.
 
 The drafts, names and projects are made up.
 """
@@ -84,6 +84,40 @@ class Contexts(unittest.TestCase):
                      "Tide gauge and Harbour survey were both for my degree."):
             with self.subTest(said):
                 self.assertEqual(drafts.wrong_context(said, PLACED), [])
+
+
+ADVERT = ("Graduate Credit Analyst\nBrightloan | Made-up Town\n\nJoin our credit team and take on the challenge of "
+          "maintaining low default rates while we grow. The role offers full in-house training and a clear path "
+          "to senior analyst. You will work on data quality across our lending platform.")
+BRIEF = "Brightloan is a made-up consumer lender that uses open banking data to price personal loans."
+NAMES = ("Graduate Credit Analyst", "Brightloan")
+
+
+class Echoes(unittest.TestCase):
+    def test_a_sentence_that_restates_the_advert_or_brief_echoes(self):
+        # "drawn to the challenge of maintaining low default rates", "the role offers full in-house training"
+        # (2026-11-07)
+        for said in ("I am drawn to the challenge of maintaining low default rates.",
+                     "The role offers full in-house training, which appeals to me.",
+                     "I like that Brightloan uses open banking data to price personal loans."):
+            with self.subTest(said):
+                self.assertTrue(drafts.echoes(said, ADVERT, BRIEF, NAMES))
+
+    def test_naming_the_role_or_tying_your_own_work_to_the_employer_is_no_echo(self):
+        for said in ("I am applying for the Graduate Credit Analyst role at Brightloan.",
+                     "My Tide gauge project taught me to clean messy sensor data, which matches your work on data "
+                     "quality.",
+                     "Brightloan's use of open banking data connects with my dissertation on how small lenders "
+                     "score credit."):
+            with self.subTest(said):
+                self.assertFalse(drafts.echoes(said, ADVERT, BRIEF, NAMES))
+
+    def test_only_the_letters_first_paragraph_and_why_questions_are_read(self):
+        first = "I am drawn to the challenge of maintaining low default rates."
+        self.assertEqual(drafts.first_paragraph(f"{first}\n\nI built Tide gauge."), first)
+        self.assertTrue(drafts.why_question("Why do you want to work here?"))
+        self.assertTrue(drafts.why_question("What motivates you to apply?"))
+        self.assertFalse(drafts.why_question("Why are you a good fit for this role?"))
 
 
 if __name__ == "__main__":

@@ -21,6 +21,12 @@ Design decisions, each with its reason:
   on purpose ("module" only as course work, "personal" only as personal work or project), as "a Lua module"
   or "personal data" say nothing about where the work was done. A sentence that also says words agreeing
   with the card ("alongside my degree, in my own time") is left alone.
+- A sentence echoes the employer when at least `ECHO_SHARE` of its own words sit in runs of `ECHO_RUN` words
+  found in the advert or the company brief: "I am drawn to the challenge of maintaining low default rates"
+  and "the role offers full in-house training" restated the advert as a reason (2026-11-07). Runs of three
+  words rarely match by chance, and a sentence half made of them restates rather than gives a reason. The
+  words of the job title and the employer's name (`names`) never count, so a sentence that only names the
+  role or the company is not an echo, and neither is one with fewer than `ECHO_MIN_WORDS` other words.
 """
 from __future__ import annotations
 
@@ -122,3 +128,49 @@ def wrong_context(draft: str, cards: list[dict]) -> list[str]:
         if clash:
             out.append(f"{sentence} ({card['name']} is {IS_WORDS[card['context']]}, not {NOT_WORDS[clash]})")
     return out
+
+
+ECHO_RUN = 3               # words in a row that must match the employer's text to count
+ECHO_SHARE = 0.5           # share of a sentence's own words in such runs that makes it an echo
+ECHO_MIN_WORDS = 3         # a sentence needs this many own words in runs before it can echo
+# Words that carry no content of their own; they are matched in runs but never counted.
+LITTLE_WORDS = frozenset("""a an the and or but of to in on at for with by from as is are was were be been it its this
+that these those i me my we our you your they their which who will would can could am do does did so than
+into about also very""".split())
+WHY_QUESTION = re.compile(r"\bwhy\b.*\b(work|join|apply|applying|want|interested|choose|chose)\b|"
+                          r"\bmotivat\w*|\b(attracts?|appeals?|interests?) you\b", re.I)
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", (text or "").lower())
+
+
+def echoes(sentence: str, advert: str, brief: str = "", names: tuple[str, ...] = ()) -> bool:
+    """True when a sentence restates the advert or company brief (see the module notes); `names` are the job
+    title and the employer's name, whose words never count."""
+    words = _tokens(sentence)
+    theirs = [*_tokens(advert), "|", *_tokens(brief)]
+    runs = {tuple(theirs[i:i + ECHO_RUN]) for i in range(len(theirs) - ECHO_RUN + 1)}
+    named = {w for n in names for w in _tokens(n)}
+    covered = [False] * len(words)
+    for i in range(len(words) - ECHO_RUN + 1):
+        if tuple(words[i:i + ECHO_RUN]) in runs:
+            covered[i:i + ECHO_RUN] = [True] * ECHO_RUN
+    own = [c for w, c in zip(words, covered, strict=True) if w not in LITTLE_WORDS and w not in named]
+    echoed = sum(own)
+    return echoed >= ECHO_MIN_WORDS and echoed >= ECHO_SHARE * len(own)
+
+
+def first_paragraph(text: str) -> str:
+    """A letter's first paragraph, where it says why this role and this employer."""
+    return next((p for p in re.split(r"\n\s*\n", (text or "").strip()) if p.strip()), "")
+
+
+def echoed(text: str, advert: str, brief: str = "", names: tuple[str, ...] = ()) -> list[str]:
+    """The sentences of `text` that echo the advert or the brief (`echoes`)."""
+    return [s for s in check.sentences(text) if echoes(s, advert, brief, names)]
+
+
+def why_question(question: str) -> bool:
+    """True for a form question that asks why the person wants this job or employer."""
+    return bool(WHY_QUESTION.search(question or ""))

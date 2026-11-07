@@ -2,8 +2,10 @@
 # used: When Hal drafts a cover letter for a job
 # needs: name, letter_words, tone, spelling, type_letter_mentions, type_evidence, avoid_phrases, voice_examples
 Write a cover letter from {name} for this job. About {letter_words} words, and
-not much fewer, in three or four paragraphs. The first names the role and gives one
-specific reason, from the advert, for wanting this work with this employer. The middle gives
+not much fewer, in three or four paragraphs. The first names the role and says why this
+employer: tie one specific thing about the applicant (a named project, module or interest from
+their facts) to one specific thing about the employer, in the applicant's own words. Never
+restate the advert or the company's description of itself as the reason. The middle gives
 the two or three strongest pieces of evidence, each tied by name to a requirement the advert
 states: what was done, where, for whom and what came of it. The last is one or two sentences
 asking for the next step. Mention
@@ -19,7 +21,8 @@ Rules:
   project). Never change it: a personal project is never part of a degree, coursework or research, a
   university team project is never a personal project, degree work is never personal work or a job.
 - Add what the CV cannot say (context, motive, the link to this job); never repeat CV lines.
-- The reason for this employer must fit no other employer: name something from the advert.
+- The reason for this employer must fit no other employer: name one thing from the advert in a few
+  words and say what it means to the applicant; never copy the advert's sentences.
 - Plain words and short sentences. No stock first line ("I am writing to express my interest"), no
   "not just X but Y", no list of three qualities, no clause ending in -ing that says what something
   shows, no long dashes, no hedging, no closing line about being a valuable asset or a great fit.

@@ -89,7 +89,11 @@ the work served instead. A first draft that breaks one of Hal's writing rules (a
 number, "not just X but Y") is rewritten once, and anything still wrong is listed under **Check before
 sending**. Hal also checks what each letter, message and answer says about you against your CV, the facts
 you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
-what is left is listed. What the draft says about the employer, taken from the advert, is not listed. On a
+what is left is listed. What the draft says about the employer, taken from the advert, is not listed.
+The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
+to work here?", should be your own: a sentence that only repeats the advert or what the company says about
+itself is rewritten once to link something of yours (a project, a module, an interest) to something about
+the employer, and listed if it still repeats the advert. On a
 form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**.
 
 Hal tells the writer today's date and where you are: still studying or finished, from **When your course

@@ -168,6 +168,11 @@ What changed in each version, in plain words.
   project**, **At work** or **In my own time**). Hal fills it in from your files, you can change it, and Hal
   never changes your choice. A letter, message or answer that says otherwise is rewritten once, and listed
   under **Check before sending** if it still does.
+- **Your own reason, not the advert's words.** Letters and "Why do you want to work here?" answers often
+  gave the advert back as the reason ("the role offers full in-house training"). Hal now asks for one thing
+  of yours tied to one thing about the employer, rewrites a sentence that repeats the advert or the
+  company's description once, and lists it under **Check before sending** if it still does. Naming the
+  role or the company is fine.
 - **The company check finds the right company.** It listed any company with the employer's name, such as a
   solar firm, a fungicide and a closed company for a lender. Hal now shows a Wikipedia article only when
   it also names the advert's town, links to the employer's website or is about the same trade, and a

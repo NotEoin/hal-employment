@@ -23,6 +23,10 @@ Design notes:
   answers are each rewritten once without the claims about the person their facts do not support, checked
   again, and only what is left is listed. The advert and the brief are the employer's own words, never
   flagged for being restated.
+- The letter's first paragraph and the "why do you want to work here" answers are checked, with no AI, for
+  sentences that restate the advert or the brief (`drafts.echoes`) and rewritten once to tie something of
+  the applicant's own to the employer (`fix_echoes`), before the claim check reads them: 26 generic
+  sentences in five real packs were the advert's words given back as a reason (2026-11-07).
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -86,6 +90,7 @@ CUT_NOTE = "Your last reply stopped mid-sentence. Write the whole draft again, a
 ROOM_CTX = 16384          # tokens for the second ask after a cut-off reply, as for the CV score and critique
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
+ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its rewrite
 # The recipient's greeting when the message greeted the applicant: the advert's named person, else this.
 HELLO = "Hello,"
 GREETING_NOTE = ("Your draft greets the applicant, who is the one writing it. Greet the person it goes to "
@@ -329,6 +334,26 @@ def claims_note(claims: list[str]) -> str:
             "one out, or soften it to what the facts do say. Keep the rest as it is.")
 
 
+def echo_note(sentences: list[str]) -> str:
+    """The request to rewrite the sentences that restate the advert or brief as the applicant's own reason."""
+    listed = "\n".join(f"- {s}" for s in sentences)
+    return (f"These sentences restate the advert or the company brief instead of giving the applicant's own "
+            f"reason:\n{listed}\nRewrite each one to tie one specific thing about the applicant (a named project, "
+            "module or interest from their facts) to one specific thing about this employer. Keep the rest as it "
+            "is.")
+
+
+def fix_echoes(draft, echoed_in, rewrite):
+    """The draft rewritten once by `rewrite(note)` when `echoed_in(draft)` finds sentences that restate the
+    advert or brief (`drafts.echoes`); returns (draft, whether it was rewritten). One rewrite, never a loop:
+    what still echoes is listed by the caller."""
+    found = echoed_in(draft)
+    if not found:
+        return draft, False
+    again = rewrite(echo_note(found))
+    return (again or draft), bool(again)
+
+
 def fix_claims(who: dict, draft, rewrite, *, facts: str, kept: str, employer: tuple[str, ...], as_text=str):
     """The draft rewritten once by `rewrite(note)` when it makes claims about the person their facts do not
     support, then checked again; returns (draft, the claims still unsupported, whether it was rewritten).
@@ -408,10 +433,18 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     letter, revised = revise_once(letter, _hits(who, letter, "letter", facts=facts, kept=kept, sources=sources),
                                   lambda note: _letter(who, f"{text}\n\nYour first draft:\n{letter}\n\n{note}",
                                                        trimmed))
+    names = (job["title"], job["company"])
+
+    def echoed_in(draft: str) -> list[str]:
+        return drafts.echoed(drafts.first_paragraph(draft), *sources, names)
+
+    letter, _ = fix_echoes(letter, echoed_in,
+                           lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed))
     letter, claims, softened = fix_claims(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}"
                                                                             f"\n\n{note}", trimmed),
                                           facts=facts, kept=kept, employer=sources)
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
+    flags += [f"{ECHO_FLAG}: {s}" for s in echoed_in(letter)]
     if letter in trimmed:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["letter"]))
     used = passages(kept)
@@ -424,24 +457,35 @@ def _answers_text(answers: list[dict]) -> str:
     return "\n".join(f"- {a.get('question', '')}: {a.get('answer', '')}" for a in answers)
 
 
+def echoed_answers(answers: list[dict], sources: tuple[str, ...], names: tuple[str, ...]) -> list[str]:
+    """The sentences of the "why do you want to work here" answers that restate the advert or brief."""
+    return [s for a in answers if drafts.why_question(str(a.get("question") or ""))
+            for s in drafts.echoed(str(a.get("answer") or ""), *sources, names)]
+
+
 def _answers(who: dict, questions: list[str], context: str, *, facts: str, kept: str,
-             sources: tuple[str, ...]) -> tuple[list[dict], list[str]]:
-    """Answers to the advert's questions, revised once together when one breaks a high-severity rule and once
-    more when they make claims the facts do not support; returns (answers, the claims still unsupported)."""
+             sources: tuple[str, ...], names: tuple[str, ...] = ()) -> tuple[list[dict], list[str], list[str]]:
+    """Answers to the advert's questions, revised once together when one breaks a high-severity rule, once when
+    a "why here" answer restates the advert (`echoed_answers`) and once more when they make claims the facts
+    do not support; returns (answers, the claims still unsupported, the sentences still restating the advert).
+    """
     request = "Questions:\n" + "\n".join(f"- {q}" for q in questions) + f"\n\n{context}"
 
     def ask(text: str) -> list[dict]:
         found = llm.chat_json(prompt("answers", who), text, role="writer").get("answers", [])
         return [{**a, "answer": spelt(llm.undash(a.get("answer", "")), who)} for a in found if isinstance(a, dict)]
 
+    def again(note: str) -> list[dict]:
+        return ask(f"{request}\n\nYour answers:\n{_answers_text(answers)}\n\n{note}")
+
     answers = ask(request)
     hits = [h for a in answers for h in _hits(who, a["answer"], "answer", facts=facts, kept=kept, sources=sources)]
     answers = revise_once(answers, hits,
                           lambda note: ask(f"{request}\n\nYour first answers:\n{_answers_text(answers)}\n\n{note}"))[0]
-    answers, claims, _ = fix_claims(who, answers,
-                                    lambda note: ask(f"{request}\n\nYour answers:\n{_answers_text(answers)}\n\n{note}"),
-                                    facts=facts, kept=kept, employer=sources, as_text=_answers_text)
-    return answers, claims
+    answers, _ = fix_echoes(answers, lambda found: echoed_answers(found, sources, names), again)
+    answers, claims, _ = fix_claims(who, answers, again, facts=facts, kept=kept, employer=sources,
+                                    as_text=_answers_text)
+    return answers, claims, echoed_answers(answers, sources, names)
 
 
 def _message(who: dict, context: str, analysis: dict, job_text: str, trimmed: set[str]) -> str:
@@ -550,15 +594,16 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
                                             employer=their_words)
     message = to_recipient(who, message, analysis, rewrite_message)
     questions = analysis.get("questions") or []
-    answers, answer_claims = _answers(who, [*questions, *COMMON_QUESTIONS],
-                                      f"{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}",
-                                      facts=facts, kept=kept, sources=their_words)
+    answers, answer_claims, answer_echoes = _answers(
+        who, [*questions, *COMMON_QUESTIONS], f"{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}",
+        facts=facts, kept=kept, sources=their_words, names=(job["title"], job["company"]))
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
     others = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
     flagged = written["flags"] + check_drafts(who, others, facts=facts, kept=kept, sources=their_words, kind="answer",
                                               claims=message_claims + answer_claims)
+    flagged += [f"{ECHO_FLAG}: {s}" for s in answer_echoes]
     if message in trimmed:
         flagged.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.

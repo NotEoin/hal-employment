@@ -433,6 +433,14 @@ runs: tests use `tests/support/fake_claude/`.
   ("personal project", "own time", "side project", "hobby") that disagree with the card's context; a
   sentence that also says words agreeing with it is left alone. Both go into the one rewrite per draft that
   `pack.fix_claims` asks for, and what is left is listed.
+- `drafts.echoes(sentence, advert, brief, names)` finds a sentence that restates the employer: at least
+  `ECHO_SHARE` (half) of its own words sit in runs of `ECHO_RUN` (three) words found in the advert or the
+  brief, with little words and the words of the job title and employer's name (`names`) never counted, and
+  at least `ECHO_MIN_WORDS` such words. It reads the letter's first paragraph (`first_paragraph`) and the
+  answers whose question asks why this job or employer (`why_question`). `pack.fix_echoes` rewrites the
+  letter, or all the answers in one call, once with the instruction to tie one specific thing of the
+  applicant's to one specific thing about the employer, before the claim check; a sentence still echoing
+  is listed as `pack.ECHO_FLAG`. The letter and answers prompts ask for this up front.
 - `writing/eligibility.py`: `blockers(must_haves, person())` finds, with no AI, a degree level above the
   person's highest (checked education and `you.education.degree`), more years than
   `goal.experience_years`, and no sponsorship when `you.right_to_work` needs it. Each is an

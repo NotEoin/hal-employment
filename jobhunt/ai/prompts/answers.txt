@@ -6,6 +6,9 @@ using only the facts given. Draw on the evidence that counts most for this appli
 {type_evidence}. The tone is {tone}; write in {spelling}.
 Rules:
 - Answer the question asked, in its first sentence.
+- For a question about why they want this job or employer, tie one specific thing about the applicant
+  (a named project, module or interest from their facts) to one specific thing about the employer.
+  Never restate the advert or the company's description of itself as the reason.
 - Where a question asks for an example, give one real example from the facts: the situation in a
   sentence, what the applicant did, and what came of it. Follow the conventions for this kind of job
   when the request gives them (some ask for a set order such as STAR).
