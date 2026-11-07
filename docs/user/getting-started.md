@@ -290,7 +290,8 @@ things of each kind Hal found and how many are left to check, and is where you a
 
 Hal only uses the facts you have checked. A fact Hal found stays out of your CV, letters and answers until
 you confirm it or edit it. While some are waiting, My CV and each application's documents say how many,
-with a **Check them** button.
+with a **Check them** button. Your CV and letters lead with your best experiences, the ones closest to the
+job first, and never use an archived one.
 
 Each job, qualification or skill is a card:
 

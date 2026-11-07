@@ -86,7 +86,8 @@ What changed in each version, in plain words.
   hand and the files OneDrive or Dropbox has not downloaded.
 - **Hal only uses facts you checked.** Your CV, cover letters, answers and messages use only the facts you
   confirmed or edited in your profile, never one Hal found that you have not checked, and never one you hid.
-  My CV and an application's documents say how many facts are waiting for you, with **Check them**.
+  My CV and an application's documents say how many facts are waiting for you, with **Check them**. They
+  lead with your best experiences, the ones closest to the job first, and leave out archived ones.
 - **Check your record.** A page that shows what Hal found one card at a time: **Yes, that's right**,
   **Fix it** or **Not me**, with the words from your file and the file's name. Where your files disagree it
   asks **Which is right?** first. Skills come in groups from one file to keep or drop together, and the

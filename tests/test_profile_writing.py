@@ -16,7 +16,7 @@ from support.profiles import humanities_profile
 from jobhunt import db, pack, profile, record
 from jobhunt.core import paths
 from jobhunt.cvstudio import context as cv_context
-from jobhunt.profile import store, writing
+from jobhunt.profile import store, tiers, writing
 
 NOW = "2026-11-05T09:00:00Z"
 SHORT = 400                # room for the heading, the name and some of the facts, not all of them
@@ -109,6 +109,34 @@ class Writing(unittest.TestCase):
         block = profile.context_block(self.con, queries=["Recording oral history interviews for a heritage trust"])
         projects = [x for x in block.splitlines() if x.startswith("- Project")]
         self.assertTrue(projects[0].startswith("- Project: Oral history"))
+
+    def test_core_experiences_lead_and_archived_ones_never_reach_the_block(self):
+        src = {"source_rel": "Sources/Projects/a.md", "quote": "x", "field": "name", "doc_type": "notes"}
+        ids = {name: store.add_found(self.con, "project", {"name": name}, src)
+               for name in ("Oral history of the Wexley mills", "Choir rota", "Fishing game bot")}
+        check_everything(self.con)
+        tiers.set_tier(self.con, ids["Oral history of the Wexley mills"], "supporting")
+        tiers.set_tier(self.con, ids["Choir rota"], "core")
+        tiers.set_tier(self.con, ids["Fishing game bot"], "archive")
+        block = profile.context_block(self.con, queries=["Recording oral history interviews for a heritage trust"])
+        projects = [x for x in block.splitlines() if x.startswith("- Project")]
+        self.assertEqual(projects, ["- Project: Choir rota", "- Project: Oral history of the Wexley mills"])
+
+    def test_jobs_lead_with_the_core_tier_then_the_closest_to_the_job(self):
+        src = {"source_rel": "Sources/CVs and letters/a.md", "quote": "x", "field": "title", "doc_type": "cv"}
+        newest = store.add_found(self.con, "job", {"title": "Bar staff", "employer": "Old Mill Inn",
+                                                   "start": "2025-01", "current": True}, src)
+        archive = store.add_found(self.con, "job", {"title": "Archive assistant", "employer": "Brackwater Museum",
+                                                    "start": "2021-01", "end": "2022-01"}, src)
+        heritage = store.add_found(self.con, "job", {"title": "Heritage guide", "employer": "Fenwick Lantern Museum",
+                                                     "start": "2019-01", "end": "2020-01"}, src)
+        check_everything(self.con)
+        for item_id in (newest, archive):          # one tier: the closer to the job leads, not the newer
+            tiers.set_tier(self.con, item_id, "supporting")
+        tiers.set_tier(self.con, heritage, "core")
+        block = profile.context_block(self.con, queries=["Heritage guide for a museum"])
+        jobs = [x.split(" at ")[0] for x in block.splitlines() if x.startswith("- Job")]
+        self.assertEqual(jobs, ["- Job: Heritage guide", "- Job: Archive assistant", "- Job: Bar staff"])
 
     def test_contact_details_are_left_out_even_when_checked(self):
         humanities_profile(self.con)

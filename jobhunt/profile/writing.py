@@ -1,8 +1,9 @@
 """The profile as words: the "Profile" block that document prompts get, and one line per item.
 
-`context_block(con, limit)` lists only what the person checked or edited: a fact Hal found and nobody has checked
-yet, and a hidden one, never reach a prompt. `with_record(queries)` puts that block above the record passages
-`record.context` finds, and is what the pack's letter, fit map and answers read (`pack._kept`).
+`context_block(con, limit)` lists only what the person checked or edited, best first: a fact Hal found
+that nobody has checked yet, and a hidden one, never reach a prompt. `with_record(queries)` puts that block
+above the record passages `record.context` finds, and is what the pack's letter, fit map and answers read
+(`pack._kept`).
 
 Design decisions, each with its reason:
 
@@ -12,6 +13,10 @@ Design decisions, each with its reason:
 - A skill only course material names (`store.is_studied`) is never used: a lecture's list of topics is what
   the person studied, not what they can show. The checked-only rule already keeps it out, as a studied
   skill is one nobody checked; once the person confirms it, it is theirs and is used.
+- Experiences lead with the best (`tiers`): core jobs, courses, projects, certificates and achievements
+  come before supporting ones and those not sorted yet, and an archived one is never used, even when the
+  person confirmed it, because they or Hal said it is not worth telling an employer. Within a tier, the
+  ones whose words are closest to the job's come first, so the block holds the best when it is cut.
 - Contact details (email, phone) are left out: no document a prompt writes needs them, and the CV and the
   person's settings already hold them where they belong.
 - No line of the block is a bracketed "[file > heading]" label, because `pack.passages` counts those lines
@@ -25,7 +30,7 @@ import sqlite3
 from contextlib import closing
 
 from jobhunt import db, record
-from jobhunt.profile import merge, store
+from jobhunt.profile import merge, store, tiers
 
 KIND_ORDER = ("basic", "job", "education", "project", "skill", "certificate", "achievement", "link")
 CONTACT_KEYS = {"email", "phone", "mobile", "telephone", "address"}
@@ -89,8 +94,9 @@ def line(kind: str, fields: dict, quote: str = "") -> str:
 
 
 # Kinds a person has many of: shown most relevant to the job first, as the block cannot hold them all
-# (89 projects filled it in a real profile, 2026-11-05).
-RANKED_KINDS = ("project", "skill", "certificate", "achievement")
+# (89 projects filled it in a real profile, 2026-11-05). Jobs and education are ranked the same way, within
+# their tier (2026-11-07).
+RANKED_KINDS = ("job", "education", "project", "skill", "certificate", "achievement")
 
 
 def _relevance(item: dict, wanted: set[str]) -> int:
@@ -107,6 +113,9 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
             found = _one_location(found)
         if kind in RANKED_KINDS and wanted:
             found = sorted(found, key=lambda it: -_relevance(it, wanted))
+        if kind in tiers.TIERED_KINDS:
+            # stable: within a tier the most relevant, or for jobs and education the newest, comes first
+            found = sorted((it for it in found if it["tier"] != tiers.ARCHIVE), key=tiers.order)
         for it in found:
             if it["state"] not in USED_STATES:
                 continue
@@ -138,7 +147,8 @@ QUERY_STOP = {"and", "or", "the", "a", "an", "of", "to", "in", "for", "with", "o
 def context_block(con: sqlite3.Connection, limit: int = LIMIT, queries: list[str] | None = None) -> str:
     """The "Profile" block for a writing prompt: the facts the person confirmed or edited, never others.
 
-    "" when the person has checked nothing yet.
+    Experiences come best tier first and never archived (see the module notes). "" when the person has
+    checked nothing yet.
     """
     checked = _lines(con, queries)
     if not checked:
