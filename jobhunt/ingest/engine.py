@@ -7,7 +7,9 @@ hashed again. One file that cannot be read is an error on its own row and never 
 Each document's role (`roles`: the person's own, taught, someone else's or unsure) is judged on this thread,
 which holds the database the person's names come from, with where the person said its folder came from (the
 item's `origin`). Someone else's document is not filed at all and gives
-nothing; the others give only the facts their role may.
+nothing; the others give only the facts their role may. Supporting files (data, figures, logs, models,
+camera photos) are never read: once the documents and course notes are written, `attach.settle` lists each
+in the note of the unit it belongs to, or skips it.
 
 Duplicates are found by SHA-256 against every item read before, in this batch or an earlier one: the copy
 gets no note of its own, and its path is added once to the first copy's note under "Also at".
@@ -35,6 +37,7 @@ from pathlib import Path
 from jobhunt import profile, record
 from jobhunt.core import events
 from jobhunt.ingest import (
+    attach,
     convert,
     discover,
     group,
@@ -55,7 +58,7 @@ log = logging.getLogger(__name__)
 STEPS = 3                    # finding, reading, linking
 ERROR_CHARS = 300
 ALSO_AT = "## Also at"
-KEPT_SECTIONS = ("## Part of", ALSO_AT, versions.EARLIER)   # added after a note was written; kept on a re-read
+KEPT_SECTIONS = ("## Part of", ALSO_AT, versions.EARLIER, attach.FILES)   # added after a note was written
 NEVER_BY_MODEL = ("code", "image", "media")
 AHEAD = 2                    # items handed to workers per worker, so none waits while this thread writes
 NO_WEB = "Reading web links is not available in this version of Hal yet."
@@ -343,10 +346,13 @@ def _prepare(row: dict, rule: rank.Rule) -> _Read:
 
 
 def _kept(note_text: str) -> str:
-    """The sections of a note that the ingest added after it was written ("Part of", "Also at"), to carry over."""
+    """The sections of a note that the ingest added after it was written ("Part of", "Also at", "Files"), to
+    carry over. They sit above "## Original"; the document's own text below may have headings of the same
+    words (a repository's file tree is under "## Files")."""
+    head = note_text.partition(attach.ORIGINAL)[0]
     out = []
     for heading in KEPT_SECTIONS:
-        found = re.search(rf"^{re.escape(heading)}\n.*?(?=^## |\Z)", note_text, re.S | re.M)
+        found = re.search(rf"^{re.escape(heading)}\n.*?(?=^## |\Z)", head, re.S | re.M)
         if found:
             out.append(found.group(0).rstrip("\n") + "\n\n")
     return "".join(out)
@@ -398,6 +404,8 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
     if read.desc is None:
         items.update(con, row["id"], state="no_text")
         return None
+    if attach.is_picture(row["rel"]) and not read.text.strip():
+        return None          # left pending: listed with its unit, or skipped, once the units are written
     desc = read.desc
     _judge(con, row, desc, read.text)
     items.update(con, row["id"], stage="understood", model=int(desc.get("by") == "model"), role=desc["role"])
@@ -505,8 +513,9 @@ def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, dr
 def mark_again(con: sqlite3.Connection, batch: str) -> int:
     """Puts every note written by rules from a document back in `batch` to be read by the AI; returns how many.
 
-    Each file's newest row is moved, so its note is rewritten in place and its links still lead to it. Code
-    and pictures are left as they are (see `by_model`), and so is a file no longer on this computer.
+    Each file's newest row is moved, so its note is rewritten in place and its links still lead to it. Code,
+    pictures and supporting files (`attach`, which a tidy takes out) are left as they are (see `by_model`), and
+    so is a file no longer on this computer.
     """
     rows = con.execute("""SELECT * FROM ingest_items WHERE id IN (SELECT max(id) FROM ingest_items
                           WHERE state = 'done' AND model = 0 AND kind = 'file' AND note IS NOT NULL GROUP BY path)
@@ -515,7 +524,8 @@ def mark_again(con: sqlite3.Connection, batch: str) -> int:
     for row in rows:
         path = Path(row["path"])
         is_picture = path.suffix.lower() in rank.IMAGE_SUFFIXES | rank.MEDIA_SUFFIXES
-        if is_picture or not by_model(_rule(row), False, every=True) or not path.is_file():
+        if is_picture or attach.supporting(row) or not by_model(_rule(row), False, every=True) \
+                or not path.is_file():
             continue
         con.execute("UPDATE ingest_items SET batch = ?, state = 'pending', stage = 'discovered' WHERE id = ?",
                     (batch, row["id"]))
@@ -621,7 +631,8 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     step("Reading each file, your CV and other rich documents first")
     drop_root = sources.drop_folder().resolve() if drop else None
     versions.settle(con, batch, vault())
-    todo = [r for r in items.pending(con, batch) if r["kind"] != "course"]
+    # supporting files are never read: `attach.settle` lists them with their unit once it is written
+    todo = [r for r in items.pending(con, batch) if r["kind"] != "course" and not attach.supporting(r)]
     # Within a rank, typed notes before converted decks and handouts, so a lecture's notes are in the record
     # when its slides come up and cover them (`lectures.Covered`); the sort keeps the rest in their order.
     todo.sort(key=lambda r: (r["rank"] if r["rank"] is not None else rank.OTHER.rank, r["kind"] == "file",
@@ -632,6 +643,7 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     step("Linking your notes")
     written += _courses(con, batch)
     vault_dir = vault()
+    attach.settle(con, batch, vault_dir)
     notes.link_pass(vault_dir, written)
     if tidy and not items.pending(con, batch):
         tidied.update(tidy_pass.finish(con, vault_dir))

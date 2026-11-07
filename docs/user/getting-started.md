@@ -225,6 +225,10 @@ Some files are listed rather than read:
 - **No text**: a file with no words Hal can read, such as a scan read while **Read photos and scans of
   certificates** is off or tesseract is not installed. Hal never guesses what such a file says.
 - **Copies** of a file Hal has already read are named in the first copy's note, not read again.
+- **Supporting files**: data files and exports, figures, logs, diffs, circuit and 3D-printing files, and
+  photos from a camera or phone say little on their own. Hal lists each one under **Files** in the note of
+  the project, report or module folder it sits in, and makes no note of its own for it. A picture or data
+  file that is not inside such a folder is skipped. Photos and scans of certificates are still read.
 - **Older copies of a project**: when you keep a code project several times ("Robot (2)", "robot-v3-final",
   a copy in a zip), Hal keeps the newest copy of each project. It reads only that one, and its note lists
   the others under **Earlier versions**. If you add a newer copy later, Hal reads it and updates the same

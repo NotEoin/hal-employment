@@ -8,6 +8,7 @@ import functools
 import http.client
 import io
 import json
+import struct
 import tempfile
 import threading
 import time
@@ -25,7 +26,7 @@ from support.fake_ai import fake_ai
 from jobhunt import db, record
 from jobhunt.core import paths, runner, settings
 from jobhunt.ingest import actions as ingest_actions
-from jobhunt.ingest import discover, engine, frontmatter, items, notes, rank, roles, sources, understand
+from jobhunt.ingest import attach, discover, engine, frontmatter, items, notes, rank, roles, sources, understand
 
 OWNER = "Avery Quillon"
 CV_TEXT = f"""# {OWNER}
@@ -950,6 +951,113 @@ class CourseWork(unittest.TestCase):
             module_folder(files)
             run(con, [files])
         self.assertEqual(len(backend.requests("ingest_doc")), 5)
+
+
+PICTURE = b"\x89PNG\r\n\x1a\n" + bytes(range(64))        # a made-up picture: only its name and bytes matter
+
+
+def camera_jpeg(make: str) -> bytes:
+    """A made-up JPEG whose Exif names the camera's maker, as a phone's photo does."""
+    value = make.encode() + b"\x00"
+    entry_at = 8 + 2 + 12 + 4                                  # after the header, the count, one entry and the link
+    tiff = b"II*\x00" + struct.pack("<I", 8) + struct.pack("<H", 1) \
+        + struct.pack("<HHII", 0x010F, 2, len(value), entry_at) + struct.pack("<I", 0) + value
+    segment = b"Exif\x00\x00" + tiff
+    return b"\xff\xd8\xff\xe1" + struct.pack(">H", len(segment) + 2) + segment + b"\xff\xd9"
+
+
+class SupportingFiles(unittest.TestCase):
+    """Data, figures, logs, models and camera photos are listed with their work, never notes of their own: a
+    dump gave 337 notes of photos and renders and notes of a supplement's CSV exports (2026-11-06)."""
+
+    def test_the_kinds_of_supporting_file_are_told_from_documents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            photo = Path(tmp) / "Portfolio" / "sunset.jpg"
+            photo.parent.mkdir()
+            photo.write_bytes(camera_jpeg("Canon"))
+            self.assertEqual(attach.camera_make(photo), "Canon")
+            kind = functools.partial(attach.kind_of, path=Path(tmp) / "none")
+            self.assertEqual(attach.kind_of("Files/Portfolio/sunset.jpg", photo), "picture", "a camera's photo")
+            self.assertEqual(kind("Files/Portfolio/poster.png"), "", "artwork is read for its words")
+            self.assertEqual(kind("Files/Certificates/First aid certificate.jpg"), "")
+            self.assertEqual(kind("Files/Certificates/IMG_2041.jpg"), "picture", "named as a camera names it")
+            self.assertEqual(kind("Files/Diss/fig1.png"), "picture")
+            self.assertEqual(kind("Files/Diss/results.csv"), "data")
+            self.assertEqual(kind("Files/Diss/results/summary.txt"), "data", "in a results folder")
+            self.assertEqual(kind("Files/Diss/results/write-up.pdf"), "", "a document in a results folder")
+            self.assertEqual(kind("Files/Bot/fix.diff"), "diff")
+            self.assertEqual(kind("Files/Bot/run.log"), "log")
+            self.assertEqual(kind("Files/Bot/case.stl"), "design")
+            self.assertEqual(kind("Files/Bot/adder.circ"), "design")
+            self.assertEqual(kind("Files/Bot/notes.md"), "")
+
+    def test_a_projects_data_and_figures_are_listed_in_its_note_and_give_nothing(self):
+        reply = {**DRAFT_REPLY, "role": "own", "title": "Tidal flats"}
+        with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(reply)}) as backend:
+            settings.set("you.name", OWNER)
+            put(files, "Dissertation/Final dissertation.md", f"{DRAFT}\n\nBy {OWNER}.")
+            put(files, "Dissertation/supplement/results.csv", "site,depth\n1,0.4\n")
+            put(files, "Dissertation/supplement/figures/fig1.png", PICTURE)
+            put(files, "Dissertation/IMG_2041.jpg", camera_jpeg("Canon"))
+            put(files, "Dissertation/rig/mount.stl", "solid mount\nendsolid mount\n")
+            run(con, [files])
+            got = rows(con)
+            report = got["Files/Dissertation/Final dissertation.md"]
+            text = (vault / report["note"]).read_text(encoding="utf-8")
+            sources = sorted(p.relative_to(vault).as_posix() for p in (vault / "Sources").rglob("*.md")
+                             if p.stem != "Index")
+            asked = len(backend.requests("ingest_doc"))
+        for rel in ("supplement/results.csv", "supplement/figures/fig1.png", "IMG_2041.jpg", "rig/mount.stl"):
+            row = got[f"Files/Dissertation/{rel}"]
+            self.assertEqual((row["state"], row["dup_of"], row["note"]), ("attached", report["id"], report["note"]))
+            self.assertIn(f"- `{rel}`", text)
+        self.assertEqual(sources, [report["note"]], "no note of its own for any supporting file")
+        self.assertEqual(asked, 1)
+        self.assertLess(text.index("## Files"), text.index("## Original"))
+
+    def test_a_courses_figures_join_its_note_and_loose_ones_are_skipped(self):
+        with home() as (con, vault, files), fake_ai({}):
+            module_folder(files)
+            put(files, "GEO101/plot.png", PICTURE)
+            put(files, "Camera/DSC_0042.jpg", PICTURE)
+            put(files, "export.csv", "a,b\n1,2\n")
+            run(con, [files])
+            got = rows(con)
+            course = (vault / got["Files/GEO101"]["note"]).read_text(encoding="utf-8")
+            shown = items.counts(con, "b1")["states"]
+        self.assertEqual((got["Files/GEO101/plot.png"]["state"], got["Files/GEO101/plot.png"]["note"]),
+                         ("attached", got["Files/GEO101"]["note"]))
+        self.assertIn("- `plot.png`", course)
+        self.assertEqual((got["Files/Camera/DSC_0042.jpg"]["state"], got["Files/Camera/DSC_0042.jpg"]["error"]),
+                         ("skipped", "a picture with no words"))
+        self.assertEqual(got["Files/export.csv"]["state"], "skipped")
+        self.assertEqual(shown["attached"], 1)
+
+    def test_a_certificate_picture_with_words_is_still_read_and_one_without_is_skipped(self):
+        def ocr(path):
+            return "Certificate of completion\n\nFirst aid at work, 2025." if "first" in path.name.lower() else ""
+
+        with home() as (con, _vault, files), fake_ai({}), mock.patch.object(record, "text_of", ocr):
+            put(files, "First aid certificate.png", PICTURE)
+            put(files, "Swimming certificate.png", PICTURE + b"\x01")
+            run(con, [files])
+            got = rows(con)
+        self.assertEqual(got["Files/First aid certificate.png"]["state"], "done")
+        swim = got["Files/Swimming certificate.png"]
+        self.assertEqual((swim["state"], swim["note"]), ("skipped", None))
+
+    def test_reading_a_projects_note_again_keeps_its_list_of_files(self):
+        with home() as (con, vault, files):
+            with fake_ai({}):
+                put(files, "Dissertation/Final dissertation.md", DRAFT)
+                put(files, "Dissertation/results.csv", "site,depth\n1,0.4\n")
+                run(con, [files])
+            with fake_ai({"ingest_doc": json.dumps(DRAFT_REPLY)}):
+                run(con, [], batch="b2", again=True)
+            report = rows(con, "b2")["Files/Dissertation/Final dissertation.md"]
+            text = (vault / report["note"]).read_text(encoding="utf-8")
+        self.assertEqual(report["model"], 1)
+        self.assertIn("- `results.csv`", text)
 
 
 class Origins(unittest.TestCase):

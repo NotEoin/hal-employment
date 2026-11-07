@@ -306,6 +306,16 @@ class RecordPage(unittest.TestCase):
         p.shows(card.get_by_text("Downloads/Friend CV.pdf"), "its name")
         self.assertEqual(self.errors(p), [])
 
+    def test_supporting_files_are_counted_in_plain_words(self) -> None:
+        finished_ingest()
+        with closing(db.connect()) as con, con:
+            for n in range(3):
+                ingest_items.add(con, "b0", path=f"/made/up/fig{n}.png", rel=f"Project/fig{n}.png", state="attached")
+        p = self.page()
+        card = p.page.locator(".rec-ingest")
+        p.shows(card.get_by_text("3 data files, figures and photos listed with their project or course"), "the count")
+        self.assertEqual(self.errors(p), [])
+
     def test_files_kept_out_as_private_are_named_and_can_be_added_anyway(self) -> None:
         finished_ingest()
         kept = self.hal.home / "Old laptop" / "statement.txt"

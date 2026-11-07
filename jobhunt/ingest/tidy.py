@@ -8,10 +8,11 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
 2. Each note already filed is judged again by rules alone: whose it is (`note_role`: the role it was given, or
    from its old `about_owner` and kind), whether it looks private (`privacy.reason`), whether it is a settings
    or tool file (`discover.is_tool_file`), and whether it is slides the person's own notes cover
-   (`lectures.Covered`). Facts its role may not give leave the profile and the note's key facts, and an
-   employer, institution or issuer the document never names leaves its fact; course material loses
-   contact details; code text is fenced. Copies of one project keep only the newest copy's note
-   (`versions`).
+   (`lectures.Covered`). A supporting file's note (data, a figure, a camera photo, a picture with no
+   words) goes, and the file is listed in its unit's note or skipped (`attach`). Facts its role may not
+   give leave the profile and the note's key facts, and an employer, institution or issuer the document
+   never names leaves its fact; course material loses contact details; code text is fenced. Copies of one
+   project keep only the newest copy's note (`versions`).
 3. Notes the AI should read again are put back in the batch, to be rewritten in place (`engine._again`):
    converted course material, for a lecture note, and documents whose role the rules cannot settle, such
    as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
@@ -37,7 +38,7 @@ import sqlite3
 import tarfile
 from pathlib import Path, PurePosixPath
 
-from jobhunt.ingest import discover, frontmatter, items, lectures, notes, privacy, rank, roles, versions
+from jobhunt.ingest import attach, discover, frontmatter, items, lectures, notes, privacy, rank, roles, versions
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +191,9 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
     words = roles.identity(understand.owner(), str(settings.get("you.other_names") or ""), con,
                            own=roles.own_links())
     covered = lectures.Covered(con)
-    done = {"left_out": 0, "private": 0, "covered": 0, "again": 0, "older_version": 0, "judged": 0}
+    done = {"left_out": 0, "private": 0, "covered": 0, "again": 0, "older_version": 0, "judged": 0,
+            attach.STATE: 0, "skipped": 0}
+    units: attach.Units | None = None
     done["older_version"] = _versions(con, vault)
     rows = con.execute("""SELECT * FROM ingest_items WHERE state = 'done' AND note IS NOT NULL
                           AND kind IN ('file', 'repo', 'page') ORDER BY rank, kind = 'file', rel""").fetchall()
@@ -206,6 +209,12 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
             drop_note(con, vault, row["note"])
             items.update(con, row["id"], state="skipped", error="settings or tool file", note=None)
             done["left_out"] += 1
+            continue
+        if row["kind"] == "file" and (attach.supporting(row) or (attach.is_picture(row["rel"]) and TEXT not in body)):
+            drop_note(con, vault, row["note"])
+            # built at the first supporting file: rows go by rank, so the documents before it are settled
+            units = units or attach.Units(con)
+            done[attach.place(con, vault, row, units)] += 1
             continue
         if why := privacy.held_back(dict(row), body):
             drop_note(con, vault, row["note"])

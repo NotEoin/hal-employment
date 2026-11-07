@@ -40,6 +40,10 @@ What changed in each version, in plain words.
 - **Coursework in a module's folder.** Coursework, reports, projects and essays kept beside a module's
   lectures are read by the AI like your other work, and stay linked from the module's note. **Tidy my
   record** reads the ones an older Hal filed by their words alone.
+- **Data files and photos stay with their work.** Data exports, figures, logs, diffs, 3D and circuit files
+  and camera photos no longer become notes of their own. Each is listed in the note of the project, report
+  or module it belongs to, and a loose one is skipped. **Tidy my record** does the same for notes an older
+  Hal made of them.
 - **The newest copy of each project.** When a folder holds several copies of one code project ("Robot",
   "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same

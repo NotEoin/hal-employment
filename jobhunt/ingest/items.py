@@ -7,6 +7,7 @@ refused while unpacking is an item too (state error), so the page lists it with 
 older copy of a code project is `older_version`, its `dup_of` the newest copy (`versions.py`). A file
 kept out as private (`ingest.privacy`) keeps only its name and the reason; `add` marks a new item allowed when
 the person let the same bytes in before, at the same path or with the same name in its folder or zip.
+A supporting file listed in its unit's note is `attached`, its `dup_of` and `note` the unit's (`attach`).
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ import sqlite3
 from jobhunt.core import clock
 
 FINAL = ("done", "duplicate", "older_version", "covered", "not_downloaded", "no_text", "skipped", "not_mine",
-         "error", "private")
+         "error", "private", "attached")
 FIRST_PATHS = 10            # not-downloaded files named on the page; the rest are counted
 PRIVATE_SHOWN = 50          # private files named on the page, newest first; each has its own button
 RECENT_ERRORS = 10

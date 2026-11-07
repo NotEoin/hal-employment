@@ -15,7 +15,7 @@ from test_ingest import NOTE_REPLY, OWNER, REPLY, home, module_folder, put, rows
 
 from jobhunt.core import settings
 from jobhunt.ingest import actions as ingest_actions
-from jobhunt.ingest import engine, frontmatter
+from jobhunt.ingest import attach, engine, frontmatter
 from jobhunt.profile import store
 
 SLIDES = "# Rivers\n\nDr Ama Pell, ama.pell@example.org. Meanders and oxbow lakes."
@@ -185,15 +185,16 @@ class Tidy(unittest.TestCase):
         self.assertEqual(got, [{"qualification": "BA Geography", "start": "2023"}])
 
     def test_a_file_a_rule_held_back_is_read_when_todays_rules_let_it_through(self):
-        # a results table's decimals were taken for a card number (2026-11-06)
+        # a results table's decimals were taken for a card number (2026-11-06); text, as a .csv is a supporting
+        # file now, listed rather than read
         with home() as (con, _vault, files):
             settings.set("you.name", OWNER)
             with fake_ai({}):
-                put(files, "dice.csv", "case,card,dice\ncase 1,card 2,0.4929123456789015\n")
+                put(files, "dice.txt", "case,card,dice\ncase 1,card 2,0.4929123456789015\n")
                 put(files, "card.md", "My visa card 4929 1234 5678 9015, expires 09/28.")
                 put(files, "told.md", "# Tide gauges\n\nA report on tide gauges.")
                 run(con, [files])
-            for rel, why in (("Files/dice.csv", "bank details"), ("Files/told.md", "the AI said it looks private")):
+            for rel, why in (("Files/dice.txt", "bank details"), ("Files/told.md", "the AI said it looks private")):
                 con.execute("UPDATE ingest_items SET state = 'private', private = ?, note = NULL WHERE rel = ?",
                             (why, rel))
             con.commit()
@@ -201,7 +202,7 @@ class Tidy(unittest.TestCase):
                 run(con, [], batch="t", tidy=True)
             states = {rel: r["state"] for rel, r in rows(con).items()} | {
                 rel: r["state"] for rel, r in rows(con, "t").items()}
-        self.assertEqual((states["Files/dice.csv"], states["Files/card.md"], states["Files/told.md"]),
+        self.assertEqual((states["Files/dice.txt"], states["Files/card.md"], states["Files/told.md"]),
                          ("done", "private", "private"))
         self.assertEqual(backend.requests("ingest_doc"), [], "a file held on the AI's word is not sent again")
 
@@ -274,6 +275,30 @@ class Tidy(unittest.TestCase):
             asked = [str(r) for r in backend.requests("ingest_doc")]
         self.assertEqual(tuple(again), (1, "own"))
         self.assertEqual(len(asked), 1, "only the coursework, not the typed lecture notes")
+
+    def test_notes_an_older_read_made_of_supporting_files_are_listed_with_their_work(self):
+        with home() as (con, vault, files):
+            with fake_ai({}), mock.patch.object(attach, "supporting", return_value=False), \
+                    mock.patch.object(attach, "is_picture", return_value=False):    # as an older Hal read them
+                put(files, "Dissertation/Final dissertation.md", REPORT)
+                put(files, "Dissertation/results.csv", "site,depth\n1,0.4\n")
+                put(files, "Holiday/beach.png", b"\x89PNG\r\n\x1a\n" + bytes(32))
+                run(con, [files])
+            old = rows(con)
+            self.assertTrue(all(old[r]["note"] for r in ("Files/Dissertation/results.csv", "Files/Holiday/beach.png")))
+            with fake_ai({}):
+                out = run(con, [], batch="t", tidy=True)
+            got = rows(con) | rows(con, "t")      # the report is read again in the tidy's batch
+            report = got["Files/Dissertation/Final dissertation.md"]
+            text = (vault / report["note"]).read_text(encoding="utf-8")
+            left = {p.relative_to(vault).as_posix() for p in (vault / "Sources").rglob("*.md") if p.stem != "Index"}
+        data = got["Files/Dissertation/results.csv"]
+        self.assertEqual((data["state"], data["note"]), ("attached", report["note"]))
+        self.assertIn("- `results.csv`", text)
+        self.assertEqual((got["Files/Holiday/beach.png"]["state"], got["Files/Holiday/beach.png"]["error"]),
+                         ("skipped", "a picture with no words"))
+        self.assertEqual(left, {report["note"]})
+        self.assertEqual((out["tidied"]["attached"], out["tidied"]["skipped"]), (1, 1))
 
 
 class Route(unittest.TestCase):

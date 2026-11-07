@@ -613,6 +613,20 @@ the AI and its note rewritten at the same path (`notes.write_source(at=)`), carr
 "Also at" and "Earlier versions" sections, so links still lead to it; when the AI does not answer, the note is left as it was and
 the row stays `model = 0` for next time. `items.by_rules` counts those notes for the page's button.
 
+Supporting files (`attach.py`). Data (`.csv`, `.json`, `.xlsx` and the like, and anything but a document in
+a results, output, data or figures folder), diffs and patches, logs, circuit, CAD and 3D files, camera photos
+(a camera's file name such as `IMG_` or `DSC_`, or a camera maker in the Exif) and pictures Hal reads no
+words from are never converted, sent to the AI or written as notes: `engine.run` leaves them out of the
+reading, and a certificate or artwork picture whose OCR comes back empty stays pending. After `_courses`,
+`attach.settle` finds each one's unit (`attach.Units`): the nearest folder below the one given that is a course
+unit, or holds a repository or a document of a work type (`roles.WORK_TYPES`); a folder named as work
+(`rank.work_named`) reaches work documents anywhere below it. The file becomes `attached` (`dup_of` the unit's
+item, `note` its note), and its path inside the unit is listed under "## Files" in the unit's note (above
+"## Original"; in a course note, its own list), which `engine._kept` carries over when the note is read again.
+With no unit it is `skipped` with "a picture with no words" or "a data, log or design file with no project
+around it". It gives no facts. `tidy.prepare` drops the notes an older read made of such files and places
+them the same way (`attach.place`).
+
 Private files (`privacy.py`). In `engine._prepare`, after conversion and before any AI call,
 `privacy.held_back` runs `privacy.reason(rel, text)` unless `record.privacy_check` is off or the row is
 `allowed`; after the AI's answer it runs again with the reply's `sensitive` field as `said`, which counts only
