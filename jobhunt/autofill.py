@@ -31,13 +31,12 @@ from __future__ import annotations
 import difflib
 import itertools
 import re
-from datetime import date
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from . import cv, db, gpu, llm, record, salary
 from .ai import prompts
-from .writing import spelling
+from .writing import spelling, stage
 
 if TYPE_CHECKING:
     from .sites.notes import Note, NoteSet
@@ -998,7 +997,7 @@ def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
     free-words notes about this job site."""
     hidden = ("salary_figure", "salary_basis", "preferred_name", *PRIVATE_KEYS)
     prof = {k: v for k, v in profile_for(job, con).items() if k not in hidden and v not in ("", None)}
-    parts = [f"Today is {date.today():%d %B %Y}.",
+    parts = [stage.today_lines(stage.current(con)),
              f"Job: {job['title']} at {job['company']} ({job['location'] or 'location not stated'}).",
              f"Applicant profile: {prof}",
              "The applicant has never worked for, interviewed with or been referred to this employer "

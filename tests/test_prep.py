@@ -29,7 +29,7 @@ class Notes(unittest.TestCase):
         self.assertIn("why this sector, a written exercise and competency questions", asked["system"])
         self.assertIn("Prepare Marnie, a new graduate", asked["system"])
         self.assertIn("Tests the advert names: written exercise and assessment centre", asked["user"])
-        self.assertIn("Stage: interview", asked["user"])
+        self.assertIn("Application stage: interview", asked["user"])
         self.assertNotIn("coding practice", asked["system"] + asked["user"])
         self.assertEqual(stored["prep"], notes)
 

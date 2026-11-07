@@ -156,6 +156,11 @@ What changed in each version, in plain words.
   own documents. It takes out or tones down a claim it cannot find there once, and lists only what is
   left. Form answers get the same check, and a claim or a number Hal cannot find is marked **Check this**.
   Hal no longer treats its earlier drafts for a job as facts when it fills in the form.
+- **Drafts know today's date.** A letter written after a degree had ended still offered to start "upon
+  completing my degree". Every letter, message, answer and form now gets today's date and a line saying
+  whether your course has ended and when you can start, and a draft that talks about finishing an ended
+  course is rewritten once. Each project also says whether it was part of your degree, done at work or
+  your own, so a personal project is no longer called degree work.
 - **The AI's own reason when it cannot answer.** When Hal's model was switched off, commands such as
   `jobhunt pack` stopped with a long error ending in "(503)". They now say in one line what the AI said,
   such as "Hal is off; run `hal on`".

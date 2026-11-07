@@ -488,6 +488,11 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / size if size else 0.0
 
 
+def _hit(passage: dict) -> dict:
+    """A passage as a search hit: where it is, its words and its note's document type."""
+    return {**{f: passage[f] for f in ("path", "title", "heading", "text")}, "doc_type": passage.get("doc_type", "")}
+
+
 def _meaning_search(queries: list[str], k: int, keep: Callable[[dict], bool]) -> list[list[dict]] | None:
     """Passages `keep` allows, ranked by meaning; None when there are no vectors or the AI does not answer."""
     index = _searcher()["raw"]
@@ -503,7 +508,7 @@ def _meaning_search(queries: list[str], k: int, keep: Callable[[dict], bool]) ->
     out = []
     for q in asked:
         scored = sorted(((_cosine(q, v), c) for c, v in keyed if v is not None), key=lambda x: -x[0])
-        out.append([{**{f: c[f] for f in ("path", "title", "heading", "text")}, "score": round(s, 3), "by": "meaning"}
+        out.append([{**_hit(c), "score": round(s, 3), "by": "meaning"}
                     for s, c in scored[:k] if s >= MEANING_MIN])
     return out
 
@@ -575,7 +580,7 @@ def search_many(queries: list[str], k: int = 5, min_score: float = MIN_SCORE,
             if share >= min_score:
                 hits.append((share, bm25, i))
         hits.sort(reverse=True)
-        results.append([{**{f: s["chunks"][i][f] for f in ("path", "title", "heading", "text")},
+        results.append([{**_hit(s["chunks"][i]),
                          "score": round(share, 3), "by": "words"} for share, _, i in hits[:k]])
     return results
 
@@ -622,8 +627,20 @@ def context(queries: list[str], per_query: int = 3, limit: int = 6000) -> str:
             if key in seen:
                 continue
             seen.add(key)
-            lines.append(f"[{h['path']} > {h['heading']}]\n{h['text']}")
+            kind = passage_kind(h)
+            lines.append(f"[{h['path']} > {h['heading']}]\n" + (f"(Kind: {kind})\n" if kind else "") + h["text"])
     return "\n\n".join(lines)[:limit]
+
+
+def passage_kind(hit: dict) -> str:
+    """The kind of project a passage's note is (`writing.stage.project_kind`), read from its document type, path
+    and title; "" for a note that is not a project, coursework or dissertation."""
+    from .writing import stage
+
+    doc_type = hit.get("doc_type") or ""
+    if doc_type not in (*stage.DEGREE_TYPES, *stage.PERSONAL_TYPES):
+        return ""
+    return stage.project_kind([hit.get("path", ""), hit.get("title", "")], [doc_type])
 
 
 def notes_for_ai() -> list[tuple[str, str]]:

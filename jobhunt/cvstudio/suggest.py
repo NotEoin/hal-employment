@@ -32,6 +32,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from jobhunt.core import clock, events
+from jobhunt.writing import stage
 
 log = logging.getLogger(__name__)
 
@@ -582,7 +583,9 @@ def ask_ai(con: sqlite3.Connection, doc, type_, sids: list[str], failing: list[D
         return None
     extra = str((type_.prompts or {}).get("cv_suggest") or "").strip()
     system = prompts.text("cv_suggest", con=con, spelling=spelling_words()) + (f"\n{extra}\n" if extra else "")
+    now = stage.current(con)
     user = json.dumps({
+        "today": now.today.isoformat(), "stage": now.words,
         "cv_type": type_.name, "writing": type_.writing, "lines": block,
         "failing_checks": [d.title for d in failing], "writing_problems": writing_problems(block, type_),
         "field_conventions": field_conventions(job), "preferences": _prefs_words(con),

@@ -36,7 +36,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import fields, spelling
+from .writing import fields, spelling, stage
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -172,7 +172,7 @@ def passages(kept: str) -> list[str]:
 def _fit(who: dict, analysis: dict, facts: str, kept: str) -> dict:
     conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
     return llm.chat_json(prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in _requirements(analysis))
-                         + f"\n\nConditions:\n{conditions}\n\nToday: {date.today().isoformat()}\n\nCV:\n{facts}"
+                         + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
                          + _record_part("Employment record", kept),
                          role="main")
 
@@ -182,7 +182,7 @@ def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, 
     return (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
             + (f"Earlier applications to this employer: {history}. Do not mention them unless asked.\n"
                if history else "") +
-            f"{who['status_line']}. Mention availability only if the advert's start date is "
+            f"{stage.today_lines()}\nMention availability only if the advert's start date is "
             f"flexible; for a fixed intake, refer to that intake instead.\n"
             f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
             + _record_part(f"Employment record ({record.OWN_DOCUMENTS}; use it where the CV is silent)", kept))
@@ -234,14 +234,18 @@ def unsupported_claims(who: dict, drafts: str, *, facts: str, kept: str, employe
     The facts are the CV, the checked profile and the passages of their own documents (`kept`); the fit map
     is not one, since the AI wrote it from the same facts. The advert and the company brief (`employer`) are
     given as the employer's own words, never to be flagged for being restated: most of the "unsupported"
-    claims in real packs were the employer's own facts (2026-11-06).
+    claims in real packs were the employer's own facts (2026-11-06). A sentence that speaks of finishing a
+    course that has ended (`stage.ended_course`) is one too, found with no AI.
     """
+    now = stage.current()
     words = "\n\n".join(e.strip() for e in employer if e and e.strip())
     request = (f"The employer's own words (the advert and the company brief): never flag a sentence for restating "
-               f"them.\n<<<EMPLOYER\n{words}\nEMPLOYER>>>\n\nFacts about the applicant:\nCV:\n{facts}"
-               + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept) + f"\n\nDrafts:\n{drafts}")
+               f"them.\n<<<EMPLOYER\n{words}\nEMPLOYER>>>\n\nFacts about the applicant:\n{stage.today_lines(now)}\n"
+               f"CV:\n{facts}" + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept)
+               + f"\n\nDrafts:\n{drafts}")
     found = llm.chat_json(prompt("verify", who), request, role="main").get("unsupported", [])
-    return [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
+    claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
+    return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(drafts, now)]
 
 
 def claims_note(claims: list[str]) -> str:

@@ -296,6 +296,18 @@ class Record(unittest.TestCase):
                         <= {"Sources/Projects/Mine.md", "My notes/Robot.md"})
         self.assertTrue(suggest.passages_for(doc, ["s:projects"]))
 
+    def test_a_projects_passage_says_its_kind(self):
+        # a letter called a personal project "degree work" (2026-11-06)
+        own = "---\nhal: ingested\nrole: own\ndoc_type: {doc_type}\n---\n# {title}\n\nThe tide gauge {words}.\n"
+        self.note("Sources/Code/Tide gauge.md", own.format(doc_type="repository", title="Tide gauge",
+                                                           words="logs made-up harbour levels in Lua"))
+        self.note("Sources/Coursework/Harbour.md", own.format(doc_type="coursework", title="Harbour",
+                                                              words="survey of a made-up harbour for a module"))
+        record.sync()
+        found = record.context(["tide gauge harbour"], per_query=5)
+        self.assertIn("[Sources/Code/Tide gauge.md > Tide gauge]\n(Kind: personal project)\n", found)
+        self.assertIn("[Sources/Coursework/Harbour.md > Harbour]\n(Kind: degree work)\n", found)
+
     def test_an_index_made_before_passages_kept_their_role_is_read_again(self):
         self.whose_notes()
         record.sync()

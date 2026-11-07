@@ -405,6 +405,36 @@ class Claims(unittest.TestCase):
         self.assertNotIn("unsupported claim", section(md, "Check before sending"))
 
 
+class Today(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(mock.patch.dict("os.environ", {"HAL_EMPLOYMENT_FAKE_NOW": "2026-11-07T09:00:00Z"}))
+
+    def test_every_writing_request_says_today_and_where_you_are(self):
+        with as_applicant(people.HUMANITIES) as a:
+            settings.set("goal.study_end", "2026-06", by="you")
+            settings.set("you.education.degree", "BA", by="you")
+            settings.set("you.education.subject", "History", by="you")
+            job = add_job(a.con, "humanities_grad")
+            pack.build(a.con, job["id"], use_web=False)
+        line = "Today: 2026-11-07\nStage: Finished BA History in 2026-06; available now."
+        for pid in ("fit", "letter", "message", "answers", "verify"):
+            self.assertIn(line, a.writer.asked(pid)[0]["user"], pid)
+
+    def test_a_letter_that_speaks_of_finishing_an_ended_course_is_rewritten_once(self):
+        # "available to start in 2026 upon completing my degree", in November 2026 (2026-11-06)
+        writer = FakeWriter(letter="I can start soon upon completing my degree in History.")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("goal.study_end", "2026-06", by="you")
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        letters = writer.asked("letter")
+        self.assertEqual(len(letters), 2)
+        self.assertIn("upon completing my degree in History. (the course ended in 2026-06)", letters[1]["user"])
+        self.assertEqual(written["flags"], ["unsupported claim: I can start soon upon completing my degree in "
+                                            "History. (the course ended in 2026-06)"],
+                         "the fixed fake letter keeps it, so it is listed")
+
+
 class Checklist(unittest.TestCase):
     def test_the_checklist_never_says_to_open_a_command_line(self):
         for person in people.PEOPLE:

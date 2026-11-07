@@ -472,6 +472,19 @@ runs: tests use `tests/support/fake_claude/`.
   analysis, and the letter, answers, form-filling and CV suggestion requests carry its conventions, plus
   the person's own field's background advice when the two differ. Conventions are in the request, never
   the prompt, since they depend on the job.
+- `stage.py` says where the person is today. `current(con, today)` reads the newest education fact the
+  person checked and the settings `goal.study_end`, `goal.study_status`, `you.education.*`, `you.start`,
+  `you.start_date` and `you.notice`; an end date with a month wins over a bare year, and the date decides
+  whether the course has ended. `today_lines()` gives the "Today: 2026-11-07" and "Stage: Finished BSc ... in
+  2026-06; available now." lines that the fit, letter, message, answers, verify, prep and form-filling
+  requests carry (CV suggestions get `today` and `stage` in their JSON). `ended_course(text, stage)` finds,
+  with no AI, the sentences of a draft that speak of finishing a course that has ended, and
+  `pack.unsupported_claims` adds them to the claims a draft is rewritten without. `project_kind` names a
+  project "degree work" (coursework or dissertation evidence, a module code, a `Sources/Coursework/` file),
+  "at work" (a placement, or the employer of a checked job named in it) or "personal project" (a repository
+  or project with neither), plus "team project"; the Profile block (`Project (degree work): ...`) and a
+  project's record passages (a `(Kind: ...)` line under the label) say it, and the letter, answers,
+  message and form prompts say never to change it.
 - Sources. The rules and conventions are Hal's own wording, drawn from UK careers guidance read on
   2026-11-05: Prospects (CVs, cover letters, example, academic and creative CVs), the National Careers
   Service's CV sections, Newcastle University Careers' CV booklet, GOV.UK's Success Profiles candidate

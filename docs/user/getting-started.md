@@ -92,6 +92,12 @@ you checked and your own documents. A claim it cannot find there is taken out or
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed. On a
 form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**.
 
+Hal tells the writer today's date and where you are: still studying or finished, from **When your course
+ends or ended** and the course you checked on Your record, and when you can start, from **When you can
+start** in Settings. A draft never talks about finishing a course that has already ended. Each project
+says what kind it was (part of your degree, done at work, or your own project), and a draft keeps it that
+way.
+
 Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
 English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the
 person hiring, form answers and interview notes. Hal changes a word spelt the other way (organize to

@@ -13,6 +13,10 @@ Refer to each piece of evidence by its name, never by a code. The tone is {tone}
 Rules:
 - Use only the facts given. Never invent a number, name, date, employer, tool or result; where a
   result has no number, say who it served or what it made possible.
+- Today's date and the applicant's stage are given. Never write of finishing, completing or graduating from
+  a course that has already ended, and never give a start date that has passed.
+- A project's kind is given where it is known (degree work, at work, personal project, team project).
+  Never change it: a personal project is never degree work or coursework, and degree work is never a job.
 - Add what the CV cannot say (context, motive, the link to this job); never repeat CV lines.
 - The reason for this employer must fit no other employer: name something from the advert.
 - Plain words and short sentences. No stock first line ("I am writing to express my interest"), no

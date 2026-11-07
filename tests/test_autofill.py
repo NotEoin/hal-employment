@@ -381,6 +381,14 @@ class Answers(unittest.TestCase):
         self.assertIn("never take a fact from them", next(system for system, _ in asked
                                                           if not system.startswith("Check drafts")))
 
+    def test_the_form_filler_knows_today_and_where_you_are(self):
+        self.addCleanup(settings.set, "goal.study_end", settings.get("goal.study_end") or "", by="you")
+        with mock.patch.dict("os.environ", {"HAL_EMPLOYMENT_FAKE_NOW": "2026-11-07T09:00:00Z"}):
+            settings.set("goal.study_end", "2026-06", by="you")
+            facts = autofill._facts(self.job, {}, None)
+        self.assertTrue(facts.startswith("Today: 2026-11-07\nStage: Finished "), facts[:80])
+        self.assertIn(" in 2026-06; ", facts.splitlines()[1])
+
     def test_a_salary_typed_for_one_job_is_never_offered_to_another(self):
         con = db.connect(Path(tempfile.mkdtemp()) / "jobs.db")
         self.addCleanup(con.close)

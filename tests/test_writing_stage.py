@@ -1,0 +1,105 @@
+"""Where the person is today: the stage line every writing request carries, and the kind of each project.
+
+Each test runs in its own temporary home with a fixed date. The course, employer and projects are made up.
+"""
+import os
+import tempfile
+import unittest
+from datetime import date
+from pathlib import Path
+from unittest import mock
+
+import support  # noqa: F401 - sets a temporary home before jobhunt is imported
+
+from jobhunt import db, profile
+from jobhunt.core import paths, settings
+from jobhunt.profile import store
+from jobhunt.writing import stage
+
+NOW = "2026-11-07T09:00:00Z"
+TODAY = date(2026, 11, 7)
+LETTER = "I can start in 2026 upon completing my degree. I built a made-up tide gauge."
+
+
+def ev(source: str, doc_type: str, quote: str = "") -> dict:
+    """Evidence as the ingest gives it."""
+    return {"source_rel": source, "quote": quote, "field": "", "doc_type": doc_type}
+
+
+class Stage(unittest.TestCase):
+    def setUp(self):
+        self.home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(paths.set_override(self.home))
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+        self.con = db.connect()
+        self.addCleanup(self.con.close)
+
+    def degree(self, end: str, *, checked: bool = True) -> int:
+        item = store.add_found(self.con, "education", {"qualification": "BSc", "subject": "Imaginary Studies",
+                                                       "institution": "Made-up University", "start": "2023-09",
+                                                       "end": end}, ev("Sources/Education/t.md", "transcript"))
+        if checked:
+            store.confirm(self.con, item)
+        return item
+
+    def test_a_degree_that_ended_says_finished_and_available_now(self):
+        # a letter in November 2026 offered to start "upon completing my degree", which ended in June (2026-11-06)
+        settings.set("goal.study_status", "at_uni", by="you")
+        settings.set("goal.study_end", "2026", by="you")
+        self.degree("2026-06")
+        now = stage.current(self.con)
+        self.assertEqual(now.words, "Finished BSc Imaginary Studies in 2026-06; available now")
+        self.assertEqual(stage.today_lines(now), "Today: 2026-11-07\nStage: Finished BSc Imaginary Studies in 2026-06; "
+                                           "available now.")
+
+    def test_a_degree_ending_within_a_year_is_the_final_year(self):
+        self.degree("2027-06")
+        settings.set("you.start", "date", by="you")
+        settings.set("you.start_date", "2027-07-01", by="you")
+        self.assertEqual(stage.current(self.con, TODAY).words,
+                         "Final year of BSc Imaginary Studies, finishing 2027-06; available from 2027-07-01")
+
+    def test_a_degree_fact_nobody_checked_never_decides(self):
+        self.degree("2026-06", checked=False)
+        settings.set("goal.study_status", "at_uni", by="you")
+        settings.set("goal.study_end", "2028-06", by="you")
+        settings.set("you.education.degree", "MSci", by="you")
+        settings.set("you.start", "1m", by="you")
+        settings.set("you.notice", "One month", by="you")
+        self.assertEqual(stage.current(self.con, TODAY).words,
+                         "Studying MSci, finishing 2028-06; available 1 month after an offer (notice: One month)")
+
+    def test_finishing_an_ended_course_is_found_and_a_running_one_is_not(self):
+        settings.set("goal.study_end", "2026-06", by="you")
+        self.degree("2026-06")
+        self.assertEqual(stage.ended_course(LETTER, stage.current(self.con)),
+                         ["I can start in 2026 upon completing my degree."])
+        self.assertEqual(stage.ended_course(LETTER, stage.current(self.con, date(2026, 3, 1))), [])
+
+
+class ProjectKind(unittest.TestCase):
+    def test_each_project_says_the_kind_its_evidence_shows(self):
+        kind = stage.project_kind
+        self.assertEqual(kind(["Tide gauge"], ["coursework"]), "degree work")
+        self.assertEqual(kind(["Tide gauge for IMAG2041"], ["repository"]), "degree work")
+        self.assertEqual(kind(["Sources/Coursework/Tide gauge.md"], ["report"]), "degree work")
+        self.assertEqual(kind(["Dashboard for Brightwater Tools"], ["cv"], ["Brightwater Tools"]), "at work")
+        self.assertEqual(kind(["Tide gauge", "Built at home in Lua"], ["repository"]), "personal project")
+        self.assertEqual(kind(["A group project on tides"], ["coursework"]), "degree work, team project")
+        self.assertEqual(kind(["Tide gauge"], ["cv"]), "", "no sign either way is left unsaid")
+
+    def test_the_profile_block_names_each_projects_kind(self):
+        home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(paths.set_override(home))
+        con = db.connect()
+        self.addCleanup(con.close)
+        for name, doc_type in (("Tide gauge", "repository"), ("Harbour survey", "dissertation")):
+            store.confirm(con, store.add_found(con, "project", {"name": name, "tools": ["Lua"]},
+                                               ev(f"Sources/Projects/{name}.md", doc_type)))
+        block = profile.context_block(con)
+        self.assertIn("- Project (personal project): Tide gauge. Tools: Lua", block)
+        self.assertIn("- Project (degree work): Harbour survey. Tools: Lua", block)
+
+
+if __name__ == "__main__":
+    unittest.main()

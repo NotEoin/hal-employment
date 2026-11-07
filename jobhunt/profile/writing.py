@@ -21,6 +21,8 @@ Design decisions, each with its reason:
   person's settings already hold them where they belong.
 - No line of the block is a bracketed "[file > heading]" label, because `pack.passages` counts those lines
   as record passages the letter used.
+- A project's line names its kind ("degree work", "at work", "personal project") when its evidence shows it
+  (`writing.stage.project_kind`), since a letter called a personal project degree work (2026-11-06).
 - The block is cut at a whole line when it reaches `limit`, kind by kind in `KIND_ORDER`, so the basics and
   jobs are the last to go.
 """
@@ -31,6 +33,7 @@ from contextlib import closing
 
 from jobhunt import db, record
 from jobhunt.profile import merge, store, tiers
+from jobhunt.writing import stage
 
 KIND_ORDER = ("basic", "job", "education", "project", "skill", "certificate", "achievement", "link")
 CONTACT_KEYS = {"email", "phone", "mobile", "telephone", "address"}
@@ -48,8 +51,8 @@ def _period(fields: dict) -> str:
     return f" ({words})" if words else ""
 
 
-def line(kind: str, fields: dict, quote: str = "") -> str:
-    """One item as a line of plain words for a prompt."""
+def line(kind: str, fields: dict, quote: str = "", project_kind: str = "") -> str:
+    """One item as a line of plain words for a prompt; a project names its kind when known (`project_kind`)."""
     f = fields
     if kind == "job":
         where = ", ".join(p for p in (f.get("employer"), f.get("location")) if p)
@@ -75,7 +78,8 @@ def line(kind: str, fields: dict, quote: str = "") -> str:
         out = f"Skill: {f.get('name', '')}" + (f" ({level})" if level else "")
         return out + (f'. Shown by: "{quote[:QUOTE_CHARS]}"' if quote else "")
     if kind == "project":
-        out = f"Project: {f.get('name', '')}" + (f" ({f['period']})" if f.get("period") else "")
+        out = f"Project{f' ({project_kind})' if project_kind else ''}: {f.get('name', '')}" + (
+            f" ({f['period']})" if f.get("period") else "")
         for label, key in (("", "summary"), ("Role", "role")):
             if f.get(key):
                 out += f". {label + ': ' if label else ''}{f[key]}"
@@ -104,9 +108,25 @@ def _relevance(item: dict, wanted: set[str]) -> int:
     return len(words & wanted)
 
 
+def kind_of(project: dict, employers: list[str]) -> str:
+    """A project item's kind from its fields and evidence (`writing.stage.project_kind`); "" when unknown."""
+    f, evidence = project["fields"], project.get("evidence") or []
+    texts = [f.get("name"), f.get("summary"), f.get("role"), f.get("link"), f.get("period"),
+             *(e.get("quote") for e in evidence), *(e.get("source_rel") for e in evidence)]
+    return stage.project_kind([str(t) for t in texts if t], [str(e.get("doc_type") or "") for e in evidence],
+                              employers)
+
+
+def employers(con: sqlite3.Connection) -> list[str]:
+    """The employers of the jobs the person checked, which make a project that names one work."""
+    return [it["fields"]["employer"] for it in store.items(con, "job", hidden=False)
+            if it["state"] in USED_STATES and it["fields"].get("employer")]
+
+
 def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[str]:
     out = []
     wanted = set(merge.text_key(" ".join(queries or [])).split()) - QUERY_STOP
+    worked_for = employers(con)
     for kind in KIND_ORDER:
         found = store.items(con, kind, hidden=False)
         if kind == "basic":
@@ -122,7 +142,8 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
             if kind == "basic" and it["fields"].get("key", "").lower() in CONTACT_KEYS:
                 continue
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
-            out.append("- " + line(kind, it["fields"], quote))
+            made = kind_of(it, worked_for) if kind == "project" else ""
+            out.append("- " + line(kind, it["fields"], quote, made))
     return out
 
 
