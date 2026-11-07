@@ -10,6 +10,9 @@ unsupported if it states a skill, language, project detail, number, status or ex
 that the facts do not contain, raises a role or a result beyond what the facts say (a
 team's result claimed as the applicant's own, "helped" made "led"), or adds a size the
 facts do not give.
+A tool, language or technique claimed for a named project or job must be in that project's or job's own
+facts (its card's tools and summary, or what the CV says of it). The skills list as a whole does not
+support it: "the Lua project needed C++" is unsupported when that project's facts never name C++.
 The employer's own words (the advert and the company brief) are given separately. Never
 flag a sentence for restating them: what the employer does, its products, customers,
 results and values, and what the role involves, are not claims about the applicant.

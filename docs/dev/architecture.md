@@ -419,6 +419,21 @@ runs: tests use `tests/support/fake_claude/`.
   (`profile.writing.cards`, each with its kind, tools and summary), never ranked or cut like the Profile
   block. `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that names a
   card's tool into a partial match citing the card (`project (personal project): Tide gauge (tools: AWS)`).
+- Checks with no AI on finished drafts (`writing/drafts.py`): a letter or message whose last line is a
+  sentence with no closing punctuation is asked for once more with room to finish (`pack.CUT_NOTE`, a
+  wider `ROOM_CTX`); if that one stops too it is kept to its last full sentence and listed (`CUT_FLAG`).
+  The AI layer does not say why a reply stopped, so the text is the only sign. A message whose greeting
+  names the applicant is rewritten once (`pack.to_recipient`), then given "Dear <the advert's contact>,"
+  or "Hello," if it still does. `misplaced_tools` turns a sentence that gives one project card a tool its
+  own tools, name and summary never name (but another card or a checked skill does) into an unsupported
+  claim, and the verify request lists every card with its tools so the AI checks claims per project.
+- `writing/eligibility.py`: `blockers(must_haves, person())` finds, with no AI, a degree level above the
+  person's highest (checked education and `you.education.degree`), more years than
+  `goal.experience_years`, and no sponsorship when `you.right_to_work` needs it. Each is an
+  "ELIGIBILITY: ..." line at the top of "Check before sending", which no rewrite changes. A requirement
+  that allows "or equivalent", is desirable or names a lower degree too is not plain, and an unknown level
+  says nothing. `where_you_live_settles` drops a fit gap or a fit eligibility note about the job's place
+  when the person lives in the advert's town (settings or CV), will relocate, or is happy in an office.
 - The pack's company check (`reputation.check(company, advert)`, also `jobhunt check`) keeps a Wikipedia
   article only when its title holds every word of the employer's name and it names the advert's town,
   links to the employer's own site (the advert's link or an address in its text, never a job board's), or

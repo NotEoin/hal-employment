@@ -479,6 +479,102 @@ class Fit(unittest.TestCase):
         self.assertIn("Gaps to address or accept: Spreadsheets\n", fit)
 
 
+def replying(pid: str, *replies: str, writer: FakeWriter | None = None) -> FakeWriter:
+    """A fake writer whose `pid` replies are `replies` in turn, the last one repeated."""
+    writer = writer or FakeWriter()
+    plain, left = writer.reply, list(replies)
+    writer.reply = lambda system, user: ((left.pop(0) if len(left) > 1 else left[0]) if prompt_id(system) == pid
+                                         else plain(system, user))
+    return writer
+
+
+class Drafts(unittest.TestCase):
+    def test_a_message_that_greets_the_applicant_is_rewritten_to_greet_the_recipient(self):
+        # a message opened "Hi <the applicant's first name>," (2026-11-07)
+        writer = replying("message", "Hi Marnie,\n\nI applied for the Collections Assistant role. Who leads it?",
+                          "Hello,\n\nI applied for the Collections Assistant role. Who leads it?")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        asked = writer.asked("message")
+        self.assertEqual(len(asked), 2)
+        self.assertIn('starting with "Hello,"', asked[1]["user"])
+        message = section(md, "Message to the hiring manager")
+        self.assertIn("\n\nHello,\n\nI applied for the Collections Assistant role.", message)
+        self.assertNotIn("Marnie", message)
+
+    def test_a_greeting_to_the_applicant_that_survives_the_rewrite_is_replaced(self):
+        writer = replying("message", "Hi Marnie Quillfeather,\n\nI applied for the role. Who leads the team?",
+                          writer=reading(contacts=[{"name": "Ada Penhallow"}]))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        message = section(md, "Message to the hiring manager")
+        self.assertIn("Dear Ada Penhallow,\n\nI applied for the role.", message)
+        self.assertNotIn("Hi Marnie", message)
+
+    def test_a_letter_cut_off_mid_word_is_asked_for_again_with_room_to_finish(self):
+        # a letter ended mid-word, "distingu", when the reply ran out of room (2026-11-07)
+        writer = replying("letter", "I catalogued letters at a made-up museum and I would bring the distingu",
+                          "I catalogued letters at a made-up museum.")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertIn(pack.CUT_NOTE, writer.asked("letter")[1]["user"])
+        self.assertEqual(written["text"], "I catalogued letters at a made-up museum.")
+        self.assertEqual(written["flags"], [])
+
+    def test_a_letter_cut_off_twice_keeps_its_last_full_sentence_and_says_so(self):
+        writer = replying("letter", "I catalogued letters at a made-up museum. I would bring the distingu")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(len(writer.asked("letter")), 2, "one more ask, never a loop")
+        self.assertEqual(written["text"], "I catalogued letters at a made-up museum.")
+        self.assertEqual(written["flags"], [pack.CUT_FLAG.format(what="cover letter")])
+
+    def test_a_degree_the_advert_requires_above_yours_goes_first_and_is_never_softened(self):
+        # an advert requiring a Master's or PhD was drafted for a BSc holder with no warning (2026-11-07)
+        writer = reading(must_have=["A Master's degree or PhD in History", "Writing reports"])
+        with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("you.education.degree", "BA", by="you")
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        first = section(md, "Check before sending").strip().splitlines()[0]
+        self.assertEqual(first, "- ELIGIBILITY: the advert requires a Master's degree (\"A Master's degree or PhD in "
+                                "History\"); your highest is a bachelor's degree")
+
+    def test_office_days_in_the_town_you_live_in_are_never_a_gap(self):
+        # a fit map called office attendance unmet for a person living in that city (2026-11-07)
+        writer = FakeWriter()
+        plain = writer.reply
+        writer.reply = lambda system, user: ({**plain(system, user), "gaps": [
+            "Office attendance in Made-up Town three days a week", "Spreadsheets"]}
+            if prompt_id(system) == "fit" else plain(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("you.city", "Made-up Town", by="you")
+            settings.set("you.relocate", False, by="you")
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertIn("Gaps to address or accept: Spreadsheets\n", section(md, "Fit"))
+
+    def test_a_tool_given_to_a_project_that_never_used_it_is_a_claim(self):
+        # a letter said a Lua project "required C++ and multithreading" (2026-11-07)
+        from jobhunt.profile import store
+
+        writer = FakeWriter(letter="My Tide gauge project required C++ and multithreading.")
+        with as_applicant(people.HUMANITIES, writer) as a:
+            ev = {"source_rel": "Sources/Code/Tide gauge.md", "quote": "", "field": "", "doc_type": "repository"}
+            store.confirm(a.con, store.add_found(a.con, "project", {"name": "Tide gauge", "tools": ["Lua"]}, ev))
+            store.confirm(a.con, store.add_found(a.con, "skill", {"name": "C++"}, {**ev, "source_rel": "cv.md"}))
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        claim = "My Tide gauge project required C++ and multithreading. (C++ is not among Tide gauge's tools)"
+        self.assertIn(f"- {claim}", writer.asked("letter")[1]["user"])
+        self.assertEqual(written["flags"], [f"unsupported claim: {claim}"])
+        self.assertIn("- Project (personal project): Tide gauge. Tools: Lua", writer.asked("verify")[0]["user"])
+
+
 class Checklist(unittest.TestCase):
     def test_the_checklist_never_says_to_open_a_command_line(self):
         for person in people.PEOPLE:

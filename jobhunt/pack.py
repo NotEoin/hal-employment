@@ -36,7 +36,7 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import fields, spelling, stage
+from .writing import drafts, eligibility, fields, spelling, stage
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -82,6 +82,14 @@ TONE_LABELS = {"plain": "Plain", "formal": "Formal", "warm": "Warm"}   # the set
 CHECKED_CLEAN = "Every fact is in your CV, record or the advert. No numbers were invented."
 REVISED = "Hal revised it once for its writing rules. "   # before the Checked line when the first draft broke one
 SOFTENED = "Hal rewrote it once to take out claims your facts do not support. "   # ... when it made such claims
+CUT_NOTE = "Your last reply stopped mid-sentence. Write the whole draft again, and end it with a full sentence."
+ROOM_CTX = 16384          # tokens for the second ask after a cut-off reply, as for the CV score and critique
+CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
+CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
+# The recipient's greeting when the message greeted the applicant: the advert's named person, else this.
+HELLO = "Hello,"
+GREETING_NOTE = ("Your draft greets the applicant, who is the one writing it. Greet the person it goes to "
+                 "instead, starting with \"{greeting}\", and change nothing else.")
 EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence line
 PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
 QUESTION_SHARE = 0.8      # share of a question's words the advert must hold for it to count as written out
@@ -169,8 +177,9 @@ def passages(kept: str) -> list[str]:
     return PASSAGE.findall(kept or "")
 
 
-def _fit(who: dict, analysis: dict, facts: str, kept: str) -> dict:
-    """The fit map: each requirement matched to evidence from the CV, every checked card and the record."""
+def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
+    """The fit map: each requirement matched to evidence from the CV, every checked card and the record; a
+    gap about where the job is, which where the person lives settles, is dropped (`eligibility`)."""
     conditions = "\n".join(f"- {c}" for c in analysis.get("eligibility", []))
     cards = profile_writing.cards()
     shown = profile_writing.cards_block(cards)
@@ -178,17 +187,13 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str) -> dict:
                         + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
                         + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept),
                         role="main")
-    return with_card_tools(fit, cards)
+    fit = with_card_tools(fit, cards)
+    you, towns = eligibility.person(), reputation.towns(reputation.advert_of(job))
+    return {**fit, "gaps": [g for g in fit["gaps"]
+                            if not eligibility.where_you_live_settles(str(g), you, towns, facts)]}
 
 
 NO_EVIDENCE = re.compile(r"^\s*(no|none|not)\b|\bno (evidence|mention)\b", re.I)   # a fit row that found nothing
-SHORT_TOOL = 2            # a tool this short ("R", "Go") is matched only with its own capitals
-
-
-def _names_tool(requirement: str, tool: str) -> bool:
-    flags = 0 if len(tool) <= SHORT_TOOL else re.I
-    return bool(tool.strip()) and re.search(rf"(?<![\w+#]){re.escape(tool.strip())}(?![\w+#])", requirement,
-                                            flags) is not None
 
 
 def with_card_tools(fit: dict, cards: list[dict]) -> dict:
@@ -199,7 +204,7 @@ def with_card_tools(fit: dict, cards: list[dict]) -> dict:
     """
     def card_for(requirement: str) -> str:
         for c in cards:
-            tool = next((t for t in c["tools"] if _names_tool(requirement, t)), None)
+            tool = next((t for t in c["tools"] if drafts.names_tool(requirement, t)), None)
             if tool:
                 return f"{c['kind']}: {c['name']} (tools: {tool})"
         return ""
@@ -235,8 +240,27 @@ def spelt(text: str, who: dict) -> str:
     return spelling.respell(text, who.get("spelling_code"))
 
 
-def _letter(who: dict, context: str) -> str:
-    return spelt(drop_notes(llm.undash(llm.chat(prompt("letter", who), context, role="writer").strip())), who)
+def _draft(who: dict, prompt_id: str, user: str, trimmed: set[str]) -> str:
+    """A text draft (letter or message), asked for again once with more room when the reply stops
+    mid-sentence (`drafts.cut_off`); when that one stops too it is kept to its last full sentence and added
+    to `trimmed`, so "Check before sending" can say so if it is the draft that is kept."""
+    def ask(text: str, ctx: int | None = None) -> str:
+        return spelt(drop_notes(llm.undash(llm.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx).strip())),
+                     who)
+
+    draft = ask(user)
+    if not drafts.cut_off(draft):
+        return draft
+    again = ask(f"{user}\n\n{CUT_NOTE}", ROOM_CTX)
+    if not drafts.cut_off(again):
+        return again
+    kept = drafts.last_full_sentence(again)
+    trimmed.add(kept)
+    return kept
+
+
+def _letter(who: dict, context: str, trimmed: set[str] | None = None) -> str:
+    return _draft(who, "letter", context, set() if trimmed is None else trimmed)
 
 
 def _hits(who: dict, text: str, kind: str, *, facts: str, kept: str, sources: tuple[str, ...]) -> list:
@@ -270,24 +294,31 @@ def drop_notes(text: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"\1", "\n\n".join(paras))
 
 
-def unsupported_claims(who: dict, drafts: str, *, facts: str, kept: str, employer: tuple[str, ...]) -> list[str]:
-    """The claims about the person in `drafts` that their facts do not support, as the verify prompt quotes them.
+def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employer: tuple[str, ...]) -> list[str]:
+    """The claims about the person in the drafts (`written`) that their facts do not support, as the verify
+    prompt quotes them.
 
-    The facts are the CV, the checked profile and the passages of their own documents (`kept`); the fit map
-    is not one, since the AI wrote it from the same facts. The advert and the company brief (`employer`) are
-    given as the employer's own words, never to be flagged for being restated: most of the "unsupported"
-    claims in real packs were the employer's own facts (2026-11-06). A sentence that speaks of finishing a
-    course that has ended (`stage.ended_course`) is one too, found with no AI.
+    The facts are the CV, every checked project and job card with its own tools, the checked profile and the
+    passages of their own documents (`kept`); the fit map is not one, since the AI wrote it from the same
+    facts. The advert and the company brief (`employer`) are given as the employer's own words, never to be
+    flagged for being restated: most of the "unsupported" claims in real packs were the employer's own facts
+    (2026-11-06). Two kinds are found with no AI as well: a sentence that speaks of finishing a course that
+    has ended (`stage.ended_course`), and a tool given to a project whose own facts never name it
+    (`drafts.misplaced_tools`).
     """
     now = stage.current()
+    cards = profile_writing.cards()
+    shown = profile_writing.cards_block(cards)
     words = "\n\n".join(e.strip() for e in employer if e and e.strip())
     request = (f"The employer's own words (the advert and the company brief): never flag a sentence for restating "
                f"them.\n<<<EMPLOYER\n{words}\nEMPLOYER>>>\n\nFacts about the applicant:\n{stage.today_lines(now)}\n"
-               f"CV:\n{facts}" + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept)
-               + f"\n\nDrafts:\n{drafts}")
+               f"CV:\n{facts}" + (f"\n\n{shown}" if shown else "")
+               + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept) + f"\n\nDrafts:\n{written}")
     found = llm.chat_json(prompt("verify", who), request, role="main").get("unsupported", [])
     claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
-    return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(drafts, now)]
+    known = [t for c in cards for t in c["tools"]] + profile_writing.skill_names()
+    return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(written, now)] \
+        + drafts.misplaced_tools(written, cards, known)
 
 
 def claims_note(claims: list[str]) -> str:
@@ -365,19 +396,23 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     facts = cv.facts_text()
     analysis = analysis if analysis is not None else _analyse(job, who)
     kept = kept if kept is not None else _kept(analysis)
-    fit = fit if fit is not None else _fit(who, analysis, facts, kept)
+    fit = fit if fit is not None else _fit(who, analysis, facts, kept, job)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
     if request:
         text += f"\n\nThe applicant asked for this change: {request}"
-    letter = _letter(who, text)
+    trimmed: set[str] = set()
+    letter = _letter(who, text, trimmed)
     sources = (_job_text(job), about)
     letter, revised = revise_once(letter, _hits(who, letter, "letter", facts=facts, kept=kept, sources=sources),
-                                  lambda note: _letter(who, f"{text}\n\nYour first draft:\n{letter}\n\n{note}"))
+                                  lambda note: _letter(who, f"{text}\n\nYour first draft:\n{letter}\n\n{note}",
+                                                       trimmed))
     letter, claims, softened = fix_claims(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}"
-                                                                            f"\n\n{note}"),
+                                                                            f"\n\n{note}", trimmed),
                                           facts=facts, kept=kept, employer=sources)
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
+    if letter in trimmed:
+        flags.append(CUT_FLAG.format(what=CUT_WHAT["letter"]))
     used = passages(kept)
     evidence = used or [m.get("evidence", "") for m in fit.get("matches", []) if m.get("strength") == "strong"]
     return {"text": letter, "flags": flags, "used": used, "revised": revised, "softened": softened,
@@ -408,15 +443,35 @@ def _answers(who: dict, questions: list[str], context: str, *, facts: str, kept:
     return answers, claims
 
 
-def _message(who: dict, context: str, analysis: dict, job_text: str) -> str:
+def _message(who: dict, context: str, analysis: dict, job_text: str, trimmed: set[str]) -> str:
     """The message to the person hiring, cleaned of the model's notes and of a title the advert never gives."""
-    return untitled(spelt(drop_notes(llm.undash(llm.chat(prompt("message", who), context, role="writer").strip())),
-                          who), analysis, job_text)
+    return untitled(_draft(who, "message", context, trimmed), analysis, job_text)
+
+
+def applicant_names(who: dict) -> list[str]:
+    """The names the applicant goes by in the prompts: full, first and preferred."""
+    full = str(who.get("name") or "")
+    return [n for n in dict.fromkeys((full, str(who.get("first_name") or ""), full.split()[0] if full else ""))
+            if n and n != SOMEONE]
+
+
+def to_recipient(who: dict, message: str, analysis: dict, rewrite) -> str:
+    """The message greeting the person it goes to, never the applicant: rewritten once by `rewrite(note)` when
+    its greeting names the applicant, and given the recipient's greeting if it still does."""
+    names = applicant_names(who)
+    if not drafts.greets_applicant(message, names):
+        return message
+    contacts = contact_names(analysis)
+    greeting = f"Dear {contacts[0]}," if contacts else HELLO
+    again = rewrite(GREETING_NOTE.format(greeting=greeting)) or message
+    return drafts.regreet(again, greeting) if drafts.greets_applicant(again, names) else again
 
 
 def _eligibility_flag(job, who: dict, fit: dict, conditions: list) -> str:
     # with no condition to judge, Claude still answered "eligible": false ("nothing to match", 2026-10-23)
-    if fit.get("eligible") is False and conditions:
+    if fit.get("eligible") is False and conditions and not eligibility.where_you_live_settles(
+            str(fit.get("eligibility_notes") or ""), eligibility.person(), reputation.towns(reputation.advert_of(job)),
+            cv.facts_text()):
         return f"ELIGIBILITY: {fit.get('eligibility_notes', 'may not be eligible')}"
     if who.get("not_eligible"):
         return f"ELIGIBILITY: {who.get('eligibility_line') or 'the advert may not be open to you'}"
@@ -479,15 +534,20 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
                      f"Company: {job['company']}\n\nJob advert:\n{job_text[:4000]}\n\nWeb sources:\n{web[:8000]}",
                      role="main")
     kept = _kept(analysis)
-    fit = _fit(who, analysis, facts, kept)
+    fit = _fit(who, analysis, facts, kept, job)
     written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit)
     letter = written["text"]
     context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     their_words = (job_text, about)
-    message = _message(who, context, analysis, job_text)
-    message, message_claims, _ = fix_claims(
-        who, message, lambda note: _message(who, f"{context}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text),
-        facts=facts, kept=kept, employer=their_words)
+    trimmed: set[str] = set()
+
+    def rewrite_message(note: str) -> str:
+        return _message(who, f"{context}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text, trimmed)
+
+    message = _message(who, context, analysis, job_text, trimmed)
+    message, message_claims, _ = fix_claims(who, message, rewrite_message, facts=facts, kept=kept,
+                                            employer=their_words)
+    message = to_recipient(who, message, analysis, rewrite_message)
     questions = analysis.get("questions") or []
     answers, answer_claims = _answers(who, [*questions, *COMMON_QUESTIONS],
                                       f"{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}",
@@ -498,6 +558,8 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     others = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
     flagged = written["flags"] + check_drafts(who, others, facts=facts, kept=kept, sources=their_words, kind="answer",
                                               claims=message_claims + answer_claims)
+    if message in trimmed:
+        flagged.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
     employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]
@@ -506,9 +568,10 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     history = previous_applications(con, job)
     if history:
         flagged.insert(0, f"REAPPLICATION: you applied here before: {history}")
-    eligibility = _eligibility_flag(job, who, fit, analysis.get("eligibility") or [])
-    if eligibility:
-        flagged.insert(0, eligibility)
+    plain = eligibility.blockers([*(analysis.get("must_have") or []), *(analysis.get("eligibility") or [])],
+                                 eligibility.person(con))
+    found = _eligibility_flag(job, who, fit, analysis.get("eligibility") or [])
+    flagged[:0] = plain + ([found] if found else [])   # first, and never softened by a rewrite
     if ctx is not None:
         for label in written["used"]:
             ctx.used("record", label)

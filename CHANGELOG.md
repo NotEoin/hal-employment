@@ -170,6 +170,13 @@ What changed in each version, in plain words.
   lists AWS, because only the projects that fit in the letter's notes were read. The fit table now reads
   the tools of every project and job you checked, and a requirement that names one of them is never listed
   as a gap.
+- **Clearer packs.** The message to the person hiring could greet you instead of them; it is now rewritten,
+  and starts "Hello," when the advert names no one. A letter that stopped mid-word is asked for again, and
+  if it stops again Hal keeps it to its last full sentence and says so under **Check before sending**. An
+  advert that requires a higher degree, more years of experience or the right to work without sponsorship
+  you do not have now gets an **ELIGIBILITY** line at the top of that list, while office days in the town
+  you live in, or a move you said you would make, are no longer listed as gaps. A tool given to the wrong
+  project ("the Lua project needed C++") is now caught as a claim your facts do not support.
 - **The AI's own reason when it cannot answer.** When Hal's model was switched off, commands such as
   `jobhunt pack` stopped with a long error ending in "(503)". They now say in one line what the AI said,
   such as "Hal is off; run `hal on`".

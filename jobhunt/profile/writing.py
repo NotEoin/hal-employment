@@ -228,6 +228,15 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     return out
 
 
+def skill_names(con: sqlite3.Connection | None = None) -> list[str]:
+    """The names of the skills the person checked (Hal's own database unless `con`)."""
+    if con is None:
+        with closing(db.connect()) as own:
+            return skill_names(own)
+    return [it["fields"].get("name", "") for it in store.items(con, "skill", hidden=False)
+            if it["state"] in USED_STATES and it["fields"].get("name")]
+
+
 def cards_block(found: list[dict]) -> str:
     """The cards as a block for the fit request, one line each with its tools; "" when there are none."""
     if not found:
