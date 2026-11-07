@@ -48,6 +48,11 @@ register(
     Setting("record.drop_folder", "path", "", "Drop folder for your record", group="cvdocs", machine=True,
             remote="local_only", order=170,
             help="Anything you put here is read into your record. Leave empty for the +Inbox folder in it."),
+    Setting("record.drop_origin", "choice", "mixed", "What you put in your drop folder", group="cvdocs",
+            order=175, choices=choices(("mixed", "A mix of both"), ("mine", "My own work"),
+                                       ("course", "Course material I was given")),
+            help="Hal counts your own work as yours even when it does not name you, and course material as "
+                 "what you studied."),
     Setting("record.copy_originals", "bool", True, "Keep a copy of each file Hal reads in", group="cvdocs",
             order=180, help="Copies go in Attachments in your record. Very large files are linked, not copied."),
     Setting("record.privacy_check", "bool", True, "Keep private documents out of your record", group="cvdocs",

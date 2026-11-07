@@ -5,7 +5,8 @@ is resumable) finds the batch's rows and goes on with those still pending; files
 hashed again. One file that cannot be read is an error on its own row and never stops the rest.
 
 Each document's role (`roles`: the person's own, taught, someone else's or unsure) is judged on this thread,
-which holds the database the person's names come from. Someone else's document is not filed at all and gives
+which holds the database the person's names come from, with where the person said its folder came from (the
+item's `origin`). Someone else's document is not filed at all and gives
 nothing; the others give only the facts their role may.
 
 Duplicates are found by SHA-256 against every item read before, in this batch or an earlier one: the copy
@@ -81,7 +82,10 @@ def _iso(ts: float) -> str:
 # Finding --------------------------------------------------------------------------------------
 
 class _Finder:
-    """Adds the items of one batch from its folders, zips, drop folder and pages."""
+    """Adds the items of one batch from its folders, zips, drop folder and pages.
+
+    Each item keeps where the person said its folder came from (`origin_of`, `roles.ORIGINS`).
+    """
 
     def __init__(self, con: sqlite3.Connection, batch: str) -> None:
         self.con, self.batch = con, batch
@@ -89,7 +93,8 @@ class _Finder:
         self.left_out: dict[str, int] = {}
         self.zips = 0
 
-    def walk(self, root: Path, prefix: str | None = None) -> None:
+    def walk(self, root: Path, prefix: str | None = None,
+             origin_of: Callable[[Path], str] = lambda _path: roles.MIXED) -> None:
         walked = discover.walk(root, prefix)
         for why, n in walked.left_out.items():
             self.left_out[why] = self.left_out.get(why, 0) + n
@@ -99,18 +104,18 @@ class _Finder:
         for repo in sorted(repos):
             shown = top if repo == root else f"{top}/{repo.relative_to(root).as_posix()}"
             items.add(self.con, self.batch, path=str(repo), rel=shown, kind="repo", rank=rank.REPO.rank,
-                      category=rank.REPO.category, doc_type=rank.REPO.doc_type)
+                      category=rank.REPO.category, doc_type=rank.REPO.doc_type, origin=origin_of(repo))
         loose = [f for f in walked.files if group.repo_of(f.path, repos) is None]
         zips = [f for f in loose if f.path.suffix.lower() == ".zip"]
         for z in zips:
-            self.unzip(z.path, z.rel)
+            self.unzip(z.path, z.rel, origin_of(z.path))
         files = [f for f in loose if f not in zips]
         courses = group.courses([(f.path, f.rel) for f in files])
         unit_of = {path: folder for folder, members in courses.items() for path, _ in members}
         for folder in sorted(courses):
             items.add(self.con, self.batch, path=str(folder), rel=rel_of[courses[folder][0][0]].rsplit("/", 1)[0],
                       kind="course", rank=rank.COURSE.rank, category=rank.COURSE.category,
-                      doc_type=rank.COURSE.doc_type)
+                      doc_type=rank.COURSE.doc_type, origin=origin_of(folder))
         for f in files:
             if str(f.path) in self.seen:
                 continue
@@ -118,19 +123,21 @@ class _Finder:
             rule = rank.rule_for(f.rel, f.path)
             items.add(self.con, self.batch, path=str(f.path), rel=f.rel, unit=str(unit_of[f.path])
                       if f.path in unit_of else None, size=f.size, sha256=f.sha256, mtime=_iso(f.mtime),
-                      magic=f.magic, rank=rule.rank, category=rule.category, doc_type=rule.doc_type, state=f.state)
+                      magic=f.magic, rank=rule.rank, category=rule.category, doc_type=rule.doc_type, state=f.state,
+                      origin=origin_of(f.path))
             self.con.commit()
 
-    def unzip(self, zip_path: Path, shown: str) -> None:
+    def unzip(self, zip_path: Path, shown: str, origin: str = roles.MIXED) -> None:
         self.zips += 1
         dest = sources.unpacked_dir(self.batch) / f"{self.zips}-{notes.slug(zip_path.stem)}"
         if not dest.exists():
             report = sources.unpack(zip_path, dest, label=shown)
             for problem in report.problems():
-                item = items.add(self.con, self.batch, path=f"{zip_path}!{problem}", rel=shown, state="error")
+                item = items.add(self.con, self.batch, path=f"{zip_path}!{problem}", rel=shown, state="error",
+                                 origin=origin)
                 items.update(self.con, item, error=problem)
             self.con.commit()
-        self.walk(dest, shown)
+        self.walk(dest, shown, lambda _path: origin)
 
     def pages(self, urls: list[str]) -> list[str]:
         """Fetches web links through `ingest.web` when it is there; the problems, in words."""
@@ -155,22 +162,29 @@ class _Finder:
         return []
 
 
-def find(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bool = False, urls=()) -> dict:
-    """Adds every item of the batch's inputs; returns what was left out and any problems, in words."""
+def find(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bool = False, urls=(),
+         origins: dict | None = None) -> dict:
+    """Adds every item of the batch's inputs; returns what was left out and any problems, in words.
+
+    `origins` maps a folder or upload, as given, to where the person said it came from (`roles.ORIGINS`);
+    one not in it is a mix. The drop folder's files come from `sources.drop_origin`.
+    """
     f = _Finder(con, batch)
     problems = []
     for given in [*folders, *uploads]:
         path = Path(given).expanduser()
+        origin = roles.origin_of((origins or {}).get(str(given)))
         if not path.exists():
             problems.append(f"{path} is not there any more.")
         elif path.is_file() and path.suffix.lower() == ".zip":
-            f.unzip(path, path.name)
+            f.unzip(path, path.name, origin)
         else:
-            f.walk(path)
+            f.walk(path, origin_of=lambda _path, origin=origin: origin)
     if drop:
         folder = sources.drop_folder()
         if folder.is_dir():
-            f.walk(folder)
+            dropped = sources.drop_origin()
+            f.walk(folder, origin_of=lambda _path: dropped)
     if urls:
         problems += f.pages(list(urls))
     con.commit()
@@ -222,7 +236,8 @@ def _judge(con: sqlite3.Connection, row: sqlite3.Row, desc: dict, text: str) -> 
     words = roles.identity(understand.owner(), str(settings.get("you.other_names") or ""), con,
                            own=roles.own_links())
     role = roles.decide(desc.get("said"), doc_type=desc["doc_type"], text=f"{row['rel']}\n{text}", words=words,
-                        in_course=bool(row["unit"]), author=str(desc.get("author") or ""))
+                        in_course=bool(row["unit"]), author=str(desc.get("author") or ""),
+                        origin=row["origin"] or roles.MIXED)
     desc["role"], desc["about_owner"] = role, roles.ABOUT_OWNER[role]
     if role == roles.TAUGHT:
         desc["summary"] = lectures.scrub(desc["summary"])
@@ -584,15 +599,17 @@ def drop_has_new(con: sqlite3.Connection) -> bool:
 
 
 def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bool = False, urls=(),
-        again: bool = False, tidy: bool = False, step: Callable[[str], None], progress: Progress) -> dict:
+        again: bool = False, tidy: bool = False, step: Callable[[str], None], progress: Progress,
+        origins: dict | None = None) -> dict:
     """The whole ingest of one batch; returns its counts, what was left out and the problems found.
 
     With `again`, the batch is the notes written by rules from documents, read now by the AI (`mark_again`);
     on a carry-on after a restart they are already in the batch. With `tidy`, the record is held to today's
     rules (`tidy.prepare`, once), the notes it asks to be read again are read, and `tidy.finish` cleans up.
+    `origins` says where the folders and uploads came from (`find`).
     """
     step("Finding your files")
-    found = find(con, batch, folders=folders, uploads=uploads, drop=drop, urls=urls)
+    found = find(con, batch, folders=folders, uploads=uploads, drop=drop, urls=urls, origins=origins)
     if again and not items.pending(con, batch):
         mark_again(con, batch)
     tidied = {}

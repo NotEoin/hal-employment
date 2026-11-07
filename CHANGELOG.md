@@ -30,6 +30,10 @@ What changed in each version, in plain words.
   when they name who made them.
   Your email and the usernames in your links in Settings name you, and you can add a student number
   under **Other names you go by** so Hal knows a file is yours.
+- **Say what a folder holds.** When you add a folder or zip, choose **My own work**, **Course material I
+  was given** or **A mix of both**. Your coursework, drafts and reports in a folder of your own work count
+  as yours even when they do not name you, and a folder of course material only shows what you studied.
+  The drop folder has the same choice in Settings, and `jobhunt ingest` takes `--mine` and `--course`.
 - **The newest copy of each project.** When a folder holds several copies of one code project ("Robot",
   "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same

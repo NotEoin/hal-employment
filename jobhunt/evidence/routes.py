@@ -123,12 +123,21 @@ def _free_name(folder: Path, name: str) -> Path:
 
 @route("POST", "/api/v2/record/files", max_body=UPLOAD_MAX_BODY)
 def add_files(req) -> dict:
-    """Copies uploaded files into the record's Inbox and starts reading the folder; a zip starts an ingest."""
+    """Copies uploaded files into the record's Inbox and starts reading the folder; a zip starts an ingest.
+
+    The form's `origin` says where a zip's files came from (`ingest.roles.ORIGINS`); a mix of both when
+    absent. Other files join the record's own Inbox, which the record reads as it is.
+    """
     from jobhunt.ingest import actions as ingest_actions
-    from jobhunt.ingest import sources
+    from jobhunt.ingest import roles, sources
 
     if not req.files:
         raise BadRequest("Choose one or more files to add.")
+    try:
+        origin = roles.origin_of((req.body or {}).get("origin") if isinstance(req.body, dict) else None)
+    except ValueError as e:
+        raise BadRequest("Say whether the files are your own work, course material or a mix of both.",
+                         field="origin") from e
     folder = Path(record._live("VAULT"))
     if not folder.exists():
         raise BadRequest("Your record folder is not there yet. Make it first.")
@@ -147,7 +156,8 @@ def add_files(req) -> dict:
     out = {"added": added, "action_id": _start_sync(req) if len(zips) < len(added) else None}
     if zips:
         try:
-            out["ingest_id"] = ingest_actions.queue(uploads=zips, session_id=_session(req), remote=req.remote,
+            out["ingest_id"] = ingest_actions.queue(uploads=zips, origins={str(z): origin for z in zips},
+                                                    session_id=_session(req), remote=req.remote,
                                                     why="You added a zip of files to your record")
         except RuntimeError as e:
             for z in zips:

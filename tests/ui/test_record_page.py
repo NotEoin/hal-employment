@@ -359,6 +359,23 @@ class RecordPage(unittest.TestCase):
         self.assertEqual(away.page.get_by_label("Folders on this computer").count(), 0)
         self.assertEqual(self.errors(away), [])
 
+    def test_folders_of_their_own_work_are_read_as_theirs(self) -> None:
+        folder = self.hal.home / "Dissertation"
+        folder.mkdir(parents=True, exist_ok=True)
+        queued = []
+        self.enterContext(mock.patch.object(ingest_actions, "queue",
+                                            side_effect=lambda **kw: queued.append(kw) or "ing2"))
+        p = self.page()
+        choice = p.page.get_by_role("radiogroup", name="What are you adding?")
+        p.shows(choice, "the choice of where the files came from")
+        self.assertEqual(choice.get_by_role("radio", name="A mix of both").get_attribute("aria-checked"), "true")
+        choice.get_by_role("radio", name="My own work").click()
+        p.page.get_by_label("Folders on this computer").fill(str(folder))
+        p.page.get_by_role("button", name="Read these folders").click()
+        p.shows(p.page.get_by_text("Hal is reading the folders into your record."), "the toast")
+        self.assertEqual(queued[0]["origins"], {str(folder.resolve()): "mine"})
+        self.assertEqual(self.errors(p), [])
+
     def test_asking_shows_the_answer_and_the_files_it_came_from(self) -> None:
         p = self.page("record-files")
         with fake_ai({"record_ask": ANSWER}):

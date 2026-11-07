@@ -499,7 +499,12 @@ runner starts the action again with the same batch and only pending items are re
    `<data>/ingest/unpacked/<batch>/`: names that are absolute or climb out with `..` are refused, links
    skipped, members counted as they are copied against a per-file and a per-zip cap (stated sizes can lie),
    encrypted members named, and zips inside zips unpacked to depth 3. Each refusal is an item in state
-   `error`.
+   `error`. Each item's `origin` (migration 0024) is where the person said its folder or zip came from:
+   `mine`, `course` or `mixed` (`roles.ORIGINS`, default `mixed`). The folder route takes each of `folders`
+   as a path or `{path, origin}`, the upload route a form field `origin` for its zips, the drop folder
+   `record.drop_origin`, and `jobhunt ingest` `--mine DIR` and `--course DIR` beside its plain folders;
+   the action keeps the non-mixed ones in its `origins` param. The row keeps it when it is read again or
+   tidied.
 2. **Discover** (`discover.py`). Size, SHA-256 and the kind by the first bytes. Junk folders (`.git`,
    virtual environments, `node_modules`, caches, and build folders inside a repository) are never entered;
    weights, programs, databases and fonts are left out by name. So are hidden folders and files, an AI
@@ -547,7 +552,11 @@ runner starts the action again with the same batch and only pending items are re
    person; its "own" holds only when the text or path names the person (`roles.identity`: `you.name`'s
    parts, `you.other_names`, and usernames and emails from links and basics their CVs and letters gave). A
    repository's text lists its committers and remotes from `.git/logs/HEAD` and `.git/config`. Without the
-   AI, slides and a course unit's files are `taught`, the rest `unsure`. `roles.allowed` keeps the facts
+   AI, slides and a course unit's files are `taught`, the rest `unsure`. That is the `mixed` origin. For
+   `mine`, the AI's own needs no name, its unsure is own unless the doc type is slides or a course page,
+   and without the AI the work types (`roles.WORK_TYPES`: coursework, report, project, dissertation, essay,
+   writing, repository) are own and the rest unsure. For `course`, everything is taught except what the AI
+   calls own and the text names. Someone else's keeps its rule for every origin. `roles.allowed` keeps the facts
    each role may give: everything for `own` (contact details and links only from a CV or a letter), skills
    for `taught`, nothing otherwise. An `others` document gets state `not_mine` and the error column
    `made by <author>`: no note, no copy, no facts, and `items.summary` names the first few with their maker.

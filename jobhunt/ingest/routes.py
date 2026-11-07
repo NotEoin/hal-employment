@@ -14,7 +14,7 @@ from pathlib import Path
 
 from jobhunt import record
 from jobhunt.core import paths
-from jobhunt.ingest import actions, items, privacy
+from jobhunt.ingest import actions, items, privacy, roles
 from jobhunt.web.router import BadRequest, NotFound, route
 
 FOLDERS_MAX = 20           # paths in one request; a longer list is a mistake, not a person's choice
@@ -32,16 +32,35 @@ def _inside(path: Path, folder: Path) -> bool:
     return path == folder or folder in path.parents
 
 
+def _folder(entry) -> tuple[str, str]:
+    """One entry of `folders`: a path (a mix), or `{"path", "origin"}`; returns (path, origin)."""
+    if isinstance(entry, dict):
+        raw, origin = entry.get("path"), entry.get("origin")
+    else:
+        raw, origin = entry, roles.MIXED
+    if not isinstance(raw, str) or not raw.strip():
+        raise BadRequest("Choose one or more folders to read.", field="folders")
+    try:
+        return raw, roles.origin_of(origin)
+    except ValueError as e:
+        raise BadRequest("Say whether the folder is your own work, course material or a mix of both.",
+                         field="folders") from e
+
+
 @route("POST", "/api/v2/record/ingest", auth="session_or_local", local_only=True)
 def start(req) -> dict:
-    """Starts reading the folders (or files and zips) at the given paths into the record."""
+    """Starts reading the folders (or files and zips) at the given paths into the record.
+
+    Each of `folders` is a path, or `{"path", "origin"}` with where the person said it came from
+    (`roles.ORIGINS`); a bare path is a mix of both.
+    """
     given = (req.body or {}).get("folders")
-    if not isinstance(given, list) or not given or not all(isinstance(p, str) and p.strip() for p in given):
+    if not isinstance(given, list) or not given:
         raise BadRequest("Choose one or more folders to read.", field="folders")
     if len(given) > FOLDERS_MAX:
         raise BadRequest(f"Choose at most {FOLDERS_MAX} folders at a time.", field="folders")
-    chosen = []
-    for raw in given:
+    chosen, origins = [], {}
+    for raw, origin in map(_folder, given):
         path = Path(raw.strip()).expanduser().resolve()
         if not path.exists():
             raise BadRequest(f"{raw} is not there. Choose a folder that exists.", field="folders")
@@ -49,9 +68,10 @@ def start(req) -> dict:
             raise BadRequest(f"{raw} is inside your record or Hal's own folder, so Hal already has it.",
                              field="folders")
         chosen.append(str(path))
+        origins[str(path)] = origin
     try:
-        action_id = actions.queue(folders=chosen, session_id=getattr(req.session, "id", None), remote=req.remote,
-                                  why="You chose folders to read into your record")
+        action_id = actions.queue(folders=chosen, origins=origins, session_id=getattr(req.session, "id", None),
+                                  remote=req.remote, why="You chose folders to read into your record")
     except RuntimeError as e:
         raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
     return {"action_id": action_id}

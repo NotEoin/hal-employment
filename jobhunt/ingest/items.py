@@ -27,13 +27,17 @@ KIND = "record.ingest"
 
 def add(con: sqlite3.Connection, batch: str, *, path: str, rel: str, kind: str = "file", unit: str | None = None,
         size: int | None = None, sha256: str = "", mtime: str = "", magic: str = "", rank: int | None = None,
-        category: str = "", doc_type: str = "", state: str = "pending") -> int:
-    """Adds one item to `batch` (or finds it, when this batch already has the path); returns its id."""
+        category: str = "", doc_type: str = "", state: str = "pending", origin: str = "mixed") -> int:
+    """Adds one item to `batch` (or finds it, when this batch already has the path); returns its id.
+
+    `origin` is where the person said the folder holding it came from (`roles.ORIGINS`).
+    """
     at = clock.iso()
     con.execute("""INSERT OR IGNORE INTO ingest_items (batch, path, rel, kind, unit, size, sha256, mtime, magic,
-                       rank, category, doc_type, stage, state, created, updated)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'discovered', ?, ?, ?)""",
-                (batch, path, rel, kind, unit, size, sha256, mtime, magic, rank, category, doc_type, state, at, at))
+                       rank, category, doc_type, stage, state, created, updated, origin)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'discovered', ?, ?, ?, ?)""",
+                (batch, path, rel, kind, unit, size, sha256, mtime, magic, rank, category, doc_type, state, at, at,
+                 origin))
     item_id = con.execute("SELECT id FROM ingest_items WHERE batch = ? AND path = ?", (batch, path)).fetchone()[0]
     if sha256 and con.execute("""SELECT 1 FROM ingest_items WHERE sha256 = ? AND allowed = 1 AND id != ?
                                  AND (path = ? OR rel = ?) LIMIT 1""", (sha256, item_id, path, rel)).fetchone():

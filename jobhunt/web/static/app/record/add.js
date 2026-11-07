@@ -5,13 +5,15 @@
    another computer (the route is local only); there, files and zips arrive as uploads. The progress card
    follows the `record.ingest` action: its events and a `profile` event reload it, and while it runs it is
    also asked again every few seconds, because counting files read adds no step and so sends no event.
-   Files kept out because they look private are listed by name and reason only, each with "Add it anyway". */
+   Files kept out because they look private are listed by name and reason only, each with "Add it anyway".
+   The person says once, above both, whether the folders and zips they add are their own work, course
+   material or a mix; files dropped on their own go into the record's Inbox, which the record reads as it is. */
 import { html, useState, useEffect } from "../core/html.js";
 import { api, post } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
 import { plural } from "../core/format.js";
 import { isRemote } from "../core/remote.js";
-import { Bar, Chip, Note } from "../ui/controls.js";
+import { Bar, Chip, Note, Seg } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 
 const INGEST = "/record/ingest";
@@ -29,6 +31,8 @@ const LEFT_OUT_WORDS = { "junk folder": "hidden folders and folders of program f
   "program or data file": "programs and data files", "settings or tool file": "settings files and bundled code",
   unreadable: "files Hal could not open" };
 const RUNNING = new Set(["queued", "running"]);
+// Where the files came from (ingest/roles.py ORIGINS), in the person's own words; a mix is the default.
+const ORIGINS = [["mine", "My own work"], ["course", "Course material I was given"], ["mixed", "A mix of both"]];
 let following = null;       // the ingest action on screen, whose steps reload the card
 
 /** Seconds left in plain words: "About 4 minutes left". */
@@ -43,12 +47,13 @@ export function etaWords(s) {
 
 const lines = text => text.split(/\s*\n\s*/).map(s => s.trim()).filter(Boolean);
 
-function Drop() {
+function Drop({ origin }) {
   const [over, setOver] = useState(false);
   const send = async list => {
     const files = [...(list || [])];
     if (!files.length) return;
     const form = new FormData();
+    form.append("origin", origin);
     files.forEach((f, i) => form.append("file" + i, f, f.name));
     try {
       const out = await api("POST", "/record/files", form);
@@ -66,7 +71,7 @@ function Drop() {
       onChange=${e => { send(e.target.files); e.target.value = ""; }} /></label>`;
 }
 
-function Paste({ id, label, hint, button, path, field, said }) {
+function Paste({ id, label, hint, button, path, field, said, each = s => s }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const go = async e => {
@@ -74,7 +79,7 @@ function Paste({ id, label, hint, button, path, field, said }) {
     const list = lines(text);
     if (!list.length) { toast(hint); return; }
     setBusy(true);
-    try { await post(path, { [field]: list }); setText(""); toast(said); invalidate(INGEST); }
+    try { await post(path, { [field]: list.map(each) }); setText(""); toast(said); invalidate(INGEST); }
     catch (err) { toast(err.message); }
     setBusy(false);
   };
@@ -86,11 +91,16 @@ function Paste({ id, label, hint, button, path, field, said }) {
 
 /** The "Add to your record" card. */
 export function AddCard() {
+  const [origin, setOrigin] = useState("mixed");
   return html`<section class="card stack s" aria-labelledby="rec-add-h"><h2 class="h2" id="rec-add-h">Add to your record</h2>
-    <${Drop} />
+    <div class="rec-origin"><div class="lab" aria-hidden="true">What are you adding?</div>
+      <${Seg} label="What are you adding?" value=${origin} options=${ORIGINS} onChange=${setOrigin} />
+      <p class="small sub">For folders and zips. Hal counts your own work as yours even when it does not name you, and course material as what you studied.</p></div>
+    <${Drop} origin=${origin} />
     ${!isRemote() && html`<${Paste} id="rec-folders" label="Folders on this computer"
       hint="Type or paste where each folder is, one a line. You can copy it from the top of the folder's window. Hal reads everything inside."
-      button="Read these folders" path=${INGEST} field="folders" said="Hal is reading the folders into your record." />`}
+      button="Read these folders" path=${INGEST} field="folders" each=${path => ({ path, origin })}
+      said="Hal is reading the folders into your record." />`}
     <${Paste} id="rec-links" label="Web links"
       hint="Paste links to your own website or blog, your GitHub page, or a Google Doc shared with anyone, one a line."
       button="Read these links" path="/record/links" field="urls" said="Hal is reading the links into your record." /></section>`;

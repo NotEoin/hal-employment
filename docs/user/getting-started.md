@@ -179,6 +179,19 @@ downloaded as a zip, a folder of certificates.
 - **Web links**: paste your own site or blog, your GitHub page, or a Google Doc shared with anyone under
   **Web links**, one a line, and press **Read these links**.
 
+Before you add a folder or a zip, choose what it holds under **What are you adding?**. This tells Hal whose
+the files are, even when they do not have your name on them:
+
+- **My own work**: your coursework, reports, projects and drafts count as yours. Slides and module pages in
+  the folder still count as course material.
+- **Course material I was given**: everything counts as course material, except a file with your name on it
+  that the AI reads as your own work, such as your submission saved with a module's files.
+- **A mix of both** (the default): Hal decides file by file, as described below.
+
+For the drop folder, choose in **What you put in your drop folder** in Settings, CV and documents. From a
+terminal, `python -m jobhunt ingest --mine FOLDER --course FOLDER` does the same; a folder given without
+either is a mix of both.
+
 While Hal reads, the Overview shows a bar with how many files are read, about how long is left, the file in
 hand, what kinds of document it found, and any files it could not read. **Stop** keeps what was read so far.
 
@@ -241,8 +254,8 @@ Hal sorts every document by whose it is, and that decides what it can learn from
   as its maker, and not name you, to count: a file that names no one stays in your record, but Hal takes
   no facts from it.
 
-Hal only counts a document as yours when it names you: your name, your email, or a username from your
-GitHub or LinkedIn link in **Settings > You**. If your files use another name for you, such as a student
+Unless it came from a folder you said holds your own work, Hal only counts a document as yours when it
+names you: your name, your email, or a username from your GitHub or LinkedIn link in **Settings > You**. If your files use another name for you, such as a student
 number, add it under **Settings > You > Other names you go by**.
 
 ### Tidying your record

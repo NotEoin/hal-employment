@@ -10,6 +10,9 @@ Zips are unpacked under the data folder, never beside the zip, and treated as ho
   the member is dropped and named in the report;
 - encrypted members are named, never guessed at;
 - a zip inside a zip is unpacked in place, down to `ZIP_DEPTH_MAX` levels; deeper ones are named.
+
+The drop folder's files are a mix of the person's own work and course material unless the person said
+otherwise in Settings (`record.drop_origin`).
 """
 from __future__ import annotations
 
@@ -73,6 +76,14 @@ def drop_folder() -> Path:
 
     chosen = str(settings.get("record.drop_folder") or "").strip()
     return Path(chosen).expanduser() if chosen else Path(record._live("VAULT")) / DROP_DEFAULT
+
+
+def drop_origin() -> str:
+    """Where the drop folder's files come from, as the person said in `record.drop_origin` (`roles.ORIGINS`)."""
+    from jobhunt.core import settings
+    from jobhunt.ingest import roles
+
+    return roles.origin_of(settings.get("record.drop_origin"))
 
 
 def safe_member(name: str) -> PurePosixPath | None:

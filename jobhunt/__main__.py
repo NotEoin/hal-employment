@@ -89,7 +89,10 @@ def main():
     s.add_argument("op", nargs="?", default="status", choices=["status", "sync", "search", "ask"])
     s.add_argument("text", nargs="*"); s.set_defaults(fn=cmd_record)
     s = sub.add_parser("ingest", help="read whole folders into the record in the running Hal")
-    s.add_argument("folders", nargs="*")
+    s.add_argument("folders", nargs="*", help="folders holding a mix of your own work and course material")
+    s.add_argument("--mine", action="append", default=[], metavar="DIR", help="a folder of your own work")
+    s.add_argument("--course", action="append", default=[], metavar="DIR",
+                   help="a folder of course material you were given")
     s.add_argument("--again", action="store_true",
                    help="read with the AI the documents an earlier ingest filed by rules alone")
     s.add_argument("--tidy", action="store_true",

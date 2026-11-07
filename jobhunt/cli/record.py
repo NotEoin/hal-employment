@@ -2,7 +2,7 @@
 
 `ingest FOLDER...` asks the running Hal to read the folders (with the local API key), so a long ingest
 runs where Your record shows its progress, then follows it here until it ends; Ctrl+C stops following, not
-the ingest.
+the ingest. `--mine DIR` and `--course DIR` name folders of the person's own work and of course material.
 
 The bodies moved unchanged from `jobhunt/__main__.py`; the parser, its arguments and help stay there,
 because the voice bridge and the /jobs command parse what these commands print.
@@ -38,20 +38,25 @@ def _hal(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
         con.close()
 
 
-def ingest(folders: list[str], again: bool = False, tidy: bool = False) -> None:
+def ingest(folders: list[str], again: bool = False, tidy: bool = False, mine: list[str] = (),
+           course: list[str] = ()) -> None:
     """Starts an ingest of `folders` in the running Hal and prints its progress until it ends.
 
-    `again` instead reads with the AI the documents an earlier ingest filed by rules alone; `tidy` holds
-    everything already in the record to today's rules, after a backup.
+    `folders` hold a mix of the person's own work and course material, `mine` their own work and `course`
+    course material they were given. `again` instead reads with the AI the documents an earlier ingest filed
+    by rules alone; `tidy` holds everything already in the record to today's rules, after a backup.
     """
-    if sum(map(bool, (folders, again, tidy))) != 1:
+    given = [(f, "mixed") for f in folders] + [(f, "mine") for f in mine] + [(f, "course") for f in course]
+    folders = [f for f, _ in given]
+    if sum(map(bool, (given, again, tidy))) != 1:
         sys.exit("ingest: give one or more folders to read, or --again, or --tidy")
     try:
         if again or tidy:
             status, out = _hal("POST", f"/api/v2/record/ingest/{'again' if again else 'tidy'}", {})
         else:
             status, out = _hal("POST", "/api/v2/record/ingest",
-                               {"folders": [str(Path(f).resolve()) for f in folders]})
+                               {"folders": [{"path": str(Path(f).resolve()), "origin": origin}
+                                            for f, origin in given]})
     except (OSError, ValueError) as e:
         sys.exit(f"ingest: Hal is not running here ({e}); start it, then try again")
     if status != 200:
@@ -73,7 +78,7 @@ def ingest(folders: list[str], again: bool = False, tidy: bool = False) -> None:
 
 def cmd_ingest(args):
     """Handles `jobhunt ingest`: reads whole folders into the record in the running Hal."""
-    ingest(args.folders, again=args.again, tidy=args.tidy)
+    ingest(args.folders, again=args.again, tidy=args.tidy, mine=args.mine, course=args.course)
 
 
 def cmd_record(args):

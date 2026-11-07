@@ -1,10 +1,12 @@
 $ jobhunt ingest --help
-usage: jobhunt ingest [-h] [--again] [--tidy] [folders ...]
+usage: jobhunt ingest [-h] [--mine DIR] [--course DIR] [--again] [--tidy] [folders ...]
 
 positional arguments:
-  folders
+  folders       folders holding a mix of your own work and course material
 
 options:
-  -h, --help  show this help message and exit
-  --again     read with the AI the documents an earlier ingest filed by rules alone
-  --tidy      back up, then hold everything already in the record to today's rules
+  -h, --help    show this help message and exit
+  --mine DIR    a folder of your own work
+  --course DIR  a folder of course material you were given
+  --again       read with the AI the documents an earlier ingest filed by rules alone
+  --tidy        back up, then hold everything already in the record to today's rules

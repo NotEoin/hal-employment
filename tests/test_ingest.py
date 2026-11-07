@@ -5,12 +5,14 @@ invented. The AI is the fake one, answering the `ingest_doc` prompt with canned 
 """
 import contextlib
 import functools
+import http.client
 import io
 import json
 import tempfile
 import threading
 import time
 import unittest
+import uuid
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -784,6 +786,124 @@ class ReadingEverything(unittest.TestCase):
         self.assertLessEqual(most[0], 3)
 
 
+DRAFT = "# Tidal flats of the made-up bay\n\nChapter 2. Method: transects walked at low tide, 2023."
+DRAFT_REPLY = {**REPLY, "doc_type": "dissertation", "category": "Coursework", "title": "Tidal flats draft",
+               "role": "unsure", "facts": [{"kind": "project", "fields": {"name": "Tidal flats survey"},
+                                            "field": "name", "quote": "transects walked at low tide"}]}
+
+
+class Origins(unittest.TestCase):
+    """Where the person said a folder came from settles whose its documents are (`roles.ORIGINS`).
+
+    On a real dump, dissertation drafts, a poster and practicals naming no one were all unsure (2026-11-06).
+    """
+
+    def test_a_folder_of_their_own_work_counts_as_theirs_without_naming_them(self):
+        words = roles.identity(OWNER)
+        mine = functools.partial(roles.decide, text=DRAFT, words=words, origin=roles.MINE)
+        self.assertEqual(mine("own", doc_type="dissertation"), "own", "no name needed")
+        self.assertEqual(mine("unsure", doc_type="dissertation"), "own")
+        self.assertEqual(mine("unsure", doc_type="slides"), "unsure", "slides are course material by kind")
+        self.assertEqual(mine("taught", doc_type="notes"), "taught")
+        self.assertEqual(mine(None, doc_type="report"), "own", "a work kind without the AI")
+        self.assertEqual(mine(None, doc_type="repository"), "own")
+        self.assertEqual(mine(None, doc_type="notes"), "unsure")
+        other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
+        self.assertEqual(roles.decide("others", doc_type="cv", text=other, words=words, author="Morwenna Tregarth",
+                                      origin=roles.MINE), "others", "someone else's keeps its rule")
+        self.assertEqual(mine("others", doc_type="report", author=""), "unsure")
+
+    def test_course_material_is_taught_unless_it_is_their_own_named_submission(self):
+        words = roles.identity(OWNER)
+        course = functools.partial(roles.decide, words=words, origin=roles.COURSE)
+        self.assertEqual(course("own", doc_type="report", text=DRAFT), "taught", "own needs their name here")
+        self.assertEqual(course("own", doc_type="report", text=f"Submitted by {OWNER}\n{DRAFT}"), "own")
+        self.assertEqual(course("unsure", doc_type="report", text=DRAFT), "taught")
+        self.assertEqual(course(None, doc_type="report", text=DRAFT), "taught")
+        other = CV_TEXT.replace(OWNER, "Morwenna Tregarth")
+        self.assertEqual(course("others", doc_type="cv", text=other, author="Morwenna Tregarth"), "others")
+        self.assertEqual(course("others", doc_type="cv", text=other, author=""), "taught")
+
+    def test_a_mix_keeps_the_rules_of_before(self):
+        words = roles.identity(OWNER)
+        for said, doc_type, want in (("own", "dissertation", "unsure"), ("unsure", "dissertation", "unsure"),
+                                     (None, "report", "unsure"), (None, "slides", "taught")):
+            with self.subTest(said=said, doc_type=doc_type):
+                self.assertEqual(roles.decide(said, doc_type=doc_type, text=DRAFT, words=words), want)
+        self.assertEqual(roles.origin_of(None), "mixed")
+        with self.assertRaises(ValueError):
+            roles.origin_of("theirs")
+
+    def test_a_draft_naming_no_one_in_their_own_folder_gives_its_facts(self):
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(DRAFT_REPLY)}):
+            settings.set("you.name", OWNER)
+            mine, mixed = files / "Dissertation", files / "Downloads"
+            put(mine, "Draft 2 dissertation.md", DRAFT)
+            put(mixed, "Dissertation draft.md", DRAFT.replace("2023", "2022"))
+            run(con, [mine, mixed], origins={str(mine): "mine"})
+            got = rows(con)
+            kinds = [r[0] for r in con.execute("SELECT kind FROM profile_items")]
+        self.assertEqual((got["Dissertation/Draft 2 dissertation.md"]["origin"],
+                          got["Dissertation/Draft 2 dissertation.md"]["role"]), ("mine", "own"))
+        self.assertEqual((got["Downloads/Dissertation draft.md"]["origin"],
+                          got["Downloads/Dissertation draft.md"]["role"]), ("mixed", "unsure"))
+        self.assertEqual(kinds, ["project"])
+
+    def test_where_a_file_came_from_stays_with_it_when_it_is_read_again(self):
+        with home() as (con, _vault, files):
+            with fake_ai({}):
+                put(files, "Labs/week 3 notes.md", "# Rivers\n\nMeanders and oxbow lakes, 2022 fieldwork.")
+                run(con, [files], origins={str(files): "course"})
+            self.assertEqual(rows(con)["Files/Labs/week 3 notes.md"]["role"], "taught")
+            with fake_ai({"ingest_doc": json.dumps({**NOTE_REPLY, "role": "own"})}):
+                run(con, [], batch="b2", again=True)
+            row = rows(con, "b2")["Files/Labs/week 3 notes.md"]
+        self.assertEqual((row["origin"], row["role"], row["model"]), ("course", "taught", 1))
+
+    def test_a_zip_and_the_drop_folder_carry_where_their_files_came_from(self):
+        with home() as (con, vault, files), fake_ai({}):
+            settings.set("record.drop_origin", "mine")
+            put(vault / sources.DROP_DEFAULT, "Poster report.md", "# Poster\n\nA made-up poster on tides.")
+            put(files, "course.zip", zip_bytes({"Week 1/lab report.md": b"# Lab\n\nA made-up lab on tides."}))
+            run(con, uploads=[str(files / "course.zip")], drop=True, origins={str(files / "course.zip"): "course"})
+            got = {r["rel"].rsplit("/", 1)[-1]: (r["origin"], r["role"]) for r in rows(con).values()}
+        self.assertEqual(got["Poster report.md"], ("mine", "own"))
+        self.assertEqual(got["lab report.md"], ("course", "taught"))
+
+    def test_the_folder_route_takes_where_each_folder_came_from(self):
+        hal = self.enterContext(HalServer())
+        self.enterContext(mock.patch.object(record, "VAULT", Path(paths.record_default()), create=True))
+        self.addCleanup(record._CACHE.clear)
+        mine, course, mixed = hal.home / "Mine", hal.home / "Modules", hal.home / "Other"
+        for folder in (mine, course, mixed):
+            put(folder, "a.md", "# A")
+        c = hal.signed_in()
+        with mock.patch.object(ingest_actions.runner, "start", return_value="a1") as start:
+            out = c.post("/api/v2/record/ingest", {"folders": [{"path": str(mine), "origin": "mine"},
+                                                               {"path": str(course), "origin": "course"},
+                                                               str(mixed)]})
+        self.assertEqual(out.status, 200, out.text)
+        params = start.call_args.kwargs["params"]
+        self.assertEqual(params["origins"], {str(mine.resolve()): "mine", str(course.resolve()): "course"})
+        bad = c.post("/api/v2/record/ingest", {"folders": [{"path": str(mine), "origin": "theirs"}]})
+        self.assertEqual(bad.status, 400)
+
+    def test_the_command_line_names_folders_of_their_own_work_and_course_material(self):
+        from jobhunt.cli import record as cli_record
+
+        sent = []
+
+        def hal(method, path, body=None):
+            sent.append(body)
+            return (200, {"action_id": "a1"}) if method == "POST" else (200, {"state": "done"})
+
+        with mock.patch.object(cli_record, "_hal", hal), mock.patch.object(cli_record.time, "sleep"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            cli_record.ingest(["Mixed"], mine=["Mine"], course=["Modules"])
+        self.assertEqual([(Path(f["path"]).name, f["origin"]) for f in sent[0]["folders"]],
+                         [("Mixed", "mixed"), ("Mine", "mine"), ("Modules", "course")])
+
+
 class Frontmatter(unittest.TestCase):
     def test_lists_and_awkward_scalars_round_trip(self):
         fields = {"title": "Report: phase 2 # draft", "tags": ["a", "b-c"], "about_owner": "true", "empty": [],
@@ -945,6 +1065,30 @@ class Routes(unittest.TestCase):
         self.assertTrue(any("points outside the zip" in e["error"] for e in shown["errors"]))
         self.assertFalse((self.hal.home / "escape.md").exists())
         self.assertFalse(list(sources.uploads_dir().glob("*.zip")), "the upload is removed once it is read")
+
+    def test_an_uploaded_zip_keeps_where_the_person_said_it_came_from(self):
+        from jobhunt.evidence import routes as evidence
+
+        evidence.make_default()
+        boundary = uuid.uuid4().hex
+        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="origin"\r\n\r\ncourse\r\n'
+                f'--{boundary}\r\nContent-Disposition: form-data; name="file0"; filename="GEO101.zip"\r\n'
+                f"Content-Type: application/zip\r\n\r\n").encode() + zip_bytes({"a.md": b"# A"}) \
+            + f"\r\n--{boundary}--\r\n".encode()
+        c = self.hal.signed_in()
+        con = http.client.HTTPConnection("127.0.0.1", self.hal.port, timeout=30)
+        with mock.patch.object(ingest_actions, "queue", return_value="a1") as queue:
+            try:
+                con.request("POST", "/api/v2/record/files", body=body, headers={
+                    "Host": f"127.0.0.1:{self.hal.port}", "X-Hal": "1",
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    "Cookie": "; ".join(f"{k}={v}" for k, v in c.jar.items())})
+                reply = con.getresponse()
+                self.assertEqual(reply.status, 200, reply.read())
+            finally:
+                con.close()
+        (zip_path, origin), = queue.call_args.kwargs["origins"].items()
+        self.assertEqual((Path(zip_path).name, origin), ("GEO101.zip", "course"))
 
     def test_only_the_upload_route_takes_a_body_past_the_usual_cap(self):
         from jobhunt.evidence import routes as evidence

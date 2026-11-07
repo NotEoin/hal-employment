@@ -21,6 +21,17 @@ them (`identity`): their name, another name they go by (`you.other_names`, such 
 number), a username from their links (in Settings or their own CVs), or their email. A model asked "is
 this theirs?" says yes too often, and other people's dissertations gave the person projects they never did
 (2026-11-05). A repository's text names who made its commits (`convert.repo_text`), so the person's own code counts.
+
+The person can say where a folder came from when they add it (`ORIGINS`), and that settles what naming
+cannot: marked coursework rarely names its author, and a dump's dissertation drafts, posters and practicals
+were all unsure while only a few dozen documents were the person's own (2026-11-06).
+
+- `mine`, "My own work": the AI's own needs no name, and its unsure is own too unless the document is
+  course material by its kind (`TAUGHT_TYPES`). Without the AI, the kinds of work a person makes
+  (`WORK_TYPES`) are own and the rest unsure.
+- `course`, "Course material I was given": taught, unless the AI says own and the text names the person (their
+  submission saved with the materials).
+- `mixed`, "A mix of both": the rules above. Someone else's keeps its rule whatever the origin.
 """
 from __future__ import annotations
 
@@ -46,6 +57,10 @@ SAID = {"own": OWN, "mine": OWN, "theirs": OWN, "true": OWN, "yes": OWN, "taught
 NAME_PART_MIN = 2          # "Al" is a name part; a lone initial is not
 OTHER_NAME_MIN = 4         # a username or student number shorter than this matches ordinary words
 MADE_BY = "made by "        # an `others` item's error column: who made it, shown with its path
+MINE, COURSE, MIXED = "mine", "course", "mixed"
+ORIGINS = (MINE, COURSE, MIXED)
+# The kinds of document a person makes rather than is given (`understand.DOC_TYPES` and `rank` doc types).
+WORK_TYPES = ("coursework", "report", "project", "dissertation", "essay", "writing", "repository")
 HANDLE_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "linkedin.com", "huggingface.co", "kaggle.com"}
 NOT_HANDLES = {"in", "u", "users", "user", "profile"}
 
@@ -118,21 +133,46 @@ def names_person(text: str, words: list[str]) -> bool:
                for w in words)
 
 
-def decide(said, *, doc_type: str, text: str, words: list[str], in_course: bool = False,
-           author: str = "") -> str:
-    """The document's role from the AI's answer (`said`, or None when no AI read it) and the rules.
+def origin_of(value) -> str:
+    """`value` as one of `ORIGINS`; ValueError for anything else, so a typo never reads as a mix."""
+    origin = str(value or MIXED).strip().lower()
+    if origin not in ORIGINS:
+        raise ValueError(f"origin must be one of {', '.join(ORIGINS)}, not {value!r}")
+    return origin
 
-    Taught is taken as the AI says; the person's own only when the text names them; someone else's only
-    when the text names its `author`, that is not the person, and the text does not name the person.
-    Without the AI, slides and the files of a course are taught, and the rest unsure.
+
+def _others(text: str, words: list[str], author: str) -> bool:
+    """True when the text names its `author`, who is not the person, and does not name the person."""
+    return bool(author and names_person(text, [author]) and not names_person(author, words)
+                and not (words and names_person(text, words)))
+
+
+def decide(said, *, doc_type: str, text: str, words: list[str], in_course: bool = False,
+           author: str = "", origin: str = MIXED) -> str:
+    """The document's role from the AI's answer (`said`, or None when no AI read it), where the person said
+    it came from (`origin`, see the module header) and the rules.
+
+    For a mix: taught is taken as the AI says; the person's own only when the text names them; someone
+    else's only when the text names its `author`, that is not the person, and the text does not name the
+    person. Without the AI, slides and the files of a course are taught, and the rest unsure.
     """
     if said is None:
+        if origin == MINE:
+            return OWN if doc_type in WORK_TYPES else UNSURE
+        if origin == COURSE:
+            return TAUGHT
         return TAUGHT if doc_type in TAUGHT_TYPES or in_course else UNSURE
     role = said_role(said)
-    if role == OWN and not (words and names_person(text, words)):
-        return UNSURE
-    if role == OTHERS and not (author and names_person(text, [author]) and not names_person(author, words)
-                               and not (words and names_person(text, words))):
+    named = bool(words and names_person(text, words))
+    if role == OTHERS:
+        return OTHERS if _others(text, words, author) else (TAUGHT if origin == COURSE else UNSURE)
+    if origin == MINE:
+        if role == UNSURE:
+            return UNSURE if doc_type in TAUGHT_TYPES else OWN
+        return role
+    if origin == COURSE:
+        return OWN if role == OWN and named else TAUGHT
+    if role == OWN and not named:
         return UNSURE
     return role
 
