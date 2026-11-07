@@ -49,6 +49,7 @@ if os.environ.get("HAL_EMPLOYMENT_NO_TRAMPOLINE") != "1" and sys.prefix == sys.b
 import argparse  # noqa: E402 - after the venv trampoline
 
 from . import db  # noqa: E402 - after the venv trampoline
+from .ai.base import LLMUnavailable  # noqa: E402 - after the venv trampoline
 from .cli import register_all  # noqa: E402 - after the venv trampoline
 from .cli.docs import cmd_check, cmd_contacts, cmd_letter, cmd_pack  # noqa: E402 - after the venv trampoline
 from .cli.find import (  # noqa: E402 - after the venv trampoline
@@ -142,7 +143,10 @@ def main():
 
     register_all(sub)
     args = p.parse_args()
-    args.fn(args)
+    try:
+        args.fn(args)
+    except LLMUnavailable as e:        # the AI is off or busy: a plain line, not a traceback
+        sys.exit(f"jobhunt {args.cmd}: {e}")
 
 
 if __name__ == "__main__":

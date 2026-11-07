@@ -114,6 +114,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The AI's own reason when it cannot answer.** When Hal's model was switched off, commands such as
+  `jobhunt pack` stopped with a long error ending in "(503)". They now say in one line what the AI said,
+  such as "Hal is off; run `hal on`".
 - **Opening Hal from another computer finds a free port.** The desktop launcher gave up with "Could
   not connect" when the port it picked was in use by another program's connection, even though the desktop
   was fine. It now moves on to the next port.

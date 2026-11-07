@@ -154,6 +154,7 @@ class GpuGate(InHome):
 class _Handler(http.server.BaseHTTPRequestHandler):
     seen: ClassVar[list] = []
     refuse_format = False
+    off = False
 
     def log_message(self, *args):
         pass
@@ -180,6 +181,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, {"message": {"content": '{"ok": true}'}})
         elif self.path == "/api/embed":
             self._send(200, {"embeddings": [[0.1, 0.2] for _ in body["input"]]})
+        elif type(self).off:
+            self._send(503, {"error": {"message": "Hal is off; run `hal on`", "type": "unavailable"}})
         elif "response_format" in body and type(self).refuse_format:
             self._send(400, {"error": "response_format is not supported"})
         else:
@@ -219,6 +222,14 @@ class Servers(unittest.TestCase):
         self.assertEqual(out.text, "made-up answer")
         self.assertEqual(["response_format" in b for _, b in _Handler.seen], [True, False])
         self.assertEqual(be.models(), ["made-up-model"])
+
+    def test_a_refusal_carries_the_servers_own_reason(self):
+        # Hal's gateway says "Hal is off" after a restart, and Hal Employment showed only "(503)" (2026-11-06)
+        _Handler.off = True
+        self.addCleanup(setattr, _Handler, "off", False)
+        with self.assertRaises(ai.LLMUnavailable) as caught:
+            OpenAICompatBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        self.assertEqual(str(caught.exception), "The local server refused the request (503): Hal is off; run `hal on`")
 
     def test_where_a_local_server_runs_decides_whether_it_is_online(self):
         self.assertEqual(classify("http://127.0.0.1:8000/v1"), (False, True))

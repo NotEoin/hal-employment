@@ -24,6 +24,7 @@ JSON_TEMPERATURE = 0.1
 PROSE_TEMPERATURE = 0.7
 REFUSED_FORMAT = (400, 422)     # what servers without JSON mode answer to `response_format`
 LOOPBACK_NAMES = ("localhost",)
+REASON_CHARS = 200              # the server's own reason, shown to the person, stays one line
 
 
 def _address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -90,12 +91,12 @@ class OpenAICompatBackend:
             out = self._request("POST", "/chat/completions", payload, timeout)
         except urllib.error.HTTPError as e:
             if not (req.json_out and e.code in REFUSED_FORMAT):
-                raise LLMUnavailable(f"The local server refused the request ({e.code}).") from e
+                raise _refused(e) from e
             payload.pop("response_format")
             try:
                 out = self._request("POST", "/chat/completions", payload, timeout)
             except urllib.error.HTTPError as again:
-                raise LLMUnavailable(f"The local server refused the request ({again.code}).") from again
+                raise _refused(again) from again
         try:
             text = out["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as e:
@@ -130,3 +131,18 @@ class OpenAICompatBackend:
     def embed(self, texts: list[str], model: str) -> list[list[float]]:
         """Not offered: record search by meaning uses Ollama."""
         raise LLMUnavailable("Searching by meaning needs the AI on this computer (Ollama).")
+
+
+def _refused(e: urllib.error.HTTPError) -> LLMUnavailable:
+    """The error for a refused request, with the server's own reason when it gives one.
+
+    Hal's gateway answers 503 with "Hal is off; run `hal on`" after a restart, which a bare code hid
+    (2026-11-06).
+    """
+    try:
+        error = json.loads(e.read() or b"{}").get("error")
+        why = str(error.get("message") if isinstance(error, dict) else error or "")
+    except (OSError, ValueError, AttributeError):
+        why = ""
+    why = " ".join(why.split())[:REASON_CHARS]
+    return LLMUnavailable(f"The local server refused the request ({e.code})" + (f": {why}" if why else "."))
