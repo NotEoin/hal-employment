@@ -897,13 +897,15 @@ def _strength(e: sqlite3.Row) -> dict:
 
 def evidence_of(con: sqlite3.Connection, item_ids: list[int]) -> dict[int, list[dict]]:
     """Each item's sources, oldest first: {item_id: [{id, source_rel, quote, field, doc_type, verified, role,
-    found_at, source_id, place, line, strength, strength_words}]}; `strength` is a skill's only."""
+    found_at, source_id, place, line, section, doc_kind, strength, strength_words}]}; `section` and `doc_kind` are
+    its source's in Your record ("" for a fact read before the sections); `strength` is a skill's only."""
     out: dict[int, list[dict]] = {i: [] for i in item_ids}
     if not item_ids:
         return out
     marks = ",".join("?" * len(item_ids))
     for e in con.execute(f"SELECT e.id, e.item_id, e.source_rel, e.quote, e.field, e.doc_type, e.verified, e.role, "
-                         f"e.found_at, e.source_id, e.place, e.line, i.kind, s.section, s.title AS source_title, "
+                         f"e.found_at, e.source_id, e.place, e.line, i.kind, s.section, s.doc_kind, "
+                         f"s.title AS source_title, "
                          f"s.module, t.fields AS card FROM profile_evidence e "
                          f"JOIN profile_items i ON i.id = e.item_id "
                          f"LEFT JOIN record_sources s ON s.id = e.source_id "
@@ -912,7 +914,8 @@ def evidence_of(con: sqlite3.Connection, item_ids: list[int]) -> dict[int, list[
         out[e["item_id"]].append({"id": e["id"], "source_rel": e["source_rel"], "quote": e["quote"],
                                   "field": e["field"], "doc_type": e["doc_type"], "verified": bool(e["verified"]),
                                   "role": e["role"], "found_at": e["found_at"], "source_id": e["source_id"],
-                                  "place": e["place"], "line": e["line"], **_strength(e)})
+                                  "place": e["place"], "line": e["line"], "section": e["section"] or "",
+                                  "doc_kind": e["doc_kind"] or "", **_strength(e)})
     return out
 
 

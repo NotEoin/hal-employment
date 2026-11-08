@@ -15,7 +15,7 @@ An item (`ITEM`):
      "evidence": [{"id": 7, "source_rel": "Sources/CVs and letters/CV.md", "file_id": "U291cmNlcy9...",
                    "quote": "Collections volunteer, Sept 2023 - present", "field": "start", "doc_type": "cv",
                    "verified": true, "found_at": "2026-11-05T09:00:00Z", "source_id": null, "place": "",
-                   "line": null, "strength": "", "strength_words": ""}],
+                   "line": null, "section": "", "doc_kind": "", "strength": "", "strength_words": ""}],
      "conflicts": [CONFLICT, ...], "can_delete": false,
      "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",
      "tier": "core", "tier_by": "hal", "tier_why": "Your main work in your field", "tier_words": "Lead with this",

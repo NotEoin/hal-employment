@@ -72,6 +72,14 @@ Design decisions, each with its reason:
   card's own repository or project notes join them, and only sentences about the work are kept, those with a
   result or a number first (`writing.quotes`): a card's quotes held table rows and credit lines while its
   README's test suite was missing (2026-11-08).
+- A project card read from its own sources in Your record (`OWN_SECTIONS`: a source on Projects, or a piece
+  of coursework in the showcase) tells only what those sources and the person's edits give (sections plan,
+  2026-11-09): its quotes are those sources' quotes, each with its place and line, and no record note is
+  scanned for sentences, as the reader already chose what the work says; a showcase piece adds the
+  sentences of its own summary. A CV only fills a field those sources leave empty, and the card says which
+  (`cv_filled`), so a story marks them. A card no project source backs (`profile.cvs.cv_only`) is marked
+  `cv_only`, and a dissertation (`dissertation`) is marked so the writer frames it as one. A card with no
+  section evidence, from the older bulk read, is told as before.
 """
 from __future__ import annotations
 
@@ -272,6 +280,9 @@ YEAR = re.compile(r"\b(?:19|20)\d\d\b")
 OLDER_CV = "only in an older CV"
 # The fields of a card a CV may give, each a text or a list (`store.KINDS`); never the name, which is the card.
 CV_FIELDS = {"project": ("summary", "role", "period", "link", "tools"), "job": ("duties", "achievements")}
+# The sections whose sources are a project's own: its code, pages, files or form, and a showcase coursework piece.
+OWN_SECTIONS = ("project", "coursework")
+DISSERTATION = "dissertation"      # the document type of the piece marked "This is my dissertation"
 
 
 def _cv_key(con: sqlite3.Connection, source_rel: str) -> tuple[int, str]:
@@ -442,6 +453,35 @@ def for_writing(con: sqlite3.Connection, item: dict, cvs: CvAuthority | None = N
     return fields
 
 
+def sectioned(item: dict) -> bool:
+    """True for a card one of its own sources in Your record gives (`OWN_SECTIONS`)."""
+    return any(e.get("section") in OWN_SECTIONS for e in item["evidence"])
+
+
+def cv_filled(con: sqlite3.Connection, item: dict) -> dict[str, list[str]]:
+    """The values of a project card's fields that only CVs give while its own sources (`sectioned`) give other
+    facts, {field: [value, ...]}; {} for a card with no own source, one the person added or edited, or one whose
+    own sources give every field."""
+    if item["kind"] != "project" or not sectioned(item) or item.get("origin") == "you" or item["state"] == "edited":
+        return {}
+    givers = []
+    for e in con.execute("SELECT doc_type, said FROM profile_evidence WHERE item_id = ?", (item["id"],)):
+        try:
+            said = json.loads(e["said"] or "{}")
+        except ValueError:
+            log.warning("profile writing: a source of item %s holds fields that do not read as JSON", item["id"])
+            continue
+        givers.append((merge.doc_group(e["doc_type"] or "") == CV_TYPE, said if isinstance(said, dict) else {}))
+    out: dict[str, list[str]] = {}
+    for name in CV_FIELDS["project"]:
+        value = item["fields"].get(name)
+        for v in (value if isinstance(value, list) else [value] if value else []):
+            by = [cv for cv, said in givers if _gives(said.get(name), v)]
+            if by and all(by):
+                out.setdefault(name, []).append(str(v))
+    return out
+
+
 def employers(con: sqlite3.Connection) -> list[str]:
     """The employers of the jobs the person checked, which make a project that names one work."""
     return [it["fields"]["employer"] for it in store.items(con, "job", hidden=False)
@@ -601,9 +641,10 @@ def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) ->
 
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
-    tools, summary, planned, context, tier, aliases, role, files, quotes, tag, similar, star}; `star` is the
-    person's showcase mark (`store.set_star`), which chooses the projects told as stories
-    (`writing.plan.story_cards`); `tier` is its
+    tools, summary, planned, context, tier, aliases, role, files, quotes, tag, similar, star, cv_only,
+    cv_filled, dissertation}; `star` is the person's showcase mark (`store.set_star`), which chooses the
+    projects told as stories (`writing.plan.story_cards`); `cv_only`, `cv_filled` and `dissertation` say where a
+    project's facts come from (see the module notes); `tier` is its
     `profile.tiers` tier ("core", "supporting", "archive", "" unsorted); `planned` holds the tools only
     a plan gives (`planned_only`), left out of `tools`; `role` is the person's part (`card_role`),
     `files` the record files it rests on, `quotes` its own evidence for a paragraph about it (`quotes`), and a
@@ -637,13 +678,15 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                                                         if e["source_rel"]
                                                         and view.belongs(it["id"], e["source_rel"]))),
                             "quotes": quotes(it, f, cvs, view, names), "tag": "", "similar": [],
-                            "star": bool(it.get("star"))})
+                            "star": bool(it.get("star")), "cv_only": section_cvs.cv_only(it),
+                            "cv_filled": cv_filled(con, it),
+                            "dissertation": any(e["doc_type"] == DISSERTATION for e in it["evidence"])})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
                             "tools": [], "summary": "; ".join(f.get("duties") or []), "planned": [],
                             "context": context, "tier": it.get("tier") or "", "role": "", "files": [],
                             "quotes": quotes(it, f, cvs, view, names), "star": bool(it.get("star")),
-                            "tag": "", "similar": []})
+                            "tag": "", "similar": [], "cv_only": False, "cv_filled": {}, "dissertation": False})
     projects = [c for c in out if c["kind"].startswith("project")]
     alike = similar([c["name"] for c in projects])
     for c in projects:
@@ -663,10 +706,14 @@ def quotes(item: dict, fields: dict, cvs: CvAuthority, view: owners.Files | None
     """A card's own evidence quotes a paragraph about it may rest on, at most `CARD_QUOTES`: from the person's own
     sources only, never an older CV's (`CvAuthority`), never a plan (`writing.planned`), never one naming a
     tool its writing fields (`fields`, from `for_writing`) leave out, never one from another card's own file,
-    and never one from a listing (`view`) that names another card (`names`) and not this one."""
+    and never one from a listing (`view`) that names another card (`names`) and not this one. A card read from
+    its own sources in Your record (`sectioned`) has only those sources' quotes and, for a showcase piece, the
+    sentences of its summary; another card's own record notes add their sentences."""
     view = view or owners.Files()
     tools = item["fields"].get("tools") or []
     dropped = [str(t) for t in tools if str(t) not in {str(k) for k in fields.get("tools") or []}]
+    if sectioned(item):
+        return _section_quotes(item, dropped)
     out: list[str] = []
     for e in item["evidence"]:
         said = " ".join(str(e.get("quote") or "").split())
@@ -683,6 +730,22 @@ def quotes(item: dict, fields: dict, cvs: CvAuthority, view: owners.Files | None
             if not planned.planned(s, rel)
             and not any(re.search(rf"(?<![\w+#]){re.escape(t)}(?![\w+#])", s, re.I) for t in dropped)]
     kept = [q for q in dict.fromkeys(out) if writing_quotes.about_work(q)]
+    return writing_quotes.ranked(kept)[:CARD_QUOTES]
+
+
+def _names_any(text: str, tools: list[str]) -> bool:
+    return any(re.search(rf"(?<![\w+#]){re.escape(t)}(?![\w+#])", text, re.I) for t in tools)
+
+
+def _section_quotes(item: dict, dropped: list[str]) -> list[str]:
+    """A sectioned card's quotes: its own sources' quotes, then for a showcase piece the sentences of its summary
+    after its opening ("Dissertation for ..."), about the work, at most `CARD_QUOTES`."""
+    own = [e for e in item["evidence"] if e.get("section") in OWN_SECTIONS]
+    out = [said for e in own if not planned.planned(said := " ".join(str(e.get("quote") or "").split()),
+                                                    e["source_rel"])]
+    if any(e["section"] == "coursework" for e in own):
+        out += writing_quotes.sentences(str(item["fields"].get("summary") or ""))[1:]
+    kept = [q for q in dict.fromkeys(out) if q and not _names_any(q, dropped) and writing_quotes.about_work(q)]
     return writing_quotes.ranked(kept)[:CARD_QUOTES]
 
 

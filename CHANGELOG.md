@@ -6,6 +6,12 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Letters tell your showcase from its own sources.** A project's story now comes from the project's own
+  code, pages, files or form and your edits; a detail only your CV gives is marked as such for the writer.
+  Showcase coursework is told like a showcase project, your dissertation by its title, and a job you put in
+  your showcase leads the letter. A project only your CV names is told only when nothing is in your
+  showcase.
+
 - **Skills you studied are told as studied.** Letters and answers tell a skill from your own work or your
   coursework as something you did, list a skill from your CV, and say a skill you only met in lectures was
   studied, never used. A sentence that says you used one is drafted again. On **CV**, a skills line that

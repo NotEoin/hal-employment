@@ -1390,7 +1390,18 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   writer tells only starred projects (`writing.plan.story_cards` for cards, `plan.offered` for the plan's
   stories), in `rank.candidates`, `rank.order`, `plan.fitting` and `plan.letter_stories`; jobs are always
   offered, and unstarred projects still give the fit map and skills their evidence. With nothing starred,
-  every project is offered as before.
+  every project is offered as before. A starred job leads: `plan.starred_first` puts its story first in
+  `rank.order` and `plan.letter_stories`, which tells it even when the plan picked nothing of it.
+- Stories from the sections: `profile.store.evidence_of` gives each piece of evidence its source's `section`
+  and `doc_kind`. A project card with evidence from `profile.writing.OWN_SECTIONS` (project, coursework) is
+  `sectioned`: its `cards()` quotes are those sources' own quotes (`_section_quotes`; a showcase piece adds
+  the sentences of its summary after "Dissertation for ..."), and no record note is scanned. `cv_filled`
+  gives the values of its fields that only CVs give, and `plan.Story.block` lists them under "From your CV,
+  not the project's own sources", out of its Tools line. `cv_only` (`profile.cvs.cv_only`) marks a card no
+  project source backs: `plan.story_cards` and `plan.offered` leave it out while any card is starred,
+  `plan.fitting` puts it last, and its story says "your CV only". `dissertation` (evidence of type
+  `dissertation`) makes the story say it is the dissertation. A card with no section evidence keeps the
+  older path, with its notes' sentences.
 - Authority: `profile.store.refold` ranks a fact from a Projects source at least at that section's
   `authority` (`store.section_rank`, through `record_sources.section`), so a project's own repository, page
   or files (rank 4) outrank the current CV (3). Every other fact keeps its rank from `profile.cvs.rank`, so an

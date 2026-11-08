@@ -126,7 +126,8 @@ def profile_source(rel: str, quote: str, field: str, doc_type: str, n: int) -> d
     fid = base64.urlsafe_b64encode(rel.encode("utf-8")).decode("ascii").rstrip("=")
     return {"id": n, "source_rel": rel, "quote": quote, "field": field, "doc_type": doc_type,
             "verified": True, "role": "own", "found_at": "2026-11-05T09:00:00Z", "file_id": fid,
-            "source_id": None, "place": "", "line": None, "strength": "", "strength_words": ""}
+            "source_id": None, "place": "", "line": None, "section": "", "doc_kind": "", "strength": "",
+            "strength_words": ""}
 
 
 # Where a made-up experience was done, by kind: (context, the page's words for it).

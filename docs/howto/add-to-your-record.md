@@ -82,10 +82,14 @@ line like "Role: Lead designer". The AI writes the summary from the page's own w
 
 Press **Showcase** on the projects you want employers to hear about. Once one project is in your showcase,
 Hal tells only showcase projects in letters, answers and messages. The others still count for your skills.
-If nothing is in your showcase, Hal chooses from all your projects, as before.
+If nothing is in your showcase, Hal chooses from all your projects, as before. Your showcase coursework
+counts as a showcase project, and your dissertation is told by its title as your dissertation. Jobs are
+always used; press **Showcase** on a job and Hal leads with it.
 
 What a project's own code, page or files say counts above what your CV says about it. A project card that
 only your CV names is marked **from your CV only**: add the project itself to give Hal more to go on.
+Hal tells such a project only when nothing is in your showcase. When a project's own sources leave a
+detail out, such as its tools, Hal may take it from your CV, and tells the writer it came from there.
 
 ## Keeping projects up to date
 

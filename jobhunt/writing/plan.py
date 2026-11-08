@@ -78,6 +78,12 @@ Design decisions, each with its reason:
 - What the person is looking for (`plain.GOAL`: "seeking a role in ...") is never a source: a CV's summary
   gave a letter "I am seeking a role in backend, systems or applied AI" (2026-11-08). The sentence is taken
   out of its line, and a line with nothing else left is no source.
+- Stories come from the sectioned record (sections plan, 2026-11-09): starred projects of any source kind,
+  starred coursework (a showcase piece is a starred project card of the degree) and jobs, a starred job
+  first (`starred_first`). A project card only a CV names (`cv_only`) is told only when no card is starred,
+  and its story says so; a field only a CV fills for a project with its own sources is marked in the story
+  (`Story.cv_filled`); a dissertation's story says it is the dissertation (`Story.dissertation`), under its
+  own title.
 """
 from __future__ import annotations
 
@@ -316,6 +322,9 @@ MESSAGE_STORIES = 1        # a message to the person hiring has room for one
 MANY = re.compile(r"\b(?:examples|instances|occasions|situations|times when|(?:two|three|several) "
                   r"(?:times|ways|projects|pieces))\b", re.I)
 WHERE_JOB = "a job"        # where a job card's work was done, as a story says it
+CV_ONLY_WORDS = "your CV only; no project files back it, so keep to what the CV says"
+CV_FILLED_WORDS = "From your CV, not the project's own sources (say no more than this)"
+DISSERTATION_WORDS = "your dissertation for your degree; call it your dissertation"
 
 
 @dataclass(frozen=True)
@@ -337,10 +346,14 @@ class Story:
     aliases: tuple[str, ...] = ()
     card: dict | None = field(default=None, compare=False, hash=False)
     kind: str = OTHER          # `PROJECT`, `JOB`, `MODULE` or `OTHER`
+    cv_filled: tuple[str, ...] = ()       # "field: value" lines only a CV gives a project with its own sources
+    cv_only: bool = False      # a project card only a CV names (`profile.cvs.cv_only`)
+    dissertation: bool = False
 
     def words(self) -> str:
         """Every word the story's facts hold, plans aside: what a paragraph about it may say."""
-        return "\n".join([self.name, *self.aliases, self.where, self.role, self.summary, *self.tools, *self.facts])
+        return "\n".join([self.name, *self.aliases, self.where, self.role, self.summary, *self.tools, *self.facts,
+                          *self.cv_filled])
 
     def block(self) -> str:
         """The story as a request gives it: plain sentences under its name, never an evidence id."""
@@ -348,10 +361,13 @@ class Story:
         lines = [f"{kind}: {self.name}" + (f" ({self.tag})" if self.tag else "") if self.name
                  else "Evidence (no name of its own)"]
         lines += [f"Where it was done: {self.where}"] if self.where else []
+        lines += [f"What kind of work: {DISSERTATION_WORDS}"] if self.dissertation else []
+        lines += [f"Where its facts come from: {CV_ONLY_WORDS}"] if self.cv_only else []
         lines += [f"Your part: {self.role}"] if self.role else []
         lines += [f"What it is: {self.summary}"] if self.summary else []
         lines += [f"Tools: {', '.join(self.tools)}"] if self.tools else []
         lines += ["Facts:", *(f"- {f}" for f in self.facts)] if self.facts else []
+        lines += [f"{CV_FILLED_WORDS}:", *(f"- {f}" for f in self.cv_filled)] if self.cv_filled else []
         if self.planned:
             lines += ["Planned, never done (leave out, or say it was planned):", *(f"- {f}" for f in self.planned)]
         lines += [f"What it can help with in this job: {self.use}"] if self.use else []
@@ -377,10 +393,14 @@ def _story(key: str, items: list[Item], card: dict | None, module: str = "") -> 
         return Story(key, module or project, _where(None, first.context), first.context, first.role, facts=facts,
                      planned=plans, use=use, kind=MODULE if module else PROJECT if project else OTHER)
     context = card.get("context", "") or first.context
+    filled = card.get("cv_filled") or {}
+    cv_tools = set(filled.get("tools") or ())
     return Story(key, card["name"], _where(card, context), context, card.get("role", "") or first.role,
-                 card.get("summary", ""), own_tools(card, facts), facts, plans,
+                 card.get("summary", ""), tuple(t for t in own_tools(card, facts) if t not in cv_tools), facts, plans,
                  tuple(card.get("planned") or ()), use, card.get("tag", ""), tuple(card.get("aliases") or ()), card,
-                 JOB if card.get("kind") == JOB else PROJECT)
+                 JOB if card.get("kind") == JOB else PROJECT,
+                 tuple(f"{name}: {', '.join(values)}" for name, values in filled.items()),
+                 bool(card.get("cv_only")), bool(card.get("dissertation")))
 
 
 def own_tools(card: dict, facts: tuple[str, ...] = ()) -> tuple[str, ...]:
@@ -456,20 +476,34 @@ def showcase_on(cards: list[dict]) -> bool:
     return any(_is_project(c) and c.get("star") for c in cards)
 
 
+def _kept(card: dict | None, cards: list[dict]) -> bool:
+    """True when a card may be told (`story_cards`); a story with no card always may."""
+    if card is None:
+        return True
+    if _is_project(card) and showcase_on(cards) and not card.get("star"):
+        return False
+    return not (card.get("cv_only") and not card.get("star") and any(c.get("star") for c in cards))
+
+
 def story_cards(cards: list[dict]) -> list[dict]:
     """The cards a draft may tell as stories: every job, and the starred projects once any project is starred
-    (all projects while none is, so a record from before stars is not left with nothing to tell). The cards
-    left out still give the fit map and skills their evidence."""
-    if not showcase_on(cards):
-        return cards
-    return [c for c in cards if not _is_project(c) or c.get("star")]
+    (all projects while none is, so a record from before stars is not left with nothing to tell); a project only
+    a CV names is left out while any card is starred. The cards left out still give the fit map and skills their
+    evidence."""
+    return [c for c in cards if _kept(c, cards)]
 
 
 def offered(found: list[Story], cards: list[dict]) -> list[Story]:
-    """`found` without the stories of unstarred project cards once any project is starred (`story_cards`)."""
-    if not showcase_on(cards):
-        return found
-    return [s for s in found if not _is_project(s.card) or s.card.get("star")]
+    """`found` without the stories of the cards `story_cards` leaves out."""
+    return [s for s in found if _kept(s.card, cards)]
+
+
+def starred_first(found: list[Story]) -> list[Story]:
+    """`found` with the stories of starred jobs first, the rest in their order: a starred job leads."""
+    def lead(s: Story) -> bool:
+        return s.card is not None and s.card.get("kind") == JOB and bool(s.card.get("star"))
+
+    return [s for s in found if lead(s)] + [s for s in found if not lead(s)]
 
 
 def card_story(card: dict) -> Story:
@@ -485,7 +519,8 @@ def fitting(found: list[Story], cards: list[dict], wanted: str) -> list[Story]:
     cards = story_cards(cards)
     fits = sorted(((relevance(c, wanted), k) for k, c in enumerate(cards)
                    if c.get("name") and c["name"] not in names and (c.get("quotes") or c.get("summary"))),
-                  key=lambda r: (-r[0], cards[r[1]].get("tier") != tiers.CORE, r[1]))
+                  key=lambda r: (bool(cards[r[1]].get("cv_only")), -r[0], cards[r[1]].get("tier") != tiers.CORE,
+                                 r[1]))
     return [card_story(cards[k]) for r, k in fits if r >= RELEVANT_MIN]
 
 
@@ -494,6 +529,9 @@ def letter_stories(found: list[Story], cards: list[dict], wanted: str, n: int = 
     the job's requirements (`wanted`) fit best that no story tells, then, only below `MIN_PROJECTS` of those,
     modules and other lines in the plan's order."""
     found = offered(found, cards)
+    named = {s.name for s in found}
+    found = starred_first([*found, *(card_story(c) for c in cards
+                                     if c.get("kind") == JOB and c.get("star") and c.get("name") not in named)])
     told = [s for s in found if s.kind in (PROJECT, JOB)]
     told += fitting(found, cards, wanted)[:max(n - len(told), 0)]
     if len(told) < MIN_PROJECTS:
