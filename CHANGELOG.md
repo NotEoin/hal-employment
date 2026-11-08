@@ -219,7 +219,8 @@ What changed in each version, in plain words.
   the other project used is taken out.
 - **Each paragraph says which project.** "I wrote a 113-test suite that ..." left the reader guessing which
   project it meant. Each paragraph about your work now names it in its first sentence, as it is about that
-  one project or job alone.
+  one project or job alone. A paragraph drawn from a project's own document that has no card, such as your
+  dissertation, names it by the document's title, and a module's paragraph names the module.
 - **No "The advert requires ..." openings.** Sentences still began by restating the advert: "The role asks
   for ...", "Regarding teamwork, ...", "In terms of testing, ...", "As required, ...". A paragraph with such an
   opening is now written again. Hal no longer cuts the opening out on its own, as that left broken

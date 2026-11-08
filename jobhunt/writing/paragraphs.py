@@ -29,6 +29,9 @@ Design decisions, each with its reason:
   AI quotes as unsupported are dropped when the story's facts or the employer's words hold them, word for
   word or by their roots (`_dropped`): most of the old check list's "unsupported" items were the facts'
   own words or the advert's (2026-11-07).
+- Every story with a name is checked for it, not only a card's (`_names`, 2026-11-08): passages of a
+  dissertation were drafted as "I designed a pure simulation engine ..." with no project named. A module's or
+  a project file's story must name its module or file's project, and is drafted again once when it does not.
 - A paragraph that fails is drafted again once with its problems stated (`Paragraph.redrafted`). One still
   failing loses only its failing sentences when what is left still reads (each cut sentence leaves the next
   one pointing at something, `flow.reads_without`, and the shape keeps its least number of sentences and its
@@ -248,9 +251,11 @@ def _projects(scope: Scope) -> list[dict]:
 
 
 def _names(sentence: str, story: Story, scope: Scope) -> bool:
-    """True when a sentence names the story's work: its card by any name, or for a job its title or employer."""
+    """True when a sentence names the story's work: its card by any name, for a job its title or employer, and
+    for a story with no card the name it was given (a module's, a project file's); True for a story with no
+    name at all."""
     if story.card is None:
-        return True
+        return not story.name or drafts.names_card(sentence, {"name": story.name, "aliases": list(story.aliases)})
     if drafts.names_card(sentence, story.card, list(_projects(scope))):
         return True
     return story.card.get("kind") == "job" and any(drafts.names_tool(sentence, p) for p in story.name.split(" at "))

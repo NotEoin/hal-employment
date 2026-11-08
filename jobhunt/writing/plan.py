@@ -61,6 +61,12 @@ Design decisions, each with its reason:
   until it has `LETTER_STORIES`; a module (`module_of`) or a line tied to no card is a paragraph only when
   fewer than `MIN_PROJECTS` project or job stories exist. The degree itself (`DEGREE`) is never a story, as
   the opening says it.
+- Every story names its work (`Story.name`, 2026-11-08): passages tied to no card were drafted as "I designed a
+  pure simulation engine ..." and "I implemented config-hashed result caching ..." with nothing saying which
+  project. A passage of a project's own file (one with a "(Kind: ...)" line) tied to no card is named after
+  its file (`profile.owners.file_name`: the repository's or folder's name, or the note's title, which for a
+  dissertation is its title), and a module story after its module; `writing.paragraphs` checks every named
+  story names its work.
 - What the person is looking for (`plain.GOAL`: "seeking a role in ...") is never a source: a CV's summary
   gave a letter "I am seeking a role in backend, systems or applied AI" (2026-11-08). The sentence is taken
   out of its line, and a line with nothing else left is no source.
@@ -73,6 +79,7 @@ from dataclasses import dataclass, field
 
 from jobhunt import llm
 from jobhunt.ai import prompts
+from jobhunt.profile import owners
 from jobhunt.writing import atoms, drafts, plain, planned, stage
 from jobhunt.writing import check as writing_check
 
@@ -350,21 +357,30 @@ def _where(card: dict | None, context: str) -> str:
 
 
 def _story(key: str, items: list[Item], card: dict | None, module: str = "") -> Story:
-    """The story of one card (with no items when the plan picked none of it), of a module, or of items tied to
-    none: its items' quotes first, its card's own after."""
+    """The story of one card (with no items when the plan picked none of it), of a module, of a project's own
+    file, or of items tied to none: its items' quotes first, its card's own after."""
     quotes = [*(i.text for i in items if not i.planned), *((card or {}).get("quotes") or [])]
     facts = tuple(list(dict.fromkeys(q for q in quotes if q.strip()))[:STORY_FACTS])
     plans = tuple(i.text for i in items if i.planned)
     use = next((i.use for i in items if i.use), "")
     first = items[0] if items else Item("", "", "")
     if card is None:
-        return Story(key, module, _where(None, first.context), first.context, first.role, facts=facts,
-                     planned=plans, use=use, kind=MODULE if module else OTHER)
+        project = _file_project(first)
+        return Story(key, module or project, _where(None, first.context), first.context, first.role, facts=facts,
+                     planned=plans, use=use, kind=MODULE if module else PROJECT if project else OTHER)
     context = card.get("context", "") or first.context
     return Story(key, card["name"], _where(card, context), context, card.get("role", "") or first.role,
                  card.get("summary", ""), tuple(card.get("tools") or ()), facts, plans,
                  tuple(card.get("planned") or ()), use, card.get("tag", ""), tuple(card.get("aliases") or ()), card,
                  JOB if card.get("kind") == JOB else PROJECT)
+
+
+def _file_project(item: Item) -> str:
+    """The project a passage's file is named after, when it is a project's own file (its passage says where the
+    work was done); "" for a CV or Profile line or any other note."""
+    if item.source in (CV, PROFILE, "") or not item.context:
+        return ""
+    return owners.file_name(_file_of(item.source))
 
 
 def module_of(text: str) -> str:

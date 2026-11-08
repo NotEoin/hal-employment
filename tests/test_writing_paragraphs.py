@@ -249,6 +249,21 @@ class Frame(unittest.TestCase):
                                        "(2026), applying for the Graduate Developer role.")
 
 
+class Named(unittest.TestCase):
+    """Passages of a dissertation were drafted as "I designed a pure simulation engine ..." with no project
+    named (2026-11-08)."""
+
+    def test_a_story_with_no_card_must_name_its_project_in_the_first_sentence(self):
+        story = Story("Sources/Dissertation/Traffic flow simulation.md > Design", "Traffic flow simulation",
+                      "degree work", "degree", facts=("I designed a pure simulation engine.",), kind="project")
+        unnamed = paragraphs.problems("I designed a pure simulation engine. It runs fast.", story, SCOPE,
+                                      paragraphs.LETTER)
+        self.assertIn(paragraphs.NOT_NAMED.format(card="Traffic flow simulation"), [p.reason for p in unnamed])
+        named = paragraphs.problems("For my Traffic flow simulation I designed a pure simulation engine. It "
+                                    "runs on its own.", story, SCOPE, paragraphs.LETTER)
+        self.assertNotIn(paragraphs.NOT_NAMED.format(card="Traffic flow simulation"), [p.reason for p in named])
+
+
 class Stock(unittest.TestCase):
     def test_plain_finds_a_stock_link_but_never_a_plain_sentence(self):
         self.assertTrue(plain.problems("This aligns with your team's work."))

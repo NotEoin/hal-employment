@@ -285,6 +285,20 @@ class ProjectsFirst(unittest.TestCase):
                          ("Network Security (91)", "Applied Cryptography (88)"))
 
 
+class Named(unittest.TestCase):
+    """Passages tied to no card were drafted with no project named (2026-11-08)."""
+
+    def test_a_project_files_passage_is_named_after_its_file_and_another_note_is_not(self):
+        kept = ("[Sources/Dissertation/Traffic flow simulation.md > Design]\n(Kind: degree work)\nI designed a pure "
+                "simulation engine with config-hashed result caching.\n\n"
+                "[Notes/river.md > Field trip]\nWe measured the river at three sites.")
+        found = plan.sources("", kept, [])
+        items = plan.checked({"evidence": [{"source": "S1", "quote": "I designed a pure simulation engine"},
+                                           {"source": "S2", "quote": "We measured the river at three sites"}]}, found)
+        self.assertEqual([(s.kind, s.name) for s in plan.stories(items, [])],
+                         [("project", "Traffic flow simulation"), ("other", "")])
+
+
 class LetterLength(unittest.TestCase):
     def test_each_paragraph_takes_a_share_of_the_letters_length(self):
         from jobhunt.writing import paragraphs

@@ -447,7 +447,10 @@ runs: tests use `tests/support/fake_claude/`.
   what it is, its tools, its facts as plain lines, what is planned and what it can help with, never an
   evidence id. `plan.choose(stories, n, used)` takes the `n` the pack has told least, best first. Each
   story has a `kind` (`plan.PROJECT`, `JOB`, `MODULE`, `OTHER`): a pick of the degree itself (`plan.DEGREE`) is
-  never a story, as the opening gives it, and a module line (`plan.module_of`) is a module story of its own.
+  never a story, as the opening gives it, and a module line (`plan.module_of`) is a module story of its own,
+  named after its module. A passage of a project's own file (it has a "(Kind: ...)" line) tied to no card is
+  a project story named after its file (`profile.owners.file_name`), and `paragraphs.problems` requires
+  every named story, card or not, to be named in its first sentence (`paragraphs._names`).
   A letter tells `plan.letter_stories`: the plan's project and job stories, then cards no story tells whose
   words share at least `plan.RELEVANT_MIN` (2) words with the job's requirements (`plan.relevance`), up to
   `plan.LETTER_STORIES`; modules and other lines only below `plan.MIN_PROJECTS` (2) of those. A CV or Profile
