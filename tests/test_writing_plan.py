@@ -106,6 +106,18 @@ class Entries(unittest.TestCase):
             self.assertEqual([s.text for s in plan.sources(line, "", CARDS)], [line])
 
 
+class SimilarNames(unittest.TestCase):
+    def test_an_item_about_a_card_with_a_namesake_says_its_tag_and_its_own_card(self):
+        quill = {**TIDE, "name": "Quill", "files": [], "tag": "offline assistant over personal notes",
+                 "similar": ["Quill Employment"]}
+        jobs = {**FERRY, "name": "Quill Employment", "tag": "job-search helper", "similar": ["Quill"]}
+        found = plan.sources("Project, Quill Employment (Python, Flask): drafts letters for graduates", "",
+                             [quill, jobs])
+        self.assertIs(found[0].card, jobs, "the longer name is not the shorter one too")
+        item = plan.checked({"evidence": [{"source": "S1", "quote": "drafts letters for graduates"}]}, found)[0]
+        self.assertIn("about Quill Employment (job-search helper), university team project", item.words())
+
+
 class Picks(unittest.TestCase):
     def setUp(self):
         self.found = plan.sources(FACTS, KEPT, CARDS)

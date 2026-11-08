@@ -194,6 +194,41 @@ class Writing(unittest.TestCase):
         self.assertEqual(cv_context.build()["profile"], profile.context_block(self.con))
 
 
+class SimilarNames(unittest.TestCase):
+    """Drafts gave a local assistant the purpose and stack of a job-search helper of a similar name
+    (2026-11-08)."""
+
+    def setUp(self):
+        self.home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(paths.set_override(self.home))
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+        self.con = db.connect()
+        self.addCleanup(self.con.close)
+        src = {"source_rel": "Sources/Projects/list.md", "quote": "x", "field": "name", "doc_type": "notes"}
+        for name, summary in (("Quill", "An offline assistant over personal notes, built with Lua."),
+                              ("Quill Employment", "A job-search helper for graduates."),
+                              ("quill-voice", "Speech for the assistant"), ("Tide gauge", "Logs tides.")):
+            store.add_found(self.con, "project", {"name": name, "summary": summary}, src)
+        check_everything(self.con)
+
+    def test_cards_with_similar_names_each_lead_with_words_of_their_own_summary(self):
+        block = profile.context_block(self.con)
+        self.assertIn("- Project: Quill (offline assistant over personal notes). An offline assistant", block)
+        self.assertIn("- Project: Quill Employment (job-search helper). A job-search helper", block)
+        self.assertIn("- Project: quill-voice (Speech). Speech for the assistant", block)
+        self.assertIn("- Project: Tide gauge. Logs tides.", block)
+
+    def test_the_cards_say_their_tag_and_the_names_they_could_be_mixed_up_with(self):
+        found = {c["name"]: (c["tag"], c["similar"]) for c in writing.cards(self.con)}
+        self.assertEqual(found["Quill Employment"], ("job-search helper", ["Quill", "quill-voice"]))
+        self.assertEqual(found["Tide gauge"], ("", []))
+
+    def test_names_alike_by_their_first_word_or_one_inside_the_other(self):
+        self.assertEqual(writing.similar(["Quill", "Quill Employment", "quill-tools", "The Ferry", "The Tide"]),
+                         {"Quill": ["Quill Employment", "quill-tools"], "Quill Employment": ["Quill", "quill-tools"],
+                          "quill-tools": ["Quill", "Quill Employment"]})
+
+
 OLD_CV, NEW_CV = "Sources/CVs and letters/CV draft.md", "Sources/CVs and letters/CV.md"
 REPO = "Sources/Code/ferry-planner/README.md"
 

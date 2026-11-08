@@ -131,6 +131,9 @@ says where it was done (part of your degree, a university team project, at work,
 a draft keeps it that way. A sentence that calls a project something else, such as "my degree included"
 for a project you did in your own time, is rewritten once, and listed under **Check before sending** if it
 is still there. This also works when the draft calls the project by a shorter name or its folder's name.
+When two of your projects have similar names, Hal adds a few words of each one's own description to its
+name in what the writer reads, and a sentence that gives one of them a tool or a purpose only the other has
+is rewritten the same way.
 
 The pack's **Company check** names a registered company as the employer only when the advert's own
 website is on its record, or it is registered in the advert's town and trade at an address that is not a

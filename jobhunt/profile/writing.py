@@ -40,6 +40,10 @@ Design decisions, each with its reason:
   its code never used, and every pack said the person used them (2026-11-08). The newest CV is the one whose
   own period (its note's `period`) ends latest, then the newest file (`ingest_items.mtime`); only CVs whose
   role is `own` count, and with one CV or none nothing is left out.
+- Project cards with similar names (`similar`: the same first word, or one name inside the other) are each
+  named with a few words of their own summary (`tag`: "Quill (offline assistant over personal notes)",
+  "Quill Employment (job-search helper)") on their Profile line and in `cards` (`tag`, `similar`): drafts gave
+  one card's tools and purpose to its namesake (2026-11-08).
 - A course's modules and a job's duties and achievements are one line each (`entry_lines`), under the line of
   the course or job they belong to and naming it, at most `LINE_MAX` characters of them per item: one line of
   every module was one piece of evidence, so a sentence about one module could cite another's words
@@ -82,10 +86,13 @@ def _period(fields: dict) -> str:
     return f" ({words})" if words else ""
 
 
-def line(kind: str, fields: dict, quote: str = "", context: str = "", entries: bool = True) -> str:
+def line(kind: str, fields: dict, quote: str = "", context: str = "", entries: bool = True, tag: str = "") -> str:
     """One item as a line of plain words for a prompt; a project names its `context` (`writing.stage.CONTEXTS`)
     when known, and another card when it is not its kind's own. `entries=False` leaves out a course's modules
-    and a job's duties and achievements, which `entry_lines` gives one a line."""
+    and a job's duties and achievements, which `entry_lines` gives one a line; a project's `tag` follows its
+    name in brackets, to tell it from a card of a similar name (`similar`)."""
+    if tag and kind == "project":
+        fields = {**fields, "name": f"{fields.get('name', '')} ({tag})"}
     said = _plain(kind, fields, quote, stage.CONTEXT_WORDS.get(context, "") if kind == "project" else "", entries)
     if context and kind != "project" and context != contexts.BY_KIND.get(kind):
         label, _, rest = said.partition(": ")
@@ -173,6 +180,55 @@ RANKED_KINDS = ("job", "education", "project", "skill", "certificate", "achievem
 def _relevance(item: dict, wanted: set[str]) -> int:
     words = set(merge.text_key(" ".join(str(v) for v in item["fields"].values())).split())
     return len(words & wanted)
+
+
+# Similar names ----------------------------------------------------------------------------------------------
+
+STEM_MIN = 3               # a first word this short ("AI", "My") says nothing of a name's stem
+TAG_WORDS = 6              # words of a card's own summary that tell it from a namesake
+NOT_STEMS = {"the", "and", "for", "our", "project", "app", "tool", "website", "personal", "team", "group"}
+# Where a summary's naming words end: punctuation, or a word that starts saying how, with what or for whom.
+TAG_END = re.compile(r"[,.;:(]|\s(?:that|which|who|built|written|made|using|used|with|for|from|in|to|on|by)\s",
+                     re.I)
+LEADING_ARTICLE = re.compile(r"^(?:an?|the|my|our)\s+", re.I)
+
+
+def _stem(name: str) -> str:
+    """A name's first word, lower case, when it is long and distinctive enough to stand for the name."""
+    first = next(iter(re.split(r"[\s_-]+", name.strip().lower())), "")
+    return first if len(first) >= STEM_MIN and first not in NOT_STEMS else ""
+
+
+def _inside(name: str, other: str) -> bool:
+    return bool(name.strip()) and re.search(rf"(?<!\w){re.escape(name.strip())}(?!\w)", other, re.I) is not None
+
+
+def similar(names: list[str]) -> dict[str, list[str]]:
+    """For each name, the other names it could be mixed up with: the same first word (`_stem`), or one name
+    inside the other ("Quill" and "Quill Employment"); names with none are left out."""
+    out: dict[str, list[str]] = {}
+    for a in names:
+        for b in names:
+            if a.strip().lower() == b.strip().lower():
+                continue
+            if (_stem(a) and _stem(a) == _stem(b)) or _inside(a, b) or _inside(b, a):
+                out.setdefault(a, []).append(b)
+    return out
+
+
+def tag(summary: str) -> str:
+    """A few words of a card's summary that say what it is ("An offline assistant over personal notes, built
+    with Lua" is "offline assistant over personal notes"); "" when it has no summary."""
+    first = TAG_END.split(" ".join(str(summary or "").split()), 1)[0]
+    words = LEADING_ARTICLE.sub("", first.strip()).split()[:TAG_WORDS]
+    return " ".join(words).rstrip(".,;:")
+
+
+def _tags(projects: list[dict]) -> dict[str, str]:
+    """The tag of each project card whose name is like another's (`similar`), by name."""
+    names = [p["fields"].get("name", "") for p in projects]
+    alike = similar(names)
+    return {n: tag(p["fields"].get("summary", "")) for n, p in zip(names, projects, strict=True) if n in alike}
 
 
 # The newest CV ------------------------------------------------------------------------------------------------
@@ -295,6 +351,8 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
     wanted = set(merge.text_key(" ".join(queries or [])).split()) - QUERY_STOP
     worked_for = employers(con)
     cvs = CvAuthority.of(con)
+    tags = _tags([it for it in store.items(con, "project", hidden=False)
+                  if it["state"] in USED_STATES and it["tier"] != tiers.ARCHIVE])
     for kind in KIND_ORDER:
         found = store.items(con, kind, hidden=False)
         if kind == "basic":
@@ -312,7 +370,8 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
             made = contexts.current(it, worked_for) if kind in contexts.CONTEXT_KINDS else ""
             fields = for_writing(con, it, cvs)
-            out.append("- " + line(kind, fields, quote, made, entries=False))
+            out.append("- " + line(kind, fields, quote, made, entries=False,
+                                   tag=tags.get(fields.get("name", "")) if kind == "project" else ""))
             out += ["- " + x for x in entry_lines(kind, fields)]
     return out
 
@@ -433,8 +492,9 @@ def aliases(item: dict, hidden: list[dict]) -> list[str]:
 
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
-    tools, summary, context, aliases, role, files}; `role` is the person's part (`card_role`) and `files` the
-    record files it rests on.
+    tools, summary, context, aliases, role, files, tag, similar}; `role` is the person's part (`card_role`),
+    `files` the record files it rests on, and a project whose name is like another's (`similar`) has those
+    names and its `tag`.
 
     All of them, never ranked or cut like the Profile block: a project listing AWS was cut from the block,
     and the fit table said there was no evidence of AWS (2026-11-06). A project's `aliases` are the other
@@ -457,11 +517,17 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                 out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),
                             "tools": list(f.get("tools") or []), "summary": f.get("summary") or "",
                             "context": context, "aliases": aliases(it, hidden), "role": card_role(it),
-                            "files": [e["source_rel"] for e in it["evidence"] if e["source_rel"]]})
+                            "files": [e["source_rel"] for e in it["evidence"] if e["source_rel"]],
+                            "tag": "", "similar": []})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
                             "tools": [], "summary": "; ".join(f.get("duties") or []), "context": context,
-                            "role": "", "files": []})
+                            "role": "", "files": [], "tag": "", "similar": []})
+    projects = [c for c in out if c["kind"].startswith("project")]
+    alike = similar([c["name"] for c in projects])
+    for c in projects:
+        if c["name"] in alike:
+            c["tag"], c["similar"] = tag(c["summary"]), alike[c["name"]]
     return out
 
 

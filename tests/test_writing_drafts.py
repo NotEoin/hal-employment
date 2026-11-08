@@ -71,6 +71,41 @@ PLACED = [{"kind": "project (personal project)", "name": "Tide gauge", "tools": 
           {"kind": "project", "name": "Lamp list", "tools": [], "summary": "", "context": ""}]
 
 
+QUILL = {"kind": "project (personal project)", "name": "Quill", "tools": ["Lua", "SQLite"],
+         "summary": "An offline assistant over personal notes, built with Lua.",
+         "tag": "offline assistant over personal notes", "similar": ["Quill Employment"]}
+QUILL_JOBS = {"kind": "project (personal project)", "name": "Quill Employment", "tools": ["Python", "Flask"],
+              "summary": "A job-search helper for graduates.", "tag": "job-search helper", "similar": ["Quill"]}
+ALIKE = [QUILL, QUILL_JOBS, *CARDS]
+
+
+class SimilarNames(unittest.TestCase):
+    """Drafts gave a local assistant the purpose and stack of a job-search helper of a similar name
+    (2026-11-08)."""
+
+    def test_a_longer_name_names_its_own_card_and_not_the_shorter_one_inside_it(self):
+        self.assertEqual([c["name"] for c in drafts.named_cards("Quill Employment drafts letters.", ALIKE)],
+                         ["Quill Employment"])
+        self.assertEqual([c["name"] for c in drafts.named_cards("Quill reads notes; Quill Employment drafts "
+                                                                "letters.", ALIKE)], ["Quill", "Quill Employment"])
+
+    def test_one_cards_purpose_or_tool_given_to_its_namesake_is_found(self):
+        for said, hit, whose, card in (
+                ("I built Quill, a local job-search helper.", "job-search", "Quill Employment", "Quill"),
+                ("Quill runs on Flask.", "Flask", "Quill Employment", "Quill"),
+                ("Quill Employment answers questions over my personal notes.", "notes", "Quill",
+                 "Quill Employment")):
+            with self.subTest(said=said):
+                self.assertEqual(drafts.crossed(said, ALIKE), [f"{said} ({hit} is {whose}'s, not {card}'s)"])
+
+    def test_each_card_with_its_own_purpose_and_tools_is_left_alone(self):
+        for said in ("Quill is an offline assistant over my notes, written in Lua.",
+                     "Quill Employment is a job-search helper built with Flask.",
+                     "Tide gauge logs tides in Lua.", "Quill Employment is a personal project of mine."):
+            with self.subTest(said=said):
+                self.assertEqual(drafts.crossed(said, ALIKE), [])
+
+
 class Contexts(unittest.TestCase):
     def test_a_personal_project_placed_in_a_degree_is_found(self):
         # "My first-class Computer Science degree includes building a local RAG assistant", a personal project

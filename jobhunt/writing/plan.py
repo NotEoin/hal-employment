@@ -25,6 +25,9 @@ Design decisions, each with its reason:
   line of every module was one source, so "I achieved 86 in <module>, where I contributed to a team
   project" cited a quote that held another module's "Team Project" (2026-11-08). Whether an entry is a
   skills list is read from its whole line.
+- An item about a card whose name is like another's says the card's tag ("about Quill (offline assistant over
+  personal notes)"), and a text naming "Quill Employment" names that card, never "Quill" as well
+  (`drafts.named_cards`).
 - Only a "Project" or "Job" line of the Profile block, a CV line or a passage of a card's file is tied to a
   card: a skill line quoting a project says nothing of where the project was done.
 - A skills list (`skills_line`: a Profile "Skill:" line, or a CV line of a label and a list, "AI and ML:
@@ -86,12 +89,15 @@ class Item:
     role: str = ""             # the person's part ("built the statistics features; team of 7"), "" when unsaid
     tools: tuple[str, ...] = ()
     skills: bool = False       # quoted from a skills list (`skills_line`), so tied to no project
+    tag: str = ""              # the card's tag when its name is like another card's (`profile.writing.tag`)
 
     def words(self) -> str:
-        """The item as a request lists it: its quote, then where it comes from, its context and role."""
+        """The item as a request lists it: its quote, then where it comes from, its card (with its tag), context
+        and role."""
         about = [f"from {'the ' + self.source if self.source in (CV, PROFILE) else self.source}"]
         if self.card:
-            about.append(f"about {self.card}" + (f", {stage.CONTEXT_WORDS[self.context]}" if self.context else ""))
+            about.append(f"about {self.card}" + (f" ({self.tag})" if self.tag else "")
+                         + (f", {stage.CONTEXT_WORDS[self.context]}" if self.context else ""))
         elif self.context:
             about.append(stage.CONTEXT_WORDS[self.context])
         if self.role:
@@ -113,7 +119,7 @@ def skills_line(label: str, text: str) -> bool:
 
 def _card_of(text: str, cards: list[dict]) -> dict | None:
     """The one card a text names, or None when it names none or several."""
-    named = [c for c in cards if c["name"].strip() and drafts.names_card(text, c, cards)]
+    named = drafts.named_cards(text, cards)
     return named[0] if len(named) == 1 else None
 
 
@@ -191,7 +197,7 @@ def checked(reply: dict, found: list[Source]) -> list[Item]:
         card = {} if skills else source.card or {}
         items.append(Item(f"E{len(items) + 1}", text, source.label, card.get("name", ""),
                           card.get("context", "") or source.context, _role(card or None, source.text),
-                          tuple(card.get("tools", ())), skills))
+                          tuple(card.get("tools", ())), skills, card.get("tag", "")))
         if len(items) == MAX_ITEMS:
             break
     return items

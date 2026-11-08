@@ -512,6 +512,7 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     known = known_tools(cards)
     return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
+        + drafts.crossed(written, cards) \
         + taught.unsupported(written, profile_writing.module_names(), (facts, kept))
 
 

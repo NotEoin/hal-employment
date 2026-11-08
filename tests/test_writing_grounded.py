@@ -94,6 +94,19 @@ class Entries(unittest.TestCase):
                          ["nothing in your facts ties Ferry Studies to a team project"])
 
 
+class SimilarNames(unittest.TestCase):
+    def test_a_cards_purpose_given_to_its_namesake_fails_through_the_markers(self):
+        # drafts called a local assistant "a local job-search helper", its namesake's purpose (2026-11-08)
+        quill = {"kind": "project (personal project)", "name": "Quill", "tools": ["Lua"], "summary": "",
+                 "tag": "offline assistant over personal notes", "similar": ["Quill Employment"]}
+        jobs = {"kind": "project (personal project)", "name": "Quill Employment", "tools": ["Flask"], "summary": "",
+                "tag": "job-search helper", "similar": ["Quill"]}
+        item = Item("E1", "an offline assistant over personal notes", "CV", "Quill", "personal", "", ("Lua",))
+        facts = grounded.Facts({"E1": item}, [quill, jobs], ["Lua", "Flask"])
+        self.assertEqual(grounded.problems(one("Quill is my local job-search helper [E1]."), facts),
+                         ["job-search is Quill Employment's, not Quill's"])
+
+
 class WithAI(unittest.TestCase):
     def check(self, text: str, reply: dict) -> tuple[list[str], FakeChecker]:
         fake = FakeChecker({cites.strip(text): reply})

@@ -175,6 +175,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Projects with similar names stay apart.** When two of your projects share a name, such as an
+  assistant and a job-search helper both starting with the same word, letters gave one the other's tools or
+  purpose. Hal now names each with a few words of its own description in the facts the writer reads, and
+  rewrites a sentence that gives one of them a tool or a purpose only the other has.
 - **Your newest CV speaks for your CVs.** When an older version of your CV gave a project tools your newest
   CV no longer claims, every letter said you used them. Hal now leaves out of your letters, messages and
   answers any tool, duty or detail that only an older CV gives, unless a repository or another document of

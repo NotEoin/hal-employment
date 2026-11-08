@@ -24,7 +24,8 @@ Design decisions, each with its reason:
   caught), and "I built" of a team's card with no word of the team or of the person's part. The checks the
   whole draft had (a finished course spoken of as to come, a tool on the wrong project, a project in the
   wrong place by name, what a module covered) run on each sentence too, and a module's mark tied to a
-  project or activity its own entry never names (`taught.joined`).
+  project or activity its own entry never names (`taught.joined`), and one card's tool or purpose given to a
+  card of a similar name (`drafts.crossed`).
 - A tool claimed for a project needs that project's own evidence (`_tool_problems`): a cited item tied to its
   card and not a skills list (`plan.Item.skills`), or the card's own names, summary and tools. "I used NumPy
   and pandas to build" a project passed on the CV's skills line though the project's card never names pandas
@@ -177,7 +178,7 @@ def _alone_problem(text: str, items: list[Item]) -> str:
 
 def _projects(text: str, items: list[Item], facts: Facts) -> list[str]:
     """The cards a sentence is about: those its items are tied to and those it names (`drafts.names_card`)."""
-    named = [c["name"] for c in facts.cards if c["name"].strip() and drafts.names_card(text, c, facts.cards)]
+    named = [c["name"] for c in drafts.named_cards(text, facts.cards)]
     return list(dict.fromkeys([*(i.card for i in items if i.card), *named]))
 
 
@@ -227,6 +228,7 @@ def problems(c: cites.Cited, facts: Facts) -> list[str]:
         out.append(f"the course ended in {facts.now.end or 'the past'}")
     out += _reason(drafts.misplaced_tools(text, facts.cards, facts.known))
     out += _reason(drafts.wrong_context(text, facts.cards))
+    out += _reason(drafts.crossed(text, facts.cards))
     out += _reason(taught.unsupported(text, facts.modules, facts.sources))
     out += _reason(taught.joined(text, facts.modules, facts.sources, facts.cards))
     out += plain.problems(text, list(facts.names), list(facts.labels))

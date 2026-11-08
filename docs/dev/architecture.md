@@ -532,8 +532,17 @@ runs: tests use `tests/support/fake_claude/`.
   (`drafts.names_card`) by its name, by one of its `aliases` (`profile.writing.aliases`: the names of hidden
   project cards resting on one of its project files, its repository's or folder's name, the end of its
   link), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
-  ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). Both go into the one rewrite per
-  draft that `pack.fix_claims` asks for, and what is left is listed.
+  ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). A card named only inside a longer
+  named card's name ("Quill" in "Quill Employment") is not named (`drafts.named_cards`). Both go into the one
+  rewrite per draft that `pack.fix_claims` asks for, and what is left is listed.
+- Similar names (`profile.writing.similar`): project cards with the same first word of at least
+  `STEM_MIN` letters (not a word in `NOT_STEMS`), or one name inside the other, each carry a `tag`, the first
+  `TAG_WORDS` words of their own summary up to a comma or a word such as "for", "with" or "that" ("Quill
+  (offline assistant over personal notes)", "Quill Employment (job-search helper)"), on their Profile line,
+  in `cards` (`tag`, `similar`) and in each plan item about them (`plan.Item.tag`). `drafts.crossed` finds a
+  sentence naming one of them with a tool, or a word of the tag (not `NOT_PURPOSE`), that only the other's
+  card holds; it is one of each sentence's checks with no AI and part of `pack.unsupported_claims`. Drafts
+  gave a local assistant its namesake's purpose and stack in every graded run (2026-11-08).
 - `writing/taught.py`: `unsupported(draft, modules, sources)` turns a sentence that says a named module
   (one of `profile.writing.module_names`, the modules of the education facts the person checked, or any
   module code) covered, taught, included or introduced something into an unsupported claim, unless a CV

@@ -108,13 +108,63 @@ def names_card(sentence: str, card: dict, cards: list[dict] = ()) -> bool:
                for w in _distinct_words(card, cards))
 
 
+def named_cards(sentence: str, cards: list[dict]) -> list[dict]:
+    """The cards a sentence names (`names_card`), leaving out a card named only inside a longer named card's
+    name: "Quill Employment drafts letters" names Quill Employment, not Quill too."""
+    named = [c for c in cards if c["name"].strip() and names_card(sentence, c, cards)]
+    out = []
+    for card in named:
+        longer = [n for o in named if o is not card for n in card_names(o)
+                  if any(names_tool(n, own) for own in card_names(card)) and len(n) > len(card["name"])]
+        rest = sentence
+        for n in sorted(longer, key=len, reverse=True):
+            rest = re.sub(re.escape(n), " ", rest, flags=re.I)
+        if not longer or names_card(rest, card, cards):
+            out.append(card)
+    return out
+
+
+def _purpose_words(card: dict) -> list[str]:
+    """The words of a card's tag that say what it is for, little and general words left out."""
+    return [w for w in re.findall(r"[\w+#-]+", card.get("tag") or "")
+            if w.lower() not in LITTLE_WORDS | NOT_PURPOSE and len(w) >= CROSSED_MIN]
+
+
+CROSSED_MIN = 3            # a tag's word this short ("a", "UI") says nothing of what a card is for
+# Words of a tag any project may say of itself, so they never tell one card from another.
+NOT_PURPOSE = frozenset("""over under between through across around via onto without within using built made
+personal project projects app application tool tools local small simple new own based my""".split())
+
+
+def crossed(draft: str, cards: list[dict]) -> list[str]:
+    """Sentences that name one of two cards with similar names (`profile.writing.similar`) with a tool or a
+    word of what it is for that only the other's card holds, each with whose it is: "Quill, a job-search
+    helper, ... (job-search is Quill Employment's, not Quill's)"."""
+    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    by_name = {c["name"]: c for c in projects}
+    out = []
+    for sentence in check.sentences(draft):
+        named = named_cards(sentence, projects)
+        if len(named) != 1 or not named[0].get("similar"):
+            continue
+        card = named[0]
+        own = " ".join([*card_names(card), card["kind"], card["summary"], *card["tools"], card.get("tag") or ""])
+        for other in (by_name[n] for n in card["similar"] if n in by_name):
+            hit = next((w for w in [*other["tools"], *_purpose_words(other)]
+                        if names_tool(sentence, w) and not names_tool(own, w)), None)
+            if hit:
+                out.append(f"{sentence} ({hit} is {other['name']}'s, not {card['name']}'s)")
+                break
+    return out
+
+
 def misplaced_tools(draft: str, cards: list[dict], known: list[str]) -> list[str]:
     """Sentences that give a project card a tool from `known` that the card's own facts never name, each
     with the tool and the project: "The Lua tide gauge needed C++. (C++ is not among Tide gauge's tools)"."""
     projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
     out = []
     for sentence in check.sentences(draft):
-        named = [c for c in projects if names_card(sentence, c, projects)]
+        named = named_cards(sentence, projects)
         if len(named) != 1:
             continue
         card = named[0]
@@ -177,7 +227,7 @@ def wrong_context(draft: str, cards: list[dict]) -> list[str]:
     projects = [c for c in every if c.get("context") in CLASHES]
     out = []
     for sentence in check.sentences(draft):
-        named = [c for c in projects if names_card(sentence, c, every)]
+        named = [c for c in named_cards(sentence, every) if c in projects]
         if len(named) != 1:
             continue
         card = named[0]
