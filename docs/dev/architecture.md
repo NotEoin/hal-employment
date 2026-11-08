@@ -472,7 +472,8 @@ runs: tests use `tests/support/fake_claude/`.
   `drafts.named_cards`, so "Quill Employment" never names "Quill"); `drafts.crossed`; degree or own-time
   words against its context; "I built" of a team's work without the person's part; `stage.ended_course`;
   `plain.problems` (with `plain.STOCK`: "aligns with", "resonates with", "directly supports", "satisfies the
-  requirement", "the role requires", "matters for the role", "demonstrates my ability to"); a sentence
+  requirement", "the role requires", "matters for the role", "demonstrates my ability to", "matches my",
+  "fits my", "suits my", "in line with my"); a sentence
   echoing the advert (`drafts.echoes`); a sentence the paragraph already said (`repeats.same`); the part as
   a label ("As the owner, ..."); `paragraphs.LIST_TOOLS` (4) tools in one sentence; `taught`'s module
   checks; the work unnamed in the first sentence; too few sentences; and the writing rules' high hits.
@@ -484,7 +485,10 @@ runs: tests use `tests/support/fake_claude/`.
   "Check before sending" says so (`Paragraph.listed`). A sentence fixed or cut is never listed. The
   opening and closing are one call (`writing/frame.py`, `frame.settle`, prompt `letter_frame`) from `frame.Facts`
   (`pack.letter_frame`: the name, `opening.described`, the role, the motivation pairing, the stories the
-  middle tells and today), checked the same way with the role and the institution required, drafted once
+  middle tells and today), checked the same way with the role and the institution required, and with a
+  pairing the work it rests on named (by its card's name) and one specific word of the employer's fact
+  (`frame.motive_problems`; `motive.offered` gives the pairing only items tied to a card while the plan has
+  any), drafted once
   more when either fails; an opening still failing is `opening.Opening`'s built sentence and a closing
   still failing is left out. Paragraphs and the frame are drafted at `paragraphs.DRAFT_TEMPERATURE`. The
   message and the answers are told the same way (`pack._story_others`, through `pack.write_others`): the

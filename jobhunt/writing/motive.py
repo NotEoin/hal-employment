@@ -15,7 +15,9 @@ Design decisions, each with its reason:
   uses of itself (`GENERIC`, the little words, the job title and the employer's name). "a culture of
   innovation and excellence" fits every employer, so it is no reason.
 - The item must be one of the plan's, so the person's side is a fact they checked; with no pairing that
-  holds, the letter says less rather than invent one (`writing.frame`).
+  holds, the letter says less rather than invent one (`writing.frame`). Only items tied to a project or job
+  card are offered while the plan has any (`offered`), so the reason names a piece of work: reasons such as
+  "because I have built features for a team project" named none (2026-11-08).
 """
 from __future__ import annotations
 
@@ -75,15 +77,21 @@ def checked(reply: dict, advert: str, brief: str, plan: list[Item], names: tuple
     return Pairing(fact, item, reason)
 
 
+def offered(plan: list[Item]) -> list[Item]:
+    """The items a pairing may rest on: those tied to a project or job card, or every item when none is."""
+    return [i for i in plan if i.card and not i.skills] or plan
+
+
 def make(names: tuple[str, ...], advert: str, brief: str, plan: list[Item]) -> Pairing | None:
     """The pairing for one letter: one AI call, then `checked`; None when the plan is empty or nothing holds.
     `names` are the job title and the employer's name."""
     if not plan:
         return None
     title, company = (*names, "", "")[:2]
+    items = offered(plan)
     request = (f"Job: {title} at {company}\n\nAdvert:\n{advert}\n\nCompany brief:\n{brief or 'none'}\n\n"
-               "Evidence plan:\n" + "\n".join(i.words() for i in plan))
-    return checked(llm.chat_json(prompts.text(PROMPT), request, role="main"), advert, brief, plan, names)
+               "Evidence plan:\n" + "\n".join(i.words() for i in items))
+    return checked(llm.chat_json(prompts.text(PROMPT), request, role="main"), advert, brief, items, names)
 
 
 def block(pairing: Pairing | None) -> str:

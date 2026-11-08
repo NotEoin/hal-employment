@@ -11,7 +11,7 @@ from unittest import mock
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt import llm
-from jobhunt.writing import frame, paragraphs, plain, stage
+from jobhunt.writing import frame, motive, paragraphs, plain, stage
 from jobhunt.writing.motive import Pairing
 from jobhunt.writing.plan import Item, Story
 
@@ -268,6 +268,34 @@ class Stock(unittest.TestCase):
     def test_plain_finds_a_stock_link_but_never_a_plain_sentence(self):
         self.assertTrue(plain.problems("This aligns with your team's work."))
         self.assertEqual(plain.problems("I lined up the shelves with care."), [])
+
+    def test_a_motive_said_as_matching_my_experience_is_stock(self):
+        # openings said the role "matches my experience" or "fits my recent work" (2026-11-08)
+        for said in ("The role matches my experience.", "Your work fits my recent projects.",
+                     "This is in line with my studies.", "The team suits my background well."):
+            self.assertTrue(plain.problems(said), said)
+
+
+class Motive(unittest.TestCase):
+    """Openings gave "matches my experience" and reasons such as "because I have built features for a team
+    project" (2026-11-08)."""
+
+    FACTS = frame.Facts("Avery Quillon", "a History graduate", "Graduate Developer", "Brightwater Tools",
+                        Pairing("ticket triage service", Item("E1", "Quill answers questions", "CV", card="Quill"),
+                                "both sort questions"), ("Quill",), "")
+
+    def test_the_reason_names_the_work_and_one_thing_of_the_employers(self):
+        self.assertEqual(frame.motive_problems("I am applying for the Graduate Developer role, as I enjoy coding.",
+                                               self.FACTS),
+                         [frame.MOTIVE_WORK.format(work="Quill"),
+                          frame.MOTIVE_EMPLOYER.format(fact="ticket triage service")])
+        self.assertEqual(frame.motive_problems("Building Quill to sort questions drew me to your triage work.",
+                                               self.FACTS), [])
+
+    def test_a_pairing_rests_on_a_piece_of_work_while_the_plan_has_one(self):
+        cv, work = Item("E1", "Final-year student", "CV"), Item("E2", "Quill answers questions", "CV", card="Quill")
+        self.assertEqual(motive.offered([cv, work]), [work])
+        self.assertEqual(motive.offered([cv]), [cv])
 
 
 if __name__ == "__main__":

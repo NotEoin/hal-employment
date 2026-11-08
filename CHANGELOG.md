@@ -192,6 +192,10 @@ What changed in each version, in plain words.
   to reach your letter length. A module is a paragraph only when fewer than two projects fit; a module the
   job asks about that no paragraph shows may get one clause with its mark in the opening. What you said you
   are looking for ("seeking a role in ...") no longer reaches a letter.
+- **Your reason for the employer is concrete.** Openings said the role "matches my experience" or "fits my
+  recent work", for reasons such as having built features for a team project. The opening's reason now
+  names one specific thing about the employer, from the advert or the company's own words, and the project
+  of yours it connects to, by name; "matches my", "fits my" and the like are written again.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that

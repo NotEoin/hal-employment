@@ -18,6 +18,10 @@ Design decisions, each with its reason:
 - A module the job's requirements name and no paragraph shows may be one clause of the opening, with its mark
   (`Facts.modules`, `plan.relevant_modules`): letters to an employer stressing security missed the person's
   high marks in security modules (2026-11-08). It is never a paragraph of its own while projects exist.
+- The opening's reason for this employer is concrete (`motive_problems`, 2026-11-08): openings said the role
+  "matches my experience" for reasons such as "because I have built features for a team project". It must
+  name the work the pairing rests on, by its project's name when it is a card's, and say one specific word
+  of the employer's fact; the stock links ("matches my", "fits my") are `plain.STOCK`.
 - One call drafts both paragraphs, and one more when either fails, so a letter's frame costs one or two calls.
   An opening still failing is the message's built sentence (`opening.Opening`, from the settings and the
   checked course), which needs no check; a closing still failing is left out, as a letter reads without it.
@@ -29,7 +33,7 @@ import re
 from dataclasses import dataclass
 
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import drafts, opening, plain, repeats, stage
+from jobhunt.writing import drafts, motive, opening, plain, repeats, stage
 from jobhunt.writing.motive import Pairing
 from jobhunt.writing.paragraphs import (
     ECHO_SAID,
@@ -49,6 +53,9 @@ PROMPT = "letter_frame"
 WHAT = "the letter's opening or closing"   # how a problem names what it found it in
 ROLE_MISSING = "does not name the role"
 WHO_MISSING = "does not say who is writing ({who})"
+MOTIVE_WORK = "does not name {work}, the work your reason for this employer rests on"
+MOTIVE_EMPLOYER = 'does not say what of the employer draws you ("{fact}")'
+STEM = 5                   # letters two words share to be one word ("triage" and "triaging")
 
 
 @dataclass(frozen=True)
@@ -119,9 +126,29 @@ def problems(text: str, facts: Facts, scope: Scope, first: bool) -> list[Problem
         out.append(Problem("", ROLE_MISSING))
     if first and facts.institution and facts.institution.lower() not in text.lower():
         out.append(Problem("", WHO_MISSING.format(who=facts.who)))
+    if first and facts.pairing is not None:
+        out += [Problem("", p) for p in motive_problems(text, facts)]
     hits = writing_check.check(text, "letter", spelling=scope.values.get("spelling_code", ""),
                                allowed=scope.values.get("own_words") or ())
     return out + [Problem("", f"{h.message} ({h.quote})") for h in writing_check.high(hits)]
+
+
+def _stems(text: str, leave: set[str] = frozenset()) -> set[str]:
+    return {w[:STEM] for w in writing_check.words_of(text) if w not in drafts.LITTLE_WORDS and w not in leave}
+
+
+def motive_problems(text: str, facts: Facts) -> list[str]:
+    """What the opening's reason for this employer lacks: the work it rests on by name (when the pairing's item
+    is a card's), and one specific word of the employer's fact (`motive.specific`'s words)."""
+    pairing, out = facts.pairing, []
+    work = pairing.item.card
+    if work and not drafts.names_card(text, {"name": work, "aliases": []}):
+        out.append(MOTIVE_WORK.format(work=work))
+    names = {w for n in (facts.title, facts.employer) for w in writing_check.words_of(n)}
+    own = _stems(pairing.fact, names | motive.GENERIC)
+    if own and not own & _stems(text):
+        out.append(MOTIVE_EMPLOYER.format(fact=pairing.fact))
+    return out
 
 
 def settle(facts: Facts, scope: Scope) -> Framed:

@@ -25,7 +25,9 @@ Design decisions, each with its reason:
   the requirement for", "addresses the need for", "aligns with", "resonates with", "the role requires",
   "matters for the role", "demonstrates my ability to", and every closing sentence of a prototype's paragraphs
   was "This experience matters for the role because it demonstrates my ability to ..." (2026-11-08). The
-  sentence that ties a piece of work to the job should name what in the job it helps with instead.
+  sentence that ties a piece of work to the job should name what in the job it helps with instead. Letter
+  openings said the role "matches my experience" or "fits my recent work" (2026-11-08), so "matches my",
+  "fits my", "suits my", "in line with my" and their kin are stock too.
 - What the person is looking for ("I am seeking a role in backend, systems or applied AI", `GOAL`) is a
   problem: a letter is for one role, and the search settings and a CV's summary leaked into one (2026-11-08).
 - The settings' own wording reaches a request only as the person's plain values (`cv.status_line`); a
@@ -70,7 +72,9 @@ STOCK = re.compile(
     r"criteri(?:on|a))|aligns? (?:directly |closely |well |strongly |perfectly )?with|resonates? with|"
     r"directly (?:supports?|relevant|applicable|relates)|matters? (?:for|to) (?:the|this|your) (?:role|job|"
     r"position|post|team)|demonstrates? my (?:ability|capacity|capability|skills?)|(?:this|that|the) experience "
-    r"matters)\b", re.I)
+    r"matters|(?:match(?:es)?|fits?|suits?|reflects?|mirrors?|complements?|(?:is |are )?in (?:line|keeping) with|"
+    r"ties? in with|aligns? (?:directly |closely |well )?with|speaks? to|connects? (?:directly |well )?(?:to|with))"
+    r" (?:well |closely |directly |perfectly )?(?:with )?my)\b", re.I)
 # What the person is looking for, as a CV's summary or the search settings say it: "seeking a role in ...".
 GOAL = re.compile(r"\b(?:seeking|looking for|searching for|hoping to find|aiming for)\s+(?:an?\s+|my\s+)?"
                   r"(?:[\w-]+\s+){0,3}?(?:roles?|positions?|jobs?|posts?|opportunit(?:y|ies)|placements?|"
