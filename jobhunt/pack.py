@@ -680,8 +680,10 @@ def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, k
     (`writing.paragraphs`): the job and its advert, today, the field's conventions, the employer's words, every
     story and card, and the person's names, modules and settings wording."""
     now, advert = stage.current(), _job_text(job)
+    brief = (f"What the employer does (from the company brief; never copy its words):\n"
+             f"{about.strip()[:paragraphs.BRIEF_CHARS]}\n\n") if (about or "").strip() else ""
     context = (f"The job: {job['title']} at {job['company']}\nThe advert (for what the job is; never copy its "
-               f"words):\n{advert[:paragraphs.ADVERT_CHARS]}\n\n{stage.today_lines(now)}\n\n"
+               f"words):\n{advert[:paragraphs.ADVERT_CHARS]}\n\n{brief}{stage.today_lines(now)}\n\n"
                + fields.block(field_of(job, who, analysis), kind))
     return paragraphs.Scope(tuple(found), tuple(cards), tuple(known_tools(cards)),
                             f"{advert}\n{about}\n{stage.today_lines(now)}", advert, about,

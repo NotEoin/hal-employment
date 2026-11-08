@@ -181,7 +181,8 @@ class FakeAI:
         return [u for s, u in self.asked if s[0] == first]
 
 
-GOOD = "Quill is my offline assistant over personal notes, in Lua. It answers questions over my notes offline."
+GOOD = ("Quill is my offline assistant over personal notes, in Lua. It answers questions over my notes offline, as "
+        "your ticket triage service does.")
 
 
 class Settle(unittest.TestCase):
@@ -268,6 +269,39 @@ class Settle(unittest.TestCase):
     def test_nothing_to_say_is_dropped_with_no_check(self):
         done = self.settle(FakeAI([""]))
         self.assertEqual((done.text, done.calls, done.dropped), ("", 1, paragraphs.NOTHING))
+
+
+class Link(unittest.TestCase):
+    """Graders flagged "resolving missing brackets in the manager class" as a fit, and links naming nothing of
+    the job (2026-11-08)."""
+
+    UNLINKED = "Quill is my offline assistant over personal notes, in Lua. It answers questions over my notes offline."
+
+    def test_a_last_sentence_naming_a_part_of_the_job_or_the_brief_is_a_link(self):
+        scope = replace(SCOPE, brief="Brightwater Tools makes flood sensors for river trusts.")
+        self.assertTrue(paragraphs.linked("It would suit your ticket triage service.", QUILL_STORY, scope))
+        self.assertTrue(paragraphs.linked("Its search could sort readings from your flood sensors.", QUILL_STORY,
+                                          scope))
+        for none in ("It answers questions over my notes offline.", "It taught me to build tools in Python.",
+                     "Brightwater Tools is a great team to grow in."):
+            self.assertFalse(paragraphs.linked(none, QUILL_STORY, scope), none)
+
+    def test_a_letter_paragraph_with_no_link_is_drafted_again_once_and_never_dropped_for_it(self):
+        fake = FakeAI([self.UNLINKED])
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            done = paragraphs.settle(QUILL_STORY, paragraphs.LETTER, SCOPE)
+        self.assertIn(paragraphs.NO_LINK, fake.calls("Write")[1])
+        self.assertEqual((done.text, done.dropped, len(fake.calls("Write"))), (self.UNLINKED, "", 2))
+
+    def test_a_redraft_that_breaks_a_check_gives_way_to_the_draft_that_lacked_only_its_link(self):
+        broken = f"{self.UNLINKED[:-1]} for 40 teams, as your ticket triage service does."
+        with mock.patch.object(llm, "chat_json", FakeAI([self.UNLINKED, broken]).chat_json):
+            done = paragraphs.settle(QUILL_STORY, paragraphs.LETTER, SCOPE)
+        self.assertEqual((done.text, done.dropped), (self.UNLINKED, ""))
+
+    def test_only_a_letters_middle_must_end_with_a_link(self):
+        self.assertEqual(paragraphs.unlinked(self.UNLINKED, QUILL_STORY, SCOPE, paragraphs.answer("Tell us.")), [])
+        self.assertTrue(paragraphs.letter(250, 3).link)
 
 
 class Frame(unittest.TestCase):

@@ -59,6 +59,14 @@ Design decisions, each with its reason:
   the AI flagged are cut, and only when the rest still reads as above; else the paragraph is kept whole and listed
   for the person to check (`Paragraph.checks`). When the redraft fails a check with no AI and its sentences
   cannot be cut, the first draft is kept this way if it failed only the AI check.
+- A letter paragraph ends with its own link to a named part of the job (`Shape.link`, `unlinked`,
+  `NO_LINK`): its last sentence names a word of the advert or the company brief (`job_terms`) that is not
+  a little word, a word any employer or piece of work uses, the title, the employer's name or a tool. Graders
+  flagged links such as "resolving missing brackets in the manager class" and a sniffer "useful for <the
+  employer>'s data-driven marketing systems" (2026-11-08), so the request asks for a result of the work, never
+  a bug fix, tied to a task, system or product of the employer's in the writer's own words. A paragraph with
+  no link is drafted again once with that reason; it is never cut or dropped for it, and a redraft that
+  breaks another check gives way to the draft that lacked only its link.
 - A letter's paragraphs share the person's letter length (`letter`): what the opening and closing leave
   (`FRAME_WORDS`) divided among the stories, never under `PARAGRAPH_WORDS`, so three project paragraphs
   reach the length setting (a letter came to 118 words against 250, 2026-11-08).
@@ -80,6 +88,7 @@ log = logging.getLogger(__name__)
 
 PROMPT, VERIFY_PROMPT = "story_paragraph", "paragraph_verify"
 ADVERT_CHARS = 3000        # of the advert a paragraph request carries, for what the job is; never to copy from
+BRIEF_CHARS = 1500         # of the company brief it carries, for the employer's products a link may name
 # Drafts are asked for cooler than other prose (0.7, `ai.openai_compat.PROSE_TEMPERATURE`): at 0.7 a local model
 # added plausible details to fit the advert in every graded run (2026-11-07). The Claude CLI takes no temperature,
 # so there it changes nothing.
@@ -121,6 +130,9 @@ LABEL_SAID = 'uses your part as a label ("{label}"); say what you did'
 LIST_SAID = "lists tools rather than saying what you did with them"
 NOT_NAMED = "does not name {card} in its first sentence"
 NO_QUESTION = "asks no question about the team's work"
+NO_LINK = ("its last sentence names nothing of this job; end with one sentence, in your own words, tying a "
+           "result of this work (never a bug fix or a detail) to a named task, system or product of the "
+           "employer's, from the advert or the company brief")
 NOT_EMPLOYER = ("does not give the reason about the employer in its first sentence; say what of the employer "
                 "draws you, its product or its mission, then tie it to the work in one sentence at most")
 SAID_AGAIN = "says your degree again, which Hal's opening already says; tell a fact of the work instead"
@@ -147,11 +159,14 @@ class Shape:
     after: str = ""            # what Hal puts before it (the message's opening sentence), never to say again
     employer: bool = False     # its first sentence speaks of the employer (a "why here" answer, `motive.addresses`)
     fact: str = ""             # the employer's fact that first sentence may name its product by
+    link: bool = False         # its last sentence names a part of the job (a letter's middle, `linked`)
 
 
 LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 sentences, 60 to 90 words, one "
-                         "connected story. Name the work in the first sentence. End with at most one sentence on "
-                         "what it can help with in this job.", "first", 2)
+                         "connected story. Name the work in the first sentence. End with one sentence that ties a "
+                         "result of this work (a system built, a measured outcome; never a bug fix or a detail) to "
+                         "a named task, system or product of this employer's, in your own words.", "first", 2,
+               link=True)
 MESSAGE = Shape("answer", "The body of a short message to the person hiring, after Hal's own greeting and opening "
                           "sentence: one or two sentences about this work, naming it in the first, then one specific "
                           "question about the team's work on what it can help with. At most 60 words in all. No "
@@ -190,7 +205,7 @@ def letter(words: int | None, n: int) -> Shape:
         return LETTER
     share = max(PARAGRAPH_WORDS[0] + PARAGRAPH_SPREAD, (int(words) - FRAME_WORDS) // n)
     low, high = max(PARAGRAPH_WORDS[0], share - PARAGRAPH_SPREAD), max(PARAGRAPH_WORDS[1], share + PARAGRAPH_SPREAD)
-    return Shape("letter", LETTER.words.replace("60 to 90 words", f"{low} to {high} words"), "first", 2)
+    return Shape("letter", LETTER.words.replace("60 to 90 words", f"{low} to {high} words"), "first", 2, link=True)
 
 
 def answer(question: str, nth: int = 0, of: int = 1) -> Shape:
@@ -505,6 +520,35 @@ def problems(text: str, story: Story, scope: Scope, shape: Shape) -> list[Proble
     return list(dict.fromkeys(out))
 
 
+LINK_STEM = 5              # letters two words share to be one word, as `motive.STEM` ("triage" and "triaging")
+
+
+def job_terms(scope: Scope) -> set[str]:
+    """The word stems (`LINK_STEM` letters) of the advert and the company brief that can name a part of this
+    job: little words, words any employer or piece of work uses (`motive.GENERIC`, `purpose.GENERAL`), the
+    job title and the employer's name, and tool names left out, as a tool is the person's, not a task."""
+    left = {w for n in (*scope.names, *scope.known) for w in writing_check.words_of(n)}
+    left |= drafts.LITTLE_WORDS | motive.GENERIC | purpose.GENERAL
+    return {w[:LINK_STEM] for w in writing_check.words_of(f"{scope.advert}\n{scope.brief}")
+            if len(w) > 2 and w not in left}
+
+
+def linked(sentence: str, story: Story, scope: Scope) -> bool:
+    """True when a sentence names a part of this job (`job_terms`) beyond the work's own name: the link a letter
+    paragraph ends with (see the module notes)."""
+    own = {w[:LINK_STEM] for w in writing_check.words_of(f"{story.name} {' '.join(story.aliases)}")}
+    return bool(({w[:LINK_STEM] for w in writing_check.words_of(sentence)} - own) & job_terms(scope))
+
+
+def unlinked(text: str, story: Story, scope: Scope, shape: Shape) -> list[Problem]:
+    """`NO_LINK` for a paragraph of a shape that ends with a link whose last sentence names nothing of the job;
+    [] else. It asks for a redraft but never cuts or drops a paragraph (`settle`)."""
+    said = writing_check.sentences(text)
+    if not shape.link or not said or not (scope.advert or scope.brief) or linked(said[-1], story, scope):
+        return []
+    return [Problem("", NO_LINK)]
+
+
 def restates(text: str, story: Story, scope: Scope) -> bool:
     """True when every content word of a paragraph, by its root, is in its story's facts or the employer's words:
     it says nothing they do not, so no AI check is needed."""
@@ -646,13 +690,16 @@ def settle(story: Story, shape: Shape, scope: Scope) -> Paragraph:
         return out
     found, by_ai = _judge(text, story, scope, shape, out)
     first = (text, found, by_ai)
-    if found:
-        log.info("paragraph about %s: %s", _called(story), "; ".join(p.line() for p in found))
-        again = draft(story, shape, scope, text, found)
+    asked = [*found, *unlinked(text, story, scope, shape)]
+    if asked:
+        log.info("paragraph about %s: %s", _called(story), "; ".join(p.line() for p in asked))
+        again = draft(story, shape, scope, text, asked)
         out.calls += 1
         out.redrafted = True
         if again:
             text, (found, by_ai) = again, _judge(again, story, scope, shape, out)
+        if found and not first[1]:     # the redraft broke a draft that lacked only its link: keep that draft
+            text, found, by_ai = first
     if not found:
         out.text = text
         return out
