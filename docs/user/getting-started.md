@@ -105,13 +105,15 @@ you want to work here?" opens with what draws you to the employer, in your own w
 advert's, then ties it in a sentence to one piece of your work that fits the job well. Each paragraph is
 checked against its own work's facts: a number or tool they do not give (a tool you used on a project must
 be in that project's own facts, as a list of your skills says what you know, not where you used it), a tool
-or name that belongs to another of your projects, the project placed somewhere else (your degree instead of
+or name that belongs to another of your projects, a tool given a job your facts give another tool, the project placed somewhere else (your degree instead of
 your own time), a team's work written as yours alone, or a sentence that ties the work to the job with
 stock words such as "aligns with" or "meets the requirement for". A paragraph with such a problem is
-written once more. If it is still wrong, Hal takes out the sentence at fault when the rest still reads, or
+written once more. If it is still wrong, Hal takes out the part of a sentence at fault, or the whole
+sentence, when the rest still reads, or
 leaves the paragraph out and says so under **Check before sending**, and then tells your next best piece of
-work instead. When only Hal's AI check doubts a paragraph, Hal keeps it, without the doubted sentence when
-the rest still reads, or whole and listed under **Check before sending** for you to check. The letter opens with who you are, the
+work instead. When only Hal's AI check doubts a paragraph, in a letter, a message or an answer, Hal keeps
+it, without the doubted part when the rest still reads, or whole and listed under **Check before sending**
+for you to check. The letter opens with who you are, the
 role and one concrete thing about the employer that draws you, such as what it makes or its mission. It
 names none of your projects there, as the paragraphs tell them, and closes by asking for the next step. When Hal finds none of your
 work to tell, it writes the letter, the message and the answers whole, and checks what each says about you
@@ -161,8 +163,8 @@ flat. A company with the employer's exact name that Hal cannot tie to the advert
 "Possible match: ... (check it is the same company)", and any other is left out.
 
 Every pack has a **Check before sending** section, which says "Nothing to check." when nothing needs
-you. It lists only what you should act on: a paragraph Hal left out and why, a question your facts could
-not answer, a letter well under the length you prefer, and a paragraph that starts with "This", "It" or
+you. It lists only what you should act on: a paragraph Hal left out and why, a paragraph Hal kept although
+its check doubted it, a question your facts could not answer, a letter well under the length you prefer, and a paragraph that starts with "This", "It" or
 "That" pointing at something the paragraph before does not say. Something Hal already fixed is never
 listed.
 
