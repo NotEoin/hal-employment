@@ -22,7 +22,9 @@ Design decisions, each with its reason:
   (`merged_why`). A new fact that matches a folded card goes to the card it was folded into. Only cards
   nobody checked are folded. A duplicate merged whole (`merge_into`) can be taken out again (`unfold`): its
   evidence comes back and Hal never merges it on its own again (`APART`). Nothing is merged into a card
-  that was merged away itself, so merges never chain.
+  that was merged away itself, so merges never chain. A tidy takes apart what older rules folded or merged
+  (`unfold` with `apart=False`, and `take_back` for facts filed away from a card that stayed), and
+  `rebuild_found` keeps where each moved fact came from, so all of it can be taken apart.
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
@@ -380,21 +382,45 @@ def merge_into(con: sqlite3.Connection, item_id: int, into: int, why: str) -> No
         conflicts.refresh(con)
 
 
-def unfold(con: sqlite3.Connection, item_id: int) -> None:
-    """Takes a merged card back out of the card it was merged into: its evidence returns, it is found by Hal
-    again, and Hal never merges it again on its own (`APART`). LookupError for an unknown card, ValueError for
-    one that was not merged."""
+def unfold(con: sqlite3.Connection, item_id: int, *, apart: bool = True) -> None:
+    """Takes a merged or folded card back out of the card it was put into: its evidence returns, and it is found
+    by Hal again. Hal never merges it again on its own (`APART`) unless `apart` is False, as when a tidy takes
+    apart what today's rules refuse. A fact filed again under the other card's name (`refile`) goes back
+    saying what this card was. LookupError for an unknown card, ValueError for one that was not merged."""
     row = _row(con, item_id)
     if row["merged_into"] is None:
         raise ValueError("That card was not merged into another.")
+    was = _row_fields(row)
     with con:
+        for e in con.execute("SELECT id, said FROM profile_evidence WHERE moved_from = ?", (item_id,)).fetchall():
+            if not merge.same_item(row["kind"], json.loads(e["said"]), was):
+                con.execute("UPDATE profile_evidence SET said = ? WHERE id = ?", (json.dumps(was), e["id"]))
         con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = NULL WHERE moved_from = ?",
                     (item_id, item_id))
         con.execute("UPDATE profile_items SET state = 'hal', merged_into = NULL, merged_why = ?, updated = ? "
-                    "WHERE id = ?", (APART, db.now(), item_id))
+                    "WHERE id = ?", (APART if apart else "", db.now(), item_id))
         refold(con, item_id)
         refold(con, row["merged_into"])
         conflicts.refresh(con)
+
+
+def take_back(con: sqlite3.Connection, item_id: int) -> int:
+    """Brings back to a shown card the facts filed again on cards nobody checked (`refile`) while it stayed,
+    each saying the card's name again; returns how many. For a tidy undoing what today's rules refuse."""
+    row = _row(con, item_id)
+    name = _row_fields(row).get("name")
+    moved = con.execute("""SELECT e.id, e.item_id, e.said FROM profile_evidence e JOIN profile_items t
+                           ON t.id = e.item_id WHERE e.moved_from = ? AND e.item_id != ? AND t.state = 'hal'""",
+                        (item_id, item_id)).fetchall()
+    with con:
+        for e in moved:
+            said = json.loads(e["said"])
+            con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = NULL, said = ? WHERE id = ?",
+                        (item_id, json.dumps({**said, "name": name} if name else said), e["id"]))
+        for target in {e["item_id"] for e in moved} | {item_id}:
+            refold(con, target)
+        conflicts.refresh(con)
+    return len(moved)
 
 
 def keep_apart(con: sqlite3.Connection, item_id: int) -> None:
@@ -493,7 +519,9 @@ def _fold_again(con: sqlite3.Connection, item_id: int, kind: str, was: dict) -> 
         con.execute("UPDATE profile_items SET state = 'hal', merged_why = '' WHERE id = ?", (item_id,))
         refold(con, item_id)
         return
-    con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = ? WHERE item_id = ?", (target, item_id, item_id))
+    # evidence moved to this card from another before keeps naming that one, so each can be taken back
+    con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = coalesce(moved_from, ?) WHERE item_id = ?",
+                (target, item_id, item_id))
     con.execute("UPDATE profile_items SET merged_into = ? WHERE id = ?", (target, item_id))
     refold(con, target)
 

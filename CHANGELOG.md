@@ -209,6 +209,9 @@ What changed in each version, in plain words.
   merges chained, so unrelated projects ended up in one card. Now only cards with the same project link
   are merged without the AI; every other merge needs the AI to say the two cards are one, two projects
   with their own folders or repositories are never merged, and a merged card never takes in others.
+- **Tidy my record undoes those merges.** A tidy brings back the projects an older Hal folded into a
+  portfolio or merged by the old rules, with all their files, and merges them again only where today's
+  rules and the AI agree. Cards you checked stay as they are.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

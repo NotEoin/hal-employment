@@ -366,7 +366,9 @@ facts that came from the wrong kind of file. Slides and documents only the AI ca
 which can take a while for a large record; a second tidy skips what the first one already read. Files
 kept out as private are checked again, and any the check now lets through are read in. A project folder an
 older Hal split into many projects, one for each note, becomes one project again: the other cards are
-hidden with "Part of" and the project's name, unless you checked them. Notes you wrote yourself are never
+hidden with "Part of" and the project's name, unless you checked them. Cards an older Hal folded or merged
+by rules it no longer follows come back on their own first, and are merged again only when today's rules
+and the AI agree. Cards you checked, and cards inside a card you checked, stay as they are. Notes you wrote yourself are never
 changed.
 
 ## Your record

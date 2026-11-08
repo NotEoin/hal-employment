@@ -300,6 +300,25 @@ def refresh(con: sqlite3.Connection, *, judge: bool = True) -> dict[str, int]:
     return counts
 
 
+def retake(con: sqlite3.Connection) -> int:
+    """Takes apart each card Hal merged into a card nobody checked, unless the two share a project link
+    (`certain`), so the pass after a tidy (`refresh`) merges again only what today's rules allow; returns how
+    many cards came back. Older merges did not ask the AI and chained, and which ones the AI agreed to was not
+    kept (2026-11-08). They come back free to merge (`store.unfold` with `apart=False`)."""
+    back = 0
+    for kind in KINDS:
+        for r in con.execute("""SELECT i.id, i.fields, t.fields AS into_fields FROM profile_items i
+                                JOIN profile_items t ON t.id = i.merged_into WHERE i.kind = ? AND i.state = 'hidden'
+                                AND substr(i.merged_why, 1, ?) = ? AND t.state = 'hal'""",
+                             (kind, len(MERGED), MERGED)).fetchall():
+            if certain({"kind": kind, "fields": json.loads(r["fields"])},
+                       {"kind": kind, "fields": json.loads(r["into_fields"])}):
+                continue
+            store.unfold(con, r["id"], apart=False)
+            back += 1
+    return back
+
+
 def listing(con: sqlite3.Connection) -> list[dict]:
     """Each card Hal merged others into, shown on Check your record: [{"item": ITEM, "merged": [ITEM]}]."""
     out = []

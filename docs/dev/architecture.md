@@ -915,9 +915,15 @@ batch for its note, takes its files out of their course units (`unit` cleared) a
 `tidy.finish` runs when nothing is pending:
 source notes no item points at are deleted with their facts and copied originals, entity notes outside
 the profile's names and all People and Places notes go, links to deleted notes become plain words, and
-`store.rebuild_found` merges the profile again. Then `projects.fold_cards` files each project fact from a
-document inside a project folder again on the folder's card (`store.refile`) and hides each unchecked card
-left with nothing as "Part of <project>" (`store.fold_away`). Notes without Hal's frontmatter are never
+`store.rebuild_found` merges the profile again (`_fold_again` keeps each moved fact's `moved_from`). Then
+`projects.fold_cards` first takes apart what older rules did (`projects.take_apart`): each card merged
+into a card nobody checked, unless the two share a project link (`duplicates.retake`), and each card
+folded as "Part of" one, come back with `store.unfold(..., apart=False)`, which gives a refiled fact this
+card's fields again; facts refiled away from a card that stayed return to it (`store.take_back`). Then it
+files each project fact from a document inside a project folder again on the folder's card
+(`store.refile`), by the rules `projects.facts_in` follows, and hides each unchecked card left with nothing
+as "Part of <project>" (`store.fold_away`). The duplicate pass after the read merges again what the AI
+agrees on. Notes without Hal's frontmatter are never
 touched.
 
 Reading is split so the AI can work on several items at once: worker threads (`ai.parallel` of them, which

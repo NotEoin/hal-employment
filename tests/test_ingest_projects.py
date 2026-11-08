@@ -14,7 +14,7 @@ from test_ingest import NOTE_REPLY, OWNER, home, put, rows, run
 
 from jobhunt.core import settings
 from jobhunt.ingest import group, projects
-from jobhunt.profile import store
+from jobhunt.profile import duplicates, store
 
 WORKSPACE = {
     "Lantern workspace/README.md": "# Lantern counter\n\nA workspace for a tool that counts harbour lanterns.",
@@ -52,6 +52,20 @@ def naming(projects: dict[str, list[str]]):
         return json.dumps({**NOTE_REPLY, "doc_type": "report", "category": "Coursework", "title": stem,
                            "role": "own", "facts": facts})
     return reply
+
+
+# The projects a made-up portfolio's dossier describes, each with the made-up repository it lives in, named
+# in other words, as a real person's were (2026-11-08).
+REPOS = {"LIDAR Autonomous Navigation": "Lidar-Autonavigation-System", "Voice Interface": "parrot-voice",
+         "Network Packet Sniffer": "wifi-sniffer", "Drone Autopilot": "px-autopilot-tuner",
+         "Desktop Companion": "hatch-desktop", "Archivist Bot": "chat-archivist",
+         "Lecture Downloader": "slide-grabber", "Notebook Package": "nbtools-kit"}
+THESIS = "Tidal Energy Forecasting"
+
+
+def shown_projects(con) -> dict[str, dict]:
+    """The project cards shown on Your record, by name."""
+    return {i["fields"]["name"]: i for i in store.items(con, "project", hidden=False)}
 
 
 def project_cards(con) -> dict[str, dict]:
@@ -174,6 +188,9 @@ class ProjectFolders(unittest.TestCase):
             self.assertEqual(group.projects({files / "a", files / "a" / "b"}, set()), {files / "a"})
 
 
+TICKETS = 100
+
+
 class Tidy(unittest.TestCase):
     def test_tidying_folds_the_cards_an_older_read_made_of_a_workspaces_notes_into_one(self):
         with home() as (con, _vault, files):
@@ -200,6 +217,69 @@ class Tidy(unittest.TestCase):
                          (cards["Lantern counter"]["id"], "Part of Lantern counter", "Part of Lantern counter"))
         self.assertTrue(courses and all(r["state"] == "skipped" for r in courses), "its course units go")
         self.assertEqual((unit["kind"], unit["state"]), ("project", "done"))
+
+    def older_rules(self, con) -> None:
+        """What the rules of an older Hal did to a record (2026-11-08): every project the dossier names
+        folded into the portfolio's card, that card merged into the dissertation's because both had the
+        dossier, and one repository's card merged into another's."""
+        cards = project_cards(con)
+        dossier = [e for e in con.execute("SELECT id, item_id FROM profile_evidence WHERE source_rel LIKE ?",
+                                          ("%Project dossier%",)).fetchall()]
+        for e in dossier:
+            store.refile(con, e["id"], {"name": "Portfolio"})
+        portfolio = project_cards(con)["Portfolio"]["id"]
+        for e in dossier:
+            if not con.execute("SELECT 1 FROM profile_evidence WHERE item_id = ?", (e["item_id"],)).fetchone():
+                store.fold_away(con, e["item_id"], portfolio, "Part of Portfolio")
+        store.merge_into(con, portfolio, cards[THESIS]["id"], duplicates.MERGED + THESIS)
+        store.merge_into(con, cards["slide-grabber"]["id"], cards["nbtools-kit"]["id"],
+                         duplicates.MERGED + "nbtools-kit")
+
+    def test_tidying_takes_apart_a_portfolio_whose_dossier_folded_every_project_into_one_card(self):
+        files_in = {"Portfolio/README.md": "# Portfolio\n\nWhere I keep my portfolio.",
+                    "Portfolio/Project dossier.md": "# Project dossier\n\nEvery project I have made.",
+                    "Dissertation/Final dissertation.md": "# Final dissertation\n\nForecasting tidal energy."}
+        for name, repo in REPOS.items():
+            files_in[f"{repo}/pyproject.toml"] = f"[project]\nname = \"{repo}\"\n"
+            files_in[f"{repo}/README.md"] = f"# {repo}\n\nMy {name.lower()}."
+        reply = naming({"Project dossier": [*REPOS, THESIS], "README": ["Portfolio"], "Final dissertation": [THESIS]})
+        with home() as (con, _vault, files):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            for rel, text in files_in.items():
+                put(files, rel, text)
+            with fake_ai({"ingest_doc": reply}), mock.patch.object(group, "projects", return_value=set()):
+                run(con, [files], origins={str(files): "mine"})
+            self.older_rules(con)
+            before = shown_projects(con)
+            with fake_ai({}):
+                run(con, [], batch="t", tidy=True)
+                duplicates.refresh(con)
+            after = shown_projects(con)
+            portfolio = after.get("Portfolio", {"evidence": []})
+        self.assertNotIn("Voice Interface", before, "the older rules hid the dossier's projects")
+        self.assertLessEqual(set(REPOS) | {THESIS, "Portfolio", "slide-grabber"}, set(after),
+                             "each project is a card again, and the portfolio is not the dissertation")
+        self.assertNotIn("Project dossier.md", [e["source_rel"].rsplit("/", 1)[-1] for e in portfolio["evidence"]])
+
+    def test_tidying_still_folds_a_research_folder_of_a_hundred_tickets_into_one_project(self):
+        tickets = {f"Probe study/tickets/PRB-{n:03d} Step {n}.md": f"# PRB-{n:03d} Step {n}\n\nCalibrate step {n}."
+                   for n in range(1, TICKETS + 1)}
+        with home() as (con, _vault, files):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            for rel, text in {"Probe study/README.md": "# Probe study\n\nMy research on a salinity probe.",
+                              "CV.md": "# Avery Quillon\n\nCurriculum vitae.", **tickets}.items():
+                put(files, rel, text)
+            with fake_ai({"ingest_doc": names_a_project}), mock.patch.object(group, "projects", return_value=set()):
+                run(con, [files], origins={str(files): "mine"})
+            before = project_cards(con)
+            with fake_ai({}):
+                run(con, [], batch="t", tidy=True)
+                duplicates.refresh(con)
+            after = shown_projects(con)
+        self.assertGreater(len(before), TICKETS, "the older read made a card of each ticket")
+        self.assertEqual(sorted(after), ["Beacon app", "Probe study"], "the CV's project stays; the tickets fold")
 
 
 if __name__ == "__main__":

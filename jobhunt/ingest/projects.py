@@ -23,7 +23,8 @@ repository, not a collection of projects). This module gives each its name, its 
 - A tidy (`find_in_record`, `fold_cards`) holds a record an older read filed to the same rules: it finds the
   project folders of the files read before, takes them out of the course units they were split into, and
   files each project fact from inside again on the folder's project card, hiding a card left with nothing
-  as "Part of <project>" (`store.fold_away`). Cards the person checked are never touched.
+  as "Part of <project>" (`store.fold_away`). Before that it takes apart what older rules folded and merged
+  (`take_apart`), so today's rules decide each card again. Cards the person checked are never touched.
 """
 from __future__ import annotations
 
@@ -347,12 +348,36 @@ def find_in_record(con: sqlite3.Connection, batch: str, vault: Path) -> int:
     return found
 
 
+def take_apart(con: sqlite3.Connection) -> int:
+    """Undoes what older rules folded and merged into project cards nobody checked, so today's rules decide
+    again: each card Hal merged (`duplicates.retake`) or folded as part of a project (`store.unfold`) comes
+    back, and facts filed away from a card that stayed return to it (`store.take_back`). Older rules folded a
+    dossier's projects into its folder's card, then merged that card into a dissertation (2026-11-08).
+    Returns how many cards came back or got facts back."""
+    from jobhunt.profile import duplicates, store
+
+    back = duplicates.retake(con)
+    fold = WHY.format(name="")
+    for r in con.execute("""SELECT i.id, i.state, i.merged_into, i.merged_why, t.state AS into_state
+                            FROM profile_items i LEFT JOIN profile_items t ON t.id = i.merged_into
+                            WHERE i.kind = ? AND EXISTS (SELECT 1 FROM profile_evidence e WHERE e.moved_from = i.id
+                            AND e.item_id != i.id)""", (KIND,)).fetchall():
+        if r["state"] == "hidden" and r["merged_why"].startswith(fold) and r["into_state"] == "hal":
+            store.unfold(con, r["id"], apart=False)
+            back += 1
+        elif r["state"] == "hal" and r["merged_into"] is None and store.take_back(con, r["id"]):
+            back += 1
+    return back
+
+
 def fold_cards(con: sqlite3.Connection) -> int:
     """Files each project fact an older read took from a document inside a project folder again on the
     folder's project card (`facts_in`), and hides each card Hal found that is left with nothing, as part of
-    that project. Returns how many cards were folded."""
+    that project; first it takes apart what older rules folded and merged (`take_apart`). Returns how many
+    cards were folded."""
     from jobhunt.profile import duplicates, merge, store
 
+    take_apart(con)
     units = _units(con)
     if not units:
         return 0
