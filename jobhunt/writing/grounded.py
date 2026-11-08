@@ -424,11 +424,31 @@ def ground(draft: str, facts: Facts, essential: Essential) -> Grounded:
     (`fix`) and checked again, then taken out when `essential(text, sentence)` says the draft does not need it
     and its paragraph reads without it (`flow.reads_without`), else kept and listed. A paragraph that lost or
     changed a sentence is smoothed once (`smooth`)."""
-    def judge(c: cites.Cited, before: str) -> list[str]:
-        return check(c, facts)
-
-    return _settle(draft, facts, essential, judge, judge,
+    return _settle(draft, facts, essential, lambda c, before: check(c, facts), lambda c, before: check(c, facts),
                    lambda c, before: cited_items(c, facts) or list(facts.items.values()))
+
+
+@dataclass(frozen=True)
+class _Repeats:
+    """What `unrepeat` asks of each sentence: the sentences of the `earlier` drafts, and the plan."""
+
+    facts: Facts
+    earlier: tuple[str, ...]
+
+    def judge(self, c: cites.Cited, before: str) -> list[str]:
+        """The earlier sentence `c` says again, before it in its draft or in an earlier draft, as a problem."""
+        seen = [cites.strip(x) for e in (*self.earlier, before) for x in cites.sentences(e)]
+        hit = repeats.first_said(c.text, seen)
+        return [REPEATS.format(sentence=hit)] if hit else []
+
+    def recheck(self, m: cites.Cited, before: str) -> list[str]:
+        """What is wrong with a rewrite: still a repeat, else its sentence checks (`check`)."""
+        return self.judge(m, before) or check(m, self.facts)
+
+    def evidence(self, c: cites.Cited, before: str) -> list[Item]:
+        """The plan items neither the drafts so far nor the sentence cite."""
+        used = _ids("\n\n".join([*self.earlier, before]))
+        return [i for i in self.facts.items.values() if i.id not in used and i.id not in c.ids]
 
 
 def unrepeat(draft: str, facts: Facts, essential: Essential, earlier: tuple[str, ...] = ()) -> Grounded:
@@ -436,21 +456,8 @@ def unrepeat(draft: str, facts: Facts, essential: Essential, earlier: tuple[str,
     draft, or in one of the `earlier` drafts of the pack) rewritten once from a plan item none of them cites,
     and checked (`check`) and compared again; one still repeating is taken out as `ground` takes a sentence
     out, else kept and listed."""
-    prior = [cites.strip(x) for e in earlier for x in cites.sentences(e)]
-
-    def judge(c: cites.Cited, before: str) -> list[str]:
-        seen = prior + [cites.strip(x) for x in cites.sentences(before)]
-        hit = repeats.first_said(c.text, seen)
-        return [REPEATS.format(sentence=hit)] if hit else []
-
-    def recheck(m: cites.Cited, before: str) -> list[str]:
-        return judge(m, before) or check(m, facts)
-
-    def evidence(c: cites.Cited, before: str) -> list[Item]:
-        used = _ids("\n\n".join([*earlier, before]))
-        return [i for i in facts.items.values() if i.id not in used and i.id not in c.ids]
-
-    return _settle(draft, facts, essential, judge, recheck, evidence)
+    asks = _Repeats(facts, earlier)
+    return _settle(draft, facts, essential, asks.judge, asks.recheck, asks.evidence)
 
 
 def lengthen(done: Grounded, facts: Facts, words: int | None, essential: Essential) -> Grounded:
