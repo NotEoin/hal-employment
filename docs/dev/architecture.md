@@ -518,7 +518,10 @@ runs: tests use `tests/support/fake_claude/`.
   question about the team's work); an answer is one story, or two when its question asks for more than one
   example (`plan.examples_wanted`), in shape `paragraphs.answer`, and a question asking why this employer
   (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and
-  its item's story (`pack._story_of`). The message, then the answers, take the stories the letter (`told`:
+  its item's story (`pack._story_of`). Every one of these shapes names its work in its first sentence
+  (`Shape.name`, `paragraphs.NOT_NAMED`), as a letter paragraph does, and is drafted again once when it
+  does not: answers and messages opened "I wrote a 113-test suite ..." in 12 of 15 graded packs
+  (2026-11-08). The message, then the answers, take the stories the letter (`told`:
   its paragraphs' stories and the story its opening's reason rests on), the message and earlier answers told
   least (`plan.choose`), best first in the ranking's order (`rank.Told.others`), so they tell the next work
   the letter did not. When an answer's or the message's paragraphs are all dropped the next story is

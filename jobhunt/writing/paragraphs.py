@@ -32,6 +32,9 @@ Design decisions, each with its reason:
 - Every story with a name is checked for it, not only a card's (`_names`, 2026-11-08): passages of a
   dissertation were drafted as "I designed a pure simulation engine ..." with no project named. A module's or
   a project file's story must name its module or file's project, and is drafted again once when it does not.
+  Answers and the message's body name their work in their first sentence too, as a letter paragraph does:
+  12 of 15 graded packs had an answer or a message opening "I wrote a 113-test suite ..." or "a
+  reproducible PyTorch pipeline ..." with the project named later or never (2026-11-08).
 - A message body never says the degree again (`message`, `says_again`, 2026-11-08): Hal's built opening says
   "I'm <name>, a first-class <subject> graduate from <university>", and the next sentence said the degree
   again. A sentence repeating the opening, or naming a degree with its words, is drafted again as a fact of
@@ -102,7 +105,6 @@ LIST_SAID = "lists tools rather than saying what you did with them"
 NOT_NAMED = "does not name {card} in its first sentence"
 NO_QUESTION = "asks no question about the team's work"
 SAID_AGAIN = "says your degree again, which Hal's opening already says; tell a fact of the work instead"
-NOT_NAMED_ANY = "never names {card}"
 TOO_SHORT = "is too short to tell what the work was, what you did and what came of it"
 NOT_SUPPORTED = 'its facts do not say: "{span}"'
 NOT_SUPPORTED_ANY = "says something its facts do not"
@@ -115,7 +117,7 @@ DROPPED = "Hal left out the paragraph about {card}: {why}. Add it yourself if it
 @dataclass(frozen=True)
 class Shape:
     """What a paragraph is for: its kind for the writing rules, the request's words, where it names its work
-    ("first" sentence, "any" sentence, or "" for nowhere) and the least number of sentences it keeps."""
+    ("first" sentence, or "" for nowhere) and the least number of sentences it keeps."""
 
     kind: str                  # `writing.rules` kind: "letter" or "answer" (a message reads as an answer)
     words: str
@@ -129,9 +131,9 @@ LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 
                          "connected story. Name the work in the first sentence. End with at most one sentence on "
                          "what it can help with in this job.", "first", 2)
 MESSAGE = Shape("answer", "The body of a short message to the person hiring, after Hal's own greeting and opening "
-                          "sentence: one or two sentences about this work, naming it, then one specific question "
-                          "about the team's work on what it can help with. At most 60 words in all. No greeting, "
-                          "no introduction and no sign-off.", "any", 2, True)
+                          "sentence: one or two sentences about this work, naming it in the first, then one specific "
+                          "question about the team's work on what it can help with. At most 60 words in all. No "
+                          "greeting, no introduction and no sign-off.", "first", 2, True)
 DEGREE_SHARED = 2          # words of the opening's course a sentence naming a degree shares to say it again
 
 
@@ -171,11 +173,11 @@ def letter(words: int | None, n: int) -> Shape:
 
 def answer(question: str, nth: int = 0, of: int = 1) -> Shape:
     """The shape of the `nth` (from 0) of `of` paragraphs answering a form question."""
-    which = ("Answer the question in the first sentence, naming the work" if nth == 0
+    which = ("Answer the question in the first sentence, naming the work there" if nth == 0
              else "Give this as a further example, naming the work in the first sentence")
     return Shape("answer", f'One paragraph of the answer to the application question "{question}". {which}: what '
                            f"it was, what you did and what came of it, in 2 to 4 sentences and at most "
-                           f"{ANSWER_WORDS // of} words.", "any" if nth == 0 else "first", 1)
+                           f"{ANSWER_WORDS // of} words.", "first", 1)
 
 
 def why(question: str, pairing: Pairing | None) -> Shape:
@@ -185,7 +187,8 @@ def why(question: str, pairing: Pairing | None) -> Shape:
               "No reason for this employer was found in the applicant's facts: say what in this role draws you "
               "to it from this work alone, and give no reason about the employer.")
     return Shape("answer", f'The answer to the application question "{question}", in 2 to 3 sentences and at most '
-                           f"80 words, answering it in the first sentence. {reason}", "any", 1)
+                           f"80 words, answering it in the first sentence and naming the work there. {reason}",
+                 "first", 1)
 
 
 @dataclass(frozen=True)
@@ -417,8 +420,6 @@ def problems(text: str, story: Story, scope: Scope, shape: Shape) -> list[Proble
     out += [Problem(s, SAID_AGAIN) for s in said if says_again(s, shape.after)]
     if story.name and said and shape.name == "first" and not _names(said[0], story, scope):
         out.append(Problem("", NOT_NAMED.format(card=story.name)))
-    elif story.name and shape.name == "any" and not any(_names(s, story, scope) for s in said):
-        out.append(Problem("", NOT_NAMED_ANY.format(card=story.name)))
     if len(said) < shape.least:
         out.append(Problem("", TOO_SHORT))
     if shape.question and "?" not in text:

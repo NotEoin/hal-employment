@@ -296,6 +296,28 @@ class Named(unittest.TestCase):
                                     "runs on its own.", story, SCOPE, paragraphs.LETTER)
         self.assertNotIn(paragraphs.NOT_NAMED.format(card="Traffic flow simulation"), [p.reason for p in named])
 
+    def test_answers_and_the_message_name_their_work_in_the_first_sentence_too(self):
+        # 12 of 15 graded packs had an answer or message opening "I wrote a 113-test suite ..." (2026-11-08)
+        unnamed = ("I wrote a 113-test suite for a job-search helper. That was Quill Employment, and the tests "
+                   "ran on every change. How does your team test its tools?")
+        named = ("Quill Employment has a 113-test suite that I wrote. The tests ran on every change. How does your "
+                 "team test its tools?")
+        missing = paragraphs.NOT_NAMED.format(card="Quill Employment")
+        for shape in (paragraphs.answer("Tell us about testing."), paragraphs.answer("Give two examples.", 1, 2),
+                      paragraphs.why("Why do you want to work here?", None), paragraphs.message("I'm Avery.")):
+            found = [p.reason for p in paragraphs.problems(unnamed, EMPLOYMENT_STORY, SCOPE, shape)]
+            self.assertIn(missing, found, shape.words[:40])
+            found = [p.reason for p in paragraphs.problems(named, EMPLOYMENT_STORY, SCOPE, shape)]
+            self.assertNotIn(missing, found, shape.words[:40])
+
+    def test_an_answer_not_naming_its_work_first_is_drafted_again_once(self):
+        unnamed = "I wrote a 113-test suite. It was for Quill Employment."
+        fake = FakeAI([unnamed, "Quill Employment has a 113-test suite."])
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            done = paragraphs.settle(EMPLOYMENT_STORY, paragraphs.answer("Tell us about testing."), SCOPE)
+        self.assertIn("does not name Quill Employment in its first sentence", fake.calls("Write")[1])
+        self.assertEqual((done.text, done.redrafted), ("Quill Employment has a 113-test suite.", True))
+
 
 class MessageBody(unittest.TestCase):
     def test_a_message_body_asks_one_question(self):
