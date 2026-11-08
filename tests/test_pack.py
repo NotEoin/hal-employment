@@ -584,6 +584,33 @@ class Paragraphs(unittest.TestCase):
         self.assertEqual(written["flags"], [], "a fixed paragraph is never listed")
         self.assertTrue(written["notes"]["checked"].startswith(pack.SOFTENED))
 
+    def test_the_work_the_openings_reason_rests_on_counts_as_told(self):
+        # one project was told in a letter's opening, a paragraph and an answer (2026-11-08)
+        crossed = "I built Quill with Preact and a 113-test suite. It answers questions over my notes."
+        writer = QuillWriter({"Quill": [crossed]})
+        writer.pairing = {"employer_fact": "Build internal tools in Python", "item": "E1",
+                          "reason": "an offline assistant is an internal tool"}
+        with quill_world(writer) as a:
+            written = pack.write_letter(a.con, a.job)
+        self.assertEqual(paragraph_about(written["text"], "Quill"), "", "its paragraph was left out")
+        self.assertEqual(written["told"], ["Quill Employment", "Quill"])
+
+    def test_answers_prefer_a_project_the_letter_did_not_tell(self):
+        from jobhunt.profile import store
+
+        writer = QuillWriter()
+        with quill_world(writer) as a:
+            for name in ("Tide gauge", "Ferry log"):
+                store.confirm(a.con, store.add_found(a.con, "project", {
+                    "name": name, "summary": "Writing reports of river levels and spreadsheets"},
+                    {"source_rel": f"Sources/Code/{name}.md", "quote": f"{name} writes reports every hour",
+                     "field": "", "doc_type": "repository"}))
+            pack.build(a.con, a.job["id"], use_web=False)
+        lettered = [e["user"] for e in writer.asked("story") if "cover letter" in e["user"]]
+        self.assertTrue(any("Project: Tide gauge" in u for u in lettered), "a third card the job fits fills the letter")
+        answered = [e["user"] for e in writer.asked("story") if "application question" in e["user"]]
+        self.assertIn("Project: Ferry log", answered[0], "untold work first")
+
     def test_a_paragraph_still_wrong_after_its_redraft_is_left_out_and_listed_with_why(self):
         crossed = "I built Quill with Preact and a 113-test suite. It answers questions over my notes."
         writer = QuillWriter({"Quill": [crossed]})

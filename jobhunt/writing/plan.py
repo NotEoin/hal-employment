@@ -60,7 +60,8 @@ Design decisions, each with its reason:
   cards, the plan's first, then other cards the job's words fit (`relevance`, at least `RELEVANT_MIN` words)
   until it has `LETTER_STORIES`; a module (`module_of`) or a line tied to no card is a paragraph only when
   fewer than `MIN_PROJECTS` project or job stories exist. The degree itself (`DEGREE`) is never a story, as
-  the opening says it.
+  the opening says it. The answers may tell those other cards too (`fitting`), so they prefer work the letter
+  did not tell: one project was told in a letter's opening, a letter paragraph and an answer (2026-11-08).
 - Every story names its work (`Story.name`, 2026-11-08): passages tied to no card were drafted as "I designed a
   pure simulation engine ..." and "I implemented config-hashed result caching ..." with nothing saying which
   project. A passage of a project's own file (one with a "(Kind: ...)" line) tied to no card is named after
@@ -430,16 +431,22 @@ def relevant_modules(modules: list[tuple[str, str]], wanted: str, told: str, n: 
     return tuple(f"{fits[k][0]} ({fits[k][1]})" if str(fits[k][1]).strip() else fits[k][0] for k in best)
 
 
+def fitting(found: list[Story], cards: list[dict], wanted: str) -> list[Story]:
+    """The stories of the cards no story of `found` tells whose words share at least `RELEVANT_MIN` words with
+    the job's requirements (`wanted`), the best fit first."""
+    names = {s.name for s in found}
+    fits = sorted(((relevance(c, wanted), k) for k, c in enumerate(cards)
+                   if c.get("name") and c["name"] not in names and (c.get("quotes") or c.get("summary"))),
+                  key=lambda r: (-r[0], r[1]))
+    return [_story(cards[k]["name"], [], cards[k]) for r, k in fits if r >= RELEVANT_MIN]
+
+
 def letter_stories(found: list[Story], cards: list[dict], wanted: str, n: int = LETTER_STORIES) -> list[Story]:
     """The `n` stories a letter tells (see the module notes): the plan's project and job stories, then the cards
     the job's requirements (`wanted`) fit best that no story tells, then, only below `MIN_PROJECTS` of those,
     modules and other lines in the plan's order."""
     told = [s for s in found if s.kind in (PROJECT, JOB)]
-    names = {s.name for s in found}
-    fits = sorted(((relevance(c, wanted), k) for k, c in enumerate(cards)
-                   if c.get("name") and c["name"] not in names and (c.get("quotes") or c.get("summary"))),
-                  key=lambda r: (-r[0], r[1]))
-    told += [_story(cards[k]["name"], [], cards[k]) for r, k in fits if r >= RELEVANT_MIN][:max(n - len(told), 0)]
+    told += fitting(found, cards, wanted)[:max(n - len(told), 0)]
     if len(told) < MIN_PROJECTS:
         told += [s for s in found if s.kind not in (PROJECT, JOB)]
     return told[:n]

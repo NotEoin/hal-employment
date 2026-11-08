@@ -636,8 +636,10 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
     softened = any(b.redrafted or b.cut for b in bodies) or framed.redrafted
     shown = [_item_note(i, cards) for i in plan]
     shown = [e for e in (drafts.evidence_checked(s, cards, known_tools(cards), facts)[0] for s in shown) if e]
+    motive_story = _story_of(pairing.item, list(scope.stories)) if pairing else None
+    told_keys = [b.story.key for b in bodies if b.text] + ([motive_story.key] if motive_story else [])
     return {"text": letter, "flags": flags, "used": passages(kept), "revised": False, "softened": softened,
-            "plan": plan, "pairing": pairing, "told": [b.story.key for b in bodies if b.text],
+            "plan": plan, "pairing": pairing, "told": list(dict.fromkeys(told_keys)),
             "calls": framed.calls + sum(b.calls for b in bodies),
             "notes": letter_notes(who, letter, shown, flags, softened=softened)}
 
@@ -855,7 +857,8 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
                   told: tuple[str, ...], whole_message=None, whole_answers=None) -> dict:
     """The message and the answers told one piece of work a paragraph (`writing.paragraphs`): the message is its
     built opening and one story's few lines and question; each answer one story, or two when its question asks
-    for more than one example, preferring work the letter (`told`) and earlier answers have not told.
+    for more than one example, preferring work the letter (`told`: its paragraphs and its opening's reason) and
+    earlier answers have not told, among the plan's stories and the other cards the job fits (`plan.fitting`).
 
     Nothing is left blank (2026-11-08: 8 of 15 graded packs had an empty answer or a message with nothing after
     its introduction, as a dropped paragraph left nothing): a dropped paragraph's next story is tried
@@ -863,6 +866,7 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
     `whole_message()` for the message and `whole_answers(questions)` ({question: answer}) for the answers."""
     you, cards, calls = eligibility.person(), list(scope.cards), 0
     found = list(scope.stories)
+    found += planning.fitting(found, cards, "\n".join(_requirements(analysis)))
     first = message_opening(who, job, analysis)
     tried = _story_message(found, scope, paragraphs.MESSAGE, {})
     body = next((p for p in tried if p.text), tried[-1] if tried else paragraphs.Paragraph(found[0]))

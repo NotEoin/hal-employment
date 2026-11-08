@@ -200,6 +200,9 @@ What changed in each version, in plain words.
   nothing after its introduction, when Hal left out a paragraph it could not check. Hal now tries another
   piece of your work, then writes the answer or message whole, and lists a question only when nothing could
   answer it. The message always tells one piece of work and asks one question.
+- **One project is not told three times.** A pack told the same project in the letter's opening, again in a
+  letter paragraph and again in a form answer. The answers now count the project behind the opening's
+  reason as told, and tell other projects of yours that fit the job first.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that
