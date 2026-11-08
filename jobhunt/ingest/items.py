@@ -151,7 +151,8 @@ def _eta(con: sqlite3.Connection, batch: str, action: sqlite3.Row, left: int) ->
         spent[rich][1] += 1
     pace = {rich: (t / n if n else (RICH_GUESS_S if rich else LIGHT_GUESS_S)) for rich, (t, n) in spent.items()}
     rich_left = con.execute("SELECT count(*) FROM ingest_items WHERE batch = ? AND state = 'pending' "
-                            "AND kind != 'course' AND rank < ?", (batch, RICH_BELOW_RANK)).fetchone()[0]
+                            "AND kind NOT IN ('course', 'project') AND rank < ?",
+                            (batch, RICH_BELOW_RANK)).fetchone()[0]
     light_left = max(0, left - rich_left)
     return max(0, round(rich_left * pace[True] + light_left * pace[False]))
 

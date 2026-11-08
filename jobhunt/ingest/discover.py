@@ -12,7 +12,8 @@
   file not yet downloaded and fill it with zeros. It is listed as "not downloaded", never converted, since
   its "text" would be nothing and a model given nothing invents a document.
 - A folder holding a version-control folder or a project manifest at its top is a repository; the walk
-  notes it, as its `.git` folder is never entered.
+  notes it, as its `.git` folder is never entered. It notes each folder with a README at its top too
+  (`has_readme`), from which `group.projects` finds the person's projects that are not repositories.
 - Symbolic links are not followed: a link can point anywhere on the computer.
 """
 from __future__ import annotations
@@ -64,6 +65,7 @@ VCS_DIRS = {".git", ".hg", ".svn"}
 PROJECT_SIGNS = {".gitignore", "makefile", "requirements.txt", "license", "license.md", "license.txt", "src",
                  "dockerfile", ".editorconfig"}
 NOTES_VAULT = ".obsidian"
+README_SUFFIXES = {"", *rank.TEXT_SUFFIXES}     # "README", "README.md", "readme.txt"
 CODE_FILES_MIN = 2        # a README with two source files beside it is a project, not a folder of notes
 SIGNATURES = ((b"%PDF", "pdf"), (b"\x89PNG", "png"), (b"\xff\xd8\xff", "jpg"), (b"GIF8", "gif"),
               (b"II*\x00", "tiff"), (b"MM\x00*", "tiff"), (b"\xd0\xcf\x11\xe0", "ole"), (b"{\\rtf", "rtf"),
@@ -87,10 +89,12 @@ class Found:
 
 @dataclass
 class Walk:
-    """What one walk found: the files, the repository folders, and how many things it left out and why."""
+    """What one walk found: the files, the repository folders, the folders with a README at their top, and how
+    many things it left out and why."""
 
     files: list[Found] = field(default_factory=list)
     repos: set[Path] = field(default_factory=set)
+    readmes: set[Path] = field(default_factory=set)
     left_out: dict[str, int] = field(default_factory=dict)   # reason -> count
 
     def leave_out(self, why: str) -> None:
@@ -128,6 +132,11 @@ def is_repo(names: list[str]) -> bool:
         return False
     code = sum(Path(n).suffix in rank.CODE_SUFFIXES - {".html", ".css"} for n in lower)
     return any(n in PROJECT_SIGNS for n in lower) or code >= CODE_FILES_MIN
+
+
+def has_readme(names: list[str]) -> bool:
+    """True when a folder whose entries are `names` holds a README ("README.md", "readme.txt", "README")."""
+    return any(Path(n).stem.lower() == "readme" and Path(n).suffix.lower() in README_SUFFIXES for n in names)
 
 
 def hash_and_zero(path: Path) -> tuple[str, bool]:
@@ -197,6 +206,8 @@ def walk(root: Path, prefix: str | None = None) -> Walk:
         here = Path(folder)
         if is_repo(dirs + names):
             out.repos.add(here)
+        if has_readme(names):
+            out.readmes.add(here)
         in_repo = any(here == r or r in here.parents for r in out.repos)
         kept = []
         for d in sorted(dirs):

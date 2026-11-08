@@ -16,6 +16,11 @@ Design decisions, each with its reason:
   copy said, not the new one. An edited item still keeps their values.
 - A hidden item still matches new facts, so reading the same CV again, or another file that names the same
   fact, never brings back what the person hid.
+- A card Hal found under the wrong name, such as a note's own name for the project it is part of, can be
+  folded into the card it belongs to (`refile`, `fold_away`, migration 0027): its evidence moves there and
+  remembers where it was (`moved_from`), and the card is hidden with `merged_into` and a few words on why
+  (`merged_why`). A new fact that matches a folded card goes to the card it was folded into. Only cards
+  nobody checked are folded.
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
@@ -271,20 +276,79 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, 
         # the item's own fields or any of its sources count, so a fact the person corrected (a misspelt
         # employer) still matches when the same file is read again, instead of coming back as a second item
         item_id = index.match(con, kind, said)
+        moved_from = None
+        if item_id is not None and (into := _folded_into(con, item_id)) is not None:
+            item_id, moved_from = into, item_id       # a card folded into another: its new facts go there too
         if item_id is None:
             item_id = con.execute("INSERT INTO profile_items (kind, fields, state, origin, created, updated) "
                                   "VALUES (?, ?, 'hal', 'found', ?, ?)",
                                   (kind, json.dumps(said), now, now)).lastrowid
         con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, verified, "
-                    "role, found_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "role, found_at, moved_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (item_id, ev["source_rel"], ev["quote"], ev["field"], ev["doc_type"], json.dumps(said),
-                     int(ev["verified"]), ev["role"], now))
+                     int(ev["verified"]), ev["role"], now, moved_from))
         refold(con, item_id)
         if refresh:
             conflicts.refresh(con)
         fields_now = _row_fields(con.execute("SELECT fields FROM profile_items WHERE id = ?", (item_id,)).fetchone())
     index.added(con, item_id, kind, said, fields_now)
     return item_id
+
+
+def _folded_into(con: sqlite3.Connection, item_id: int) -> int | None:
+    """The card a hidden card was folded into (`fold_away`), when that card is still there; else None."""
+    row = con.execute("""SELECT i.merged_into FROM profile_items i JOIN profile_items t ON t.id = i.merged_into
+                         WHERE i.id = ? AND i.state = 'hidden'""", (item_id,)).fetchone()
+    return row[0] if row else None
+
+
+def refile(con: sqlite3.Connection, evidence_id: int, said: dict) -> int:
+    """Files one piece of evidence again as the fact `said`, on the card that fact belongs to (a new one when
+    none); returns that card's id.
+
+    For facts an older read filed under the wrong name, such as a note's own name for the project it is part
+    of (`ingest.projects`). The evidence remembers the card it was on (`moved_from`). Raises LookupError for
+    an unknown piece of evidence and ValueError for a fact the store refuses, changing nothing.
+    """
+    row = con.execute("""SELECT e.item_id, e.moved_from, i.kind FROM profile_evidence e
+                         JOIN profile_items i ON i.id = e.item_id WHERE e.id = ?""", (evidence_id,)).fetchone()
+    if row is None:
+        raise LookupError("That piece of evidence is not in your profile.")
+    fact = clean(row["kind"], said)
+    _named(row["kind"], fact)
+    now = db.now()
+    with con:
+        target = index.match(con, row["kind"], fact)
+        if target is not None:
+            target = _folded_into(con, target) or target
+        else:
+            target = con.execute("INSERT INTO profile_items (kind, fields, state, origin, created, updated) "
+                                 "VALUES (?, ?, 'hal', 'found', ?, ?)",
+                                 (row["kind"], json.dumps(fact), now, now)).lastrowid
+        if target != row["item_id"]:
+            con.execute("UPDATE profile_evidence SET item_id = ?, said = ?, moved_from = ? WHERE id = ?",
+                        (target, json.dumps(fact), row["moved_from"] or row["item_id"], evidence_id))
+        else:
+            con.execute("UPDATE profile_evidence SET said = ? WHERE id = ?", (json.dumps(fact), evidence_id))
+        refold(con, row["item_id"])
+        refold(con, target)
+    return target
+
+
+def fold_away(con: sqlite3.Connection, item_id: int, into: int, why: str) -> None:
+    """Hides a card Hal found and nobody checked as part of the card `into`, saying `why` in a few words.
+
+    Raises ValueError for a card the person checked, edited, hid or added: Hal never folds those on its own.
+    """
+    row = _row(con, item_id)
+    if row["state"] != "hal" or row["origin"] != "found":
+        raise ValueError("Hal only folds cards it found and nobody has checked.")
+    _row(con, into)
+    with con:
+        con.execute("UPDATE profile_items SET state = 'hidden', merged_into = ?, merged_why = ?, updated = ? "
+                    "WHERE id = ?", (into, why, db.now(), item_id))
+        # a card folded into this one before goes with it, so every fold names a card that is shown
+        con.execute("UPDATE profile_items SET merged_into = ? WHERE merged_into = ?", (into, item_id))
 
 
 def _said_by(con: sqlite3.Connection, source_rel: str) -> dict[int, list[str]]:
@@ -332,13 +396,19 @@ def rebuild_found(con: sqlite3.Connection) -> int:
 
     For after the merge rules change: an item the person confirmed, edited, hid or added is kept as it is,
     and new facts still merge into it. Conflicts are worked out again; ones the person settled about rebuilt
-    items are found afresh.
+    items are found afresh. A card folded into a rebuilt one (`fold_away`) is folded into the card rebuilt in
+    its place (`_fold_again`).
     """
-    rows = con.execute("""SELECT i.kind, e.source_rel, e.quote, e.field, e.doc_type, e.said, e.verified, e.role
-                          FROM profile_evidence e JOIN profile_items i ON i.id = e.item_id
+    folded = {r["id"]: r for r in con.execute(
+        """SELECT i.id, t.kind, t.fields FROM profile_items i JOIN profile_items t ON t.id = i.merged_into
+           WHERE t.state = 'hal' AND t.origin = 'found'""")}
+    rows = con.execute("""SELECT i.kind, e.source_rel, e.quote, e.field, e.doc_type, e.said, e.verified, e.role,
+                          e.moved_from FROM profile_evidence e JOIN profile_items i ON i.id = e.item_id
                           WHERE i.state = 'hal' AND i.origin = 'found' ORDER BY e.id""").fetchall()
     with con:
         con.execute("DELETE FROM profile_items WHERE state = 'hal' AND origin = 'found'")
+        # until the cards they were folded into are rebuilt, no new fact is sent to a card that is gone
+        con.executemany("UPDATE profile_items SET merged_into = NULL WHERE id = ?", [(i,) for i in folded])
     for r in rows:
         try:
             add_found(con, r["kind"], json.loads(r["said"]),
@@ -347,9 +417,32 @@ def rebuild_found(con: sqlite3.Connection) -> int:
                       refresh=False)
         except ValueError:  # a fact the rules now refuse, such as a module filed as a qualification, stays out
             continue
+        if r["moved_from"] is not None:
+            with con:
+                con.execute("UPDATE profile_evidence SET moved_from = ? WHERE id = (SELECT max(id) "
+                            "FROM profile_evidence) AND item_id != ?", (r["moved_from"], r["moved_from"]))
     with con:
+        for item_id, r in folded.items():
+            _fold_again(con, item_id, r["kind"], json.loads(r["fields"]))
         conflicts.refresh(con)
     return con.execute("SELECT COUNT(*) FROM profile_items").fetchone()[0]
+
+
+def _fold_again(con: sqlite3.Connection, item_id: int, kind: str, was: dict) -> None:
+    """Folds a card again into the shown card that is now what its old card (`was`) was, with its evidence and
+    the evidence that came from it; with none, the card is shown again as found by Hal."""
+    target = next((r["id"] for r in con.execute("SELECT id, fields FROM profile_items WHERE kind = ? AND id != ? "
+                                                "AND state != 'hidden' ORDER BY id", (kind, item_id))
+                   if merge.same_item(kind, json.loads(r["fields"]), was)), None)
+    if target is None:
+        con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = NULL WHERE moved_from = ?",
+                    (item_id, item_id))
+        con.execute("UPDATE profile_items SET state = 'hal', merged_why = '' WHERE id = ?", (item_id,))
+        refold(con, item_id)
+        return
+    con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = ? WHERE item_id = ?", (target, item_id, item_id))
+    con.execute("UPDATE profile_items SET merged_into = ? WHERE id = ?", (target, item_id))
+    refold(con, target)
 
 
 def _row(con: sqlite3.Connection, item_id) -> sqlite3.Row:
@@ -508,7 +601,8 @@ def _shape(row: sqlite3.Row, evidence: list[dict], open_conflicts: list[dict]) -
            "origin": row["origin"], "fields": fields, "title": title(row["kind"], fields),
            "sub": subtitle(row["kind"], fields), "when": when(fields), "evidence": evidence,
            "conflicts": [c for c in open_conflicts if row["id"] in c["item_ids"]],
-           "can_delete": row["origin"] == "you", "created": row["created"], "updated": row["updated"]}
+           "can_delete": row["origin"] == "you", "created": row["created"], "updated": row["updated"],
+           "merged_into": row["merged_into"], "merged_why": row["merged_why"]}
     return {**out, **tiers.shown(out, row), **contexts.shown(out, row)}
 
 

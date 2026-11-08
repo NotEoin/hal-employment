@@ -573,6 +573,41 @@ class Store(unittest.TestCase):
         self.assertEqual(len(certs[0]["evidence"]), 2)
         self.assertEqual(store.item(self.con, mine)["fields"]["title"], "Collections volunteer (Saturdays)")
 
+    def fold(self) -> tuple[int, int]:
+        """A note's own project card folded into the project it is part of; (folded card, project card)."""
+        note = store.add_found(self.con, "project", {"name": "Ticket 7 lamp rota", "tools": ["Lua"]},
+                               ev(NOTES, "notes"))
+        evidence = store.item(self.con, note)["evidence"][0]["id"]
+        project = store.refile(self.con, evidence, {"name": "Lantern archive", "tools": ["Lua"]})
+        store.fold_away(self.con, note, project, "Part of Lantern archive")
+        return note, project
+
+    def test_a_folded_card_is_hidden_with_why_and_its_evidence_moves_with_where_it_was(self):
+        note, project = self.fold()
+        got, card = store.item(self.con, note), store.item(self.con, project)
+        self.assertEqual((got["state"], got["merged_into"], got["merged_why"]), ("hidden", project,
+                                                                                  "Part of Lantern archive"))
+        self.assertEqual((card["fields"]["name"], card["fields"]["tools"]), ("Lantern archive", ["Lua"]))
+        self.assertEqual(self.con.execute("SELECT moved_from FROM profile_evidence").fetchone()[0], note)
+        later = store.add_found(self.con, "project", {"name": "Ticket 7 lamp rota", "tools": ["Python"]},
+                                ev(CV_A, "cv"))
+        self.assertEqual(later, project, "a new fact naming the folded card goes to the card it is part of")
+
+    def test_a_card_the_person_checked_is_never_folded_by_hal(self):
+        mine = store.add_found(self.con, "project", {"name": "Lamp rota"}, ev(CV_A, "cv"))
+        other = store.add_found(self.con, "project", {"name": "Lantern archive"}, ev(CV_A, "cv"))
+        store.confirm(self.con, mine)
+        with self.assertRaises(ValueError):
+            store.fold_away(self.con, mine, other, "Part of Lantern archive")
+
+    def test_a_folded_card_stays_folded_into_the_card_rebuilt_in_its_place(self):
+        note, _project = self.fold()
+        store.rebuild_found(self.con)
+        rebuilt = [i for i in store.items(self.con, "project") if i["state"] != "hidden"]
+        self.assertEqual([i["fields"]["name"] for i in rebuilt], ["Lantern archive"])
+        self.assertEqual(store.item(self.con, note)["merged_into"], rebuilt[0]["id"])
+        self.assertEqual(len(rebuilt[0]["evidence"]), 1)
+
 DOCUMENTS, FACTS_EACH = 20, 100       # 2,000 facts, as a large ingest gives them
 # Merging them took 5.5 s when every fact read every item and source of its kind, and 0.3 s with the index
 # (measured on the development machine, 2026-11-07); the bound leaves room for a loaded test runner.

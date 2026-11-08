@@ -757,7 +757,17 @@ runner starts the action again with the same batch and only pending items are re
    in any batch, is a `duplicate` named once under "Also at" in the first copy's note.
 3. **Group** (`group.py`). A repository (a `.git` folder or a manifest at its top) is one `repo` item,
    summarised from its README, docs headings, manifest, language mix and file tree, never file by file. A
-   folder whose own files are mostly notes or slides (three or more) is a `course` unit: a note per file
+   folder with a README at its top (`discover.has_readme`) in a `mine` or `mixed` origin, not a repository
+   and not holding `group.COLLECTION_MIN` (2) or more other projects, is one `project` item with all its
+   sub-folders (`group.projects`; the outermost one wins, and the folder given counts). Its files are read
+   one by one, but `projects.facts_in` (called by `engine._judge`) turns each project fact read in one
+   into a fact about the folder's project: named from the README's first heading or the folder
+   (`projects.name_of`), keeping only tools and links (and the README's summary, role and dates). A CV,
+   letter or transcript keeps its project facts, and so does a fact that names another project folder's
+   or repository's project. `projects.write_notes` writes the folder's note listing its files' notes, which
+   link back under "Part of", and supporting files attach to it. A `course` origin never makes one. A
+   folder outside any project folder whose own files are mostly notes or slides (three or more) is a
+   `course` unit: a note per file
    and one summary note linking them, one per module code (`engine._courses`: a unit whose code
    already has a course note adds its files to it). A unit's files are light (`rank.in_unit`), except a
    document whose own name says it is work (`rank.work_named`: the report and project rules' words, essay
@@ -837,10 +847,16 @@ rules (role from its `role` or older `about_owner`, tool files, `privacy.reason`
 already covers, copies of one project via `versions`), facts its role may not give deleted, course material
 scrubbed, code text fenced, and the notes only the AI can settle (converted course material, unsure rich
 documents) moved into the batch to be read again in place, unless the note's `read_by: ai` (and
-`lecture_note`, for course material) says the AI already read it under these rules. `tidy.finish` runs when nothing is pending:
+`lecture_note`, for course material) says the AI already read it under these rules. Before that,
+`projects.find_in_record` walks the folders older reads came from again, adds each project folder to the
+batch for its note, takes its files out of their course units (`unit` cleared) and drops those units' notes.
+`tidy.finish` runs when nothing is pending:
 source notes no item points at are deleted with their facts and copied originals, entity notes outside
 the profile's names and all People and Places notes go, links to deleted notes become plain words, and
-`store.rebuild_found` merges the profile again. Notes without Hal's frontmatter are never touched.
+`store.rebuild_found` merges the profile again. Then `projects.fold_cards` files each project fact from a
+document inside a project folder again on the folder's card (`store.refile`) and hides each unchecked card
+left with nothing as "Part of <project>" (`store.fold_away`). Notes without Hal's frontmatter are never
+touched.
 
 Reading is split so the AI can work on several items at once: worker threads (`ai.parallel` of them, which
 also caps the AI layer's own turns) only convert and describe (`engine._prepare`), and the action's thread
@@ -942,6 +958,15 @@ available yet.
   moved since the store last wrote through it. The ingest (`engine._give_facts`) adds a document's facts
   with `refresh=False` and runs one `conflicts.refresh` per document. 2,000 synthetic facts merge in about
   0.3 s, against 4.4 to 5.5 s before (`tests/test_profile.py`, `Scale`, measured 2026-11-07).
+- Folding (migration 0027): `store.refile(con, evidence_id, said)` files one piece of evidence again as
+  another fact, on the card that fact matches (a new one when none), and `store.fold_away(con, item_id,
+  into, why)` hides an unchecked found card with `merged_into` and `merged_why`; it raises `ValueError` for
+  a card the person checked, edited, hid or added. Moved evidence keeps the card it was on in
+  `profile_evidence.moved_from`. A new fact that matches a folded card goes to the card it was folded into
+  (`add_found`), cards folded into a card that is folded later follow it, and `rebuild_found` folds each
+  card again into the card rebuilt in its place, or shows it again when there is none. A folded card's
+  tier reason is its `merged_why` rather than "You hid it". Shaped items carry `merged_into` and
+  `merged_why`.
 - A found item (state `hal`) takes each field from its best-ranked source: transcript, then certificate,
   CV, letter and notes. An education item's modules come from its transcripts and certificates when any
   lists modules, else from its CVs, never from notes, slides or coursework; they are one per module code

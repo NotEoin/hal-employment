@@ -65,6 +65,11 @@ What changed in each version, in plain words.
   "Robot (2)", "robot-v3-final", the same project in two folders or in a zip), Hal reads only the newest
   and lists the others under **Earlier versions** in its note. A newer copy added later updates the same
   note, and a fact you checked that it changes goes back to unchecked for you to look at again.
+- **One project per project folder.** A folder of your own work with a README at its top is one project,
+  even with no code in it: its plans, tickets and write-ups each get a note, but they add their tools and
+  quotes to one project card instead of each becoming a project of its own. A CV kept in the folder, and a
+  note about another of your projects, still count as they are. **Tidy my record** folds the cards an
+  older Hal made of such a folder's notes into its one card, unless you checked them.
 - **Private files stay out of your record.** When Hal reads a folder or zip, files that look like bank
   details, a passport or ID card, a payslip or tax form, medical information, a date of birth with a
   passport or licence number, or passwords and keys are not filed, not sent to the AI and give no facts.

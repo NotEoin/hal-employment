@@ -13,7 +13,9 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
    give leave the profile and the note's key facts, and an employer, institution or issuer the document
    never names leaves its fact; course material loses contact details; code text is fenced. Copies of one
    project keep only the newest copy's note (`versions`). An empty note goes, and a note made from slides is
-   course material (`vaultnotes`).
+   course material (`vaultnotes`). Each project folder of the person's own work (`group.projects`) is found
+   and put in the batch for its note, and the course units an older read split it into go
+   (`projects.find_in_record`).
 3. Notes the AI should read again are put back in the batch, to be rewritten in place (`engine._again`):
    converted course material, for a lecture note, and documents whose role the rules cannot settle, such
    as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
@@ -26,7 +28,9 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
 `finish` runs at the end of every tidy run, and is safe to run again: notes no item points at any more are
 deleted with their facts and copied originals, entity notes outside `notes.noted` go (all of People and
 Places), links to deleted notes become plain words, and the profile is merged again from its evidence
-(`store.rebuild_found`), so the merge rules of today apply to everything.
+(`store.rebuild_found`), so the merge rules of today apply to everything. Then the project facts read inside a
+project folder are filed on that folder's project card, and a card left with nothing is hidden as part of it
+(`projects.fold_cards`).
 
 Notes the person wrote are never touched: only notes with Hal's `hal:` or `type: entity` frontmatter are.
 """
@@ -47,6 +51,7 @@ from jobhunt.ingest import (
     lectures,
     notes,
     privacy,
+    projects,
     rank,
     roles,
     vaultnotes,
@@ -208,6 +213,7 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
             attach.STATE: 0, "skipped": 0, "empty": 0}
     units: attach.Units | None = None
     done["older_version"] = _versions(con, vault)
+    done["projects"] = projects.find_in_record(con, batch, vault)
     rows = con.execute("""SELECT * FROM ingest_items WHERE state = 'done' AND note IS NOT NULL
                           AND kind IN ('file', 'repo', 'page') ORDER BY rank, kind = 'file', rel""").fetchall()
     for row in rows:
@@ -404,6 +410,7 @@ def finish(con: sqlite3.Connection, vault: Path) -> dict:
 
     out = {"notes_deleted": _sweep_sources(con, vault)}
     store.rebuild_found(con)
+    out["project_cards_folded"] = projects.fold_cards(con)
     out["entities_deleted"] = _sweep_entities(con, vault)
     out["links_unlinked"] = _unlink_missing(vault)
     notes.write_indexes(vault)

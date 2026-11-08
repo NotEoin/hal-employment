@@ -7,8 +7,10 @@ hashed again. One file that cannot be read is an error on its own row and never 
 Each document's role (`roles`: the person's own, taught, someone else's or unsure) is judged on this thread,
 which holds the database the person's names come from, with where the person said its folder came from (the
 item's `origin`). Someone else's document is not filed at all and gives
-nothing; the others give only the facts their role may. Supporting files (data, figures, logs, models,
-camera photos) are never read: once the documents and course notes are written, `attach.settle` lists each
+nothing; the others give only the facts their role may. A project fact from a document inside a project
+folder is a fact about that folder's project (`projects.facts_in`), so its notes make one project card.
+Supporting files (data, figures, logs, models, camera photos) are never read: once the documents and the
+course and project notes are written, `attach.settle` lists each
 in the note of the unit it belongs to, or skips it. An empty note is skipped, and a note made from slides is
 course material by rules (`vaultnotes`).
 
@@ -46,6 +48,7 @@ from jobhunt.ingest import (
     lectures,
     notes,
     privacy,
+    projects,
     rank,
     roles,
     sources,
@@ -62,6 +65,7 @@ ERROR_CHARS = 300
 ALSO_AT = "## Also at"
 KEPT_SECTIONS = ("## Part of", ALSO_AT, versions.EARLIER, attach.FILES)   # added after a note was written
 NEVER_BY_MODEL = ("code", "image", "media")
+UNITS = ("course", projects.KIND)    # units whose note lists their files' notes; nothing reads them as a document
 BY_SOURCE = "source"         # a description settled by the document a note was made from (`vaultnotes`)
 AHEAD = 2                    # items handed to workers per worker, so none waits while this thread writes
 NO_WEB = "Reading web links is not available in this version of Hal yet."
@@ -116,7 +120,13 @@ class _Finder:
         for z in zips:
             self.unzip(z.path, z.rel, origin_of(z.path))
         files = [f for f in loose if f not in zips]
-        courses = group.courses([(f.path, f.rel) for f in files])
+        # a folder of course material is never one project: a module folder holds several pieces of coursework
+        owned = {f for f in group.projects(walked.readmes, walked.repos) if origin_of(f) != roles.COURSE}
+        for folder in sorted(owned):
+            shown = top if folder == root else f"{top}/{folder.relative_to(root).as_posix()}"
+            items.add(self.con, self.batch, path=str(folder), rel=shown, kind=projects.KIND, rank=projects.RULE.rank,
+                      category=projects.RULE.category, doc_type=projects.RULE.doc_type, origin=origin_of(folder))
+        courses = group.courses([(f.path, f.rel) for f in files if group.project_of(f.path, owned) is None])
         unit_of = {path: folder for folder, members in courses.items() for path, _ in members}
         for folder in sorted(courses):
             items.add(self.con, self.batch, path=str(folder), rel=rel_of[courses[folder][0][0]].rsplit("/", 1)[0],
@@ -248,6 +258,7 @@ def _judge(con: sqlite3.Connection, row: sqlite3.Row, desc: dict, text: str) -> 
     if role == roles.TAUGHT:
         desc["summary"] = lectures.scrub(desc["summary"])
     desc["facts"] = [f for f in desc["facts"] if roles.allowed(role, f["kind"], desc["doc_type"])]
+    desc["facts"] = projects.facts_in(con, row, desc)     # a note inside a project folder speaks for its project
 
 
 def _shown_text(desc: dict, text: str) -> str:
@@ -656,7 +667,7 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     drop_root = sources.drop_folder().resolve() if drop else None
     versions.settle(con, batch, vault())
     # supporting files are never read: `attach.settle` lists them with their unit once it is written
-    todo = [r for r in items.pending(con, batch) if r["kind"] != "course" and not attach.supporting(r)]
+    todo = [r for r in items.pending(con, batch) if r["kind"] not in UNITS and not attach.supporting(r)]
     # Within a rank, typed notes before converted decks and handouts, so a lecture's notes are in the record
     # when its slides come up and cover them (`lectures.Covered`); the sort keeps the rest in their order.
     todo.sort(key=lambda r: (r["rank"] if r["rank"] is not None else rank.OTHER.rank, r["kind"] == "file",
@@ -667,6 +678,7 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     step("Linking your notes")
     written += _courses(con, batch)
     vault_dir = vault()
+    written += projects.write_notes(con, batch, vault_dir)
     attach.settle(con, batch, vault_dir)
     notes.link_pass(vault_dir, written)
     if tidy and not items.pending(con, batch):

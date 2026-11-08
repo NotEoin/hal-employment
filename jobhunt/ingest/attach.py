@@ -14,10 +14,11 @@ converted, never sent to the AI and give no facts:
 `settle` runs once a batch's documents and course notes are written. A supporting file inside a unit gets
 state `attached`: `dup_of` the unit's item, `note` the unit's note, and its path inside the unit listed
 under "## Files" in that note (`list_in`). A unit (`Units.find`) is the nearest folder above the file, and
-below the folder the person gave, that is a course unit or a repository, or holds a document of a kind of
-work (`roles.WORK_TYPES`) or a repository; a folder named as work ("Dissertation", "Final project",
-`rank.work_named`) reaches the work documents anywhere below it. Outside any unit the file is `skipped`,
-with the reason in its error column. `tidy` holds notes an older read filed to the same rule.
+below the folder the person gave (or that folder, when it is a project folder), that is a course unit, a
+project folder (`group.projects`) or a repository, or holds a document of a kind of work (`roles.WORK_TYPES`)
+or a repository; a folder named as work ("Dissertation", "Final project", `rank.work_named`) reaches the work
+documents anywhere below it. Outside any unit the file is `skipped`, with the reason in its error column.
+`tidy` holds notes an older read filed to the same rule.
 """
 from __future__ import annotations
 
@@ -34,6 +35,8 @@ FILES = "## Files"
 ORIGINAL = "\n## Original\n"
 NO_WORDS = "a picture with no words"
 NO_UNIT = "a data, log or design file with no project around it"
+FOLDER_UNITS = ("course", "repo", "project")    # units that are a whole folder (`group`), not one document
+LISTS = ("course", "project")                   # units whose note's text is the list of their files
 DATA_SUFFIXES = {".csv", ".tsv", ".json", ".jsonl", ".xlsx", ".xls", ".ods", ".parquet", ".npy", ".npz", ".mat",
                  ".h5", ".hdf5", ".sav", ".dta", ".arff"}
 DIFF_SUFFIXES = {".diff", ".patch"}
@@ -136,22 +139,30 @@ class Units:
     """
 
     def __init__(self, con: sqlite3.Connection) -> None:
-        self.at: dict[Path, sqlite3.Row] = {}            # course units and repositories, by their own folder
+        self.at: dict[Path, sqlite3.Row] = {}            # course, project and repository units, by their folder
         self.work: dict[Path, list[sqlite3.Row]] = {}    # work documents and repositories, by the folder above
         for r in con.execute("""SELECT id, kind, path, rel, note, doc_type, rank FROM ingest_items
                                 WHERE state IN ('done', 'pending') AND note IS NOT NULL
-                                AND kind IN ('course', 'repo', 'file')
+                                AND kind IN ('course', 'repo', 'project', 'file')
                                 ORDER BY id DESC"""):
             path = Path(r["path"])
-            if r["kind"] in ("course", "repo"):
+            if r["kind"] in FOLDER_UNITS:
                 self.at.setdefault(path, r)
             if r["kind"] == "repo" or (r["kind"] == "file" and r["doc_type"] in roles.WORK_TYPES):
                 self.work.setdefault(path.parent, []).append(r)
 
     def find(self, path: Path, rel: str) -> sqlite3.Row | None:
-        """The unit of the file at `path` (`rel` inside the folder the person gave), nearest folder first."""
-        between = len(PurePosixPath(rel).parts) - 2      # the folders below the one given, which is no unit
-        for folder in list(path.parents)[:max(0, between)]:
+        """The unit of the file at `path` (`rel` inside the folder the person gave), nearest folder first.
+
+        The folder given is no unit, unless it is a project folder: a person may give one project's folder.
+        """
+        between = len(PurePosixPath(rel).parts) - 2      # the folders below the one given
+        if between < 0:
+            return None                                  # the person gave this one file
+        for n, folder in enumerate(list(path.parents)[:between + 1]):
+            if n == between:
+                found = self.at.get(folder)
+                return found if found is not None and found["kind"] == "project" else None
             if folder in self.at:
                 return self.at[folder]
             if here := self.work.get(folder):
@@ -165,14 +176,14 @@ class Units:
 def _base(unit: sqlite3.Row) -> Path:
     """The folder a unit's files are named from: its own for a course or repository, else its document's."""
     path = Path(unit["path"])
-    return path if unit["kind"] in ("course", "repo") else path.parent
+    return path if unit["kind"] in FOLDER_UNITS else path.parent
 
 
 def list_in(vault: Path, unit: sqlite3.Row, name: str) -> None:
     """Adds `name` to the "## Files" list of the unit's note, once.
 
-    A course note's list is its text; any other note gets its own list above "## Original", as the document's
-    text below may have a "## Files" heading of its own (a repository's file tree does).
+    A course or project note's list is its text; any other note gets its own list above "## Original", as the
+    document's text below may have a "## Files" heading of its own (a repository's file tree does).
     """
     path = vault / unit["note"]
     if not path.is_file():
@@ -181,7 +192,7 @@ def list_in(vault: Path, unit: sqlite3.Row, name: str) -> None:
     line = f"- `{name}`\n"
     if line in text:
         return
-    head, sep, tail = (text, "", "") if unit["kind"] == "course" else text.partition(ORIGINAL)
+    head, sep, tail = (text, "", "") if unit["kind"] in LISTS else text.partition(ORIGINAL)
     found = re.search(rf"(?:^|\n){re.escape(FILES)}\n\n(?:- .*\n)*", head)
     if found:
         head = head[:found.end()] + line + head[found.end():]

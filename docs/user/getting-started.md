@@ -257,7 +257,15 @@ folder, grouped by kind (CVs and letters, Education, Certificates and so on), wi
 to notes about your modules, and the employers, skills and projects it gives facts about. Hal makes no notes
 about the people and places a document mentions, as they do not help an application. A code project
 becomes one note, and each module gets one course note linking its lectures, however many folders they
-came from. With **Keep a copy of each file Hal reads in** on, the original is copied to `Attachments`
+came from.
+
+A folder of your own work with a README at its top (a project folder, even without code) is one project,
+however many notes, plans and write-ups it holds. Each file still gets a note, linked from the project's
+note, but what they say about the project goes on one project card, named from the README's first heading
+or the folder's name, with the tools each note mentions. Skills in the notes are still found. A CV or a
+letter kept in the folder still names each of your projects, and a note about another of your projects
+counts for that one. A folder that holds two or more such projects is a set of projects, not one, and a
+folder of course material is never one project. With **Keep a copy of each file Hal reads in** on, the original is copied to `Attachments`
 beside the notes.
 
 The AI reads the rich documents in full, including coursework, reports, projects and essays kept in a
@@ -341,8 +349,10 @@ Then it holds every note to the rules above: it takes out notes of other people'
 settings files, notes about people and places, lecturers' emails and older copies of your projects, and
 facts that came from the wrong kind of file. Slides and documents only the AI can judge are read again,
 which can take a while for a large record; a second tidy skips what the first one already read. Files
-kept out as private are checked again, and any the check now lets through are read in. Notes you
-wrote yourself are never changed.
+kept out as private are checked again, and any the check now lets through are read in. A project folder an
+older Hal split into many projects, one for each note, becomes one project again: the other cards are
+hidden with "Part of" and the project's name, unless you checked them. Notes you wrote yourself are never
+changed.
 
 ## Your record
 

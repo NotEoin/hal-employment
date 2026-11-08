@@ -68,7 +68,8 @@ def rule(item: dict) -> tuple[str, str] | None:
     if item["kind"] not in TIERED_KINDS:
         return None
     if item["state"] == "hidden":
-        return ARCHIVE, WHY_HIDDEN
+        # a card Hal folded into another (`store.fold_away`) was not hidden by the person
+        return ARCHIVE, (item.get("merged_why") if item.get("merged_into") else "") or WHY_HIDDEN
     if item["origin"] == "found" and item["state"] == "hal" and \
             not any(e.get("role", "") == store.OWN_ROLE for e in item["evidence"]):
         return ARCHIVE, WHY_NOT_OWN
@@ -237,7 +238,8 @@ def refresh(con: sqlite3.Connection, *, judge: bool = True) -> dict[str, int]:
                                             TIERED_KINDS)}
     found_ev = store.evidence_of(con, list(rows))
     shaped = {i: {"id": i, "kind": r["kind"], "state": r["state"], "origin": r["origin"],
-                  "fields": json.loads(r["fields"]), "evidence": found_ev[i]} for i, r in rows.items()}
+                  "fields": json.loads(r["fields"]), "evidence": found_ev[i], "merged_into": r["merged_into"],
+                  "merged_why": r["merged_why"]} for i, r in rows.items()}
     basis = _fingerprints(con, list(rows))
     counts, todo = {"rules": 0, "judged": 0, "unjudged": 0}, []
     with con:

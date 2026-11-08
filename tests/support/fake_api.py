@@ -148,7 +148,7 @@ def profile_item(n: int, kind: str, fields: dict, title: str, sub: str = "", whe
             "tier": tier[0], "tier_by": "hal" if tier[0] else "", "tier_why": tier[1],
             "tier_words": tier_words[tier[0]] if tiered else "",
             "context": CONTEXTS.get(kind, ("", ""))[0], "context_by": "hal" if kind in CONTEXTS else "",
-            "context_words": CONTEXTS.get(kind, ("", ""))[1]}
+            "context_words": CONTEXTS.get(kind, ("", ""))[1], "merged_into": None, "merged_why": ""}
 
 
 PROFILE_CONFLICT = {

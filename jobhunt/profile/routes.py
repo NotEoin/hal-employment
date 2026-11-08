@@ -18,7 +18,7 @@ An item (`ITEM`):
      "conflicts": [CONFLICT, ...], "can_delete": false,
      "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",
      "tier": "core", "tier_by": "hal", "tier_why": "Your main work in your field", "tier_words": "Lead with this",
-     "context": "work", "context_by": "hal", "context_words": "At work"}
+     "context": "work", "context_by": "hal", "context_words": "At work", "merged_into": null, "merged_why": ""}
 
 `state` is hal | confirmed | edited | hidden (`state_words`: Found by Hal, Checked by you, Edited by you,
 Hidden); `origin` is found | you; `fields` hold only the fields that have a value, with dates as `YYYY-MM` or
@@ -32,7 +32,9 @@ value) and link (label, url). `tier` is core | supporting | archive | "" (not so
 education, projects, achievements and certificates (`profile.tiers`); `tier_by` is hal | person | "".
 `context` is degree | team | work | personal | "" (not known), for the same kinds (`profile.contexts`), with
 `context_by` hal | person | "" and `context_words` the page's words for it ("Part of my degree",
-"University team project", "At work", "In my own time").
+"University team project", "At work", "In my own time"). `merged_into` is the id of the card a hidden card
+was folded into by Hal (`store.fold_away`), else null, and `merged_why` Hal's words on why ("Part of
+Lantern workspace").
 
 A conflict (`CONFLICT`):
 
