@@ -410,7 +410,14 @@ runs: tests use `tests/support/fake_claude/`.
   `record.OWN_DOCUMENTS` ("from the applicant's own documents"), never "true".
 - The evidence plan (`writing/plan.py`, prompt `evidence_plan`): before the letter is written,
   `pack.evidence_plan` asks once for up to `plan.MAX_ITEMS` (8) quotes from numbered sources
-  (`plan.sources`: each CV line, each Profile block line and each record passage of `kept`). A pick is kept
+  (`plan.sources`: each CV line, each Profile block line and each record passage of `kept`). A list-shaped
+  line is one source per entry, its heading kept on each (`writing/atoms.py`, `atoms.split`: "Second year
+  modules (overall 73.3): Ferry Studies 86" from a CV line of every module and its mark; a skills list; a
+  list of achievements), and a pick from an entry is the whole entry. A line is a list when a short heading
+  with no comma is followed by entries of at most `atoms.ENTRY_WORDS` words, at least `atoms.LIST_MIN` of
+  them, or two under a heading naming modules or skills or when each ends in a mark, so "Project, Ferry
+  planner (Lua, SQL): ..." stays whole. A whole module line as one source let a sentence about one module
+  cite another's "Team Project" (2026-11-08). A pick is kept
   only when its source exists and its quote is in that source word for word, spaces and case aside, and the
   text kept is the source's own (`plan.quoted`). Each item (`plan.Item`, E1, E2, ...) carries the card its
   source is about (a Project or Job line of the Profile block, a CV line naming one card, a passage of one of
@@ -535,6 +542,11 @@ runs: tests use `tests/support/fake_claude/`.
   letters). In a source naming several modules only the words from this module's name to the next count. A
   letter said a data science module "covered core statistical methods" when its notes covered databases
   and SQL (2026-11-07). It goes into the same one rewrite, and the verify prompt says the same.
+  `joined(draft, modules, sources, cards)` finds a sentence tying a named module and a mark to a project
+  card or an activity (`ACTIVITY`: "through a team project", "where I contributed to a team project", "by
+  building Ferry planner") that the module's own entry (`atoms.split` of the sources' lines) never names;
+  the modules of a list in the sources (`modules_listed`) count as named. It is one of each sentence's checks with
+  no AI (`grounded.problems`).
 - `drafts.echoes(sentence, advert, brief, names)` finds a sentence that restates the employer: at least
   `ECHO_SHARE` (half) of its own words sit in runs of `ECHO_RUN` (three) words found in the advert or the
   brief, with little words and the words of the job title and employer's name (`names`) never counted, and
@@ -1022,7 +1034,10 @@ available yet.
   word overlap of `RANKED_KINDS`), and an archived one never, even confirmed. No email or phone is included. The pages that write (My CV, an application's
   Documents step) show `ui/unchecked-note.js`, which reads `to_check` from `GET /api/v2/profile` and says
   how many facts wait. Each item is one line of at most
-  `LINE_MAX` characters, cut at a whole list item, and one location is named. `pack._kept` puts it
+  `LINE_MAX` characters, cut at a whole list item, and one location is named. A course's modules and a
+  job's duties and achievements are one line each under it, naming the course or job (`entry_lines`:
+  "Module (BA History): Oral History (68)", "Job duty (Guide at Fenwick Museum): Ran tours"), at most
+  `LINE_MAX` characters of them per item. `pack._kept` puts it
   above the record's passages (`profile.writing.with_record`), so the fit map, letter, message and answers
   read it, and `cvstudio.context.build` gives it to every document prompt as the `profile` value.
 - The check queue: `check.queue(con)` works out, from the items' states each time, what the person has

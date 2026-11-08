@@ -175,6 +175,13 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **One module, one fact.** A CV line listing every module and its mark was one piece of evidence, so a
+  letter could say "I achieved 86 in one module, where I contributed to a team project" because another
+  module on the same line was called "Team Project". Hal now reads such a line as one fact per module, each
+  with its heading ("Second year modules"), and the same for skills lists and lists of achievements. A
+  module's mark tied to a project or a piece of work the module's own line never names is rewritten like
+  any unsupported sentence. The facts you checked list each module, duty and achievement on a line of its
+  own too.
 - **A list of your projects is not one project.** A portfolio folder holding a plan that described all
   your projects turned every one of them into the portfolio, and cards that shared such a plan were merged.
   A document that describes three or more projects now lists them, as a CV does, and a note about another

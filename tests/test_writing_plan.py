@@ -63,10 +63,47 @@ class SkillsLists(unittest.TestCase):
 
     def test_a_pick_from_a_skills_list_is_tied_to_no_project_and_says_so(self):
         found = plan.sources("Tools: Lua, Tide gauge, SQL", "", CARDS)
-        self.assertIs(found[0].card, TIDE, "the line names the card")
-        item = plan.checked({"evidence": [{"source": "S1", "quote": "Lua, Tide gauge, SQL"}]}, found)[0]
+        self.assertIs(found[1].card, TIDE, "the entry names the card")
+        item = plan.checked({"evidence": [{"source": "S2", "quote": "Tools: Tide gauge"}]}, found)[0]
         self.assertEqual((item.card, item.context, item.tools, item.skills), ("", "", (), True))
         self.assertIn("a skills list: what the applicant knows, never which project used it", item.words())
+
+
+MODULES = ("Second year modules (overall 73.3): Ferry Studies 86, River Trade 79, Software Engineering Team "
+           "Project 73, Harbour Records 70")
+
+
+class Entries(unittest.TestCase):
+    """A CV line of every module was one source, so "I achieved 86 in <module>, where I contributed to a team
+    project" cited a quote holding another module's "Team Project" (2026-11-08)."""
+
+    def test_each_module_of_a_list_is_its_own_source_with_the_lists_heading(self):
+        found = plan.sources(MODULES, "", CARDS)
+        self.assertEqual([s.text for s in found],
+                         ["Second year modules (overall 73.3): Ferry Studies 86",
+                          "Second year modules (overall 73.3): River Trade 79",
+                          "Second year modules (overall 73.3): Software Engineering Team Project 73",
+                          "Second year modules (overall 73.3): Harbour Records 70"])
+
+    def test_a_pick_across_two_modules_is_dropped_and_one_module_is_its_whole_entry(self):
+        found = plan.sources(MODULES, "", CARDS)
+        items = plan.checked({"evidence": [
+            {"source": "S1", "quote": "Ferry Studies 86, River Trade 79, Software Engineering Team Project 73"},
+            {"source": "S1", "quote": "Ferry Studies 86"}]}, found)
+        self.assertEqual([i.text for i in items], ["Second year modules (overall 73.3): Ferry Studies 86"])
+        self.assertNotIn("Team Project", plan.block(items))
+
+    def test_a_skills_list_is_one_source_per_skill_and_each_says_it_is_a_skills_list(self):
+        found = plan.sources("AI and ML: PyTorch, NumPy, pandas", "", CARDS)
+        self.assertEqual([(s.text, s.skills) for s in found],
+                         [("AI and ML: PyTorch", True), ("AI and ML: NumPy", True), ("AI and ML: pandas", True)])
+        item = plan.checked({"evidence": [{"source": "S3", "quote": "AI and ML: pandas"}]}, found)[0]
+        self.assertTrue(item.skills)
+
+    def test_a_line_about_one_piece_of_work_stays_whole(self):
+        for line in (FACTS.splitlines()[1], "Volunteering: Guide at a made-up heritage centre, 2024 to 2026",
+                     "Barista, Old Mill Inn (2024 to 2025): served customers, ran the till, trained staff"):
+            self.assertEqual([s.text for s in plan.sources(line, "", CARDS)], [line])
 
 
 class Picks(unittest.TestCase):

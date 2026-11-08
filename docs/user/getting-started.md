@@ -108,6 +108,8 @@ message or an earlier answer, is rewritten once to use a fact the drafts have no
 and listed under **Check before sending** if it has to stay.
 A draft may say what one of your modules covered only when your CV, the facts you checked or your own
 documents say it too, as a module's name alone does not say what it taught.
+Each module and its mark is a fact of its own, even when your CV lists them all on one line, so a draft
+cannot tie one module's mark to a project or a piece of work that only another module's line names.
 The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
 to work here?", should be your own. Before writing a letter, Hal pairs one specific thing about the employer,
 in the advert's or the company's own words (a product, a project, a place; never "innovation" or "a great

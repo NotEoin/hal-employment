@@ -20,6 +20,11 @@ Design decisions, each with its reason:
   aside; the text kept is the source's own, so a model's paraphrase never becomes evidence.
 - The card, its context and the person's role come from Hal's reading of the card (`profile.contexts`, the
   card's Role field and team words), never from the reply: the context is what drafts got wrong.
+- A list-shaped line (a CV's modules and marks, a skills list, a list of achievements) is one source per
+  entry (`writing.atoms`), its heading kept on each, and an item quoted from one is the whole entry: a CV
+  line of every module was one source, so "I achieved 86 in <module>, where I contributed to a team
+  project" cited a quote that held another module's "Team Project" (2026-11-08). Whether an entry is a
+  skills list is read from its whole line.
 - Only a "Project" or "Job" line of the Profile block, a CV line or a passage of a card's file is tied to a
   card: a skill line quoting a project says nothing of where the project was done.
 - A skills list (`skills_line`: a Profile "Skill:" line, or a CV line of a label and a list, "AI and ML:
@@ -36,7 +41,7 @@ from dataclasses import dataclass
 
 from jobhunt import llm
 from jobhunt.ai import prompts
-from jobhunt.writing import drafts, stage
+from jobhunt.writing import atoms, drafts, stage
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +70,8 @@ class Source:
     text: str
     card: dict | None = None
     context: str = ""          # the passage's own "(Kind: ...)" context when no card says one
+    skills: bool = False       # an entry of a skills list (`skills_line`, read from its whole line)
+    entry: bool = False        # one entry of a list-shaped line (`writing.atoms.split`), heading kept
 
 
 @dataclass(frozen=True)
@@ -110,19 +117,30 @@ def _card_of(text: str, cards: list[dict]) -> dict | None:
     return named[0] if len(named) == 1 else None
 
 
+def _line_sources(label: str, line: str, cards: list[dict], tied: bool = True) -> list[tuple]:
+    """A CV or Profile line as sources: one per entry when it is list-shaped (`atoms.split`), each with the card
+    it names when `tied`, and whether its whole line is a skills list."""
+    entries = atoms.split(line)
+    skills = skills_line(label, line)
+    return [(label, e, _card_of(e, cards) if tied else None, "", skills, len(entries) > 1) for e in entries]
+
+
 def sources(facts: str, kept: str, cards: list[dict]) -> list[Source]:
     """Every fact a plan may quote, numbered S1, S2, ...: the CV's lines, the Profile block's lines and the
-    passages of the person's own documents in `kept`."""
-    found: list[tuple[str, str, dict | None, str]] = []
+    passages of the person's own documents in `kept`, a list-shaped line one source per entry."""
+    found: list[tuple[str, str, dict | None, str, bool, bool]] = []
     for line in (facts or "").splitlines():
         if line.strip():
-            found.append((CV, line.strip(), _card_of(line, cards), ""))
+            found += _line_sources(CV, line.strip(), cards)
     parts = LABEL.split(kept or "")
     for line in parts[0].splitlines():
         said = line.strip()
         if said.startswith("- "):
             said = said[2:].strip()
-            found.append((PROFILE, said, _card_of(said, cards) if CARD_LINE.match(said) else None, ""))
+            if CARD_LINE.match(said):
+                found.append((PROFILE, said, _card_of(said, cards), "", False, False))
+            else:
+                found += _line_sources(PROFILE, said, cards, tied=False)
     for label, body in zip(parts[1::2], parts[2::2], strict=True):
         lines = body.strip().splitlines()
         kind = KIND_LINE.match(lines[0]) if lines else None
@@ -130,8 +148,8 @@ def sources(facts: str, kept: str, cards: list[dict]) -> list[Source]:
         file = label.split(" > ", 1)[0]
         card = next((c for c in cards if file in c.get("files", [])), None)
         if text:
-            found.append((label, text, card, BY_WORDS.get(kind.group(1), "") if kind else ""))
-    return [Source(f"S{n}", label, text, card, context) for n, (label, text, card, context) in enumerate(found, 1)]
+            found.append((label, text, card, BY_WORDS.get(kind.group(1), "") if kind else "", False, False))
+    return [Source(f"S{n}", *source) for n, source in enumerate(found, 1)]
 
 
 def quoted(quote: str, source: str) -> str:
@@ -164,11 +182,12 @@ def checked(reply: dict, found: list[Source]) -> list[Item]:
     for pick in picks if isinstance(picks, list) else []:
         source = by_id.get(str(pick.get("source") or "").strip().upper()) if isinstance(pick, dict) else None
         text = quoted(str(pick.get("quote") or ""), source.text) if source else ""
+        text = source.text if text and source.entry else text     # an entry is one fact, its heading kept
         if not text or text.lower() in seen:
             log.info("evidence plan: dropped a pick that quotes no source word for word: %r", pick)
             continue
         seen.add(text.lower())
-        skills = skills_line(source.label, source.text)
+        skills = source.skills or skills_line(source.label, source.text)
         card = {} if skills else source.card or {}
         items.append(Item(f"E{len(items) + 1}", text, source.label, card.get("name", ""),
                           card.get("context", "") or source.context, _role(card or None, source.text),

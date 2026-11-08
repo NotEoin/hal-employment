@@ -14,6 +14,34 @@ PASSAGE = ("[Sources/Writing/Data reflection.md > Week 3]\nIn Foundations of Ima
            "over a made-up harbour database and tagged sailors' logs with language processing.")
 
 
+CARDS = [{"kind": "project (university team project)", "name": "Ferry planner", "aliases": []}]
+LIST = ("Second year modules (overall 73.3): Ferry Studies 86, River Trade 79, Software Engineering Team Project 73",)
+
+
+class Joined(unittest.TestCase):
+    """"I achieved 86 in <module>, where I contributed to a team project" from a CV line of every module and its
+    mark, where "Team Project" was another module's name (2026-11-08)."""
+
+    def test_a_module_and_its_mark_tied_to_work_its_own_entry_never_names_is_found(self):
+        for said, tied in (("I achieved 86 in Ferry Studies, where I contributed to a team project.", "a team project"),
+                           ("I scored 86 in Ferry Studies by building Ferry planner.", "Ferry planner")):
+            with self.subTest(said=said):
+                self.assertEqual(taught.joined(said, [], LIST, CARDS),
+                                 [f"{said} (nothing in your facts ties Ferry Studies to {tied})"])
+
+    def test_a_module_and_its_mark_alone_or_tied_as_its_own_entry_says_are_left_alone(self):
+        self.assertEqual(taught.joined("I scored 86 in Ferry Studies.", [], LIST, CARDS), [])
+        self.assertEqual(taught.joined("I scored 73 in Software Engineering Team Project, a team project.", [], LIST,
+                                       CARDS), [])
+        lines = ("Databases module, mark 66: a team project on a made-up harbour database.",)
+        self.assertEqual(taught.joined("I achieved 66 in the Databases module through a team project.", MODULES,
+                                       lines, CARDS), [])
+
+    def test_the_modules_of_a_list_are_named_modules(self):
+        self.assertEqual(taught.modules_listed(LIST),
+                         ["Ferry Studies", "River Trade", "Software Engineering Team Project"])
+
+
 class Taught(unittest.TestCase):
     def test_what_a_module_covered_with_no_source_is_unsupported(self):
         # "the Foundations of Data Science module, which covered core statistical methods", while its notes

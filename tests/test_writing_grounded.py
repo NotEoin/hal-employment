@@ -10,7 +10,7 @@ from unittest import mock
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt import llm
-from jobhunt.writing import cites, grounded, plain
+from jobhunt.writing import cites, grounded, plain, plan
 from jobhunt.writing.plan import Item
 
 FLAGS = json.loads((Path(__file__).parent / "fixtures" / "grounded_flags.json").read_text(encoding="utf-8"))
@@ -78,6 +78,20 @@ class NoAI(unittest.TestCase):
     def test_a_project_described_rather_than_named_is_held_to_its_cards_context(self):
         found = grounded.problems(one("My degree included building a river logger in Lua [E2]."), FACTS)
         self.assertEqual(found, ["calls Tide gauge part of a degree; its evidence says a personal project"])
+
+
+class Entries(unittest.TestCase):
+    """A sentence citing one module of a CV's list of marks passed every check, as its item was the whole
+    line and held another module's "Team Project" (2026-11-08)."""
+
+    def test_a_module_cited_alone_is_never_held_to_another_modules_words(self):
+        line = "Second year modules (overall 73.3): Ferry Studies 86, Software Engineering Team Project 73"
+        found = plan.sources(line, "", [])
+        items = plan.checked({"evidence": [{"source": "S1", "quote": "Ferry Studies 86"}]}, found)
+        facts = grounded.Facts({i.id: i for i in items}, [], [], "", None, [], (line,))
+        said = one("I achieved 86 in Ferry Studies, where I contributed to a team project [E1].")
+        self.assertEqual(grounded.problems(said, facts),
+                         ["nothing in your facts ties Ferry Studies to a team project"])
 
 
 class WithAI(unittest.TestCase):

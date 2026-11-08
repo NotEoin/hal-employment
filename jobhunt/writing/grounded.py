@@ -23,7 +23,8 @@ Design decisions, each with its reason:
   (as `drafts.wrong_context`, but through the markers, so a project described rather than named is
   caught), and "I built" of a team's card with no word of the team or of the person's part. The checks the
   whole draft had (a finished course spoken of as to come, a tool on the wrong project, a project in the
-  wrong place by name, what a module covered) run on each sentence too.
+  wrong place by name, what a module covered) run on each sentence too, and a module's mark tied to a
+  project or activity its own entry never names (`taught.joined`).
 - A tool claimed for a project needs that project's own evidence (`_tool_problems`): a cited item tied to its
   card and not a skills list (`plan.Item.skills`), or the card's own names, summary and tools. "I used NumPy
   and pandas to build" a project passed on the CV's skills line though the project's card never names pandas
@@ -227,6 +228,7 @@ def problems(c: cites.Cited, facts: Facts) -> list[str]:
     out += _reason(drafts.misplaced_tools(text, facts.cards, facts.known))
     out += _reason(drafts.wrong_context(text, facts.cards))
     out += _reason(taught.unsupported(text, facts.modules, facts.sources))
+    out += _reason(taught.joined(text, facts.modules, facts.sources, facts.cards))
     out += plain.problems(text, list(facts.names), list(facts.labels))
     return list(dict.fromkeys(out))
 

@@ -33,6 +33,10 @@ Design decisions, each with its reason:
   two cards together.
 - The block is cut at a whole line when it reaches `limit`, kind by kind in `KIND_ORDER`, so the basics and
   jobs are the last to go.
+- A course's modules and a job's duties and achievements are one line each (`entry_lines`), under the line of
+  the course or job they belong to and naming it, at most `LINE_MAX` characters of them per item: one line of
+  every module was one piece of evidence, so a sentence about one module could cite another's words
+  (2026-11-08).
 """
 from __future__ import annotations
 
@@ -65,23 +69,50 @@ def _period(fields: dict) -> str:
     return f" ({words})" if words else ""
 
 
-def line(kind: str, fields: dict, quote: str = "", context: str = "") -> str:
+def line(kind: str, fields: dict, quote: str = "", context: str = "", entries: bool = True) -> str:
     """One item as a line of plain words for a prompt; a project names its `context` (`writing.stage.CONTEXTS`)
-    when known, and another card when it is not its kind's own."""
-    said = _plain(kind, fields, quote, stage.CONTEXT_WORDS.get(context, "") if kind == "project" else "")
+    when known, and another card when it is not its kind's own. `entries=False` leaves out a course's modules
+    and a job's duties and achievements, which `entry_lines` gives one a line."""
+    said = _plain(kind, fields, quote, stage.CONTEXT_WORDS.get(context, "") if kind == "project" else "", entries)
     if context and kind != "project" and context != contexts.BY_KIND.get(kind):
         label, _, rest = said.partition(": ")
         said = f"{label} ({stage.CONTEXT_WORDS[context]}): {rest}"
     return said
 
 
-def _plain(kind: str, fields: dict, quote: str, project_kind: str) -> str:
+def entry_lines(kind: str, fields: dict) -> list[str]:
+    """The lines of a course's modules and of a job's duties and achievements, one each and naming the course
+    or job ("Module (BA History): Oral History (68)", "Job duty (Guide at Fenwick Museum): Ran tours"), at
+    most `LINE_MAX` characters in all; [] for any other kind."""
+    f = fields
+    if kind == "education":
+        course = " ".join(p for p in (f.get("qualification"), f.get("subject")) if p) or "a course"
+        said = [f"Module ({course}): " + m["name"] + (f" ({m['mark']})" if m.get("mark") else "")
+                for m in f.get("modules") or [] if m.get("name")]
+    elif kind == "job":
+        job = " at ".join(p for p in (f.get("title"), f.get("employer")) if p) or "a role"
+        said = [f"Job {word} ({job}): {x}" for word, key in (("duty", "duties"), ("achievement", "achievements"))
+                for x in f.get(key) or [] if str(x).strip()]
+    else:
+        return []
+    out, size = [], 0
+    for x in said:
+        if size + len(x) > LINE_MAX:
+            break
+        out.append(x)
+        size += len(x)
+    return out
+
+
+def _plain(kind: str, fields: dict, quote: str, project_kind: str, entries: bool = True) -> str:
     f = fields
     if kind == "job":
         where = ", ".join(p for p in (f.get("employer"), f.get("location")) if p)
         out = f"Job: {f.get('title') or 'a role'}" + (f" at {where}" if where else "") + _period(f)
         if f.get("hours") == "part_time":
             out += ", part-time"
+        if not entries:
+            return out
         if f.get("duties"):
             out += ". Duties: " + "; ".join(f["duties"])
         if f.get("achievements"):
@@ -92,7 +123,7 @@ def _plain(kind: str, fields: dict, quote: str, project_kind: str) -> str:
         out = f"Education: {course}" + (f" at {f['institution']}" if f.get("institution") else "") + _period(f)
         if f.get("grade"):
             out += f", grade {f['grade']}"
-        if f.get("modules"):
+        if f.get("modules") and entries:
             out += ". Modules: " + "; ".join(m["name"] + (f" ({m['mark']})" if m.get("mark") else "")
                                              for m in f["modules"])
         return out
@@ -157,7 +188,8 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
                 continue
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
             made = contexts.current(it, worked_for) if kind in contexts.CONTEXT_KINDS else ""
-            out.append("- " + line(kind, it["fields"], quote, made))
+            out.append("- " + line(kind, it["fields"], quote, made, entries=False))
+            out += ["- " + x for x in entry_lines(kind, it["fields"])]
     return out
 
 

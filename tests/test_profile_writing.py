@@ -150,7 +150,13 @@ class Writing(unittest.TestCase):
         humanities_profile(self.con)
         check_everything(self.con)
         block = profile.context_block(self.con)
-        self.assertIn("Modules: Early Modern Letters (72); Oral History in Practice (68)", block)
+        # one line of every module let a sentence about one module cite another's words (2026-11-08)
+        self.assertIn("- Education: BA (Hons) History and Imaginary Studies at University of Nowhere Fen "
+                      "(September 2022 to June 2025), grade 2:1\n"
+                      "- Module (BA (Hons) History and Imaginary Studies): Early Modern Letters (72)\n"
+                      "- Module (BA (Hons) History and Imaginary Studies): Oral History in Practice (68)\n", block)
+        self.assertIn("- Job duty (Collections volunteer at Fenwick Lantern Museum Trust): Catalogued a donated "
+                      "collection of letters", block)
         self.assertIn('Skill: Archival research (research). Shown by: "read the parish records in the county '
                       'archive"', block)
         self.assertIn("Collections volunteer at Fenwick Lantern Museum Trust (September 2023 to now), part-time",
