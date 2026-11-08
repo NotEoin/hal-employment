@@ -42,6 +42,7 @@ CURRENT_SECTIONS = ("cv",)
 MODULE_SECTIONS = ("coursework", "lecture")
 DISSERTATION_SECTION, DISSERTATION = "coursework", "dissertation"
 NOT_DISSERTATION = "other"     # the kind a piece takes when the person says it is not the dissertation after all
+SPLIT_KINDS = ("repo", "repo_url", "upload")   # code projects a monorepo may be (`sections.split`)
 TITLE_MAX = 200            # a title is a line; a longer one is a pasted paragraph
 FILES_FOLDER = "record-sources"
 
@@ -194,7 +195,9 @@ def _project_shape(r: sqlite3.Row, found: dict) -> dict:
     return {"parent_id": r["parent_id"], "what_changed": r["what_changed"],
             "not_yours": bool(found.get("not_yours")), "theirs": bool(m.get("theirs")),
             "pieces": list(found.get("pieces") or []), "picked": list(m.get("picked") or []),
-            "form": m.get("form") or None}
+            "form": m.get("form") or None,
+            # a code project read as code (it has a fingerprint) that is not itself a part of one
+            "can_split": r["doc_kind"] in SPLIT_KINDS and bool(found.get("fingerprint")) and not m.get("split_from")}
 
 
 def listing(con: sqlite3.Connection, section: str | None = None, target: int | None = None) -> list[dict]:

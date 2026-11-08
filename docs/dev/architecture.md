@@ -1395,6 +1395,11 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   file's time and the file count), a folder of projects' list, `pages.check`'s ETag or hash), plus sources
   still `new` or `failed` whose reader is ready. A check that fails counts as unchanged. The action reads
   the changed ones through `pipeline.read`, so cards the person edited keep their values.
+- Monorepos (`sections/split.py`, `POST .../sources/{id}/split`, shown as `can_split` on a code project
+  read as code): `parts(root)` are the top folders with their own manifest (`discover.is_repo`) and those
+  inside `PART_HOMES` (`packages`, `apps`, `services`, ...). Each becomes a `repo` child held as a folder,
+  with `meta.git_root` the repository's root, so `repo.git_history(folder, root)` counts only the commits
+  that touched it. The whole project stays beside its parts.
 
 ## Profile (`jobhunt/profile/`)
 

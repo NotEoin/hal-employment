@@ -64,6 +64,8 @@ Routes:
 - `POST /api/v2/record/sources/{id}/reread` {"allow": true to read one kept out as private}: {"action_id"}.
 - `POST /api/v2/record/sources/{id}/back`: puts back the facts of the read before the last
   (`sections.revisions`); SOURCE with "hidden", or 404 when no earlier read is kept.
+- `POST /api/v2/record/sources/{id}/split`: each folder of a code project that is a project itself becomes
+  its own source under it (`sections.split`); {"added": [SOURCE], "action_id"}, or 400 when there are none.
 - `DELETE /api/v2/record/sources/{id}`: removes it with its note and facts; {"hidden": [card ids]}.
 
 A kind of document or card that does not fit is 400 with plain words; a section, source or card that is not
@@ -234,6 +236,20 @@ def go_back(req: Request) -> dict:
         raise NotFound(str(e)) from e
     events.publish("profile", source_id=got["id"])
     return {**store.get(req.con, got["id"]), "hidden": out["hidden"]}
+
+
+@route("POST", PREFIX + "/{source_id}/split")
+def split_by_folder(req: Request) -> dict:
+    """Adds each folder of a code project that is a project of its own as its own source, and reads them."""
+    from jobhunt.sections import split
+
+    try:
+        new = split.split(req.con, req.params["source_id"])
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    events.publish("profile", sources=new)
+    return {"added": [store.get(req.con, i) for i in new],
+            "action_id": _start(req, new, why="You split a code project into projects by folder")}
 
 
 @route("DELETE", PREFIX + "/{source_id}")

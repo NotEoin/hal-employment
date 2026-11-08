@@ -128,6 +128,9 @@ function SourceRow({ s }) {
         onClick=${() => act(() => put(path, { current: true }), "This is your current CV now.")}>Make this my current CV</button>`}
       ${s.state === "kept_out" && html`<button type="button" class="btn small" aria-label=${"Add " + s.title + " anyway"}
         onClick=${() => act(() => post(path + "/reread", { allow: true }), "Hal is reading it.")}>Add it anyway</button>`}
+      ${s.can_split && html`<button type="button" class="btn quiet small" aria-label=${"Split into projects by folder: " + s.title}
+        onClick=${() => act(() => post(path + "/split"), out => "Split into " + plural(out.added.length, "project") + ". Hal is reading them.")}>
+        Split into projects by folder</button>`}
       ${s.can_go_back && html`<button type="button" class="btn quiet small" aria-label=${"Go back to the last read: " + s.title}
         onClick=${() => act(() => post(path + "/back"), "Hal put back what the last read found.")}>Go back to the last read</button>`}
       <button type="button" class="btn quiet small" aria-label=${"Read again: " + s.title}

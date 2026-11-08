@@ -247,6 +247,11 @@ def attach(con: sqlite3.Connection, source_id, uploads: list[Incoming]) -> dict:
     return out
 
 
+def source_of(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
+    """A source's row as its reader is given it (`readers.Source`)."""
+    return _source(con, r)
+
+
 def _source(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
     folder = store.files_dir(r["id"])
     files = tuple(readers.SourceFile(rel, folder / rel) for rel in store.file_rels(con, r["id"]))

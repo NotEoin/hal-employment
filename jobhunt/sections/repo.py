@@ -148,14 +148,21 @@ class History:
         return {(email.lower() or name.lower()): name for _, name, email in self.commits}
 
 
-def git_history(folder: Path) -> History:
+def git_history(folder: Path, root: Path | None = None) -> History:
     """The commits on HEAD from `git log` (never the reflog); an empty `History` when there is no git history,
-    git is missing, or it does not answer within `GIT_TIMEOUT_S`."""
-    if not (folder / ".git").exists():
+    git is missing, or it does not answer within `GIT_TIMEOUT_S`.
+
+    With `root`, `folder` is a part of the repository at `root` (a project split out of a monorepo,
+    `sections.split`), and only the commits that touched it count.
+    """
+    root = root or folder
+    if not (root / ".git").exists():
         return History()
     cmd = ["git", "-c", "core.fsmonitor=false", "-c", f"core.hooksPath={os.devnull}",
-           "-c", f"safe.directory={folder}", "-C", str(folder), "log", "--reverse", f"--format={GIT_FORMAT}",
+           "-c", f"safe.directory={root}", "-C", str(root), "log", "--reverse", f"--format={GIT_FORMAT}",
            "HEAD"]
+    if root != folder:
+        cmd += ["--", folder.relative_to(root).as_posix()]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=GIT_TIMEOUT_S, check=False,
                              env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"})
@@ -435,7 +442,8 @@ def _period(first: str, last: str) -> str:
     return a if a == b else f"{a} to {b}" if a and b else a or b
 
 
-def read_folder(folder: Path, *, name: str = "", meta: dict | None = None, theirs: bool = False) -> readers.Reading:
+def read_folder(folder: Path, *, name: str = "", meta: dict | None = None, theirs: bool = False,
+                git_root: Path | None = None) -> readers.Reading:
     """One code project's reading: its note text, summary, project and skill facts, and `details`.
 
     `meta` is what GitHub says of it (name, description, topics, licence, link); `theirs` is the person
@@ -453,7 +461,7 @@ def read_folder(folder: Path, *, name: str = "", meta: dict | None = None, their
     langs = languages(paths)
     deps = stack.read(folder)
     test_files, ci_name = tests(folder, paths), ci(folder)
-    history = git_history(folder)
+    history = git_history(folder, git_root)
     who = person()
     part = share(history, who)
     first, last = (history.first, history.last) if history.commits else _file_dates(paths)
@@ -554,7 +562,9 @@ class RepoReader:
     def read(self, source: readers.Source) -> readers.Reading:
         """The project's reading (`read_folder`), with GitHub's details for a clone."""
         root = root_of(source)              # a clone is made or brought up to date first, with GitHub's details
-        if source.held == "folder" and root.is_dir() and not is_code(root):
+        said = source.meta or {}
+        git_root = Path(said["git_root"]) if said.get("git_root") else None     # a part split out of a monorepo
+        if source.held == "folder" and root.is_dir() and not is_code(root) and git_root is None:
             return files_reading(source.title or root.name, folder_files(root))
         meta: dict = {}
         if source.held == "link":
@@ -562,7 +572,7 @@ class RepoReader:
 
             meta = {"link": source.locator, **github.meta_of(source.locator)}
         return read_folder(root, name=source.title or (source.locator if source.held == "files" else ""),
-                           meta=meta, theirs=bool((source.meta or {}).get("theirs")))
+                           meta=meta, theirs=bool(said.get("theirs")), git_root=git_root)
 
 
 def is_code(folder: Path) -> bool:

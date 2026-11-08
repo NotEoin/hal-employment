@@ -289,6 +289,21 @@ class RecordSections(unittest.TestCase):
         row.get_by_role("button", name="Go back to the last read: tide").click()
         p.shows(p.page.get_by_text("Hal put back what the last read found."), "the toast")
 
+    def test_a_code_project_is_split_into_projects_by_folder(self) -> None:
+        settings.set("you.name", repos.AVERY[0])
+        settings.set("you.email", repos.AVERY[1])
+        folder = repos.make(self.files / "suite", {"README.md": "# Suite\n", "package.json": '{"name": "suite"}',
+                                                   "web/package.json": '{"name": "web"}', "web/app.js": "1\n",
+                                                   "api/package.json": '{"name": "api"}', "api/index.js": "1\n"})
+        with closing(db.connect()) as con:
+            pipeline.read(con, pipeline.add_link(con, "project", str(folder), doc_kind="repo")["added"][0])
+        p = self.page("record-projects")
+        panel = self.panel(p, "Add projects")
+        panel.get_by_role("button", name="Split into projects by folder: suite").click()
+        for name in ("web", "api"):
+            p.shows(panel.locator("li.rec-source.rec-child", has_text=name), name)
+        self.clean(p)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -63,6 +63,10 @@ it that is a code project, or that has files of its own (a design brief, drawing
 own project. Folders that only hold more folders are left out. If the folder you give is one code project
 itself, Hal reads it as that one project.
 
+If one code project holds several projects in its own folders (a website and an app, say), press **Split
+into projects by folder** under it. Each folder that is a project of its own becomes a project beside the
+whole, with the dates and your share of the changes in that folder only.
+
 ## Portfolios, web pages and online documents
 
 **Portfolio site** takes the page that lists your work: a Behance, Dribbble or ArtStation profile, or your
@@ -122,4 +126,5 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | A project you removed from your GitHub account does not come back | Hal remembers you removed it. Add its link with **Link to one code project** to bring it back. |
 | A portfolio shows no **Pick pieces to add** | Hal found no links to pieces on that page. Add the page that lists your work, or add each piece with **Web page or online document**. |
 | A project from a web page has no role | The page does not say your role in a line like "Role: ...". Add it on the project's card with **Edit**. |
+| "Hal found no folders inside this project that are projects of their own." | Only folders with their own project file (such as `package.json` or `pyproject.toml`) are split out. The project stays as one. |
 | A code project has no "sole author" or "contributor" line | It has no history Hal can read (an uploaded copy often has none), so Hal shows its file dates instead. |

@@ -80,6 +80,8 @@ What changed in each version, in plain words.
 - **Projects stay up to date.** Every 6 hours (change it in Settings, Schedule) Hal checks your GitHub
   projects, folders and pages and reads again only what changed, never overwriting what you changed on a
   card. Each shows **What changed**, and **Go back to the last read** undoes a read that went wrong.
+- **Split a code project into projects by folder.** A project that holds several of its own (a website
+  and an app in one) can be split, and each part gets its own dates and your share of its changes.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,
