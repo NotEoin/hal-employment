@@ -275,6 +275,24 @@ class MessageBody(unittest.TestCase):
         self.assertNotIn(paragraphs.NO_QUESTION, asked)
 
 
+class DegreeAgain(unittest.TestCase):
+    """A message's built opening gave the degree and its next sentence gave it again (2026-11-08)."""
+
+    AFTER = ("I'm Avery Quillon, a first-class Software Studies graduate from Made-up University (2026), applying "
+             "for the Graduate Developer role.")
+
+    def reasons(self, text: str) -> list[str]:
+        return [p.reason for p in paragraphs.problems(text, QUILL_STORY, SCOPE, paragraphs.message(self.AFTER))]
+
+    def test_a_sentence_saying_the_degree_again_is_drafted_again(self):
+        self.assertIn(paragraphs.SAID_AGAIN, self.reasons(
+            "As a Software Studies graduate I built Quill in Lua. How does your team search its notes?"))
+
+    def test_a_fact_of_the_work_after_the_opening_is_fine(self):
+        self.assertNotIn(paragraphs.SAID_AGAIN, self.reasons(
+            "I built Quill in Lua as part of my degree. How does your team search its notes?"))
+
+
 class Stock(unittest.TestCase):
     def test_plain_finds_a_stock_link_but_never_a_plain_sentence(self):
         self.assertTrue(plain.problems("This aligns with your team's work."))

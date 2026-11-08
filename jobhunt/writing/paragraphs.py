@@ -32,6 +32,10 @@ Design decisions, each with its reason:
 - Every story with a name is checked for it, not only a card's (`_names`, 2026-11-08): passages of a
   dissertation were drafted as "I designed a pure simulation engine ..." with no project named. A module's or
   a project file's story must name its module or file's project, and is drafted again once when it does not.
+- A message body never says the degree again (`message`, `says_again`, 2026-11-08): Hal's built opening says
+  "I'm <name>, a first-class <subject> graduate from <university>", and the next sentence said the degree
+  again. A sentence repeating the opening, or naming a degree with its words, is drafted again as a fact of
+  the work.
 - A paragraph that fails is drafted again once with its problems stated (`Paragraph.redrafted`). One still
   failing loses only its failing sentences when what is left still reads (each cut sentence leaves the next
   one pointing at something, `flow.reads_without`, and the shape keeps its least number of sentences and its
@@ -52,7 +56,7 @@ from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
 from jobhunt.writing import drafts, flow, plain, planned, repeats, spelling, stage, taught
 from jobhunt.writing.motive import Pairing
-from jobhunt.writing.plan import Story
+from jobhunt.writing.plan import DEGREE, Story
 
 log = logging.getLogger(__name__)
 
@@ -95,6 +99,7 @@ LABEL_SAID = 'uses your part as a label ("{label}"); say what you did'
 LIST_SAID = "lists tools rather than saying what you did with them"
 NOT_NAMED = "does not name {card} in its first sentence"
 NO_QUESTION = "asks no question about the team's work"
+SAID_AGAIN = "says your degree again, which Hal's opening already says; tell a fact of the work instead"
 NOT_NAMED_ANY = "never names {card}"
 TOO_SHORT = "is too short to tell what the work was, what you did and what came of it"
 NOT_SUPPORTED = 'its facts do not say: "{span}"'
@@ -115,6 +120,7 @@ class Shape:
     name: str = "first"
     least: int = 1
     question: bool = False     # it must ask one question (a message's body)
+    after: str = ""            # what Hal puts before it (the message's opening sentence), never to say again
 
 
 LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 sentences, 60 to 90 words, one "
@@ -124,6 +130,26 @@ MESSAGE = Shape("answer", "The body of a short message to the person hiring, aft
                           "sentence: one or two sentences about this work, naming it, then one specific question "
                           "about the team's work on what it can help with. At most 60 words in all. No greeting, "
                           "no introduction and no sign-off.", "any", 2, True)
+DEGREE_SHARED = 2          # words of the opening's course a sentence naming a degree shares to say it again
+
+
+def message(after: str) -> Shape:
+    """The message body's shape after Hal's opening sentence `after`, which the body must not say again."""
+    return Shape(MESSAGE.kind, MESSAGE.words, MESSAGE.name, MESSAGE.least, MESSAGE.question, after)
+
+
+def says_again(sentence: str, after: str) -> bool:
+    """True when a sentence repeats the opening before it (`repeats.same`), or names a degree with at least
+    `DEGREE_SHARED` of the opening's own words ("I am a Software Studies graduate who ...")."""
+    if not after:
+        return False
+    if repeats.same(sentence, after):
+        return True
+    own = {w for w in writing_check.words_of(after) if w not in drafts.LITTLE_WORDS}
+    said = {w for w in writing_check.words_of(sentence) if w not in drafts.LITTLE_WORDS}
+    return bool(DEGREE.search(sentence)) and len(own & said) >= DEGREE_SHARED
+
+
 ANSWER_WORDS = 100         # words of a whole form answer, as the answers prompt asks
 FRAME_WORDS = 70           # words of a letter's opening and closing together: three sentences and one or two
 PARAGRAPH_WORDS = (60, 90)  # least and most words a letter paragraph is asked for, whatever the length setting
@@ -376,6 +402,7 @@ def problems(text: str, story: Story, scope: Scope, shape: Shape) -> list[Proble
     (`writing.check.high`, numbers aside, which are checked against the story)."""
     said = writing_check.sentences(text)
     out = [Problem(s, r) for k, s in enumerate(said) for r in sentence_problems(s, story, scope, said[:k])]
+    out += [Problem(s, SAID_AGAIN) for s in said if says_again(s, shape.after)]
     if story.name and said and shape.name == "first" and not _names(said[0], story, scope):
         out.append(Problem("", NOT_NAMED.format(card=story.name)))
     elif story.name and shape.name == "any" and not any(_names(s, story, scope) for s in said):

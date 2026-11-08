@@ -868,7 +868,7 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
     found = list(scope.stories)
     found += planning.fitting(found, cards, "\n".join(_requirements(analysis)))
     first = message_opening(who, job, analysis)
-    tried = _story_message(found, scope, paragraphs.MESSAGE, {})
+    tried = _story_message(found, scope, paragraphs.message(first.sentence), {})
     body = next((p for p in tried if p.text), tried[-1] if tried else paragraphs.Paragraph(found[0]))
     calls += sum(p.calls for p in tried)
     flags = [body.listed] if body.dropped else []
