@@ -55,6 +55,12 @@ Design notes:
 - A fit row that places a project card against its context is given the card's words, or listed under
   "Check before sending" when it cannot be (`checked_fit_contexts`): a fit table called a university team
   project a personal project (2026-11-08).
+- Calls per pack, counted with the fake AI (`tests/test_pack.py`): a pack whose drafts need nothing makes 11
+  calls and one sentence check per sentence about the person; each sentence that fails adds a rewrite, and
+  each paragraph that changes a smoothing call; a draft that reads badly adds one polish and one
+  attribution, the message and the answers sharing both. The letter is drafted once: with sentences fixed in
+  place, a second letter added 5 calls to a 23-call pack whose first letter needed one rewrite, and was not
+  kept, as both ended with no sentence failing (2026-11-08).
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -145,15 +151,9 @@ SOFTENED = "Hal rewrote it once to take out claims your facts do not support. " 
 CUT_NOTE = "Your last reply stopped mid-sentence. Write the whole draft again, and end it with a full sentence."
 ROOM_CTX = 16384          # tokens for the second ask after a cut-off reply, as for the CV score and critique
 # The letter and the message are drafted cooler than other prose (0.7, `ai.openai_compat.PROSE_TEMPERATURE`): at
-# 0.7 a local model added plausible details to fit the advert in every graded run (2026-11-07), and 0.4 still
-# leaves two drafts of one letter different enough to be worth comparing (`LETTER_DRAFTS`). The Claude CLI
+# 0.7 a local model added plausible details to fit the advert in every graded run (2026-11-07). The Claude CLI
 # takes no temperature, so there it changes nothing.
 DRAFT_TEMPERATURE = 0.4
-# Letters drafted independently, the one with the fewest sentences still failing kept (`write_letter`); the
-# second is skipped when the first needed no rewrite, as it could only tie. Two keep a pack within a few
-# minutes on a local model: each draft adds one call and a call per sentence checked (`tests/test_pack.py`
-# counts them).
-LETTER_DRAFTS = 2
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
 ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its rewrite
@@ -722,10 +722,9 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
     the fit map made and the evidence plan picked (`evidence_plan`), each unless given, then the letter and its
     checks. `request` holds the person's own words when they asked for a rewrite. Its reason for the employer
-    comes from a motivation pairing (`writing.motive`), or it gives none. The letter cites the plan's
-    items (`writing.cites`), each sentence is checked against its own (`settle`), and when the first draft
-    needed a rewrite a second is drafted and the better kept (`LETTER_DRAFTS`, `grounded.Grounded.key`); its
-    markers are taken out before it is returned.
+    comes from a motivation pairing (`writing.motive`), or it gives none. The letter is drafted once, each
+    sentence is attributed to the plan's items and checked against its own (`settle`), then it is polished
+    once if it reads badly (`writing.polish`); its markers are taken out before it is returned.
     """
     who = who or person(job)
     facts = cv.facts_text()
@@ -759,12 +758,6 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
                       employer=sources, pairing=pairing, words=who.get("letter_words")), revised
 
     best, revised = one_letter()
-    for _ in range(LETTER_DRAFTS - 1):
-        if not best.marked or (not best.failed and not best.rewrites):
-            break
-        again, again_revised = one_letter()
-        if again.key() < best.key():
-            best, revised = again, again_revised
     cut = best.text in trimmed
     against = grounds(who, plan, facts=facts, kept=kept, employer=sources, pairing=pairing)
     unique = grounded.unrepeat(best.text, against, grounded.only_in_paragraph)

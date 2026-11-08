@@ -652,11 +652,20 @@ runs: tests use `tests/support/fake_claude/`.
   (2026-11-07). Anything else reads "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The letter and the message are drafted at
-  `pack.DRAFT_TEMPERATURE` (0.4), cooler than other prose. When the first letter's sentence checks needed a
-  rewrite, a second is drafted on its own (`pack.LETTER_DRAFTS`, 2), and the one with fewer sentences still
-  failing is kept, then the one with fewer rewrites, then the first (`grounded.Grounded.key`); a draft with
-  no markers is never drafted twice. The message and the answers are drafted once. The pack's `## Letter notes` section says Tone, Length,
-  Evidence and Checked; the application page reads them back.
+  `pack.DRAFT_TEMPERATURE` (0.4), cooler than other prose. The letter, the message and the answers are each
+  drafted once. A second letter, drafted when the first needed a rewrite and kept when it had fewer
+  sentences still failing, was dropped (2026-11-08): with sentences fixed in place, it added 5 calls (a
+  letter, an attribution, a check, a rewrite, a smoothing) to a 23-call fake-AI pack whose first letter
+  needed one rewrite, and the first was kept, as both ended with no sentence failing. The pack's
+  `## Letter notes` section says Tone, Length, Evidence and Checked; the application page reads them back.
+- Calls per pack, counted with the fake AI (`tests/test_pack.py`, class `Calls`): a pack whose drafts need
+  nothing makes 11 calls (advert, brief, fit map, plan, pairing, letter, message, answers, and one
+  attribution each for the letter, the message and the answers) and one sentence check per sentence about
+  the person that does not restate its items. A failing sentence adds one rewrite, a paragraph that changed
+  one smoothing, a short letter one added paragraph, and a draft that reads badly one polish and one
+  attribution (the message and the answers share both). Every call but the drafts and the polish replies
+  with a short JSON object. How long a pack takes on a local model is unverified: time a real pack built
+  with `jobhunt pack` to check it.
 - The advert reading keeps only the questions the advert writes out, so a model's own note about questions
   is never answered. When the advert states no requirement, its main duties stand in, so the fit map is
   never empty. The letter greets the first person the advert names, else "Hiring Team", and never adds a

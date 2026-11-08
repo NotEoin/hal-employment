@@ -13,10 +13,9 @@ What changed in each version, in plain words.
   connected paragraphs from those facts, then Hal notes which fact each sentence rests on (you never see the
   marks) and checks each sentence about you against only those facts: a detail added to fit the advert, a
   personal project placed in your degree, or a team's work written as yours alone is rewritten once where
-  it stands, and listed if it is still wrong. **Check
-  before sending** no longer lists a whole-pack check's guesses, which were mostly false alarms. When the
-  first letter needed such a fix, Hal writes a second and keeps the one with fewer problems, and letters
-  and messages are written in a steadier style that adds fewer details of its own. The letter's reason for
+  it stands, and listed if it is still wrong. **Check before sending** no longer lists a whole-pack check's
+  guesses, which were mostly false alarms. Letters and messages are written in a steadier style that adds
+  fewer details of its own. The letter's reason for
   wanting the job comes from one specific thing about the employer, in the advert's or the company's own
   words, paired with one of your facts; when nothing connects, the letter gives no reason rather than
   a generic one.
@@ -195,6 +194,9 @@ What changed in each version, in plain words.
   unsupported sentence, a repeated fact or copied line is rewritten with another fact, and the stray fact
   moves to the closing paragraph. A fit table row that calls a team project personal is put right, or listed
   under **Check before sending** when Hal cannot.
+- **One letter, not two.** When the first letter needed a fix, Hal used to write a second from scratch and
+  keep the better. Now that a wrong sentence is fixed where it stands, the second letter only made a pack
+  slower (5 more AI calls of 23 in our test pack) and was not the one kept, so Hal writes the letter once.
 - **A wrong sentence is fixed where it stands.** Hal used to take out a sentence that was still wrong after
   its rewrite, which left paragraphs that jumped from one fact to the next. It now rewrites the sentence
   with its whole paragraph in view, so the paragraph still reads on, and lists it under **Check before

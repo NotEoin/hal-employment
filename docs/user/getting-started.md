@@ -105,8 +105,7 @@ on a list of tools, puts a fact in a paragraph about something else, or a messag
 who you are and why you are writing), Hal asks once for a polished version. It keeps the polish only when
 it reads better and every sentence still passes the same checks, with no new number, tool or project;
 otherwise the draft stays as it was. A letter left well under the length you prefer gets one more
-paragraph from facts it has not used yet, checked the same way. When the first letter needed such a fix,
-Hal writes a second one from scratch and keeps the one with fewer problems.
+paragraph from facts it has not used yet, checked the same way.
 Hal also checks what each letter, message and answer says about you against your CV, the facts
 you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed.

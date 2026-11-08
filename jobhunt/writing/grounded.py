@@ -138,11 +138,6 @@ class Grounded:
     smoothed: int = 0          # paragraphs rewritten to read well after a sentence was rewritten or cut
     added: bool = False        # a paragraph was added to a short letter (`lengthen`)
 
-    def key(self) -> tuple[bool, int, int]:
-        """How a draft ranks against another of the same document, lowest best: marked first, then fewer
-        sentences still failing, then fewer rewrites."""
-        return (not self.marked, len(self.failed), self.rewrites)
-
 
 def numbers(text: str) -> set[str]:
     """The numbers of a text, in figures, with words read as figures ("seven" is "7")."""
