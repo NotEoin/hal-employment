@@ -1174,6 +1174,46 @@ only, so a resumed ingest is not counted as fast), counts by stage, state and ca
 `not_downloaded` with the first paths, recent errors, `by_rules` and whether it was a read `again`. Web links are read by `ingest/web.py` when it is
 present (`fetch(urls, page_cap=)`), imported lazily; without it the ingest says web links are not
 available yet.
+## Sections of the record (`jobhunt/sections/`)
+
+The person adds each source to a section of Your record, and the section says what it is and whose it is,
+so nothing guesses a file's kind or owner afterwards (the bulk read below did, and crossed facts between
+people). Readers only take facts out of a source, within that frame.
+
+- `registry.SECTIONS`: cv, letter, job_doc, coursework, lecture, official, project, document. A `Section` has
+  `id`, `label`, `hint`, `folder` (under `Sources/`, `{target}` the card's title), `doc_kinds` (the first is
+  the default), `role` (own, taught, official, others; `evidence_role` maps official to own),
+  `creates` (the profile kinds its facts may make), `authority` (rank per field on `merge.RANKS`' scale,
+  `*` for the rest; `rank(field)`), `reader` and `readers` (per kind of document; `reader_of(kind)`),
+  `target` and `target_required` (coursework and lecture need an education card, job_doc a job). A
+  `DocKind` has `id`, `label`, `doc_type` (what evidence carries, which sets its rank today) and `held`
+  (upload, files, link, account, folder, manual).
+- `readers`: `Reader.read(Source) -> Reading`. A `Source` is `id, section, doc_kind, title, held, locator,
+  files (SourceFile rel, path), target` (the card as `profile.store.item`); a `Reading` is `title, date,
+  text, summary, facts`, each `Fact(kind, fields, Quote(field, quote, place, line))`. `document` keeps the
+  text and finds a title and date only. The rest are `Stub`s raising `NotReadYet` (a `NotImplementedError`
+  naming the phase: cv and letter 2; repo, github_account, project_files, portfolio, page and manual 3;
+  coursework, lecture and official 4; job_doc 5). A phase plugs its reader in with `readers.register`.
+- `store` keeps `record_sources` and `record_source_files` (migration 0028; not `sources`, which 0012 gave to
+  job sites). Uploads are copied to `data/record-sources/<id>/`.
+- `pipeline`: `add_uploads(con, section, [Incoming(name, data, relative_path)], doc_kind=, target_id=)` (a
+  zip, or files with a `relative_path`, is one source of several files; the same content in any section is
+  refused as a duplicate), `add_link(con, section, locator, doc_kind=, target_id=)`, `read(con, id,
+  allow_private=)` and `remove(con, id)`. `read` runs the reader, applies the bulk read's privacy check,
+  writes the note at `Sources/<section folder>/<title>.md` with `notes.write_source`, and calls
+  `profile.store.swap_source(con, id, facts)`, which replaces the source's evidence in one transaction
+  (evidence carries `source_id`, `place` and `line`). A found card no source names any more is hidden with
+  its state kept in `orphaned_from`, and comes back in that state when a source names it again. The tidy
+  keeps the notes `record_sources.note_rel` points at.
+- `wrong_place.suggest(section, name, text)` is the bulk read's first-glance rules (`ingest.rank`) for a CV,
+  a transcript and a letter; the source's `suggestion` is shown, never acted on.
+- `actions`: `record.sources` reads a list of source ids at priority 1, resumable. `routes`: under
+  `/api/v2/record/sources` (the shapes are in its header), with `GET /api/v2/record/sections`, and
+  `PUT /api/v2/profile/items/{id}/star` for a project or job card's star (`profile_items.star`, `star_by`).
+- The page (`static/app/record/sections.js`): `SourcesPanel` (one or more sections, a target card),
+  `SourceList`, `ProjectsPanel`, `EducationSources` and `JobSources` (inside those cards), and `StarButton`.
+  On screen a star is **Showcase**, as the app's words keep "STAR" for the way of telling examples.
+
 ## Profile (`jobhunt/profile/`)
 
 - The profile is the facts about the person that Hal finds in their record: jobs, education (with modules

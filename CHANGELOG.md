@@ -6,6 +6,17 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Each part of Your record takes its own files.** Add your CVs on Overview, a job's reference or
+  contract on its card, coursework, lecture material and official papers on each course's card, and
+  certificates and other papers on **Documents** (the tab that was **Files**). Where you put a file tells
+  Hal what it is and whose it is, so Hal no longer guesses. Each place lists what you added with **Read
+  again** and **Remove**; removing a file takes out everything Hal took from it. **Showcase** marks the
+  coursework and projects Hal should tell employers about. Hal says when a file looks like it belongs
+  elsewhere ("This looks like a CV") but never moves it by itself. Documents are read now; CVs, coursework,
+  lecture material, official papers and the ways to add projects arrive in later updates, and files added
+  to them wait until then. The older bulk read stays under **More ways to add**. See
+  [Add your CVs, education, projects and documents](docs/howto/add-to-your-record.md).
+
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,
   even if you had already checked or hidden one, where hiding a duplicate used to hide its files too. Your
