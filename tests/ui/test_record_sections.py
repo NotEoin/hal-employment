@@ -269,6 +269,26 @@ class RecordSections(unittest.TestCase):
         with closing(db.connect()) as con:
             self.assertEqual(sources.listing(con, "project")[0]["files"], 1)
 
+    def test_what_changed_shows_on_the_project_and_its_card_and_the_last_read_can_be_put_back(self) -> None:
+        settings.set("you.name", repos.AVERY[0])
+        settings.set("you.email", repos.AVERY[1])
+        folder = repos.make(self.files / "tide", {"README.md": "# Tide\n", "requirements.txt": "flask\n"})
+        with closing(db.connect()) as con:
+            source_id = pipeline.add_link(con, "project", str(folder), doc_kind="repo")["added"][0]
+            pipeline.read(con, source_id)
+            repos.write(folder, {"requirements.txt": "flask\ndjango\n"})
+            repos.git(folder, "add", "-A", date="2024-09-01T10:00:00Z")
+            repos.git(folder, "commit", "-q", "-m", "more", date="2024-09-01T10:00:00Z")
+            pipeline.read(con, source_id)
+        p = self.page("record-projects")
+        row = self.panel(p, "Add projects").locator("li.rec-source", has_text="tide")
+        p.shows(row.get_by_text("Tools added: Django."), "what changed on the source")
+        card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="tide"))
+        p.shows(card.get_by_text("Tools added: Django."), "what changed on the card")
+        self.clean(p)
+        row.get_by_role("button", name="Go back to the last read: tide").click()
+        p.shows(p.page.get_by_text("Hal put back what the last read found."), "the toast")
+
 
 if __name__ == "__main__":
     unittest.main()

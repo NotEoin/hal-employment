@@ -62,6 +62,8 @@ Routes:
   again. A project's SOURCE adds "parent_id", "what_changed", "not_yours", "theirs", "pieces" [{"url",
   "title"}], "picked" and "form".
 - `POST /api/v2/record/sources/{id}/reread` {"allow": true to read one kept out as private}: {"action_id"}.
+- `POST /api/v2/record/sources/{id}/back`: puts back the facts of the read before the last
+  (`sections.revisions`); SOURCE with "hidden", or 404 when no earlier read is kept.
 - `DELETE /api/v2/record/sources/{id}`: removes it with its note and facts; {"hidden": [card ids]}.
 
 A kind of document or card that does not fit is 400 with plain words; a section, source or card that is not
@@ -74,7 +76,7 @@ from pathlib import Path
 from jobhunt import record
 from jobhunt.core import events, paths
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
-from jobhunt.sections import actions, pipeline, readers, registry, store
+from jobhunt.sections import actions, pipeline, readers, registry, revisions, store
 from jobhunt.web.router import BadRequest, NotFound, NotHere, Request, route
 
 PREFIX = "/api/v2/record/sources"
@@ -220,6 +222,18 @@ def reread(req: Request) -> dict:
     got = store.get(req.con, req.params["source_id"])
     allow = [got["id"]] if _body(req).get("allow") is True else []
     return {"action_id": _start(req, [got["id"]], allow=allow, why="You asked Hal to read a source again")}
+
+
+@route("POST", PREFIX + "/{source_id}/back")
+def go_back(req: Request) -> dict:
+    """Puts back the facts of the read before the last one; 404 when Hal keeps no earlier read."""
+    got = store.get(req.con, req.params["source_id"])
+    try:
+        out = revisions.go_back(req.con, got["id"])
+    except LookupError as e:
+        raise NotFound(str(e)) from e
+    events.publish("profile", source_id=got["id"])
+    return {**store.get(req.con, got["id"]), "hidden": out["hidden"]}
 
 
 @route("DELETE", PREFIX + "/{source_id}")

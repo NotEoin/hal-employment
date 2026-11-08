@@ -56,7 +56,7 @@ CHILD_EXAMPLE = ("--help",)  # what gate G9 runs: a quick child that prints and 
 # Settings the plan depends on; a change to any of them plans again.
 WATCHED = ("schedule.search_times", "schedule.mail_every", "schedule.mail_hours", "schedule.record_every",
            "schedule.catch_up", "goal.mode", "notify.daily_summary", "updates.auto_check",
-           "learn.enabled")
+           "learn.enabled", "schedule.projects_every")
 
 
 @dataclass(frozen=True)

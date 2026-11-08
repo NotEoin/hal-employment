@@ -77,6 +77,9 @@ What changed in each version, in plain words.
 - **Letters tell your showcase projects.** Once you press **Showcase** on a project, letters, answers and
   messages tell only your showcase projects; the rest still count for your skills. What a project's own
   code, page or files say counts above your CV.
+- **Projects stay up to date.** Every 6 hours (change it in Settings, Schedule) Hal checks your GitHub
+  projects, folders and pages and reads again only what changed, never overwriting what you changed on a
+  card. Each shows **What changed**, and **Go back to the last read** undoes a read that went wrong.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

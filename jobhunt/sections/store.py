@@ -178,7 +178,10 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
             "mark": str(found.get("mark") or ""), "summary": str(found.get("summary") or ""),
             **_module_shape(con, r, found),
             "dissertation": r["section"] == DISSERTATION_SECTION and r["doc_kind"] == DISSERTATION,
-            "can_be_dissertation": r["section"] == DISSERTATION_SECTION, **_project_shape(r, found)}
+            "can_be_dissertation": r["section"] == DISSERTATION_SECTION, **_project_shape(r, found),
+            # an earlier read is kept beside this one (`sections.revisions`), so "Go back to the last read" works
+            "can_go_back": con.execute("SELECT count(*) FROM record_source_revisions WHERE source_id = ?",
+                                       (r["id"],)).fetchone()[0] > 1}
 
 
 def _project_shape(r: sqlite3.Row, found: dict) -> dict:

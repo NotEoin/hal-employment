@@ -83,6 +83,16 @@ If nothing is in your showcase, Hal chooses from all your projects, as before.
 What a project's own code, page or files say counts above what your CV says about it. A project card that
 only your CV names is marked **from your CV only**: add the project itself to give Hal more to go on.
 
+## Keeping projects up to date
+
+Every 6 hours Hal checks your GitHub projects, folders and pages for changes and reads again only the ones
+that changed. Anything you changed on a project's card stays as you left it. A project that changed shows
+**What changed** (for example "Tools added: Django. 3 new commits.") on its entry and its card. If a new
+read got something wrong, press **Go back to the last read** to put back what the read before found.
+
+To check more or less often, open **Settings**, **Schedule**, **Show more**, and change **Check your
+projects for changes every**. **Never** stops the checks; **Read again** still works.
+
 ## Projects with no page or code
 
 **Add one by hand** is for anything else: an exhibition, a campaign, an event, research, writing, something

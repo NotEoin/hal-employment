@@ -104,6 +104,7 @@ function SourceRow({ s }) {
       ${s.summary && html`<p class="small rec-line">${s.summary}</p>`}
       ${s.error && html`<p class="small sub rec-line">${s.error}</p>`}
       ${s.can_have_module && s.state === "read" && html`<${ModuleChoice} s=${s} path=${path} />`}
+      ${s.what_changed && html`<p class="small rec-line rec-changed"><b>What changed:</b> ${s.what_changed}</p>`}
       ${s.suggestion && html`<${Note} tone="info">This looks like it belongs in ${s.suggestion_label}.
         <button type="button" class="btn small" onClick=${() => act(() => put(path, { section: s.suggestion }),
           "Moved to " + s.suggestion_label + ". Hal is reading it again.")}>Move it to ${s.suggestion_label}</button><//>`}
@@ -127,6 +128,8 @@ function SourceRow({ s }) {
         onClick=${() => act(() => put(path, { current: true }), "This is your current CV now.")}>Make this my current CV</button>`}
       ${s.state === "kept_out" && html`<button type="button" class="btn small" aria-label=${"Add " + s.title + " anyway"}
         onClick=${() => act(() => post(path + "/reread", { allow: true }), "Hal is reading it.")}>Add it anyway</button>`}
+      ${s.can_go_back && html`<button type="button" class="btn quiet small" aria-label=${"Go back to the last read: " + s.title}
+        onClick=${() => act(() => post(path + "/back"), "Hal put back what the last read found.")}>Go back to the last read</button>`}
       <button type="button" class="btn quiet small" aria-label=${"Read again: " + s.title}
         onClick=${() => act(() => post(path + "/reread"), "Hal is reading it again.")}><${Icon} n="refresh" c="s" />Read again</button>
       <button type="button" class="btn danger small" aria-label=${"Remove: " + s.title}
@@ -327,6 +330,15 @@ export function JobSources({ item }) {
   return html`<details class="rec-hidden rec-card-sources"><summary>Add a document for this job</summary>
     <${SourcesPanel} uid=${"rec-job" + item.id} level="h3" heading="Documents for this job" parts=${[["job_doc", null]]}
       target=${item.id} hint="A reference, a contract or the job description." /></details>`;
+}
+
+/** On a project card: what the last read of its own sources changed (jobhunt/sections/revisions.py). */
+export function WhatChanged({ item }) {
+  const { data } = useApi(SOURCES + "?section=project", { on: reloadOn });
+  const ids = new Set(item.evidence.map(e => e.source_id).filter(id => id != null));
+  const notes = (data || []).filter(s => ids.has(s.id) && s.what_changed).map(s => s.what_changed);
+  if (!notes.length) return null;
+  return html`<p class="small rec-line rec-changed"><b>What changed:</b> ${[...new Set(notes)].join(" ")}</p>`;
 }
 
 /** "Showcase" on a project or job card (the card's star): a project to tell employers about, a job to lead with. */

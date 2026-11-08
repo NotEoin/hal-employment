@@ -1332,7 +1332,7 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   keeps its own name.
 - Readers: `repo` (a folder on this computer, or a repository link once cloned) and `project_files` (an
   uploaded folder or zip: `repo` when its top looks like code, `ingest.discover.is_repo`, else its files' text
-  as a project named after the folder). `Reading.details` (tools, commits, mine, first, last, role, head,
+  as a project named after the folder). `Reading.details` (tools, commits, mine, first, last, role, fingerprint,
   link, not_yours) is kept in `record_sources.details` (migration 0029) for later checks. `repo` is in
   `pipeline.READER_MODULES`, and `record_sources.meta` (migration 0030) keeps what the person said.
 - GitHub (`sections/github.py`): `repo_url` (`RepoLinkReader`) clones a repository into
@@ -1380,6 +1380,21 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   `authority` (`store.section_rank`, through `record_sources.section`), so a project's own repository, page
   or files (rank 4) outrank the current CV (3). Every other fact keeps its rank from `profile.cvs.rank`, so an
   older CV stays at `merge.OLDER_CV_RANK`, below documents and the current CV.
+- Revisions (`sections/revisions.py`): after every read the pipeline calls `record(con, id, facts,
+  details, before=)`, which keeps that read's facts and details in `record_source_revisions` (the last
+  `KEEP`, 2) and writes `record_sources.what_changed` (`words`: from `before`, the details of the read before:
+  tools added or removed, new commits, the new last date, a
+  new role, or that a page's words changed; "" on a first read).
+  `go_back` swaps the earlier read's facts back in (`POST .../sources/{id}/back`) and drops the newest;
+  a SOURCE says `can_go_back`. The page shows "What changed" on the source and on project cards whose
+  evidence names it (`WhatChanged`).
+- Refresh (`sections/refresh.py`, action `record.projects_refresh` in `sections/actions.py`, job in
+  `sections/schedule.py`, setting `schedule.projects_every` in `sections/settings.py`, default 6 hours, 0
+  for never): `changed(con)` runs each project source's cheap check (`CHECKS`: GitHub `pushed_at` against
+  the clone's `<repo>.json`, an account's list of projects, `repo.fingerprint` (HEAD's sha, or the newest
+  file's time and the file count), a folder of projects' list, `pages.check`'s ETag or hash), plus sources
+  still `new` or `failed` whose reader is ready. A check that fails counts as unchanged. The action reads
+  the changed ones through `pipeline.read`, so cards the person edited keep their values.
 
 ## Profile (`jobhunt/profile/`)
 

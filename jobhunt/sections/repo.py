@@ -186,6 +186,22 @@ def git_head(folder: Path) -> str:
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
+def fingerprint(folder: Path, paths: list[Path] | None = None) -> str:
+    """What changes when the project does: its HEAD's sha, or with no git history the newest file's time and
+    how many files there are. The refresh compares it to tell a changed folder cheaply."""
+    head = git_head(folder)
+    if head:
+        return head
+    paths = files(folder) if paths is None else paths
+    stamps = []
+    for p in paths:
+        try:
+            stamps.append(p.stat().st_mtime_ns)
+        except OSError as e:       # a file gone since it was listed counts as a change by the count
+            log.debug("no time for %s: %s", p, e)
+    return f"{max(stamps, default=0)}:{len(stamps)}"
+
+
 def share(history: History, who: Person) -> dict:
     """The person's part in the commits: {"role", "mine", "total", "contributors", "yours"}.
 
@@ -507,7 +523,7 @@ def read_folder(folder: Path, *, name: str = "", meta: dict | None = None, their
         for lang, _ in langs:
             facts.append(readers.Fact("skill", {"name": lang}, readers.Quote("name", lang_line, "languages")))
     details = {"tools": tools, "commits": part["total"], "mine": part["mine"], "first": first, "last": last,
-               "role": part["role"], "yours": part["yours"], "head": git_head(folder), "link": link,
+               "role": part["role"], "yours": part["yours"], "fingerprint": fingerprint(folder, paths), "link": link,
                "not_yours": not_yours}
     return readers.Reading(title=title, date=(last or first)[:7], text=text, summary=summary, facts=facts,
                            details=details)

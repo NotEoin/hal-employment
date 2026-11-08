@@ -52,6 +52,7 @@ from jobhunt.sections import (
     readers,
     registry,
     repo,
+    revisions,
     store,
     wrong_place,
 )
@@ -373,6 +374,7 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
     if section.id == cv_reader.SECTION:
         cv_reader.settle(con)
     readers.settle(readers.get(section.reader_of(r["doc_kind"])), con)
+    revisions.record(con, r["id"], facts, reading.details, before=store.details(r))
     return {**out, "state": "read", "facts": swapped["added"], "left_out": len(reading.facts) - len(facts)
             + len(swapped["left_out"]), "hidden": swapped["hidden"], "suggestion": suggestion,
             "children": add_children(con, r["id"], reading.children)}

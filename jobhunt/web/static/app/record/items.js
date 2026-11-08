@@ -13,7 +13,7 @@ import { useApi, toast, invalidate } from "../core/store.js";
 import { Chip, Empty } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { KIND_FIELDS, KIND_WORDS, ItemForm, basicKey, shown } from "./fields.js";
-import { EducationSources, JobSources, StarButton } from "./sections.js";
+import { EducationSources, JobSources, StarButton, WhatChanged } from "./sections.js";
 
 const STATE_TONE = { hal: "warn", confirmed: "good", edited: "info", hidden: "line" };
 const FILE_PATH = "/api/v2/record/file/";
@@ -116,6 +116,7 @@ function ItemCard({ item, conflicts, names }) {
     <${Sources} evidence=${item.evidence} />
     ${!hidden && item.kind === "education" && html`<${EducationSources} item=${item} />`}
     ${!hidden && item.kind === "job" && html`<${JobSources} item=${item} />`}
+    ${!hidden && item.kind === "project" && html`<${WhatChanged} item=${item} />`}
     ${conflicts.map(c => html`<${Conflict} key=${c.id} c=${c} names=${names} />`)}
     ${!editing && html`<div class="row rec-acts">
       ${(item.state === "hal" || hidden) && html`<button type="button" class="btn good small" aria-label=${(hidden ? "Show again: " : "Confirm: ") + what}
