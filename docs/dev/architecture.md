@@ -517,14 +517,14 @@ runs: tests use `tests/support/fake_claude/`.
   for having nothing to say (`paragraphs.education`). A sentence fixed or cut is never listed. The
   opening and closing are one call (`writing/frame.py`, `frame.settle`, prompt `letter_frame`) from `frame.Facts`
   (`pack.letter_frame`: the name, `opening.described`, the role, the motivation pairing, the stories the
-  middle tells and today), checked the same way with the role and the institution required, and with a
-  pairing the work it rests on named (by its card's name) and one specific word of the employer's fact
-  (`frame.motive_problems`; `motive.offered` gives the pairing only items tied to a card while the plan has
-  any), and never retelling the middle (`frame.retold` against `frame.Facts.middle`, the paragraphs'
-  names and texts: a sentence `repeats.same` as one of theirs, sharing `frame.RETOLD_RUN` (4) own words in a
-  row with one, names, role and employer aside, or giving one of its numbers; the request tells it to name the
-  pairing's work in a short clause, `frame.TOLD_WORK`), drafted once
-  more when either fails; an opening still failing is `opening.Opening`'s built sentence and a closing
+  middle tells and today), checked the same way with the role and the institution required. The opening's
+  reason is one concrete thing about the employer: the request gives the pairing's employer fact alone, never
+  its item, and with a pairing the opening needs one specific word of that fact; it never names a card of the
+  person's or the work the middle tells (`frame.motive_problems`, `frame.NAMES_WORK`), as openings told a
+  project a paragraph then told again (5 cases in 15 graded packs, 2026-11-08). Neither paragraph retells the
+  middle (`frame.retold` against `frame.Facts.middle`, the paragraphs' names and texts: a sentence
+  `repeats.same` as one of theirs, sharing `frame.RETOLD_RUN` (4) own words in a row with one, names, role and
+  employer aside, or giving one of its numbers). The pair is drafted once more when either fails; an opening still failing is `opening.Opening`'s built sentence and a closing
   still failing is left out. Paragraphs and the frame are drafted at `paragraphs.DRAFT_TEMPERATURE`. The
   message and the answers are told the same way (`pack._story_others`, through `pack.write_others`): the
   message is `opening.Opening` and one story in shape `paragraphs.MESSAGE` (one or two sentences, then one
@@ -535,7 +535,7 @@ runs: tests use `tests/support/fake_claude/`.
   (`Shape.name`, `paragraphs.NOT_NAMED`), as a letter paragraph does, and is drafted again once when it
   does not: answers and messages opened "I wrote a 113-test suite ..." in 12 of 15 graded packs
   (2026-11-08). The message, then the answers, take the stories the letter (`told`:
-  its paragraphs' stories and the story its opening's reason rests on), the message and earlier answers told
+  its paragraphs' stories), the message and earlier answers told
   least (`plan.choose`), best first in the ranking's order (`rank.Told.others`), so they tell the next work
   the letter did not. When an answer's or the message's paragraphs are all dropped the next story is
   tried, up to `pack.STORY_TRIES` (3) stories (`pack._story_answer`, `pack._story_message`), then the
@@ -569,7 +569,9 @@ runs: tests use `tests/support/fake_claude/`.
   (`flow.dangling`, `pack.DANGLING_FLAG`).
 - Plain first-person writing (`writing/plain.py`): `plain.problems` finds a sentence opening with the
   advert's requirement ("For the requirement to ...", "Regarding the need for ...", "As required ...", "The
-  advert requires ...", "The role asks for ...", "Regarding <X>, ...", "In terms of <X>, ..."), tying the
+  advert requires ...", "The role asks for ...", "Regarding <X>, ...", "In terms of <X>, ...", "Your
+  requirement to ...", "Your need for ...", "Your work on ...": openings said the advert's words as the
+  employer's, 2026-11-08), tying the
   work to the job with a stock phrase (`plain.STOCK`), pointing at the CV ("My CV lists ...", "as listed in
   my CV"), speaking of the person in the third person ("the applicant", "the candidate", their name with a
   verb) or pasting a setting's wording (`plain.settings_labels`: the right-to-work choices' labels, and
@@ -691,13 +693,13 @@ runs: tests use `tests/support/fake_claude/`.
   item and a one-line reason. `motive.checked` keeps the pairing only when the fact is in the advert or the
   brief word for word (`plan.quoted`), at least `MIN_SPECIFIC` (2) of its own words are not words any
   employer uses of itself (`GENERIC`, the little words, the job title and the employer's name), the item
-  is the plan's and there is a reason. The letter's opening (`writing.frame`) and a "why here" answer
-  (`paragraphs.why`) are drafted from the pairing, or told there is none and to give no reason beyond the
-  role; a letter with no story gets the pairing in its request (`motive.block`, or `motive.NONE_SAID`). A
-  letter told by stories asks for the pairing after the ranking chose its stories, offering only their items
-  (`motive.told_items`: the plan's items of those stories, and up to `motive.STORY_ITEMS` (2) facts of a
-  story the plan picked nothing of, numbered after the plan's), so the opening's reason is always work a
-  paragraph tells.
+  is the plan's, there is a reason, and the fact is not a duty or requirement of the job (`motive.duty`,
+  `motive.DUTY`: "write and improve ...", "experience of ...", "you will ...", as openings led in with "Your
+  requirement to write and improve SQL queries ...", 2026-11-08). The letter's opening (`writing.frame`) is
+  drafted from the pairing's fact alone and a "why here" answer (`paragraphs.why`) from the fact and its item,
+  or each is told there is none and to give no reason beyond the role; a letter with no story gets the
+  pairing in its request (`motive.block`, or `motive.NONE_SAID`). The pairing is offered every plan item
+  tied to a card (`motive.offered`), as the opening names no project.
 - `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
   (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer. `pack.fix_repeats`
   rewrites the answers once, in one call, asking for other evidence in the later ones, after the echo

@@ -18,15 +18,16 @@ Design decisions, each with its reason:
 - A module the job's requirements name and no paragraph shows may be one clause of the opening, with its mark
   (`Facts.modules`, `plan.relevant_modules`): letters to an employer stressing security missed the person's
   high marks in security modules (2026-11-08). It is never a paragraph of its own while projects exist.
-- The opening's reason for this employer is concrete (`motive_problems`, 2026-11-08): openings said the role
-  "matches my experience" for reasons such as "because I have built features for a team project". It must
-  name the work the pairing rests on, by its project's name when it is a card's, and say one specific word
-  of the employer's fact; the stock links ("matches my", "fits my") are `plain.STOCK`.
-- The frame never retells the middle (`retold`, `Facts.middle`, 2026-11-08): the opening named the pairing's
-  project with its facts and a paragraph then told them again. The pairing rests on work the middle tells
-  (`motive.told_items`), so the opening names it in a short clause (`TOLD_WORK`), and a sentence of the
-  opening or closing that says nearly what a paragraph's sentence says, shares `RETOLD_RUN` own words in a
-  row with it or gives one of its numbers is a problem, drafted again with the frame's one redraft.
+- The opening's reason for this employer is one concrete thing about the employer (`motive_problems`,
+  2026-11-08): its product, its mission or a fact from the company brief, in the writer's own words, with one
+  specific word of the employer's fact. It names no project or job of the person's (`NAMES_WORK`): openings
+  told a project that a paragraph then told again (5 cases in 15 graded packs), and the two that escaped the
+  readability cap gave the name, the role and the reason alone and left the projects to the paragraphs. The
+  stock links ("matches my", "fits my") and the advert's lead-ins ("Your requirement to ...", "Your work on
+  ...") are `plain.STOCK` and `plain.LEAD_IN`.
+- The frame never retells the middle (`retold`, `Facts.middle`, 2026-11-08): a sentence of the opening or
+  closing that says nearly what a paragraph's sentence says, shares `RETOLD_RUN` own words in a row with it
+  or gives one of its numbers is a problem, drafted again with the frame's one redraft.
 - One call drafts both paragraphs, and one more when either fails, so a letter's frame costs one or two calls.
   An opening still failing is the message's built sentence (`opening.Opening`, from the settings and the
   checked course), which needs no check; a closing still failing is left out, as a letter reads without it.
@@ -58,11 +59,9 @@ PROMPT = "letter_frame"
 WHAT = "the letter's opening or closing"   # how a problem names what it found it in
 ROLE_MISSING = "does not name the role"
 WHO_MISSING = "does not say who is writing ({who})"
-MOTIVE_WORK = "does not name {work}, the work your reason for this employer rests on"
+NAMES_WORK = "names {work}; the opening gives a reason about the employer and leaves your work to the paragraphs"
 MOTIVE_EMPLOYER = 'does not say what of the employer draws you ("{fact}")'
-RETOLD_SAID = "retells what the paragraph about {work} says; name {work} in a short clause and leave its facts there"
-TOLD_WORK = ("The work your reason rests on, {work}, has its own paragraph in the middle: name it in a short "
-             "clause and leave its facts, numbers and tools to that paragraph.")
+RETOLD_SAID = "retells what the paragraph about {work} says; leave it to that paragraph"
 STEM = 5                   # letters two words share to be one word ("triage" and "triaging")
 RETOLD_RUN = 4             # own words in a row a frame sentence shares with a paragraph to retell it: a name aside,
                            # three ("offline notes assistant") can name the work, four tell a fact of it
@@ -78,23 +77,21 @@ class Facts:
     title: str
     employer: str
     pairing: Pairing | None = None
-    told: tuple[str, ...] = ()  # the names of the work the letter's middle tells
+    told: tuple[str, ...] = ()  # the names of the work the letter's middle tells, never named in the frame
     institution: str = ""
     modules: tuple[str, ...] = ()  # "Name (mark)" of modules the job names that no paragraph shows
     middle: tuple[tuple[str, str], ...] = ()  # (name, text) of each paragraph of the middle, never to retell
 
     def request(self, scope: Scope) -> str:
         """The request: who is writing, the role, the reason, what the middle tells and today."""
-        reason = (f"The reason for this employer: the employer's \"{self.pairing.fact}\" and the applicant's "
-                  f"\"{self.pairing.item.text}\", because {self.pairing.reason}" if self.pairing else
-                  "The reason for this employer: none was found in the applicant's facts; give none beyond the role.")
+        reason = ("The reason for this employer: none was found in the applicant's facts; give none beyond the role."
+                  if self.pairing is None else
+                  f"The reason for this employer: the employer's \"{self.pairing.fact}\". Say one concrete thing about "
+                  "the employer from it (its product, its mission or this fact) in your own words.")
         who = ", ".join(p for p in (self.name, self.who) if p) or "the applicant"
         lines = [f"Who is writing: {who}", f"The role: {self.title} at {self.employer}", reason]
         if self.told:
-            lines.append(f"The letter's middle tells (never retell them): {'; '.join(self.told)}")
-        work = self.pairing.item.card if self.pairing else ""
-        if work and work in self.told:
-            lines.append(TOLD_WORK.format(work=work))
+            lines.append(f"The letter's middle tells (never name or retell them): {'; '.join(self.told)}")
         if self.modules:
             lines.append("Modules of the applicant's that this job asks about and no paragraph shows (the opening "
                          f"may name them and their marks in one clause): {'; '.join(self.modules)}")
@@ -105,7 +102,7 @@ class Facts:
 
     def words(self) -> str:
         """Every word the frame's facts hold."""
-        pair = f"{self.pairing.fact}\n{self.pairing.item.text}\n{self.pairing.reason}" if self.pairing else ""
+        pair = self.pairing.fact if self.pairing else ""
         return "\n".join([self.name, self.who, self.title, self.employer, pair, *self.told, *self.modules])
 
 
@@ -141,8 +138,8 @@ def problems(text: str, facts: Facts, scope: Scope, first: bool) -> list[Problem
         out.append(Problem("", ROLE_MISSING))
     if first and facts.institution and facts.institution.lower() not in text.lower():
         out.append(Problem("", WHO_MISSING.format(who=facts.who)))
-    if first and facts.pairing is not None:
-        out += [Problem("", p) for p in motive_problems(text, facts)]
+    if first:
+        out += [Problem("", p) for p in motive_problems(text, facts, list(scope.cards))]
     hits = writing_check.check(text, "letter", spelling=scope.values.get("spelling_code", ""),
                                allowed=scope.values.get("own_words") or ())
     return out + [Problem("", f"{h.message} ({h.quote})") for h in writing_check.high(hits)]
@@ -178,17 +175,19 @@ def _stems(text: str, leave: set[str] = frozenset()) -> set[str]:
     return {w[:STEM] for w in writing_check.words_of(text) if w not in drafts.LITTLE_WORDS and w not in leave}
 
 
-def motive_problems(text: str, facts: Facts) -> list[str]:
-    """What the opening's reason for this employer lacks: the work it rests on by name (when the pairing's item
-    is a card's), and one specific word of the employer's fact (`motive.specific`'s words)."""
-    pairing, out = facts.pairing, []
-    work = pairing.item.card
-    if work and not drafts.names_card(text, {"name": work, "aliases": []}):
-        out.append(MOTIVE_WORK.format(work=work))
+def motive_problems(text: str, facts: Facts, cards: list[dict] = ()) -> list[str]:
+    """What is wrong with the opening's reason for this employer: it names a project or job of the person's (a
+    card of `cards`, or work the middle tells), or, with a pairing, it lacks one specific word of the employer's
+    fact (`motive.specific`'s words)."""
+    named = [c["name"] for c in drafts.named_cards(text, [c for c in cards if c.get("name", "").strip()])]
+    named += [n for n in facts.told if n not in named and drafts.names_card(text, {"name": n, "aliases": []})]
+    out = [NAMES_WORK.format(work=n) for n in named]
+    if facts.pairing is None:
+        return out
     names = {w for n in (facts.title, facts.employer) for w in writing_check.words_of(n)}
-    own = _stems(pairing.fact, names | motive.GENERIC)
+    own = _stems(facts.pairing.fact, names | motive.GENERIC)
     if own and not own & _stems(text):
-        out.append(MOTIVE_EMPLOYER.format(fact=pairing.fact))
+        out.append(MOTIVE_EMPLOYER.format(fact=facts.pairing.fact))
     return out
 
 

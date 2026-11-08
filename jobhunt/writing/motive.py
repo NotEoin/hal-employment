@@ -18,26 +18,36 @@ Design decisions, each with its reason:
   holds, the letter says less rather than invent one (`writing.frame`). Only items tied to a project or job
   card are offered while the plan has any (`offered`), so the reason names a piece of work: reasons such as
   "because I have built features for a team project" named none (2026-11-08).
-- A letter's pairing rests on work its middle tells (`told_items`, 2026-11-08): the opening named a project
-  and a paragraph then told it again, or named one the letter never otherwise introduced. The pairing is made
-  after the ranking chose the letter's stories (`writing.rank`), from their items alone, so the opening names
-  the work in a clause and leaves its facts to its paragraph (`writing.frame` checks it does).
+- The fact is about the employer, never a duty of the job (`duty`): openings led in with the advert's
+  requirements ("Your requirement to write and improve SQL queries against Postgres ...", 2026-11-08), and a
+  duty says what the job holder will do, not what the employer is. A fact that reads as a duty or a requirement
+  ("write and improve ...", "experience of ...", "you will ...") is no pairing. The letter's opening says the
+  fact alone and names no project (`writing.frame`); the item is for the "why here" answers, which may tie
+  the reason to that one piece of work.
 """
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 
 from jobhunt import llm
 from jobhunt.ai import prompts
 from jobhunt.writing import check, drafts
-from jobhunt.writing.plan import PROFILE, Item, Story, quoted
+from jobhunt.writing.plan import Item, quoted
 
 log = logging.getLogger(__name__)
 
 PROMPT = "motive_pair"
 MIN_SPECIFIC = 2           # own words of an employer's fact beyond the generic: "flood sensors", "river data"
-STORY_ITEMS = 2            # facts of a story the plan picked nothing of offered as items: what it is and a result
+# The first words of a line of what the job holder will do or must have: a duty or a requirement, not a fact
+# about the employer (see the module notes).
+DUTY = re.compile(r"^\W*(?:you(?:'ll| will| would| should| must| have| need)?|we(?:'re| are) (?:looking|seeking)|the "
+                  r"(?:successful )?(?:candidate|applicant|role holder)|candidates?|applicants?|must|should|"
+                  r"experience|knowledge|ability|proficiency|familiarity|understanding|strong|excellent|"
+                  r"essential|desirable|responsible for|requirements?|write|build|develop|design|maintain|"
+                  r"support|help|work|create|deliver|manage|assist|analy[sz]e|test|implement|improve|collaborate|"
+                  r"contribute|answer|use|own|run|lead)\b", re.I)
 # Words any employer uses of itself or of what it offers, so they make no reason to choose this one.
 GENERIC = frozenset("""innovation innovative innovate excellence excellent values value culture growth grow growing
 passion passionate diverse diversity inclusion inclusive equality people customer customers client clients quality
@@ -67,6 +77,12 @@ def specific(fact: str, names: tuple[str, ...] = ()) -> bool:
     return len(own) >= MIN_SPECIFIC
 
 
+def duty(fact: str) -> bool:
+    """True when an employer's fact reads as a duty of the job or a requirement (`DUTY`), not a fact about the
+    employer."""
+    return bool(DUTY.match(fact))
+
+
 def checked(reply: dict, advert: str, brief: str, plan: list[Item], names: tuple[str, ...] = ()) -> Pairing | None:
     """The pairing of a reply when it holds (see the module notes), else None."""
     if not isinstance(reply, dict):
@@ -75,28 +91,11 @@ def checked(reply: dict, advert: str, brief: str, plan: list[Item], names: tuple
     fact = quoted(said, advert) or quoted(said, brief)
     item = next((i for i in plan if i.id == str(reply.get("item") or "").strip().upper()), None)
     reason = " ".join(str(reply.get("reason") or "").split())
-    if not (fact and item and reason and specific(fact, names)):
+    if not (fact and item and reason and specific(fact, names)) or duty(fact):
         if said:
             log.info("motivation: dropped a pairing that does not hold: %r", reply)
         return None
     return Pairing(fact, item, reason)
-
-
-def told_items(stories: list[Story], plan: list[Item]) -> list[Item]:
-    """The items a letter's pairing may rest on: the plan's items of the stories its middle tells, and for a
-    story the plan picked nothing of (a card the ranking chose), its first `STORY_ITEMS` facts as items numbered
-    after the plan's, so the opening's reason is always work a paragraph tells (see the module notes)."""
-    names = {s.name for s in stories if s.name}
-    out = [i for i in plan if (i.card and i.card in names)
-           or any(i.text in (*s.facts, *s.planned) for s in stories)]
-    n = len(plan)
-    for s in stories:
-        if s.card is None or any(i.card == s.name for i in out):
-            continue
-        for fact in s.facts[:STORY_ITEMS]:
-            n += 1
-            out.append(Item(f"E{n}", fact, PROFILE, s.name, s.context, s.role, s.tools, tag=s.tag))
-    return out
 
 
 def offered(plan: list[Item]) -> list[Item]:

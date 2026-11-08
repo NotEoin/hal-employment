@@ -21,6 +21,9 @@ Design decisions, each with its reason:
   ...", "Regarding <X>, ...", "In terms of <X>, ...", "As required, ...", 2026-11-08). They are never cut out
   with no AI: cutting them left garbled text ("applying for the ... role in London, where I achieved a top
   score of 96", 2026-11-08), so a paragraph holding one is drafted again instead.
+- Openings led in with the advert as the employer's: "Your requirement to write and improve SQL queries ...",
+  "Your work on ... Reinforcement Learning Agents builds on ..." (2026-11-08), so "your requirement", "your
+  need" and "your work on" open a lead-in too, and "your requirement for" or "your need to" is stock anywhere.
 - The same move mid-sentence is a problem too (`STOCK`): "satisfies the requirement for", "directly supports
   the requirement for", "addresses the need for", "aligns with", "resonates with", "the role requires",
   "matters for the role", "demonstrates my ability to", and every closing sentence of a prototype's paragraphs
@@ -49,6 +52,7 @@ LEAD_IN = re.compile(
     r"(?:the|this|your) (?:advert(?:isement)?|role|job(?: description)?|position|post|vacancy|person "
     r"specification|listing) (?:requires|asks for|calls for|specifies|states|mentions|lists|seeks|wants|"
     r"is looking for|emphasi[sz]es|highlights)\b|you (?:require|ask for|are looking for|are seeking)\b|"
+    r"your (?:requirements?|needs?|work on)\b|"
     r"(?:regarding|concerning|in terms of|with (?:regard|respect) to|in relation to|as for|when it comes to)"
     r"\b[^,.;]{1,80},)", re.I)
 # A stray evidence id and the space before it: "[E4]", "[E2,E5]", "[M]", "[E4,M]".
@@ -69,7 +73,8 @@ DISTINCT = re.compile(r"\s|[a-z][A-Z]|[A-Z]{2}|\d")
 STOCK = re.compile(
     r"\b(?:(?:the|this) (?:role|job|position|post) requires|"
     r"(?:satisf|meet|address|fulfil)\w* (?:the|your|this|its|their) (?:[\w-]+ )?(?:requirements?|needs?|"
-    r"criteri(?:on|a))|aligns? (?:directly |closely |well |strongly |perfectly )?with|resonates? with|"
+    r"criteri(?:on|a))|your (?:requirements?|needs?) (?:for|to|of)|"
+    r"aligns? (?:directly |closely |well |strongly |perfectly )?with|resonates? with|"
     r"directly (?:supports?|relevant|applicable|relates)|matters? (?:for|to) (?:the|this|your) (?:role|job|"
     r"position|post|team)|demonstrates? my (?:ability|capacity|capability|skills?)|(?:this|that|the) experience "
     r"matters|(?:match(?:es)?|fits?|suits?|reflects?|mirrors?|complements?|(?:is |are )?in (?:line|keeping) with|"

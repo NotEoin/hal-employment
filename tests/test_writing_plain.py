@@ -40,6 +40,18 @@ class Problems(unittest.TestCase):
                          "You are looking for someone who can write reports."):
             self.assertEqual(plain.problems(sentence, NAMES, LABELS), [plain.LEAD_IN_SAID], sentence)
 
+    def test_the_adverts_requirements_said_as_the_employers_are_found(self):
+        # "Your requirement to write and improve SQL queries against Postgres ..." and "Your work on ...
+        # Reinforcement Learning Agents builds on ..." opened graded letters (2026-11-08)
+        for sentence in ("Your requirement to write and improve SQL queries draws me to the role.",
+                         "Your need for reliable tide data is why I am applying.",
+                         "Your work on made-up learning agents builds on my studies."):
+            self.assertEqual(plain.problems(sentence, NAMES, LABELS), [plain.LEAD_IN_SAID], sentence)
+        stock = plain.problems("I would like to meet your requirement for SQL skills.", NAMES, LABELS)
+        self.assertEqual(len(stock), 1)
+        self.assertTrue(stock[0].startswith("ties the work to the job with a stock phrase"))
+        self.assertEqual(plain.problems("Your flood sensors help river trusts plan ahead.", NAMES, LABELS), [])
+
     def test_saying_what_roles_you_are_looking_for_is_found(self):
         # "I am seeking a role in backend, systems or applied AI" reached a letter (2026-11-08)
         for said in ("I am seeking a role in backend, systems or applied AI.",

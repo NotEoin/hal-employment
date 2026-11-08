@@ -192,11 +192,14 @@ What changed in each version, in plain words.
   the top three and yours is not in the top half. The message and the answers follow the same order. Work
   you would lead with is always ranked, also when the AI leaves it out, its name is written a little
   differently, or its card has no summary.
-- **The opening no longer tells a project twice.** A letter's opening named the project behind your reason
-  for the employer with its details, and a paragraph then told the same details again, or the opening named
-  a project the letter never came back to. The reason now rests on a project the letter tells, the opening
-  names it in a short phrase, and an opening that repeats a paragraph's details or numbers is written once
-  more.
+- **The opening is about the employer.** A letter's opening named the project behind your reason for the
+  employer with its details, and a paragraph then told the same details again, or it began with the
+  advert's words as the employer's ("Your requirement to write and improve SQL queries ...", "Your work on
+  ..."). The opening now gives your name and course, the role and one concrete thing about the employer,
+  such as what it makes, its mission or a fact from the company brief, in your own words. It names none of
+  your projects, which the paragraphs tell, and a duty of the job is never the reason. An opening that
+  names a project, repeats a paragraph's details or numbers, or begins "Your requirement", "Your need" or
+  "Your work on" is written once more.
 - **Answers and messages say which project.** Form answers and messages to the person hiring began "I
   wrote a 113-test suite ..." and named the project later, or never. Like a letter paragraph, each now names
   its project or job in its first sentence, and is written once more when it does not.

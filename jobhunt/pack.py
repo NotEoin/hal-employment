@@ -645,8 +645,7 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
     softened = any(b.redrafted or b.cut for b in bodies) or framed.redrafted
     shown = [_item_note(i, cards) for i in plan]
     shown = [e for e in (drafts.evidence_checked(s, cards, known_tools(cards), facts)[0] for s in shown) if e]
-    motive_story = _story_of(pairing.item, [*chosen, *scope.stories]) if pairing else None
-    told_keys = [b.story.key for b in bodies if b.text] + ([motive_story.key] if motive_story else [])
+    told_keys = [b.story.key for b in bodies if b.text]
     return {"text": letter, "flags": flags, "used": passages(kept), "revised": False, "softened": softened,
             "plan": plan, "pairing": pairing, "told": list(dict.fromkeys(told_keys)),
             "calls": framed.calls + sum(b.calls for b in bodies),
@@ -696,7 +695,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
         ranking = story_ranking(job, analysis, about, found, cards) if asked else ranking
         wanted = "\n".join(_requirements(analysis))
         told = rank.order(found, cards, ranking, wanted)
-        pairing = motive.make(names, _job_text(job), about, motive.told_items(list(told.letter), plan))
+        pairing = motive.make(names, _job_text(job), about, plan)
         written = _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing,
                                 chosen=list(told.letter), wanted=wanted)
         return {**written, "ranking": ranking, "calls": written["calls"] + asked}
@@ -889,7 +888,7 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
                   whole_answers=None) -> dict:
     """The message and the answers told one piece of work a paragraph (`writing.paragraphs`): the message is its
     built opening and one story's few lines and question; each answer one story, or two when its question asks
-    for more than one example. Each prefers work the letter (`told`: its paragraphs and its opening's reason),
+    for more than one example. Each prefers work the letter (`told`: its paragraphs' stories),
     the message and earlier answers have not told, in the order of `ordered` (`rank.Told.others`: the ranking's,
     else the plan's stories and the other cards the job fits).
 

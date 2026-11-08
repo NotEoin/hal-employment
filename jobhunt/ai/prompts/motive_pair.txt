@@ -9,8 +9,10 @@ Reply with JSON only: {"employer_fact": the employer's words, copied exactly fro
 "item": "E3", "reason": one line in plain words}
 Rules:
 - The fact is something only this employer has: a product, project, service, place, client, method or
-  result of theirs. Never a general value (innovation, excellence, a great culture, growth, diversity) or
-  what any employer offers (training, progression, a friendly team).
+  result of theirs, or its mission; the company brief is the best place to find one. Never a general value
+  (innovation, excellence, a great culture, growth, diversity), what any employer offers (training,
+  progression, a friendly team), or a duty or requirement of the job ("write SQL queries", "experience of
+  Python"): those say what the job holder does, not what the employer is.
 - The connection must be real: the item and the fact are about the same kind of work, subject or place.
 - When no fact of the employer truly connects to an item, reply {"employer_fact": "", "item": "",
   "reason": ""}. An honest letter says less rather than invent a link.

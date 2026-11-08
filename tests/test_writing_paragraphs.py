@@ -237,9 +237,10 @@ class Frame(unittest.TestCase):
         done = self.settle(fake)
         self.assertEqual((done.opening, done.closing, done.calls), (good, "Could we talk about the role?", 1))
         request = fake.calls("Write")[0]
-        self.assertIn('The reason for this employer: the employer\'s "ticket triage service" and the applicant\'s '
-                      '"Quill answers questions", because both sort questions', request)
-        self.assertIn("The letter's middle tells (never retell them): Quill", request)
+        self.assertIn('The reason for this employer: the employer\'s "ticket triage service". Say one concrete thing '
+                      "about the employer from it (its product, its mission or this fact) in your own words.", request)
+        self.assertNotIn("Quill answers questions", request, "the opening names no project, so it is given none")
+        self.assertIn("The letter's middle tells (never name or retell them): Quill", request)
 
     def test_an_opening_without_who_is_writing_falls_back_to_the_built_sentence(self):
         fake = FakeAI(["I am applying for the Graduate Developer role, as I am finishing my degree."])
@@ -303,7 +304,7 @@ class Retold(unittest.TestCase):
                         Pairing("ticket triage service", Item("E1", "Quill answers questions", "CV", card="Quill"),
                                 "both sort questions"), ("Quill",), "Made-up University", middle=(("Quill", BODY),))
     GOOD = ("I am Avery Quillon, a first-class History graduate from Made-up University (2026), applying for the "
-            "Graduate Developer role. Building Quill to sort questions drew me to your ticket triage service.")
+            "Graduate Developer role. A ticket triage service that sorts what people ask is what draws me to you.")
 
     def test_an_opening_retelling_a_paragraphs_facts_is_a_problem_and_a_short_clause_is_not(self):
         retold = ("I am applying for the Graduate Developer role, as Quill, which answers questions over my notes "
@@ -322,8 +323,8 @@ class Retold(unittest.TestCase):
         with mock.patch.object(llm, "chat_json", fake.chat_json):
             done = frame.settle(self.FACTS, SCOPE)
         asked = fake.calls("Write")
-        self.assertIn(frame.TOLD_WORK.format(work="Quill"), asked[0])
         self.assertIn(frame.RETOLD_SAID.format(work="Quill"), asked[1])
+        self.assertIn(frame.NAMES_WORK.format(work="Quill"), asked[1])
         self.assertEqual((done.opening, done.calls), (self.GOOD, 2))
 
 
@@ -417,20 +418,27 @@ class Stock(unittest.TestCase):
 
 
 class Motive(unittest.TestCase):
-    """Openings gave "matches my experience" and reasons such as "because I have built features for a team
-    project" (2026-11-08)."""
+    """Openings gave "matches my experience", led in with the advert's requirements, and told a project that a
+    paragraph then told again (2026-11-08)."""
 
     FACTS = frame.Facts("Avery Quillon", "a History graduate", "Graduate Developer", "Brightwater Tools",
                         Pairing("ticket triage service", Item("E1", "Quill answers questions", "CV", card="Quill"),
                                 "both sort questions"), ("Quill",), "")
 
-    def test_the_reason_names_the_work_and_one_thing_of_the_employers(self):
+    def test_the_reason_says_one_thing_of_the_employers_and_names_no_project(self):
         self.assertEqual(frame.motive_problems("I am applying for the Graduate Developer role, as I enjoy coding.",
                                                self.FACTS),
-                         [frame.MOTIVE_WORK.format(work="Quill"),
-                          frame.MOTIVE_EMPLOYER.format(fact="ticket triage service")])
+                         [frame.MOTIVE_EMPLOYER.format(fact="ticket triage service")])
         self.assertEqual(frame.motive_problems("Building Quill to sort questions drew me to your triage work.",
+                                               self.FACTS), [frame.NAMES_WORK.format(work="Quill")])
+        self.assertEqual(frame.motive_problems("A triage service that sorts what people ask is what draws me to you.",
                                                self.FACTS), [])
+
+    def test_an_opening_naming_any_card_of_yours_is_a_problem_even_with_no_reason(self):
+        facts = replace(self.FACTS, pairing=None, told=())
+        said = "I am applying for the Graduate Developer role after building Quill Employment."
+        self.assertEqual(frame.motive_problems(said, facts, [QUILL, EMPLOYMENT]),
+                         [frame.NAMES_WORK.format(work="Quill Employment")])
 
     def test_a_pairing_rests_on_a_piece_of_work_while_the_plan_has_one(self):
         cv, work = Item("E1", "Final-year student", "CV"), Item("E2", "Quill answers questions", "CV", card="Quill")

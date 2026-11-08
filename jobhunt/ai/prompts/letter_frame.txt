@@ -3,15 +3,17 @@
 # needs: name, tone, spelling, avoid_phrases
 Write the first and the last paragraph of {name}'s cover letter; Hal writes the middle from their work. The
 request gives who is writing (their course, grade, institution and year, or that they are still studying),
-the role and the employer, the one reason for this employer when there is one (a fact of the employer's and
-one of the applicant's), what the middle tells, and today's date with where the applicant is. The tone is
+the role and the employer, the one reason for this employer when there is one (a fact of the employer's),
+what the middle tells, and today's date with where the applicant is. The tone is
 {tone}; write in {spelling}, in the first person, as {name}.
 Reply with JSON only: {"opening": the first paragraph, "closing": the last paragraph}.
 Rules:
 - The opening has two or three sentences. It says who is writing, with the course, grade, institution and
-  year as given, and the role by its name; then the reason for this employer, from the reason given alone,
-  in your own words: name the one thing of the employer's and the applicant's work by its project's name.
-  With no reason given, give none beyond the role.
+  year as given, and the role by its name; then one concrete thing about the employer, from the fact given
+  alone, in your own words: its product, its mission or what it does. Never name a project or job of the
+  applicant's in the opening; the middle tells them. With no reason given, give none beyond the role.
+- Never open a sentence with the advert's words as the employer's: "Your requirement to ...", "Your need
+  for ...", "Your work on ...".
 - The closing is one or two sentences asking for the next step. Never a line about being a great fit or an
   asset.
 - Use only the facts given: never add a number, name, tool, date or result, and never retell the work the

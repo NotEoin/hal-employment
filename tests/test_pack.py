@@ -593,16 +593,19 @@ class Paragraphs(unittest.TestCase):
         self.assertEqual(written["flags"], [], "a fixed paragraph is never listed")
         self.assertTrue(written["notes"]["checked"].startswith(pack.SOFTENED))
 
-    def test_the_work_the_openings_reason_rests_on_counts_as_told(self):
-        # one project was told in a letter's opening, a paragraph and an answer (2026-11-08)
+    def test_the_opening_names_no_project_so_only_the_paragraphs_count_as_told(self):
+        # an opening told a project that a paragraph then told again in 5 of 15 graded packs (2026-11-08)
         crossed = "I built Quill with Preact and a 113-test suite. It answers questions over my notes."
         writer = QuillWriter({"Quill": [crossed]})
-        writer.pairing = {"employer_fact": "Build internal tools in Python", "item": "E1",
+        writer.pairing = {"employer_fact": "internal tools in Python", "item": "E1",
                           "reason": "an offline assistant is an internal tool"}
         with quill_world(writer) as a:
             written = pack.write_letter(a.con, a.job)
         self.assertEqual(paragraph_about(written["text"], "Quill"), "", "its paragraph was left out")
-        self.assertEqual(written["told"], ["Quill Employment", "Quill"])
+        self.assertEqual(written["told"], ["Quill Employment"])
+        asked = writer.asked("frame")[0]["user"]
+        self.assertIn('the employer\'s "internal tools in Python". Say one concrete thing about the employer', asked)
+        self.assertNotIn("offline assistant", asked, "the opening is given no project to tell")
 
     def test_the_message_and_answers_prefer_a_project_the_letter_did_not_tell(self):
         from jobhunt.profile import store
@@ -674,30 +677,6 @@ class Paragraphs(unittest.TestCase):
                     for e in writer.asked("story") if "cover letter" in e["user"]]
         self.assertEqual(lettered, ["Quill", "Ferry log", "Tide gauge"])
         self.assertIn("- Quill (personal project; core): ", writer.asked("rank")[0]["user"])
-
-    def test_the_openings_reason_is_chosen_from_the_work_the_letter_tells_after_the_ranking(self):
-        # the opening named a project the letter never otherwise introduced, or one a paragraph retold
-        # (2026-11-08)
-        from jobhunt.profile import store
-
-        order = ["Ferry log", "Quill Employment", "Tide gauge", "Quill"]
-        writer = QuillWriter()
-        plain = writer.reply
-        writer.reply = lambda system, user: ({"ranking": [{"name": n, "reason": "made-up"} for n in order]}
-                                             if prompt_id(system) == "rank" else plain(system, user))
-        with quill_world(writer) as a:
-            for name in ("Tide gauge", "Ferry log"):
-                store.confirm(a.con, store.add_found(a.con, "project", {
-                    "name": name, "summary": "Writing reports of river levels and spreadsheets"},
-                    {"source_rel": f"Sources/Code/{name}.md", "quote": f"{name} writes reports every hour",
-                     "field": "", "doc_type": "repository"}))
-            pack.write_letter(a.con, a.job)
-        ids = [e["id"] for e in writer.log]
-        self.assertLess(ids.index("rank"), ids.index("pairing"))
-        offered = writer.asked("pairing")[0]["user"]
-        self.assertIn('E3: "Ferry log writes reports every hour"', offered)
-        self.assertIn("Quill Employment, a job-search helper", offered)
-        self.assertNotIn("Quill, an offline assistant", offered, "the letter does not tell Quill")
 
     def test_a_ranking_that_fails_leaves_the_job_words_to_choose(self):
         writer = replying("rank", "{}", writer=QuillWriter())
@@ -786,8 +765,8 @@ class Paragraphs(unittest.TestCase):
         self.assertTrue(written["text"].endswith("\n\nCould we talk about the role?"))
 
     def test_the_letters_reason_for_the_employer_comes_from_a_pairing_that_holds(self):
-        writer = FakeWriter(plan=PICKS, pairing={"employer_fact": "answer enquiries from visitors", "item": "E2",
-                                                 "reason": "guiding visitors is the same work"})
+        writer = FakeWriter(plan=PICKS, pairing={"employer_fact": "looks after river boats", "item": "E2",
+                                                 "reason": "guiding visitors round boats is the same work"})
         with as_applicant(people.HUMANITIES, writer) as a:
             job = add_job(a.con, "humanities_grad")
             written = pack.write_letter(a.con, job, about="A made-up trust that looks after river boats.")
@@ -795,11 +774,9 @@ class Paragraphs(unittest.TestCase):
         self.assertIn("Advert:\nCollections Assistant", asked)
         self.assertIn("Company brief:\nA made-up trust that looks after river boats.", asked)
         self.assertIn('E2: "A made-up note about guiding visitors"', asked)
-        self.assertIn('The reason for this employer: the employer\'s "answer enquiries from visitors" and the '
-                      'applicant\'s "A made-up note about guiding visitors", because guiding visitors is the same '
-                      'work', writer.asked("frame")[0]["user"])
-        self.assertEqual((written["pairing"].item.id, written["pairing"].fact),
-                         ("E2", "answer enquiries from visitors"))
+        self.assertIn('The reason for this employer: the employer\'s "looks after river boats". Say one concrete '
+                      "thing about the employer", writer.asked("frame")[0]["user"])
+        self.assertEqual((written["pairing"].item.id, written["pairing"].fact), ("E2", "looks after river boats"))
 
     def test_with_no_honest_pairing_the_opening_is_told_to_give_no_reason(self):
         writer = FakeWriter(plan=PICKS, pairing={"employer_fact": "a culture of innovation", "item": "E1",
@@ -946,12 +923,12 @@ class Others(unittest.TestCase):
 
     def test_a_why_here_answer_ties_the_pairings_fact_to_its_own_projects_facts(self):
         writer = QuillWriter()
-        writer.pairing = {"employer_fact": "Build internal tools in Python", "item": "E2",
+        writer.pairing = {"employer_fact": "internal tools in Python", "item": "E2",
                           "reason": "a job-search helper is an internal tool for graduates"}
         with quill_world(writer) as a:
             pack.build(a.con, a.job["id"], use_web=False)
         why = next(e["user"] for e in writer.asked("story") if "Why do you want to work here?" in e["user"])
-        self.assertIn('The reason: the employer\'s "Build internal tools in Python" and this work, because a '
+        self.assertIn('The reason: the employer\'s "internal tools in Python" and this work, because a '
                       "job-search helper is an internal tool for graduates", why)
         self.assertIn("Project: Quill Employment", why)
         self.assertEqual(len(writer.asked("pairing")), 1, "the letter's pairing serves the answers too")

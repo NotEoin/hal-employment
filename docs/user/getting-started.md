@@ -105,7 +105,8 @@ your own time), a team's work written as yours alone, or a sentence that ties th
 stock words such as "aligns with" or "meets the requirement for". A paragraph with such a problem is
 written once more. If it is still wrong, Hal takes out the sentence at fault when the rest still reads, or
 leaves the paragraph out and says so under **Check before sending**. The letter opens with who you are, the
-role and your reason for this employer, and closes by asking for the next step. When Hal finds none of your
+role and one concrete thing about the employer that draws you, such as what it makes or its mission. It
+names none of your projects there, as the paragraphs tell them, and closes by asking for the next step. When Hal finds none of your
 work to tell, it writes the letter, the message and the answers whole, and checks what each says about you
 against your CV, the facts you checked and your own documents: a claim it cannot find there is taken out or
 toned down once, and only what is left is listed. What a draft says about the employer, taken from the
@@ -117,8 +118,9 @@ cannot tie one module's mark to a project or a piece of work that only another m
 The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
 to work here?", should be your own. Before writing a letter, Hal pairs one specific thing about the employer,
 in the advert's or the company's own words (a product, a project, a place; never "innovation" or "a great
-culture"), with one of the facts it picked, and the letter's reason comes from that pairing. When nothing
-of yours connects to it, the letter names the role and gives no reason rather than invent one. A sentence
+culture", and never a duty of the job such as "write SQL queries"), with one of the facts it picked, and
+the letter's reason comes from that pairing. When nothing of yours connects to it, the letter names the role
+and gives no reason rather than invent one. A sentence
 that only repeats the advert or what the company says about itself is rewritten once to link something of
 yours (a project, a module, an interest) to something about the employer, and listed if it still repeats
 the advert. On a form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**. When you
