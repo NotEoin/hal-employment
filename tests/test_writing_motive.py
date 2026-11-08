@@ -7,7 +7,7 @@ from unittest import mock
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt import llm
-from jobhunt.writing import motive
+from jobhunt.writing import motive, plan
 from jobhunt.writing.plan import Item
 
 ADVERT = ("Graduate Analyst at Brightwater Tools. We build flood sensors for river trusts. We value innovation and "
@@ -51,6 +51,20 @@ class Pairings(unittest.TestCase):
                          'sensors for river trusts" and the applicant\'s "a sensor logger in Lua that records river '
                          'levels every ten minutes", because both read river levels')
         self.assertEqual(motive.block(None), motive.NONE_SAID)
+
+    def test_a_letters_pairing_rests_only_on_work_its_middle_tells(self):
+        # the opening named a project the letter never otherwise told, or one a paragraph then retold
+        # (2026-11-08)
+        gull = {"kind": "project (personal project)", "name": "Gullwing", "tools": ["C++"], "summary": "An autopilot",
+                "context": "personal", "role": "", "quotes": ["Gullwing replans its route twenty times a second",
+                                                              "Gullwing steers a model boat", "Gullwing logs"]}
+        tide = plan.stories(PLAN[:1], [])[0]
+        told = motive.told_items([tide, plan.card_story(gull)], PLAN)
+        self.assertEqual([(i.id, i.card) for i in told], [("E1", "Tide gauge"), ("E3", "Gullwing"),
+                                                          ("E4", "Gullwing")])
+        self.assertEqual(told[1].text, "Gullwing replans its route twenty times a second")
+        self.assertNotIn("Volunteer guide at a made-up heritage centre", [i.text for i in told],
+                         "work the middle does not tell is never the opening's reason")
 
     def test_no_plan_means_no_call(self):
         with mock.patch.object(llm, "chat_json", side_effect=AssertionError("no call")):

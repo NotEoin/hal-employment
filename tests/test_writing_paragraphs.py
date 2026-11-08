@@ -249,6 +249,39 @@ class Frame(unittest.TestCase):
                                        "(2026), applying for the Graduate Developer role.")
 
 
+class Retold(unittest.TestCase):
+    """The opening named the pairing's project with its facts, then a paragraph told them again (2026-11-08)."""
+
+    BODY = "Quill answers questions over my notes offline, in Lua. It has 40 saved searches."
+    FACTS = frame.Facts("Avery Quillon", "a first-class History graduate from Made-up University (2026)",
+                        "Graduate Developer", "Brightwater Tools",
+                        Pairing("ticket triage service", Item("E1", "Quill answers questions", "CV", card="Quill"),
+                                "both sort questions"), ("Quill",), "Made-up University", middle=(("Quill", BODY),))
+    GOOD = ("I am Avery Quillon, a first-class History graduate from Made-up University (2026), applying for the "
+            "Graduate Developer role. Building Quill to sort questions drew me to your ticket triage service.")
+
+    def test_an_opening_retelling_a_paragraphs_facts_is_a_problem_and_a_short_clause_is_not(self):
+        retold = ("I am applying for the Graduate Developer role, as Quill, which answers questions over my notes "
+                  "offline, drew me to your ticket triage service.")
+        self.assertEqual(frame.retold(retold, self.FACTS), ["Quill"])
+        self.assertEqual(frame.retold("My Quill keeps 40 saved searches for your triage work.", self.FACTS),
+                         ["Quill"], "a number the paragraph gives")
+        self.assertEqual(frame.retold(self.GOOD.split(". ")[1], self.FACTS), [])
+        self.assertEqual(frame.retold("I graduated from Made-up University in 2026.", self.FACTS), [],
+                         "who is writing is the opening's own")
+
+    def test_the_frame_is_drafted_once_more_without_the_retelling(self):
+        retold = (f"{self.GOOD.split('. ')[0]}. Quill answers questions over my notes offline, which drew me to "
+                  "your ticket triage service.")
+        fake = FakeAI([retold, self.GOOD])
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            done = frame.settle(self.FACTS, SCOPE)
+        asked = fake.calls("Write")
+        self.assertIn(frame.TOLD_WORK.format(work="Quill"), asked[0])
+        self.assertIn(frame.RETOLD_SAID.format(work="Quill"), asked[1])
+        self.assertEqual((done.opening, done.calls), (self.GOOD, 2))
+
+
 class Named(unittest.TestCase):
     """Passages of a dissertation were drafted as "I designed a pure simulation engine ..." with no project
     named (2026-11-08)."""

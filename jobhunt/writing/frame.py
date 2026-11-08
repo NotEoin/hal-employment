@@ -22,6 +22,11 @@ Design decisions, each with its reason:
   "matches my experience" for reasons such as "because I have built features for a team project". It must
   name the work the pairing rests on, by its project's name when it is a card's, and say one specific word
   of the employer's fact; the stock links ("matches my", "fits my") are `plain.STOCK`.
+- The frame never retells the middle (`retold`, `Facts.middle`, 2026-11-08): the opening named the pairing's
+  project with its facts and a paragraph then told them again. The pairing rests on work the middle tells
+  (`motive.told_items`), so the opening names it in a short clause (`TOLD_WORK`), and a sentence of the
+  opening or closing that says nearly what a paragraph's sentence says, shares `RETOLD_RUN` own words in a
+  row with it or gives one of its numbers is a problem, drafted again with the frame's one redraft.
 - One call drafts both paragraphs, and one more when either fails, so a letter's frame costs one or two calls.
   An opening still failing is the message's built sentence (`opening.Opening`, from the settings and the
   checked course), which needs no check; a closing still failing is left out, as a letter reads without it.
@@ -55,7 +60,12 @@ ROLE_MISSING = "does not name the role"
 WHO_MISSING = "does not say who is writing ({who})"
 MOTIVE_WORK = "does not name {work}, the work your reason for this employer rests on"
 MOTIVE_EMPLOYER = 'does not say what of the employer draws you ("{fact}")'
+RETOLD_SAID = "retells what the paragraph about {work} says; name {work} in a short clause and leave its facts there"
+TOLD_WORK = ("The work your reason rests on, {work}, has its own paragraph in the middle: name it in a short "
+             "clause and leave its facts, numbers and tools to that paragraph.")
 STEM = 5                   # letters two words share to be one word ("triage" and "triaging")
+RETOLD_RUN = 4             # own words in a row a frame sentence shares with a paragraph to retell it: a name aside,
+                           # three ("offline notes assistant") can name the work, four tell a fact of it
 
 
 @dataclass(frozen=True)
@@ -71,6 +81,7 @@ class Facts:
     told: tuple[str, ...] = ()  # the names of the work the letter's middle tells
     institution: str = ""
     modules: tuple[str, ...] = ()  # "Name (mark)" of modules the job names that no paragraph shows
+    middle: tuple[tuple[str, str], ...] = ()  # (name, text) of each paragraph of the middle, never to retell
 
     def request(self, scope: Scope) -> str:
         """The request: who is writing, the role, the reason, what the middle tells and today."""
@@ -81,6 +92,9 @@ class Facts:
         lines = [f"Who is writing: {who}", f"The role: {self.title} at {self.employer}", reason]
         if self.told:
             lines.append(f"The letter's middle tells (never retell them): {'; '.join(self.told)}")
+        work = self.pairing.item.card if self.pairing else ""
+        if work and work in self.told:
+            lines.append(TOLD_WORK.format(work=work))
         if self.modules:
             lines.append("Modules of the applicant's that this job asks about and no paragraph shows (the opening "
                          f"may name them and their marks in one clause): {'; '.join(self.modules)}")
@@ -121,6 +135,7 @@ def problems(text: str, facts: Facts, scope: Scope, first: bool) -> list[Problem
             found.append(ECHO_SAID)
         if any(repeats.same(s, b) for b in said[:k]):
             found.append(REPEAT_SAID)
+        found += [RETOLD_SAID.format(work=work) for work in retold(s, facts)]
         out += [Problem(s, r) for r in dict.fromkeys(found)]
     if first and not re.search(re.escape(facts.title.strip()), text, re.I):
         out.append(Problem("", ROLE_MISSING))
@@ -131,6 +146,32 @@ def problems(text: str, facts: Facts, scope: Scope, first: bool) -> list[Problem
     hits = writing_check.check(text, "letter", spelling=scope.values.get("spelling_code", ""),
                                allowed=scope.values.get("own_words") or ())
     return out + [Problem("", f"{h.message} ({h.quote})") for h in writing_check.high(hits)]
+
+
+def _own_words(text: str, names: list[str]) -> list[str]:
+    """The words of a text in order, names (`names`, longest first) and little words taken out."""
+    for name in sorted(names, key=len, reverse=True):
+        text = re.sub(rf"(?<!\w){re.escape(name)}(?!\w)", " ", text, flags=re.I)
+    return [w for w in re.findall(r"[a-z0-9+#]+", text.lower()) if w not in drafts.LITTLE_WORDS]
+
+
+def retold(sentence: str, facts: Facts) -> list[str]:
+    """The names of the middle's paragraphs (`Facts.middle`) a frame sentence retells: it says nearly what one
+    of the paragraph's sentences says (`repeats.same`), shares `RETOLD_RUN` of its own words in a row with one
+    (names, the role and the employer aside), or gives a number the paragraph gives that who is writing and
+    the modules do not."""
+    names = [*(n for n, _ in facts.middle), *facts.told, facts.title, facts.employer]
+    mine = _own_words(sentence, names)
+    runs_of = {tuple(mine[i:i + RETOLD_RUN]) for i in range(len(mine) - RETOLD_RUN + 1)}
+    own_numbers = numbers(sentence) - numbers("\n".join([facts.who, facts.title, facts.employer, *facts.modules]))
+    out = []
+    for work, text in facts.middle:
+        theirs = _own_words(text, names)
+        shared = any(tuple(theirs[i:i + RETOLD_RUN]) in runs_of for i in range(len(theirs) - RETOLD_RUN + 1))
+        if shared or own_numbers & numbers(text) or any(repeats.same(sentence, b)
+                                                         for b in writing_check.sentences(text)):
+            out.append(work)
+    return out
 
 
 def _stems(text: str, leave: set[str] = frozenset()) -> set[str]:

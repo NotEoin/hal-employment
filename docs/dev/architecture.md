@@ -507,7 +507,10 @@ runs: tests use `tests/support/fake_claude/`.
   middle tells and today), checked the same way with the role and the institution required, and with a
   pairing the work it rests on named (by its card's name) and one specific word of the employer's fact
   (`frame.motive_problems`; `motive.offered` gives the pairing only items tied to a card while the plan has
-  any), drafted once
+  any), and never retelling the middle (`frame.retold` against `frame.Facts.middle`, the paragraphs'
+  names and texts: a sentence `repeats.same` as one of theirs, sharing `frame.RETOLD_RUN` (4) own words in a
+  row with one, names, role and employer aside, or giving one of its numbers; the request tells it to name the
+  pairing's work in a short clause, `frame.TOLD_WORK`), drafted once
   more when either fails; an opening still failing is `opening.Opening`'s built sentence and a closing
   still failing is left out. Paragraphs and the frame are drafted at `paragraphs.DRAFT_TEMPERATURE`. The
   message and the answers are told the same way (`pack._story_others`, through `pack.write_others`): the
@@ -663,7 +666,11 @@ runs: tests use `tests/support/fake_claude/`.
   employer uses of itself (`GENERIC`, the little words, the job title and the employer's name), the item
   is the plan's and there is a reason. The letter's opening (`writing.frame`) and a "why here" answer
   (`paragraphs.why`) are drafted from the pairing, or told there is none and to give no reason beyond the
-  role; a letter with no story gets the pairing in its request (`motive.block`, or `motive.NONE_SAID`).
+  role; a letter with no story gets the pairing in its request (`motive.block`, or `motive.NONE_SAID`). A
+  letter told by stories asks for the pairing after the ranking chose its stories, offering only their items
+  (`motive.told_items`: the plan's items of those stories, and up to `motive.STORY_ITEMS` (2) facts of a
+  story the plan picked nothing of, numbered after the plan's), so the opening's reason is always work a
+  paragraph tells.
 - `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
   (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer. `pack.fix_repeats`
   rewrites the answers once, in one call, asking for other evidence in the later ones, after the echo

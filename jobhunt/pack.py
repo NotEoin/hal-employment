@@ -603,14 +603,16 @@ def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, k
 
 
 def letter_frame(who: dict, job, scope: paragraphs.Scope, pairing: motive.Pairing | None,
-                 told: tuple[str, ...], modules: tuple[str, ...] = ()) -> frame.Facts:
+                 told: tuple[str, ...], modules: tuple[str, ...] = (),
+                 middle: tuple[tuple[str, str], ...] = ()) -> frame.Facts:
     """The fixed facts of a letter's opening and closing: the person's name and course (`opening.described`), the
-    role, the reason for this employer, the names of the work the middle tells and the `modules` the job's
-    requirements name that no paragraph shows (`plan.relevant_modules`)."""
+    role, the reason for this employer, the names of the work the middle tells, the `modules` the job's
+    requirements name that no paragraph shows (`plan.relevant_modules`) and the middle's paragraphs, (name,
+    text) each, which the frame must not retell (`frame.retold`)."""
     name = str(who.get("name") or "")
     now = scope.now or stage.current()
     return frame.Facts("" if name == SOMEONE else name, opening.described(now), job["title"], job["company"],
-                       pairing, told, now.institution, modules)
+                       pairing, told, now.institution, modules, middle)
 
 
 def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, kept: str, facts: str,
@@ -626,7 +628,8 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
     told = tuple(b.story.name for b in bodies if b.text and b.story.name)
     modules = planning.relevant_modules(profile_writing.marked_modules(), wanted,
                                         "\n".join(b.story.words() for b in bodies if b.text))
-    facts_said = letter_frame(who, job, scope, pairing, told, modules)
+    middle = tuple((b.story.name, b.text) for b in bodies if b.text)
+    facts_said = letter_frame(who, job, scope, pairing, told, modules, middle)
     framed = frame.settle(facts_said, scope)
     cards = list(scope.cards)
     text = "\n\n".join(p for p in (framed.opening, *(b.text for b in bodies), framed.closing) if p)
@@ -640,7 +643,7 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
     softened = any(b.redrafted or b.cut for b in bodies) or framed.redrafted
     shown = [_item_note(i, cards) for i in plan]
     shown = [e for e in (drafts.evidence_checked(s, cards, known_tools(cards), facts)[0] for s in shown) if e]
-    motive_story = _story_of(pairing.item, list(scope.stories)) if pairing else None
+    motive_story = _story_of(pairing.item, [*chosen, *scope.stories]) if pairing else None
     told_keys = [b.story.key for b in bodies if b.text] + ([motive_story.key] if motive_story else [])
     return {"text": letter, "flags": flags, "used": passages(kept), "revised": False, "softened": softened,
             "plan": plan, "pairing": pairing, "told": list(dict.fromkeys(told_keys)),
@@ -682,7 +685,6 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     fit = fit if fit is not None else _fit(who, analysis, facts, kept, job)
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept)
     names = (job["title"], job["company"])
-    pairing = motive.make(names, _job_text(job), about, plan)
     cards = profile_writing.cards()
     found = planning.stories(plan, cards)
     if found:
@@ -692,9 +694,11 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
         ranking = story_ranking(job, analysis, about, found, cards) if asked else ranking
         wanted = "\n".join(_requirements(analysis))
         told = rank.order(found, cards, ranking, wanted)
+        pairing = motive.make(names, _job_text(job), about, motive.told_items(list(told.letter), plan))
         written = _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing,
                                 chosen=list(told.letter), wanted=wanted)
         return {**written, "ranking": ranking, "calls": written["calls"] + asked}
+    pairing = motive.make(names, _job_text(job), about, plan)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     text += f"\n\n{motive.block(pairing)}" if pairing is not None else ""
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")

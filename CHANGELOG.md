@@ -185,6 +185,11 @@ What changed in each version, in plain words.
   pack, with a short reason for each, and the letter tells the three best that have facts to tell. The
   message and the answers take the next ones. Work you marked as one to lead with comes first when two fit
   about as well. If the ranking fails, Hal chooses by the advert's words as before.
+- **The opening no longer tells a project twice.** A letter's opening named the project behind your reason
+  for the employer with its details, and a paragraph then told the same details again, or the opening named
+  a project the letter never came back to. The reason now rests on a project the letter tells, the opening
+  names it in a short phrase, and an opening that repeats a paragraph's details or numbers is written once
+  more.
 - **A note about all your projects no longer mixes them up.** A note describing about ten projects tied
   each of them to the others, so a letter put one project's network sniffer in another project. Hal now
   reads such a note only for the parts that name one project, and never takes another name for a project

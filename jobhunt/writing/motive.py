@@ -18,6 +18,10 @@ Design decisions, each with its reason:
   holds, the letter says less rather than invent one (`writing.frame`). Only items tied to a project or job
   card are offered while the plan has any (`offered`), so the reason names a piece of work: reasons such as
   "because I have built features for a team project" named none (2026-11-08).
+- A letter's pairing rests on work its middle tells (`told_items`, 2026-11-08): the opening named a project
+  and a paragraph then told it again, or named one the letter never otherwise introduced. The pairing is made
+  after the ranking chose the letter's stories (`writing.rank`), from their items alone, so the opening names
+  the work in a clause and leaves its facts to its paragraph (`writing.frame` checks it does).
 """
 from __future__ import annotations
 
@@ -27,12 +31,13 @@ from dataclasses import dataclass
 from jobhunt import llm
 from jobhunt.ai import prompts
 from jobhunt.writing import check, drafts
-from jobhunt.writing.plan import Item, quoted
+from jobhunt.writing.plan import PROFILE, Item, Story, quoted
 
 log = logging.getLogger(__name__)
 
 PROMPT = "motive_pair"
 MIN_SPECIFIC = 2           # own words of an employer's fact beyond the generic: "flood sensors", "river data"
+STORY_ITEMS = 2            # facts of a story the plan picked nothing of offered as items: what it is and a result
 # Words any employer uses of itself or of what it offers, so they make no reason to choose this one.
 GENERIC = frozenset("""innovation innovative innovate excellence excellent values value culture growth grow growing
 passion passionate diverse diversity inclusion inclusive equality people customer customers client clients quality
@@ -75,6 +80,23 @@ def checked(reply: dict, advert: str, brief: str, plan: list[Item], names: tuple
             log.info("motivation: dropped a pairing that does not hold: %r", reply)
         return None
     return Pairing(fact, item, reason)
+
+
+def told_items(stories: list[Story], plan: list[Item]) -> list[Item]:
+    """The items a letter's pairing may rest on: the plan's items of the stories its middle tells, and for a
+    story the plan picked nothing of (a card the ranking chose), its first `STORY_ITEMS` facts as items numbered
+    after the plan's, so the opening's reason is always work a paragraph tells (see the module notes)."""
+    names = {s.name for s in stories if s.name}
+    out = [i for i in plan if (i.card and i.card in names)
+           or any(i.text in (*s.facts, *s.planned) for s in stories)]
+    n = len(plan)
+    for s in stories:
+        if s.card is None or any(i.card == s.name for i in out):
+            continue
+        for fact in s.facts[:STORY_ITEMS]:
+            n += 1
+            out.append(Item(f"E{n}", fact, PROFILE, s.name, s.context, s.role, s.tools, tag=s.tag))
+    return out
 
 
 def offered(plan: list[Item]) -> list[Item]:
