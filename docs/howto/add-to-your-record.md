@@ -13,7 +13,8 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    The newest is your **Current CV**; the others show **Older CV, fills gaps**. To lead with another, press
    **Make this my current CV** on it.
 2. Open **Work history**. On a job's card, open **Add a document for this job** and add a reference, a
-   contract or the job description.
+   contract or the job description. Hal takes the job's title, dates and duties from it, after your current
+   CV.
 3. Open **Education**. On a course's card, open **Coursework, lecture material and official papers**:
    - **Coursework**: your essays, reports, portfolios and dissertation. Press **Showcase** on the pieces you
      are proudest of.

@@ -1,11 +1,11 @@
 """Two made-up graduates' files for the sectioned record's tests: a software graduate and a history graduate.
 
 Each has a current CV, an older one, a cover letter or personal statement, a transcript (whose marks differ
-from the CV's), a certificate and a reference. The older CV lists an extra
-old job the newer one dropped, gives a detail the newer one leaves out (a job's town, a skill) and disagrees
-with it on others (a grade, a mark), so a test can see that an older CV only fills gaps. Every name,
-employer, place and address is invented; email addresses use the reserved `example.org` domain and phone
-numbers Ofcom's drama range.
+from the CV's), a certificate, a reference, and a contract or job description for one job. The older CV
+lists an extra old job the newer one dropped, gives a detail the newer one leaves out (a job's town, a skill)
+and disagrees with it on others (a grade, a mark), so a test can see that an older CV only fills gaps. Every
+name, employer, place and address is invented; email addresses use the reserved `example.org` domain and
+phone numbers Ofcom's drama range.
 """
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ class Graduate:
     transcript: str = ""
     certificate: str = ""
     reference: str = ""
+    job_document: str = ""         # a contract or job description for one job
 
 
 AVERY = Graduate(
@@ -122,6 +123,16 @@ asks good questions and writes tests without being asked.
 
 Jo Brackwater
 Lead developer, Made-up Tides Ltd
+""",
+    job_document="""# Job description
+
+Job title: Junior developer
+Employer: Made-up Tides Ltd
+
+## Main duties
+
+- Answer customer questions about tide data
+- Review other developers' code
 """)
 
 MARNIE = Graduate(
@@ -208,6 +219,15 @@ Lantern Museum Trust since September 2023. Her care with fragile letters has bee
 
 Sam Oakhurst
 Archivist, Fenwick Lantern Museum Trust
+""",
+    job_document="""# Contract of employment
+
+Employer: Harrowgate Gazette
+Position: Paper delivery round
+Start date: 1 March 2018
+End date: 31 August 2020
+
+Your duties are delivering papers, collecting payments and keeping the round book.
 """)
 
 GRADUATES = (AVERY, MARNIE)

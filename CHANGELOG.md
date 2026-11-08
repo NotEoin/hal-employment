@@ -32,6 +32,8 @@ What changed in each version, in plain words.
   reference is kept on the job it is about, with the referee's words marked as theirs, not yours. Under
   **Is it about one of these?** you can say which course, job or certificate a document is for. When a file
   looks like another kind ("This looks like a transcript"), Hal suggests it, and you decide.
+- **A job's documents fill in the job.** A reference, contract or job description added to a job's card
+  gives its title, dates and duties. Your current CV still comes first; these come before an older CV.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

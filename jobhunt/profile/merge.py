@@ -60,6 +60,8 @@ DOC_TYPES = {  # other names the ingest may give a document type
     "degree_certificate": "certificate", "award": "certificate", "certificates": "certificate",
     "resume": "cv", "curriculum_vitae": "cv",
     "cover_letter": "letter", "personal_statement": "letter", "reference": "letter", "statement": "letter",
+    # a job's contract or description ranks with a reference: below the current CV, above an older one
+    "contract": "letter", "job_description": "letter",
     "note": "notes", "study_notes": "notes", "slides": "notes",
 }
 UNKNOWN_RANK = 0           # a document type Hal has no rank for is below notes

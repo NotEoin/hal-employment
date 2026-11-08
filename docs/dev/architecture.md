@@ -1242,6 +1242,12 @@ people). Readers only take facts out of a source, within that frame.
   at its institution (`merge.same_item`). Documents may name an education, job or certificate card
   (`Section.targets`, checked by `store.target_card`). `wrong_place.suggest_kind` suggests a transcript,
   certificate or reference kind, kept as `suggestion = "kind:<id>"` and shown as `suggestion_kind`.
+- `job_doc` (`documents.JobDocReader`): a reference, contract or job description on a job's card gives that
+  job's fact (`documents.job_facts`): the title (a "Job title:" line, else "as a ... at"), the dates
+  (labelled start and end lines, else "since ..." or "from ... to ..."), the duties (bullets under a duties
+  heading, else "duties included ..."), and the card's employer. Its evidence ranks as a letter
+  (`merge.DOC_TYPES` maps contract and job_description there): below the current CV, above older CVs. A
+  reference's fact carries `role = others`, as on Documents, where a contract about a job reads the same way.
 
 ## Profile (`jobhunt/profile/`)
 

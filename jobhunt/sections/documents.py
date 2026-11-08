@@ -9,6 +9,8 @@ and may say which card it is about: an education period, a job or a certificate.
 - a certificate: a certificate card (name, issuer, date, grade) at the certificate's rank;
 - a reference: the job card it is about, with the referee's words as the quote, marked as another person's
   (`roles.OTHERS`), never as the person's own claim; with no job card named it gives no facts;
+- a reference, a contract or a job description on a job's card (the `job_doc` reader): the title, dates and
+  duties it gives, at the rank of documents (`merge.RANKS["letter"]`): below the current CV, above older CVs;
 - anything else (a check, a report, a letter of thanks): its text, a title and a date, and no facts.
 
 Design decisions, each with its reason:
@@ -57,6 +59,24 @@ PLAIN_ROW = re.compile(r"^\W*(?P<name>.*?[A-Za-z].*?)\s+(?P<mark>\d{1,3}(?:\.\d+
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
 GREETING = re.compile(r"^\s*(?:dear\b|to whom it may concern|re:|subject:)", re.I)
 QUOTE_WORDS = 40           # a referee's quote is a sentence or two
+TITLE_WORDS = 5            # "as a Junior developer at": a job title is a few words
+JOB_TITLE = re.compile(LABEL.format(words=r"job title|position|post|role|title"), re.I | re.M)
+EMPLOYED = re.compile(LABEL.format(words=r"period of employment|dates? of employment|employed"), re.I | re.M)
+STARTED = re.compile(LABEL.format(words=r"start date|starting date|date of commencement|commencement date|"
+                                        r"employment start|date started"), re.I | re.M)
+ENDED = re.compile(LABEL.format(words=r"end date|finish date|date of leaving|leaving date|employment end"),
+                   re.I | re.M)
+MONTH_YEAR = r"(?:\d{1,2}\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d\d"
+SINCE = re.compile(rf"\b(?:since|from)\s+(?P<start>{MONTH_YEAR})(?:\s+(?:to|until)\s+(?P<end>{MONTH_YEAR}))?",
+                   re.I)
+AS_TITLE = re.compile(rf"\bas (?:an? |the |our )?(?P<title>[A-Z][\w-]*(?: [\w-]+){{0,{TITLE_WORDS - 1}}}?) "
+                      r"(?:at|with|for|in)\b")
+DUTIES_HEADING = re.compile(r"^#*\s*(?:main |key |principal )?(?:duties|responsibilities|tasks|what you will do)"
+                            r"(?: and responsibilities)?\s*:?\s*$", re.I)
+BULLET = re.compile(r"^(?:[-*\u2022]|\d+[.)])\s+(?P<item>.+)$")
+DUTIES_SENTENCE = re.compile(r"\b(?:duties|responsibilities|tasks) (?:included|include|were|are|cover(?:ed)?)\s+"
+                             r"(?P<list>[^.]+)\.", re.I)
+LIST_SPLIT = re.compile(r",\s*(?:and\s+)?|\s+and\s+")
 EDUCATION_KEYS = ("qualification", "subject", "institution")
 JOB_KEYS = ("title", "employer")
 
@@ -203,16 +223,62 @@ def referee_quote(text: str, target: dict | None) -> str:
     return " ".join(chosen.split()[:QUOTE_WORDS])
 
 
-def reference_facts(text: str, source: readers.Source) -> list[readers.Fact]:
-    """The job fact of a reference about the job card it names, quoting the referee as another person's words;
-    none when it names no job card."""
+def _duties(text: str) -> list[str]:
+    """The duties a job document lists: the bullets under a duties heading, else those a sentence names
+    ("Her duties included cataloguing letters and guiding visitors")."""
+    out, under = [], False
+    for line in text.splitlines():
+        plain = line.strip()
+        if DUTIES_HEADING.match(plain):
+            under = True
+            continue
+        if under and (plain.startswith("#") or (plain and not BULLET.match(plain) and out)):
+            break
+        if under and (m := BULLET.match(plain)):
+            out.append(m.group("item").strip())
+    if out:
+        return out
+    m = DUTIES_SENTENCE.search(" ".join(text.split()))
+    return [d.strip() for d in LIST_SPLIT.split(m.group("list")) if d.strip()] if m else []
+
+
+def _job_dates(text: str) -> dict:
+    """A job's start and end as the document gives them: labelled lines, else "from ... to ..." or "since ..."."""
+    period, _ = _labelled(EMPLOYED, text)
+    if period:
+        return {"period": period}
+    start, _ = _labelled(STARTED, text)
+    end, _ = _labelled(ENDED, text)
+    if not start and (m := SINCE.search(" ".join(text.split()))):
+        start = m.group("start")
+        end = end or (m.group("end") or "")
+    return {k: v for k, v in (("start", start), ("end", end)) if v}
+
+
+def job_facts(text: str, source: readers.Source, role: str = "") -> list[readers.Fact]:
+    """The job fact of a document about the job card it names: the title, dates and duties the document gives,
+    with the card's employer (and its title when the document names none); none when it names no job card.
+
+    The quote is the line that names the title, else the referee's sentence about the work."""
     if not source.target or source.target.get("kind") != "job":
         return []
-    fields = _filled({}, source.target, "job", JOB_KEYS)
-    words = referee_quote(text, source.target)
-    if not fields or not words:
+    title, title_line = _labelled(JOB_TITLE, text)
+    flat = " ".join(text.split())
+    if not title and (m := AS_TITLE.search(flat)):
+        title = m.group("title")
+    fields = _filled({"title": title, **_job_dates(text), "duties": _duties(text)}, source.target, "job", JOB_KEYS)
+    fields = {k: v for k, v in fields.items() if v}
+    words = title_line or referee_quote(text, source.target)
+    if not any(fields.get(k) for k in JOB_KEYS) or not words:
         return []
-    return [readers.Fact("job", fields, _quote(text, "title", words, _place(source)), role=roles.OTHERS)]
+    field = "title" if title_line else "duties" if fields.get("duties") else "title"
+    return [readers.Fact("job", fields, _quote(text, field, words, _place(source)), role=role)]
+
+
+def reference_facts(text: str, source: readers.Source) -> list[readers.Fact]:
+    """The job fact of a reference about the job card it names, quoting the referee as another person's words
+    (`roles.OTHERS`); none when it names no job card."""
+    return job_facts(text, source, roles.OTHERS)
 
 
 class DocumentsReader:
@@ -229,7 +295,23 @@ class DocumentsReader:
             reading.facts = certificate_facts(reading.text, reading.title, reading.date, source)
         elif source.doc_kind == "reference":
             reading.facts = reference_facts(reading.text, source)
+        elif source.doc_kind == "contract":
+            reading.facts = job_facts(reading.text, source)
+        return reading
+
+
+class JobDocReader:
+    """Reads a document added to a job's card: a reference, a contract, the job description or another paper."""
+
+    name = "job_doc"
+
+    def read(self, source: readers.Source) -> readers.Reading:
+        """The text, title and date of the document, and the job's title, dates and duties it gives."""
+        reading = readers.DocumentReader().read(source)
+        reading.facts = reference_facts(reading.text, source) if source.doc_kind == "reference" else \
+            job_facts(reading.text, source)
         return reading
 
 
 readers.register(DocumentsReader())
+readers.register(JobDocReader())

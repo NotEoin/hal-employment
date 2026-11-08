@@ -145,5 +145,64 @@ class OtherDocuments(unittest.TestCase):
         self.assertEqual(documents.modules_in(text), [{"name": "Studio practice", "mark": "Merit"}])
 
 
+def job_card(con, **match) -> dict:
+    """The one shown job card whose fields hold `match`."""
+    (found,) = [j for j in profile_store.items(con, "job", hidden=False)
+                if all(j["fields"].get(k) == v for k, v in match.items())]
+    return found
+
+
+class JobDocuments(unittest.TestCase):
+    def test_a_job_description_adds_duties_below_the_current_cvs(self):
+        with home() as (con, _, _):
+            add_cv(con, AVERY.cv)
+            job = job_card(con, employer="Made-up Tides Ltd")
+            got = add_document(con, "job description.md", AVERY.job_document, "job_description", job["id"], "job_doc")
+            after = profile_store.item(con, job["id"])
+            jobs = len(profile_store.items(con, "job"))
+        self.assertEqual((got["state"], got["note_rel"]),
+                         ("read", "Sources/Work/Junior developer/Job description.md"))
+        self.assertEqual(after["fields"]["title"], "Junior developer")
+        self.assertEqual(after["fields"]["duties"], ["Built a tide alert service in Python",
+                                                     "Answer customer questions about tide data",
+                                                     "Review other developers' code"])
+        ev = next(e for e in after["evidence"] if e["source_id"] == got["id"])
+        self.assertEqual((ev["doc_type"], ev["role"], ev["quote"]), ("letter", "own", "Job title: Junior developer"))
+        self.assertEqual(jobs, 2)
+
+    def test_a_contract_beats_an_older_cv_on_the_job_only_that_cv_gives(self):
+        with home() as (con, _, _):
+            add_cv(con, MARNIE.cv)
+            pipeline.read(con, pipeline.add_uploads(con, "cv", [Incoming("old.md", MARNIE.older_cv.encode())])
+                          ["added"][0])
+            paper = job_card(con, employer="Harrowgate Gazette")
+            add_document(con, "contract.md", MARNIE.job_document, "contract", paper["id"], "job_doc")
+            after = profile_store.item(con, paper["id"])
+        fields = after["fields"]
+        self.assertEqual((fields["title"], fields["start"], fields["end"]),
+                         ("Paper delivery round", "2018-03", "2020-08"))
+        self.assertEqual(fields["duties"], ["delivering papers", "collecting payments", "keeping the round book"],
+                         "the older CV's duties stay out once a document gives some")
+        self.assertEqual(fields["location"], "Harrowgate", "the older CV still fills what nothing else gives")
+
+    def test_a_reference_on_a_job_card_is_the_referees_word_and_never_beats_the_current_cv(self):
+        with home() as (con, _, _):
+            add_cv(con, MARNIE.cv)
+            job = job_card(con, employer="Fenwick Lantern Museum Trust")
+            got = add_document(con, "reference.md", MARNIE.reference, "reference", job["id"], "job_doc")
+            after = profile_store.item(con, job["id"])
+            said = con.execute("SELECT said FROM profile_evidence WHERE source_id = ?", (got["id"],)).fetchone()[0]
+        ev = next(e for e in after["evidence"] if e["source_id"] == got["id"])
+        self.assertEqual(ev["role"], "others")
+        self.assertIn("volunteered as an Archive volunteer", ev["quote"])
+        self.assertIn('"start": "2023-09"', said)
+        self.assertEqual((after["fields"]["title"], after["fields"]["start"]), ("Archive volunteer", "2023-09"))
+
+    def test_a_job_document_needs_the_job_it_is_for(self):
+        with home() as (con, _, _), self.assertRaisesRegex(ValueError, "Choose which job"):
+            pipeline.add_uploads(con, "job_doc", [Incoming("contract.md", MARNIE.job_document.encode())],
+                                 doc_kind="contract")
+
+
 if __name__ == "__main__":
     unittest.main()
