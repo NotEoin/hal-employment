@@ -475,8 +475,9 @@ class OwnFiles(unittest.TestCase):
             store.add_found(self.con, "project", {"name": "Quill"},
                             own("Sources/Code/quill/README.md", "repository", junk))
         quotes = {c["name"]: c for c in writing.cards(self.con)}["Quill"]["quotes"]
-        self.assertEqual(quotes, ["A 40-test suite checks every answer against its note.", "Quill answers offline",
-                                  "Quill answers questions over a folder of notes with no network."])
+        self.assertEqual(quotes, ["A 40-test suite checks every answer against its note.",
+                                  "Quill answers questions over a folder of notes with no network.",
+                                  "Quill answers offline"])
 
     def test_a_repository_note_named_with_an_imports_suffix_gives_this_card_nothing(self):
         # ingest names a repository's note "<repo> repository"; that note's tools, name and quotes stayed on

@@ -441,8 +441,13 @@ runs: tests use `tests/support/fake_claude/`.
   person's own sources only, never an older CV's, a plan's or one naming a tool `for_writing` drops, with
   the sentences of the card's own repository or project notes; `writing/quotes.py` keeps only sentences
   about the work, `quotes.about_work`: no table row, bare link, credit, rating, heading or line under
-  `quotes.MIN_WORDS` (6) words with no verb, and puts those with a result or a number first,
-  `quotes.ranked`; `plan.STORY_FACTS` (12) in all), one per passage's file and one per other item; a skills list is never a
+  `quotes.MIN_WORDS` (6) words with no verb, no command line (`quotes.COMMAND`: a command word and a flag,
+  a `--` flag or a ` # ` comment), no dependency pinned to a version (`quotes.PINNED`), no file statistics
+  (`quotes.STATS`), no line about the repository or its docs (`quotes.META`) and no sentence's tail
+  starting in lower case (`quotes.FRAGMENT`); `quotes.sentences` skips code blocks, joins hard-wrapped
+  lines into their paragraph or list item and drops a last sentence cut off with no full stop; and
+  `quotes.ranked` puts those with a result or a number first, then those saying how (`quotes.HOW`);
+  `plan.STORY_FACTS` (12) in all), one per passage's file and one per other item; a skills list is never a
   story. `Story.block` is what a request gives: the name and tag, where it was done, the person's part,
   what it is, its tools, its facts as plain lines, what is planned and what it can help with, never an
   evidence id. `plan.choose(stories, n, used)` takes the `n` the pack has told least, best first. Each
