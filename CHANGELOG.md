@@ -215,6 +215,9 @@ What changed in each version, in plain words.
   your record shows it or a common equivalent (GitHub Actions, GitLab CI or Jenkins for CI/CD; A*,
   Dijkstra or BFS for graph algorithms); the table cites where instead. A module code with its year, such
   as CSC2031/23, is no longer listed as a number your CV does not hold.
+- **Each project is told once in a pack.** The answer to "Why do you want to work here?" told the project
+  your reason rests on even when the letter had told it already and other work was left untold. It now
+  takes work the letter and the message have not told while there is some, like the other answers.
 - **Answers and messages say which project.** Form answers and messages to the person hiring began "I
   wrote a 113-test suite ..." and named the project later, or never. Like a letter paragraph, each now names
   its project or job in its first sentence, and is written once more when it does not.

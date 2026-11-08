@@ -936,20 +936,32 @@ def _story_of(item: planning.Item, found: list[planning.Story]) -> planning.Stor
 STORY_TRIES = 3            # stories one answer or the message tries before the whole-draft path writes it
 
 
+def _why_story(left: list[planning.Story], used: dict[str, int],
+               pairing: motive.Pairing | None) -> planning.Story:
+    """The story a "why here" answer ties its reason to: the pairing's item's story while the pack has told it no
+    more than any other (`used`), else the one told least (`plan.choose`); counted in `used` either way. A
+    project the letter told was told again in the "why here" answer while other work was left untold
+    (2026-11-08)."""
+    own = _story_of(pairing.item, left) if pairing else None
+    if own is None or used.get(own.key, 0) > min(used.get(s.key, 0) for s in left):
+        return planning.choose(left, 1, used)[0]
+    used[own.key] = used.get(own.key, 0) + 1
+    return own
+
+
 def _story_answer(question: str, found: list[planning.Story], used: dict[str, int], scope: paragraphs.Scope,
                   pairing: motive.Pairing | None) -> list[paragraphs.Paragraph]:
-    """The paragraphs answering one form question: a "why here" question from the motivation `pairing` and its
-    item's story, any other from the stories the pack has told least (`plan.choose`), one or two
+    """The paragraphs answering one form question: a "why here" question from the motivation `pairing` and the
+    story `_why_story` gives, any other from the stories the pack has told least (`plan.choose`), one or two
     (`plan.examples_wanted`). When every paragraph is dropped the next story is tried, up to `STORY_TRIES`
     stories; all the paragraphs tried are returned, the ones that stand with text."""
     out: list[paragraphs.Paragraph] = []
     left = list(found)
-    for attempt in range(STORY_TRIES):
+    for _ in range(STORY_TRIES):
         if not left:
             break
         if drafts.why_question(question):
-            story = (_story_of(pairing.item, left) if pairing and attempt == 0 else None) or \
-                planning.choose(left, 1, used)[0]
+            story = _why_story(left, used, pairing)
             said = [paragraphs.settle(story, paragraphs.why(question, pairing), scope)]
         else:
             chosen = planning.choose(left, planning.examples_wanted(question), used)

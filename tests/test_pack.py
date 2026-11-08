@@ -947,6 +947,42 @@ class Others(unittest.TestCase):
                          "the letter told both once and the message the first; the answers take the other first")
         self.assertEqual(writer.asked("answers"), [], "no free answers are drafted")
 
+    def test_the_why_here_answer_never_retells_the_letters_work_while_other_work_is_untold(self):
+        # one project was told in a letter and again in the "why here" answer (2026-11-08)
+        from jobhunt.profile import store
+
+        order = ["Quill", "Quill Employment", "Tide gauge", "Ferry log", "Harbour lights"]
+        writer = QuillWriter()
+        writer.pairing = {"employer_fact": "internal tools in Python", "item": "E1",
+                          "reason": "an offline assistant is an internal tool"}
+        plain = writer.reply
+        writer.reply = lambda system, user: ({"ranking": [{"name": n, "reason": "made-up"} for n in order]}
+                                             if prompt_id(system) == "rank" else plain(system, user))
+        with quill_world(writer) as a:
+            for name in ("Tide gauge", "Ferry log", "Harbour lights"):
+                store.confirm(a.con, store.add_found(a.con, "project", {
+                    "name": name, "summary": "Writing reports of river levels and spreadsheets"},
+                    {"source_rel": f"Sources/Code/{name}.md", "quote": f"{name} writes reports every hour",
+                     "field": "", "doc_type": "repository"}))
+            pack.build(a.con, a.job["id"], use_web=False)
+
+        def told(where: str) -> list[str]:
+            return [re.search(r"^(?:Project|Job): (.+?)(?: \(|$)", e["user"], re.M).group(1)
+                    for e in writer.asked("story") if where in e["user"]]
+
+        self.assertEqual(told("cover letter"), ["Quill", "Quill Employment", "Tide gauge"])
+        self.assertEqual(told("short message"), ["Ferry log"])
+        self.assertEqual(told("Why do you want to work here?"), ["Harbour lights"],
+                         "the pairing's project was told in the letter, and other work was untold")
+
+    def test_the_why_here_answer_keeps_the_pairings_work_when_it_is_told_no_more_than_the_rest(self):
+        found = [pack.planning.Story("Quill", "Quill", ""), pack.planning.Story("Tide gauge", "Tide gauge", "")]
+        pairing = pack.motive.Pairing("internal tools", pack.planning.Item("E1", "Quill answers", "CV", "Quill"), "x")
+        used = {"Quill": 1, "Tide gauge": 1}
+        self.assertEqual(pack._why_story(found, used, pairing).name, "Quill")
+        self.assertEqual(used["Quill"], 2, "the answer's story counts as told")
+        self.assertEqual(pack._why_story(found, used, pairing).name, "Tide gauge")
+
     def test_a_question_asking_for_two_examples_is_answered_from_two_projects(self):
         question = "Give two examples of tools you have built."
         writer = QuillWriter()

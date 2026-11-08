@@ -539,7 +539,9 @@ runs: tests use `tests/support/fake_claude/`.
   question about the team's work); an answer is one story, or two when its question asks for more than one
   example (`plan.examples_wanted`), in shape `paragraphs.answer`, and a question asking why this employer
   (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and
-  its item's story (`pack._story_of`). Every one of these shapes but `why` names its work in its first
+  its item's story (`pack._story_of`) while the pack has told that story no more than any other, else the
+  story told least, counted as told either way (`pack._why_story`): a project the letter told was told
+  again in the "why here" answer while other work was untold (2026-11-08). Every one of these shapes but `why` names its work in its first
   sentence (`Shape.name`, `paragraphs.NOT_NAMED`), as a letter paragraph does, and is drafted again once when
   it does not: answers and messages opened "I wrote a 113-test suite ..." in 12 of 15 graded packs
   (2026-11-08). A `why` answer leads with the reason about the employer from the pairing's fact and may tie

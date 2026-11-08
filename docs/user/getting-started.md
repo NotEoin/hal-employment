@@ -95,8 +95,9 @@ Hal then tells each piece of work in a paragraph of its own. Each paragraph in t
 about one of your projects or jobs, told once, and is written on its own from that work's facts alone:
 what it is, where you did it, your part, its tools and what came of it. The message to the person hiring
 tells one piece of work in a sentence or two and asks one question about the team's work. Each form answer
-tells one piece of work, or two when the question asks for more than one example, and the answers take
-work the letter and earlier answers have not told first where your record has enough. An answer to "Why do
+tells one piece of work, or two when the question asks for more than one example, and the message and the
+answers take work the letter, the message and earlier answers have not told first where your record has
+enough, also in the answer to "Why do you want to work here?". An answer to "Why do
 you want to work here?" opens with what draws you to the employer, then may tie it to one piece of your
 work in a sentence. Each paragraph is
 checked against its own work's facts: a number or tool they do not give (a tool you used on a project must
