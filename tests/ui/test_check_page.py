@@ -19,6 +19,8 @@ CV = "Sources/CVs and letters/Alex Doe CV.md"
 LETTER = "Sources/CVs and letters/Museum letter.md"
 PROJECT = "Sources/Projects/Mill town letters.md"
 MODULE = "Sources/Study notes/Archive methods week 3.md"
+OLD_CV = "Sources/CVs and letters/Alex Doe CV 2022.md"
+PLAN = "Sources/Projects/Mill town plan.md"
 EMPLOYER = "Fenwick Lantern Museum Trust"
 # The shell asks for Home's summary, which this test does not serve; its 404 is not this page's fault.
 NOT_YET = ("/api/v2/home",)
@@ -81,12 +83,13 @@ class CheckPage(unittest.TestCase):
         return p.page.locator("section.rec-check").first
 
     def skills(self) -> dict:
-        """Two skills both a project and a CV name, so they are asked about, and one from a lecture only."""
+        """Two skills both a project and a CV name, so they are asked about, and one only an older CV names,
+        which Hal is less sure of."""
         ids = {name: found("skill", {"name": name}, PROJECT, "notes", name.lower())
                for name in ("Oral history interviewing", "Transcription")}
         for name in ids:
             found("skill", {"name": name}, CV, "cv", name.lower())
-        ids["Palaeography"] = found("skill", {"name": "Palaeography"}, MODULE, "notes", "palaeography")
+        ids["Palaeography"] = found("skill", {"name": "Palaeography"}, OLD_CV, "cv", "palaeography")
         return ids
 
     def test_the_queue_asks_the_conflict_then_each_fact_then_the_skills_and_ends_ready(self) -> None:
@@ -155,6 +158,18 @@ class CheckPage(unittest.TestCase):
         studied.get_by_role("button", name="I have used this: Stream processing").click()
         p.page.get_by_text("Studied in your course (1 skill)").wait_for()
         self.assertEqual(state(stream), "confirmed")
+
+    def test_skills_only_notes_mention_are_folded_apart_and_one_can_be_claimed(self) -> None:
+        noted = found("skill", {"name": "Beam logging"}, PLAN, "notes", "beam logging", "own")
+        p = self.page()
+        p.shows(p.page.get_by_text("Your record is ready"), "nothing else to check")
+        mentioned = p.page.locator("details.rec-check-mentioned")
+        self.assertIn("Mentioned in your files (1 skill)", mentioned.inner_text())
+        mentioned.locator("summary").click()
+        self.clean(p)
+        mentioned.get_by_role("button", name="I have used this: Beam logging").click()
+        mentioned.wait_for(state="detached")
+        self.assertEqual(state(noted), "confirmed")
 
     def test_cards_hal_merged_are_listed_and_undo_shows_them_apart_again(self) -> None:
         kept = found("project", {"name": "Mill town letters"}, CV, "cv", "Mill town letters", "own")

@@ -437,6 +437,12 @@ them.
 Skills that only your course material names, such as the topics of a lecture, are listed apart under
 **Studied in your course**. They show what you studied, not what you have done, so Hal leaves them off your
 CV and out of your letters. If you have used one in your own work, press **I have used this** beside it.
+
+Hal only asks about skills you can stand behind: skills on your CV, skills you checked, and the tools of a
+project Hal would tell an employer about (one it would lead with, or one useful when a job asks). Any
+other skill your files name, such as a word in your notes or plans, is folded away under **Mentioned in
+your files**, with **I have used this** in the same way. Hal leaves them off your CV and out of your
+letters. When a read ends, the Overview says how many of each it found.
 One skill written several ways ("python-scripting", "Python scripting") is one entry, shown in normal case.
 
 After reading your files, Hal looks for a project, course or achievement it found more than once under

@@ -5,7 +5,9 @@
    way and coming back starts where the person stopped. Conflicts come first as "Which is right?", then the
    facts most worth checking, then skills in groups; the skills Hal is least sure of wait under "Show more",
    the cards Hal merged as one experience found under different names are listed with Undo under "Hal merged
-   these", and the skills only course material names are listed apart as "Studied in your course".
+   these", the skills only course material names are listed apart as "Studied in your course", and the other
+   skills not on a CV, not checked and not a tool of a project worth telling an employer about are folded
+   away as "Mentioned in your files".
    Above the queue, "Your best experiences" (`record/best.js`) lists what Hal would lead with, to check first.
    When a card is answered, focus moves to the next card's heading, so the page works from the keyboard. */
 import { html, useEffect, useRef } from "../core/html.js";
@@ -15,7 +17,7 @@ import { plural } from "../core/format.js";
 import { Head, Note, Bar } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { BestExperiences } from "../record/best.js";
-import { ItemCheck, SkillsCheck, ConflictCheck, StudiedSkills, MergedCards } from "../record/check.js";
+import { ItemCheck, SkillsCheck, ConflictCheck, StudiedSkills, MentionedSkills, MergedCards } from "../record/check.js";
 
 const PERCENT = 100;
 
@@ -68,5 +70,6 @@ export function Check() {
         <div class="stack s">${data.more.map(c => html`<${SkillsCheck} key=${c.key} card=${c} sub=${true} />`)}</div></details>`}
       ${(data.merged || []).length > 0 && html`<${MergedCards} groups=${data.merged} />`}
       ${(data.studied || []).length > 0 && html`<${StudiedSkills} items=${data.studied} />`}
+      ${(data.mentioned || []).length > 0 && html`<${MentionedSkills} items=${data.mentioned} />`}
     </div>`}`;
 }

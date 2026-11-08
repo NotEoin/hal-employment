@@ -128,7 +128,10 @@ What changed in each version, in plain words.
   away with **Move up a tier**, and **Sort them again** asks Hal to sort them afresh.
 - **Skills from your own work.** A skill that only your course material names, such as a topic from a
   lecture, is listed apart on Check your record under **Studied in your course** and never goes on your CV
-  or in a letter, unless you press **I have used this**. One skill written several ways
+  or in a letter, unless you press **I have used this**. A skill that is not on your CV, not checked by you
+  and not a tool of a project worth telling an employer about, such as a word a research note mentions, is
+  folded away under **Mentioned in your files** in the same way, and the Overview says how many skills of
+  each kind a read found. One skill written several ways
   ("python-scripting", "Python scripting") is one entry, shown in normal case.
 - **Large records read faster.** Hal adds what it finds in each file to your profile much faster when your
   record holds thousands of facts.

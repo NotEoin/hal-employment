@@ -160,12 +160,15 @@ def _eta(con: sqlite3.Connection, batch: str, action: sqlite3.Row, left: int) ->
 def summary(con: sqlite3.Connection) -> dict:
     """The latest ingest for the page: state, done, total, eta_s, counts, current item, not downloaded, someone
     else's documents left out (`not_mine`), errors, the files kept out as private, and how many were skipped
-    for each reason (`skipped`: an empty note, a picture with no words ...)."""
+    for each reason (`skipped`: an empty note, a picture with no words ...), and once it ended, how many skills
+    the person can stand behind and how many are only mentioned in their files (`skills`: {usable, mentioned},
+    or {} before then)."""
     action = latest_action(con)
     if action is None:
         return {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {}, "by_rules": 0,
                 "states": {}, "categories": {}, "current": "", "not_downloaded": 0, "not_downloaded_paths": [],
-                "not_mine": 0, "not_mine_paths": [], "errors": [], "left_out": {}, "private": [], "skipped": {}}
+                "not_mine": 0, "not_mine_paths": [], "errors": [], "left_out": {}, "private": [], "skipped": {},
+                "skills": {}}
     params = json.loads(action["params"] or "{}")
     batch = params.get("batch") or ""
     c = counts(con, batch)
@@ -191,5 +194,6 @@ def summary(con: sqlite3.Connection) -> dict:
             "errors": errors, "by_rules": by_rules(con), "again": bool(params.get("again")),
             "tidy": bool(params.get("tidy")),
             "left_out": result.get("left_out", {}), "private": private(con), "skipped": skipped,
+            "skills": result.get("skills") if isinstance(result.get("skills"), dict) else {},
             "started": action["started"],
             "ended": action["ended"]}

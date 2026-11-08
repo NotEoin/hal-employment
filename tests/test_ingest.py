@@ -1145,6 +1145,24 @@ class VaultNotes(unittest.TestCase):
             shown = items.summary(con)
         self.assertEqual(shown["skipped"], {"an empty note": 1})
 
+    def test_a_read_says_how_many_skills_the_person_can_stand_behind(self):
+        cv = {**REPLY, "facts": [{"kind": "skill", "fields": {"name": "Public speaking"}, "field": "name",
+                                  "quote": "Led weekend tours"}]}
+        note = {**NOTE_REPLY, "role": "own", "facts": [{"kind": "skill", "fields": {"name": "Meander surveys"},
+                                                        "field": "name", "quote": "Meanders"}]}
+
+        def reply(req) -> str:
+            return json.dumps(cv if "CV.md" in req.user else note)
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": reply}):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            put(files, "CV.md", CV_TEXT)
+            put(files, "Rivers.md", "# Rivers\n\nMeanders and oxbow lakes, by Avery Quillon.")
+            done = finished(ingest_actions.queue(folders=[files]))
+            self.assertEqual(done["state"], "done", done["error"])
+            shown = items.summary(con)
+        self.assertEqual(shown["skills"], {"usable": 1, "mentioned": 1})
+
     def test_a_tools_line_in_many_notes_is_no_words_of_their_own(self):
         # thousands of concept stubs each held one long quoted line naming its own concept in bold (2026-11-08)
         stubs = {f"Vault/{name}.md": concept_stub(name) for name in CONCEPTS}

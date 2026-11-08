@@ -79,22 +79,48 @@ class Queue(unittest.TestCase):
         found = check.queue(self.con)
         self.assertEqual([c["field"] for c in found["conflicts"]], ["start"])
 
+    def core_project(self, *tools: str) -> int:
+        """A project worth leading with whose tools are `tools`."""
+        item_id = self.found("project", {"name": "Mill town letters", "tools": list(tools)},
+                             ev(PROJECT, "project", role="own"))
+        tiers.set_tier(self.con, item_id, "core")
+        return item_id
+
     def test_skills_are_grouped_by_the_file_they_rest_on_most(self):
+        self.core_project("Oral history interviewing", "Transcription")
         a = self.skill("Archival research", (MODULE, "notes", ""), (CV, "cv", ""))
         b = self.skill("Oral history interviewing", (PROJECT, "notes", "own"))
         c = self.skill("Transcription", (PROJECT, "notes", "own"), (MODULE, "notes", ""))
-        groups = [(g["source_rel"], [i["id"] for i in g["items"]]) for g in check.queue(self.con)["cards"]]
+        groups = [(g["source_rel"], [i["id"] for i in g["items"]]) for g in check.queue(self.con)["cards"]
+                  if g["type"] == "skills"]
         self.assertEqual(groups, [(PROJECT, [c, b]), (CV, [a])])
 
     def test_skills_only_course_material_names_are_listed_apart_by_name(self):
         flink = self.skill("Stream processing", (MODULE, "notes", "taught"))
         joins = self.skill("Batch joins", (MODULE, "notes", "taught"), (PROJECT, "notes", "taught"))
-        mine = self.skill("Oral history interviewing", (MODULE, "notes", "taught"), (PROJECT, "notes", "own"))
+        mine = self.skill("Oral history interviewing", (MODULE, "notes", "taught"), (CV, "cv", "own"))
         found = check.queue(self.con)
         self.assertEqual([i["id"] for i in found["studied"]], [joins, flink])
         queued = [i["id"] for c in found["cards"] + found["more"] for i in c["items"]]
-        self.assertEqual(queued, [mine], "a skill from the person's own work is asked about as before")
+        self.assertEqual(queued, [mine], "a skill on the person's CV is asked about as before")
         self.assertEqual(found["total"], 1, "studied skills are not counted as left to check")
+
+    def test_a_skill_only_notes_mention_is_folded_apart_until_a_cv_or_a_projects_tools_name_it(self):
+        # a real read gave 2,368 skill cards, most of them words a research note mentioned (2026-11-08)
+        noted = self.skill("Beam logging", (PROJECT, "notes", "own"))
+        tool = self.skill("Tide modelling", (PROJECT, "notes", "own"))
+        found = check.queue(self.con)
+        self.assertEqual([i["id"] for i in found["mentioned"]], [noted, tool])
+        self.assertEqual((found["cards"], found["total"]), ([], 0))
+        self.assertEqual(check.skill_counts(self.con), {"usable": 0, "mentioned": 2})
+        project = self.core_project("tide-modelling")
+        found = check.queue(self.con)
+        self.assertEqual([i["id"] for i in found["mentioned"]], [noted])
+        self.assertEqual([i["id"] for c in found["cards"] if c["type"] == "skills" for i in c["items"]], [tool])
+        tiers.set_tier(self.con, project, "archive")
+        self.assertEqual(check.skill_counts(self.con), {"usable": 0, "mentioned": 2}, "an archived project's tools")
+        store.confirm(self.con, noted)
+        self.assertEqual(check.skill_counts(self.con), {"usable": 1, "mentioned": 1}, "the person's word counts")
 
     def test_the_best_experiences_are_by_tier_then_evidence_then_recency_with_the_archive_apart(self):
         old = self.found("job", {"title": "Lamp porter", "employer": "Glimmerholt Trust", "start": "2018",
@@ -122,8 +148,8 @@ class Queue(unittest.TestCase):
         self.assertEqual(len(check.best(self.con)["best"]), check.BEST_MAX)
 
     def test_weak_skills_and_those_past_the_first_wait_under_show_more(self):
-        weak = self.skill("Palaeography", (MODULE, "notes", ""))
-        strong = [self.skill(f"Made-up method {n:02d}", (PROJECT, "notes", "own"))
+        weak = self.skill("Palaeography", (LETTER, "cv", ""))
+        strong = [self.skill(f"Made-up method {n:02d}", (CV, "cv", "own"))
                   for n in range(check.SKILLS_FIRST + 2)]
         found = check.queue(self.con)
         asked = [i["id"] for c in found["cards"] for i in c["items"]]

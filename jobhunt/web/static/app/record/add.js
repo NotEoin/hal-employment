@@ -182,6 +182,8 @@ export function IngestCard() {
     ${counted(data.categories).length > 0 && html`<div><div class="small sub">What Hal found</div><div class="chips">
       ${counted(data.categories).map(([c, n]) => html`<${Chip} tone="info">${c}: ${n}<//>`)}</div></div>`}
     ${states.length > 0 && html`<p class="small sub rec-line">${states.join(", ")}.</p>`}
+    ${!running && data.skills && data.skills.usable + data.skills.mentioned > 0 && html`<p class="small sub rec-line">
+      ${plural(data.skills.usable, "skill")} you can stand behind (on your CV, checked by you, or a tool of a project worth telling an employer about), and ${plural(data.skills.mentioned, "skill")} only mentioned in your files, folded away on Check your record.</p>`}
     ${data.not_downloaded > 0 && html`<${Note} tone="warn"><b>${plural(data.not_downloaded, "file is", "files are")} not downloaded.</b>
       ${" "}They are kept online only (for example in OneDrive, Dropbox or iCloud), so this computer has an empty copy and Hal cannot read it.
       Download them first (in OneDrive, choose "Always keep on this device"), then add them again.

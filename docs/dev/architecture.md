@@ -1018,7 +1018,14 @@ available yet.
   fewer than two files name and whose evidence has no `role` of "own" ("" is unknown and does not count).
   A skill whose every source has the role `taught` (`store.is_studied`) is in neither: the queue lists it
   under `studied`, which the page shows apart as "Studied in your course" with **I have used this**
-  (confirm); unconfirmed, it never reaches a writing prompt.
+  (confirm); unconfirmed, it never reaches a writing prompt. Only usable skills are queued
+  (`store.is_usable`: on a CV, confirmed, edited or added, or a `merge.skill_key` match for a tool of a
+  project whose tier is core or supporting and that is not hidden, `check.project_tools`); a skill that is
+  not usable and not studied is listed under `mentioned`, which the page folds away as "Mentioned in your
+  files" with the same **I have used this**. Neither reaches a writing prompt unconfirmed (`USED_STATES`),
+  and a confirmed skill is usable. After each read the ingest action stores `check.skill_counts`
+  ({usable, mentioned}, shown skills only) in its result as `skills`, which `items.summary` returns and the
+  Overview shows.
   `GET /api/v2/profile/check` serves it with `done` and `total` for the progress bar, and
   `POST /api/v2/profile/confirm-many` and `/hide-many` {ids} change a group in one transaction with one
   conflicts refresh and one `profile` event. The page is `pages/check.js` (route `check`) with its cards

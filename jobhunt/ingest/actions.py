@@ -2,7 +2,8 @@
 
 After the read, the experiences found twice under different names are merged (`profile.actions.dedupe`), then
 the experiences in the profile are sorted into tiers (`profile.actions.sort`), so the Check your record page
-can show the best ones first.
+can show the best ones first. The result then says how many skills the person can stand behind and how many
+are only mentioned in their files (`profile.check.skill_counts`), which the Overview shows.
 
 Background work (priority 2), one at a time (`exclusive="kind"`), and resumable: after a restart the runner
 starts it again with the same params, and the batch's `ingest_items` rows say what is left. `queue` is how
@@ -18,6 +19,7 @@ from pathlib import Path
 from jobhunt.core import runner
 from jobhunt.ingest import engine, items, privacy, roles
 from jobhunt.profile import actions as profile_actions
+from jobhunt.profile import check
 
 STEPS = engine.STEPS + 2     # the engine's steps, merging the experiences found twice, then sorting them
 
@@ -79,6 +81,11 @@ def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = 
                          ("private", "kept out because they look private")):
         if states.get(state):
             ctx.changed(f"{states[state]} {words}.")
+    # after sorting, as a skill is usable when it is a tool of a core or supporting project
+    out["skills"] = check.skill_counts(ctx.con)
+    if any(out["skills"].values()):
+        ctx.changed(f"{out['skills']['usable']} skills you can stand behind; {out['skills']['mentioned']} only "
+                    "mentioned in your files, folded away on Check your record.")
     return out
 
 

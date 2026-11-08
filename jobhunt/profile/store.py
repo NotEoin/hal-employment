@@ -26,6 +26,9 @@ Design decisions, each with its reason:
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
   apart, under "Studied in your course", and no CV or letter uses it unless the person confirms it.
+- A skill is usable (`is_usable`) when the person can stand behind it: on a CV, checked by them, or a tool
+  of a project worth telling an employer about. The check page asks only about usable skills and folds the
+  rest away as "Mentioned in your files".
 - Fields are checked against the kind's list (`KINDS`): an unknown kind or field raises `ValueError` naming
   it, so an ingest that misreads a document fails loudly instead of storing a field nothing shows.
 - Only items the person added by hand can be deleted; a found item is hidden instead, because deleting it
@@ -609,6 +612,21 @@ def is_studied(item: dict) -> bool:
     """
     return item["kind"] == "skill" and item.get("origin") != "you" and item["state"] in ("hal", "hidden") and \
         bool(item["evidence"]) and all(e.get("role", "") == TAUGHT_ROLE for e in item["evidence"])
+
+
+def is_usable(item: dict, tools: set[str]) -> bool:
+    """True for a skill the person can stand behind: on one of their CVs, checked by them (confirmed, edited
+    or added), or a tool of a project worth telling an employer about (`tools`, as `merge.skill_key` keys).
+
+    A real read gave 2,368 skill cards, most of them words a research note mentioned (2026-11-08); a skill
+    that is none of these is only mentioned in the person's files, and the check page folds it away.
+    """
+    if item["kind"] != "skill":
+        return False
+    if item.get("origin") == "you" or item["state"] in ("confirmed", "edited"):
+        return True
+    return any(merge.doc_group(e["doc_type"]) == "cv" for e in item["evidence"]) or \
+        merge.skill_key(item["fields"].get("name", "")) in tools
 
 
 def is_weak(item: dict) -> bool:

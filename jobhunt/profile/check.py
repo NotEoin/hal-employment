@@ -10,8 +10,11 @@ back later starts where they left off, with nothing to save. It gives:
   ones (`store.is_weak`).
 - `studied`: the skills only course material names (`store.is_studied`), by name, which the page shows
   apart as "Studied in your course": they are not the person's to keep or drop, only to claim.
+- `mentioned`: the other skills the person cannot yet stand behind (`store.is_usable`: not on a CV, not a
+  tool of a core or supporting project), by name, which the page folds away as "Mentioned in your files",
+  each to claim the same way. Only usable skills are asked about one group at a time.
 - `done` and `total`: how many found facts are checked (confirmed, edited or hidden) and how many there are
-  to check in all, leaving out what waits under "Show more" and the studied skills.
+  to check in all, leaving out what waits under "Show more" and the studied and mentioned skills.
 
 Design decisions, each with its reason:
 
@@ -85,7 +88,8 @@ def _with_best(card: dict) -> dict:
 
 
 def queue(con: sqlite3.Connection) -> dict:
-    """What is left to check: {"conflicts", "cards", "more", "studied", "done", "total"} (see the module notes).
+    """What is left to check: {"conflicts", "cards", "more", "studied", "mentioned", "done", "total"} (see the
+    module notes).
 
     A card is {"type": "item" | "skills", "key", "source_rel", "items": [ITEM], "best": [evidence id]}; an
     item card holds one item and a `source_rel` of "", a skills card the file its skills rest on most. `best`
@@ -103,16 +107,37 @@ def queue(con: sqlite3.Connection) -> dict:
             items = sorted(items, key=_basic_order)
         cards += [_with_best({"type": "item", "key": f"item:{i['id']}", "source_rel": "", "items": [i]})
                   for i in items]
-    studied = sorted((i for i in waiting["skill"] if store.is_studied(i)),
-                     key=lambda i: merge.skill_key(i["fields"].get("name", "")))
-    skills = [i for i in waiting["skill"] if not store.is_studied(i)]
+    tools = project_tools(con)
+    skills = [i for i in waiting["skill"] if store.is_usable(i, tools)]
+    apart = sorted((i for i in waiting["skill"] if not store.is_usable(i, tools)),
+                   key=lambda i: merge.skill_key(i["fields"].get("name", "")))
     strong = sorted((i for i in skills if not store.is_weak(i)), key=strength, reverse=True)
     weak = sorted((i for i in skills if store.is_weak(i)), key=strength, reverse=True)
     cards += _groups(strong[:SKILLS_FIRST], "skills")
     more = _groups(strong[SKILLS_FIRST:], "more") + _groups(weak, "weak")
     left = sum(len(c["items"]) for c in cards)
-    return {"conflicts": conflicts.listing(con), "cards": cards, "more": more, "studied": studied, "done": done,
-            "total": done + left}
+    return {"conflicts": conflicts.listing(con), "cards": cards, "more": more,
+            "studied": [i for i in apart if store.is_studied(i)],
+            "mentioned": [i for i in apart if not store.is_studied(i)], "done": done, "total": done + left}
+
+
+USABLE_TIERS = (tiers.CORE, tiers.SUPPORTING)
+
+
+def project_tools(con: sqlite3.Connection) -> set[str]:
+    """The tools of the projects worth telling an employer about (core or supporting, not hidden), as
+    `merge.skill_key` keys, which make a skill one the person can stand behind (`store.is_usable`)."""
+    return {merge.skill_key(t) for p in store.items(con, "project", hidden=False) if p["tier"] in USABLE_TIERS
+            for t in p["fields"].get("tools") or [] if merge.skill_key(t)}
+
+
+def skill_counts(con: sqlite3.Connection) -> dict[str, int]:
+    """How many shown skills the person can stand behind (`usable`) and how many are only mentioned in their
+    files (`mentioned`, course material's included), for a read's summary."""
+    tools = project_tools(con)
+    shown = store.items(con, "skill", hidden=False)
+    usable = sum(store.is_usable(i, tools) for i in shown)
+    return {"usable": usable, "mentioned": len(shown) - usable}
 
 
 # One short sitting: about twenty to thirty cards (2026-11-07); past that the person stops reading.

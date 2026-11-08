@@ -109,15 +109,28 @@ export function SkillsCheck({ card, sub = false }) {
 /** The skills only course material names, kept apart: Hal never writes with them unless the person says they
     used one in their own work. */
 export function StudiedSkills({ items }) {
+  return html`<${SkillsApart} items=${items} cls="rec-check-studied" title="Studied in your course"
+    about="Hal found these only in your course material, such as lecture notes and slides. They show what you studied, so Hal leaves them off your CV and out of your letters." />`;
+}
+
+/** The skills Hal found only in the person's notes and other files, not on a CV, not checked and not a tool of a
+    project worth telling an employer about: folded away, and never used unless the person says they used one. */
+export function MentionedSkills({ items }) {
+  return html`<${SkillsApart} items=${items} cls="rec-check-mentioned" title="Mentioned in your files"
+    about="Your files mention these, for example in notes or plans, but they are not on your CV and not tools of a project Hal would tell an employer about. Hal leaves them off your CV and out of your letters." />`;
+}
+
+/** A folded list of skills kept apart, each with "I have used this", which confirms it. */
+function SkillsApart({ items, cls, title, about }) {
   const [busy, setBusy] = useState(false);
   const claim = async it => {
     setBusy(true);
     await act(() => post("/profile/items/" + encodeURIComponent(it.id) + "/confirm"), "Thanks. Hal can use " + it.title + " now.");
     setBusy(false);
   };
-  return html`<details class="rec-hidden rec-check-studied">
-    <summary>Studied in your course (${items.length} ${items.length === 1 ? "skill" : "skills"})</summary>
-    <p class="small sub rec-line">Hal found these only in your course material, such as lecture notes and slides. They show what you studied, so Hal leaves them off your CV and out of your letters. If you have used one in your own work, press <b>I have used this</b>.</p>
+  return html`<details class=${"rec-hidden " + cls}>
+    <summary>${title} (${items.length} ${items.length === 1 ? "skill" : "skills"})</summary>
+    <p class="small sub rec-line">${about} If you have used one in your own work, press <b>I have used this</b>.</p>
     <ul class="rec-check-studied-list">${items.map(it => html`<li key=${it.id}>
       <span>${it.title}</span>
       <button type="button" class="btn small" disabled=${busy} aria-label=${"I have used this: " + it.title} onClick=${() => claim(it)}>I have used this</button></li>`)}</ul>

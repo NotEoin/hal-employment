@@ -67,13 +67,15 @@ Routes:
   returns CONFLICT, now resolved.
 - `GET /api/v2/profile/check`: the best experiences (`check.best`) and the Check your record queue
   (`check.queue`): {"best": [ITEM], "archived": [ITEM], "conflicts": [NAMED_CONFLICT],
-  "cards": [CARD], "more": [CARD], "studied": [ITEM], "merged": [{"item": ITEM, "merged": [ITEM]}],
+  "cards": [CARD], "more": [CARD], "studied": [ITEM], "mentioned": [ITEM],
+  "merged": [{"item": ITEM, "merged": [ITEM]}],
   "done": n, "total": n}. A card (`CARD`) is
   {"type": "item" | "skills", "key", "source_rel", "file_id", "items": [ITEM], "best": [evidence id]}: an item
   card holds one item and no file (`source_rel` "", `file_id` null); a skills card holds the skills that rest
   most on one file. `best` gives, for each item, the id of the source whose quote to show.
   `more` is what the page keeps under "Show more"; `studied` the skills only course material names
-  (`store.is_studied`), shown apart; `merged` each card Hal merged others into after a read
+  (`store.is_studied`), shown apart; `mentioned` the other skills that are not on a CV, checked or a tool of a
+  core or supporting project (`store.is_usable`), folded away; `merged` each card Hal merged others into after a read
   (`duplicates.listing`), with the cards hidden into it; `done` of `total` is the progress bar.
 - `POST /api/v2/profile/items/{id}/unmerge`: takes the cards Hal merged into this one back out, as they were,
   and Hal never merges them on its own again (`duplicates.undo`); ITEM. A card Hal merged nothing into is
@@ -144,6 +146,7 @@ def check_queue(req: Request) -> dict:
     return {"best": [with_files(i) for i in top["best"]], "archived": [with_files(i) for i in top["archived"]],
             "conflicts": named(req.con, found["conflicts"]), "cards": _cards(found["cards"]),
             "more": _cards(found["more"]), "studied": [with_files(i) for i in found["studied"]],
+            "mentioned": [with_files(i) for i in found["mentioned"]],
             "merged": [{"item": with_files(m["item"]), "merged": [with_files(i) for i in m["merged"]]}
                        for m in duplicates.listing(req.con)],
             "done": found["done"], "total": found["total"]}

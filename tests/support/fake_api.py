@@ -225,7 +225,7 @@ MADE_UP_PROFILE_CHECK = {
                "best": [4]},
               {"type": "skills", "key": "skills:" + PROFILE_CV, "source_rel": PROFILE_CV,
                "file_id": _SKILL["evidence"][0]["file_id"], "items": [_SKILL], "best": [3]}],
-    "more": [], "studied": [], "merged": [], "done": 2, "total": 5}
+    "more": [], "studied": [], "mentioned": [], "merged": [], "done": 2, "total": 5}
 
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
@@ -327,7 +327,8 @@ MADE_UP_PAGES = {
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
                        "not_downloaded_paths": [], "not_mine": 0, "not_mine_paths": [], "errors": [],
-                       "left_out": {}, "by_rules": 0, "again": False, "tidy": False, "private": []},
+                       "left_out": {}, "by_rules": 0, "again": False, "tidy": False, "private": [], "skipped": {},
+                       "skills": {}},
     "/profile": MADE_UP_PROFILE,
     **MADE_UP_PROFILE_KINDS,
     "/profile/check": MADE_UP_PROFILE_CHECK,
