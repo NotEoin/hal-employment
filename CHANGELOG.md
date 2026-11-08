@@ -191,6 +191,11 @@ What changed in each version, in plain words.
   your portfolio site's card, under the portfolio's name. A site's front page and the website in your
   settings no longer tie two projects together; a link to a page of its own still does. Tidy my record
   takes apart projects merged this way, each with its own name and tools.
+- **A research folder is one project again.** In a project folder whose notes each named a few of its
+  tickets and write-ups, every ticket became a project card once more, because a note naming three or more
+  was taken as a list of projects. Now a name in such a folder stays a project of its own only when Hal
+  knows that project from outside the folder (its own folder or repository, another file, or your CV);
+  the rest are part of the folder's project, at reading and when you tidy your record.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

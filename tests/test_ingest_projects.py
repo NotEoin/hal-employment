@@ -3,6 +3,7 @@
 Every test builds a made-up workspace in its own temporary home; the AI is the fake one, which names a project
 after each file it reads, as a real read named one after each ticket and write-up (2026-11-08).
 """
+import contextlib
 import json
 import re
 import unittest
@@ -59,7 +60,7 @@ def naming(projects: dict[str, list[str]]):
 REPOS = {"LIDAR Autonomous Navigation": "Lidar-Autonavigation-System", "Voice Interface": "parrot-voice",
          "Network Packet Sniffer": "wifi-sniffer", "Drone Autopilot": "px-autopilot-tuner",
          "Desktop Companion": "hatch-desktop", "Archivist Bot": "chat-archivist",
-         "Lecture Downloader": "slide-grabber", "Notebook Package": "nbtools-kit"}
+         "Lecture Downloader": "lecture-grabber", "Notebook Package": "notebook-kit"}
 THESIS = "Tidal Energy Forecasting"
 
 
@@ -120,20 +121,24 @@ class ProjectFolders(unittest.TestCase):
                         "a note about a project with its own unit speaks for that one")
         self.assertIn("Lantern counter", cards)
 
-    def test_a_document_listing_three_or_more_projects_keeps_each_projects_own_card(self):
-        listed = ["Tide clock", "Wick sensor", "Beam log", "Harbour lights survey"]
+    def test_a_dossier_listing_projects_with_their_own_repositories_keeps_each_projects_own_card(self):
         portfolio = {"Portfolio/README.md": "# Portfolio\n\nMy portfolio.",
                      "Portfolio/Project dossier.md": "# Project dossier\n\nEvery project I have made.",
                      "Portfolio/Next steps.md": "# Next steps\n\nPolish the portfolio."}
-        with home() as (con, _vault, files), fake_ai({"ingest_doc": naming({"Project dossier": listed})}):
+        reply = naming({"Project dossier": [*REPOS, "Portfolio redesign"]})
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": reply}):
             settings.set("you.name", OWNER)
             settings.set("record.read_all", True)
+            for name, repo in REPOS.items():
+                put(files, f"Code/{repo}/pyproject.toml", f"[project]\nname = \"{repo}\"\n")
+                put(files, f"Code/{repo}/README.md", f"# {repo}\n\nMy {name.lower()}.")
+            run(con, [files / "Code"], batch="b0", origins={str(files / "Code"): "mine"})
             for rel, text in portfolio.items():
                 put(files, rel, text)
             run(con, [files / "Portfolio"], origins={str(files / "Portfolio"): "mine"})
             cards = project_cards(con)
-        self.assertEqual(sorted(cards), sorted([*listed, "Portfolio"]),
-                         "a dossier lists projects, as a CV does; a note about the folder's own work is its card")
+        self.assertLessEqual({*REPOS, "Portfolio"}, set(cards), "each project with its own repository keeps its card")
+        self.assertNotIn("Portfolio redesign", cards, "a name known nowhere else is the portfolio's own")
 
     def test_a_note_naming_a_repositorys_project_in_other_words_keeps_its_own_name(self):
         repo = {"Lidar-Autonavigation-System/pyproject.toml": "[project]\nname = \"lidar-autonav\"\n",
@@ -232,8 +237,8 @@ class Tidy(unittest.TestCase):
             if not con.execute("SELECT 1 FROM profile_evidence WHERE item_id = ?", (e["item_id"],)).fetchone():
                 store.fold_away(con, e["item_id"], portfolio, "Part of Portfolio")
         store.merge_into(con, portfolio, cards[THESIS]["id"], duplicates.MERGED + THESIS)
-        store.merge_into(con, cards["slide-grabber"]["id"], cards["nbtools-kit"]["id"],
-                         duplicates.MERGED + "nbtools-kit")
+        store.merge_into(con, cards["lecture-grabber"]["id"], cards["notebook-kit"]["id"],
+                         duplicates.MERGED + "notebook-kit")
 
     def test_tidying_takes_apart_a_portfolio_whose_dossier_folded_every_project_into_one_card(self):
         files_in = {"Portfolio/README.md": "# Portfolio\n\nWhere I keep my portfolio.",
@@ -258,7 +263,7 @@ class Tidy(unittest.TestCase):
             after = shown_projects(con)
             portfolio = after.get("Portfolio", {"evidence": []})
         self.assertNotIn("Voice Interface", before, "the older rules hid the dossier's projects")
-        self.assertLessEqual(set(REPOS) | {THESIS, "Portfolio", "slide-grabber"}, set(after),
+        self.assertLessEqual(set(REPOS) | {THESIS, "Portfolio", "lecture-grabber"}, set(after),
                              "each project is a card again, and the portfolio is not the dissertation")
         self.assertNotIn("Project dossier.md", [e["source_rel"].rsplit("/", 1)[-1] for e in portfolio["evidence"]])
 
@@ -280,6 +285,39 @@ class Tidy(unittest.TestCase):
             after = shown_projects(con)
         self.assertGreater(len(before), TICKETS, "the older read made a card of each ticket")
         self.assertEqual(sorted(after), ["Beacon app", "Probe study"], "the CV's project stays; the tickets fold")
+
+    def read_tickets(self, con, files, older: bool) -> None:
+        """Reads a made-up research folder of `TICKETS` notes, each naming three of its tickets, as a real
+        folder's notes named a few tickets and write-ups each (2026-11-08); with `older`, as an older read did,
+        finding no project folder."""
+        tickets = {f"Probe study/tickets/PRB-{n:03d}.md": f"# PRB-{n:03d}\n\nCalibrate step {n}."
+                   for n in range(1, TICKETS + 1)}
+        names = {f"PRB-{n:03d}": [f"PRB-{n + k:03d} probe step" for k in range(3)] for n in range(1, TICKETS + 1)}
+        settings.set("you.name", OWNER)
+        settings.set("record.read_all", True)
+        for rel, text in {"Probe study/README.md": "# Probe study\n\nMy research on a salinity probe.",
+                          **tickets}.items():
+            put(files, rel, text)
+        no_folders = mock.patch.object(group, "projects", return_value=set()) if older else contextlib.nullcontext()
+        with fake_ai({"ingest_doc": naming({**names, "README": ["Probe study"]})}), no_folders:
+            run(con, [files], origins={str(files): "mine"})
+
+    def test_a_research_folder_whose_notes_each_name_three_tickets_is_one_card(self):
+        with home() as (con, _vault, files):
+            self.read_tickets(con, files, older=False)
+            cards = project_cards(con)
+        self.assertEqual(sorted(cards), ["Probe study"], "naming many tickets does not make them projects")
+
+    def test_tidying_folds_a_research_folder_whose_notes_each_name_three_tickets(self):
+        with home() as (con, _vault, files):
+            self.read_tickets(con, files, older=True)
+            before = project_cards(con)
+            with fake_ai({}):
+                run(con, [], batch="t", tidy=True)
+                duplicates.refresh(con)
+            after = shown_projects(con)
+        self.assertGreater(len(before), TICKETS, "the older read made a card of each ticket")
+        self.assertEqual(sorted(after), ["Probe study"])
 
     def test_tidying_takes_apart_two_projects_an_older_read_merged_by_the_persons_site(self):
         # CV lines ending "Write-ups at <the person's site>" gave a flagship project the site's front page as its

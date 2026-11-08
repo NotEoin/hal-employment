@@ -9,13 +9,16 @@ repository, not a collection of projects). This module gives each its name, its 
   write-up is evidence of the one project card, never a card of its own. The README keeps its summary, role
   and dates too, as it says what the whole project is. Notes inside still give skills and quotes. A real
   research workspace gave about 180 project cards, one per ticket and write-up (2026-11-08).
-- A document that lists projects keeps its project facts as they are: a CV, letter or transcript
-  (`LISTS_PROJECTS`), and any document whose project facts name three or more projects
-  (`merge.lists_projects`), such as a dossier or plan describing all the person's work. A portfolio folder's
-  dossier gave its card ten other projects' facts (2026-11-08).
+- A CV, letter or transcript (`LISTS_PROJECTS`) keeps its project facts as they are, as it lists the
+  person's projects wherever it is kept.
 - So does a fact whose project is plainly another one of the person's (`Others`): a card a file outside the
-  folder speaks for, a repository or another project folder, matched by a close name or a distinctive word
-  the names share, as a note names a repository's project in its own words.
+  folder, a CV, letter or transcript, or the person speaks for, a repository or another project folder,
+  matched by a close name or a distinctive word the names share, as a note names a repository's project in
+  its own words. A portfolio folder's dossier gave its card ten other projects' facts (2026-11-08).
+- Any other name folds into the folder's project, even in a document that names three or more projects
+  (`merge.lists_projects`): a research folder's 150 notes each named a few of its tickets and write-ups and
+  gave 150 cards again (2026-11-08). Listing many names says nothing about whether they are projects of
+  their own; being known outside the folder does.
 - `note_units` names the repository or project folder each note belongs to, so `profile.duplicates` never
   merges two projects that each hold one.
 - Each folder gets one note (`write_notes`) listing its files' notes, which link back to it under "Part of",
@@ -108,9 +111,10 @@ def _distinctive(word: str, acronym: bool) -> bool:
 
 class Others:
     """The person's other projects, as seen from one project folder: every project card some file outside the
-    folder speaks for (or the person checked or added), with the names of the cards Hal merged into it
-    (`profile.duplicates`), each repository and each other project folder. A card only the folder's own files
-    speak for, such as a ticket an older read made a card of, is not one of them.
+    folder, or a CV, letter or transcript, speaks for (or the person checked or added), with the names of the
+    cards Hal merged into it (`profile.duplicates`), each repository and each other project folder. A card
+    only the folder's other files speak for, such as a ticket an older read made a card of, is not one of
+    them, however many projects those files name.
 
     `names(name, own)` is True when a project fact named `name` read inside the folder whose project is `own`
     is about one of them: close to one of their names (`merge.same_item`, `merge._name_close`), or sharing a
@@ -131,7 +135,6 @@ class Others:
         from jobhunt.profile import duplicates, merge
 
         start = str(folder) + os.sep
-        listings = duplicates.listing_files(con)
         cards: dict[int, dict] = {}
         for r in con.execute("""SELECT i.id, i.fields, i.state, i.origin, i.merged_into, i.merged_why,
                                 e.source_rel, e.doc_type, r.path FROM profile_items i
@@ -140,11 +143,11 @@ class Others:
                                 AND r.kind IN ('file', 'repo') WHERE i.kind = ?""", (KIND,)):
             card = cards.setdefault(r["id"], {"name": json.loads(r["fields"]).get("name", ""), "known": False,
                                               "into": r["merged_into"], "why": r["merged_why"]})
-            # a file outside the folder (or one no read filed, such as a CV given another way), a file listing
-            # projects, or the person, says the card is a project of its own
+            # a file outside the folder (or one no read filed, such as a CV given another way), a CV, letter or
+            # transcript, or the person, says the card is a project of its own; a note inside naming many
+            # tickets does not (2026-11-08)
             card["known"] = card["known"] or (r["state"] in CHECKED or r["origin"] != "found") or (
                 r["source_rel"] is not None and (r["path"] is None or not r["path"].startswith(start)
-                                                 or r["source_rel"] in listings
                                                  or merge.doc_group(r["doc_type"]) in LISTS_PROJECTS))
         groups = {i: [c["name"]] for i, c in cards.items() if c["into"] is None and c["known"]}
         for c in cards.values():
@@ -190,18 +193,14 @@ def _is_top(path: Path, folder: Path) -> bool:
     return path.parent == folder and discover.has_readme([path.name])
 
 
-def _names(facts: list[dict]) -> list[str]:
-    return [str(f["fields"].get("name") or "") for f in facts if f["kind"] == KIND]
-
-
 def facts_in(con: sqlite3.Connection, row: sqlite3.Row | dict, desc: dict) -> list[dict]:
     """The document's facts, its project facts as facts about the project folder it is in (`redirect`), unless
-    the document lists projects (`LISTS_PROJECTS`, or `merge.lists_projects`)."""
+    it is a CV, letter or transcript (`LISTS_PROJECTS`)."""
     from jobhunt.profile import merge
 
     facts = desc["facts"]
     if row["kind"] != "file" or merge.doc_group(desc["doc_type"]) in LISTS_PROJECTS \
-            or not any(f["kind"] == KIND for f in facts) or merge.lists_projects(_names(facts)):
+            or not any(f["kind"] == KIND for f in facts):
         return facts
     units = _units(con)
     path = Path(row["path"])
@@ -375,13 +374,12 @@ def fold_cards(con: sqlite3.Connection) -> int:
     folder's project card (`facts_in`), and hides each card Hal found that is left with nothing, as part of
     that project; first it takes apart what older rules folded and merged (`take_apart`). Returns how many
     cards were folded."""
-    from jobhunt.profile import duplicates, merge, store
+    from jobhunt.profile import merge, store
 
     take_apart(con)
     units = _units(con)
     if not units:
         return 0
-    listings = duplicates.listing_files(con)
     others: dict[Path, Others] = {}
     paths = {r["note"]: Path(r["path"]) for r in con.execute(
         "SELECT note, path FROM ingest_items WHERE kind = 'file' AND state = 'done' AND note IS NOT NULL")}
@@ -391,7 +389,7 @@ def fold_cards(con: sqlite3.Connection) -> int:
                             AND i.origin = 'found' ORDER BY e.id""", (KIND,)).fetchall():
         path = paths.get(e["source_rel"])
         folder = group.project_of(path, set(units)) if path is not None else None
-        if folder is None or merge.doc_group(e["doc_type"]) in LISTS_PROJECTS or e["source_rel"] in listings:
+        if folder is None or merge.doc_group(e["doc_type"]) in LISTS_PROJECTS:
             continue
         said = json.loads(e["said"] or "{}")
         name = units[folder]

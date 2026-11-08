@@ -763,13 +763,15 @@ runner starts the action again with the same batch and only pending items are re
    one by one, but `projects.facts_in` (called by `engine._judge`) turns each project fact read in one
    into a fact about the folder's project: named from the README's first heading or the folder
    (`projects.name_of`), keeping only tools and links (and the README's summary, role and dates). A CV,
-   letter or transcript keeps its project facts, and so does a document whose project facts name
-   `merge.LISTING_NAMES` (3) or more projects (`merge.lists_projects`), such as a dossier of all the
-   person's work. A fact also keeps its name when it is about another of the person's projects
-   (`projects.Others`): a card a file outside the folder, a listing or the person speaks for (with the names
-   of cards merged into it), a repository or another project folder, matched by `merge.same_item`,
+   letter or transcript keeps its project facts. Any other fact keeps its name only when it is about
+   another of the person's projects (`projects.Others`): a card a file outside the folder, a CV, letter or
+   transcript, or the person speaks for (with the names of cards merged into it), a repository or another
+   project folder, matched by `merge.same_item`,
    `merge._name_close` or a distinctive word only that one name shares (an acronym, or a word of
-   `projects.DISTINCT_MIN` (5) or more letters not in `projects.GENERIC_WORDS`). `projects.write_notes` writes the folder's note listing its files' notes, which
+   `projects.DISTINCT_MIN` (5) or more letters not in `projects.GENERIC_WORDS`). A document naming
+   `merge.LISTING_NAMES` (3) or more projects inside the folder follows the same rule, so a dossier keeps
+   the projects that have their own repositories while a research note naming three of the folder's tickets
+   adds them to the folder's card. `projects.write_notes` writes the folder's note listing its files' notes, which
    link back under "Part of", and supporting files attach to it. A `course` origin never makes one. A
    folder outside any project folder whose own files are mostly notes or slides (three or more) is a
    `course` unit: a note per file
