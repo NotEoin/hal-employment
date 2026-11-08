@@ -194,5 +194,48 @@ class Picks(unittest.TestCase):
         self.assertEqual([i.text for i in items], ["We measured the river at three sites"])
 
 
+class Stories(unittest.TestCase):
+    """One piece of work is one paragraph, told once: drafts retold one project in several paragraphs in 10 of
+    15 graded packs (2026-11-08)."""
+
+    def setUp(self):
+        found = plan.sources(FACTS, KEPT, [{**TIDE, "quotes": ["Tide gauge has logged since 2024"]}, FERRY])
+        self.items = plan.checked({"evidence": [
+            {"source": "S2", "quote": "wrote the statistics features of a timetable app", "use": "the reports"},
+            {"source": "S6", "quote": "A logger in Lua that records river levels", "use": "sensor data"},
+            {"source": "S3", "quote": "Volunteer guide at a made-up heritage centre"},
+            {"source": "S5", "quote": "Skill: Lua"},
+            {"source": "S4", "quote": "Tide gauge. Logs river levels"}]}, found)
+        self.stories = plan.stories(self.items, [{**TIDE, "quotes": ["Tide gauge has logged since 2024"]}, FERRY])
+
+    def test_a_cards_items_are_one_story_and_a_skills_list_is_none(self):
+        self.assertEqual([s.key for s in self.stories], ["Ferry planner", "Tide gauge", "CV E3"])
+        tide = self.stories[1]
+        self.assertEqual(tide.facts, ("A logger in Lua that records river levels", "Tide gauge. Logs river levels",
+                                      "Tide gauge has logged since 2024"), "its items first, then its own quotes")
+        self.assertEqual((tide.where, tide.use, tide.tools), ("personal project", "sensor data", ("Lua",)))
+
+    def test_a_story_reads_as_plain_sentences_under_its_name(self):
+        ferry = self.stories[0].block()
+        self.assertEqual(ferry, "Project: Ferry planner\nWhere it was done: university team project\nYour part: built "
+                                "the statistics features; team of 7\nWhat it is: A timetable app built by a team of "
+                                "7.\nTools: Python, Flask\nFacts:\n- wrote the statistics features of a timetable app"
+                                "\nWhat it can help with in this job: the reports")
+        self.assertEqual(self.stories[2].block(), "Evidence (no name of its own)\nFacts:\n- Volunteer guide at a "
+                                                  "made-up heritage centre")
+
+    def test_each_draft_prefers_work_the_pack_has_not_told(self):
+        used: dict[str, int] = {}
+        letter = plan.choose(self.stories, plan.LETTER_STORIES, used)
+        self.assertEqual([s.key for s in letter], ["Ferry planner", "Tide gauge", "CV E3"])
+        first = plan.choose(self.stories, 1, used)
+        second = plan.choose(self.stories, 1, used)
+        self.assertEqual([first[0].key, second[0].key], ["Ferry planner", "Tide gauge"])
+
+    def test_a_question_asking_for_examples_gets_two_pieces_of_work(self):
+        self.assertEqual(plan.examples_wanted("Give two examples of times when you solved a problem."), 2)
+        self.assertEqual(plan.examples_wanted("Tell us about a project you are proud of."), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

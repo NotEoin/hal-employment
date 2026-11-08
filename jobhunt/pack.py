@@ -64,9 +64,11 @@ from .writing import (
     eligibility,
     fields,
     flow,
+    frame,
     grounded,
     motive,
     opening,
+    paragraphs,
     plain,
     relocation,
     repeats,
@@ -132,11 +134,8 @@ REVISED = "Hal revised it once for its writing rules. "   # before the Checked l
 SOFTENED = "Hal rewrote it once to take out claims your facts do not support. "   # ... when it made such claims
 CUT_NOTE = "Your last reply stopped mid-sentence. Write the whole draft again, and end it with a full sentence."
 ROOM_CTX = 16384          # tokens for the second ask after a cut-off reply, as for the CV score and critique
-# The letter and the message are drafted cooler than other prose (0.7, `ai.openai_compat.PROSE_TEMPERATURE`): at
-# 0.7 a local model added plausible details to fit the advert in every graded run (2026-11-07), and 0.4 still
-# leaves two drafts of one letter different enough to be worth comparing (`LETTER_DRAFTS`). The Claude CLI
-# takes no temperature, so there it changes nothing.
-DRAFT_TEMPERATURE = 0.4
+# The letter and the message are drafted cooler than other prose, as each paragraph is (`writing.paragraphs`).
+DRAFT_TEMPERATURE = paragraphs.DRAFT_TEMPERATURE
 # Letters drafted independently, the one with the fewest sentences still failing kept (`write_letter`); the
 # second is skipped when the first needed no rewrite, as it could only tie. Two keep a pack within a few
 # minutes on a local model: each draft adds one call and a call per sentence checked (`tests/test_pack.py`
@@ -631,6 +630,60 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], 
                 "sending: see Check before sending.")}
 
 
+def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, kept: str,
+                    found: list[planning.Story], cards: list[dict], request: str = "",
+                    kind: str = "letter") -> paragraphs.Scope:
+    """What each paragraph of one job's `kind` of draft is drafted with and checked against beside its own story
+    (`writing.paragraphs`): the job and its advert, today, the field's conventions, the employer's words, every
+    story and card, and the person's names, modules and settings wording."""
+    now, advert = stage.current(), _job_text(job)
+    context = (f"The job: {job['title']} at {job['company']}\nThe advert (for what the job is; never copy its "
+               f"words):\n{advert[:paragraphs.ADVERT_CHARS]}\n\n{stage.today_lines(now)}\n\n"
+               + fields.block(field_of(job, who, analysis), kind))
+    return paragraphs.Scope(tuple(found), tuple(cards), tuple(known_tools(cards)),
+                            f"{advert}\n{about}\n{stage.today_lines(now)}", advert, about,
+                            (job["title"], job["company"]), now, tuple(profile_writing.module_names()), (facts, kept),
+                            tuple(applicant_names(who)), tuple(plain.settings_labels()), who, context.strip(), request)
+
+
+def letter_frame(who: dict, job, scope: paragraphs.Scope, pairing: motive.Pairing | None,
+                 told: tuple[str, ...]) -> frame.Facts:
+    """The fixed facts of a letter's opening and closing: the person's name and course (`opening.described`), the
+    role, the reason for this employer and the names of the work the middle tells."""
+    name = str(who.get("name") or "")
+    now = scope.now or stage.current()
+    return frame.Facts("" if name == SOMEONE else name, opening.described(now), job["title"], job["company"],
+                            pairing, told, now.institution)
+
+
+def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, kept: str, facts: str,
+                  plan: list[planning.Item], pairing: motive.Pairing | None) -> dict:
+    """A letter told one piece of work a paragraph (`writing.paragraphs`): up to `plan.LETTER_STORIES` stories,
+    each drafted from its own facts and checked against them, between an opening and a closing drafted from the
+    fixed facts of who is writing, the role and the reason for this employer (`letter_frame`, `writing.frame`)."""
+    bodies = [paragraphs.settle(s, paragraphs.LETTER, scope)
+              for s in planning.choose(list(scope.stories), planning.LETTER_STORIES, {})]
+    told = tuple(b.story.name for b in bodies if b.text and b.story.name)
+    facts_said = letter_frame(who, job, scope, pairing, told)
+    framed = frame.settle(facts_said, scope)
+    cards = list(scope.cards)
+    text = "\n\n".join(p for p in (framed.opening, *(b.text for b in bodies), framed.closing) if p)
+    letter = plain.tidy(relocation.without_own_move(text, eligibility.person(con)), cards)
+    flags = check_drafts(who, letter, facts=facts, kept=kept, sources=(scope.advert, scope.brief, facts_said.words(),
+                                                                       scope.allowed), claims=[])
+    flags += [b.listed for b in bodies if b.dropped]
+    flags += [f"{DANGLING_FLAG}: {s}" for s in flow.dangling(letter)]
+    if flow.short(letter, who.get("letter_words")):
+        flags.append(SHORT_FLAG.format(n=flow.word_count(letter), words=who["letter_words"]))
+    softened = any(b.redrafted or b.cut for b in bodies) or framed.redrafted
+    shown = [_item_note(i, cards) for i in plan]
+    shown = [e for e in (drafts.evidence_checked(s, cards, known_tools(cards), facts)[0] for s in shown) if e]
+    return {"text": letter, "flags": flags, "used": passages(kept), "revised": False, "softened": softened,
+            "plan": plan, "pairing": pairing, "told": [b.story.key for b in bodies if b.text],
+            "calls": framed.calls + sum(b.calls for b in bodies),
+            "notes": letter_notes(who, letter, shown, flags, softened=softened)}
+
+
 def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = None, about: str = "",
                  kept: str | None = None, fit: dict | None = None, request: str = "",
                  plan: list[planning.Item] | None = None) -> dict:
@@ -639,7 +692,8 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
     the fit map made and the evidence plan picked (`evidence_plan`), each unless given, then the letter and its
     checks. `request` holds the person's own words when they asked for a rewrite. Its reason for the employer
-    comes from a motivation pairing (`writing.motive`), or it gives none. The letter cites the plan's
+    comes from a motivation pairing (`writing.motive`), or it gives none. When the plan tells any piece of work
+    (`plan.stories`), the letter is one paragraph per piece of work (`_story_letter`). Otherwise it cites the plan's
     items (`writing.cites`), each sentence is checked against its own (`settle`), and when the first draft
     needed a rewrite a second is drafted and the better kept (`LETTER_DRAFTS`, `grounded.Grounded.key`); its
     markers are taken out before it is returned.
@@ -652,6 +706,12 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept)
     names = (job["title"], job["company"])
     pairing = motive.make(names, _job_text(job), about, plan)
+    cards = profile_writing.cards()
+    found = planning.stories(plan, cards)
+    if found:
+        scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
+                                request=request, kind="letter")
+        return _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     text += _plan_part(plan) + (f"\n\n{motive.block(pairing)}" if plan else "")
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")

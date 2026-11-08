@@ -60,10 +60,29 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "sentence_check": "Check one sentence", "sentence_fix": "Rewrite one sentence",
     "paragraph_check": "Check the numbered sentences",
     "pairing": "Find the applicant's own reason", "smooth": "Rewrite one paragraph",
-    "add": "Write one more paragraph",
+    "add": "Write one more paragraph", "story": "Write one paragraph of", "frame": "Write the first and the last",
+    "paragraph_verify": "Check one paragraph",
 }
 WAIT_S = 10.0
 POLL_S = 0.05
+
+
+def story_paragraph(user: str) -> str:
+    """What a careful writer makes of a paragraph request: its work named, then each fact it was given, in turn."""
+    head = user.split("\n\n")[1].splitlines() if "\n\n" in user else []
+    name = next((line.split(": ", 1)[1].split(" (", 1)[0] for line in head
+                 if line.startswith(("Project: ", "Job: "))), "")
+    facts = [line[2:].rstrip(".") for line in head if line.startswith("- ")]
+    said = [f"I worked on {name}." if name else "I did this work myself."]
+    said += [f"What I remember best about this work is this: {f}." for f in facts[:2]]
+    return " ".join(s for s in said if s) or "I did made-up work."
+
+
+def frame_opening(user: str) -> str:
+    """The opening a careful writer makes of a frame request: who is writing and the role, as given."""
+    who = user.split("Who is writing: ", 1)[1].split("\n", 1)[0]
+    role = user.split("The role: ", 1)[1].split("\n", 1)[0]
+    return f"I am {who}. I am applying for the {role.split(' at ', 1)[0]} role."
 
 
 def prompt_id(system: str) -> str:
@@ -115,6 +134,12 @@ class FakeWriter:
             return self.pairing
         if pid in ("smooth", "add"):
             return {"paragraph": ""}
+        if pid == "story":
+            return {"paragraph": story_paragraph(user)}
+        if pid == "frame":
+            return {"opening": frame_opening(user), "closing": "I would welcome the chance to talk about the role."}
+        if pid == "paragraph_verify":
+            return {"supported": True, "unsupported": [], "context_ok": True, "role_ok": True}
         if pid == "contacts_pick":
             return {"picks": [{"n": 1, "why": "Leads the team that is hiring.", "sure": True}]}
         if pid == "prep":
@@ -130,7 +155,8 @@ class FakeWriter:
 
     def chat_json(self, system: str, user: str, **kw) -> dict:
         out = self.reply(system, user)
-        self.log.append({"id": prompt_id(system), "system": system, "user": user, "reply": json.dumps(out)})
+        self.log.append({"id": prompt_id(system), "system": system, "user": user, "reply": json.dumps(out),
+                         "temperature": kw.get("temperature")})
         return json.loads(json.dumps(out))
 
     def asked(self, pid: str) -> list[dict]:
@@ -474,19 +500,13 @@ CITED = "My dissertation was on river trade in an invented port town [E1]. I wou
 
 
 class MarkedWriter(FakeWriter):
-    """A fake writer that cites the evidence plan as the prompts ask; `first` is each letter's first draft, or
-    the drafts in turn when it is a list."""
+    """A fake writer that cites the evidence plan in the message and the answers as their prompts ask."""
 
-    def __init__(self, first: str | list[str] = CITED):
+    def __init__(self):
         super().__init__(plan=PICKS)
-        self.first = first
 
     def reply(self, system: str, user: str) -> object:
         pid = prompt_id(system)
-        if pid == "letter":
-            if "Your draft:" in user:
-                return CITED
-            return self.first.pop(0) if isinstance(self.first, list) else self.first
         if pid == "message":
             return "Hello,\n\nI guided visitors at a made-up heritage centre [E2]. What does the team catalogue [M]?"
         if pid == "answers":
@@ -495,140 +515,227 @@ class MarkedWriter(FakeWriter):
         return super().reply(system, user)
 
 
-# A pack whose drafts need no fix, of the size a letter, a message and three answers have: a letter of four
-# paragraphs and eight sentences, a message of two paragraphs and three answers of two or three sentences.
-FULL_LETTER = ("I am writing about the Collections Assistant post [M].\n\n"
-               "My dissertation was on river trade in an invented port town [E1]. It drew on letters between "
-               "merchants of that town [E1]. Writing it taught me to sort a mass of sources into a clear account "
-               "[E1].\n\n"
-               "I also kept a made-up note about guiding visitors [E2]. Guiding them showed me how people meet "
-               "old objects [E2]. Their questions shaped how I explained each room [E2].\n\n"
-               "I would welcome the chance to talk about the role [M].")
-FULL_MESSAGE = ("Hello,\n\nMy studies of an invented port town's trade led me to archives [E1]. Visitors I guided "
-                "asked about the river most often [E2].\n\nWhat does the team catalogue first [M]?")
-FULL_ANSWERS = [
-    "I would like to look after your collections [M]. My dissertation used such letters [E1]. I would "
-    "like to keep them in order [M].",
-    "My guiding note shows I can explain sources to the public [E2]. My dissertation shows I can read them "
-    "closely [E1].",
-    "I enjoy work where accuracy matters [M]. Sorting merchants' letters for my dissertation needed care [E1]."]
-
-
-class FullWriter(MarkedWriter):
-    """A marked writer whose letter, message and answers are of a real pack's size, and need no fix."""
-
-    def reply(self, system: str, user: str) -> object:
-        pid = prompt_id(system)
-        if pid == "letter":
-            return FULL_LETTER
-        if pid == "message":
-            return FULL_MESSAGE
-        if pid == "answers":
-            return {"answers": [{"question": q, "answer": a} for q, a in zip(
-                ["Why this role?", *pack.COMMON_QUESTIONS], FULL_ANSWERS, strict=True)]}
-        return super().reply(system, user)
-
-
 class Cited(unittest.TestCase):
-    def test_every_draft_cites_the_plan_and_is_shown_without_its_markers(self):
+    def test_the_message_and_answers_cite_the_plan_and_are_shown_without_their_markers(self):
         writer = MarkedWriter()
         with as_applicant(people.HUMANITIES, writer) as a:
             job = add_job(a.con, "humanities_grad")
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         self.assertEqual(len(writer.asked("plan")), 1, "one plan for the letter, the message and the answers")
-        for pid in ("letter", "message", "answers"):
+        for pid in ("message", "answers"):
             self.assertIn('E1: "Dissertation on river trade in an invented port town" (from the CV)',
                           writer.asked(pid)[0]["user"], pid)
-            self.assertIn("When the request gives an evidence plan", " ".join(writer.asked(pid)[0]["system"].split()),
-                          pid)
-        self.assertIn("My dissertation was on river trade in an invented port town. I would like to talk about the "
-                      "role.", section(md, "Cover letter"))
         self.assertIn("I guided visitors at a made-up heritage centre. What does the team catalogue?",
                       section(md, "Message to the hiring manager"))
         self.assertIn("Guiding visitors taught me to answer questions clearly.", section(md, "Form answers"))
         self.assertEqual(writer.asked("verify"), [], "a marked draft is checked sentence by sentence")
         self.assertNotRegex(md, r"\[(E\d|M)", "no marker reaches the pack")
 
-    def test_a_sentence_about_you_that_cites_no_evidence_is_rewritten_once_then_taken_out(self):
-        # a local model added "to ensure patient data remained local and secure" to fit an advert (2026-11-07)
-        writer = MarkedWriter(first=f"I kept every visitor record local and secure. {CITED}")
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job)
-        fixes = writer.asked("sentence_fix")
-        letters = writer.asked("letter")
-        self.assertEqual(len(letters), 2, "the first needed a rewrite, so a second is drafted; neither is rewritten")
-        self.assertNotIn("Your draft:", letters[1]["user"], "the second is drafted afresh")
-        self.assertEqual(len(fixes), 2, "one sentence rewrite in each draft")
-        self.assertIn(f"Sentence: I kept every visitor record local and secure.\nWhat is wrong: {cites.NO_EVIDENCE}",
-                      fixes[0]["user"])
-        self.assertEqual(written["text"], cites.strip(CITED), "the rewrite found nothing true to say, so it is cut")
+
+# Two projects with look-alike names, as a real record had (2026-11-08): the grader's worst false claims gave the
+# job-search helper's test suite and its tools to the assistant.
+QUILL_CV = ("Avery Quillon. BSc Imaginary Studies.\n"
+            "Built Quill, an offline assistant over personal notes, in Lua\n"
+            "Wrote Quill Employment, a job-search helper in Preact with a 113-test suite and SQLite storage")
+QUILL_PICKS = [{"source": "S2", "quote": "Built Quill, an offline assistant over personal notes, in Lua",
+                "use": "answering staff questions from their own notes"},
+               {"source": "S3", "quote": "Wrote Quill Employment, a job-search helper in Preact with a 113-test "
+                                         "suite and SQLite storage", "use": "testing internal tools before release"}]
+QUILL_SAID = "Quill is my offline assistant over personal notes, built in Lua. It answers questions over my notes."
+
+
+class QuillWriter(FakeWriter):
+    """A fake writer for the two look-alike projects: each paragraph request is answered from `paragraphs` by the
+    project it names (each list in turn, the last repeated), else as the plain fake writes it."""
+
+    def __init__(self, paragraphs: dict[str, list[str]] | None = None):
+        super().__init__(plan=QUILL_PICKS)
+        self.paragraphs = {k: list(v) for k, v in (paragraphs or {}).items()}
+
+    def reply(self, system: str, user: str) -> object:
+        if prompt_id(system) == "story":
+            name = re.search(r"^(?:Project|Job): (.+?)(?: \(|$)", user, re.M)
+            left = self.paragraphs.get(name.group(1) if name else "")
+            if left:
+                return {"paragraph": left.pop(0) if len(left) > 1 else left[0]}
+        return super().reply(system, user)
+
+
+@contextlib.contextmanager
+def quill_world(writer: FakeWriter) -> Iterator[SimpleNamespace]:
+    """The technical graduate with the two look-alike project cards checked and a CV naming both."""
+    from jobhunt.profile import store
+
+    with as_applicant(people.TECHNICAL, writer) as a, mock.patch.object(cv, "facts_text", lambda: QUILL_CV), \
+            mock.patch.object(record, "context", lambda *q, **k: ""):
+        ev = {"source_rel": "Sources/Code/quill.md", "quote": "Quill answers questions over my notes offline",
+              "field": "", "doc_type": "repository"}
+        store.confirm(a.con, store.add_found(a.con, "project", {
+            "name": "Quill", "tools": ["Lua"], "summary": "An offline assistant over personal notes"}, ev))
+        store.confirm(a.con, store.add_found(a.con, "project", {
+            "name": "Quill Employment", "tools": ["Preact", "SQLite", "Playwright"],
+            "summary": "A job-search helper for graduates"},
+            {**ev, "source_rel": "Sources/Code/quill-employment.md",
+             "quote": "Quill Employment drafts letters and checks them with Playwright"}))
+        a.job = add_job(a.con, "technical_grad")
+        yield a
+
+
+def paragraph_about(letter: str, name: str) -> str:
+    """The paragraph of a letter whose first sentence names `name` and not a longer project's name."""
+    return next((p for p in letter.split("\n\n") if re.match(rf"[^.]*\b{re.escape(name)}\b(?! Employment)", p)), "")
+
+
+class Paragraphs(unittest.TestCase):
+    """A letter tells each piece of work once, in a paragraph drafted from its own facts: a grader capped every
+    pack at 2 of 5 for readability, as drafts retold projects and gave one project's tools to another
+    (15 packs, 2026-11-08)."""
+
+    def test_each_paragraph_is_drafted_from_one_projects_facts_alone(self):
+        writer = QuillWriter()
+        with quill_world(writer) as a:
+            written = pack.write_letter(a.con, a.job)
+        asked = {re.search(r"^Project: (.+?)(?: \(|$)", e["user"], re.M).group(1): e["user"]
+                 for e in writer.asked("story")}
+        self.assertEqual(set(asked), {"Quill", "Quill Employment"}, "one paragraph per project, each told once")
+        quill, employment = asked["Quill"].split("The job:")[0], asked["Quill Employment"].split("The job:")[0]
+        self.assertIn("Project: Quill (offline assistant over personal notes)\nWhere it was done: personal project",
+                      quill)
+        self.assertIn("What it can help with in this job: answering staff questions from their own notes", quill)
+        self.assertIn("- Quill answers questions over my notes offline", quill, "the card's own quote")
+        for theirs in ("Preact", "SQLite", "Playwright", "113"):
+            self.assertNotIn(theirs, quill, "the other project's facts never reach this paragraph")
+        self.assertNotIn("Lua", employment)
+        self.assertNotRegex(quill + employment, r"\bE\d\b|\[M\]", "facts come as plain sentences, never with ids")
+        letter = written["text"]
+        self.assertNotIn("SQLite", paragraph_about(letter, "Quill"))
+        self.assertIn("Lua", paragraph_about(letter, "Quill"))
+        self.assertIn("SQLite", paragraph_about(letter, "Quill Employment"))
         self.assertEqual(written["flags"], [])
+
+    def test_another_projects_tool_is_drafted_again_once_naming_whose_it_is(self):
+        crossed = ("I built Quill, an offline assistant over personal notes, in Lua with SQLite storage. It answers "
+                   "questions over my notes.")
+        writer = QuillWriter({"Quill": [crossed, QUILL_SAID]})
+        with quill_world(writer) as a:
+            written = pack.write_letter(a.con, a.job)
+        quill = [e["user"] for e in writer.asked("story") if "Project: Quill (" in e["user"]]
+        self.assertEqual(len(quill), 2, "one redraft, never a loop")
+        self.assertIn(f'- "{crossed.split(". ")[0]}.": SQLite is Quill Employment\'s, not Quill\'s', quill[1])
+        self.assertIn(f"Your last paragraph:\n{crossed}", quill[1])
+        self.assertEqual(paragraph_about(written["text"], "Quill"), QUILL_SAID)
+        self.assertEqual(written["flags"], [], "a fixed paragraph is never listed")
         self.assertTrue(written["notes"]["checked"].startswith(pack.SOFTENED))
 
-    def test_check_before_sending_lists_only_sentences_still_failing_never_free_form_flags(self):
-        # one verify call over every draft listed about 20 false alarms for 10 real problems in five packs
-        # (2026-11-07); a marked draft is checked sentence by sentence, against its own evidence only
-        added = "I catalogued visitor feedback for the centre's new exhibition [E2]."
-        writer = MarkedWriter(first=f"{CITED}\n\n{added}")
+    def test_a_paragraph_still_wrong_after_its_redraft_is_left_out_and_listed_with_why(self):
+        crossed = "I built Quill with Preact and a 113-test suite. It answers questions over my notes."
+        writer = QuillWriter({"Quill": [crossed]})
+        with quill_world(writer) as a:
+            written = pack.write_letter(a.con, a.job)
+        self.assertEqual(paragraph_about(written["text"], "Quill"), "")
+        self.assertNotIn("113", written["text"].replace(paragraph_about(written["text"], "Quill Employment"), ""))
+        dropped = [f for f in written["flags"] if f.startswith("Hal left out the paragraph about Quill:")]
+        self.assertEqual(len(dropped), 1, written["flags"])
+        self.assertIn("Preact is Quill Employment's, not Quill's", dropped[0])
+        self.assertIn("the number 113 is not in the facts of Quill", dropped[0])
+
+    def test_a_sentence_still_wrong_is_cut_when_the_rest_still_reads(self):
+        stock = f"{QUILL_SAID} This experience matters for the role because it demonstrates my ability to build."
+        writer = QuillWriter({"Quill": [stock]})
+        with quill_world(writer) as a:
+            written = pack.write_letter(a.con, a.job)
+        quill = [e["user"] for e in writer.asked("story") if "Project: Quill (" in e["user"]]
+        self.assertIn('ties the work to the job with a stock phrase ("This experience matters")', quill[1])
+        self.assertEqual(paragraph_about(written["text"], "Quill"), QUILL_SAID)
+        self.assertEqual(written["flags"], [], "a sentence taken out is never listed")
+
+    def test_words_the_facts_or_the_advert_hold_are_never_unsupported(self):
+        # most "Check before sending" items were the facts' own words or the advert's (2026-11-07)
+        writer = QuillWriter({"Quill": ["I built Quill in Lua, an offline assistant over personal notes. "
+                                        "Writing it taught me patience."]})
         plain = writer.reply
+        writer.reply = lambda system, user: ({"supported": False, "context_ok": True, "role_ok": True,
+                                              "unsupported": ["offline assistant over personal notes", "internal tools",
+                                                              "taught me patience"]}
+                                             if prompt_id(system) == "paragraph_verify" else plain(system, user))
+        with quill_world(writer) as a:
+            pack.write_letter(a.con, a.job)
+        quill = [e["user"] for e in writer.asked("story") if "Project: Quill (" in e["user"]]
+        self.assertIn('its facts do not say: "taught me patience"', quill[1])
+        for held in ("offline assistant over personal notes", "internal tools"):
+            self.assertNotIn(held, quill[1].split("What is wrong with it:", 1)[1])
+        checked = writer.asked("paragraph_verify")
+        self.assertTrue(all("Facts:\n" in e["user"] for e in checked))
+        self.assertTrue(all("Quill Employment" not in e["user"] for e in checked if "Project: Quill (" in e["user"]))
 
-        def reply(system: str, user: str) -> object:
-            if prompt_id(system) == "verify":
-                return {"unsupported": ["Dissertation on river trade", "a made-up heritage centre", "the role"]}
-            if prompt_id(system) == "sentence_check" and "exhibition" in user:
-                return {"supported": False, "unsupported": ["for the centre's new exhibition", "visitor"],
-                        "context_ok": True, "role_ok": True}
-            return plain(system, user)
+    def test_the_opening_says_who_is_writing_and_the_role_and_never_a_course_that_has_ended(self):
+        # letters lacked an introduction or buried it in paragraph four, and said "finishing my degree in 2026"
+        # after graduation (2026-11-08)
+        stale = "I am finishing my History degree in 2026 and applying for the Collections Assistant role."
+        writer = replying("frame", json.dumps({"opening": stale, "closing": "Could we talk about the role?"}),
+                          writer=FakeWriter(plan=PICKS))
+        writer.reply = lambda system, user, original=writer.reply: (
+            json.loads(original(system, user)) if prompt_id(system) == "frame" else original(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a, \
+                mock.patch.dict("os.environ", {"HAL_EMPLOYMENT_FAKE_NOW": "2026-11-08T09:00:00Z"}):
+            settings.set("goal.study_end", "2026-06", by="you")
+            settings.set("you.education.subject", "History", by="you")
+            settings.set("you.education.university", "Made-up University", by="you")
+            settings.set("you.education.grade", "First Class Honours", by="you")
+            written = pack.write_letter(a.con, add_job(a.con, "humanities_grad"))
+        asked = writer.asked("frame")
+        self.assertEqual(len(asked), 2, "one redraft, never a loop")
+        self.assertIn("Who is writing: Marnie Quillfeather, a first-class History graduate from Made-up University "
+                      "(2026)\nThe role: Collections Assistant at Riverside Heritage Trust", asked[0]["user"])
+        self.assertIn("the course ended in 2026-06", asked[1]["user"])
+        self.assertTrue(written["text"].startswith("I'm Marnie Quillfeather, a first-class History graduate from "
+                                                   "Made-up University (2026), applying for the Collections "
+                                                   "Assistant role.\n\n"), written["text"])
+        self.assertTrue(written["text"].endswith("\n\nCould we talk about the role?"))
 
-        writer.reply = reply
+    def test_the_letters_reason_for_the_employer_comes_from_a_pairing_that_holds(self):
+        writer = FakeWriter(plan=PICKS, pairing={"employer_fact": "answer enquiries from visitors", "item": "E2",
+                                                 "reason": "guiding visitors is the same work"})
         with as_applicant(people.HUMANITIES, writer) as a:
             job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job)
-        self.assertEqual(writer.asked("verify"), [])
-        self.assertEqual(written["flags"], ["unsupported claim: I catalogued visitor feedback for the centre's new "
-                                            "exhibition. (its evidence does not say: \"for the centre's new "
-                                            "exhibition\")"])
-        checked = writer.asked("sentence_check")
-        self.assertEqual(len(checked), 2, "one call in each of the two drafts; restating its evidence needs none")
-        self.assertNotIn("Dissertation", checked[0]["user"], "a sentence sees only the evidence it cites")
+            written = pack.write_letter(a.con, job, about="A made-up trust that looks after river boats.")
+        asked = writer.asked("pairing")[0]["user"]
+        self.assertIn("Advert:\nCollections Assistant", asked)
+        self.assertIn("Company brief:\nA made-up trust that looks after river boats.", asked)
+        self.assertIn('E2: "A made-up note about guiding visitors"', asked)
+        self.assertIn('The reason for this employer: the employer\'s "answer enquiries from visitors" and the '
+                      'applicant\'s "A made-up note about guiding visitors", because guiding visitors is the same '
+                      'work', writer.asked("frame")[0]["user"])
+        self.assertEqual((written["pairing"].item.id, written["pairing"].fact),
+                         ("E2", "answer enquiries from visitors"))
 
-    def test_a_message_saying_what_the_letter_said_is_rewritten_from_other_evidence(self):
-        # packs reused one CV line in the letter, the message and both answers (2026-11-07)
-        writer = MarkedWriter()
-        plain = writer.reply
-        said = "My dissertation was on river trade in an invented port town [E1]."
-
-        def reply(system: str, user: str) -> object:
-            pid = prompt_id(system)
-            if pid == "message":
-                return f"Hello,\n\n{said} What does the team catalogue [M]?"
-            if pid == "sentence_fix" and "already said as" in user:
-                return {"sentence": "I guided visitors at a made-up heritage centre [E2]."}
-            return plain(system, user)
-
-        writer.reply = reply
+    def test_with_no_honest_pairing_the_opening_is_told_to_give_no_reason(self):
+        writer = FakeWriter(plan=PICKS, pairing={"employer_fact": "a culture of innovation", "item": "E1",
+                                                 "reason": "it is exciting"})
         with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            md = pack.build(a.con, job["id"], use_web=False).read_text()
-        fix = writer.asked("sentence_fix")[0]["user"]
-        self.assertIn('already said as "My dissertation was on river trade in an invented port town."', fix)
-        self.assertNotIn("E1:", fix)
-        self.assertIn("I guided visitors at a made-up heritage centre. What does the team catalogue?",
-                      section(md, "Message to the hiring manager"))
-        self.assertNotIn(pack.REPEAT_FLAG, md)
+            written = pack.write_letter(a.con, add_job(a.con, "humanities_grad"))
+        self.assertIsNone(written["pairing"], "a fact the advert never says is no pairing")
+        self.assertIn("The reason for this employer: none was found", writer.asked("frame")[0]["user"])
 
-    def test_a_letter_short_of_your_length_gets_one_paragraph_more_and_is_listed_if_still_short(self):
-        # letters of 105 to 216 words against a preferred 250 had no "Check before sending" at all (2026-11-07)
-        writer = MarkedWriter()
-        with as_applicant(people.HUMANITIES, writer, length_floor=flow.LENGTH_FLOOR) as a:
-            job = add_job(a.con, "humanities_grad")
-            md = pack.build(a.con, job["id"], use_web=False).read_text()
-        asked = writer.asked("add")
-        self.assertEqual(len(asked), 1, "one paragraph more, asked for once")
-        self.assertIn('Unused evidence:\nE2: "A made-up note about guiding visitors"', asked[0]["user"])
-        n = len(cites.strip(CITED).split())
-        self.assertIn(f"- {pack.SHORT_FLAG.format(n=n, words=250)}", section(md, "Check before sending"))
+    def test_a_letter_needing_no_fix_makes_these_calls(self):
+        # a pack made about 55 calls, most of them one per sentence (2026-11-08); a letter is now a call per
+        # paragraph, at most one check each, and one for its opening and closing; Quill's paragraph says only its
+        # facts' own words, so it needs no check
+        writer = QuillWriter({"Quill": [QUILL_SAID]})
+        with quill_world(writer) as a:
+            written = pack.write_letter(a.con, a.job)
+        counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
+        self.assertEqual(counts, {"analyse": 1, "fit": 1, "plan": 1, "pairing": 1, "story": 2,
+                                  "paragraph_verify": 1, "frame": 1})
+        self.assertEqual(written["calls"], 4, "the letter's own calls: two paragraphs, one check and the frame")
+
+    def test_the_letter_is_drafted_cooler_than_other_prose(self):
+        writer = QuillWriter()
+        with quill_world(writer) as a:
+            pack.write_letter(a.con, a.job)
+        drafted = {e["temperature"] for e in writer.log if e["id"] in ("story", "frame")}
+        self.assertEqual(drafted, {pack.DRAFT_TEMPERATURE})
+        self.assertLess(pack.DRAFT_TEMPERATURE, 0.7)
 
     def test_check_before_sending_is_always_there_and_says_when_nothing_needs_you(self):
         # some packs had no "Check before sending" at all, so nothing flagged a broken letter (2026-11-07)
@@ -642,111 +749,32 @@ class Cited(unittest.TestCase):
                 pack.add_company_check(path, job["company"], job)
             self.assertEqual(section(path.read_text(), "Check before sending").strip(), "- Possible match: X")
 
+    def test_a_letter_short_of_your_length_is_listed(self):
+        # letters of 105 to 216 words against a preferred 250 had no "Check before sending" at all (2026-11-07)
+        with as_applicant(people.HUMANITIES, FakeWriter(plan=PICKS), length_floor=flow.LENGTH_FLOOR) as a:
+            written = pack.write_letter(a.con, add_job(a.con, "humanities_grad"))
+        n = flow.word_count(written["text"])
+        self.assertIn(pack.SHORT_FLAG.format(n=n, words=250), written["flags"])
+
     def test_a_paragraph_pointing_back_at_nothing_is_listed(self):
-        letter = (f"{CITED}\n\nThis exhibition taught me to answer questions from visitors [E2].")
-        with as_applicant(people.HUMANITIES, MarkedWriter(first=letter)) as a:
-            job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job)
-        self.assertEqual(written["flags"], [f"{pack.DANGLING_FLAG}: This exhibition taught me to answer questions "
-                                            "from visitors."])
+        said = "This exhibition taught me to answer questions from visitors. I wrote a made-up note about guiding."
+        writer = replying("story", json.dumps({"paragraph": said}), writer=FakeWriter(plan=PICKS[1:]))
+        writer.reply = lambda system, user, original=writer.reply: (
+            json.loads(original(system, user)) if prompt_id(system) == "story" else original(system, user))
+        with as_applicant(people.HUMANITIES, writer) as a:
+            written = pack.write_letter(a.con, add_job(a.con, "humanities_grad"))
+        self.assertIn(f"{pack.DANGLING_FLAG}: This exhibition taught me to answer questions from visitors.",
+                      written["flags"])
 
     def test_saved_drafts_have_straight_quotes_and_no_stray_leading_space(self):
         # curly apostrophes and a stray leading space reached graded packs (2026-11-07)
-        curly = " My dissertation\u2019s subject was river trade in an invented port town [E1]. I would like to " \
-                "talk about the role [M]."
-        writer = MarkedWriter(first=curly)
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job)
-        self.assertTrue(written["text"].startswith("My dissertation's subject"), written["text"])
-
-    def test_of_two_letters_the_one_with_fewer_sentences_still_failing_is_kept(self):
-        writer = MarkedWriter(first=["I led every tour of the heritage centre [E7].", CITED])
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job)
-        self.assertEqual(len(writer.asked("letter")), 2)
-        self.assertEqual((written["text"], written["flags"]), (cites.strip(CITED), []))
-
-    def test_of_two_letters_as_good_as_each_other_the_first_is_kept(self):
-        writer = MarkedWriter(first=["I led every tour of the heritage centre [E7].", "I ran the shop [E8]."])
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job)
-        self.assertEqual(written["text"], "I led every tour of the heritage centre.")
-
-    def test_a_pack_with_a_letter_needing_no_rewrite_makes_these_calls(self):
-        # the count a local model at about 200 tokens a second answers in a few minutes (2026-11-07); a letter
-        # needing a rewrite adds one letter, and each sentence checked adds one call
-        writer = MarkedWriter()
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            pack.build(a.con, job["id"], use_web=False)
-        counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
-        self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "letter": 1,
-                                  "message": 1, "sentence_check": 2, "answers": 1})
-
-    def test_a_full_pack_needing_no_fix_checks_each_paragraph_in_one_call(self):
-        # a pack made about 55 calls, most of them one per sentence (2026-11-08); with the fake AI this pack made
-        # 18 calls (10 sentence checks) checked one sentence at a time, and makes 14 (6) with a paragraph's
-        # sentences checked together
-        writer = FullWriter()
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            md = pack.build(a.con, job["id"], use_web=False).read_text()
-        counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
-        self.assertEqual(section(md, "Check before sending").strip(), pack.NOTHING_TO_CHECK)
-        self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "letter": 1,
-                                  "message": 1, "paragraph_check": 4, "sentence_check": 2, "answers": 1})
-        self.assertLess(len(writer.log), 25)
-
-    def test_the_letter_and_message_are_drafted_cooler_than_other_prose(self):
-        writer = MarkedWriter()
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            pack.build(a.con, job["id"], use_web=False)
-        self.assertEqual({e["id"]: e["temperature"] for e in writer.log if e["id"] in ("letter", "message", "brief")},
-                         {"letter": pack.DRAFT_TEMPERATURE, "message": pack.DRAFT_TEMPERATURE, "brief": None})
-        self.assertLess(pack.DRAFT_TEMPERATURE, 0.7)
-
-    def test_the_letters_reason_for_the_employer_comes_from_a_pairing_that_holds(self):
-        pairing = {"employer_fact": "answer enquiries from visitors", "item": "E2",
-                   "reason": "guiding visitors is the same work"}
-        writer = MarkedWriter()
-        writer.pairing = pairing
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job, about="A made-up trust that looks after river boats.")
-        asked = writer.asked("pairing")[0]["user"]
-        self.assertIn("Advert:\nCollections Assistant", asked)
-        self.assertIn("Company brief:\nA made-up trust that looks after river boats.", asked)
-        self.assertIn('E2: "A made-up note about guiding visitors"', asked)
-        self.assertIn('Motivation pairing (write why this employer from this alone, in [M] sentences): the '
-                      'employer\'s "answer enquiries from visitors" and the applicant\'s E2',
-                      writer.asked("letter")[0]["user"])
-        self.assertEqual((written["pairing"].item.id, written["pairing"].fact),
-                         ("E2", "answer enquiries from visitors"))
-
-    def test_with_no_honest_pairing_the_letter_is_told_to_give_no_reason(self):
-        writer = MarkedWriter()
-        writer.pairing = {"employer_fact": "a culture of innovation", "item": "E1", "reason": "it is exciting"}
-        with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job)
-        self.assertIsNone(written["pairing"], "a fact the advert never says is no pairing")
-        self.assertIn(motive.NONE_SAID, writer.asked("letter")[0]["user"])
-
-    def test_a_sentence_citing_evidence_the_plan_does_not_hold_is_listed_when_it_stays(self):
-        stubborn = "I led every tour of the heritage centre [E7]."
-        writer = MarkedWriter(first=stubborn)
+        said = " My dissertation\u2019s subject was river trade in an invented port town. I read its records."
+        writer = replying("story", json.dumps({"paragraph": said}), writer=FakeWriter(plan=PICKS[:1]))
         writer.reply = lambda system, user, original=writer.reply: (
-            stubborn if prompt_id(system) == "letter" else original(system, user))
+            json.loads(original(system, user)) if prompt_id(system) == "story" else original(system, user))
         with as_applicant(people.HUMANITIES, writer) as a:
-            job = add_job(a.con, "humanities_grad")
-            written = pack.write_letter(a.con, job)
-        self.assertEqual(written["text"], "I led every tour of the heritage centre.")
-        self.assertEqual(written["flags"], ["unsupported claim: I led every tour of the heritage centre. (cites E7, "
-                                            "which the evidence plan does not hold)"])
+            written = pack.write_letter(a.con, add_job(a.con, "humanities_grad"))
+        self.assertIn("\n\nMy dissertation's subject was river trade", written["text"])
 
 
 class Today(unittest.TestCase):

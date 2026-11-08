@@ -1,7 +1,8 @@
 """Plain first-person writing: what a draft must never say about how it was made, and the last tidy before saving.
 
 `problems(sentence, names, labels)` finds, with no AI, a sentence that opens with the advert's requirement
-("For the requirement to ..."), points at the CV instead of saying the thing ("My CV lists ..."), speaks of
+("For the requirement to ..."), ties the work to the job with a stock phrase ("aligns with", `STOCK`),
+points at the CV instead of saying the thing ("My CV lists ..."), speaks of
 the person in the third person ("The applicant developed ...", "<name> has ...") or pastes the wording of a
 setting (`labels`, from `settings_labels`); `writing.grounded` lists them with a sentence's other problems,
 so each such sentence is rewritten once. `unlead(text, cards)` takes a lead-in clause out with no AI when
@@ -22,6 +23,11 @@ Design decisions, each with its reason:
   sentence after the lead-in's first comma opens with a subject ("I", "My", "We", "Our", a project's name),
   the lead-in is taken out with no AI (`unlead`), before the sentence checks and again as the draft is
   saved; otherwise the sentence gets its one rewrite.
+- The same move mid-sentence is a problem too (`STOCK`): "satisfies the requirement for", "directly supports
+  the requirement for", "addresses the need for", "aligns with", "resonates with", "the role requires",
+  "matters for the role", "demonstrates my ability to", and every closing sentence of a prototype's paragraphs
+  was "This experience matters for the role because it demonstrates my ability to ..." (2026-11-08). The
+  sentence that ties a piece of work to the job should name what in the job it helps with instead.
 - The settings' own wording reaches a request only as the person's plain values (`cv.status_line`); a
   label still found in a draft is a problem. `you.work_status` is how forms should word the right to work,
   so it is a label too unless it is already a sentence in the first person.
@@ -56,7 +62,17 @@ CURLY = {"\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'", "\u2032": "
 CURLY_RX = re.compile("[" + "".join(CURLY) + "]")
 LEADING = re.compile(r"(?m)^[ \t\u00a0]+(?![-*] )(?=\S)")
 DISTINCT = re.compile(r"\s|[a-z][A-Z]|[A-Z]{2}|\d")
+# Stock ways of tying a piece of work to the job, in any part of a sentence (see the module notes).
+STOCK = re.compile(
+    r"\b(?:(?:the|this) (?:role|job|position|post) requires|"
+    r"(?:satisf|meet|address|fulfil)\w* (?:the|your|this|its|their) (?:[\w-]+ )?(?:requirements?|needs?|"
+    r"criteri(?:on|a))|aligns? (?:directly |closely |well |strongly |perfectly )?with|resonates? with|"
+    r"directly (?:supports?|relevant|applicable|relates)|matters? (?:for|to) (?:the|this|your) (?:role|job|"
+    r"position|post|team)|demonstrates? my (?:ability|capacity|capability|skills?)|(?:this|that|the) experience "
+    r"matters)\b", re.I)
 LEAD_IN_SAID = "opens with the advert's requirement; say what you did in your own words"
+STOCK_SAID = ('ties the work to the job with a stock phrase ("{phrase}"); name the thing in the job it helps '
+              "with, in your own words")
 CV_SAID = "points at your CV instead of saying it"
 THIRD_SAID = "speaks of you in the third person; write as I"
 LABEL_SAID = 'pastes the settings wording "{label}"; say it in your own words'
@@ -89,8 +105,11 @@ def problems(sentence: str, names: list[str] = (), labels: list[str] = ()) -> li
     when nothing. `names` are the person's names, `labels` the settings wording (`settings_labels`)."""
     text = sentence.strip()
     out = []
+    stock = STOCK.search(text)
     if LEAD_IN.search(text):
         out.append(LEAD_IN_SAID)
+    elif stock:
+        out.append(STOCK_SAID.format(phrase=stock.group(0)))
     if CV_SAYS.search(text):
         out.append(CV_SAID)
     if _third_person(text, list(names)):

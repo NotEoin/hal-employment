@@ -53,6 +53,9 @@ Design decisions, each with its reason:
   the course or job they belong to and naming it, at most `LINE_MAX` characters of them per item: one line of
   every module was one piece of evidence, so a sentence about one module could cite another's words
   (2026-11-08).
+- A card carries its own evidence quotes (`quotes`) for the paragraph that tells it (`writing.plan.Story`):
+  only the person's own sources, never an older CV's, a plan's, or one naming a tool the card's writing
+  fields leave out, so a quote never brings back what `for_writing` took out (2026-11-08).
 """
 from __future__ import annotations
 
@@ -82,6 +85,7 @@ USED_STATES = ("confirmed", "edited")
 CARD_KINDS = ("project", "job")    # the cards whose tools and work the fit map sees in full (`cards`)
 CARDS_HEADING = "Profile cards (every project and job the applicant checked, with its tools):"
 CARD_SUMMARY = 200        # characters of a card's summary: enough to say what it was, short enough for all
+CARD_QUOTES = 12          # a card's own quotes a paragraph about it is given (`writing.plan.STORY_FACTS`)
 # A passage's "[file > heading]" line and its "(Kind: ...)" line, as `record.context` writes them.
 PASSAGE_HEAD = re.compile(r"^(\[(.+?) > [^\n]*\]\n)(\(Kind: [^\n]*\)\n)?", re.M)
 
@@ -547,10 +551,10 @@ def aliases(item: dict, hidden: list[dict]) -> list[str]:
 
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
-    tools, summary, planned, context, aliases, role, files, tag, similar}; `planned` holds the tools only a plan
-    gives (`planned_only`), left out of `tools`; `role` is the person's part (`card_role`),
-    `files` the record files it rests on, and a project whose name is like another's (`similar`) has those
-    names and its `tag`.
+    tools, summary, planned, context, aliases, role, files, quotes, tag, similar}; `planned` holds the tools only
+    a plan gives (`planned_only`), left out of `tools`; `role` is the person's part (`card_role`),
+    `files` the record files it rests on, `quotes` its own evidence for a paragraph about it (`quotes`), and a
+    project whose name is like another's (`similar`) has those names and its `tag`.
 
     All of them, never ranked or cut like the Profile block: a project listing AWS was cut from the block,
     and the fit table said there was no evidence of AWS (2026-11-06). A project's `aliases` are the other
@@ -575,17 +579,35 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                             "planned": list(planned_only(con, it).get("tools", {})),
                             "context": context, "aliases": aliases(it, hidden), "role": card_role(it),
                             "files": [e["source_rel"] for e in it["evidence"] if e["source_rel"]],
-                            "tag": "", "similar": []})
+                            "quotes": quotes(it, f, cvs), "tag": "", "similar": []})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
                             "tools": [], "summary": "; ".join(f.get("duties") or []), "planned": [],
-                            "context": context, "role": "", "files": [], "tag": "", "similar": []})
+                            "context": context, "role": "", "files": [], "quotes": quotes(it, f, cvs),
+                            "tag": "", "similar": []})
     projects = [c for c in out if c["kind"].startswith("project")]
     alike = similar([c["name"] for c in projects])
     for c in projects:
         if c["name"] in alike:
             c["tag"], c["similar"] = tag(c["summary"]), alike[c["name"]]
     return out
+
+
+def quotes(item: dict, fields: dict, cvs: CvAuthority) -> list[str]:
+    """A card's own evidence quotes a paragraph about it may rest on, at most `CARD_QUOTES`: from the person's own
+    sources only, never an older CV's (`CvAuthority`), never a plan (`writing.planned`), and never one naming a
+    tool its writing fields (`fields`, from `for_writing`) leave out."""
+    tools = item["fields"].get("tools") or []
+    dropped = [str(t) for t in tools if str(t) not in {str(k) for k in fields.get("tools") or []}]
+    out: list[str] = []
+    for e in item["evidence"]:
+        said = " ".join(str(e.get("quote") or "").split())
+        if not said or e.get("role", "") not in (OWN_ROLE, "") or e["source_rel"] in cvs.older \
+                or planned.planned(said, e["source_rel"]) \
+                or any(re.search(rf"(?<![\w+#]){re.escape(t)}(?![\w+#])", said, re.I) for t in dropped):
+            continue
+        out.append(said)
+    return list(dict.fromkeys(out))[:CARD_QUOTES]
 
 
 def card_role(item: dict) -> str:

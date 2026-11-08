@@ -274,6 +274,14 @@ class NewestCv(unittest.TestCase):
         self.assertNotIn("Azure", block)
         self.assertNotIn("hosted on a cloud", block)
 
+    def test_a_quote_only_an_older_cv_gives_is_never_one_of_the_cards_quotes(self):
+        self.seed()
+        self.con.execute("UPDATE profile_evidence SET quote = 'Ferry planner ran on Azure' WHERE source_rel = ?",
+                         (OLD_CV,))
+        self.con.commit()
+        quotes = writing.cards(self.con)[0]["quotes"]
+        self.assertEqual(quotes, ["Ferry planner"], "the newest CV's and the repository's quote, once")
+
     def test_the_profile_says_which_values_only_an_older_cv_gives(self):
         item = store.item(self.con, self.seed())
         self.assertEqual(writing.older_cv_only(self.con, item),
@@ -350,6 +358,11 @@ class PlannedNotDone(unittest.TestCase):
                          {"tools": {"Docker": "Design Document", "PostgreSQL": "Design Document"}})
         mine = store.add_by_hand(self.con, "project", {"name": "Tide gauge", "tools": ["Docker"]})
         self.assertEqual(writing.planned_only(self.con, mine), {}, "a card you added is all yours")
+
+    def test_a_cards_own_quotes_for_its_paragraph_never_hold_a_plan(self):
+        # a paragraph is drafted from one card's quotes (2026-11-08); a plan's quote would bring Docker back
+        self.seed()
+        self.assertEqual(writing.cards(self.con)[0]["quotes"], ["Stores timetables in SQLite"])
 
     def test_a_tool_a_plan_and_a_record_of_the_work_both_give_is_kept(self):
         self.ferry(DESIGN, ["Docker"], "The app will use Docker", "report")

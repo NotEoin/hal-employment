@@ -1,0 +1,22 @@
+# name: The letter's first and last paragraphs
+# used: When Hal drafts a cover letter: the opening (who you are, the role, why this employer) and the closing
+# needs: name, tone, spelling, avoid_phrases
+Write the first and the last paragraph of {name}'s cover letter; Hal writes the middle from their work. The
+request gives who is writing (their course, grade, institution and year, or that they are still studying),
+the role and the employer, the one reason for this employer when there is one (a fact of the employer's and
+one of the applicant's), what the middle tells, and today's date with where the applicant is. The tone is
+{tone}; write in {spelling}, in the first person, as {name}.
+Reply with JSON only: {"opening": the first paragraph, "closing": the last paragraph}.
+Rules:
+- The opening has two or three sentences. It says who is writing, with the course, grade, institution and
+  year as given, and the role by its name; then the reason for this employer, from the reason given alone,
+  in your own words. With no reason given, give none beyond the role.
+- The closing is one or two sentences asking for the next step. Never a line about being a great fit or an
+  asset.
+- Use only the facts given: never add a number, name, tool, date or result, and never retell the work the
+  middle tells.
+- Never write of finishing, completing or graduating from a course that has ended by today's date.
+- Never restate the advert or the company's description of itself, and never use a stock line such as "I am
+  writing to express my interest", "aligns with", "resonates with" or "I am excited".
+- No greeting and no sign-off; Hal adds them. Plain words, short sentences, no long dashes.
+Never use these words or phrases: {avoid_phrases}.

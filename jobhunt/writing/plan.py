@@ -6,6 +6,8 @@ of the Profile block and each passage of the person's own documents (`kept`, as 
 with the card each one is about. `make(requirements, questions, facts, kept, cards)` asks the AI once (prompt
 `evidence_plan`) to pick up to `MAX_ITEMS` quotes from them, and `checked(reply, found)` keeps the picks that
 hold, as `Item`s with ids E1, E2, ... `block(items)` is the plan as a writing request shows it.
+`stories(items, cards)` groups the items into the pieces of work a draft tells, one paragraph each (`Story`),
+and `choose(found, n, used)` picks which of them a letter, an answer or a message tells.
 
 Design decisions, each with its reason:
 
@@ -38,12 +40,24 @@ Design decisions, each with its reason:
   person knows, never which project used it. A letter said "I used NumPy and pandas to build" a project whose
   card never names pandas, citing the CV's skills line (2026-11-07); `writing.grounded` holds a tool claimed
   for a project to that project's own evidence.
+- One piece of work is one paragraph, told once (`Story`, 2026-11-08): a grader capped every pack at 2 of 5
+  for readability, as drafts retold one project in several paragraphs (10 of 15 packs), gave one project's
+  test suite or tools to another, and read as lists of facts. Each story holds one card's facts alone (its
+  plan items first, then its own quotes, `STORY_FACTS` in all, its tools, part and where it was done), so a
+  paragraph drafted from it has no other project's facts to borrow. An item tied to no card is a story of
+  its own (a passage's items one story per file), and a skills list is never one, as it tells no work.
+- The plan says what each piece of evidence can help with in this job (`Item.use`), in the model's own
+  words, so a paragraph's one link to the job names a task or a system rather than the advert's
+  requirement: graders marked down "satisfies the requirement for" and the like in every pack (2026-11-08).
+- How many stories each draft tells (`LETTER_STORIES`, `ANSWER_STORIES`, `MESSAGE_STORIES`) and which:
+  `choose` prefers stories no earlier draft of the pack told, the plan's best first, so a letter's
+  paragraphs and the answers each tell a different piece of work while the record has enough.
 """
 from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from jobhunt import llm
 from jobhunt.ai import prompts
@@ -95,6 +109,7 @@ class Item:
     skills: bool = False       # quoted from a skills list (`skills_line`), so tied to no project
     tag: str = ""              # the card's tag when its name is like another card's (`profile.writing.tag`)
     planned: bool = False      # it says what was planned, not done (`writing.planned`)
+    use: str = ""              # what in this job it can help with, in the model's words (see the module notes)
 
     def words(self) -> str:
         """The item as a request lists it: its quote, then where it comes from, its card (with its tag), context
@@ -205,7 +220,8 @@ def checked(reply: dict, found: list[Source]) -> list[Item]:
         items.append(Item(f"E{len(items) + 1}", text, source.label, card.get("name", ""),
                           card.get("context", "") or source.context, _role(card or None, source.text),
                           tuple(card.get("tools", ())), skills, card.get("tag", ""),
-                          planned.planned(text, _file_of(source.label))))
+                          planned.planned(text, _file_of(source.label)),
+                          " ".join(str(pick.get("use") or "").split())))
         if len(items) == MAX_ITEMS:
             break
     return items
@@ -240,3 +256,104 @@ HEADING = "Evidence plan (the only facts about the applicant a draft may state):
 def block(items: list[Item]) -> str:
     """The plan as a writing request shows it; "" for an empty plan."""
     return "\n".join([HEADING, *(i.words() for i in items)]) if items else ""
+
+
+STORY_FACTS = 12           # facts a paragraph is given: the prototype's (2026-11-08); more would be a list to copy
+LETTER_STORIES = 3         # a letter's middle tells two or three pieces of work, one paragraph each
+ANSWER_STORIES = 1         # an answer tells one piece of work ...
+ANSWER_STORIES_MANY = 2    # ... or two, when its question asks for more than one example
+MESSAGE_STORIES = 1        # a message to the person hiring has room for one
+# A question asking for more than one example: "Give two examples", "times when you ...".
+MANY = re.compile(r"\b(?:examples|instances|occasions|situations|times when|(?:two|three|several) "
+                  r"(?:times|ways|projects|pieces))\b", re.I)
+WHERE_JOB = "a job"        # where a job card's work was done, as a story says it
+
+
+@dataclass(frozen=True)
+class Story:
+    """One piece of work a draft tells in one paragraph: a card's facts, or items tied to no card."""
+
+    key: str                   # what tells it from another: its card's name, else its items' source
+    name: str                  # the card's name; "" for items tied to no card
+    where: str                 # where it was done, in a prompt's words ("personal project", "a job"); "" unknown
+    context: str = ""          # `writing.stage.CONTEXTS`, or "" when unknown
+    role: str = ""             # the person's part
+    summary: str = ""
+    tools: tuple[str, ...] = ()
+    facts: tuple[str, ...] = ()           # its plan items' quotes, then its card's own quotes
+    planned: tuple[str, ...] = ()         # quotes that are plans, never done (`Item.planned`)
+    planned_tools: tuple[str, ...] = ()   # tools only a plan of its card gives (`profile.writing.planned_only`)
+    use: str = ""              # what in this job it can help with (`Item.use`)
+    tag: str = ""
+    aliases: tuple[str, ...] = ()
+    card: dict | None = field(default=None, compare=False, hash=False)
+
+    def words(self) -> str:
+        """Every word the story's facts hold, plans aside: what a paragraph about it may say."""
+        return "\n".join([self.name, *self.aliases, self.where, self.role, self.summary, *self.tools, *self.facts])
+
+    def block(self) -> str:
+        """The story as a request gives it: plain sentences under its name, never an evidence id."""
+        kind = "Job" if self.where == WHERE_JOB else "Project"
+        lines = [f"{kind}: {self.name}" + (f" ({self.tag})" if self.tag else "") if self.name
+                 else "Evidence (no name of its own)"]
+        lines += [f"Where it was done: {self.where}"] if self.where else []
+        lines += [f"Your part: {self.role}"] if self.role else []
+        lines += [f"What it is: {self.summary}"] if self.summary else []
+        lines += [f"Tools: {', '.join(self.tools)}"] if self.tools else []
+        lines += ["Facts:", *(f"- {f}" for f in self.facts)] if self.facts else []
+        if self.planned:
+            lines += ["Planned, never done (leave out, or say it was planned):", *(f"- {f}" for f in self.planned)]
+        lines += [f"What it can help with in this job: {self.use}"] if self.use else []
+        return "\n".join(lines)
+
+
+def _where(card: dict | None, context: str) -> str:
+    if card is not None and card.get("kind") == "job":
+        return WHERE_JOB
+    return stage.CONTEXT_WORDS.get(context, "")
+
+
+def _story(key: str, items: list[Item], card: dict | None) -> Story:
+    """The story of one card, or of items tied to none: its items' quotes first, its card's own after."""
+    quotes = [*(i.text for i in items if not i.planned), *((card or {}).get("quotes") or [])]
+    facts = tuple(list(dict.fromkeys(q for q in quotes if q.strip()))[:STORY_FACTS])
+    plans = tuple(i.text for i in items if i.planned)
+    use = next((i.use for i in items if i.use), "")
+    first = items[0]
+    if card is None:
+        return Story(key, "", _where(None, first.context), first.context, first.role, facts=facts, planned=plans,
+                     use=use)
+    context = card.get("context", "") or first.context
+    return Story(key, card["name"], _where(card, context), context, card.get("role", "") or first.role,
+                 card.get("summary", ""), tuple(card.get("tools") or ()), facts, plans,
+                 tuple(card.get("planned") or ()), use, card.get("tag", ""), tuple(card.get("aliases") or ()), card)
+
+
+def stories(items: list[Item], cards: list[dict]) -> list[Story]:
+    """The pieces of work the plan's items tell, best first (see the module notes): one per card, one per
+    passage's file, one per other item; a skills list tells none."""
+    by_name = {c["name"]: c for c in cards if c.get("name")}
+    groups: dict[str, list[Item]] = {}
+    for i in items:
+        if i.skills:
+            continue
+        key = i.card or (i.source if i.source not in (CV, PROFILE) else f"{i.source} {i.id}")
+        groups.setdefault(key, []).append(i)
+    return [_story(key, its, by_name.get(its[0].card)) for key, its in groups.items()]
+
+
+def choose(found: list[Story], n: int, used: dict[str, int]) -> list[Story]:
+    """`n` of the stories (`found`, best first), those the pack has told least first (`used`, by key, which is
+    counted up for each one chosen), in the plan's order."""
+    picked = sorted(sorted(range(len(found)), key=lambda k: (used.get(found[k].key, 0), k))[:max(n, 0)])
+    out = [found[k] for k in picked]
+    for s in out:
+        used[s.key] = used.get(s.key, 0) + 1
+    return out
+
+
+def examples_wanted(question: str) -> int:
+    """How many pieces of work an answer to `question` tells: `ANSWER_STORIES_MANY` when it asks for more than
+    one example, else `ANSWER_STORIES`."""
+    return ANSWER_STORIES_MANY if MANY.search(question or "") else ANSWER_STORIES

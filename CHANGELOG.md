@@ -175,6 +175,15 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
+  paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
+  facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that
+  work's facts alone, then checks it against those facts: a tool, number or name that belongs to another of
+  your projects is caught and named, and the paragraph is written once more. One that is still wrong loses
+  the sentence at fault, or is left out and named under **Check before sending**. A sentence that ties your
+  work to the job with stock words ("aligns with", "meets the requirement for") is written again too. The
+  letter opens with who you are (your course, grade, university and year), the role and your one reason
+  for this employer, and closes by asking for the next step.
 - **Every message says who is writing.** Messages to the person hiring opened with a bare question, "I also
   ...", or "I am available to start immediately", never saying who you are. Hal now writes the opening
   itself from your settings and the course you checked: "Hello <your contact>, I'm <your name>, a

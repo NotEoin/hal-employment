@@ -433,7 +433,42 @@ runs: tests use `tests/support/fake_claude/`.
   `drafts.evidence_checked`). The
   letter's Evidence line names the plan's quotes, else the record passages as before. The pack picks one
   plan for the letter, the message and the answers (with `COMMON_QUESTIONS`); `docs.change` picks one for
-  the message and answers.
+  the message and answers. Each pick also says what in the job it can help with (`Item.use`, the prompt's
+  `use`), in the model's own words.
+- Stories (`plan.stories`, `plan.Story`): the plan's items grouped into the pieces of work a draft tells, one
+  per card (its items' quotes first, then the card's own `quotes` from `profile.writing.quotes`: the
+  person's own sources only, never an older CV's, a plan's or one naming a tool `for_writing` drops,
+  `plan.STORY_FACTS` (12) in all), one per passage's file and one per other item; a skills list is never a
+  story. `Story.block` is what a request gives: the name and tag, where it was done, the person's part,
+  what it is, its tools, its facts as plain lines, what is planned and what it can help with, never an
+  evidence id. `plan.choose(stories, n, used)` takes the `n` the pack has told least, best first.
+- Paragraphs (`writing/paragraphs.py`): a letter whose plan tells any story is `pack._story_letter`: up to
+  `plan.LETTER_STORIES` (3) stories, each drafted in its own call from its own story alone (prompt
+  `story_paragraph`, shape `paragraphs.LETTER`: 3 to 4 sentences, the work named in the first) and settled
+  by `paragraphs.settle`. The checks with no AI (`paragraphs.problems`, `sentence_problems`) read the
+  paragraph against its story only, through `paragraphs.Scope` (`pack.paragraph_scope`: every story and
+  card, `pack.known_tools`, the employer's words and the stage line, the person's names and settings
+  wording): a number or a known tool its facts lack, named as another card's when that card holds it
+  (`CROSSED_TOOL`) or as a plan's (`PLANNED_SAID`); another card's name (`CROSSED_NAME`, with
+  `drafts.named_cards`, so "Quill Employment" never names "Quill"); `drafts.crossed`; degree or own-time
+  words against its context; "I built" of a team's work without the person's part; `stage.ended_course`;
+  `plain.problems` (with `plain.STOCK`: "aligns with", "resonates with", "directly supports", "satisfies the
+  requirement", "the role requires", "matters for the role", "demonstrates my ability to"); a sentence
+  echoing the advert (`drafts.echoes`); a sentence the paragraph already said (`repeats.same`); the part as
+  a label ("As the owner, ..."); `paragraphs.LIST_TOOLS` (4) tools in one sentence; `taught`'s module
+  checks; the work unnamed in the first sentence; too few sentences; and the writing rules' high hits.
+  When they find nothing and the paragraph says more than its facts' own words (`paragraphs.restates`),
+  one AI call checks it against its story (`verify`, prompt `paragraph_verify`); quoted words its facts or
+  the employer's words hold, word for word or by their roots, are dropped. A paragraph with a problem is
+  drafted once more with the problems listed; one still failing loses its failing sentences when the rest
+  still reads (`flow.reads_without`, and the shape's least sentences and name kept), else it is dropped and
+  "Check before sending" says so (`Paragraph.listed`). A sentence fixed or cut is never listed. The
+  opening and closing are one call (`writing/frame.py`, `frame.settle`, prompt `letter_frame`) from `frame.Facts`
+  (`pack.letter_frame`: the name, `opening.described`, the role, the motivation pairing, the stories the
+  middle tells and today), checked the same way with the role and the institution required, drafted once
+  more when either fails; an opening still failing is `opening.Opening`'s built sentence and a closing
+  still failing is left out. Paragraphs and the frame are drafted at `paragraphs.DRAFT_TEMPERATURE`. A
+  letter with no story is drafted whole as below.
 - Evidence markers (`writing/cites.py`): the letter, message and answers requests carry the plan
   (`pack._plan_part`), and their prompts ask for each sentence about the person to end with the ids it
   rests on ("[E2]", "[E2,E5]") and a reason for the employer or a closing request with "[M]".

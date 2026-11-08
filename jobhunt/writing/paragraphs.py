@@ -1,0 +1,480 @@
+"""One paragraph about one piece of work: drafted from that work's facts alone, checked against them alone, and
+drafted again once when something is wrong.
+
+`settle(story, shape, scope)` asks the AI (prompt `story_paragraph`) for one paragraph about one story of the
+evidence plan (`writing.plan.Story`) in a shape (`Shape`: a letter's middle, an answer, a message's body), finds
+with no AI what is wrong with it against that story (`problems`), asks the AI once whether it says anything the
+story's facts do not (`verify`, prompt `paragraph_verify`), drafts it once more with the problems stated, and
+returns what is left (`Paragraph`). A letter's opening and closing are `writing.frame`'s, checked with the
+same pieces.
+
+Design decisions, each with its reason:
+
+- A paragraph is drafted from one story's facts alone, as plain sentences with no evidence ids: a grader
+  capped every pack at 2 of 5 for readability across four designs of sentence-by-sentence drafting and
+  checking, which retold one project in several paragraphs, gave one project's test suite and tools to
+  another, and left lists of facts, one-sentence paragraphs and a stray "[E4,M]" (15 packs, 2026-11-08). A
+  prototype that wrote each paragraph in its own call with one card's facts gave coherent paragraphs that
+  named their project, and no fact crossed, because none was in the prompt.
+- Every check is scoped to the paragraph's story (`problems`): a number, or a known tool, its facts do not
+  hold; a plan's tool said to be used (`writing.planned`); words placing the work in a degree or in the
+  person's own time against its context; "I built" of a team's work without the person's part; a course that
+  has ended spoken of as running (`stage.ended_course`); the wording `writing.plain` finds, the stock links of
+  `plain.STOCK` among them; a sentence restating the advert (`drafts.echoes`) or one already said in the
+  paragraph; the person's part used as a label ("As the owner, I built ...", seen in the prototype); and
+  four or more tools in one sentence, a list rather than a story. As a paragraph holds one piece of work, a
+  tool or the name of another card in it is a crossed project, named with the other card's name.
+- At most one AI check per paragraph (`verify`), with that story's facts only, and none when the checks with
+  no AI already found a problem or when every word of the paragraph is in its facts (`restates`). Words the
+  AI quotes as unsupported are dropped when the story's facts or the employer's words hold them, word for
+  word or by their roots (`_dropped`): most of the old check list's "unsupported" items were the facts'
+  own words or the advert's (2026-11-07).
+- A paragraph that fails is drafted again once with its problems stated (`Paragraph.redrafted`). One still
+  failing loses only its failing sentences when what is left still reads (each cut sentence leaves the next
+  one pointing at something, `flow.reads_without`, and the shape keeps its least number of sentences and its
+  name); else it is dropped and listed with why (`Paragraph.listed`). A sentence that was fixed or cut is
+  never listed: only what the person should act on is.
+"""
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass, field
+
+from jobhunt import llm
+from jobhunt.ai import prompts
+from jobhunt.writing import check as writing_check
+from jobhunt.writing import drafts, flow, plain, planned, repeats, spelling, stage, taught
+from jobhunt.writing.motive import Pairing
+from jobhunt.writing.plan import Story
+
+log = logging.getLogger(__name__)
+
+PROMPT, VERIFY_PROMPT = "story_paragraph", "paragraph_verify"
+ADVERT_CHARS = 3000        # of the advert a paragraph request carries, for what the job is; never to copy from
+# Drafts are asked for cooler than other prose (0.7, `ai.openai_compat.PROSE_TEMPERATURE`): at 0.7 a local model
+# added plausible details to fit the advert in every graded run (2026-11-07). The Claude CLI takes no temperature,
+# so there it changes nothing.
+DRAFT_TEMPERATURE = 0.4
+LIST_TOOLS = 4             # tools named in one sentence that make it a list rather than a story
+PART_SHARE = 0.5           # share of the person's part's own words a sentence must hold to name that part
+ROOT_MIN = 3               # letters a word keeps when its ending is taken off ("uses" is "use", "is" stays)
+ENDINGS = ("ing", "ed", "es", "s")
+WORD_NUMBERS = {w: str(n) for n, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve "
+                                                "thirteen fourteen fifteen sixteen seventeen eighteen nineteen "
+                                                "twenty".split())}
+WORD_NUMBERS.update({"thirty": "30", "forty": "40", "fifty": "50", "sixty": "60", "seventy": "70", "eighty": "80",
+                     "ninety": "90"})
+NUMBER = re.compile(r"\d[\d,.]*\d|\d|\b(?:" + "|".join(WORD_NUMBERS) + r")\b", re.I)
+# "I built X" and its kin: the whole of a piece of work claimed by one person.
+SOLO = re.compile(r"\bI (?:have |had )?(?:single-handedly |alone |myself |personally )?(built|designed|led|developed|"
+                  r"created|wrote|made|implemented|programmed|coded|engineered|delivered|architected|produced|"
+                  r"ran|launched|founded)\b", re.I)
+# Words that say the work was shared, or name the person's part of it.
+SHARED = re.compile(r"\b(we|our|us|team|teams|group|together|jointly|classmates|teammates|colleagues|others|"
+                    r"as part of|part of a|contributed|my part|my role|my share|alongside)\b", re.I)
+# "As the owner, I ...": the person's part written as a label at a sentence's start.
+AS_LABEL = re.compile(r"^\W*as (?:the|a|an|my) ([\w -]{1,40}?),", re.I)
+
+NUMBER_SAID = "the number {n} is not in the facts of {card}"
+TOOL_SAID = "{tool} is not in the facts of {card}"
+CROSSED_TOOL = "{tool} is {other}'s, not {card}'s"
+CROSSED_NAME = "names {other}, which is another piece of work; this paragraph is about {card}"
+PLANNED_SAID = "{tool} was only planned for {card}; say it was planned, or leave it out"
+ALONE = "says you did {card} alone; it was a team's work{part}"
+CONTEXT_SAID = "calls {card} {wrong}; its facts say {said}"
+ECHO_SAID = "restates the advert; say it in your own words"
+REPEAT_SAID = "says again what an earlier sentence of the paragraph says"
+LABEL_SAID = 'uses your part as a label ("{label}"); say what you did'
+LIST_SAID = "lists tools rather than saying what you did with them"
+NOT_NAMED = "does not name {card} in its first sentence"
+NOT_NAMED_ANY = "never names {card}"
+TOO_SHORT = "is too short to tell what the work was, what you did and what came of it"
+NOT_SUPPORTED = 'its facts do not say: "{span}"'
+NOT_SUPPORTED_ANY = "says something its facts do not"
+WRONG_PLACE = "places the work where its facts do not"
+TOO_MUCH = "gives you more of the work than its facts do"
+NOTHING = "your facts gave nothing to say here"
+DROPPED = "Hal left out the paragraph about {card}: {why}. Add it yourself if it is true"
+
+
+@dataclass(frozen=True)
+class Shape:
+    """What a paragraph is for: its kind for the writing rules, the request's words, where it names its work
+    ("first" sentence, "any" sentence, or "" for nowhere) and the least number of sentences it keeps."""
+
+    kind: str                  # `writing.rules` kind: "letter" or "answer" (a message reads as an answer)
+    words: str
+    name: str = "first"
+    least: int = 1
+
+
+LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 sentences, 60 to 90 words, one "
+                         "connected story. Name the work in the first sentence. End with at most one sentence on "
+                         "what it can help with in this job.", "first", 2)
+MESSAGE = Shape("answer", "The body of a short message to the person hiring, after Hal's own greeting and opening "
+                          "sentence: one or two sentences about this work, naming it, then one specific question "
+                          "about the team's work on what it can help with. At most 60 words in all. No greeting, "
+                          "no introduction and no sign-off.", "any", 2)
+ANSWER_WORDS = 100         # words of a whole form answer, as the answers prompt asks
+
+
+def answer(question: str, nth: int = 0, of: int = 1) -> Shape:
+    """The shape of the `nth` (from 0) of `of` paragraphs answering a form question."""
+    which = ("Answer the question in the first sentence, naming the work" if nth == 0
+             else "Give this as a further example, naming the work in the first sentence")
+    return Shape("answer", f'One paragraph of the answer to the application question "{question}". {which}: what '
+                           f"it was, what you did and what came of it, in 2 to 4 sentences and at most "
+                           f"{ANSWER_WORDS // of} words.", "any" if nth == 0 else "first", 1)
+
+
+def why(question: str, pairing: Pairing | None) -> Shape:
+    """The shape of an answer to a question asking why this job or employer, from the motivation `pairing`."""
+    reason = (f"The reason: the employer's \"{pairing.fact}\" and this work, because {pairing.reason}. Tie the "
+              "two in your own words; never restate the advert." if pairing else
+              "No reason for this employer was found in the applicant's facts: say what in this role draws you "
+              "to it from this work alone, and give no reason about the employer.")
+    return Shape("answer", f'The answer to the application question "{question}", in 2 to 3 sentences and at most '
+                           f"80 words, answering it in the first sentence. {reason}", "any", 1)
+
+
+@dataclass(frozen=True)
+class Scope:
+    """What every paragraph of one job's drafts is checked against, beside its own story."""
+
+    stories: tuple[Story, ...] = ()    # every story of the plan, to name whose a crossed tool is
+    cards: tuple[dict, ...] = ()       # `profile.writing.cards`
+    known: tuple[str, ...] = ()        # every tool a card or checked skill names (`pack.known_tools`)
+    allowed: str = ""                  # the employer's words and the stage line: numbers there are not claims
+    advert: str = ""
+    brief: str = ""
+    names: tuple[str, ...] = ()        # the job title and the employer's name (`drafts.echoes`)
+    now: stage.Stage | None = None
+    modules: tuple[str, ...] = ()
+    sources: tuple[str, ...] = ()      # the CV and the passages, for what a module covered
+    person: tuple[str, ...] = ()       # the person's names, never a sentence's subject (`writing.plain`)
+    labels: tuple[str, ...] = ()       # the settings wording a draft must never paste
+    values: dict = field(default_factory=dict)   # the prompt values (`pack.person`)
+    context: str = ""                  # the job lines every request carries
+    request: str = ""                  # the person's own words, when they asked for a change
+
+
+@dataclass(frozen=True)
+class Problem:
+    """One thing wrong with a paragraph: the sentence it is in ("" for the whole paragraph) and why."""
+
+    sentence: str
+    reason: str
+
+    def line(self) -> str:
+        """The problem as a request or a log states it."""
+        return f'"{self.sentence}": {self.reason}' if self.sentence else self.reason
+
+
+@dataclass
+class Paragraph:
+    """A paragraph after its checks: its text ("" when dropped), why it was dropped, and what was done."""
+
+    story: Story
+    text: str = ""
+    dropped: str = ""
+    calls: int = 0
+    redrafted: bool = False
+    cut: int = 0
+
+    @property
+    def listed(self) -> str:
+        """The check list's line for a dropped paragraph, "" for one that stands."""
+        return DROPPED.format(card=_called(self.story), why=self.dropped) if self.dropped else ""
+
+
+def _called(story: Story) -> str:
+    """How a check names a story: its card's name, else the start of its first fact."""
+    if story.name:
+        return story.name
+    first = story.facts[0] if story.facts else "this evidence"
+    return f'"{first[:60].rsplit(" ", 1)[0] if len(first) > 60 else first}"'
+
+
+def numbers(text: str) -> set[str]:
+    """The numbers of a text, in figures, with words read as figures ("seven" is "7")."""
+    found = (m.group(0).lower().rstrip(".,") for m in NUMBER.finditer(text or ""))
+    return {WORD_NUMBERS.get(n, n).replace(",", "") for n in found}
+
+
+def _root(word: str) -> str:
+    """A word without its ending ("records", "recorded" and "recording" are "record"; "guide" is "guid")."""
+    for end in ENDINGS:
+        if word.endswith(end) and len(word) - len(end) >= ROOT_MIN:
+            word = word[:-len(end)]
+            break
+    return word[:-1] if word.endswith("e") and len(word) > ROOT_MIN else word
+
+
+def _roots(text: str) -> set[str]:
+    return {_root(w) for w in re.findall(r"[a-z0-9+#]{2,}", (text or "").lower()) if w not in drafts.LITTLE_WORDS}
+
+
+def _held(span: str, where: str) -> bool:
+    words = re.findall(r"\S+", span.strip().strip("\"'").rstrip(".,;:"))
+    return bool(words) and re.search(r"\s+".join(map(re.escape, words)), where, re.I) is not None
+
+
+def _dropped(span: str, where: str) -> bool:
+    """True when quoted words are no problem: `where` holds them word for word, or holds every one's root."""
+    own = _roots(span)
+    return _held(span, where) or (bool(own) and own <= _roots(where))
+
+
+def _projects(scope: Scope) -> list[dict]:
+    return [c for c in scope.cards if c.get("name", "").strip()]
+
+
+def _names(sentence: str, story: Story, scope: Scope) -> bool:
+    """True when a sentence names the story's work: its card by any name, or for a job its title or employer."""
+    if story.card is None:
+        return True
+    if drafts.names_card(sentence, story.card, list(_projects(scope))):
+        return True
+    return story.card.get("kind") == "job" and any(drafts.names_tool(sentence, p) for p in story.name.split(" at "))
+
+
+def _owner(tool: str, story: Story, scope: Scope) -> str:
+    """The name of another story or card whose own facts hold `tool`; "" when none does."""
+    for other in scope.stories:
+        if other.key != story.key and other.name and drafts.names_tool(other.words(), tool):
+            return other.name
+    for c in _projects(scope):
+        if c["name"] != story.name and drafts.names_tool(" ".join([c["summary"], *c["tools"]]), tool):
+            return c["name"]
+    return ""
+
+
+def _tool_problems(sentence: str, story: Story, scope: Scope) -> list[str]:
+    """The tools a sentence names that its story's facts do not hold, each as a plan's tool, another's or not
+    its story's at all."""
+    own, plans = story.words(), "\n".join([*story.planned, *story.planned_tools])
+    known = dict.fromkeys([*scope.known, *(t for s in scope.stories for t in s.tools),
+                           *(t for c in scope.cards for t in c.get("tools") or ())])
+    out = []
+    for tool in (t for t in known if t.strip()):
+        if not drafts.names_tool(sentence, tool) or drafts.names_tool(own, tool):
+            continue
+        if drafts.names_tool(plans, tool):
+            if not planned.said(sentence):
+                out.append(PLANNED_SAID.format(tool=tool, card=_called(story)))
+            continue
+        other = _owner(tool, story, scope)
+        out.append(CROSSED_TOOL.format(tool=tool, other=other, card=_called(story)) if other
+                   else TOOL_SAID.format(tool=tool, card=_called(story)))
+    return out
+
+
+def _crossed_names(sentence: str, story: Story, scope: Scope) -> list[str]:
+    """Another card a sentence names, which its story's own facts never name."""
+    own = story.words()
+    projects = _projects(scope)
+    return [CROSSED_NAME.format(other=c["name"], card=_called(story)) for c in drafts.named_cards(sentence, projects)
+            if c["name"] != story.name and c not in drafts.named_cards(own, projects)]
+
+
+def _context_problem(sentence: str, story: Story) -> str:
+    """What is wrong with where a sentence places the work, given its story's context."""
+    context = story.context
+    if context not in drafts.CLASHES or any(drafts.SAID[a].search(sentence) for a in drafts.AGREES[context]):
+        return ""
+    for word in drafts.CLASHES[context]:
+        if drafts.SAID[word].search(sentence):
+            return CONTEXT_SAID.format(card=_called(story), wrong=drafts.NOT_WORDS[word],
+                                       said=drafts.IS_WORDS[context])
+    return ""
+
+
+def _names_part(sentence: str, role: str) -> bool:
+    """True when a sentence holds the person's part: at least `PART_SHARE` of the role's own words."""
+    part = stage.TEAM_WORDS.sub("", role)
+    own = {w for w in writing_check.words_of(part) if w not in drafts.LITTLE_WORDS}
+    return bool(own) and len(own & set(writing_check.words_of(sentence))) >= PART_SHARE * len(own)
+
+
+def _alone_problem(sentence: str, story: Story) -> str:
+    """What is wrong when a sentence says the person did a team's work alone."""
+    team = story.context == stage.TEAM or bool(stage.team_words(story.role))
+    if not team or not SOLO.search(sentence) or SHARED.search(sentence) or _names_part(sentence, story.role):
+        return ""
+    part = next((p for p in story.role.split("; ") if p and not stage.team_words(p)), "")
+    return ALONE.format(card=_called(story), part=f"; your part: {part}" if part else "")
+
+
+def _label_problem(sentence: str, story: Story) -> str:
+    found = AS_LABEL.match(sentence)
+    if not found or not story.role:
+        return ""
+    words = {w for w in writing_check.words_of(found.group(1)) if w not in drafts.LITTLE_WORDS}
+    role = set(writing_check.words_of(story.role))
+    return LABEL_SAID.format(label=found.group(0).strip().rstrip(",")) if words & role else ""
+
+
+def _reasons(found: list[str]) -> list[str]:
+    """The reasons in brackets at the end of what a `writing.drafts` or `writing.taught` check finds."""
+    return [m.group(1) for m in (re.search(r"\(([^()]*)\)$", f) for f in found) if m]
+
+
+def sentence_problems(sentence: str, story: Story, scope: Scope, before: list[str] = ()) -> list[str]:
+    """What is wrong with one sentence of a paragraph about `story`, with no AI (see the module notes);
+    `before` are the paragraph's sentences ahead of it."""
+    own = story.words() + ("\n" + "\n".join(story.planned) if planned.said(sentence) else "")
+    out = [NUMBER_SAID.format(n=n, card=_called(story))
+           for n in sorted(numbers(sentence) - numbers(f"{own}\n{scope.allowed}"))]
+    out += _tool_problems(sentence, story, scope)
+    out += _crossed_names(sentence, story, scope)
+    if story.card is not None:
+        out += _reasons(drafts.crossed(sentence, list(scope.cards)))
+    out += [p for p in (_context_problem(sentence, story), _alone_problem(sentence, story),
+                        _label_problem(sentence, story)) if p]
+    if scope.now is not None and stage.ended_course(sentence, scope.now):
+        out.append(stage.ended_said(scope.now))
+    out += plain.problems(sentence, list(scope.person), list(scope.labels))
+    if scope.advert and drafts.echoes(sentence, scope.advert, scope.brief, scope.names):
+        out.append(ECHO_SAID)
+    if any(repeats.same(sentence, b) for b in before):
+        out.append(REPEAT_SAID)
+    if sum(drafts.names_tool(sentence, t) for t in dict.fromkeys(scope.known)) >= LIST_TOOLS:
+        out.append(LIST_SAID)
+    out += _reasons(taught.unsupported(sentence, list(scope.modules), (*scope.sources, own)))
+    out += _reasons(taught.joined(sentence, list(scope.modules), scope.sources, list(scope.cards)))
+    return list(dict.fromkeys(out))
+
+
+def problems(text: str, story: Story, scope: Scope, shape: Shape) -> list[Problem]:
+    """What is wrong with a paragraph about `story`, with no AI: each sentence's problems, the work left unnamed
+    where the shape names it, too few sentences, and the writing rules that make a draft be revised
+    (`writing.check.high`, numbers aside, which are checked against the story)."""
+    said = writing_check.sentences(text)
+    out = [Problem(s, r) for k, s in enumerate(said) for r in sentence_problems(s, story, scope, said[:k])]
+    if story.name and said and shape.name == "first" and not _names(said[0], story, scope):
+        out.append(Problem("", NOT_NAMED.format(card=story.name)))
+    elif story.name and shape.name == "any" and not any(_names(s, story, scope) for s in said):
+        out.append(Problem("", NOT_NAMED_ANY.format(card=story.name)))
+    if len(said) < shape.least:
+        out.append(Problem("", TOO_SHORT))
+    hits = writing_check.check(text, shape.kind, spelling=scope.values.get("spelling_code", ""),
+                               allowed=scope.values.get("own_words") or ())
+    for hit in writing_check.high(hits):
+        where = next((s for s in said if hit.quote.lower() in s.lower()), "")
+        out.append(Problem(where, f"{hit.message} ({hit.quote})"))
+    return list(dict.fromkeys(out))
+
+
+def restates(text: str, story: Story, scope: Scope) -> bool:
+    """True when every content word of a paragraph, by its root, is in its story's facts or the employer's words:
+    it says nothing they do not, so no AI check is needed."""
+    own = _roots(text)
+    return bool(own) and own <= _roots(f"{story.words()}\n{scope.allowed}\n{' '.join(scope.names)}")
+
+
+def verify(text: str, story: Story, scope: Scope) -> list[Problem]:
+    """What the AI finds a paragraph says that its story's facts do not (prompt `paragraph_verify`); quoted
+    words the facts or the employer's words hold are dropped (`_dropped`); [] for a reply that is not JSON."""
+    request = f"Paragraph:\n{text}\n\nThe facts of the work it is about:\n{story.block()}"
+    reply = llm.chat_json(prompts.text(VERIFY_PROMPT), request, role="main")
+    if not isinstance(reply, dict):
+        return []
+    said, where = writing_check.sentences(text), f"{story.words()}\n{scope.allowed}\n{' '.join(scope.names)}"
+    out = []
+    if reply.get("supported") is False:
+        given = [str(s) for s in reply.get("unsupported") or [] if str(s).strip()]
+        spans = [s for s in given if not _dropped(s, where)]
+        out += [Problem(next((x for x in said if _held(s, x)), ""), NOT_SUPPORTED.format(span=s.strip().strip("\"'")))
+                for s in spans]
+        if not given:
+            out.append(Problem("", NOT_SUPPORTED_ANY))
+    if reply.get("context_ok") is False:
+        out.append(Problem("", WRONG_PLACE))
+    if reply.get("role_ok") is False:
+        out.append(Problem("", TOO_MUCH))
+    return out
+
+
+def ask(prompt_id: str, request: str, scope: Scope, key: str = "paragraph") -> dict | str:
+    """One draft from the AI: the `key` of its JSON reply, undashed and respelt ("" for none), or the whole reply
+    when `key` is ""."""
+    reply = llm.chat_json(prompts.text(prompt_id, **scope.values), request, role="writer",
+                          temperature=DRAFT_TEMPERATURE)
+    if not key:
+        return reply if isinstance(reply, dict) else {}
+    return clean(reply.get(key) if isinstance(reply, dict) else "", scope)
+
+
+def clean(said, scope: Scope) -> str:
+    text = " ".join(str(said or "").split())
+    return spelling.respell(llm.undash(text), scope.values.get("spelling_code")) if text else ""
+
+
+def _request(story: Story, shape: Shape, scope: Scope, last: str = "", found: list[Problem] = ()) -> str:
+    parts = [f"Shape: {shape.words}", story.block(), scope.context]
+    if scope.request:
+        parts.append(f"The applicant asked for this change: {scope.request}")
+    if last:
+        parts.append(f"Your last paragraph:\n{last}\n\nWhat is wrong with it:\n"
+                     + "\n".join(f"- {p.line()}" for p in found)
+                     + "\nWrite it again without these problems, from the facts above alone.")
+    return "\n\n".join(p for p in parts if p)
+
+
+def draft(story: Story, shape: Shape, scope: Scope, last: str = "", found: list[Problem] = ()) -> str:
+    """One paragraph about `story` in `shape` from the AI (prompt `story_paragraph`); with `last` and `found`,
+    the paragraph drafted again without those problems. "" when the facts give nothing for the shape."""
+    return ask(PROMPT, _request(story, shape, scope, last, found), scope)
+
+
+def _judge(text: str, story: Story, scope: Scope, shape: Shape, out: Paragraph) -> list[Problem]:
+    """The checks with no AI, then, when they find nothing and the paragraph says more than its facts' own words,
+    the one AI check."""
+    found = problems(text, story, scope, shape)
+    if found or restates(text, story, scope):
+        return found
+    out.calls += 1
+    return verify(text, story, scope)
+
+
+def _cut(text: str, found: list[Problem], story: Story, scope: Scope, shape: Shape) -> str:
+    """`text` without its failing sentences when what is left still reads (see the module notes); "" else."""
+    if any(not p.sentence for p in found):
+        return ""
+    kept = text
+    for sentence in dict.fromkeys(p.sentence for p in found):
+        said = writing_check.sentences(kept)
+        if sentence not in said or not flow.reads_without(kept, sentence):
+            return ""
+        kept = " ".join(s for s in said if s != sentence)
+    return "" if problems(kept, story, scope, shape) else kept
+
+
+def settle(story: Story, shape: Shape, scope: Scope) -> Paragraph:
+    """One paragraph about `story` in `shape`: drafted, checked (`problems`, then `verify`), drafted once more
+    with what is wrong, then kept, kept without its failing sentences, or dropped (see the module notes)."""
+    out = Paragraph(story)
+    text = draft(story, shape, scope)
+    out.calls += 1
+    if not text:
+        out.dropped = NOTHING
+        return out
+    found = _judge(text, story, scope, shape, out)
+    if found:
+        log.info("paragraph about %s: %s", _called(story), "; ".join(p.line() for p in found))
+        again = draft(story, shape, scope, text, found)
+        out.calls += 1
+        out.redrafted = True
+        if again:
+            text, found = again, _judge(again, story, scope, shape, out)
+    if not found:
+        out.text = text
+        return out
+    kept = _cut(text, found, story, scope, shape)
+    if kept:
+        out.text, out.cut = kept, len(writing_check.sentences(text)) - len(writing_check.sentences(kept))
+    else:
+        out.dropped = "; ".join(dict.fromkeys(p.reason for p in found))
+    log.info("paragraph about %s after its redraft: %s", _called(story), "; ".join(p.line() for p in found))
+    return out

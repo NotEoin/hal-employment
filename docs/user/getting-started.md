@@ -89,8 +89,13 @@ the work served instead. A first draft that breaks one of Hal's writing rules (a
 number, "not just X but Y") is rewritten once, and anything still wrong is listed under **Check before
 sending**. Before it writes a letter, Hal picks the facts it will rest on: up to eight short quotes
 from your CV, the facts you checked and your own documents, each with where the work was done and your part
-in it when your files say so. The letter's notes list them under **Evidence**. The letter, the message
-and the answers say which of these facts each sentence rests on (you never see these marks), and Hal
+in it when your files say so. The letter's notes list them under **Evidence**. Each paragraph in the middle
+of a letter tells one of your projects or jobs, once, written on its own from that work's facts alone and
+checked against them: a tool, number or name from another of your projects is caught, and the paragraph is
+written once more. If it is still wrong, Hal takes out the sentence at fault, or leaves the paragraph out
+and says so under **Check before sending**. The letter opens with who you are, the role and your reason for
+this employer, and closes by asking for the next step. The message and
+the answers say which of these facts each sentence rests on (you never see these marks), and Hal
 checks each sentence about you against only the facts it rests on: a number, tool or detail they do not
 give (a tool you used on a project must be in that project's own facts, as a list of your skills says what
 you know, not where you used it), a project placed somewhere else (your degree instead of your own time),
@@ -99,9 +104,7 @@ or a team's work written as yours alone. Such a sentence is rewritten once; if i
 ..."). A sentence about one of your projects says which one: when nothing before it in its paragraph names
 the project, Hal adds its name ("For <project>, I wrote ..."), or rewrites the sentence once to name it.
 After a sentence is rewritten or taken out, Hal rewrites its paragraph once so it reads well, keeping the
-same facts and adding none. A letter left well under the length you prefer gets one more
-paragraph from facts it has not used yet, checked the same way. When the first letter needed such a fix,
-Hal writes a second one from scratch and keeps the one with fewer problems.
+same facts and adding none.
 Hal also checks what each letter, message and answer says about you against your CV, the facts
 you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed.
