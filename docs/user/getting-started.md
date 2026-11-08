@@ -90,7 +90,8 @@ number, "not just X but Y") is rewritten once, and anything still wrong is liste
 sending**. Before it writes a letter, Hal picks the facts it will rest on: up to eight short quotes
 from your CV, the facts you checked and your own documents, each with where the work was done and your part
 in it when your files say so. The letter's notes list them under **Evidence**. The letter, the message
-and the answers say which of these facts each sentence rests on (you never see these marks), and Hal
+and the answers are written as connected paragraphs from these facts, naming each project when they first
+mention it. Hal then works out which of the facts each sentence rests on (you never see this), and
 checks each sentence about you against only the facts it rests on: a number, tool or detail they do not
 give (a tool you used on a project must be in that project's own facts, as a list of your skills says what
 you know, not where you used it), a project placed somewhere else (your degree instead of your own time),

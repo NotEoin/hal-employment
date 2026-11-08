@@ -9,8 +9,9 @@ What changed in each version, in plain words.
 - **Drafts rest on evidence chosen first.** Before writing a letter, Hal picks up to eight facts it will
   rest on, each quoted word for word from your CV, the facts you checked or your own documents, with where
   the work was done and your part in it (a team of seven, the features you built) when your files say so.
-  The letter's notes list them under **Evidence**. The letter, the message and the answers mark which fact
-  each sentence rests on (you never see the marks), and Hal checks each sentence about you against only
+  The letter's notes list them under **Evidence**. The letter, the message and the answers are written as
+  connected paragraphs from those facts, then Hal notes which fact each sentence rests on (you never see the
+  marks), and Hal checks each sentence about you against only
   those facts: a detail added to fit the advert, a personal project placed in your degree, or a team's work
   written as yours alone is rewritten once, then taken out, or listed when the draft needs it. **Check
   before sending** no longer lists a whole-pack check's guesses, which were mostly false alarms. When the
@@ -175,6 +176,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Drafts read as writing, not a list of facts.** When the writer had to mark the fact behind every sentence
+  as it wrote, letters came out as one fact per sentence, ended on a list of tools and talked about "a
+  113-test suite" without saying which project it was. Drafts are now written freely as connected
+  paragraphs that name each project when they first mention it, and Hal works out afterwards which fact
+  each sentence rests on, so every sentence is still checked against its own facts.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

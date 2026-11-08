@@ -59,7 +59,7 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "prep": "Prepare ", "contacts_pick": "You choose who", "plan": "Choose the evidence",
     "sentence_check": "Check one sentence", "sentence_fix": "Rewrite one sentence",
     "pairing": "Find the applicant's own reason", "smooth": "Rewrite one paragraph",
-    "add": "Write one more paragraph",
+    "add": "Write one more paragraph", "attribute": "Say which evidence items",
 }
 WAIT_S = 10.0
 POLL_S = 0.05
@@ -111,6 +111,9 @@ class FakeWriter:
             return self.pairing
         if pid in ("smooth", "add"):
             return {"paragraph": ""}
+        if pid == "attribute":
+            return {"sentences": [{"n": int(n), "ids": [], "kind": "courtesy"}
+                                  for n in re.findall(r"^(\d+)\. ", user.split("\nSentences:\n", 1)[-1], re.M)]}
         if pid == "contacts_pick":
             return {"picks": [{"n": 1, "why": "Leads the team that is hiring.", "sure": True}]}
         if pid == "prep":
@@ -669,7 +672,7 @@ class Cited(unittest.TestCase):
         self.assertIn("Advert:\nCollections Assistant", asked)
         self.assertIn("Company brief:\nA made-up trust that looks after river boats.", asked)
         self.assertIn('E2: "A made-up note about guiding visitors"', asked)
-        self.assertIn('Motivation pairing (write why this employer from this alone, in [M] sentences): the '
+        self.assertIn('Motivation pairing (write why this employer from this alone): the '
                       'employer\'s "answer enquiries from visitors" and the applicant\'s E2',
                       writer.asked("letter")[0]["user"])
         self.assertEqual((written["pairing"].item.id, written["pairing"].fact),
@@ -695,6 +698,89 @@ class Cited(unittest.TestCase):
         self.assertEqual(written["text"], "I led every tour of the heritage centre.")
         self.assertEqual(written["flags"], ["unsupported claim: I led every tour of the heritage centre. (cites E7, "
                                             "which the evidence plan does not hold)"])
+
+
+FREE_LETTER = ("My dissertation on river trade in an invented port town taught me to read old ledgers closely. "
+               "I would like to talk about the role.")
+FREE_MESSAGE = ("Hello,\n\nI am a history graduate applying for the Collections Assistant role. I guided visitors "
+                "at a made-up heritage centre. What does the team catalogue?")
+FREE_ANSWER = "Guiding visitors at a made-up heritage centre taught me to answer questions clearly."
+
+
+class FreeWriter(FakeWriter):
+    """A fake writer that writes freely, as the prompts now ask, and attributes each sentence by `cites`: the
+    ids of the first key a sentence holds; a sentence holding none is a courtesy. `attributed` False makes the
+    attribution reply hold nothing."""
+
+    def __init__(self, cites_by: dict[str, list[str]] | None = None, attributed: bool = True):
+        super().__init__(plan=PICKS)
+        self.cites_by = cites_by if cites_by is not None else {"dissertation": ["E1"], "guided visitors": ["E2"],
+                                                                "Guiding visitors": ["E2"]}
+        self.attributed = attributed
+
+    def reply(self, system: str, user: str) -> object:
+        pid = prompt_id(system)
+        if pid == "letter":
+            return CITED if cites.MARK_NOTE in user else FREE_LETTER
+        if pid == "message":
+            return FREE_MESSAGE
+        if pid == "answers":
+            return {"answers": [{"question": "Why this role?", "answer": FREE_ANSWER}]}
+        if pid == "attribute":
+            if not self.attributed:
+                return {}
+            said = re.findall(r"^(\d+)\. (.*)$", user.split("\nSentences:\n", 1)[1], re.M)
+            return {"sentences": [{"n": int(n), "ids": next((v for k, v in self.cites_by.items() if k in s), []),
+                                   "kind": "fact" if any(k in s for k in self.cites_by) else "courtesy"}
+                                  for n, s in said]}
+        return super().reply(system, user)
+
+
+class Free(unittest.TestCase):
+    def test_drafts_are_written_freely_then_each_sentence_is_tied_to_its_evidence_and_checked(self):
+        # marking every sentence while writing made choppy one-fact sentences, held at 2 of 5 (2026-11-08)
+        writer = FreeWriter()
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        for pid in ("letter", "message", "answers"):
+            system = " ".join(writer.asked(pid)[0]["system"].split())
+            self.assertNotIn("[E2]", system, pid)
+            self.assertIn("When the request gives an evidence plan, its items are the facts to use", system, pid)
+            self.assertIn('E1: "Dissertation on river trade in an invented port town"', writer.asked(pid)[0]["user"])
+        self.assertIn("name each project, job or module the first time", " ".join(writer.asked("letter")[0]["system"]
+                                                                                    .split()))
+        attributed = writer.asked("attribute")
+        self.assertEqual(len(attributed), 3, "one attribution each for the letter, the message and the answers")
+        self.assertIn("1. My dissertation on river trade", attributed[0]["user"])
+        checked = [e["user"] for e in writer.asked("sentence_check")]
+        self.assertTrue(checked)
+        self.assertTrue(all(("E1:" in u) != ("E2:" in u) for u in checked), "each sees only its own evidence")
+        self.assertIn(FREE_LETTER, section(md, "Cover letter"))
+        self.assertIn(FREE_MESSAGE.split("\n\n", 1)[1], section(md, "Message to the hiring manager"))
+        self.assertIn(FREE_ANSWER, section(md, "Form answers"))
+        self.assertEqual(writer.asked("verify"), [])
+        self.assertNotRegex(md, r"\[(E\d|M)")
+
+    def test_a_sentence_about_you_the_attribution_ties_to_nothing_is_rewritten(self):
+        writer = FreeWriter(cites_by={"guided visitors": ["E2"], "Guiding visitors": ["E2"]})
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            pack.write_letter(a.con, job)
+        fixes = writer.asked("sentence_fix")
+        self.assertTrue(fixes)
+        self.assertIn(f"What is wrong: {cites.NO_EVIDENCE}", fixes[0]["user"])
+
+    def test_when_attribution_fails_the_writer_marks_its_own_draft_once(self):
+        writer = FreeWriter(attributed=False)
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        letters = writer.asked("letter")
+        self.assertEqual(len(letters), 2)
+        self.assertIn(f"Your draft:\n{FREE_LETTER}\n\n{cites.MARK_NOTE}", letters[1]["user"])
+        self.assertEqual(written["text"], cites.strip(CITED))
+        self.assertEqual(writer.asked("verify"), [], "the marked draft is checked sentence by sentence")
 
 
 class Today(unittest.TestCase):

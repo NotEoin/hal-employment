@@ -39,10 +39,13 @@ Design notes:
 - Each draft rests on an evidence plan picked before it is written (`evidence_plan`, `writing.plan`): quotes
   of the CV, the Profile block and the record, each with its card's context and the person's part, as a
   local model framed projects in the wrong place and wrote team work as solo when it wrote freely
-  (2026-11-07). The letter, the message and the answers mark each sentence with the items it rests on
-  (`writing.cites`), and each sentence is checked against only what it cites (`settle`, `writing.grounded`)
-  in place of the whole-draft claim check, whose single call over every draft listed about 20 false alarms
-  for 10 real problems in five packs (2026-11-07). The markers are taken out before a draft is returned.
+  (2026-11-07). The letter, the message and the answers are written freely with the plan as their facts,
+  then one call ties each sentence to the items it rests on (`writing.attribute`, as markers `writing.cites`
+  reads): marking while writing made choppy one-fact sentences that graders held at 2 of 5 for readability
+  (2026-11-08). The writer marks its own draft only when that call fails (`cites.MARK_NOTE`). Each sentence
+  is checked against only what it cites (`settle`, `writing.grounded`) in place of the whole-draft claim
+  check, whose single call over every draft listed about 20 false alarms for 10 real problems in five packs
+  (2026-11-07). The markers are taken out before a draft is returned.
   The letter's reason for the employer comes from a pairing of one employer fact with one plan item
   (`writing.motive`), or it gives none, as letters gave generic motivation that echoed the advert.
 - The pack's checklist names no command: every action is a button on the Documents page.
@@ -57,8 +60,8 @@ from .ai import prompts
 from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
-from .writing import check as writing_check
 from .writing import (
+    attribute,
     cites,
     drafts,
     eligibility,
@@ -73,6 +76,7 @@ from .writing import (
     stage,
     taught,
 )
+from .writing import check as writing_check
 from .writing import plan as planning
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
@@ -571,28 +575,56 @@ def grounds(who: dict, plan: list[planning.Item], *, facts: str, kept: str, empl
                           tuple(plain.settings_labels()))
 
 
+def marked(draft: str, against: grounded.Facts, remark) -> str:
+    """A free draft with each sentence marked with what it rests on (`writing.attribute`); when attributing
+    fails, the writer's own marking (`remark(cites.MARK_NOTE)`), which may come back unmarked. A draft that
+    already carries markers is taken as it is."""
+    if cites.has_markers(draft):
+        return draft
+    done = attribute.mark([draft], list(against.items.values()), against.motive, against.allowed)
+    return done[0] if done is not None else (remark(cites.MARK_NOTE) or draft)
+
+
 def settle(who: dict, draft: str, rewrite, *, plan: list[planning.Item], essential: grounded.Essential, facts: str,
            kept: str, employer: tuple[str, ...], pairing: motive.Pairing | None = None,
            words: int | None = None) -> grounded.Grounded:
     """A letter or message checked for what it says about the person: its text, what is still wrong and what
-    was done. One that cites the evidence `plan` is checked sentence by sentence (`grounded.ground`), and a
-    letter left short of `words` gets one paragraph more (`grounded.lengthen`); one with no markers is
-    checked whole and rewritten once (`fix_claims`)."""
-    if plan and cites.has_markers(draft):
+    was done. With an evidence `plan`, the free draft is attributed (`marked`), each sentence is checked
+    against what it rests on (`grounded.ground`), and a letter left short of `words` gets one paragraph more
+    (`grounded.lengthen`); a draft with no plan, or left with no markers, is checked whole and rewritten once
+    (`fix_claims`)."""
+    if plan:
         against = grounds(who, plan, facts=facts, kept=kept, employer=employer, pairing=pairing)
-        return grounded.lengthen(grounded.ground(draft, against, essential), against, words, essential)
+        draft = marked(draft, against, rewrite)
+        if cites.has_markers(draft):
+            return grounded.lengthen(grounded.ground(draft, against, essential), against, words, essential)
     text, claims, again = fix_claims(who, draft, rewrite, facts=facts, kept=kept, employer=employer)
     return grounded.Grounded(text, claims, int(again), marked=False)
 
 
+def marked_answers(answers: list[dict], against: grounded.Facts, remark) -> list[dict]:
+    """The answers with each sentence marked, as `marked` marks a draft: one attribution for all of them, else
+    the writer's own marking (`remark(cites.MARK_NOTE)`); answers already carrying markers are taken as they
+    are."""
+    texts = [str(a.get("answer") or "") for a in answers]
+    if any(cites.has_markers(t) for t in texts):
+        return answers
+    done = attribute.mark(texts, list(against.items.values()), against.motive, against.allowed)
+    if done is None:
+        return remark(cites.MARK_NOTE) or answers
+    return [{**a, "answer": t} for a, t in zip(answers, done, strict=True)]
+
+
 def settle_answers(who: dict, answers: list[dict], rewrite, *, plan: list[planning.Item], facts: str, kept: str,
                    employer: tuple[str, ...]) -> tuple[list[dict], list[str]]:
-    """The answers checked as `settle` checks a letter, each answer on its own when they cite the plan (an
-    answer's first sentence answers the question, so it is never cut); returns (answers, what is still
-    wrong)."""
-    if not (plan and any(cites.has_markers(str(a.get("answer") or "")) for a in answers)):
+    """The answers checked as `settle` checks a letter, attributed together (`marked_answers`) and then each
+    checked on its own (an answer's first sentence answers the question, so it is never cut); returns
+    (answers, what is still wrong)."""
+    against = grounds(who, plan, facts=facts, kept=kept, employer=employer) if plan else None
+    if against is not None:
+        answers = marked_answers(answers, against, rewrite)
+    if against is None or not any(cites.has_markers(str(a.get("answer") or "")) for a in answers):
         return fix_claims(who, answers, rewrite, facts=facts, kept=kept, employer=employer, as_text=_answers_text)[:2]
-    against = grounds(who, plan, facts=facts, kept=kept, employer=employer)
     out, failed = [], []
     for a in answers:
         done = grounded.ground(str(a.get("answer") or ""), against, grounded.first_of_answer)

@@ -422,10 +422,19 @@ runs: tests use `tests/support/fake_claude/`.
   letter's Evidence line names the plan's quotes, else the record passages as before. The pack picks one
   plan for the letter, the message and the answers (with `COMMON_QUESTIONS`); `docs.change` picks one for
   the message and answers.
-- Evidence markers (`writing/cites.py`): the letter, message and answers requests carry the plan
-  (`pack._plan_part`), and their prompts ask for each sentence about the person to end with the ids it
-  rests on ("[E2]", "[E2,E5]") and a reason for the employer or a closing request with "[M]".
-  `cites.normalise` moves a marker written after a full stop before it, and puts a full stop after a marker
+- Attribution (`writing/attribute.py`, prompt `sentence_attribute`): the letter, message and answers
+  requests carry the plan (`pack._plan_part`) as the facts to use, and their prompts ask for connected
+  paragraphs that name each project when first mentioned, with no markers. Once a draft is written,
+  `pack.marked` (letter, message) and `pack.marked_answers` (all answers in one call) ask once for each
+  numbered sentence's items and kind (`fact`, `motivation`, `courtesy`). `attribute.read_reply` keeps a reply
+  only when it gives every sentence; with no AI, an id the plan lacks is dropped and a sentence about the
+  person (`cites.about_person`) is a fact whatever kind the reply gave. `attribute.marked` writes the
+  result into the draft as markers, so every check below reads it as before. When the reply does not hold,
+  the writer is asked once for its own marked draft (`cites.MARK_NOTE`); a draft that already carries
+  markers is taken as it is. Marking while writing made one-fact sentences that graders held at 2 of 5 for
+  readability; free drafts read well but misframed more (2026-11-08, 2026-11-07).
+- Evidence markers (`writing/cites.py`): "[E2]", "[E2,E5]" after a sentence about the person, "[M]" after
+  a reason for the employer or a courtesy. `cites.normalise` moves a marker written after a full stop before it, and puts a full stop after a marker
   run that has none when a capital, a quote, a digit, a line break or the end of the text follows it ("on
   one consumer GPU [E1] This project" read as one sentence, 2026-11-07); `cites.sentences` splits after
   every marker run with its stop. Every writing check reads the draft without markers (`cites.strip`).

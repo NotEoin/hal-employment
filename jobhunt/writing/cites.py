@@ -1,6 +1,9 @@
 """Evidence markers: each sentence of a draft says which items of the evidence plan (`writing.plan`) it rests
 on, and the markers are checked and taken out before anyone sees the draft.
 
+Drafts are written freely and their markers put in afterwards by `writing.attribute`; a writer is asked to
+mark its own sentences (`MARK_NOTE`) only when that attribution fails.
+
 A sentence that states something about the person ends with the ids of its evidence, "[E2]" or "[E2,E5]",
 before its full stop; a reason for wanting the job or a closing request ends with "[M]", which states no fact
 about the person. `cited(text)` reads each sentence with its marker, `strip(text)` is the draft as the person
@@ -9,9 +12,10 @@ needs evidence; `writing.grounded` checks each sentence against what it cites.
 
 Design decisions, each with its reason:
 
-- The model marks each sentence as it writes it, so a check can tie a sentence to its card whatever words it
-  uses: projects described rather than named ("a personal project included in my degree") slipped past the
-  checks that look for a card's name (2026-11-07).
+- Each sentence is marked, so a check can tie a sentence to its card whatever words it uses: projects
+  described rather than named ("a personal project included in my degree") slipped past the checks that look
+  for a card's name (2026-11-07). A writer marking as it wrote made choppy one-fact sentences, so the marks
+  come from `writing.attribute` after the draft is written (2026-11-08).
 - A sentence is about the person when it is in the first person and has a verb in the past tense, or holds a
   number that neither the employer's words nor the person's stage line hold. An "-ed" word after "am", "be",
   "feel" and the like is an adjective ("I am interested"), and words of being drawn to an employer
@@ -53,6 +57,11 @@ PAST_ED = 5                # an "-ed" word at least this long ("based" and up) c
 NUMBER = re.compile(r"\d[\d,.]*\d|\d|\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|"
                     r"forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|dozen)\b", re.I)
 NO_EVIDENCE = "states something about you but cites no evidence"
+# The writer's own marking, asked for only when attributing a free draft fails (`writing.attribute`).
+MARK_NOTE = ("Write the draft again with the same words, and end each sentence that says anything about the "
+             "applicant with the ids of the evidence plan's items it rests on, in square brackets before its full "
+             "stop: [E2] or [E2,E5]. End a sentence about why this employer, a question or the closing request "
+             "with [M]. Hal checks and removes these markers.")
 NOT_IN_PLAN = "cites {ids}, which the evidence plan does not hold"
 
 
