@@ -672,6 +672,21 @@ class Paragraphs(unittest.TestCase):
         self.assertIsNone(written["pairing"], "a fact the advert never says is no pairing")
         self.assertIn("The reason for this employer: none was found", writer.asked("frame")[0]["user"])
 
+    def test_a_module_the_job_names_and_no_paragraph_shows_is_offered_to_the_opening(self):
+        # letters to an employer stressing security missed high marks in security modules (2026-11-08)
+        from jobhunt.profile import store
+
+        writer = QuillWriter()
+        with quill_world(writer) as a:
+            course = store.add_found(a.con, "education", {
+                "qualification": "BSc", "subject": "Imaginary Studies", "institution": "Made-up University",
+                "modules": [{"name": "Writing Skills", "mark": "88"}, {"name": "Oral History", "mark": "95"}]},
+                {"source_rel": "Sources/CVs and letters/CV.md", "quote": "BSc", "field": "", "doc_type": "cv"})
+            store.confirm(a.con, course)
+            pack.write_letter(a.con, a.job)
+        self.assertIn("no paragraph shows (the opening may name them and their marks in one clause): Writing "
+                      "Skills (88)\n", writer.asked("frame")[0]["user"])
+
     def test_a_letter_needing_no_fix_makes_these_calls(self):
         # a pack made about 55 calls, most of them one per sentence (2026-11-08); a letter is now a call per
         # paragraph, at most one check each, and one for its opening and closing; Quill's paragraph says only its

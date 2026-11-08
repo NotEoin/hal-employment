@@ -694,6 +694,16 @@ def module_names(con: sqlite3.Connection | None = None) -> list[str]:
             for m in it["fields"].get("modules") or [] if m.get("name")]
 
 
+def marked_modules(con: sqlite3.Connection | None = None) -> list[tuple[str, str]]:
+    """The (name, mark) of each module on the education facts the person checked; mark "" when none is given
+    (Hal's own database unless `con`)."""
+    if con is None:
+        with closing(db.connect()) as own:
+            return marked_modules(own)
+    return [(m["name"], str(m.get("mark") or "")) for it in store.items(con, "education", hidden=False)
+            if it["state"] in USED_STATES for m in it["fields"].get("modules") or [] if m.get("name")]
+
+
 def skill_names(con: sqlite3.Connection | None = None) -> list[str]:
     """The names of the skills the person checked (Hal's own database unless `con`)."""
     if con is None:

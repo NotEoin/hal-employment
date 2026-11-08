@@ -15,6 +15,9 @@ Design decisions, each with its reason:
 - The checks are a paragraph's (`writing.paragraphs`) against the frame's own facts: a number or a known tool
   they lack, a course that has ended spoken of as running, the wording of `writing.plain` (the stock links
   among it), a sentence restating the advert or said twice, and the writing rules' high hits.
+- A module the job's requirements name and no paragraph shows may be one clause of the opening, with its mark
+  (`Facts.modules`, `plan.relevant_modules`): letters to an employer stressing security missed the person's
+  high marks in security modules (2026-11-08). It is never a paragraph of its own while projects exist.
 - One call drafts both paragraphs, and one more when either fails, so a letter's frame costs one or two calls.
   An opening still failing is the message's built sentence (`opening.Opening`, from the settings and the
   checked course), which needs no check; a closing still failing is left out, as a letter reads without it.
@@ -60,6 +63,7 @@ class Facts:
     pairing: Pairing | None = None
     told: tuple[str, ...] = ()  # the names of the work the letter's middle tells
     institution: str = ""
+    modules: tuple[str, ...] = ()  # "Name (mark)" of modules the job names that no paragraph shows
 
     def request(self, scope: Scope) -> str:
         """The request: who is writing, the role, the reason, what the middle tells and today."""
@@ -70,6 +74,9 @@ class Facts:
         lines = [f"Who is writing: {who}", f"The role: {self.title} at {self.employer}", reason]
         if self.told:
             lines.append(f"The letter's middle tells (never retell them): {'; '.join(self.told)}")
+        if self.modules:
+            lines.append("Modules of the applicant's that this job asks about and no paragraph shows (the opening "
+                         f"may name them and their marks in one clause): {'; '.join(self.modules)}")
         lines.append(stage.today_lines(scope.now) if scope.now else "")
         if scope.request:
             lines.append(f"The applicant asked for this change: {scope.request}")
@@ -78,7 +85,7 @@ class Facts:
     def words(self) -> str:
         """Every word the frame's facts hold."""
         pair = f"{self.pairing.fact}\n{self.pairing.item.text}\n{self.pairing.reason}" if self.pairing else ""
-        return "\n".join([self.name, self.who, self.title, self.employer, pair, *self.told])
+        return "\n".join([self.name, self.who, self.title, self.employer, pair, *self.told, *self.modules])
 
 
 @dataclass

@@ -445,10 +445,22 @@ runs: tests use `tests/support/fake_claude/`.
   `quotes.ranked`; `plan.STORY_FACTS` (12) in all), one per passage's file and one per other item; a skills list is never a
   story. `Story.block` is what a request gives: the name and tag, where it was done, the person's part,
   what it is, its tools, its facts as plain lines, what is planned and what it can help with, never an
-  evidence id. `plan.choose(stories, n, used)` takes the `n` the pack has told least, best first.
+  evidence id. `plan.choose(stories, n, used)` takes the `n` the pack has told least, best first. Each
+  story has a `kind` (`plan.PROJECT`, `JOB`, `MODULE`, `OTHER`): a pick of the degree itself (`plan.DEGREE`) is
+  never a story, as the opening gives it, and a module line (`plan.module_of`) is a module story of its own.
+  A letter tells `plan.letter_stories`: the plan's project and job stories, then cards no story tells whose
+  words share at least `plan.RELEVANT_MIN` (2) words with the job's requirements (`plan.relevance`), up to
+  `plan.LETTER_STORIES`; modules and other lines only below `plan.MIN_PROJECTS` (2) of those. A CV or Profile
+  line's sentences saying what the person is looking for (`plain.GOAL`) are taken out before it is a
+  source (`plan.without_goal`), and `plain.problems` finds one in a draft (`plain.GOAL_SAID`). The modules
+  the job's requirements name and no paragraph shows, best mark first (`plan.relevant_modules`, at most
+  `plan.MODULE_CLAUSE` (2), from `profile.writing.marked_modules`), go to the opening's request
+  (`frame.Facts.modules`) for one clause.
 - Paragraphs (`writing/paragraphs.py`): a letter whose plan tells any story is `pack._story_letter`: up to
   `plan.LETTER_STORIES` (3) stories, each drafted in its own call from its own story alone (prompt
-  `story_paragraph`, shape `paragraphs.LETTER`: 3 to 4 sentences, the work named in the first) and settled
+  `story_paragraph`, shape `paragraphs.letter(cvdocs.letter_words, n)`: 3 to 4 sentences, a share of the
+  letter's length after `paragraphs.FRAME_WORDS` (70) and never under 60 to 90 words, the work named in the
+  first) and settled
   by `paragraphs.settle`. The checks with no AI (`paragraphs.problems`, `sentence_problems`) read the
   paragraph against its story only, through `paragraphs.Scope` (`pack.paragraph_scope`: every story and
   card, `pack.known_tools`, the employer's words and the stage line, the person's names and settings

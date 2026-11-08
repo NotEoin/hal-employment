@@ -54,6 +54,16 @@ Design decisions, each with its reason:
 - How many stories each draft tells (`LETTER_STORIES`, `ANSWER_STORIES`, `MESSAGE_STORIES`) and which:
   `choose` prefers stories no earlier draft of the pack told, the plan's best first, so a letter's
   paragraphs and the answers each tell a different piece of work while the record has enough.
+- Projects first (`Story.kind`, `letter_stories`, 2026-11-08): a software letter told two university modules
+  ("I scored 86 in ...") instead of strong projects and came to 118 words against a 250-word setting, and
+  another spent a paragraph restating the degree the opening gives. A letter's stories are project and job
+  cards, the plan's first, then other cards the job's words fit (`relevance`, at least `RELEVANT_MIN` words)
+  until it has `LETTER_STORIES`; a module (`module_of`) or a line tied to no card is a paragraph only when
+  fewer than `MIN_PROJECTS` project or job stories exist. The degree itself (`DEGREE`) is never a story, as
+  the opening says it.
+- What the person is looking for (`plain.GOAL`: "seeking a role in ...") is never a source: a CV's summary
+  gave a letter "I am seeking a role in backend, systems or applied AI" (2026-11-08). The sentence is taken
+  out of its line, and a line with nothing else left is no source.
 """
 from __future__ import annotations
 
@@ -63,7 +73,8 @@ from dataclasses import dataclass, field
 
 from jobhunt import llm
 from jobhunt.ai import prompts
-from jobhunt.writing import atoms, drafts, planned, stage
+from jobhunt.writing import atoms, drafts, plain, planned, stage
+from jobhunt.writing import check as writing_check
 
 log = logging.getLogger(__name__)
 
@@ -147,9 +158,20 @@ def _card_of(text: str, cards: list[dict]) -> dict | None:
     return named[0] if len(named) == 1 else None
 
 
+def without_goal(text: str) -> str:
+    """A line without its sentences saying what the person is looking for (`plain.GOAL`); "" when nothing else
+    is left."""
+    kept = [s for s in writing_check.sentences(text) if not plain.GOAL.search(s)] if plain.GOAL.search(text) else [text]
+    return " ".join(kept).strip()
+
+
 def _line_sources(label: str, line: str, cards: list[dict], tied: bool = True) -> list[tuple]:
     """A CV or Profile line as sources: one per entry when it is list-shaped (`atoms.split`), each with the card
-    it names when `tied`, and whether its whole line is a skills list."""
+    it names when `tied`, and whether its whole line is a skills list; [] for a line that only says what the
+    person is looking for (`without_goal`)."""
+    line = without_goal(line)
+    if not line:
+        return []
     entries = atoms.split(line)
     skills = skills_line(label, line)
     return [(label, e, _card_of(e, cards) if tied else None, "", skills, len(entries) > 1) for e in entries]
@@ -168,8 +190,8 @@ def sources(facts: str, kept: str, cards: list[dict], listings: frozenset[str] =
         said = line.strip()
         if said.startswith("- "):
             said = said[2:].strip()
-            if CARD_LINE.match(said):
-                found.append((PROFILE, said, _card_of(said, cards), "", False, False))
+            if CARD_LINE.match(said) and without_goal(said):
+                found.append((PROFILE, without_goal(said), _card_of(said, cards), "", False, False))
             else:
                 found += _line_sources(PROFILE, said, cards, tied=False)
     for label, body in zip(parts[1::2], parts[2::2], strict=True):
@@ -264,6 +286,14 @@ def make(requirements: list[str], questions: list[str], facts: str, kept: str, c
 
 STORY_FACTS = 12           # facts a paragraph is given: the prototype's (2026-11-08); more would be a list to copy
 LETTER_STORIES = 3         # a letter's middle tells two or three pieces of work, one paragraph each
+MIN_PROJECTS = 2           # project or job stories below which a module or another line may be a letter's paragraph
+RELEVANT_MIN = 2           # words of the job's requirements a card's words must share to be told unpicked
+PROJECT, JOB, MODULE, OTHER = "project", "job", "module", "other"     # `Story.kind`
+# The degree itself: a qualification, a class or the course as a whole, which the opening already gives.
+DEGREE = re.compile(r"^(?:Education|Degree|Qualifications?)\b|\b(?:BSc|BA|MSc|MA|MEng|BEng|MPhil|PhD|LLB|BEd|HND|"
+                    r"A-levels?|degree|graduat\w*|honours|hons|first[- ]class|2:[12]|GPA|final[- ]year)\b", re.I)
+# A module line: the Profile's "Module (BA History): Oral History (68)" or a CV's "Year 2 modules: Ferry Studies 86".
+MODULE_LINE = re.compile(r"^(?P<head>[^:]{0,60}\bmodules?\b[^:]{0,60}):\s*(?P<name>.+)$", re.I)
 ANSWER_STORIES = 1         # an answer tells one piece of work ...
 ANSWER_STORIES_MANY = 2    # ... or two, when its question asks for more than one example
 MESSAGE_STORIES = 1        # a message to the person hiring has room for one
@@ -291,6 +321,7 @@ class Story:
     tag: str = ""
     aliases: tuple[str, ...] = ()
     card: dict | None = field(default=None, compare=False, hash=False)
+    kind: str = OTHER          # `PROJECT`, `JOB`, `MODULE` or `OTHER`
 
     def words(self) -> str:
         """Every word the story's facts hold, plans aside: what a paragraph about it may say."""
@@ -298,7 +329,7 @@ class Story:
 
     def block(self) -> str:
         """The story as a request gives it: plain sentences under its name, never an evidence id."""
-        kind = "Job" if self.where == WHERE_JOB else "Project"
+        kind = "Job" if self.where == WHERE_JOB else "Module" if self.kind == MODULE else "Project"
         lines = [f"{kind}: {self.name}" + (f" ({self.tag})" if self.tag else "") if self.name
                  else "Evidence (no name of its own)"]
         lines += [f"Where it was done: {self.where}"] if self.where else []
@@ -318,33 +349,84 @@ def _where(card: dict | None, context: str) -> str:
     return stage.CONTEXT_WORDS.get(context, "")
 
 
-def _story(key: str, items: list[Item], card: dict | None) -> Story:
-    """The story of one card, or of items tied to none: its items' quotes first, its card's own after."""
+def _story(key: str, items: list[Item], card: dict | None, module: str = "") -> Story:
+    """The story of one card (with no items when the plan picked none of it), of a module, or of items tied to
+    none: its items' quotes first, its card's own after."""
     quotes = [*(i.text for i in items if not i.planned), *((card or {}).get("quotes") or [])]
     facts = tuple(list(dict.fromkeys(q for q in quotes if q.strip()))[:STORY_FACTS])
     plans = tuple(i.text for i in items if i.planned)
     use = next((i.use for i in items if i.use), "")
-    first = items[0]
+    first = items[0] if items else Item("", "", "")
     if card is None:
-        return Story(key, "", _where(None, first.context), first.context, first.role, facts=facts, planned=plans,
-                     use=use)
+        return Story(key, module, _where(None, first.context), first.context, first.role, facts=facts,
+                     planned=plans, use=use, kind=MODULE if module else OTHER)
     context = card.get("context", "") or first.context
     return Story(key, card["name"], _where(card, context), context, card.get("role", "") or first.role,
                  card.get("summary", ""), tuple(card.get("tools") or ()), facts, plans,
-                 tuple(card.get("planned") or ()), use, card.get("tag", ""), tuple(card.get("aliases") or ()), card)
+                 tuple(card.get("planned") or ()), use, card.get("tag", ""), tuple(card.get("aliases") or ()), card,
+                 JOB if card.get("kind") == JOB else PROJECT)
+
+
+def module_of(text: str) -> str:
+    """The module a line is about ("Oral History" of "Module (BA History): Oral History (68)"), "" for none."""
+    found = MODULE_LINE.match((text or "").strip())
+    return atoms.MARK.sub("", found.group("name")).strip() if found else ""
 
 
 def stories(items: list[Item], cards: list[dict]) -> list[Story]:
     """The pieces of work the plan's items tell, best first (see the module notes): one per card, one per
-    passage's file, one per other item; a skills list tells none."""
+    module, one per passage's file, one per other item; a skills list and the degree itself tell none."""
     by_name = {c["name"]: c for c in cards if c.get("name")}
-    groups: dict[str, list[Item]] = {}
+    groups: dict[str, tuple[str, list[Item]]] = {}
     for i in items:
-        if i.skills:
-            continue
-        key = i.card or (i.source if i.source not in (CV, PROFILE) else f"{i.source} {i.id}")
-        groups.setdefault(key, []).append(i)
-    return [_story(key, its, by_name.get(its[0].card)) for key, its in groups.items()]
+        module = "" if i.card else module_of(i.text)
+        if i.skills or (not i.card and not module and DEGREE.search(i.text)):
+            continue                       # what the person knows, or the degree the opening says
+        key = i.card or (f"Module {module}" if module else
+                         i.source if i.source not in (CV, PROFILE) else f"{i.source} {i.id}")
+        groups.setdefault(key, (module, []))[1].append(i)
+    return [_story(key, its, by_name.get(its[0].card), module) for key, (module, its) in groups.items()]
+
+
+def relevance(card: dict, wanted: str) -> int:
+    """How many words of the job's requirements (`wanted`) a card's name, summary, tools and quotes share."""
+    def words(text: str) -> set[str]:
+        return {w for w in writing_check.words_of(text) if w not in drafts.LITTLE_WORDS}
+
+    own = " ".join([card.get("name", ""), card.get("summary", ""), *card.get("tools", ()), *card.get("quotes", ())])
+    return len(words(own) & words(wanted))
+
+
+MODULE_CLAUSE = 2          # modules one clause of the opening may name: more is a transcript, not a reason
+
+
+def relevant_modules(modules: list[tuple[str, str]], wanted: str, told: str, n: int = MODULE_CLAUSE) -> tuple[str, ...]:
+    """The modules (name, mark) whose names share a word with the job's requirements (`wanted`) and none with
+    what the letter's paragraphs tell (`told`), best mark first, at most `n`, each "Name (mark)". A security
+    advert's letters missed the person's high marks in security modules that no project showed (2026-11-08)."""
+    def words(text: str) -> set[str]:
+        return {w for w in writing_check.words_of(text) if w not in drafts.LITTLE_WORDS and len(w) > 2}
+
+    asked, shown = words(wanted), words(told)
+    fits = [(name, mark) for name, mark in modules if words(name) & asked and not words(name) & shown]
+    marks = [float(m) if re.fullmatch(r"\d+(?:\.\d+)?", str(m).strip()) else -1.0 for _, m in fits]
+    best = sorted(range(len(fits)), key=lambda k: -marks[k])[:n]
+    return tuple(f"{fits[k][0]} ({fits[k][1]})" if str(fits[k][1]).strip() else fits[k][0] for k in best)
+
+
+def letter_stories(found: list[Story], cards: list[dict], wanted: str, n: int = LETTER_STORIES) -> list[Story]:
+    """The `n` stories a letter tells (see the module notes): the plan's project and job stories, then the cards
+    the job's requirements (`wanted`) fit best that no story tells, then, only below `MIN_PROJECTS` of those,
+    modules and other lines in the plan's order."""
+    told = [s for s in found if s.kind in (PROJECT, JOB)]
+    names = {s.name for s in found}
+    fits = sorted(((relevance(c, wanted), k) for k, c in enumerate(cards)
+                   if c.get("name") and c["name"] not in names and (c.get("quotes") or c.get("summary"))),
+                  key=lambda r: (-r[0], r[1]))
+    told += [_story(cards[k]["name"], [], cards[k]) for r, k in fits if r >= RELEVANT_MIN][:max(n - len(told), 0)]
+    if len(told) < MIN_PROJECTS:
+        told += [s for s in found if s.kind not in (PROJECT, JOB)]
+    return told[:n]
 
 
 def choose(found: list[Story], n: int, used: dict[str, int]) -> list[Story]:

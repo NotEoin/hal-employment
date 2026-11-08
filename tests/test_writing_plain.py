@@ -40,6 +40,13 @@ class Problems(unittest.TestCase):
                          "You are looking for someone who can write reports."):
             self.assertEqual(plain.problems(sentence, NAMES, LABELS), [plain.LEAD_IN_SAID], sentence)
 
+    def test_saying_what_roles_you_are_looking_for_is_found(self):
+        # "I am seeking a role in backend, systems or applied AI" reached a letter (2026-11-08)
+        for said in ("I am seeking a role in backend, systems or applied AI.",
+                     "I am looking for graduate positions in data.", "My career goal is research."):
+            self.assertIn(plain.GOAL_SAID, plain.problems(said), said)
+        self.assertEqual(plain.problems("Quill is looking for patterns in my notes."), [])
+
     def test_plain_first_person_sentences_are_fine(self):
         for sentence in ("I built a tide logger in Lua in my own time.", "My name is Avery Quillon.",
                          "I hope to be the candidate you need.", "The role needs SQL, which I used every week.",

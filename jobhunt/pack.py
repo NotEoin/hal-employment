@@ -596,24 +596,30 @@ def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, k
 
 
 def letter_frame(who: dict, job, scope: paragraphs.Scope, pairing: motive.Pairing | None,
-                 told: tuple[str, ...]) -> frame.Facts:
+                 told: tuple[str, ...], modules: tuple[str, ...] = ()) -> frame.Facts:
     """The fixed facts of a letter's opening and closing: the person's name and course (`opening.described`), the
-    role, the reason for this employer and the names of the work the middle tells."""
+    role, the reason for this employer, the names of the work the middle tells and the `modules` the job's
+    requirements name that no paragraph shows (`plan.relevant_modules`)."""
     name = str(who.get("name") or "")
     now = scope.now or stage.current()
     return frame.Facts("" if name == SOMEONE else name, opening.described(now), job["title"], job["company"],
-                            pairing, told, now.institution)
+                       pairing, told, now.institution, modules)
 
 
 def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, kept: str, facts: str,
-                  plan: list[planning.Item], pairing: motive.Pairing | None) -> dict:
-    """A letter told one piece of work a paragraph (`writing.paragraphs`): up to `plan.LETTER_STORIES` stories,
-    each drafted from its own facts and checked against them, between an opening and a closing drafted from the
-    fixed facts of who is writing, the role and the reason for this employer (`letter_frame`, `writing.frame`)."""
-    bodies = [paragraphs.settle(s, paragraphs.LETTER, scope)
-              for s in planning.choose(list(scope.stories), planning.LETTER_STORIES, {})]
+                  plan: list[planning.Item], pairing: motive.Pairing | None, wanted: str = "") -> dict:
+    """A letter told one piece of work a paragraph (`writing.paragraphs`): the stories of `plan.letter_stories`
+    for the job's requirements (`wanted`), projects first, each drafted from its own facts and checked against
+    them, at a length that fills the person's letter length (`paragraphs.letter`), between an opening and a
+    closing drafted from the fixed facts of who is writing, the role and the reason for this employer
+    (`letter_frame`, `writing.frame`)."""
+    chosen = planning.letter_stories(list(scope.stories), list(scope.cards), wanted)
+    shape = paragraphs.letter(who.get("letter_words"), len(chosen))
+    bodies = [paragraphs.settle(s, shape, scope) for s in chosen]
     told = tuple(b.story.name for b in bodies if b.text and b.story.name)
-    facts_said = letter_frame(who, job, scope, pairing, told)
+    modules = planning.relevant_modules(profile_writing.marked_modules(), wanted,
+                                        "\n".join(b.story.words() for b in bodies if b.text))
+    facts_said = letter_frame(who, job, scope, pairing, told, modules)
     framed = frame.settle(facts_said, scope)
     cards = list(scope.cards)
     text = "\n\n".join(p for p in (framed.opening, *(b.text for b in bodies), framed.closing) if p)
@@ -659,7 +665,8 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     if found:
         scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
                                 request=request, kind="letter")
-        return _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing)
+        return _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing,
+                             wanted="\n".join(_requirements(analysis)))
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     text += f"\n\n{motive.block(pairing)}" if pairing is not None else ""
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")

@@ -34,6 +34,9 @@ Design decisions, each with its reason:
   one pointing at something, `flow.reads_without`, and the shape keeps its least number of sentences and its
   name); else it is dropped and listed with why (`Paragraph.listed`). A sentence that was fixed or cut is
   never listed: only what the person should act on is.
+- A letter's paragraphs share the person's letter length (`letter`): what the opening and closing leave
+  (`FRAME_WORDS`) divided among the stories, never under `PARAGRAPH_WORDS`, so three project paragraphs
+  reach the length setting (a letter came to 118 words against 250, 2026-11-08).
 """
 from __future__ import annotations
 
@@ -117,6 +120,20 @@ MESSAGE = Shape("answer", "The body of a short message to the person hiring, aft
                           "about the team's work on what it can help with. At most 60 words in all. No greeting, "
                           "no introduction and no sign-off.", "any", 2)
 ANSWER_WORDS = 100         # words of a whole form answer, as the answers prompt asks
+FRAME_WORDS = 70           # words of a letter's opening and closing together: three sentences and one or two
+PARAGRAPH_WORDS = (60, 90)  # least and most words a letter paragraph is asked for, whatever the length setting
+PARAGRAPH_SPREAD = 15      # words either side of a paragraph's share of the letter
+
+
+def letter(words: int | None, n: int) -> Shape:
+    """The shape of a letter paragraph when the letter tells `n` of them in about `words` words: each a share of
+    what the opening and closing leave (`FRAME_WORDS`), never under `PARAGRAPH_WORDS`. A letter of two module
+    paragraphs came to 118 words against a 250-word setting (2026-11-08)."""
+    if not words or n <= 0:
+        return LETTER
+    share = max(PARAGRAPH_WORDS[0] + PARAGRAPH_SPREAD, (int(words) - FRAME_WORDS) // n)
+    low, high = max(PARAGRAPH_WORDS[0], share - PARAGRAPH_SPREAD), max(PARAGRAPH_WORDS[1], share + PARAGRAPH_SPREAD)
+    return Shape("letter", LETTER.words.replace("60 to 90 words", f"{low} to {high} words"), "first", 2)
 
 
 def answer(question: str, nth: int = 0, of: int = 1) -> Shape:

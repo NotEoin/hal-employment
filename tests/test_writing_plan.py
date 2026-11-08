@@ -236,5 +236,63 @@ class Stories(unittest.TestCase):
         self.assertEqual(plan.examples_wanted("Tell us about a project you are proud of."), 1)
 
 
+QUILL = {"kind": "project (personal project)", "name": "Quill", "tools": ["Lua"], "context": "personal",
+         "summary": "An offline assistant that answers questions over notes.", "aliases": [], "role": "",
+         "files": [], "quotes": ["Quill answers questions over a folder of notes with a 40-test suite."]}
+MODULES_CV = ("BSc Imaginary Studies, Made-up University, First Class Honours\n"
+              "Year 3 modules (overall 81): Algorithm Design 86, Computer Systems 96\n"
+              "Final-year Imaginary Studies student seeking a role in backend, systems or applied AI.\n"
+              "Project, Ferry planner (Python, Flask): wrote the statistics features of a timetable app in a team of 7")
+
+
+class ProjectsFirst(unittest.TestCase):
+    """A software letter told two modules instead of strong projects and came to 118 words against 250, another
+    restated the degree, and one said "I am seeking a role in backend, systems or applied AI" (2026-11-08)."""
+
+    def setUp(self):
+        self.found = plan.sources(MODULES_CV, "", [TIDE, FERRY, QUILL])
+        self.items = plan.checked({"evidence": [
+            {"source": "S1", "quote": "BSc Imaginary Studies, Made-up University, First Class Honours"},
+            {"source": "S2", "quote": "Year 3 modules (overall 81): Algorithm Design 86"},
+            {"source": "S3", "quote": "Year 3 modules (overall 81): Computer Systems 96"},
+            {"source": "S4", "quote": "wrote the statistics features of a timetable app"}]}, self.found)
+        self.stories = plan.stories(self.items, [TIDE, FERRY, QUILL])
+
+    def test_what_the_person_is_looking_for_is_never_a_source(self):
+        self.assertFalse(any("seeking" in s.text for s in self.found))
+        self.assertEqual(plan.without_goal("I build tools. I am seeking a graduate role in data."), "I build tools.")
+
+    def test_the_degree_is_never_a_story_and_a_module_is_a_story_of_its_own(self):
+        self.assertEqual([(s.kind, s.name) for s in self.stories],
+                         [("module", "Algorithm Design"), ("module", "Computer Systems"), ("project", "Ferry planner")])
+        self.assertTrue(self.stories[0].block().startswith("Module: Algorithm Design\n"))
+
+    def test_a_letter_tells_projects_and_fills_with_the_cards_the_job_fits(self):
+        told = plan.letter_stories(self.stories, [TIDE, FERRY, QUILL], "Answer questions over internal notes")
+        self.assertEqual([s.name for s in told], ["Ferry planner", "Quill"],
+                         "a card the job fits joins; Tide gauge shares no word of the job's")
+        self.assertEqual(told[1].facts, tuple(QUILL["quotes"]))
+
+    def test_a_module_is_a_paragraph_only_when_too_few_projects_fit(self):
+        told = plan.letter_stories(self.stories, [TIDE, FERRY], "Answer questions over internal notes")
+        self.assertEqual([s.name for s in told], ["Ferry planner", "Algorithm Design", "Computer Systems"])
+
+    def test_the_strongest_modules_the_job_names_that_no_paragraph_shows_are_offered(self):
+        modules = [("Network Security", "91"), ("Applied Cryptography", "88"), ("Security Law", "70"),
+                   ("Oral History", "95")]
+        self.assertEqual(plan.relevant_modules(modules, "Secure networks and cryptography; security reviews",
+                                               "Quill answers questions"),
+                         ("Network Security (91)", "Applied Cryptography (88)"))
+
+
+class LetterLength(unittest.TestCase):
+    def test_each_paragraph_takes_a_share_of_the_letters_length(self):
+        from jobhunt.writing import paragraphs
+
+        self.assertIn("3 to 4 sentences, 70 to 100 words", paragraphs.letter(325, 3).words)
+        self.assertIn("60 to 90 words", paragraphs.letter(200, 3).words, "never under the least")
+        self.assertIs(paragraphs.letter(None, 3), paragraphs.LETTER)
+
+
 if __name__ == "__main__":
     unittest.main()

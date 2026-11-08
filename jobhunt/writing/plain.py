@@ -26,6 +26,8 @@ Design decisions, each with its reason:
   "matters for the role", "demonstrates my ability to", and every closing sentence of a prototype's paragraphs
   was "This experience matters for the role because it demonstrates my ability to ..." (2026-11-08). The
   sentence that ties a piece of work to the job should name what in the job it helps with instead.
+- What the person is looking for ("I am seeking a role in backend, systems or applied AI", `GOAL`) is a
+  problem: a letter is for one role, and the search settings and a CV's summary leaked into one (2026-11-08).
 - The settings' own wording reaches a request only as the person's plain values (`cv.status_line`); a
   label still found in a draft is a problem. `you.work_status` is how forms should word the right to work,
   so it is a label too unless it is already a sentence in the first person.
@@ -69,7 +71,12 @@ STOCK = re.compile(
     r"directly (?:supports?|relevant|applicable|relates)|matters? (?:for|to) (?:the|this|your) (?:role|job|"
     r"position|post|team)|demonstrates? my (?:ability|capacity|capability|skills?)|(?:this|that|the) experience "
     r"matters)\b", re.I)
+# What the person is looking for, as a CV's summary or the search settings say it: "seeking a role in ...".
+GOAL = re.compile(r"\b(?:seeking|looking for|searching for|hoping to find|aiming for)\s+(?:an?\s+|my\s+)?"
+                  r"(?:[\w-]+\s+){0,3}?(?:roles?|positions?|jobs?|posts?|opportunit(?:y|ies)|placements?|"
+                  r"internships?|careers?)\b|\bcareer (?:goal|objective)s?\b", re.I)
 LEAD_IN_SAID = "opens with the advert's requirement; say what you did in your own words"
+GOAL_SAID = "says what roles you are looking for; this letter is for this role alone"
 STOCK_SAID = ('ties the work to the job with a stock phrase ("{phrase}"); name the thing in the job it helps '
               "with, in your own words")
 CV_SAID = "points at your CV instead of saying it"
@@ -111,6 +118,8 @@ def problems(sentence: str, names: list[str] = (), labels: list[str] = ()) -> li
         out.append(STOCK_SAID.format(phrase=stock.group(0)))
     if CV_SAYS.search(text):
         out.append(CV_SAID)
+    if GOAL.search(text):
+        out.append(GOAL_SAID)
     if _third_person(text, list(names)):
         out.append(THIRD_SAID)
     out += [LABEL_SAID.format(label=label) for label in labels

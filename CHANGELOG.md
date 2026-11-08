@@ -186,6 +186,12 @@ What changed in each version, in plain words.
   held table rows, links, credit lines and ratings, and missed what the project's own README says. Hal now
   keeps only sentences about the work, adds the sentences of the project's own README, and gives the ones
   with a result or a number first.
+- **Letters tell your projects first.** A letter for a software role told two university modules instead of
+  strong projects and came to half its length, and another spent a paragraph on the degree its opening
+  already gave. A letter now tells your projects and jobs that fit the job, up to three, each long enough
+  to reach your letter length. A module is a paragraph only when fewer than two projects fit; a module the
+  job asks about that no paragraph shows may get one clause with its mark in the opening. What you said you
+  are looking for ("seeking a role in ...") no longer reaches a letter.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that
