@@ -5,7 +5,6 @@ invented. The AI is the fake one, answering the `ingest_doc` prompt with canned 
 """
 import contextlib
 import functools
-import http.client
 import io
 import json
 import struct
@@ -13,7 +12,6 @@ import tempfile
 import threading
 import time
 import unittest
-import uuid
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -1283,40 +1281,6 @@ class Origins(unittest.TestCase):
         self.assertEqual(got["Poster report.md"], ("mine", "own"))
         self.assertEqual(got["lab report.md"], ("course", "taught"))
 
-    def test_the_folder_route_takes_where_each_folder_came_from(self):
-        hal = self.enterContext(HalServer())
-        self.enterContext(mock.patch.object(record, "VAULT", Path(paths.record_default()), create=True))
-        self.addCleanup(record._CACHE.clear)
-        mine, course, mixed = hal.home / "Mine", hal.home / "Modules", hal.home / "Other"
-        for folder in (mine, course, mixed):
-            put(folder, "a.md", "# A")
-        c = hal.signed_in()
-        with mock.patch.object(ingest_actions.runner, "start", return_value="a1") as start:
-            out = c.post("/api/v2/record/ingest", {"folders": [{"path": str(mine), "origin": "mine"},
-                                                               {"path": str(course), "origin": "course"},
-                                                               str(mixed)]})
-        self.assertEqual(out.status, 200, out.text)
-        params = start.call_args.kwargs["params"]
-        self.assertEqual(params["origins"], {str(mine.resolve()): "mine", str(course.resolve()): "course"})
-        bad = c.post("/api/v2/record/ingest", {"folders": [{"path": str(mine), "origin": "theirs"}]})
-        self.assertEqual(bad.status, 400)
-
-    def test_the_command_line_names_folders_of_their_own_work_and_course_material(self):
-        from jobhunt.cli import record as cli_record
-
-        sent = []
-
-        def hal(method, path, body=None):
-            sent.append(body)
-            return (200, {"action_id": "a1"}) if method == "POST" else (200, {"state": "done"})
-
-        with mock.patch.object(cli_record, "_hal", hal), mock.patch.object(cli_record.time, "sleep"), \
-                contextlib.redirect_stdout(io.StringIO()):
-            cli_record.ingest(["Mixed"], mine=["Mine"], course=["Modules"])
-        self.assertEqual([(Path(f["path"]).name, f["origin"]) for f in sent[0]["folders"]],
-                         [("Mixed", "mixed"), ("Mine", "mine"), ("Modules", "course")])
-
-
 class Frontmatter(unittest.TestCase):
     def test_lists_and_awkward_scalars_round_trip(self):
         fields = {"title": "Report: phase 2 # draft", "tags": ["a", "b-c"], "about_owner": "true", "empty": [],
@@ -1383,19 +1347,6 @@ class Progress(unittest.TestCase):
             self.assertEqual(shown["not_downloaded_paths"], ["Files/Cloud/Offer letter.pdf"])
             self.assertEqual(shown["categories"], {"CVs and letters": 1})
 
-    def test_a_file_dropped_in_the_drop_folder_is_picked_up_and_moved_in(self):
-        with home() as (con, vault, _files), fake_ai({}):
-            drop = vault / sources.DROP_DEFAULT
-            put(drop, "Certificate of completion.md", "# First aid\n\nCompleted 2025.")
-            self.assertTrue(engine.drop_has_new(con))
-            done = finished(ingest_actions.queue_drop())
-            self.assertEqual(done["state"], "done", done["error"])
-            self.assertFalse((drop / "Certificate of completion.md").exists())
-            self.assertTrue((vault / record.ORIGINALS / "Certificates" / "Certificate of completion.md").exists())
-            self.assertFalse(engine.drop_has_new(con))
-            self.assertIsNone(ingest_actions.queue_drop())
-
-
 class Routes(unittest.TestCase):
     def setUp(self):
         self.hal = self.enterContext(HalServer())
@@ -1409,32 +1360,6 @@ class Routes(unittest.TestCase):
         shown = self.hal.signed_in().get("/api/v2/record/ingest").json()
         self.assertEqual((shown["state"], shown["done"], shown["total"]), ("none", 0, 0))
 
-    def test_a_folder_on_this_computer_is_read_and_the_page_shows_how_it_went(self):
-        put(self.files, "CV.md", CV_TEXT)
-        put(self.files, "OneDrive/Reference.pdf", bytes(64))
-        c = self.hal.signed_in()
-        started = c.post("/api/v2/record/ingest", {"folders": [str(self.files)]})
-        self.assertEqual(started.status, 200, started.text)
-        self.assertEqual(finished(started.json()["action_id"])["state"], "done")
-        shown = c.get("/api/v2/record/ingest").json()
-        self.assertEqual((shown["state"], shown["done"], shown["total"], shown["not_downloaded"]), ("done", 2, 2, 1))
-        self.assertEqual(shown["not_downloaded_paths"], ["Old laptop/OneDrive/Reference.pdf"])
-        self.assertEqual(shown["stages"]["written"], 1)
-        self.assertTrue(list((self.folder / "Sources").rglob("*.md")))
-
-    def test_the_local_key_starts_an_ingest_and_follows_it_without_a_window(self):
-        # `python -m jobhunt ingest` runs a long ingest in the running Hal, where its progress shows
-        from jobhunt.web import auth
-
-        put(self.files, "CV.md", CV_TEXT)
-        c = self.hal.client()
-        key = {"Authorization": f"Bearer {auth.local_api_key()}"}
-        self.assertEqual(c.get("/api/v2/record/ingest").status, 401)
-        started = c.post("/api/v2/record/ingest", {"folders": [str(self.files)]}, headers=key)
-        self.assertEqual(started.status, 200, started.text)
-        self.assertEqual(finished(started.json()["action_id"])["state"], "done")
-        self.assertEqual(c.get("/api/v2/record/ingest", headers=key).json()["state"], "done")
-
     def test_reading_again_is_refused_when_the_ai_has_read_everything(self):
         c = self.hal.signed_in()
         self.assertEqual(c.post("/api/v2/record/ingest/again", {}).status, 400)
@@ -1443,14 +1368,6 @@ class Routes(unittest.TestCase):
             started = c.post("/api/v2/record/ingest/again", {})
         self.assertEqual(started.json(), {"action_id": "a1"})
         self.assertTrue(queue.call_args.kwargs["again"])
-
-    def test_pasted_links_start_an_ingest_and_an_empty_paste_is_refused(self):
-        c = self.hal.signed_in()
-        self.assertEqual(c.post("/api/v2/record/links", {"urls": []}).status, 400)
-        with mock.patch.object(ingest_actions, "queue", return_value="a1") as queue:
-            started = c.post("/api/v2/record/links", {"urls": "https://example.org/me  https://example.org/blog"})
-        self.assertEqual(started.json(), {"action_id": "a1"})
-        self.assertEqual(queue.call_args.kwargs["urls"], ["https://example.org/me", "https://example.org/blog"])
 
     def test_reading_a_folder_by_path_is_refused_from_another_computer_and_inside_the_record(self):
         put(self.files, "CV.md", CV_TEXT)
@@ -1461,47 +1378,6 @@ class Routes(unittest.TestCase):
         self.assertEqual(c.post("/api/v2/record/ingest", {"folders": [str(self.folder)]}).status, 400)
         self.assertEqual(c.post("/api/v2/record/ingest", {"folders": [str(self.files / "missing")]}).status, 400)
         self.assertEqual(c.post("/api/v2/record/ingest", {"folders": []}).status, 400)
-
-    def test_an_uploaded_zip_is_unpacked_safely_and_read(self):
-        from test_evidence_routes import upload
-
-        from jobhunt.evidence import routes as evidence
-
-        evidence.make_default()
-        data = zip_bytes({"Year 1/CV.md": CV_TEXT.encode(), "../../escape.md": b"# Out"})
-        status, out = upload(self.hal, self.hal.signed_in(), {"uni.zip": data})
-        self.assertEqual(status, 200, out)
-        self.assertIsNone(out["action_id"], "a zip alone starts the ingest, not a plain read")
-        self.assertEqual(finished(out["ingest_id"])["state"], "done")
-        shown = self.hal.signed_in().get("/api/v2/record/ingest").json()
-        self.assertEqual(shown["states"].get("done"), 1)
-        self.assertTrue(any("points outside the zip" in e["error"] for e in shown["errors"]))
-        self.assertFalse((self.hal.home / "escape.md").exists())
-        self.assertFalse(list(sources.uploads_dir().glob("*.zip")), "the upload is removed once it is read")
-
-    def test_an_uploaded_zip_keeps_where_the_person_said_it_came_from(self):
-        from jobhunt.evidence import routes as evidence
-
-        evidence.make_default()
-        boundary = uuid.uuid4().hex
-        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="origin"\r\n\r\ncourse\r\n'
-                f'--{boundary}\r\nContent-Disposition: form-data; name="file0"; filename="GEO101.zip"\r\n'
-                f"Content-Type: application/zip\r\n\r\n").encode() + zip_bytes({"a.md": b"# A"}) \
-            + f"\r\n--{boundary}--\r\n".encode()
-        c = self.hal.signed_in()
-        con = http.client.HTTPConnection("127.0.0.1", self.hal.port, timeout=30)
-        with mock.patch.object(ingest_actions, "queue", return_value="a1") as queue:
-            try:
-                con.request("POST", "/api/v2/record/files", body=body, headers={
-                    "Host": f"127.0.0.1:{self.hal.port}", "X-Hal": "1",
-                    "Content-Type": f"multipart/form-data; boundary={boundary}",
-                    "Cookie": "; ".join(f"{k}={v}" for k, v in c.jar.items())})
-                reply = con.getresponse()
-                self.assertEqual(reply.status, 200, reply.read())
-            finally:
-                con.close()
-        (zip_path, origin), = queue.call_args.kwargs["origins"].items()
-        self.assertEqual((Path(zip_path).name, origin), ("GEO101.zip", "course"))
 
     def test_only_the_upload_route_takes_a_body_past_the_usual_cap(self):
         from jobhunt.evidence import routes as evidence

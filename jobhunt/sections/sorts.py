@@ -145,6 +145,15 @@ def inbox_known(con: sqlite3.Connection, but: int | None = None) -> set[str]:
                                       "WHERE s.kind = 'inbox' AND s.id != ?", (-1 if but is None else but,))}
 
 
+def inbox_has_new(con: sqlite3.Connection, folder: Path) -> bool:
+    """True when the drop folder holds a file no sort of it has proposed (alone or inside a project folder)."""
+    known = inbox_known(con)
+    for f in discover.walk(folder).files:
+        if not any(str(p) in known for p in (f.path, *f.path.parents)):
+            return True
+    return False
+
+
 def _card_titles(con: sqlite3.Connection, ids: set[int]) -> dict[int, str]:
     if not ids:
         return {}

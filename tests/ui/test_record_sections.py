@@ -95,7 +95,7 @@ class RecordSections(unittest.TestCase):
         with closing(db.connect()) as con:
             return sources.listing(con, section)
 
-    def test_the_cvs_panel_takes_cvs_and_letters_and_the_old_drop_zone_is_folded_away(self) -> None:
+    def test_the_cvs_panel_takes_cvs_and_letters_and_the_old_drop_zone_is_gone(self) -> None:
         for size, scheme in (("wide", "light"), ("narrow", "dark")):
             with self.subTest(size=size):
                 p = self.page("record", size, scheme)
@@ -104,10 +104,8 @@ class RecordSections(unittest.TestCase):
                 kinds = cvs.get_by_label("What is it?")
                 self.assertEqual(kinds.locator("option").all_inner_texts(),
                                  ["CV", "Cover letter", "Personal statement"])
-                fold = p.page.locator("details.rec-more")
-                self.assertIsNone(fold.get_attribute("open"))
-                fold.locator("summary", has_text="More ways to add").click()
-                p.shows(fold.get_by_text("Drop files here to add them"), "the old drop zone")
+                self.assertEqual(p.page.get_by_text("More ways to add").count(), 0, "the old drop zone is gone")
+                p.shows(p.page.get_by_role("heading", name="Sort a big folder for me"), "the sort card instead")
                 self.clean(p)
         cvs.locator("input[type=file]").first.set_input_files(self.file("Marnie CV.md", CV))
         row = cvs.locator("li.rec-source", has_text="Marnie CV")

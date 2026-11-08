@@ -144,11 +144,6 @@ class RecordPage(unittest.TestCase):
                       "current": True}, LETTER, "letter", "since October 2023")
         return ids
 
-    def more(self, p: AppPage) -> AppPage:
-        """Opens "More ways to add" on Overview, where the older bulk read of files, folders and links is."""
-        p.page.locator("details.rec-more summary").click()
-        return p
-
     def card(self, p: AppPage, title: str):
         """The card of the item with this title."""
         return p.page.locator("article.rec-item", has=p.page.locator("h3", has_text=title))
@@ -381,43 +376,6 @@ class RecordPage(unittest.TestCase):
         self.assertTrue(queued[0]["tidy"])
         self.assertEqual(self.errors(p), [])
 
-    def test_pasted_links_start_a_read(self) -> None:
-        queued = []
-        self.enterContext(mock.patch.object(ingest_actions, "queue",
-                                            side_effect=lambda **kw: queued.append(kw) or "ing2"))
-        p = self.more(self.page())
-        p.page.get_by_label("Web links").fill("https://example.org/marnie\n\nhttps://github.com/made-up-marnie\n")
-        p.page.get_by_role("button", name="Read these links").click()
-        p.shows(p.page.get_by_text("Hal is reading the links into your record."), "the toast")
-        self.assertEqual(queued[0]["urls"], ["https://example.org/marnie", "https://github.com/made-up-marnie"])
-        self.assertEqual(self.errors(p), [])
-
-    def test_folders_can_be_read_here_but_not_from_another_computer(self) -> None:
-        here = self.more(self.page())
-        p_folders = here.page.get_by_label("Folders on this computer")
-        here.shows(p_folders, "the folders box")
-        away = self.more(self.page("record", remote=True, remote_host="deskbox"))
-        away.shows(away.page.get_by_label("Web links"), "the links box")
-        self.assertEqual(away.page.get_by_label("Folders on this computer").count(), 0)
-        self.assertEqual(self.errors(away), [])
-
-    def test_folders_of_their_own_work_are_read_as_theirs(self) -> None:
-        folder = self.hal.home / "Dissertation"
-        folder.mkdir(parents=True, exist_ok=True)
-        queued = []
-        self.enterContext(mock.patch.object(ingest_actions, "queue",
-                                            side_effect=lambda **kw: queued.append(kw) or "ing2"))
-        p = self.more(self.page())
-        choice = p.page.get_by_role("radiogroup", name="What are you adding?")
-        p.shows(choice, "the choice of where the files came from")
-        self.assertEqual(choice.get_by_role("radio", name="A mix of both").get_attribute("aria-checked"), "true")
-        choice.get_by_role("radio", name="My own work").click()
-        p.page.get_by_label("Folders on this computer").fill(str(folder))
-        p.page.get_by_role("button", name="Read these folders").click()
-        p.shows(p.page.get_by_text("Hal is reading the folders into your record."), "the toast")
-        self.assertEqual(queued[0]["origins"], {str(folder.resolve()): "mine"})
-        self.assertEqual(self.errors(p), [])
-
     def test_asking_shows_the_answer_and_the_files_it_came_from(self) -> None:
         p = self.page("record-files")
         with fake_ai({"record_ask": ANSWER}):
@@ -436,15 +394,6 @@ class RecordPage(unittest.TestCase):
         p.page.wait_for_selector(".answer")
         self.assertIn("From your record", p.page.text_content(".answer"))
         self.assertIn("Hal could not write an answer", p.page.inner_text("#main"))
-
-    def test_a_dropped_file_is_added_to_the_inbox(self) -> None:
-        p = self.page()
-        upload = Path(paths.cache_dir()) / "Reference.txt"
-        upload.parent.mkdir(parents=True, exist_ok=True)
-        upload.write_text("A made-up reference from a made-up archive.", encoding="utf-8")
-        self.more(p).page.set_input_files("input[aria-label='Add files to your record']", str(upload))
-        p.page.wait_for_selector("text=Added Reference.txt")
-        self.assertTrue((Path(record._live("VAULT")) / "Inbox" / "Reference.txt").exists())
 
     def test_a_group_opens_to_its_files_with_downloads(self) -> None:
         p = self.page("record-files")

@@ -68,6 +68,8 @@ Routes:
   its own source under it (`sections.split`); {"added": [SOURCE], "action_id"}, or 400 when there are none.
 - `DELETE /api/v2/record/sources/{id}`: removes it with its note and facts; {"hidden": [card ids]}.
 
+The local API key opens the listing, both ways of adding and reading again, for `jobhunt sources`.
+
 A kind of document or card that does not fit is 400 with plain words; a section, source or card that is not
 there is 404 (the router's answer to LookupError).
 """
@@ -121,7 +123,7 @@ def sections(req: Request) -> list[dict]:
             for s in registry.SECTIONS.values()]
 
 
-@route("GET", PREFIX)
+@route("GET", PREFIX, auth="session_or_local")
 def listing(req: Request) -> list[dict]:
     """The sources of one section, or of one card."""
     target = req.query.get("target") or None
@@ -131,7 +133,7 @@ def listing(req: Request) -> list[dict]:
         raise BadRequest("Choose a section of your record and a card by its number.") from e
 
 
-@route("POST", PREFIX + "/{section}", max_body=UPLOAD_MAX_BODY)
+@route("POST", PREFIX + "/{section}", auth="session_or_local", max_body=UPLOAD_MAX_BODY)
 def upload(req: Request) -> dict:
     """Keeps the uploaded files as sources of the section and starts reading them."""
     section = _section(req)
@@ -166,7 +168,7 @@ def _folder(req: Request, raw: str) -> str:
     return str(path)
 
 
-@route("POST", PREFIX + "/{section}/link")
+@route("POST", PREFIX + "/{section}/link", auth="session_or_local")
 def link(req: Request) -> dict:
     """Keeps a link, account, folder on this computer or a project typed in as a source, and starts reading it."""
     section = _section(req)
@@ -218,7 +220,7 @@ def change(req: Request) -> dict:
             if again else None}
 
 
-@route("POST", PREFIX + "/{source_id}/reread")
+@route("POST", PREFIX + "/{source_id}/reread", auth="session_or_local")
 def reread(req: Request) -> dict:
     """Starts reading a source again; with `allow`, one kept out as private is read anyway."""
     got = store.get(req.con, req.params["source_id"])

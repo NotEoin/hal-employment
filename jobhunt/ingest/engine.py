@@ -1,5 +1,11 @@
 """The ingest's stages run in order over one batch: find, group and rank, then read and write each item.
 
+Legacy (sections plan, 2026-11-09): `run` guesses each file's kind and owner, which crossed facts between
+people, so nothing new is read this way. It is kept only for "Read again" of records an older Hal built (its
+`again`, `tidy` and `allow` runs, through `ingest/actions.py`) and for moving such a record to sections. New
+files go through the sections (`jobhunt.sections`) or "Sort a big folder for me" (`sections.sorter`). It is
+not deleted yet, as older records still need it.
+
 `run` is what the `record.ingest` action calls. Every item is committed as it ends, so a restart (the kind
 is resumable) finds the batch's rows and goes on with those still pending; files already hashed are not
 hashed again. One file that cannot be read is an error on its own row and never stops the rest.

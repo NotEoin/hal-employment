@@ -40,7 +40,8 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    or **Kept out: it looks private**) and when Hal last read it. Press **Read again** after you change a
    file's kind, or **Remove** to take it out with everything Hal took from it.
 
-The older way to add many files at once is still on **Overview**, under **More ways to add**.
+To add many files at once, use **Sort a big folder for me** on **Overview**: Hal suggests where each file
+goes, and adds only what you accept.
 
 ## Code projects
 

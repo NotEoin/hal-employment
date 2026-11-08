@@ -60,7 +60,7 @@ What changed in each version, in plain words.
   coursework and projects Hal should tell employers about. Hal says when a file looks like it belongs
   elsewhere ("This looks like a CV") but never moves it by itself. CVs, letters, documents, official
   papers, coursework and lecture material are read now; the ways to add projects arrive in a later update,
-  and files added to them wait until then. The older bulk read stays under **More ways to add**. See
+  and files added to them wait until then. See
   [Add your CVs, education, projects and documents](docs/howto/add-to-your-record.md).
 - **Hal reads the CVs you add.** Each CV you add under **Your CVs** gives your jobs, volunteering,
   education with its modules and marks, skills, projects, awards, contact details and links, each with the

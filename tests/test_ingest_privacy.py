@@ -284,8 +284,8 @@ class Routes(unittest.TestCase):
         put(self.files, "CV.md", CV_TEXT)
         put(self.files, "Bank/statement.txt", BANK_TEXT)
         c = self.hal.signed_in()
-        self.assertEqual(finished(c.post("/api/v2/record/ingest", {"folders": [str(self.files)]})
-                                  .json()["action_id"])["state"], "done")
+        # read in as an older Hal did: the folder route now sorts instead
+        self.assertEqual(finished(ingest_actions.queue(folders=[str(self.files)]))["state"], "done")
         shown = c.get("/api/v2/record/ingest").json()
         self.assertEqual([(p["name"], p["reason"]) for p in shown["private"]],
                          [("Old laptop/Bank/statement.txt", privacy.BANK)])

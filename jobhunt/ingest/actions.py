@@ -1,4 +1,8 @@
-"""The `record.ingest` action: one bulk read of folders, zips, the drop folder and web links into the record.
+"""The `record.ingest` action (legacy): one bulk read into the record, now only for a record an older Hal built.
+
+Nothing new comes in this way: folders, zips, uploads and the drop folder are sorted instead
+(`sections.sort_actions`). The action stays for "Read them with the AI" (`again`), "Tidy my record" (`tidy`)
+and a file kept out as private let in (`allow`); its other params are kept so an older queued run carries on.
 
 After the read, the experiences found twice under different names are merged (`profile.actions.dedupe`), then
 the experiences in the profile are sorted into tiers (`profile.actions.sort`), so the Check your record page
@@ -7,7 +11,7 @@ are only mentioned in their files (`profile.check.skill_counts`), which the Over
 
 Background work (priority 2), one at a time (`exclusive="kind"`), and resumable: after a restart the runner
 starts it again with the same params, and the batch's `ingest_items` rows say what is left. `queue` is how
-routes and the scheduled read of the record start one. `origins` is kept only for the folders the person
+the routes for an older record start one. `origins` is kept only for the folders the person
 said were their own work or course material, so a params row from before reads as a mix. With `allow`, the
 batch is the files the person let in after they were kept out as private (`privacy.requeue`); a carry-on
 finds them in the batch already.
@@ -109,20 +113,3 @@ def queue(*, folders=(), uploads=(), drop: bool = False, urls=(), again: bool = 
     if allow:
         params["allow"] = [int(i) for i in allow]
     return runner.start("record.ingest", params=params, session_id=session_id, remote=remote, why=why)
-
-
-def queue_drop() -> str | None:
-    """Starts an ingest of the drop folder when it holds files not read yet; its action id, else None."""
-    from jobhunt import db
-
-    con = db.connect()
-    try:
-        new = engine.drop_has_new(con)
-    finally:
-        con.close()
-    if not new:
-        return None
-    try:
-        return queue(drop=True, why="New files in your drop folder")
-    except RuntimeError:
-        return None      # an ingest is running already; the next scheduled read starts this one

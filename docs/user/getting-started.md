@@ -43,8 +43,9 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    weeks, apprenticeships, part-time or fixed-term work. Press every career area you are interested in, such
    as **Heritage and museums** and **Creative and media**; each fills in example roles you can change. Hal
    then says "Here is what I understood"; press **Change something** if it is not right.
-5. **Your record.** Hal makes a folder for your certificates, references and other evidence. Press
-   **Add files** to copy documents into it.
+5. **Your record.** Hal makes a folder for your certificates, references and other evidence. Under
+   **Sort a big folder for me**, give Hal a folder or a zip of your old files, and check its suggestions on
+   Your record later.
 6. **How Hal thinks.** Choose **On this computer** if your computer runs a local model through Ollama, or
    **Your Claude subscription** (Claude Pro or Max). For Claude, press **Install**, then **Sign in**, then
    **Test**. Hal never sees your Claude password.
@@ -247,140 +248,46 @@ behaved before it could be changed.
 
 Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts** for the keys.
 
-## Reading many files into your record
+## Sorting a big folder into your record
 
-Hal can read a whole folder of your files at once: an old laptop's Documents, a university account
-downloaded as a zip, a folder of certificates.
+If you have a folder of everything from your studies and jobs (an old laptop's Documents, a university
+account downloaded as a zip), Hal can suggest where each file goes. It never adds anything until you say so.
 
-- **A zip.** On Your record, Overview, drop the zip on **Drop files here to add them** (or click there and
-  choose it), up to 256 MB. Hal unpacks it safely, zips inside it too, and reads what is inside.
-- **The drop folder.** Anything you put in the **+Inbox** folder inside your record is read the next time
-  Hal reads your record, every 10 minutes unless you changed it. To use another folder, set **Drop folder
-  for your record** in Settings, CV and documents.
-- **A folder on the computer Hal runs on** can be read where it is, so nothing needs copying first: type or
-  paste where it is under **Folders on this computer** and press **Read these folders**. This works only on
-  that computer; a window opened from another one does not show the box. From a terminal on that computer,
-  `python -m jobhunt ingest FOLDER...` does the same and prints how far it has got; the bar shows it too.
-- **Web links**: paste your own site or blog, your GitHub page, or a Google Doc shared with anyone under
-  **Web links**, one a line, and press **Read these links**.
+- **On Your record, Overview**, under **Sort a big folder for me**, type or paste where a folder on this
+  computer is and press **Sort this folder**, or press **Upload a zip or files to sort** (up to 256 MB at a
+  time). The folder box only shows on the computer Hal runs on.
+- **In the setup guide**, the **Your record** step has the same.
+- **From a terminal** on the computer Hal runs on, `python -m jobhunt sort FOLDER` prints what Hal proposes
+  for each part of your record, and `python -m jobhunt sort --accept-all` adds everything ticked.
+  `python -m jobhunt ingest FOLDER` now does the same as `sort`.
+- **The drop folder.** Files you put in the **+Inbox** folder inside your record (or the folder set in
+  **Drop folder for your record**, Settings, CV and documents) are sorted the next time Hal reads your
+  record, every 10 minutes unless you changed it. They wait on Overview for you to check, and stay where you
+  put them.
 
-Before you add a folder or a zip, choose what it holds under **What are you adding?**. This tells Hal whose
-the files are, even when they do not have your name on them:
+Hal proposes a part of your record for each file: your CVs, your coursework and lecture notes by course,
+your code projects and project folders, your certificates and other papers. Press **Check the list** to see
+the proposals, one part at a time. Change where a file goes, what it is or which course or job it is for, or
+untick it, then press **Add the ticked ...** for one part or **Add everything ticked**. Each file you add is
+read by that part of your record, as if you had added it there yourself.
 
-- **My own work**: your coursework, reports, projects and drafts count as yours. Slides and module pages in
-  the folder still count as course material.
-- **Course material I was given**: everything counts as course material, except a file with your name on it
-  that the AI reads as your own work, such as your submission saved with a module's files.
-- **A mix of both** (the default): Hal decides file by file, as described below.
+Hal leaves out what it is not sure about, with the reason: pictures and recordings, code outside a project,
+files only stored online, files that look private (such as a medical letter or a bank statement), and
+anything neither Hal's rules nor the AI could place. Older copies of a file or project are set aside, and
+only the newest is proposed. You can still give any of them a place by hand. Coursework and lecture notes
+wait for their course until your CV, once added, gives Hal your courses, or until you choose one.
 
-For the drop folder, choose in **What you put in your drop folder** in Settings, CV and documents. From a
-terminal, `python -m jobhunt ingest --mine FOLDER --course FOLDER` does the same; a folder given without
-either is a mix of both.
+## A record from an older Hal
 
-While Hal reads, the Overview shows a bar with how many files are read, about how long is left, the file in
-hand, what kinds of document it found, and any files it could not read. **Stop** keeps what was read so far.
-
-Hal reads your CV, transcripts, letters and certificates first, so what it learns about you arrives early,
-then reports, projects, writing, notes and slides. Each document becomes a note in your record's `Sources`
-folder, grouped by kind (CVs and letters, Education, Certificates and so on), with a summary, tags and links
-to notes about your modules, and the employers, skills and projects it gives facts about. Hal makes no notes
-about the people and places a document mentions, as they do not help an application. A code project
-becomes one note, and each module gets one course note linking its lectures, however many folders they
-came from.
-
-A folder of your own work with a README at its top (a project folder, even without code) is one project,
-however many notes, plans and write-ups it holds. Each file still gets a note, linked from the project's
-note, but what they say about the project goes on one project card, named from the README's first heading
-or the folder's name, with the tools each note mentions. Skills in the notes are still found. A CV or a
-letter kept in the folder still names each of your projects. A note about another of your projects counts
-for that one, even when it names it in other words than its folder does, as long as Hal knows that project
-from outside the folder: its own folder or repository, a file that is in no project folder, or your CV.
-Anything else a note in the folder names, such as its tickets and write-ups, is part of the folder's
-project, however many of them one note names, and so is a ticket of another project folder: it belongs to
-that folder's project. If you once gave Hal a folder inside a project folder on its own, its files stay
-with it. A folder that holds two or more such projects is a set of projects, not one, and a
-folder of course material is never one project. With **Keep a copy of each file Hal reads in** on, the original is copied to `Attachments`
-beside the notes.
-
-The AI reads the rich documents in full, including coursework, reports, projects and essays kept in a
-module's folder beside its lectures. Notes and slides are filed by their headings and words, which is
-quick but gives them no AI summary and adds nothing to your profile. To have the AI read those too:
-
-- **For the next files you add:** turn on **Read every document with the AI** in Settings, CV and
-  documents. Reading takes much longer.
-- **For files already read:** when the last read has ended, the Overview says how many notes were filed
-  without the AI; press **Read them with the AI**. Each note is rewritten where it is, so links to it still
-  work. From a terminal, `python -m jobhunt ingest --again` does the same. Code files are still read as part
-  of their project, and pictures by **Read certificates and artwork in pictures with the AI**.
-
-Hal reads as many documents at once as **AI calls at once** allows (Settings, AI). A model on your own
-computer that can answer several requests together (Hal's managed vLLM model can) reads faster at 3 or 4.
-
-Some files are listed rather than read:
-
-- **Not downloaded**: OneDrive and Dropbox keep a file's name on your computer before its contents arrive.
-  Open the folder in OneDrive or Dropbox, choose to keep the files on this device, and read it again.
-- **No text**: a file with no words Hal can read, such as a scan read while **Read photos and scans of
-  certificates** is off or tesseract is not installed. Hal never guesses what such a file says.
-- **Copies** of a file Hal has already read are named in the first copy's note, not read again.
-- **Empty notes**: a note with only a heading, links or a line a note-taking tool wrote, and fewer than two
-  words of your own, is skipped. So is a note marked `status: stub`. A line that appears in ten or more of
-  the notes you add at once, such as the same sentence a tool put in every note it made, does not count as
-  your own words. The Overview counts them.
-- **Notes made from slides**: when a note in your notes app says which slides, handout or past paper it was
-  made from, Hal files it as course material without asking the AI.
-- **Supporting files**: data files and exports, figures, logs, diffs, circuit and 3D-printing files, and
-  photos from a camera or phone say little on their own. Hal lists each one under **Files** in the note of
-  the project, report or module folder it sits in, and makes no note of its own for it. A picture or data
-  file that is not inside such a folder is skipped. Photos and scans of certificates are still read.
-- **Older copies of a project**: when you keep a code project several times ("Robot (2)", "robot-v3-final",
-  a copy in a zip), Hal keeps the newest copy of each project. It reads only that one, and its note lists
-  the others under **Earlier versions**. If you add a newer copy later, Hal reads it and updates the same
-  note. A fact you checked that the newer copy changes goes back to **Found by Hal**, so you can look again;
-  a fact you edited keeps your words.
-- **Private files**, such as bank statements, passport scans, payslips, fit notes and files with
-  passwords, are kept out of your record and never sent to the AI. The Overview lists them by name with
-  the reason; press **Add it anyway** if one is fine to keep. [Your privacy](privacy.md#private-documents-in-your-files)
-  says what is kept out and how to turn the check off.
-
-Each fact Hal takes from a document comes with the document's own words. When those words are not in the
-document, the fact is marked **Check this**. If Hal closes part way through, it carries on from the next
-file when it opens.
-
-Hal sorts every document by whose it is, and that decides what it can learn from it:
-
-- **Yours**: your CV, letters, coursework, reports and projects. These give your jobs, education,
-  projects, skills and achievements. Your email, phone, address and links come only from your CVs and
-  letters, so a classmate's email in a group report never becomes yours.
-- **Course material**: slides, handouts, lecture notes and module pages. These show what you studied, so
-  they give skills and nothing else: never a lecturer's email, and never a lecture's example as your project.
-  When the AI reads slides or a handout, it writes them up as lecture notes: the topics, ideas, definitions
-  and examples, without names, emails, rooms or admin. Email addresses and phone numbers are taken out of
-  all course material. Slides of a lecture you already have your own notes on are not filed again: your
-  notes list them under **Also at**.
-- **Someone else's**: another person's CV, a paper you downloaded, a classmate's poster. Hal leaves these out
-  of your record and names them, with who made each one, when it finishes. A file has to name someone else
-  as its maker, and not name you, to count: a file that names no one stays in your record, but Hal takes
-  no facts from it.
-
-When Hal writes a letter, a form answer, interview notes or a CV suggestion, it reads only your own
-documents and the notes you wrote yourself. Course material, someone else's documents and files Hal is not
-sure about stay in your record, and **Ask your record** still searches them, but they never become claims
-about you. Your CV in CV Studio is given to the writer whole, so older CVs and your letters to other
-employers are left out of what it reads: they can hold claims you have since dropped, or ones written for
-another job.
-
-Unless it came from a folder you said holds your own work, Hal only counts a document as yours when it
-names you: your name, your email, or a username from your GitHub or LinkedIn link in **Settings > You**.
-The name a Word, PowerPoint, Excel, OpenDocument or PDF file keeps as its author, or as the last person to
-save it, counts too, so coursework saved under your name or university username is yours even when its
-words never name you. If your files use another name for you, such as a student
-number, add it under **Settings > You > Other names you go by**.
+An older Hal read whole folders into your record at once and guessed what each file was. Those notes and the
+facts Hal took from them stay until you change them. While the last such read runs, or after it, the
+Overview shows how it went. **Read them with the AI** reads the notes it filed by their words alone, and
+**Tidy my record** holds them to today's rules (below). From a terminal, `python -m jobhunt ingest --again`
+and `python -m jobhunt ingest --tidy` do the same.
 
 ### Tidying your record
 
-If you read files into your record with an older Hal, press **Tidy my record** on the Overview (or run
-`jobhunt ingest --tidy`). Hal first saves a copy of your record and its database in Hal's backups folder.
+Press **Tidy my record** on the Overview (or run `jobhunt ingest --tidy`). Hal first saves a copy of your record and its database in Hal's backups folder.
 Then it holds every note to the rules above: it takes out notes of other people's files and private files,
 settings files, notes about people and places, lecturers' emails and older copies of your projects, and
 facts that came from the wrong kind of file. Slides and documents only the AI can judge are read again,

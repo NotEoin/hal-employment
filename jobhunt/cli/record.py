@@ -1,8 +1,10 @@
 """Commands for the employment record vault: record status, sync, search and ask, and ingest.
 
-`ingest FOLDER...` asks the running Hal to read the folders (with the local API key), so a long ingest
-runs where Your record shows its progress, then follows it here until it ends; Ctrl+C stops following, not
-the ingest. `--mine DIR` and `--course DIR` name folders of the person's own work and of course material.
+`ingest FOLDER...` asks the running Hal to sort the folders (with the local API key), as `jobhunt sort` does:
+Hal proposes where each file goes and adds nothing until the person accepts (`cli/sort.py`). It no longer
+reads folders straight in, which guessed each file's kind and owner. `--mine DIR` and `--course DIR` are kept
+for older scripts and sorted the same way. `--again` and `--tidy` still work on a record an older Hal built,
+following the read until it ends; Ctrl+C stops following, not the read.
 
 The bodies moved unchanged from `jobhunt/__main__.py`; the parser, its arguments and help stay there,
 because the voice bridge and the /jobs command parse what these commands print.
@@ -20,13 +22,20 @@ HTTP_TIMEOUT_S = 30
 FINAL = ("done", "error", "stopped", "interrupted")
 
 
-def _hal(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
-    """Calls the running Hal on this computer with the local API key."""
+def address() -> tuple[str, int]:
+    """The local API key and the port of the running Hal on this computer."""
     from ..core import paths, settings, updates
 
     key = (paths.config_dir() / "local-api-key").read_text(encoding="utf-8").strip()
     raw = os.environ.get("HAL_EMPLOYMENT_PORT", "").strip()
-    port = int(raw) if raw.isdigit() else int(settings.get("advanced.port") or updates.DEFAULT_PORT)
+    return key, int(raw) if raw.isdigit() else int(settings.get("advanced.port") or updates.DEFAULT_PORT)
+
+
+def _hal(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+    """Calls the running Hal on this computer with the local API key."""
+    from ..core import updates
+
+    key, port = address()
     con = http.client.HTTPConnection(updates.BIND, port, timeout=HTTP_TIMEOUT_S)
     try:
         con.request(method, path, body=json.dumps(body or {}).encode() if method == "POST" else None,
@@ -40,29 +49,32 @@ def _hal(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
 
 def ingest(folders: list[str], again: bool = False, tidy: bool = False, mine: list[str] = (),
            course: list[str] = ()) -> None:
-    """Starts an ingest of `folders` in the running Hal and prints its progress until it ends.
+    """Sorts `folders` (with `mine` and `course`) in the running Hal, or reads again an older Hal's record.
 
-    `folders` hold a mix of the person's own work and course material, `mine` their own work and `course`
-    course material they were given. `again` instead reads with the AI the documents an earlier ingest filed
-    by rules alone; `tidy` holds everything already in the record to today's rules, after a backup.
+    Folders are sorted as `jobhunt sort` does: proposals to accept, nothing read in. `again` reads with the AI
+    the documents an earlier ingest filed by rules alone; `tidy` holds everything already in the record to
+    today's rules, after a backup; both print their progress until they end.
     """
-    given = [(f, "mixed") for f in folders] + [(f, "mine") for f in mine] + [(f, "course") for f in course]
-    folders = [f for f, _ in given]
-    if sum(map(bool, (given, again, tidy))) != 1:
-        sys.exit("ingest: give one or more folders to read, or --again, or --tidy")
+    folders = [*folders, *mine, *course]
+    if sum(map(bool, (folders, again, tidy))) != 1:
+        sys.exit("ingest: give one or more folders to sort, or --again, or --tidy")
     try:
         if again or tidy:
             status, out = _hal("POST", f"/api/v2/record/ingest/{'again' if again else 'tidy'}", {})
         else:
-            status, out = _hal("POST", "/api/v2/record/ingest",
-                               {"folders": [{"path": str(Path(f).resolve()), "origin": origin}
-                                            for f, origin in given]})
+            status, out = _hal("POST", "/api/v2/record/ingest", {"folders": [str(Path(f).resolve()) for f in folders]})
     except (OSError, ValueError) as e:
         sys.exit(f"ingest: Hal is not running here ({e}); start it, then try again")
     if status != 200:
         sys.exit(f"ingest: {(out.get('error') or {}).get('message') or status}")
-    print("Reading the rest of your documents with the AI" if again else "Tidying your record" if tidy else
-          f"Reading {len(folders)} folder(s) into your record", "; it shows on Your record too.", sep="")
+    if not (again or tidy):
+        from . import sort
+
+        print(f"Sorting {len(folders)} folder(s); Hal proposes where each file goes and adds nothing yet.")
+        sort.follow_sort(out["sort_id"])
+        return
+    print("Reading the rest of your documents with the AI" if again else "Tidying your record",
+          "; it shows on Your record too.", sep="")
     try:
         while True:
             time.sleep(FOLLOW_EVERY_S)
@@ -77,7 +89,7 @@ def ingest(folders: list[str], again: bool = False, tidy: bool = False, mine: li
 
 
 def cmd_ingest(args):
-    """Handles `jobhunt ingest`: reads whole folders into the record in the running Hal."""
+    """Handles `jobhunt ingest`: sorts whole folders, or reads again an older Hal's record, in the running Hal."""
     ingest(args.folders, again=args.again, tidy=args.tidy, mine=args.mine, course=args.course)
 
 

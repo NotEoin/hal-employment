@@ -98,6 +98,28 @@ def begin(con, sort_id: int, *, session_id: str | None = None, remote: bool = Fa
         raise RuntimeError("Hal is still sorting another folder. Try again when it is done.") from e
 
 
+def queue_inbox() -> int | None:
+    """Starts sorting the drop folder when it holds files no sort of it has proposed yet; the new sort's id, else
+    None (nothing new, or another sort is running, which the next scheduled check follows)."""
+    from jobhunt import db
+    from jobhunt.ingest import sources as ingest_sources
+
+    folder = ingest_sources.drop_folder()
+    if not folder.is_dir():
+        return None
+    con = db.connect()
+    try:
+        if not sorts.inbox_has_new(con, folder):
+            return None
+        try:
+            sort_id, _ = start(con, "inbox", [str(folder)], folder.name, why="New files in your drop folder")
+        except RuntimeError:
+            return None
+        return sort_id
+    finally:
+        con.close()
+
+
 def queue_accept(sort_id: int, *, session_id: str | None = None, remote: bool = False) -> str:
     """Starts making a sort's accepted proposals sources; the action's id."""
     return runner.start(ACCEPT, params={"sort_id": int(sort_id)}, session_id=session_id, remote=remote,

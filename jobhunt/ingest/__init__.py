@@ -1,4 +1,9 @@
-"""The bulk ingest: whole folders, zips, a drop folder and web pages read into the record as Obsidian notes.
+"""The bulk ingest (legacy): whole folders, zips, a drop folder and web pages read into the record as notes.
+
+Legacy since the sectioned record (sections plan, 2026-11-09): it guessed each file's kind and owner, which
+crossed facts between people. New files go through the sections (`jobhunt.sections`) or "Sort a big folder
+for me" (`sections.sorter`), which only proposes. The ingest is kept for records an older Hal built: "Read them
+with the AI", "Tidy my record", a private file let in, and its discovery, which the sorter reuses.
 
 One `record.ingest` action (`ingest/actions.py`) takes every input and works through it in stages, each kept
 in the `ingest_items` table (`ingest/items.py`) so a restart carries on from the next item:

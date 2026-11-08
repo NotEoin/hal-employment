@@ -1,0 +1,10 @@
+$ jobhunt sort --help
+usage: jobhunt sort [-h] [--accept-all] [--id ID] [folders ...]
+
+positional arguments:
+  folders       folders on this computer to sort
+
+options:
+  -h, --help    show this help message and exit
+  --accept-all  add everything ticked in the latest sort
+  --id ID       the sort to accept, when not the latest

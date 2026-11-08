@@ -102,16 +102,6 @@ class RecordRoutes(unittest.TestCase):
             self.assertEqual(c.get(f"/api/v2/record/file/{routes.file_id(rel)}").status, 404, rel)
         self.assertEqual(c.get("/api/v2/record/file/!!!").status, 404)
 
-    def test_added_files_go_into_the_inbox_and_the_folder_is_read(self):
-        routes.make_default()
-        (self.folder / "Inbox" / "notes.txt").write_text("already here", encoding="utf-8")
-        c = self.hal.signed_in()
-        status, out = upload(self.hal, c, {"notes.txt": b"Volunteered at a made-up archive in 2024, 400 items."})
-        self.assertEqual((status, out["added"]), (200, ["notes (2).txt"]))
-        self.assertEqual((self.folder / "Inbox" / "notes.txt").read_text(encoding="utf-8"), "already here")
-        self.assertEqual(done(out["action_id"])["state"], "done")
-        self.assertTrue(c.get("/api/v2/record").json()["last_read"])
-
     def test_asking_the_record_answers_with_its_sources(self):
         self.put("Certificates/First Aid.md", "# First Aid\n\nEmergency first aid at work, completed 5 March 2025.\n")
         record.sync()

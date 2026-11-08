@@ -961,6 +961,16 @@ one `Page` with `error` in plain words. Every request has a 20 s timeout, a size
 `tests/test_ingest_web.py` serves a made-up site, GitHub API and Google export from 127.0.0.1.
 ## Reading files into the record (`jobhunt/ingest/`)
 
+Legacy (sections plan, 2026-11-09): nothing new is read this way, as guessing each file's kind and owner
+crossed facts between people. `POST /api/v2/record/ingest` (folders) and `POST /api/v2/record/files`
+(uploads and zips) now start a sort (`sections/sort_routes.py`: `start_folders`, `start_upload`), `POST
+/api/v2/record/links` adds each link to Projects as its own source (`ingest/routes.link_kind`: a GitHub
+account, a GitHub project or a web page), the scheduled `record.sync` sorts new files in the drop folder
+(`sort_actions.queue_inbox`, `sorts.inbox_has_new`), and `jobhunt ingest FOLDER` sorts as `jobhunt sort`
+does. The Overview card that took files, folders and links is gone. The `record.ingest` action and
+`engine.run` stay for a record an older Hal built (`again`, `tidy`, `allow`) and for moving it to sections;
+the rest of this part says how they work, and its inputs are those an older Hal took.
+
 One `record.ingest` action (area documents, priority 2, `exclusive="kind"`, resumable) reads folders, zips,
 the drop folder and web links into the record folder as Obsidian notes. Each item is a row of
 `ingest_items` (migration 0019) with the stage it reached, committed as it ends, so after a restart the
@@ -970,7 +980,7 @@ runner starts the action again with the same batch and only pending items are re
    `ingest/web.py`), a folder on this computer (`POST /api/v2/record/ingest`, `local_only`), a zip
    uploaded through `POST /api/v2/record/files` (saved under `<data>/ingest/uploads/`; that route alone takes
    bodies up to `UPLOAD_MAX_BODY`, 256 MB), and the drop folder (`record.drop_folder`, default
-   `<record>/+Inbox`), which the scheduled `record.sync` checks (`actions.queue_drop`). Zips unpack under
+   `<record>/+Inbox`), which the scheduled `record.sync` checked. Zips unpack under
    `<data>/ingest/unpacked/<batch>/`: names that are absolute or climb out with `..` are refused, links
    skipped, members counted as they are copied against a per-file and a per-zip cap (stated sizes can lie),
    encrypted members named, and zips inside zips unpacked to depth 3. Each refusal is an item in state
@@ -1497,10 +1507,17 @@ you, `source_id` once added).
   .../sort/upload`, `GET .../sort/{id}`, `PUT /api/v2/record/sort-rows/{id}`, `POST .../sort/{id}/tick`,
   `.../accept`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
   path is local only.
+- Command line (`cli/sort.py`, through the running Hal with the local API key, as `jobhunt ingest` does):
+  `jobhunt sort FOLDER...` starts a sort and prints its counts once it is ready (`summary`); `jobhunt sort
+  --accept-all [--id N]` accepts every ticked row and waits until none is left accepted. `jobhunt sources
+  list [--section S]`, `add SECTION THING [--kind K] [--card ID]` (a file or folder is uploaded as the page
+  does, `_form`; a folder of kind `repo` or `local_folder`, a link, an account or a name is added as a
+  link) and `read ID`. The section routes take the local API key for these.
 - The page (`static/app/record/sort.js`): `SortCard` on Overview (start a sort, list the latest, open one),
   `SortStart` (a folder path on this computer, or a zip or files uploaded) and `SortReview` (section buttons
   with counts, a page of rows with tick, section, kind, card and showcase, "Add the ticked ...", "Add
-  everything ticked", and the left out, copies, added and failed rows).
+  everything ticked", and the left out, copies, added and failed rows). The setup guide's record step
+  (`setup/steps/record.js`) offers `SortStart` too.
 
 ## Profile (`jobhunt/profile/`)
 

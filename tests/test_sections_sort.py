@@ -6,6 +6,7 @@ The made-up dumps are `test_sections_sorter`'s: Avery Quillon (software) and Mar
 import json
 import time
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest import mock
 
@@ -16,7 +17,7 @@ from test_ingest import home, put
 from test_sections_routes import form
 from test_sections_sorter import AVERY_CV, CERTIFICATE, history_dump, software_dump
 
-from jobhunt import record
+from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import pipeline, sorter, sorts
@@ -214,6 +215,187 @@ def sort_upload(hal, client, files: list[tuple[str, bytes]]):
         return r.status, json.loads(r.read())
     finally:
         con.close()
+
+
+class OldWaysIn(unittest.TestCase):
+    """Every older way of adding files now sorts them, or adds a source in its section; none reads a file in."""
+
+    def setUp(self):
+        self.hal = self.enterContext(HalServer())
+        self.folder = Path(paths.record_default())
+        self.folder.mkdir(parents=True, exist_ok=True)
+        self.enterContext(mock.patch.object(record, "VAULT", self.folder, create=True))
+        self.addCleanup(record._CACHE.clear)
+        self.enterContext(fake_ai(NONE))
+
+    def sources(self) -> int:
+        """How many sources the record holds."""
+        with closing(db.connect()) as con:
+            return con.execute("SELECT count(*) FROM record_sources").fetchone()[0]
+
+    def test_the_old_folder_route_sorts_and_reads_nothing_in(self):
+        dump = history_dump(self.hal.home / "Files")
+        c = self.hal.signed_in()
+        out = c.post("/api/v2/record/ingest", {"folders": [{"path": str(dump), "origin": "mine"}]})
+        self.assertEqual(out.status, 200, out.text)
+        self.assertEqual(ended(out.json()["action_id"])["state"], "done")
+        page = c.get(f"/api/v2/record/sort/{out.json()['sort_id']}").json()
+        self.assertGreater(page["counts"]["proposed"], 0)
+        self.assertEqual(c.get("/api/v2/record/ingest").json()["state"], "none", "the bulk read never ran")
+        self.assertEqual(self.sources(), 0)
+        self.assertFalse((self.folder / "Sources").exists())
+
+    def test_the_local_key_sorts_a_folder_and_accepts_it_without_a_window(self):
+        from jobhunt.web import auth
+
+        put(self.hal.home / "Files", "Avery Quillon CV.md", AVERY_CV)
+        c = self.hal.client()
+        key = {"Authorization": f"Bearer {auth.local_api_key()}"}
+        self.assertEqual(c.get("/api/v2/record/sort").status, 401)
+        out = c.post("/api/v2/record/sort", {"folders": [str(self.hal.home / "Files")]}, headers=key).json()
+        self.assertEqual(ended(out["action_id"])["state"], "done")
+        accepted = c.post(f"/api/v2/record/sort/{out['sort']['id']}/accept", {}, headers=key).json()
+        self.assertEqual(ended(accepted["action_id"])["state"], "done")
+        self.assertEqual([s["section"] for s in c.get("/api/v2/record/sources", headers=key).json()], ["cv"])
+
+    def test_an_upload_to_the_old_route_is_sorted_and_a_zips_escape_refused(self):
+        import io
+        import zipfile
+
+        from test_evidence_routes import upload
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("Year 1/Avery Quillon CV.md", AVERY_CV)
+            z.writestr("../../escape.md", "# Out")
+        status, out = upload(self.hal, self.hal.signed_in(),
+                             {"uni.zip": buf.getvalue(), "award.md": CERTIFICATE.encode()})
+        self.assertEqual(status, 200, out)
+        self.assertEqual(ended(out["action_id"])["state"], "done")
+        self.assertTrue(any("outside the zip" in p for p in out["problems"]))
+        self.assertFalse((self.hal.home / "escape.md").exists())
+        rows = self.hal.signed_in().get(f"/api/v2/record/sort/{out['sort']['id']}").json()["rows"]
+        self.assertEqual(sorted((r["name"], r["section"]) for r in rows),
+                         [("Avery Quillon CV.md", "cv"), ("award.md", "document")])
+        self.assertEqual(self.sources(), 0)
+        self.assertFalse((self.folder / "Inbox").exists(), "nothing goes straight into the record's Inbox")
+
+    def test_pasted_links_become_project_sources_by_their_address(self):
+        from jobhunt.sections import actions as section_actions
+
+        c = self.hal.signed_in()
+        self.assertEqual(c.post("/api/v2/record/links", {"urls": []}).status, 400)
+        with mock.patch.object(section_actions, "queue", return_value="a1") as queue:
+            out = c.post("/api/v2/record/links", {"urls": "https://github.com/averyq https://github.com/averyq/tide "
+                                                          "https://example.org/zine"})
+        self.assertEqual(out.status, 200, out.text)
+        self.assertEqual(len(queue.call_args.args[0]), 3)
+        with closing(db.connect()) as con:
+            kinds = [r[0] for r in con.execute("SELECT doc_kind FROM record_sources WHERE section = 'project' "
+                                               "ORDER BY id")]
+        self.assertEqual(kinds, ["github_account", "repo_url", "web_page"])
+
+
+class DropFolder(unittest.TestCase):
+    def test_new_files_in_the_drop_folder_get_proposals_and_are_never_read_in(self):
+        from jobhunt.ingest import sources as ingest_sources
+        from jobhunt.sections import sort_actions
+
+        with home() as (con, _vault, _files), fake_ai(NONE):
+            drop = ingest_sources.drop_folder()
+            put(drop, "Avery Quillon CV.md", AVERY_CV)
+            sort_id = sort_actions.queue_inbox()
+            self.assertIsNotNone(sort_id)
+            runner.idle(WAIT_S)
+            self.assertEqual([r["name"] for r in sorts.rows(con, sort_id, section="cv")["rows"]],
+                             ["Avery Quillon CV.md"])
+            self.assertTrue((drop / "Avery Quillon CV.md").exists(), "the file stays where the person put it")
+            self.assertEqual(sections_of(con), [])
+            self.assertIsNone(sort_actions.queue_inbox(), "a file proposed once is not proposed again")
+            put(drop, "First aid certificate.md", CERTIFICATE)
+            again = sort_actions.queue_inbox()
+            runner.idle(WAIT_S)
+            self.assertEqual([r["name"] for r in sorts.rows(con, again)["rows"]], ["First aid certificate.md"])
+
+
+class CommandLine(unittest.TestCase):
+    """`jobhunt sort`, `jobhunt sources` and `jobhunt ingest` through a stand-in for the running Hal."""
+
+    def run_cli(self, fn, replies: dict) -> tuple[list, str]:
+        """Runs `fn` with each call to Hal answered from `replies` by (method, path start); (calls, printed)."""
+        import contextlib
+        import io
+
+        from jobhunt.cli import record as cli_record
+        from jobhunt.cli import sort as cli_sort
+
+        calls = []
+
+        def hal(method, path, body=None):
+            calls.append((method, path, body))
+            return 200, next(v for (m, start), v in replies.items() if m == method and path.startswith(start))
+
+        out = io.StringIO()
+        with mock.patch.object(cli_record, "_hal", hal), mock.patch.object(cli_sort.time, "sleep"), \
+                contextlib.redirect_stdout(out):
+            fn()
+        return calls, out.getvalue()
+
+    def test_sort_proposes_and_accept_all_adds_what_is_ticked(self):
+        from jobhunt.cli import sort as cli_sort
+
+        ready = {"id": 7, "label": "Avery stuff", "state": "ready", "counts": {
+            "sections": [{"id": "cv", "label": "CVs", "proposed": 2, "ticked": 2, "needs_card": 0}],
+            "proposed": 2, "left_out": 1, "copy": 1, "accepted": 0, "added": 0, "failed": 0, "total": 4}}
+        calls, printed = self.run_cli(lambda: cli_sort.sort(["Avery stuff"]), {
+            ("POST", "/api/v2/record/sort"): {"sort": {"id": 7}, "action_id": "a1"},
+            ("GET", "/api/v2/record/sort/7"): ready})
+        self.assertEqual(Path(calls[0][2]["folders"][0]).name, "Avery stuff")
+        self.assertIn("CVs: 2 proposed, 2 ticked", printed)
+        self.assertIn("Nothing is added yet", printed)
+        calls, printed = self.run_cli(lambda: cli_sort.sort([], accept_all=True), {
+            ("GET", "/api/v2/record/sort/7"): {**ready, "counts": {**ready["counts"], "added": 2}},
+            ("GET", "/api/v2/record/sort"): {"sorts": [ready]},
+            ("POST", "/api/v2/record/sort/7/accept"): {"accepted": 2, "need_card": 0, "action_id": "a2"}})
+        self.assertEqual([c[:2] for c in calls][:2], [("GET", "/api/v2/record/sort"),
+                                                      ("POST", "/api/v2/record/sort/7/accept")])
+        self.assertIn("Added: 2", printed)
+
+    def test_ingest_of_folders_now_sorts_them(self):
+        from jobhunt.cli import record as cli_record
+
+        ready = {"id": 3, "label": "Mixed", "state": "ready", "counts": {
+            "sections": [], "proposed": 0, "left_out": 0, "copy": 0, "accepted": 0, "added": 0, "failed": 0,
+            "total": 0}}
+        calls, printed = self.run_cli(lambda: cli_record.ingest(["Mixed"], mine=["Mine"]), {
+            ("POST", "/api/v2/record/ingest"): {"action_id": "a1", "sort_id": 3},
+            ("GET", "/api/v2/record/sort/3"): ready})
+        self.assertEqual([Path(f).name for f in calls[0][2]["folders"]], ["Mixed", "Mine"])
+        self.assertIn("adds nothing yet", printed)
+
+    def test_sources_lists_adds_a_file_and_reads_again(self):
+        from jobhunt.cli import sort as cli_sort
+
+        listed = [{"id": 4, "section_label": "CVs", "title": "Avery Quillon", "doc_kind_label": "CV",
+                   "state_words": "Read"}]
+        _, printed = self.run_cli(lambda: cli_sort.sources("list", [], section="cv"),
+                                  {("GET", "/api/v2/record/sources?section=cv"): listed})
+        self.assertIn("    4  CVs: Avery Quillon (CV, Read)", printed)
+        cv = Path(self.enterContext(__import__("tempfile").TemporaryDirectory())) / "CV.md"
+        cv.write_text(AVERY_CV, encoding="utf-8")
+        sent = []
+        with mock.patch.object(cli_sort, "_form", lambda path, files, fields: sent.append((path, files)) or (
+                200, {"added": [{"id": 5, "title": "Avery Quillon"}], "duplicates": []})):
+            _, printed = self.run_cli(lambda: cli_sort.sources("add", ["cv", str(cv)]), {})
+        self.assertEqual((sent[0][0], sent[0][1][0][0]), ("/api/v2/record/sources/cv", "CV.md"))
+        self.assertIn("Added Avery Quillon (source 5)", printed)
+        calls, _ = self.run_cli(lambda: cli_sort.sources("add", ["project", "https://example.org/zine"],
+                                                         kind="web_page"),
+                                {("POST", "/api/v2/record/sources/project/link"): {"added": [], "duplicates": []}})
+        self.assertEqual(calls[0][2], {"locator": "https://example.org/zine", "doc_kind": "web_page"})
+        calls, _ = self.run_cli(lambda: cli_sort.sources("read", ["5"]),
+                                {("POST", "/api/v2/record/sources/5/reread"): {"action_id": "a3"}})
+        self.assertEqual(calls[0][:2], ("POST", "/api/v2/record/sources/5/reread"))
 
 
 if __name__ == "__main__":
