@@ -126,9 +126,8 @@ used; with no named contact, Hal suggests a LinkedIn search for the person hirin
 
 Hal tells the writer today's date and where you are: still studying or finished, from **When your course
 ends or ended** and the course you checked on Your record, and when you can start, from **When you can
-start** in Settings. A draft never talks about finishing a course that has already ended, or calls you a
-student once it has. Each project
-says where it was done (part of your degree, a university team project, at work, or in your own time), and
+start** in Settings. A draft never talks about finishing a course that has already ended, says you are
+still completing it (or on track for a grade), or calls you a student once it has. Each project says where it was done (part of your degree, a university team project, at work, or in your own time), and
 a draft keeps it that way. A sentence that calls a project something else, such as "my degree included"
 for a project you did in your own time, is rewritten once, and listed under **Check before sending** if it
 is still there. This also works when the draft calls the project by a shorter name or its folder's name.

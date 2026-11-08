@@ -714,8 +714,11 @@ runs: tests use `tests/support/fake_claude/`.
   "following my graduation" and the like beside words of what is to come (`PENDING`) and none of what has
   been (`DONE`)), or that call the person a student now (`STUDENT`, "a Computer Science student", in a
   sentence with a word of the present, `NOW_WORDS`, or opening "As a ... student", and no "I built" or "I
-  was", `I_DID`), and
-  `pack.unsupported_claims` adds them to the claims a draft is rewritten without. `project_kind` names a
+  was", `I_DID`), or that say the course is still running: "currently completing", "on track to achieve",
+  "expected to graduate", a predicted grade, or "in my final year" with no `I_DID` (`IN_FINAL_YEAR`).
+  "I am currently completing a Bachelor of Science ... on track to achieve a First" passed after graduation
+  (2026-11-08). `pack.unsupported_claims` adds them to the claims a draft is rewritten without, and the
+  reason given with each (`ended_said`) holds the stage line for the rewrite to follow. `project_kind` names a
   project "personal project" when its words say own time ("own time", "side project", "personal project",
   "extends my dissertation"), else "degree work" (coursework or dissertation evidence, degree words such as
   "assignment", "practical 3" or "submitted for", a module code, also one joined to a word as in

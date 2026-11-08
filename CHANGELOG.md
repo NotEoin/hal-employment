@@ -175,6 +175,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **No "still studying" after you graduate.** "I am currently completing a degree, on track to achieve a
+  First" was left in drafts written after the course ended. Hal now also finds "currently completing", "on
+  track to", "expected to graduate", a predicted grade and "now in my final year" once your course has
+  ended, and the rewrite is told where you are today, as Settings and Your record say it.
 - **No "student" after you graduate.** Messages called people "a Computer Science student" months after their
   course ended. A sentence that calls you a student now, such as "As a Computer Science student, I am keen
   to ...", is rewritten once your course has ended; "As a student, I built ..." is about the past and stays.

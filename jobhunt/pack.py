@@ -510,7 +510,7 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
     claims = [c for c in claims if not drafts.stated_in(c, facts)]
     known = known_tools(cards)
-    return claims + [f"{s} (the course ended in {now.end or 'the past'})" for s in stage.ended_course(written, now)] \
+    return claims + [f"{s} ({stage.ended_said(now)})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
         + drafts.crossed(written, cards) \
         + taught.unsupported(written, profile_writing.module_names(), (facts, kept))

@@ -233,7 +233,7 @@ def problems(c: cites.Cited, facts: Facts) -> list[str]:
         out += _tool_problems(text, items, facts)
         out += [p for p in (_context_problem(text, items), _alone_problem(text, items)) if p]
     if facts.now is not None and stage.ended_course(text, facts.now):
-        out.append(f"the course ended in {facts.now.end or 'the past'}")
+        out.append(stage.ended_said(facts.now))
     out += _reason(drafts.misplaced_tools(text, facts.cards, facts.known))
     out += _reason(drafts.wrong_context(text, facts.cards))
     out += _reason(drafts.crossed(text, facts.cards))

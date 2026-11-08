@@ -25,6 +25,11 @@ Design decisions, each with its reason:
   opening "As a ... student") and says nothing the person did ("I built", "I was"). Messages called a person
   who had graduated "a Computer Science student" in every graded run (2026-11-08); "As a student, I built
   ..." is about the past and stays.
+- Words of a course still running count too: "I am currently completing a Bachelor of Science ... on track to
+  achieve a First" passed after graduation (2026-11-08), so "currently completing", "on track to", "expected
+  to graduate", a predicted grade and "in my final year" (unless the sentence tells what the person did then)
+  are found. The reason given with each sentence holds the stage line (`ended_said`), so its one rewrite says
+  where the person is today rather than guessing.
 - A draft that speaks of finishing an ended course is found by words, with no AI, so the same draft always
   gets the same answer; the sentences found are treated as unsupported claims (`pack.unsupported_claims`).
 - A project's kind comes from its evidence: coursework, a dissertation or a module code make it degree work;
@@ -61,7 +66,11 @@ FINISHING = re.compile(
     r"\b((upon|on|after|once|when) (completing|finishing|completion of|graduating|I (complete|finish|graduate))|"
     r"(will|due to|expect(ed|ing)? to|about to|set to) (graduate|complete (my|the)|finish (my|the))|"
     r"final[- ]year (student|of)|(am|I'm) (currently |now )?(studying|in (my|the) final year)|"
-    r"currently (studying|enrolled)|graduating (in|this|on)|"
+    r"(am|I'm) (currently |now )?(completing|finishing) (a|an|my|the)|"
+    r"currently (studying|enrolled|completing|finishing)|graduating (in|this|on)|"
+    r"on (track|course) (to|for) (achiev\w*|get\w*|graduat\w*|a|an|finish\w*|complet\w*)|"
+    r"expected (graduation|grade|classification|degree)|"
+    r"predicted (grade|classification|degree|mark|result|to|first|2:[12]|an?)|(a|my) predicted|"
     r"once I('ve| have) (graduated|completed|finished)|(once|when|after) my (degree|course|studies) "
     r"(ends?|finish(es)?|is (complete|completed|finished|over)))\b", re.I)
 # A graduation spoken of as an event to come: "available to start immediately following my graduation in June".
@@ -79,6 +88,8 @@ NOW_WORDS = re.compile(r"\b(I am|I'm|currently|presently|at present|right now|no
 # "I built", "I was", "I learnt": the sentence tells what the person did, as a student then.
 I_DID = re.compile(r"\bI\s+(?:\w+ly\s+)?(?:\w+ed|was|had|built|wrote|led|made|ran|took|won|spent|went|did|got|"
                    r"found|learnt|taught|gave|began|kept|met|held|chose|drew|became|knew|saw)\b", re.I)
+# "in my final year": still in the course, unless the sentence tells what the person did then (`I_DID`).
+IN_FINAL_YEAR = re.compile(r"\b(in|into|entering|starting) (my|the) final year\b", re.I)
 DEGREE_TYPES = ("coursework", "dissertation")
 PERSONAL_TYPES = ("repository", "project")
 DEGREE_WORDS = re.compile(r"\b(coursework|dissertation|thesis|module|assignment|lab report|final[- ]year project|"
@@ -205,7 +216,13 @@ def ended_course(text: str, stage: Stage) -> list[str]:
         return []
     from jobhunt.writing import check
 
-    return [s for s in check.sentences(text) if FINISHING.search(s) or _pending_graduation(s) or _still_student(s)]
+    return [s for s in check.sentences(text) if FINISHING.search(s) or _pending_graduation(s) or _still_student(s)
+            or (IN_FINAL_YEAR.search(s) and not I_DID.search(s))]
+
+
+def ended_said(stage: Stage) -> str:
+    """Why a sentence of `ended_course` is wrong, with the stage line its rewrite should follow."""
+    return f"the course ended in {stage.end or 'the past'}; say it as the stage line does: {stage.words}"
 
 
 def _still_student(sentence: str) -> bool:

@@ -108,7 +108,19 @@ class Stage(unittest.TestCase):
             with self.subTest(said):
                 self.assertEqual(stage.ended_course(said, now), [said])
                 self.assertEqual(stage.ended_course(said, then), [], "true while the course runs")
+        for said in ("I am currently completing a BSc in Imaginary Studies, on track to achieve a First.",
+                     "I am on track to graduate with a 2:1.",
+                     "I am expected to graduate in June.",
+                     "My predicted grade is a First.",
+                     "Now in my final year, I enjoy working with made-up data."):
+            with self.subTest(said):
+                # "I am currently completing a Bachelor of Science ... on track to achieve a First" passed
+                # after graduation (2026-11-08)
+                self.assertEqual(stage.ended_course(said, now), [said])
+                self.assertEqual(stage.ended_course(said, then), [], "true while the course runs")
         for said in ("As a student, I built a made-up tide logger in my own time.",
+                     "In my final year, I built a made-up ferry planner.",
+                     "I completed a project on track records of made-up ferries.",
                      "I was an Imaginary Studies student from 2023 to 2026.",
                      "I am a recent Imaginary Studies graduate.",
                      "I now help the student volunteers at a made-up museum."):

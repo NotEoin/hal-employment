@@ -773,10 +773,12 @@ class Today(unittest.TestCase):
             written = pack.write_letter(a.con, job)
         letters = writer.asked("letter")
         self.assertEqual(len(letters), 2)
-        self.assertIn("upon completing my degree in History. (the course ended in 2026-06)", letters[1]["user"])
-        self.assertEqual(written["flags"], ["unsupported claim: I can start soon upon completing my degree in "
-                                            "History. (the course ended in 2026-06)"],
-                         "the fixed fake letter keeps it, so it is listed")
+        said = "(the course ended in 2026-06; say it as the stage line does: Finished "
+        self.assertIn(f"upon completing my degree in History. {said}", letters[1]["user"],
+                      "the rewrite is given the stage line to follow")
+        self.assertEqual(len(written["flags"]), 1, "the fixed fake letter keeps it, so it is listed")
+        self.assertTrue(written["flags"][0].startswith("unsupported claim: I can start soon upon completing my "
+                                                       f"degree in History. {said}"), written["flags"])
 
 
 class FitWriter(FakeWriter):
