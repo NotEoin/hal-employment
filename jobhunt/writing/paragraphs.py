@@ -25,7 +25,8 @@ Design decisions, each with its reason:
   paragraph; the person's part used as a label ("As the owner, I built ...", seen in the prototype); a skill
   only studied in a course said to be used (`writing.strengths`, `Scope.studied`); and four or more tools in
   one sentence, a list rather than a story. As a paragraph holds one piece of work, a
-  tool or the name of another card in it is a crossed project, named with the other card's name.
+  tool or the name of another card in it is a crossed project, named with the other card's name, and a tool
+  only an older CV gives the card (`older_cv` of `profile.writing.cards`) is no claim it can make.
 - At most one AI check per paragraph (`verify`), with that story's facts only, and none when the checks with
   no AI already found a problem or when every word of the paragraph is in its facts (`restates`). Words the
   AI quotes as unsupported are dropped when the story's facts or the employer's words hold them, word for
@@ -130,6 +131,7 @@ AS_LABEL = re.compile(r"^\W*as (?:the|a|an|my) ([\w -]{1,40}?),", re.I)
 NUMBER_SAID = "the number {n} is not in the facts of {card}"
 TOOL_SAID = "{tool} is not in the facts of {card}"
 CROSSED_TOOL = "{tool} is {other}'s, not {card}'s"
+OLDER_CV_SAID = "{tool} is only on an older CV for {card}, never in its own sources; leave it out"
 CROSSED_NAME = "names {other}, which is another piece of work; this paragraph is about {card}"
 PLANNED_SAID = "{tool} was only planned for {card}; say it was planned, or leave it out"
 ALONE = "says you did {card} alone; it was a team's work{part}"
@@ -425,6 +427,9 @@ def _tool_problems(sentence: str, story: Story, scope: Scope) -> list[str]:
         if drafts.names_tool(plans, tool):
             if not planned.said(sentence):
                 out.append(PLANNED_SAID.format(tool=tool, card=_called(story)))
+            continue
+        if story.card is not None and tool in (story.card.get("older_cv") or ()):
+            out.append(OLDER_CV_SAID.format(tool=tool, card=_called(story)))
             continue
         other = _owner(tool, story, scope)
         out.append(CROSSED_TOOL.format(tool=tool, other=other, card=_called(story)) if other

@@ -4,6 +4,7 @@ while none is), unstarred ones still give skills, and a project's own source out
 The person is Avery Quillon; every project and CV line is made up.
 """
 import unittest
+from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import graduates, repos
@@ -13,6 +14,7 @@ from test_sections_manual import FORM
 from test_sections_manual import added as manual_added
 from test_sections_repo import README, me
 
+from jobhunt import pack
 from jobhunt.profile import store as profile_store
 from jobhunt.profile import writing
 from jobhunt.sections import pipeline
@@ -150,6 +152,33 @@ class Stories(unittest.TestCase):
         self.assertIn(f"What kind of work: {plan.DISSERTATION_WORDS}", told.block())
         self.assertIn("Where it was done: degree work", told.block())
         self.assertTrue(told.facts, "a showcase piece is told from its own summary")
+
+
+class Sources(unittest.TestCase):
+    """Each card and fit row says where its facts come from; an older CV's tool is kept apart."""
+
+    def test_each_card_says_where_its_facts_come_from_and_an_older_cvs_tool_is_kept_apart(self):
+        with home() as (con, _, _):
+            pipeline.read(con, manual_added(con))
+            old = profile_store.add_found(con, "project", {"name": "Harbour bot", "tools": ["Java"]},
+                                          {"source_rel": "Sources/CVs/old.md", "doc_type": "cv", "role": "own"})
+            profile_store.add_found(con, "project", {"name": "Harbour bot", "summary": "A made-up bot."},
+                                    {"source_rel": "Sources/CVs/new.md", "doc_type": "cv", "role": "own"})
+            with mock.patch.object(writing, "_cv_key", lambda con, rel: (2025 if "new" in rel else 2020, "")):
+                profile_store.confirm_many(con, [c["id"] for c in profile_store.items(con, "project")])
+                cards = {c["name"]: c for c in writing.cards(con)}
+        self.assertEqual(cards[FORM["name"]]["source"], "from what you typed")
+        self.assertEqual(cards["Harbour bot"]["source"], "from your current CV")
+        self.assertEqual((cards["Harbour bot"]["tools"], cards["Harbour bot"]["older_cv"]), ([], ["Java"]))
+        self.assertTrue(old)
+
+    def test_a_fit_row_cites_the_card_it_names_or_the_cv(self):
+        cards = [{"kind": "project (personal project)", "name": "Tide gauge", "tools": ["Python"], "summary": "",
+                  "source": "from the code project"}]
+        fit = pack.with_sources({"matches": [{"requirement": "Python", "evidence": "Tide gauge reads tides in Python"},
+                                             {"requirement": "Teamwork", "evidence": "Helped first-year students"}]},
+                                cards, "Lab helper\n- Helped first-year students in programming labs")
+        self.assertEqual([m["source"] for m in fit["matches"]], ["from the code project", "from your current CV"])
 
 
 if __name__ == "__main__":

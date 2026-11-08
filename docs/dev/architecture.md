@@ -673,7 +673,15 @@ runs: tests use `tests/support/fake_claude/`.
   card of a similar name a row names is followed by its tag (`drafts.tagged`). The letter's Evidence line goes through the same check, and a plan item about such
   a card that does not name it says the card and its tag (`pack._item_note`). Fit rows and the Evidence line
   gave a local assistant its namesake's stack, as a CV line of "Quill Employment" named "Quill" too
-  (2026-11-08).
+  (2026-11-08). Last, `pack.with_sources` gives each row a `source`, shown in the table's Source column
+  (`pack.row_source`): the `source` of the one card its evidence names (`profile.writing.source_words`: "from
+  the code project", "from your coursework", "from your current CV" and so on), else "from your current CV"
+  when a CV line states it, "from your skills", or "from your record"; a row met by where the person lives
+  says "from your settings".
+- A tool only an older CV gives a project card (`profile.writing.older_cv_only`) is off the card's `tools`
+  and kept as its `older_cv`. `pack.known_tools` includes those tools, so `paragraphs._tool_problems` fails a
+  sentence giving one to the card (`OLDER_CV_SAID`), and `drafts.misplaced_tools` and fit rows take it out,
+  saying it is only on an older CV.
 - Checks with no AI on finished drafts (`writing/drafts.py`): a letter or message whose last line is a
   sentence with no closing punctuation is asked for once more with room to finish (`pack.CUT_NOTE`, a
   wider `ROOM_CTX`); if that one stops too it is kept to its last full sentence and listed (`CUT_FLAG`).

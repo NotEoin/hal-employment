@@ -1234,9 +1234,12 @@ class Fit(unittest.TestCase):
             job = add_job(a.con, "technical_grad")
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         fit = section(md, "Fit")
-        self.assertIn("| Experience with AWS | project (personal project): Tide gauge (tools: AWS) | partial |", fit)
-        self.assertIn("| Docker | project (personal project): Tide gauge (tools: Docker) | partial |", fit)
-        self.assertIn("| Writing reports | a made-up report | strong |", fit)
+        self.assertIn("| Experience with AWS | project (personal project): Tide gauge (tools: AWS) "
+                      "| from the code project "
+                      "| partial |", fit)
+        self.assertIn("| Docker | project (personal project): Tide gauge (tools: Docker) | from the code project "
+                      "| partial |", fit)
+        self.assertIn("| Writing reports | a made-up report | from your record | strong |", fit)
         self.assertIn("Gaps to address or accept: Spreadsheets\n", fit)
 
 
@@ -1309,7 +1312,7 @@ class CoveredGaps(unittest.TestCase):
                 mock.patch.object(cv, "facts_text", lambda: f"{FACTS['technical_grad']} Tools: GitHub Actions."):
             md = pack.build(a.con, add_job(a.con, "technical_grad")["id"], use_web=False).read_text()
         fit = section(md, "Fit")
-        self.assertIn("| CI/CD | your CV (GitHub Actions) | partial |", fit)
+        self.assertIn("| CI/CD | your CV (GitHub Actions) | from your current CV | partial |", fit)
         self.assertIn("Gaps to address or accept: none found", fit)
         self.assertNotIn("if strict", md)
 
@@ -1347,8 +1350,9 @@ class FitTools(unittest.TestCase):
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         fit = section(md, "Fit")
         self.assertNotIn("| Python data libraries |", fit)
-        self.assertIn("| Data cleaning | Tide gauge cleans sensor logs with Lua. | partial |", fit)
-        self.assertIn("| Writing reports | a made-up report | strong |", fit)
+        self.assertIn("| Data cleaning | Tide gauge cleans sensor logs with Lua. | from the code project | partial |",
+                      fit)
+        self.assertIn("| Writing reports | a made-up report | from your record | strong |", fit)
         self.assertIn("Gaps to address or accept: Spreadsheets; Python data libraries\n", fit)
 
     def test_fit_rows_and_evidence_notes_never_give_one_card_its_namesakes_tools(self):
@@ -1373,7 +1377,9 @@ class FitTools(unittest.TestCase):
             job = add_job(a.con, "technical_grad")
             md = pack.build(a.con, job["id"], use_web=False).read_text()
             notes = pack.read_letter_notes(job)
-        self.assertIn("| Web apps | Quill Employment (job-search helper) uses Flask. | partial |", section(md, "Fit"))
+        self.assertIn("| Web apps | Quill Employment (job-search helper) uses Flask. | from the code project "
+                      "| partial |",
+                      section(md, "Fit"))
         self.assertTrue(notes["evidence"].startswith("Quill (offline assistant over personal notes) reads notes "
                                                      "with Lua"), notes["evidence"])
         self.assertNotIn("Quill using Flask", md)
@@ -1414,7 +1420,7 @@ class Table(unittest.TestCase):
         self.assertEqual(len(asks), 2, "one more ask, never a loop")
         self.assertIn("Requirements:\n- Familiar with statistical methodologies\n\n", asks[1]["user"])
         self.assertIn("| Familiar with statistical methodologies | record: a made-up survey of visitor numbers "
-                      "| partial |", section(md, "Fit"))
+                      "| from your record | partial |", section(md, "Fit"))
 
     def test_a_row_with_no_evidence_is_a_gap_and_office_days_where_you_live_are_met(self):
         # "London office three days a week" was partial, "no evidence of refusal", for a person in London, and a
@@ -1425,7 +1431,9 @@ class Table(unittest.TestCase):
             job = add_job(a.con, "humanities_grad")
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         fit = section(md, "Fit")
-        self.assertIn("| Made-up Town office three days a week | You live in Made-up Town | strong |", fit)
+        self.assertIn("| Made-up Town office three days a week | You live in Made-up Town | from your settings "
+                      "| strong |",
+                      fit)
         self.assertNotIn("| Writing reports |", fit)
         self.assertIn("Gaps to address or accept: Writing reports\n", fit)
 

@@ -263,13 +263,40 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
     fit = consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
     fit = checked_fit_tools(fit, cards, known_tools(cards), facts)
     fit = covered_gaps(fit, cards, profile_writing.skill_names(), facts)
-    return {**fit, "gaps": repeats.unique_gaps(fit.get("gaps") or [])}
+    return with_sources({**fit, "gaps": repeats.unique_gaps(fit.get("gaps") or [])}, cards, facts)
+
+
+SKILLS_PLACE = "your skills"     # where `covered_gaps` says a checked skill shows a gap's skill
+CV_PLACE = "your CV"             # where it says the CV does
+SETTINGS_WORDS = "from your settings"
+SKILLS_WORDS = "from your skills"
+
+
+def row_source(evidence: str, cards: list[dict], facts: str) -> str:
+    """Where one fit row's evidence comes from: the card it names (its `source`), the current CV when a CV line
+    states it, the person's checked skills, else the record as a whole."""
+    named = drafts.named_cards(evidence, [c for c in cards if c.get("name")])
+    if len(named) == 1 and named[0].get("source"):
+        return named[0]["source"]
+    if evidence.startswith(CV_PLACE) or drafts.stated_in(evidence, facts):
+        return profile_writing.CURRENT_CV_WORDS
+    if evidence.startswith(SKILLS_PLACE):
+        return SKILLS_WORDS
+    return profile_writing.RECORD_WORDS
+
+
+def with_sources(fit: dict, cards: list[dict], facts: str) -> dict:
+    """The fit map with each row citing where its evidence comes from (`row_source`), unless it already says."""
+    return {**fit, "matches": [{**m, "source": m.get("source") or row_source(str(m.get("evidence") or ""), cards,
+                                                                             facts)}
+                               for m in fit.get("matches") or [] if isinstance(m, dict)]}
 
 
 def known_tools(cards: list[dict]) -> list[str]:
-    """Every tool a checked card or skill names, and every tool a card's plan names (`planned`): what a draft or
-    fit row may wrongly give to a project."""
-    return [t for c in cards for t in (*c["tools"], *c.get("planned", ()))] + profile_writing.skill_names()
+    """Every tool a checked card or skill names, every tool a card's plan names (`planned`) and every tool only an
+    older CV gives a card (`older_cv`): what a draft or fit row may wrongly give to a project."""
+    return [t for c in cards for t in (*c["tools"], *c.get("planned", ()), *c.get("older_cv", ()))] \
+        + profile_writing.skill_names()
 
 
 NO_EVIDENCE = re.compile(r"^\s*(no|none|not)\b|\bno (evidence|mention)\b", re.I)   # a fit row that found nothing
@@ -313,7 +340,7 @@ def consistent_fit(fit: dict, you, towns: list[str], facts: str) -> dict:
         requirement = str(m.get("requirement") or "")
         reason = eligibility.where_you_live_reason(requirement, you, towns, facts)
         if reason:
-            matches.append({**m, "evidence": reason, "strength": "strong"})
+            matches.append({**m, "evidence": reason, "strength": "strong", "source": SETTINGS_WORDS})
         elif NO_EVIDENCE.search(str(m.get("evidence") or "")):
             gaps.append(requirement)
         else:
@@ -321,7 +348,8 @@ def consistent_fit(fit: dict, you, towns: list[str], facts: str) -> dict:
     for gap in fit.get("gaps") or []:
         reason = eligibility.where_you_live_reason(str(gap), you, towns, facts)
         if reason:
-            matches.append({"requirement": str(gap), "evidence": reason, "strength": "strong"})
+            matches.append({"requirement": str(gap), "evidence": reason, "strength": "strong",
+                            "source": SETTINGS_WORDS})
         else:
             gaps.append(gap)
     return {**fit, "matches": matches, "gaps": gaps}
@@ -448,7 +476,7 @@ def covered_gaps(fit: dict, cards: list[dict], skills: list[str], facts: str) ->
     a card's tools or quotes, a checked skill, or the CV (`facts`), for the skill or one that shows it
     (`EQUIVALENTS`)."""
     places = [(f"{c['kind']}: {c['name']}", "\n".join([*c.get("tools", ()), *c.get("quotes", ())])) for c in cards]
-    places += [("your skills", "\n".join(skills)), ("your CV", facts)]
+    places += [(SKILLS_PLACE, "\n".join(skills)), (CV_PLACE, facts)]
     named = [*(t for c in cards for t in c.get("tools", ())), *skills]
     matches, gaps = list(fit.get("matches") or []), []
     for gap in fit.get("gaps") or []:
@@ -1387,9 +1415,9 @@ def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, tr
     lines += [CHECK_HEADING, ""] + ([f"- {f}" for f in flagged] or [NOTHING_TO_CHECK]) + [""]
     lines += ["## Role", "", analysis.get("summary", ""), "", "## Company", "", about.strip(), ""]
     lines += [f"- Source: {u}" for u in urls] + ([""] if urls else [])
-    lines += ["## Fit", "", "| Requirement | Evidence | Strength |", "| --- | --- | --- |"]
-    lines += [f"| {m.get('requirement', '')} | {m.get('evidence', '')} | {m.get('strength', '')} |"
-              for m in fit.get("matches", [])]
+    lines += ["## Fit", "", "| Requirement | Evidence | Source | Strength |", "| --- | --- | --- | --- |"]
+    lines += [f"| {m.get('requirement', '')} | {m.get('evidence', '')} | {m.get('source', '')} | "
+              f"{m.get('strength', '')} |" for m in fit.get("matches", [])]
     gaps = fit.get("gaps", [])
     lines += ["", "Gaps to address or accept: " + ("; ".join(gaps) if gaps else "none found"), ""]
     lines += ["## Cover letter", "", salutation(analysis), "", letter, "", f"{who['signoff']},", who["name"], ""]

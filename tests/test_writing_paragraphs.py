@@ -12,7 +12,7 @@ from unittest import mock
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt import llm
-from jobhunt.writing import frame, motive, paragraphs, plain, purpose, stage
+from jobhunt.writing import drafts, frame, motive, paragraphs, plain, purpose, stage
 from jobhunt.writing.motive import Pairing
 from jobhunt.writing.plan import Item, Story
 
@@ -631,6 +631,19 @@ class Voice(unittest.TestCase):
         scope = replace(SCOPE, voice=(VOICE,))
         found = paragraphs.sentence_problems("Quill grew from running a choir of 35 singers.", QUILL_STORY, scope)
         self.assertIn("the number 35 is not in the facts of Quill", found)
+
+
+class OlderCv(unittest.TestCase):
+    """A tool only an older CV gives a project is no tool the project used (sections plan, 2026-11-09)."""
+
+    def test_a_tool_only_an_older_cv_gives_is_no_tool_claim_in_a_paragraph_or_a_draft(self):
+        card = {**QUILL, "older_cv": ["Java"]}
+        story = replace(QUILL_STORY, card=card)
+        scope = replace(SCOPE, cards=(card, EMPLOYMENT, FERRY, SHOP), known=(*SCOPE.known, "Java"))
+        self.assertEqual(paragraphs.sentence_problems("I wrote Quill's indexer in Java.", story, scope),
+                         ["Java is only on an older CV for Quill, never in its own sources; leave it out"])
+        self.assertEqual(drafts.misplaced_tools("I wrote Quill's indexer in Java.", [card], ["Java"]),
+                         ["I wrote Quill's indexer in Java. (Java is only on an older CV for Quill)"])
 
 
 if __name__ == "__main__":

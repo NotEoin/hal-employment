@@ -153,7 +153,9 @@ is still there. This also works when the draft calls the project by a shorter na
 When two of your projects have similar names, Hal adds a few words of each one's own description to its
 name in what the writer reads, and a sentence that gives one of them a tool or a purpose only the other has
 is rewritten the same way. The pack's fit table and the letter's **Evidence** note name each with those few
-words too, and lose a tool given to the wrong one.
+words too, and lose a tool given to the wrong one. Each row of the fit table says where its evidence comes
+from, such as "from the code project" or "from your current CV". A tool that only an older CV gives a
+project is never said to be used in it.
 
 The pack's **Company check** names a registered company as the employer only when the advert's own
 website is on its record, or it is registered in the advert's town and trade at an address that is not a

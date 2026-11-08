@@ -176,7 +176,8 @@ def misplaced_tools(draft: str, cards: list[dict], known: list[str]) -> list[str
         own = " ".join([*card_names(card), card["summary"], *card["tools"], *_planned_said(sentence, card)])
         for tool in dict.fromkeys(known):
             if names_tool(sentence, tool) and not names_tool(own, tool):
-                out.append(f"{sentence} ({tool} is not among {card['name']}'s tools)")
+                why = "is only on an older CV for" if tool in (card.get("older_cv") or ()) else "is not among"
+                out.append(f"{sentence} ({tool} {why} {card['name']}" + ("'s tools)" if why == "is not among" else ")"))
                 break
     return out
 

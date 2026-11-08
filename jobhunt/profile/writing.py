@@ -80,6 +80,10 @@ Design decisions, each with its reason:
   (`cv_filled`), so a story marks them. A card no project source backs (`profile.cvs.cv_only`) is marked
   `cv_only`, and a dissertation (`dissertation`) is marked so the writer frames it as one. A card with no
   section evidence, from the older bulk read, is told as before.
+- A tool only an older CV gives a card (`older_cv_only`) stays off its tools and is kept as the card's
+  `older_cv`, so the checks on drafts and fit rows can say whose it is not ("only on an older CV"); each card
+  says where its facts come from in plain words (`source_words`: "from the code project", "from your current
+  CV"), which the fit table cites per row (sections plan, 2026-11-09).
 """
 from __future__ import annotations
 
@@ -282,6 +286,16 @@ OLDER_CV = "only in an older CV"
 CV_FIELDS = {"project": ("summary", "role", "period", "link", "tools"), "job": ("duties", "achievements")}
 # The sections whose sources are a project's own: its code, pages, files or form, and a showcase coursework piece.
 OWN_SECTIONS = ("project", "coursework")
+# Where a card's facts come from, as a fit row cites it: by its source's kind of document in Your record, else
+# by the document type of a fact from the older bulk read.
+SOURCE_WORDS = {"repo": "from the code project", "repo_url": "from the code project",
+                "github_account": "from the code project", "local_folder": "from the code project",
+                "upload": "from the project's files", "portfolio_site": "from the portfolio piece",
+                "web_page": "from the web page", "manual": "from what you typed",
+                "dissertation": "from your dissertation", "coursework": "from your coursework",
+                "job_doc": "from the job's documents", "repository": "from the code project",
+                "project": "from the project's files"}
+CURRENT_CV_WORDS, OLDER_CV_WORDS, RECORD_WORDS = "from your current CV", "from an older CV", "from your record"
 DISSERTATION = "dissertation"      # the document type of the piece marked "This is my dissertation"
 
 
@@ -482,6 +496,28 @@ def cv_filled(con: sqlite3.Connection, item: dict) -> dict[str, list[str]]:
     return out
 
 
+def source_words(item: dict, cvs: CvAuthority) -> str:
+    """Where a card's facts come from, in a fit row's words (`SOURCE_WORDS`): its own project or coursework
+    source first, then a job's documents, the current CV, an older CV, else "from your record"."""
+    ev = item["evidence"]
+    for e in ev:
+        if e.get("section") in OWN_SECTIONS:
+            kind = e["doc_type"] if e["section"] == "coursework" and e["doc_type"] == DISSERTATION else \
+                "coursework" if e["section"] == "coursework" else e.get("doc_kind", "")
+            if kind in SOURCE_WORDS:
+                return SOURCE_WORDS[kind]
+    if any(e.get("section") == "job_doc" for e in ev):
+        return SOURCE_WORDS["job_doc"]
+    old = next((SOURCE_WORDS[e["doc_type"]] for e in ev if not e.get("section") and e["doc_type"] in SOURCE_WORDS),
+               "")
+    if old:
+        return old
+    cv = [e["source_rel"] for e in ev if merge.doc_group(e["doc_type"] or "") == CV_TYPE]
+    if cv and any(rel not in cvs.older for rel in cv):
+        return CURRENT_CV_WORDS
+    return OLDER_CV_WORDS if cv else RECORD_WORDS
+
+
 def employers(con: sqlite3.Connection) -> list[str]:
     """The employers of the jobs the person checked, which make a project that names one work."""
     return [it["fields"]["employer"] for it in store.items(con, "job", hidden=False)
@@ -642,7 +678,9 @@ def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) ->
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
     tools, summary, planned, context, tier, aliases, role, files, quotes, tag, similar, star, cv_only,
-    cv_filled, dissertation}; `star` is the person's showcase mark (`store.set_star`), which chooses the
+    cv_filled, dissertation, older_cv, source}; `older_cv` holds the tools only older CVs give, left out of
+    `tools`, and `source` where its facts come from (`source_words`); `star` is the person's showcase mark
+    (`store.set_star`), which chooses the
     projects told as stories (`writing.plan.story_cards`); `cv_only`, `cv_filled` and `dissertation` say where a
     project's facts come from (see the module notes); `tier` is its
     `profile.tiers` tier ("core", "supporting", "archive", "" unsorted); `planned` holds the tools only
@@ -680,13 +718,16 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                             "quotes": quotes(it, f, cvs, view, names), "tag": "", "similar": [],
                             "star": bool(it.get("star")), "cv_only": section_cvs.cv_only(it),
                             "cv_filled": cv_filled(con, it),
-                            "dissertation": any(e["doc_type"] == DISSERTATION for e in it["evidence"])})
+                            "dissertation": any(e["doc_type"] == DISSERTATION for e in it["evidence"]),
+                            "older_cv": older_cv_only(con, it, cvs).get("tools", []),
+                            "source": source_words(it, cvs)})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
                             "tools": [], "summary": "; ".join(f.get("duties") or []), "planned": [],
                             "context": context, "tier": it.get("tier") or "", "role": "", "files": [],
                             "quotes": quotes(it, f, cvs, view, names), "star": bool(it.get("star")),
-                            "tag": "", "similar": [], "cv_only": False, "cv_filled": {}, "dissertation": False})
+                            "tag": "", "similar": [], "cv_only": False, "cv_filled": {}, "dissertation": False,
+                            "older_cv": [], "source": source_words(it, cvs)})
     projects = [c for c in out if c["kind"].startswith("project")]
     alike = similar([c["name"] for c in projects])
     for c in projects:

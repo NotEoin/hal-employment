@@ -12,6 +12,10 @@ What changed in each version, in plain words.
   your showcase leads the letter. A project only your CV names is told only when nothing is in your
   showcase.
 
+- **The fit table says where each row comes from.** A new Source column says "from the code project",
+  "from your coursework", "from your current CV" and so on. A tool only an older CV gives a project is no
+  longer said to be used in it, in drafts or in the table.
+
 - **Letters sound like you.** With **Match my own writing** on, the cover letters and personal statements
   you added on Your record give each new letter a short sample of your own words, so Hal matches your tone
   and sentence length. Nothing in them becomes a fact about you.
