@@ -278,9 +278,11 @@ class NewestCv(unittest.TestCase):
         self.seed()
         self.con.execute("UPDATE profile_evidence SET quote = 'Ferry planner ran on Azure' WHERE source_rel = ?",
                          (OLD_CV,))
+        self.con.execute("UPDATE profile_evidence SET quote = 'Ferry planner shows the next ferry' "
+                         "WHERE source_rel != ?", (OLD_CV,))
         self.con.commit()
         quotes = writing.cards(self.con)[0]["quotes"]
-        self.assertEqual(quotes, ["Ferry planner"], "the newest CV's and the repository's quote, once")
+        self.assertEqual(quotes, ["Ferry planner shows the next ferry"], "the newest CV's and the repository's, once")
 
     def test_the_profile_says_which_values_only_an_older_cv_gives(self):
         item = store.item(self.con, self.seed())
@@ -458,6 +460,23 @@ class OwnFiles(unittest.TestCase):
         employment = self.cards["Quill Employment"]
         self.assertEqual(employment["tools"], ["Preact", "SQLite"])
         self.assertEqual(employment["files"], ["Sources/Code/quill-employment/README.md"])
+
+    def test_a_cards_quotes_are_sentences_about_the_work_with_its_readmes_first_by_result(self):
+        # a card's quotes held a table row and a credit line while its README's test suite was missing
+        # (2026-11-08)
+        vault = self.home / "made-up record"
+        self.enterContext(mock.patch.object(record, "VAULT", vault, create=True))
+        note = vault / "Sources/Code/quill/README.md"
+        note.parent.mkdir(parents=True)
+        note.write_text("---\ntype: source\ndoc_type: repository\n---\n# Quill\n\n| Quill | Yes |\n\n"
+                        "Quill answers questions over a folder of notes with no network. A 40-test suite checks "
+                        "every answer against its note.\n")
+        for junk in ("quill | Yes | https://example.org/avery/quill", "Built by [@avery](https://example.org)"):
+            store.add_found(self.con, "project", {"name": "Quill"},
+                            own("Sources/Code/quill/README.md", "repository", junk))
+        quotes = {c["name"]: c for c in writing.cards(self.con)}["Quill"]["quotes"]
+        self.assertEqual(quotes, ["A 40-test suite checks every answer against its note.", "Quill answers offline",
+                                  "Quill answers questions over a folder of notes with no network."])
 
     def test_the_record_keeps_the_evidence_as_it_was_stored(self):
         self.assertIn("SQLite", store.item(self.con, self.quill)["fields"]["tools"])

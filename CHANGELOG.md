@@ -182,6 +182,10 @@ What changed in each version, in plain words.
   repository of a later project with a longer name, and letters said it used the later one's database. A
   repository or project file named after one of your projects now gives its tools and quotes to that
   project alone. Your record still shows every file as Hal found it.
+- **Paragraphs rest on sentences about your work.** The facts a paragraph about a project was written from
+  held table rows, links, credit lines and ratings, and missed what the project's own README says. Hal now
+  keeps only sentences about the work, adds the sentences of the project's own README, and gives the ones
+  with a result or a number first.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that

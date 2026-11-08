@@ -63,7 +63,10 @@ Design decisions, each with its reason:
   database (2026-11-08). The record and the review page keep the evidence as stored.
 - A card carries its own evidence quotes (`quotes`) for the paragraph that tells it (`writing.plan.Story`):
   only the person's own sources, never an older CV's, a plan's, or one naming a tool the card's writing
-  fields leave out, so a quote never brings back what `for_writing` took out (2026-11-08).
+  fields leave out, so a quote never brings back what `for_writing` took out (2026-11-08). The sentences of the
+  card's own repository or project notes join them, and only sentences about the work are kept, those with a
+  result or a number first (`writing.quotes`): a card's quotes held table rows and credit lines while its
+  README's test suite was missing (2026-11-08).
 """
 from __future__ import annotations
 
@@ -78,6 +81,7 @@ from jobhunt import db, record
 from jobhunt.ingest import frontmatter
 from jobhunt.profile import contexts, merge, owners, store, tiers
 from jobhunt.writing import planned, stage
+from jobhunt.writing import quotes as writing_quotes
 
 log = logging.getLogger(__name__)
 
@@ -649,7 +653,23 @@ def quotes(item: dict, fields: dict, cvs: CvAuthority, view: owners.Files | None
                 or any(re.search(rf"(?<![\w+#]){re.escape(t)}(?![\w+#])", said, re.I) for t in dropped):
             continue
         out.append(said)
-    return list(dict.fromkeys(out))[:CARD_QUOTES]
+    own_files = {e["source_rel"] for e in item["evidence"] if e["doc_type"] in PROJECT_FILES
+                 and e.get("role", "") in (OWN_ROLE, "") and view.belongs(item["id"], e["source_rel"])}
+    out += [s for rel in sorted(own_files) for s in _note_sentences(rel)
+            if not planned.planned(s, rel)
+            and not any(re.search(rf"(?<![\w+#]){re.escape(t)}(?![\w+#])", s, re.I) for t in dropped)]
+    kept = [q for q in dict.fromkeys(out) if writing_quotes.about_work(q)]
+    return writing_quotes.ranked(kept)[:CARD_QUOTES]
+
+
+def _note_sentences(source_rel: str) -> list[str]:
+    """The sentences about the work of one note of the record (`writing.quotes.sentences`); [] when it cannot
+    be read."""
+    try:
+        _, body = frontmatter.parse(record.file_path(source_rel).read_text(encoding="utf-8", errors="replace"))
+    except (LookupError, OSError):
+        return []
+    return writing_quotes.sentences(body)
 
 
 def card_role(item: dict) -> str:

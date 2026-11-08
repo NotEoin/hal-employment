@@ -438,8 +438,11 @@ runs: tests use `tests/support/fake_claude/`.
   `use`), in the model's own words.
 - Stories (`plan.stories`, `plan.Story`): the plan's items grouped into the pieces of work a draft tells, one
   per card (its items' quotes first, then the card's own `quotes` from `profile.writing.quotes`: the
-  person's own sources only, never an older CV's, a plan's or one naming a tool `for_writing` drops,
-  `plan.STORY_FACTS` (12) in all), one per passage's file and one per other item; a skills list is never a
+  person's own sources only, never an older CV's, a plan's or one naming a tool `for_writing` drops, with
+  the sentences of the card's own repository or project notes; `writing/quotes.py` keeps only sentences
+  about the work, `quotes.about_work`: no table row, bare link, credit, rating, heading or line under
+  `quotes.MIN_WORDS` (6) words with no verb, and puts those with a result or a number first,
+  `quotes.ranked`; `plan.STORY_FACTS` (12) in all), one per passage's file and one per other item; a skills list is never a
   story. `Story.block` is what a request gives: the name and tag, where it was done, the person's part,
   what it is, its tools, its facts as plain lines, what is planned and what it can help with, never an
   evidence id. `plan.choose(stories, n, used)` takes the `n` the pack has told least, best first.
