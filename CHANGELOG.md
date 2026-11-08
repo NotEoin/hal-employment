@@ -160,6 +160,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Check before sending is always there.** Some packs had no **Check before sending** at all, so nothing
+  said a letter was too short or did not read well. Every pack now has the section, saying "Nothing to
+  check." when that is so, and it lists a letter well under your preferred length and a paragraph that
+  starts by pointing back at something the paragraph before does not say.
 - **Drafts speak as you.** Letters opened sentences with the advert's wording ("For the requirement to
   ..."), wrote "My CV lists C++", called you "the applicant", or pasted a settings choice ("as a British or
   Irish citizen"). Hal now rewrites such a sentence once and lists it if it stays, gives the writer your

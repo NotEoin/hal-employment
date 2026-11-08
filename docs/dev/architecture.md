@@ -428,7 +428,8 @@ runs: tests use `tests/support/fake_claude/`.
   `cites.normalise` moves a marker written after a full stop before it, and puts a full stop after a marker
   run that has none when a capital, a quote, a digit, a line break or the end of the text follows it ("on
   one consumer GPU [E1] This project" read as one sentence, 2026-11-07); `cites.sentences` splits after
-  every marker run with its stop. Every writing check reads the draft without markers (`cites.strip`). The markers are taken out before a draft is returned, shown or
+  every marker run with its stop. Every writing check reads the draft without markers (`cites.strip`).
+  The markers are taken out before a draft is returned, shown or
   saved. An empty plan, or a draft with no marker at all, is checked whole as before (`pack.fix_claims`).
 - Sentence checks (`writing/grounded.py`): `pack.settle` (letter, message) and `pack.settle_answers` check a
   marked draft one sentence at a time against only the items it cites (`pack.grounds` gathers them). With no
@@ -454,8 +455,14 @@ runs: tests use `tests/support/fake_claude/`.
   letter then under `flow.LENGTH_FLOOR` (0.8) of `cvdocs.letter_words` gets one paragraph from the plan
   items it does not cite (`grounded.lengthen`, prompt `paragraph_add`, through `pack.settle`'s `words`),
   checked sentence by sentence and put before its last paragraph. Cut sentences had left "This project
-  allowed me ..." and letters of 105 to 216 words against 250 (2026-11-07). "Check before sending" lists those, the eligibility lines, cut-offs and the checks with no AI on
-  style; the verify call is not made for a marked draft. `tests/fixtures/grounded_flags.json` holds
+  allowed me ..." and letters of 105 to 216 words against 250 (2026-11-07). "Check before sending" lists
+  those, the eligibility lines, cut-offs and the checks with no AI on style; the verify call is not made
+  for a marked draft. The section is in every pack, saying `pack.NOTHING_TO_CHECK` when it lists nothing
+  (`pack.add_company_check` replaces that line with its flags), since packs without it gave no sign of a
+  broken letter (2026-11-07). It also lists a letter still under `flow.LENGTH_FLOOR` of the preferred
+  length after the added paragraph (`pack.SHORT_FLAG`), and a paragraph of the letter or the message that
+  opens by pointing back ("This", "It", "That", "These" and a noun) at nothing the paragraph before says
+  (`flow.dangling`, `pack.DANGLING_FLAG`). `tests/fixtures/grounded_flags.json` holds
   sentences of each kind a local model wrote, and `tests/test_writing_grounded.py` requires each judged
   right.
 - Plain first-person writing (`writing/plain.py`): `plain.problems` finds a sentence opening with the

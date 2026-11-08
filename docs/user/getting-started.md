@@ -93,8 +93,8 @@ in it when your files say so. The letter's notes list them under **Evidence**. T
 and the answers say which of these facts each sentence rests on (you never see these marks), and Hal
 checks each sentence about you against only the facts it rests on: a number, tool or detail they do not
 give (a tool you used on a project must be in that project's own facts, as a list of your skills says what
-you know, not where you used it), a project placed somewhere else (your degree instead of your own time), or a team's work written as
-yours alone. Such a sentence is rewritten once; if it is still wrong, Hal takes it out, or lists it under
+you know, not where you used it), a project placed somewhere else (your degree instead of your own time),
+or a team's work written as yours alone. Such a sentence is rewritten once; if it is still wrong, Hal takes it out, or lists it under
 **Check before sending** when the draft needs it or the next sentence points back at it ("This project
 ..."). After a sentence is rewritten or taken out, Hal rewrites its paragraph once so it reads well,
 keeping the same facts and adding none. A letter left well under the length you prefer gets one more
@@ -129,6 +129,11 @@ says where it was done (part of your degree, a university team project, at work,
 a draft keeps it that way. A sentence that calls a project something else, such as "my degree included"
 for a project you did in your own time, is rewritten once, and listed under **Check before sending** if it
 is still there. This also works when the draft calls the project by a shorter name or its folder's name.
+
+Every pack has a **Check before sending** section, which says "Nothing to check." when nothing needs
+you. Besides the sentences Hal could not fix, it lists a letter still well under the length you prefer, and
+a paragraph that starts with "This", "It" or "That" pointing at something the paragraph before does not
+say.
 
 Drafts speak as you, in the first person. A sentence that opens with the advert's wording ("For the
 requirement to ..."), points at your CV ("My CV lists ...") or calls you "the applicant" is rewritten once,

@@ -63,6 +63,7 @@ from .writing import (
     drafts,
     eligibility,
     fields,
+    flow,
     grounded,
     motive,
     plain,
@@ -143,6 +144,12 @@ LETTER_DRAFTS = 2
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
 ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its rewrite
+NOTHING_TO_CHECK = "Nothing to check."   # the "Check before sending" section when it lists nothing
+CHECK_HEADING = "## Check before sending"
+# A letter left short after its sentence checks and the one added paragraph (`flow.short`).
+SHORT_FLAG = ("the letter is {n} words, well under the {words} you prefer; add a paragraph of your own evidence "
+              "before you send it")
+DANGLING_FLAG = "opens a paragraph by pointing back at something the paragraph before does not say"
 REPEAT_FLAG = "says what an earlier sentence or draft already says"   # still repeating after its rewrite
 # The recipient's greeting when the message greeted the applicant: the advert's named person, else this.
 HELLO = "Hello,"
@@ -698,6 +705,9 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in echoed_in(letter)]
     flags += [f"{REPEAT_FLAG}: {s}" for s in unique.failed]
+    flags += [f"{DANGLING_FLAG}: {s}" for s in flow.dangling(letter)]
+    if flow.short(letter, who.get("letter_words")):
+        flags.append(SHORT_FLAG.format(n=flow.word_count(letter), words=who["letter_words"]))
     if cut:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["letter"]))
     used = passages(kept)
@@ -835,6 +845,7 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
                          claims=message_claims + answer_claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in answer_echoes]
     flags += [f"{REPEAT_FLAG}: {s}" for s in repeated]
+    flags += [f"{DANGLING_FLAG}: {s}" for s in flow.dangling(message)]
     if cut:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
     return {"message": message, "answers": answers, "flags": flags}
@@ -1034,10 +1045,11 @@ def add_company_check(pack_md: Path, company: str, job=None) -> None:
     text = re.sub(r"## Company check\n.*?(?=\n## )", "", pack_md.read_text(), flags=re.S)
     if flags:
         bullets = "".join(f"- {f}\n" for f in flags)
-        if "## Check before sending\n\n" in text:
-            text = text.replace("## Check before sending\n\n", "## Check before sending\n\n" + bullets, 1)
+        text = text.replace(f"{CHECK_HEADING}\n\n{NOTHING_TO_CHECK}\n", f"{CHECK_HEADING}\n\n", 1)
+        if f"{CHECK_HEADING}\n\n" in text:
+            text = text.replace(f"{CHECK_HEADING}\n\n", f"{CHECK_HEADING}\n\n" + bullets, 1)
         else:
-            text = text.replace("\n## Role\n", f"\n## Check before sending\n\n{bullets}\n## Role\n", 1)
+            text = text.replace("\n## Role\n", f"\n{CHECK_HEADING}\n\n{bullets}\n## Role\n", 1)
     text = text.replace("\n## Role\n", "\n" + section + "\n## Role\n", 1)
     pack_md.write_text(text)
     title = text.splitlines()[0].removeprefix("# ")
@@ -1059,8 +1071,7 @@ def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, tr
              f"- Location: {job['location'] or 'not stated'} | Salary: {job['salary'] or 'not stated'}",
              f"- Tailored CV: `{pdf}`" + (f" (track: {track})" if track else ""),
              f"- Drafted: {date.today().isoformat()} | Job id: `{job['id']}`", ""]
-    if flagged:
-        lines += ["## Check before sending", ""] + [f"- {f}" for f in flagged] + [""]
+    lines += [CHECK_HEADING, ""] + ([f"- {f}" for f in flagged] or [NOTHING_TO_CHECK]) + [""]
     lines += ["## Role", "", analysis.get("summary", ""), "", "## Company", "", about.strip(), ""]
     lines += [f"- Source: {u}" for u in urls] + ([""] if urls else [])
     lines += ["## Fit", "", "| Requirement | Evidence | Strength |", "| --- | --- | --- |"]

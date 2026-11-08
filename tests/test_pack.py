@@ -28,7 +28,7 @@ from support.world import World
 
 from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
 from jobhunt.core import runner, settings
-from jobhunt.writing import cites, motive
+from jobhunt.writing import cites, flow, motive
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.
 ADVERTS = {
@@ -147,13 +147,17 @@ def add_job(con, key: str, *, status: str = "shortlisted", eligibility: dict | N
 
 
 @contextlib.contextmanager
-def as_applicant(person: people.Person, writer: FakeWriter | None = None) -> Iterator[SimpleNamespace]:
-    """A made-up world where `person`, with their CV type and their own made-up CV, has the fake writer."""
+def as_applicant(person: people.Person, writer: FakeWriter | None = None,
+                 length_floor: float = 0.0) -> Iterator[SimpleNamespace]:
+    """A made-up world where `person`, with their CV type and their own made-up CV, has the fake writer. The
+    made-up letters are a sentence or two, so no letter is short (`flow.LENGTH_FLOOR`) unless a test gives
+    `length_floor`."""
     writer = writer or FakeWriter()
     with World() as w, people.as_person(person), people.cv_type(person.key), contextlib.ExitStack() as stack:
         for p in (mock.patch.object(llm, "chat", writer.chat), mock.patch.object(llm, "chat_json", writer.chat_json),
                   mock.patch.object(cv, "facts_text", lambda: FACTS[person.key]),
-                  mock.patch.object(record, "context", lambda queries, per_query=3, limit=6000: RECORD)):
+                  mock.patch.object(record, "context", lambda queries, per_query=3, limit=6000: RECORD),
+                  mock.patch.object(flow, "LENGTH_FLOOR", length_floor)):
             stack.enter_context(p)
         yield SimpleNamespace(world=w, con=w.con, writer=writer, person=person)
 
@@ -576,6 +580,38 @@ class Cited(unittest.TestCase):
                       section(md, "Message to the hiring manager"))
         self.assertNotIn(pack.REPEAT_FLAG, md)
 
+    def test_a_letter_short_of_your_length_gets_one_paragraph_more_and_is_listed_if_still_short(self):
+        # letters of 105 to 216 words against a preferred 250 had no "Check before sending" at all (2026-11-07)
+        writer = MarkedWriter()
+        with as_applicant(people.HUMANITIES, writer, length_floor=flow.LENGTH_FLOOR) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        asked = writer.asked("add")
+        self.assertEqual(len(asked), 1, "one paragraph more, asked for once")
+        self.assertIn('Unused evidence:\nE2: "A made-up note about guiding visitors"', asked[0]["user"])
+        n = len(cites.strip(CITED).split())
+        self.assertIn(f"- {pack.SHORT_FLAG.format(n=n, words=250)}", section(md, "Check before sending"))
+
+    def test_check_before_sending_is_always_there_and_says_when_nothing_needs_you(self):
+        # some packs had no "Check before sending" at all, so nothing flagged a broken letter (2026-11-07)
+        with as_applicant(people.HUMANITIES, MarkedWriter()) as a:
+            job = add_job(a.con, "humanities_grad")
+            path = pack.build(a.con, job["id"], use_web=False)
+            md = path.read_text()
+            self.assertEqual(section(md, "Check before sending").strip(), pack.NOTHING_TO_CHECK)
+            self.assertEqual(documents.summary(job)["flags"], [])
+            with mock.patch.object(pack.reputation, "check", lambda company, advert: (["Possible match: X"], "")):
+                pack.add_company_check(path, job["company"], job)
+            self.assertEqual(section(path.read_text(), "Check before sending").strip(), "- Possible match: X")
+
+    def test_a_paragraph_pointing_back_at_nothing_is_listed(self):
+        letter = (f"{CITED}\n\nThis exhibition taught me to answer questions from visitors [E2].")
+        with as_applicant(people.HUMANITIES, MarkedWriter(first=letter)) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertEqual(written["flags"], [f"{pack.DANGLING_FLAG}: This exhibition taught me to answer questions "
+                                            "from visitors."])
+
     def test_saved_drafts_have_straight_quotes_and_no_stray_leading_space(self):
         # curly apostrophes and a stray leading space reached graded packs (2026-11-07)
         curly = " My dissertation\u2019s subject was river trade in an invented port town [E1]. I would like to " \
@@ -609,9 +645,8 @@ class Cited(unittest.TestCase):
             job = add_job(a.con, "humanities_grad")
             pack.build(a.con, job["id"], use_web=False)
         counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
-        # the made-up letter is far under the preferred 250 words, so one paragraph more is asked for
         self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "letter": 1,
-                                  "add": 1, "message": 1, "sentence_check": 2, "answers": 1})
+                                  "message": 1, "sentence_check": 2, "answers": 1})
 
     def test_the_letter_and_message_are_drafted_cooler_than_other_prose(self):
         writer = MarkedWriter()
