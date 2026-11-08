@@ -712,7 +712,9 @@ runs: tests use `tests/support/fake_claude/`.
   requests carry (CV suggestions get `today` and `stage` in their JSON). `ended_course(text, stage)` finds,
   with no AI, the sentences of a draft that speak of finishing a course that has ended (`FINISHING`, and
   "following my graduation" and the like beside words of what is to come (`PENDING`) and none of what has
-  been (`DONE`)), and
+  been (`DONE`)), or that call the person a student now (`STUDENT`, "a Computer Science student", in a
+  sentence with a word of the present, `NOW_WORDS`, or opening "As a ... student", and no "I built" or "I
+  was", `I_DID`), and
   `pack.unsupported_claims` adds them to the claims a draft is rewritten without. `project_kind` names a
   project "personal project" when its words say own time ("own time", "side project", "personal project",
   "extends my dissertation"), else "degree work" (coursework or dissertation evidence, degree words such as

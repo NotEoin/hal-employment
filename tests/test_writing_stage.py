@@ -96,6 +96,26 @@ class Stage(unittest.TestCase):
                 self.assertEqual(stage.ended_course(said, now), [])
 
 
+    def test_calling_you_a_student_after_the_course_ended_is_found(self):
+        # messages called a person who had graduated "a Computer Science student" (2026-11-08)
+        settings.set("goal.study_end", "2026-06", by="you")
+        self.degree("2026-06")
+        now, then = stage.current(self.con, date(2026, 11, 8)), stage.current(self.con, date(2026, 3, 1))
+        for said in ("I am a Computer Science student at a made-up university.",
+                     "As an Imaginary Studies student, I am keen to join your team.",
+                     "I'm currently a final-year student.",
+                     "I am currently studying for a BSc in Imaginary Studies."):
+            with self.subTest(said):
+                self.assertEqual(stage.ended_course(said, now), [said])
+                self.assertEqual(stage.ended_course(said, then), [], "true while the course runs")
+        for said in ("As a student, I built a made-up tide logger in my own time.",
+                     "I was an Imaginary Studies student from 2023 to 2026.",
+                     "I am a recent Imaginary Studies graduate.",
+                     "I now help the student volunteers at a made-up museum."):
+            with self.subTest(said):
+                self.assertEqual(stage.ended_course(said, now), [])
+
+
 class ProjectKind(unittest.TestCase):
     def test_each_project_says_the_kind_its_evidence_shows(self):
         kind = stage.project_kind

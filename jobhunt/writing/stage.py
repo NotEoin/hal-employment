@@ -20,6 +20,11 @@ Design decisions, each with its reason:
   graduation in June 2026" was written on 2026-11-07, after the person graduated. "Following my graduation"
   also opens true sentences about the past, so it counts only beside words of what is to come and none of
   what has been.
+- Calling the person a student today counts too (`_still_student`): "a Computer Science student", "I am a
+  student", "As a final-year student, I am ..." in a sentence that speaks of now ("I am", "currently", or
+  opening "As a ... student") and says nothing the person did ("I built", "I was"). Messages called a person
+  who had graduated "a Computer Science student" in every graded run (2026-11-08); "As a student, I built
+  ..." is about the past and stays.
 - A draft that speaks of finishing an ended course is found by words, with no AI, so the same draft always
   gets the same answer; the sentences found are treated as unsupported claims (`pack.unsupported_claims`).
 - A project's kind comes from its evidence: coursework, a dissertation or a module code make it degree work;
@@ -67,6 +72,13 @@ AFTER_GRADUATION = re.compile(r"\b(following|after|upon|on|from|post[- ]?) ?(my 
 PENDING = re.compile(r"\b(will|shall|available|availability|start|starting|begin|beginning|commence|join|"
                      r"joining|ready to|able to|free to)\b|'ll\b", re.I)
 DONE = re.compile(r"\b(have|has|had|since|was|were|spent|went)\b|'ve\b", re.I)
+# "a Computer Science student", "an MSc student", "a final-year student": the person called a student.
+STUDENT = re.compile(r"\b(?:a|an)\s+(?:[\w&/-]+\s+){0,4}?student\b", re.I)
+# Words that put a sentence in the present: "I am", "currently", or a sentence opening "As a ... student".
+NOW_WORDS = re.compile(r"\b(I am|I'm|currently|presently|at present|right now|now)\b|^\W*as an?\s", re.I)
+# "I built", "I was", "I learnt": the sentence tells what the person did, as a student then.
+I_DID = re.compile(r"\bI\s+(?:\w+ly\s+)?(?:\w+ed|was|had|built|wrote|led|made|ran|took|won|spent|went|did|got|"
+                   r"found|learnt|taught|gave|began|kept|met|held|chose|drew|became|knew|saw)\b", re.I)
 DEGREE_TYPES = ("coursework", "dissertation")
 PERSONAL_TYPES = ("repository", "project")
 DEGREE_WORDS = re.compile(r"\b(coursework|dissertation|thesis|module|assignment|lab report|final[- ]year project|"
@@ -193,7 +205,13 @@ def ended_course(text: str, stage: Stage) -> list[str]:
         return []
     from jobhunt.writing import check
 
-    return [s for s in check.sentences(text) if FINISHING.search(s) or _pending_graduation(s)]
+    return [s for s in check.sentences(text) if FINISHING.search(s) or _pending_graduation(s) or _still_student(s)]
+
+
+def _still_student(sentence: str) -> bool:
+    """True when a sentence calls the person a student now ("As a Computer Science student, I am keen ..."),
+    not when it tells what they did as one ("As a student, I built ...")."""
+    return bool(STUDENT.search(sentence)) and bool(NOW_WORDS.search(sentence)) and not I_DID.search(sentence)
 
 
 def _pending_graduation(sentence: str) -> bool:

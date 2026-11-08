@@ -175,6 +175,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **No "student" after you graduate.** Messages called people "a Computer Science student" months after their
+  course ended. A sentence that calls you a student now, such as "As a Computer Science student, I am keen
+  to ...", is rewritten once your course has ended; "As a student, I built ..." is about the past and stays.
 - **Packs are drafted with fewer AI calls.** Hal checked every sentence about you in a call of its own, about
   55 calls for one pack. A sentence whose every word is already in the facts it rests on is no longer sent,
   and the sentences of one paragraph are checked in one call, each still against only its own facts. Our
