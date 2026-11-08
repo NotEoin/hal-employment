@@ -15,7 +15,7 @@ An item (`ITEM`):
      "evidence": [{"id": 7, "source_rel": "Sources/CVs and letters/CV.md", "file_id": "U291cmNlcy9...",
                    "quote": "Collections volunteer, Sept 2023 - present", "field": "start", "doc_type": "cv",
                    "verified": true, "found_at": "2026-11-05T09:00:00Z", "source_id": null, "place": "",
-                   "line": null}],
+                   "line": null, "strength": "", "strength_words": ""}],
      "conflicts": [CONFLICT, ...], "can_delete": false,
      "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",
      "tier": "core", "tier_by": "hal", "tier_why": "Your main work in your field", "tier_words": "Lead with this",
@@ -39,7 +39,9 @@ was folded into by Hal (`store.fold_away`) or the person (`store.same_as`), else
 words on why ("Part of Lantern workspace", "You said it is the same as Tide gauge"). `star` is the person's
 star on a project or job (`can_star`), with `star_by` "you" once they set it. A source's `source_id` is the
 source of the record it came from (`jobhunt.sections`), with `place` (a file inside it or a URL) and `line`,
-or null and "" for facts the bulk read found.
+or null and "" for facts the bulk read found. A skill's source says how strongly it shows the skill (`strength`
+and `strength_words`, `profile.strength`; "" for other kinds), and `star_by` is "coursework" for a project card
+starred through a piece of coursework in the showcase.
 
 A conflict (`CONFLICT`):
 

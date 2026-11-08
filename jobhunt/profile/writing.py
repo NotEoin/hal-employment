@@ -12,7 +12,9 @@ Design decisions, each with its reason:
   the person has seen and agreed to, so the Check your record page asks them first.
 - A skill only course material names (`store.is_studied`) is never used: a lecture's list of topics is what
   the person studied, not what they can show. The checked-only rule already keeps it out, as a studied
-  skill is one nobody checked; once the person confirms it, it is theirs and is used.
+  skill is one nobody checked; once the person confirms it, it is theirs and is used. How strongly each
+  usable skill is shown (`skill_strengths`, `profile.strength`: shown, coursework, cv, studied) is there for
+  the writer to tell a skill only studied as knowledge, never as something the person did.
 - Experiences lead with the best (`tiers`): core jobs, courses, projects, certificates and achievements
   come before supporting ones and those not sorted yet, and an archived one is never used, even when the
   person confirmed it, because they or Hal said it is not worth telling an employer. Within a tier, the
@@ -80,7 +82,7 @@ from dataclasses import dataclass, field
 
 from jobhunt import db, record
 from jobhunt.ingest import frontmatter
-from jobhunt.profile import contexts, merge, owners, store, tiers
+from jobhunt.profile import contexts, merge, owners, store, strength, tiers
 from jobhunt.profile import cvs as section_cvs
 from jobhunt.writing import planned, stage
 from jobhunt.writing import quotes as writing_quotes
@@ -720,6 +722,17 @@ def skill_names(con: sqlite3.Connection | None = None) -> list[str]:
             return skill_names(own)
     return [it["fields"].get("name", "") for it in store.items(con, "skill", hidden=False)
             if it["state"] in USED_STATES and it["fields"].get("name") and not planned_only(con, it)]
+
+
+def skill_strengths(con: sqlite3.Connection | None = None) -> dict[str, str]:
+    """How strongly each skill the writer may use is shown, by name (`profile.strength`: "shown", "coursework",
+    "cv", "studied" or ""); Hal's own database unless `con`. A skill the person confirmed from lectures alone is
+    "studied": theirs to mention, as knowledge."""
+    if con is None:
+        with closing(db.connect()) as own:
+            return skill_strengths(own)
+    return {it["fields"]["name"]: strength.of_skill(it) for it in store.items(con, "skill", hidden=False)
+            if it["state"] in USED_STATES and it["fields"].get("name") and not planned_only(con, it)}
 
 
 def cards_block(found: list[dict]) -> str:

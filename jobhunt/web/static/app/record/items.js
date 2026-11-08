@@ -27,8 +27,9 @@ async function act(fn, said) {
 
 const fileName = rel => rel.split("/").pop().replace(/\.md$/, "");
 
-/** "From:" the files an item came from, each with its quote, a mark when the quote is not in the file, and one
-    on a CV that is not your current one (it only fills gaps, `jobhunt/profile/cvs.py`). */
+/** "From:" the files an item came from, each with its quote, a mark when the quote is not in the file, one on a
+    CV that is not your current one (it only fills gaps, `jobhunt/profile/cvs.py`), and for a skill how strongly
+    it shows it ("Done in your coursework: ...", "Studied in ...", jobhunt/profile/strength.py). */
 export function Sources({ evidence }) {
   if (!evidence.length) return null;
   return html`<div class="rec-from"><div class="small sub"><b>From:</b></div><ul class="rec-sources">
@@ -36,6 +37,7 @@ export function Sources({ evidence }) {
       <a href=${FILE_PATH + e.file_id} target="_blank" rel="noopener">${fileName(e.source_rel)}</a>
       ${e.from_older_cv && html` <${Chip} tone="line">from an older CV<//>`}
       ${!e.verified && html` <${Chip} tone="warn">Quote not found in the file<//>`}
+      ${e.strength_words && html`<div class="small sub">${e.strength_words}</div>`}
       ${e.quote && html`<div class="quote">"${e.quote}"</div>`}</li>`)}</ul></div>`;
 }
 

@@ -1293,6 +1293,15 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   a large file keeps its first part and says the rest was left out. The topics come from the
   `lecture_topics` prompt, each with a quote found in the notes. The notes and topics are cached in
   `details` by hash, and Hal's suggested module is `details["module"]`, as for coursework.
+- Skill strength (`profile/strength.py`): each piece of a skill's evidence is `shown` (own repository or
+  project files), `coursework` (the coursework section, or an own coursework, dissertation, essay or report
+  file), `cv`, `studied` (the lecture section, or role `taught`) or "" (`of_evidence`), worked out from its
+  source's section through `source_id`, never stored, so choosing a module later changes the words at once.
+  `store.evidence_of` gives a skill's evidence `strength` and `strength_words` ("Done in your coursework:
+  <source title>", "Studied in <chosen module>", else "Studied in <course>"), shown under "From:" on the
+  skill card. `of_skill` is the strongest; `store.is_studied` is `strength.studied_only`, so the two always
+  agree. `profile.writing.skill_strengths(con)` maps each skill the writer may use to its strength, for the
+  writer to tell a studied skill only as knowledge.
 
 ## Profile (`jobhunt/profile/`)
 
@@ -1400,7 +1409,7 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   Skills are ranked by `check.strength`; the first `SKILLS_FIRST` (30) are queued and the rest, then the
   weak ones, go to `more` ("Show more"). `store.is_weak(item)` is the one rule for weak: a found skill that
   fewer than two files name and whose evidence has no `role` of "own" ("" is unknown and does not count).
-  A skill whose every source has the role `taught` (`store.is_studied`) is in neither: the queue lists it
+  A skill whose every source is studied (`store.is_studied`, `profile.strength`) is in neither: the queue lists it
   under `studied`, which the page shows apart as "Studied in your course" with **I have used this**
   (confirm); unconfirmed, it never reaches a writing prompt. Only usable skills are queued
   (`store.is_usable`: on a CV, confirmed, edited or added, or a `merge.skill_key` match for a tool of a

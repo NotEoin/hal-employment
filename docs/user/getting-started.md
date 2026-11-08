@@ -482,6 +482,8 @@ them.
 Skills that only your course material names, such as the topics of a lecture, are listed apart under
 **Studied in your course**. They show what you studied, not what you have done, so Hal leaves them off your
 CV and out of your letters. If you have used one in your own work, press **I have used this** beside it.
+Under **From:**, each skill says where it was shown: "Done in your coursework: ..." for a piece of your
+coursework, or "Studied in ..." with the module or course it was taught in.
 
 Hal only asks about skills you can stand behind: skills on your CV, skills you checked, and the tools of a
 project Hal would tell an employer about (one it would lead with, or one useful when a job asks). Any

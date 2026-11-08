@@ -20,6 +20,10 @@ What changed in each version, in plain words.
   become short study notes without the lecturers' contact details, and the topics they teach count as
   skills you studied, never as work you did. A very long deck is summarised rather than kept whole.
 
+- **Each skill says where you showed it.** On **Skills**, a skill's sources now say "Done in your
+  coursework: <the piece>" or "Studied in <the module>", so you can tell what you did from what you were
+  taught.
+
 - **Official papers set your marks.** A transcript added under **Official papers** on a course's card now
   gives that course its modules, each with its mark, and its grade. A degree certificate gives the grade.
   Hal reads these with the same fixed rules as a transcript on **Documents**, not the AI, so a mark is never

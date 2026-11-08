@@ -8,6 +8,7 @@ summary and suggested module from rules alone.
 from __future__ import annotations
 
 import contextlib
+import json
 import unittest
 from contextlib import closing
 from pathlib import Path
@@ -15,6 +16,7 @@ from unittest import mock
 
 from support import graduates
 from support.api import HalServer
+from support.fake_ai import fake_ai
 from support.ui import AppPage, chromium, skip_unless_browser
 
 from jobhunt import db, record
@@ -152,6 +154,28 @@ class RecordEducation(unittest.TestCase):
         self.assertEqual(row.get_by_role("button", name="This is my dissertation", exact=False).count(), 0)
         note = Path(paths.record_default()) / self.listed("lecture")[0]["note_rel"]
         self.assertNotIn("ivo.pellingrove@example.org", note.read_text(encoding="utf-8"))
+        self.clean(p)
+
+
+    def test_a_skills_sources_say_done_in_coursework_or_studied_in_its_module(self) -> None:
+        course("ba")
+        read = {"summary": "Reads parish registers.", "methods": [
+            {"name": "Archival research", "quote": "archival research at the county record office"}]}
+        topics = {"topics": [{"name": "Port books as sources", "quote": "Port books record cargoes"}]}
+        p = self.page()
+        card = self.open_card(p, "BA History")
+        with fake_ai({"coursework_read": json.dumps(read), "lecture_topics": json.dumps(topics)}):
+            self.upload(self.panel(card, "Coursework"), "registers.md", graduates.ESSAY, "Essay")
+            self.upload(self.panel(card, "Lecture material"), "seminar4.md", graduates.SEMINAR_NOTES, "Notes")
+            seminar = self.panel(card, "Lecture material").locator("li.rec-source", has_text="HIST2110 Seminar 4")
+            p.shows(seminar.get_by_text("Hal thinks this is for Rivers and Trade (HIST2110)."), "the seminar read")
+            p.shows(self.panel(card, "Coursework").get_by_text("Mark: 72%"), "the essay read")
+        seminar.get_by_role("button", name="Yes, that is right").click()
+        p.shows(p.page.get_by_text("Saved: this is for Rivers and Trade (HIST2110)."), "the saved module")
+        p.open("record-skills")
+        p.shows(p.page.get_by_text("Done in your coursework: The parish registers of Harrowgate Vale"),
+                "the coursework strength")
+        p.shows(p.page.get_by_text("Studied in Rivers and Trade (HIST2110)"), "the studied strength")
         self.clean(p)
 
 

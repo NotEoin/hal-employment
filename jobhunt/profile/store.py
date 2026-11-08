@@ -48,6 +48,9 @@ Design decisions, each with its reason:
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
   apart, under "Studied in your course", and no CV or letter uses it unless the person confirms it.
+- Each piece of a skill's evidence carries its strength (`profile.strength`: shown in own work, done in
+  coursework, on a CV, studied) and the words for it ("Done in your coursework: <title>", "Studied in
+  <module>"), worked out from its source's section, title and module (`record_sources`) when it has one.
 - A skill is usable (`is_usable`) when the person can stand behind it: on a CV, checked by them, or a tool
   of a project worth telling an employer about. The check page asks only about usable skills and folds the
   rest away as "Mentioned in your files".
@@ -69,7 +72,7 @@ import sqlite3
 from collections.abc import Callable
 
 from jobhunt import db
-from jobhunt.profile import conflicts, cvs, index, merge
+from jobhunt.profile import conflicts, cvs, index, merge, strength
 
 TEXT, DATE, FLAG, LIST, MODULES = "text", "date", "bool", "list", "modules"
 # Each kind's fields and their types. `period` is also accepted for jobs and education, and split into
@@ -820,7 +823,6 @@ def set_star(con: sqlite3.Connection, item_id, on: bool) -> dict:
 
 
 OWN_ROLE = "own"           # evidence `role`: "own" for the person's own document, "taught" for course material
-TAUGHT_ROLE = "taught"
 STRONG_FILES = 2           # two files naming a skill is a pattern, not one lecture's list of topics
 
 
@@ -832,7 +834,7 @@ def is_studied(item: dict) -> bool:
     person confirmed, edited or added is theirs, so it is never studied.
     """
     return item["kind"] == "skill" and item.get("origin") != "you" and item["state"] in ("hal", "hidden") and \
-        bool(item["evidence"]) and all(e.get("role", "") == TAUGHT_ROLE for e in item["evidence"])
+        strength.studied_only(item)
 
 
 def is_usable(item: dict, tools: set[str]) -> bool:
@@ -862,20 +864,35 @@ def is_weak(item: dict) -> bool:
     return len(files) < STRONG_FILES and not any(e.get("role", "") == OWN_ROLE for e in item["evidence"])
 
 
+def _strength(e: sqlite3.Row) -> dict:
+    """A skill's piece of evidence's strength and its words, from its source's section, title, module and card."""
+    if e["kind"] != "skill":
+        return {"strength": "", "strength_words": ""}
+    said = {"section": e["section"], "role": e["role"], "doc_type": e["doc_type"]}
+    found = strength.of_evidence(said)
+    course = title("education", json.loads(e["card"])) if e["card"] else ""
+    return {"strength": found, "strength_words": strength.words(found, title=e["source_title"] or "",
+                                                                module=e["module"] or "", course=course)}
+
+
 def evidence_of(con: sqlite3.Connection, item_ids: list[int]) -> dict[int, list[dict]]:
     """Each item's sources, oldest first: {item_id: [{id, source_rel, quote, field, doc_type, verified, role,
-    found_at, source_id, place, line}]}."""
+    found_at, source_id, place, line, strength, strength_words}]}; `strength` is a skill's only."""
     out: dict[int, list[dict]] = {i: [] for i in item_ids}
     if not item_ids:
         return out
     marks = ",".join("?" * len(item_ids))
-    for e in con.execute(f"SELECT id, item_id, source_rel, quote, field, doc_type, verified, role, found_at, "
-                         f"source_id, place, line FROM profile_evidence "
-                         f"WHERE item_id IN ({marks}) ORDER BY id", item_ids):
+    for e in con.execute(f"SELECT e.id, e.item_id, e.source_rel, e.quote, e.field, e.doc_type, e.verified, e.role, "
+                         f"e.found_at, e.source_id, e.place, e.line, i.kind, s.section, s.title AS source_title, "
+                         f"s.module, t.fields AS card FROM profile_evidence e "
+                         f"JOIN profile_items i ON i.id = e.item_id "
+                         f"LEFT JOIN record_sources s ON s.id = e.source_id "
+                         f"LEFT JOIN profile_items t ON t.id = s.target_id AND t.kind = 'education' "
+                         f"WHERE e.item_id IN ({marks}) ORDER BY e.id", item_ids):
         out[e["item_id"]].append({"id": e["id"], "source_rel": e["source_rel"], "quote": e["quote"],
                                   "field": e["field"], "doc_type": e["doc_type"], "verified": bool(e["verified"]),
                                   "role": e["role"], "found_at": e["found_at"], "source_id": e["source_id"],
-                                  "place": e["place"], "line": e["line"]})
+                                  "place": e["place"], "line": e["line"], **_strength(e)})
     return out
 
 
