@@ -8,6 +8,8 @@ the same for any subject: history essays, design portfolios, lab reports, busine
 1. Open **Your record**. On **Overview**, under **Your CVs**, choose **What is it?** (CV, cover letter or
    personal statement) and press **Add files**. Add every CV you have. Hal reads cover letters and personal
    statements only to learn how you write, never as facts about you.
+   Hal reads each CV into your jobs, education, skills and projects, and dates it by the date at its top
+   (such as "CV, March 2025"), else by its latest entry.
 2. Open **Work history**. On a job's card, open **Add a document for this job** and add a reference, a
    contract or the job description.
 3. Open **Education**. On a course's card, open **Coursework, lecture material and official papers**:

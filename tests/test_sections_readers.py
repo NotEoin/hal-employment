@@ -46,11 +46,12 @@ class Readers(unittest.TestCase):
     def test_a_reader_not_written_yet_says_which_phase_brings_it(self):
         src, tmp = source(("cv.md", "# CV"))
         self.addCleanup(tmp.cleanup)
+        self.addCleanup(readers.register, readers.register(readers.Stub("cv", 2)))
         with self.assertRaises(readers.NotReadYet) as caught:
             readers.get("cv").read(src)
         self.assertEqual((caught.exception.reader, caught.exception.phase), ("cv", 2))
         self.assertIsInstance(caught.exception, NotImplementedError)
-        self.assertEqual({n for n in readers.READERS if readers.ready(n)}, {"document"})
+        self.assertEqual((readers.ready("cv"), readers.ready("document")), (False, True))
 
     def test_a_later_phase_puts_its_reader_in_place_and_can_be_put_back(self):
         made = readers.Stub("repo", 99)

@@ -16,6 +16,10 @@ What changed in each version, in plain words.
   lecture material, official papers and the ways to add projects arrive in later updates, and files added
   to them wait until then. The older bulk read stays under **More ways to add**. See
   [Add your CVs, education, projects and documents](docs/howto/add-to-your-record.md).
+- **Hal reads the CVs you add.** Each CV you add under **Your CVs** gives your jobs, volunteering,
+  education with its modules and marks, skills, projects, awards, contact details and links, each with the
+  line of the CV it came from. Hal dates each CV by the date at its top, else its latest entry, and shows
+  that date beside it.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

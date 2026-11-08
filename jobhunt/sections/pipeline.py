@@ -36,6 +36,7 @@ from jobhunt import db, record
 from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
+from jobhunt.sections import cv as _cv  # noqa: F401 - puts the cv reader in place (`readers.register`)
 from jobhunt.sections import readers, registry, store, wrong_place
 
 log = logging.getLogger(__name__)

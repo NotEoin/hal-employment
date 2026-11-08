@@ -214,6 +214,8 @@ class Pipeline(unittest.TestCase):
         self.assertEqual((item["state"], [e["doc_type"] for e in item["evidence"]]), ("hal", ["cv"]))
 
     def test_a_reader_not_written_yet_leaves_the_source_waiting_and_says_which_phase(self):
+        before = readers.register(readers.Stub("cv", readers.CV_PHASE))
+        self.addCleanup(readers.register, before)
         with home() as (con, _, _):
             source_id = pipeline.add_uploads(con, "cv", [Incoming("Avery CV.md", CV.encode())])["added"][0]
             out = pipeline.read(con, source_id)

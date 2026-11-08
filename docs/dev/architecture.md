@@ -1213,6 +1213,12 @@ people). Readers only take facts out of a source, within that frame.
 - The page (`static/app/record/sections.js`): `SourcesPanel` (one or more sections, a target card),
   `SourceList`, `ProjectsPanel`, `EducationSources` and `JobSources` (inside those cards), and `StarButton`.
   On screen a star is **Showcase**, as the app's words keep "STAR" for the way of telling examples.
+- `cv` (`sections/cv.py`, put in place when `pipeline` imports it): the CV reader. It asks the AI only what
+  the CV says (`record_cv` prompt: facts of every kind, never the document's type or owner), checks the facts
+  with `ingest.understand.facts` (quotes against the text, unnamed organisations left out), and falls back to
+  the CV studio's rules (`cvstudio.parse.read_rules`) when the AI does not answer or gives no facts. Each
+  fact's `Quote` names the file and line. The CV's date (`Reading.date`, kept in `record_sources.dated`) is a
+  date in its first lines, else its latest dated entry, else its file's date.
 
 ## Profile (`jobhunt/profile/`)
 
