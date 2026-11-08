@@ -174,6 +174,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A note about all your projects no longer mixes them up.** A note describing about ten projects tied
+  each of them to the others, so a letter put one project's network sniffer in another project. Hal now
+  reads such a note only for the parts that name one project, and never takes another name for a project
+  from it.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that

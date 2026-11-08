@@ -421,7 +421,8 @@ runs: tests use `tests/support/fake_claude/`.
   only when its source exists and its quote is in that source word for word, spaces and case aside, and the
   text kept is the source's own (`plan.quoted`). Each item (`plan.Item`, E1, E2, ...) carries the card its
   source is about (a Project or Job line of the Profile block, a CV line naming one card, a passage of one of
-  the card's `files`), the card's context (`profile.contexts.current`, never the reply's) and the person's
+  the card's `files`, or a passage of a listing that names one card; a listing's passage naming none is no
+  source), the card's context (`profile.contexts.current`, never the reply's) and the person's
   part (`profile.writing.card_role`: the card's Role field and its team words, `stage.team_words`). A pick
   from a skills list (`plan.skills_line`: a Profile "Skill:" line, a CV line labelled "Skills:",
   "Languages:", "Tools:" and the like, or a label and a list of three or more) is tied to no card and marked
@@ -562,7 +563,9 @@ runs: tests use `tests/support/fake_claude/`.
   sentence that also says words agreeing with it is left alone. A sentence names a card
   (`drafts.names_card`) by its name, by one of its `aliases` (`profile.writing.aliases`: the names of hidden
   project cards resting on one of its project files, its repository's or folder's name, the end of its
-  link), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
+  link; never through a file that lists projects, `profile.owners.Files.listings`, a file backing two or more
+  visible project cards or naming several projects, which is in no card's `files`, gives no passage context
+  and gives a card no quote naming another card and not it), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
   ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). A card named only inside a longer
   named card's name ("Quill" in "Quill Employment") is not named (`drafts.named_cards`). Both go into the one
   rewrite per draft that `pack.fix_claims` asks for, and what is left is listed.

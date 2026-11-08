@@ -372,7 +372,7 @@ def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, .
     """The evidence the drafts for one job may rest on (`writing.plan`): picked once from the CV, the Profile
     block and the record passages for the advert's requirements and `questions`."""
     return planning.make(_requirements(analysis), [*(analysis.get("questions") or []), *questions], facts, kept,
-                         profile_writing.cards())
+                         profile_writing.cards(), profile_writing.listings())
 
 
 def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, kept: str, history: str) -> str:

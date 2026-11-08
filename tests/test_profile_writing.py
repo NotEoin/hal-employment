@@ -371,5 +371,61 @@ class PlannedNotDone(unittest.TestCase):
         self.assertEqual(writing.cards(self.con)[0]["tools"], ["Docker"])
 
 
+DOSSIER = "Sources/Projects/Portfolio overview.md"
+
+
+def own(rel: str, doc_type: str, quote: str = "") -> dict:
+    """Evidence from one of the person's own made-up files."""
+    return {"source_rel": rel, "quote": quote, "field": "", "doc_type": doc_type, "role": "own"}
+
+
+class Listings(unittest.TestCase):
+    """A note describing every project backed a hidden copy of a sniffer and two other cards, so the copy's name
+    became an alias of both and a letter put the sniffer in a navigation project (2026-11-08)."""
+
+    def setUp(self):
+        self.home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(paths.set_override(self.home))
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+        self.con = db.connect()
+        self.addCleanup(self.con.close)
+        for name, repo in (("Quill", "quill"), ("Tide gauge", "tide-gauge"), ("Packet listener", "ferry-sniffer")):
+            store.add_found(self.con, "project", {"name": name}, own(f"Sources/Code/{repo}/README.md", "repository"))
+        store.add_found(self.con, "project", {"name": "Quill"},
+                        own(DOSSIER, "project", "Quill answers questions over my notes offline"))
+        store.add_found(self.con, "project", {"name": "Quill"},
+                        own(DOSSIER, "project", "Packet listener fingerprints phones by their probe requests"))
+        store.add_found(self.con, "project", {"name": "Tide gauge"}, own(DOSSIER, "project", "Tide gauge logs"))
+        copy = store.add_found(self.con, "project", {"name": "Ferry sniffer"}, own(DOSSIER, "project"))
+        store.add_found(self.con, "project", {"name": "Ferry sniffer"},
+                        own("Sources/Code/ferry-sniffer/README.md", "repository"))
+        check_everything(self.con)
+        store.hide(self.con, copy)
+        self.cards = {c["name"]: c for c in writing.cards(self.con)}
+
+    def test_a_file_listing_projects_gives_no_card_an_alias(self):
+        self.assertEqual(self.cards["Quill"]["aliases"], [])
+        self.assertEqual(self.cards["Tide gauge"]["aliases"], ["tide-gauge"])
+        self.assertEqual(self.cards["Packet listener"]["aliases"], ["Ferry sniffer", "ferry-sniffer"],
+                         "a hidden copy still names the card whose own repository it rests on")
+
+    def test_a_file_listing_projects_is_no_cards_own_file(self):
+        self.assertEqual(self.cards["Quill"]["files"], ["Sources/Code/quill/README.md"])
+        self.assertIn(DOSSIER, writing.listings(self.con))
+        self.assertNotIn(DOSSIER, writing.passage_contexts(self.con))
+
+    def test_a_listings_quote_naming_another_card_is_never_this_cards(self):
+        self.assertEqual(self.cards["Quill"]["quotes"], ["Quill answers questions over my notes offline"])
+
+    def test_a_listings_passage_counts_only_for_the_one_card_it_names(self):
+        from jobhunt.writing import plan
+
+        kept = (f"[{DOSSIER} > Tide gauge]\n(Kind: personal project)\nThe Tide gauge logs river levels.\n\n"
+                f"[{DOSSIER} > Sniffer]\n(Kind: personal project)\nIt listens for probe requests.")
+        found = plan.sources("", kept, list(self.cards.values()), writing.listings(self.con))
+        self.assertEqual([(s.text, s.card["name"]) for s in found], [("The Tide gauge logs river levels.",
+                                                                       "Tide gauge")])
+
+
 if __name__ == "__main__":
     unittest.main()

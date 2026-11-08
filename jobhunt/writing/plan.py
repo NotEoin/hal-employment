@@ -30,7 +30,10 @@ Design decisions, each with its reason:
   personal notes)"), and a text naming "Quill Employment" names that card, never "Quill" as well
   (`drafts.named_cards`).
 - Only a "Project" or "Job" line of the Profile block, a CV line or a passage of a card's file is tied to a
-  card: a skill line quoting a project says nothing of where the project was done.
+  card: a skill line quoting a project says nothing of where the project was done. A file that lists projects
+  (`profile.owners`) is no card's file: its passage is a source only when it names one card, and is that
+  card's, as a dossier of every project put a network sniffer's passages in a navigation project's
+  paragraph (2026-11-08).
 - A pick whose quote is a plan (`writing.planned`: plan words, or a passage of a design document,
   specification or proposal saying nothing was done) is marked (`Item.planned`) and says so: a design
   document's planned tools became "I used Docker" in every pack (2026-11-08).
@@ -152,9 +155,10 @@ def _line_sources(label: str, line: str, cards: list[dict], tied: bool = True) -
     return [(label, e, _card_of(e, cards) if tied else None, "", skills, len(entries) > 1) for e in entries]
 
 
-def sources(facts: str, kept: str, cards: list[dict]) -> list[Source]:
+def sources(facts: str, kept: str, cards: list[dict], listings: frozenset[str] = frozenset()) -> list[Source]:
     """Every fact a plan may quote, numbered S1, S2, ...: the CV's lines, the Profile block's lines and the
-    passages of the person's own documents in `kept`, a list-shaped line one source per entry."""
+    passages of the person's own documents in `kept`, a list-shaped line one source per entry. A passage of a
+    file that lists projects (`listings`) is a source only when it names one card, and is about that card."""
     found: list[tuple[str, str, dict | None, str, bool, bool]] = []
     for line in (facts or "").splitlines():
         if line.strip():
@@ -173,7 +177,13 @@ def sources(facts: str, kept: str, cards: list[dict]) -> list[Source]:
         kind = KIND_LINE.match(lines[0]) if lines else None
         text = "\n".join(lines[1:] if kind else lines).strip()
         file = label.split(" > ", 1)[0]
-        card = next((c for c in cards if file in c.get("files", [])), None)
+        if file in listings:
+            card = _card_of(text, cards)
+            if card is None:
+                log.info("evidence plan: left out a passage of %s, which lists projects and names no one card", file)
+                continue
+        else:
+            card = next((c for c in cards if file in c.get("files", [])), None)
         if text:
             found.append((label, text, card, BY_WORDS.get(kind.group(1), "") if kind else "", False, False))
     return [Source(f"S{n}", *source) for n, source in enumerate(found, 1)]
@@ -240,9 +250,11 @@ def request(requirements: list[str], questions: list[str], found: list[Source]) 
             + f"\nSources (the applicant's facts):\n{listed}\n\nPick at most {MAX_ITEMS}.")
 
 
-def make(requirements: list[str], questions: list[str], facts: str, kept: str, cards: list[dict]) -> list[Item]:
-    """The evidence plan for one job's drafts: one AI call, then the picks that hold; [] when nothing does."""
-    found = sources(facts, kept, cards)
+def make(requirements: list[str], questions: list[str], facts: str, kept: str, cards: list[dict],
+         listings: frozenset[str] = frozenset()) -> list[Item]:
+    """The evidence plan for one job's drafts: one AI call, then the picks that hold; [] when nothing does.
+    `listings` are the files that list projects (`profile.owners.Files.listings`)."""
+    found = sources(facts, kept, cards, listings)
     if not found:
         return []
     reply = llm.chat_json(prompts.text(PROMPT), request(requirements, questions, found), role="main")

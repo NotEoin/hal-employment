@@ -30,7 +30,10 @@ Design decisions, each with its reason:
   resting on one of its project files, its repository's or folder's name and the end of its link. A letter
   placed a personal project in a degree under a hidden copy's shorter name, and the check, reading only the
   card's own name, missed it (2026-11-07). A CV names every project, so only a file of one project ties
-  two cards together.
+  two cards together, and a file that lists projects (`owners.Files.listings`: it backs two or more visible
+  project cards, or names several projects) ties none: it is in no card's `files`, gives no alias and no
+  passage context, and a quote from it that names another card and not this one is not this card's
+  (`quotes`). A dossier of every project gave a hidden sniffer's name to two other cards (2026-11-08).
 - The block is cut at a whole line when it reaches `limit`, kind by kind in `KIND_ORDER`, so the basics and
   jobs are the last to go.
 - The person's newest CV speaks for their CVs (`CvAuthority`): a card's tool, duty or field that only older
@@ -68,7 +71,7 @@ from dataclasses import dataclass, field
 
 from jobhunt import db, record
 from jobhunt.ingest import frontmatter
-from jobhunt.profile import contexts, merge, store, tiers
+from jobhunt.profile import contexts, merge, owners, store, tiers
 from jobhunt.writing import planned, stage
 
 log = logging.getLogger(__name__)
@@ -483,14 +486,25 @@ def block(queries: list[str] | None = None) -> str:
 
 
 def passage_contexts(con: sqlite3.Connection) -> dict[str, str]:
-    """The context, in a prompt's words, of each file a project card rests on: {file in the record: words}."""
+    """The context, in a prompt's words, of each file a project card rests on: {file in the record: words}; a
+    file that lists projects (`owners.Files.listings`) says none, as its passages are about many."""
     worked_for = employers(con)
+    view = owners.Files.of(con)
     out: dict[str, str] = {}
     for it in store.items(con, "project", hidden=False):
         context = contexts.current(it, worked_for)
         for e in it["evidence"] if context else []:
-            out.setdefault(e["source_rel"], stage.CONTEXT_WORDS[context])
+            if view.ties(e["source_rel"]):
+                out.setdefault(e["source_rel"], stage.CONTEXT_WORDS[context])
     return out
+
+
+def listings(con: sqlite3.Connection | None = None) -> frozenset[str]:
+    """The files that list projects (`owners.Files.listings`), Hal's own database unless `con`."""
+    if con is None:
+        with closing(db.connect()) as own:
+            return listings(own)
+    return owners.Files.of(con).listings
 
 
 def with_contexts(passages: str, by_file: dict[str, str]) -> str:
@@ -529,19 +543,25 @@ def _file_name(source_rel: str) -> str:
     return next((s for s in stems if s.lower() not in GENERIC_FILES and len(s) >= ALIAS_MIN), "")
 
 
-def aliases(item: dict, hidden: list[dict]) -> list[str]:
+def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) -> list[str]:
     """The other names a project card goes by: the names of hidden project cards (`hidden`) resting on one of
     its project files or merged into it (`profile.duplicates`), the name of its repository or project file, and
     the last part of its link.
 
-    Only a file of one project (`PROJECT_FILES`) ties two cards together: a CV names every project.
+    Only a file of one project (`PROJECT_FILES`, and never a listing of `view`) ties two cards together: a CV
+    names every project, and a dossier of every project gave a hidden copy's name to two other cards
+    (2026-11-08).
     """
+    view = view or owners.Files()
+
     def files(it: dict) -> set[str]:
-        return {e["source_rel"] for e in it["evidence"] if e["doc_type"] in PROJECT_FILES}
+        return {e["source_rel"] for e in it["evidence"]
+                if e["doc_type"] in PROJECT_FILES and view.ties(e["source_rel"])}
 
     own = files(item)
     found = [h["fields"].get("name", "") for h in hidden if own & files(h) or h.get("merged_into") == item["id"]]
-    found += [_file_name(e["source_rel"]) for e in item["evidence"] if e["doc_type"] in stage.PERSONAL_TYPES]
+    found += [_file_name(e["source_rel"]) for e in item["evidence"]
+              if e["doc_type"] in stage.PERSONAL_TYPES and view.ties(e["source_rel"])]
     link = str(item["fields"].get("link") or "").rstrip("/")
     if link:
         found.append(_file_name(link.rsplit("/", 1)[-1]))
@@ -565,7 +585,8 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
             return cards(own)
     worked_for = employers(con)
     hidden = [it for it in store.items(con, "project") if it["state"] == "hidden"]
-    cvs = CvAuthority.of(con)
+    cvs, view = CvAuthority.of(con), owners.Files.of(con)
+    names = [it["fields"].get("name", "") for it in store.items(con, "project", hidden=False)]
     out = []
     for kind in CARD_KINDS:
         for it in store.items(con, kind, hidden=False):
@@ -577,13 +598,14 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                 out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),
                             "tools": list(f.get("tools") or []), "summary": f.get("summary") or "",
                             "planned": list(planned_only(con, it).get("tools", {})),
-                            "context": context, "aliases": aliases(it, hidden), "role": card_role(it),
-                            "files": [e["source_rel"] for e in it["evidence"] if e["source_rel"]],
-                            "quotes": quotes(it, f, cvs), "tag": "", "similar": []})
+                            "context": context, "aliases": aliases(it, hidden, view), "role": card_role(it),
+                            "files": list(dict.fromkeys(e["source_rel"] for e in it["evidence"]
+                                                        if e["source_rel"] and view.ties(e["source_rel"]))),
+                            "quotes": quotes(it, f, cvs, view, names), "tag": "", "similar": []})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
                             "tools": [], "summary": "; ".join(f.get("duties") or []), "planned": [],
-                            "context": context, "role": "", "files": [], "quotes": quotes(it, f, cvs),
+                            "context": context, "role": "", "files": [], "quotes": quotes(it, f, cvs, view, names),
                             "tag": "", "similar": []})
     projects = [c for c in out if c["kind"].startswith("project")]
     alike = similar([c["name"] for c in projects])
@@ -593,10 +615,19 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     return out
 
 
-def quotes(item: dict, fields: dict, cvs: CvAuthority) -> list[str]:
+def _about_another(quote: str, item: dict, names: list[str]) -> bool:
+    """True when a quote names another card (`names`) and not this one: from a listing, it is that card's."""
+    own = str(item["fields"].get("name") or "")
+    return not _inside(own, quote) and any(_inside(n, quote) for n in names if n.strip() and n != own)
+
+
+def quotes(item: dict, fields: dict, cvs: CvAuthority, view: owners.Files | None = None,
+           names: list[str] = ()) -> list[str]:
     """A card's own evidence quotes a paragraph about it may rest on, at most `CARD_QUOTES`: from the person's own
-    sources only, never an older CV's (`CvAuthority`), never a plan (`writing.planned`), and never one naming a
-    tool its writing fields (`fields`, from `for_writing`) leave out."""
+    sources only, never an older CV's (`CvAuthority`), never a plan (`writing.planned`), never one naming a
+    tool its writing fields (`fields`, from `for_writing`) leave out, and never one from a listing (`view`)
+    that names another card (`names`) and not this one."""
+    view = view or owners.Files()
     tools = item["fields"].get("tools") or []
     dropped = [str(t) for t in tools if str(t) not in {str(k) for k in fields.get("tools") or []}]
     out: list[str] = []
@@ -604,6 +635,7 @@ def quotes(item: dict, fields: dict, cvs: CvAuthority) -> list[str]:
         said = " ".join(str(e.get("quote") or "").split())
         if not said or e.get("role", "") not in (OWN_ROLE, "") or e["source_rel"] in cvs.older \
                 or planned.planned(said, e["source_rel"]) \
+                or (not view.ties(e["source_rel"]) and _about_another(said, item, list(names))) \
                 or any(re.search(rf"(?<![\w+#]){re.escape(t)}(?![\w+#])", said, re.I) for t in dropped):
             continue
         out.append(said)
