@@ -713,6 +713,46 @@ class Paragraphs(unittest.TestCase):
         self.assertIn("Preact is Quill Employment's, not Quill's", dropped[0])
         self.assertIn("the number 113 is not in the facts of Quill", dropped[0])
 
+    def test_a_dropped_paragraph_is_replaced_by_the_next_ranked_story(self):
+        # a letter came out at 56 words when three paragraphs were dropped (2026-11-08)
+        from jobhunt.profile import store
+
+        crossed = "I built Quill with Preact and a 113-test suite. It answers questions over my notes."
+        order = ["Quill", "Quill Employment", "Tide gauge", "Ferry log", "Harbour lights"]
+        writer = QuillWriter({"Quill": [crossed]})
+        plain = writer.reply
+        writer.reply = lambda system, user: ({"ranking": [{"name": n, "reason": "made-up"} for n in order]}
+                                             if prompt_id(system) == "rank" else plain(system, user))
+        with quill_world(writer) as a:
+            for name in ("Tide gauge", "Ferry log", "Harbour lights"):
+                store.confirm(a.con, store.add_found(a.con, "project", {
+                    "name": name, "summary": "Writing reports of river levels and spreadsheets"},
+                    {"source_rel": f"Sources/Code/{name}.md", "quote": f"{name} writes reports every hour",
+                     "field": "", "doc_type": "repository"}))
+            written = pack.write_letter(a.con, a.job)
+        lettered = [re.search(r"^Project: (.+?)(?: \(|$)", e["user"], re.M).group(1)
+                    for e in writer.asked("story") if "cover letter" in e["user"]]
+        self.assertEqual(lettered, ["Quill", "Quill", "Quill Employment", "Tide gauge", "Ferry log"])
+        self.assertEqual(written["told"], ["Quill Employment", "Tide gauge", "Ferry log"])
+        self.assertTrue(any(f.startswith("Hal left out the paragraph about Quill:") for f in written["flags"]))
+
+    def test_a_letter_under_half_its_length_setting_tries_further_stories(self):
+        from jobhunt.profile import store
+
+        writer = QuillWriter()
+        with quill_world(writer) as a:
+            settings.set("cvdocs.letter_words", 400, by="you")
+            for name in ("Tide gauge", "Ferry log", "Harbour lights"):
+                store.confirm(a.con, store.add_found(a.con, "project", {
+                    "name": name, "summary": "Writing reports of river levels and spreadsheets"},
+                    {"source_rel": f"Sources/Code/{name}.md", "quote": f"{name} writes reports every hour",
+                     "field": "", "doc_type": "repository"}))
+            written = pack.write_letter(a.con, a.job)
+        lettered = [e for e in writer.asked("story") if "cover letter" in e["user"]]
+        self.assertGreater(len(lettered), 3, "three short paragraphs are under half of 400 words")
+        self.assertLessEqual(len(lettered), 3 + pack.LETTER_TRIES)
+        self.assertEqual(len(written["told"]), len(lettered))
+
     def test_a_sentence_still_wrong_is_cut_when_the_rest_still_reads(self):
         stock = f"{QUILL_SAID} This experience matters for the role because it demonstrates my ability to build."
         writer = QuillWriter({"Quill": [stock]})

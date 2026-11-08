@@ -50,6 +50,12 @@ Design decisions, each with its reason:
   never listed: only what the person should act on is. Nor is a module's or the degree's story dropped for
   having nothing to say (`education`): "Hal left out the paragraph about First-Class Honours: your facts gave
   nothing" was most of the false check items (2026-11-08), and the opening and the CV give the degree.
+- A paragraph that passes every check with no AI and fails only the AI check is never dropped (`_doubted`,
+  2026-11-08): one letter came out at 56 words after three paragraphs were dropped, two of them over claims
+  the record supports, as they failed `paragraph_verify` after their redraft. Only the sentences the AI
+  flagged are cut, and only when the rest still reads as above; else the paragraph is kept whole and listed
+  for the person to check (`Paragraph.checks`). When the redraft fails a check with no AI and its sentences
+  cannot be cut, the first draft is kept this way if it failed only the AI check.
 - A letter's paragraphs share the person's letter length (`letter`): what the opening and closing leave
   (`FRAME_WORDS`) divided among the stories, never under `PARAGRAPH_WORDS`, so three project paragraphs
   reach the length setting (a letter came to 118 words against 250, 2026-11-08).
@@ -120,6 +126,7 @@ WRONG_PLACE = "places the work where its facts do not"
 TOO_MUCH = "gives you more of the work than its facts do"
 NOTHING = "your facts gave nothing to say here"
 DROPPED = "Hal left out the paragraph about {card}: {why}. Add it yourself if it is true"
+DOUBTED = "Check the paragraph about {card}: Hal's check of it found that {why}"
 
 
 @dataclass(frozen=True)
@@ -248,6 +255,7 @@ class Paragraph:
     calls: int = 0
     redrafted: bool = False
     cut: int = 0
+    doubts: tuple[str, ...] = ()   # what the AI check found in a paragraph kept whole (`_doubted`)
 
     @property
     def listed(self) -> str:
@@ -256,6 +264,11 @@ class Paragraph:
         if not self.dropped or (self.dropped == NOTHING and education(self.story)):
             return ""
         return DROPPED.format(card=_called(self.story), why=self.dropped)
+
+    @property
+    def checks(self) -> list[str]:
+        """The check list's line for a paragraph kept whole although the AI check doubted it; [] for none."""
+        return [DOUBTED.format(card=_called(self.story), why="; ".join(self.doubts))] if self.doubts else []
 
 
 def education(story: Story) -> bool:
@@ -520,14 +533,14 @@ def draft(story: Story, shape: Shape, scope: Scope, last: str = "", found: list[
     return ask(PROMPT, _request(story, shape, scope, last, found), scope)
 
 
-def _judge(text: str, story: Story, scope: Scope, shape: Shape, out: Paragraph) -> list[Problem]:
+def _judge(text: str, story: Story, scope: Scope, shape: Shape, out: Paragraph) -> tuple[list[Problem], bool]:
     """The checks with no AI, then, when they find nothing and the paragraph says more than its facts' own words,
-    the one AI check."""
+    the one AI check; with whether what was found is the AI check's alone."""
     found = problems(text, story, scope, shape)
     if found or restates(text, story, scope):
-        return found
+        return found, False
     out.calls += 1
-    return verify(text, story, scope)
+    return verify(text, story, scope), True
 
 
 def _cut(text: str, found: list[Problem], story: Story, scope: Scope, shape: Shape) -> str:
@@ -543,29 +556,48 @@ def _cut(text: str, found: list[Problem], story: Story, scope: Scope, shape: Sha
     return "" if problems(kept, story, scope, shape) else kept
 
 
+def _doubted(out: Paragraph, text: str, found: list[Problem], story: Story, scope: Scope, shape: Shape) -> Paragraph:
+    """A paragraph that failed only the AI check, kept: without the sentences the AI flagged when the rest still
+    reads, else whole with what the AI found to check (see the module notes)."""
+    kept = _cut(text, found, story, scope, shape)
+    if kept:
+        out.text, out.cut = kept, len(writing_check.sentences(text)) - len(writing_check.sentences(kept))
+    else:
+        out.text, out.doubts = text, tuple(dict.fromkeys(p.reason for p in found))
+    log.info("paragraph about %s kept although the AI check found: %s", _called(story),
+             "; ".join(p.line() for p in found))
+    return out
+
+
 def settle(story: Story, shape: Shape, scope: Scope) -> Paragraph:
     """One paragraph about `story` in `shape`: drafted, checked (`problems`, then `verify`), drafted once more
-    with what is wrong, then kept, kept without its failing sentences, or dropped (see the module notes)."""
+    with what is wrong, then kept, kept without its failing sentences, or dropped; never dropped for the AI
+    check alone (see the module notes)."""
     out = Paragraph(story)
     text = draft(story, shape, scope)
     out.calls += 1
     if not text:
         out.dropped = NOTHING
         return out
-    found = _judge(text, story, scope, shape, out)
+    found, by_ai = _judge(text, story, scope, shape, out)
+    first = (text, found) if found and by_ai else None
     if found:
         log.info("paragraph about %s: %s", _called(story), "; ".join(p.line() for p in found))
         again = draft(story, shape, scope, text, found)
         out.calls += 1
         out.redrafted = True
         if again:
-            text, found = again, _judge(again, story, scope, shape, out)
+            text, (found, by_ai) = again, _judge(again, story, scope, shape, out)
     if not found:
         out.text = text
         return out
+    if by_ai:
+        return _doubted(out, text, found, story, scope, shape)
     kept = _cut(text, found, story, scope, shape)
     if kept:
         out.text, out.cut = kept, len(writing_check.sentences(text)) - len(writing_check.sentences(kept))
+    elif first is not None:
+        return _doubted(out, *first, story, scope, shape)
     else:
         out.dropped = "; ".join(dict.fromkeys(p.reason for p in found))
     log.info("paragraph about %s after its redraft: %s", _called(story), "; ".join(p.line() for p in found))

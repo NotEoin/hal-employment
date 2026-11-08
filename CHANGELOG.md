@@ -204,6 +204,12 @@ What changed in each version, in plain words.
   a project. The answer now opens with what draws you to the employer, such as its product or its mission,
   in your own words, and may then tie it to one piece of your work in a sentence. An answer whose first
   sentence does not speak of the employer is written once more.
+- **A letter keeps its true paragraphs.** One letter came out at 56 words: three paragraphs were left out,
+  two of them over claims your record supports, because the AI check still doubted them after one rewrite.
+  A paragraph that passes every other check is now kept, without the sentence the AI doubted when the rest
+  still reads, or whole and listed under **Check before sending**. When a paragraph is left out, the letter
+  tells your next best piece of work instead, and a letter under half your length setting tries more of
+  your work.
 - **Answers and messages say which project.** Form answers and messages to the person hiring began "I
   wrote a 113-test suite ..." and named the project later, or never. Like a letter paragraph, each now names
   its project or job in its first sentence, and is written once more when it does not.

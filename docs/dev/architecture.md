@@ -514,7 +514,15 @@ runs: tests use `tests/support/fake_claude/`.
   drafted once more with the problems listed; one still failing loses its failing sentences when the rest
   still reads (`flow.reads_without`, and the shape's least sentences and name kept), else it is dropped and
   "Check before sending" says so (`Paragraph.listed`), unless it is a module's or the degree's story dropped
-  for having nothing to say (`paragraphs.education`). A sentence fixed or cut is never listed. The
+  for having nothing to say (`paragraphs.education`). A sentence fixed or cut is never listed. A paragraph
+  that passes every check with no AI and fails only `verify` is never dropped (`paragraphs._doubted`): the
+  sentences the AI flagged are cut when the rest still reads, else it is kept whole and listed
+  (`Paragraph.checks`, `paragraphs.DOUBTED`); a redraft that fails a check with no AI and cannot be cut falls
+  back to a first draft that failed `verify` alone. A letter came out at 56 words when three paragraphs were
+  dropped, two over claims the record supports (2026-11-08). `pack._letter_bodies` then tries the next
+  project or job story with facts of `rank.Told.others`, up to `pack.LETTER_TRIES` (3), while fewer
+  paragraphs stand than were chosen or they and `paragraphs.FRAME_WORDS` come to under `pack.SHORT_MIDDLE`
+  (half) of `cvdocs.letter_words` (`pack._short_middle`). The
   opening and closing are one call (`writing/frame.py`, `frame.settle`, prompt `letter_frame`) from `frame.Facts`
   (`pack.letter_frame`: the name, `opening.described`, the role, the motivation pairing, the stories the
   middle tells and today), checked the same way with the role and the institution required. The opening's

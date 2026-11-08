@@ -105,7 +105,9 @@ or name that belongs to another of your projects, the project placed somewhere e
 your own time), a team's work written as yours alone, or a sentence that ties the work to the job with
 stock words such as "aligns with" or "meets the requirement for". A paragraph with such a problem is
 written once more. If it is still wrong, Hal takes out the sentence at fault when the rest still reads, or
-leaves the paragraph out and says so under **Check before sending**. The letter opens with who you are, the
+leaves the paragraph out and says so under **Check before sending**, and then tells your next best piece of
+work instead. When only Hal's AI check doubts a paragraph, Hal keeps it, without the doubted sentence when
+the rest still reads, or whole and listed under **Check before sending** for you to check. The letter opens with who you are, the
 role and one concrete thing about the employer that draws you, such as what it makes or its mission. It
 names none of your projects there, as the paragraphs tell them, and closes by asking for the next step. When Hal finds none of your
 work to tell, it writes the letter, the message and the answers whole, and checks what each says about you

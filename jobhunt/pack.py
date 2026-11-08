@@ -617,16 +617,44 @@ def letter_frame(who: dict, job, scope: paragraphs.Scope, pairing: motive.Pairin
                        pairing, told, now.institution, modules, middle)
 
 
+LETTER_TRIES = 3           # stories past the chosen ones a letter tries: each costs one to three calls
+SHORT_MIDDLE = 0.5         # share of the length setting under which a letter tries further stories
+
+
+def _short_middle(bodies: list[paragraphs.Paragraph], n: int, words: int | None) -> bool:
+    """True when a letter's paragraphs that stand are fewer than the `n` it chose, or they and the opening and
+    closing (`paragraphs.FRAME_WORDS`) come to under `SHORT_MIDDLE` of the length setting `words`."""
+    standing = [b.text for b in bodies if b.text]
+    said = sum(flow.word_count(t) for t in standing) + paragraphs.FRAME_WORDS
+    return len(standing) < n or (bool(words) and said < SHORT_MIDDLE * int(words))
+
+
+def _letter_bodies(chosen: list[planning.Story], spare: list[planning.Story], shape: paragraphs.Shape,
+                   scope: paragraphs.Scope, words: int | None) -> list[paragraphs.Paragraph]:
+    """The letter's paragraphs: one per `chosen` story, then, while one was dropped or the letter is under half
+    its length setting (`_short_middle`), the next `spare` project or job story with facts, up to
+    `LETTER_TRIES` of them. A letter came out at 56 words when three paragraphs were dropped (2026-11-08)."""
+    bodies = [paragraphs.settle(s, shape, scope) for s in chosen]
+    left = [s for s in spare if s not in chosen and s.kind in (planning.PROJECT, planning.JOB) and s.facts]
+    for story in left[:LETTER_TRIES]:
+        if not _short_middle(bodies, len(chosen), words):
+            break
+        log.info("letter: one more story, %s, as the letter is short of paragraphs or words", story.name or story.key)
+        bodies.append(paragraphs.settle(story, shape, scope))
+    return bodies
+
+
 def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, kept: str, facts: str,
                   plan: list[planning.Item], pairing: motive.Pairing | None, chosen: list[planning.Story],
-                  wanted: str = "") -> dict:
+                  wanted: str = "", spare: list[planning.Story] = ()) -> dict:
     """A letter told one piece of work a paragraph (`writing.paragraphs`): the `chosen` stories (`rank.order`),
     each drafted from its own facts and checked against them, at a length that fills the person's letter length
-    (`paragraphs.letter`), between an opening and a closing drafted from the fixed facts of who is writing, the
+    (`paragraphs.letter`), and the next of `spare` (`rank.Told.others`) when one is dropped or the letter is short
+    (`_letter_bodies`), between an opening and a closing drafted from the fixed facts of who is writing, the
     role and the reason for this employer (`letter_frame`, `writing.frame`); `wanted` is the job's requirements,
     for the modules the opening may name."""
     shape = paragraphs.letter(who.get("letter_words"), len(chosen))
-    bodies = [paragraphs.settle(s, shape, scope) for s in chosen]
+    bodies = _letter_bodies(chosen, list(spare), shape, scope, who.get("letter_words"))
     told = tuple(b.story.name for b in bodies if b.text and b.story.name)
     modules = planning.relevant_modules(profile_writing.marked_modules(), wanted,
                                         "\n".join(b.story.words() for b in bodies if b.text))
@@ -639,6 +667,7 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=(scope.advert, scope.brief, facts_said.words(),
                                                                        scope.allowed), claims=[])
     flags += [b.listed for b in bodies if b.dropped]
+    flags += [line for b in bodies for line in b.checks]
     flags += [f"{DANGLING_FLAG}: {s}" for s in flow.dangling(letter)]
     if flow.short(letter, who.get("letter_words")):
         flags.append(SHORT_FLAG.format(n=flow.word_count(letter), words=who["letter_words"]))
@@ -697,7 +726,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
         told = rank.order(found, cards, ranking, wanted)
         pairing = motive.make(names, _job_text(job), about, plan)
         written = _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing,
-                                chosen=list(told.letter), wanted=wanted)
+                                chosen=list(told.letter), wanted=wanted, spare=list(told.others))
         return {**written, "ranking": ranking, "calls": written["calls"] + asked}
     pairing = motive.make(names, _job_text(job), about, plan)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))

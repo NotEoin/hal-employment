@@ -215,6 +215,30 @@ class Settle(unittest.TestCase):
         self.assertNotIn("answers questions over my notes\"", again)
         self.assertEqual(done.calls, 3, "a draft, its check, and the redraft that says only its facts")
 
+    def test_failing_only_the_ai_check_after_the_redraft_loses_only_the_flagged_sentence(self):
+        # a letter came out at 56 words: two of its three dropped paragraphs made claims the record supports
+        # and failed only the AI check after their redraft (2026-11-08)
+        verdict = {"supported": False, "unsupported": ["on a Raspberry Pi"], "context_ok": True, "role_ok": True}
+        text = f"{GOOD} It runs on a Raspberry Pi."
+        fake = FakeAI([text], verdict)
+        done = self.settle(fake)
+        self.assertEqual((done.text, done.cut, done.dropped, done.checks), (GOOD, 1, "", []))
+        self.assertEqual(len(fake.calls("Write")), 2, "one redraft, never a loop")
+
+    def test_a_paragraph_the_ai_doubts_as_a_whole_is_kept_whole_and_listed_to_check(self):
+        verdict = {"supported": True, "unsupported": [], "context_ok": True, "role_ok": False}
+        text = "Quill is my offline assistant over personal notes, built in Lua. It answers questions over my notes."
+        done = self.settle(FakeAI([text], verdict))
+        self.assertEqual((done.text, done.dropped, done.listed), (text, "", ""))
+        self.assertEqual(done.checks, [paragraphs.DOUBTED.format(card="Quill", why=paragraphs.TOO_MUCH)])
+
+    def test_a_redraft_failing_a_check_with_no_ai_falls_back_to_the_draft_only_the_ai_doubted(self):
+        verdict = {"supported": False, "unsupported": ["on a Raspberry Pi"], "context_ok": True, "role_ok": True}
+        first = f"{GOOD} It runs on a Raspberry Pi."
+        worse = "I gave Quill a SQLite store. It answers questions over my notes offline."
+        done = self.settle(FakeAI([first, worse], verdict))
+        self.assertEqual((done.text, done.dropped), (GOOD, ""))
+
     def test_nothing_to_say_is_dropped_with_no_check(self):
         done = self.settle(FakeAI([""]))
         self.assertEqual((done.text, done.calls, done.dropped), ("", 1, paragraphs.NOTHING))
