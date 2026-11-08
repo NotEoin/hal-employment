@@ -175,6 +175,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Packs are drafted with fewer AI calls.** Hal checked every sentence about you in a call of its own, about
+  55 calls for one pack. A sentence whose every word is already in the facts it rests on is no longer sent,
+  and the sentences of one paragraph are checked in one call, each still against only its own facts. Our
+  test pack went from 18 calls to 14.
 - **Projects with similar names stay apart.** When two of your projects share a name, such as an
   assistant and a job-search helper both starting with the same word, letters gave one the other's tools or
   purpose. Hal now names each with a few words of its own description in the facts the writer reads, and

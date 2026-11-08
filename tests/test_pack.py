@@ -58,6 +58,7 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "answers": "Answer these application questions", "verify": "Check drafts written",
     "prep": "Prepare ", "contacts_pick": "You choose who", "plan": "Choose the evidence",
     "sentence_check": "Check one sentence", "sentence_fix": "Rewrite one sentence",
+    "paragraph_check": "Check the numbered sentences",
     "pairing": "Find the applicant's own reason", "smooth": "Rewrite one paragraph",
     "add": "Write one more paragraph",
 }
@@ -105,6 +106,9 @@ class FakeWriter:
             return {"evidence": self.plan}
         if pid == "sentence_check":
             return {"supported": True, "unsupported": [], "context_ok": True, "role_ok": True}
+        if pid == "paragraph_check":
+            return {"sentences": [{"n": int(n), "supported": True, "unsupported": [], "context_ok": True,
+                                   "role_ok": True} for n in re.findall(r"^Sentence (\d+):", user, re.M)]}
         if pid == "sentence_fix":
             return {"sentence": ""}
         if pid == "pairing":
@@ -491,6 +495,40 @@ class MarkedWriter(FakeWriter):
         return super().reply(system, user)
 
 
+# A pack whose drafts need no fix, of the size a letter, a message and three answers have: a letter of four
+# paragraphs and eight sentences, a message of two paragraphs and three answers of two or three sentences.
+FULL_LETTER = ("I am writing about the Collections Assistant post [M].\n\n"
+               "My dissertation was on river trade in an invented port town [E1]. It drew on letters between "
+               "merchants of that town [E1]. Writing it taught me to sort a mass of sources into a clear account "
+               "[E1].\n\n"
+               "I also kept a made-up note about guiding visitors [E2]. Guiding them showed me how people meet "
+               "old objects [E2]. Their questions shaped how I explained each room [E2].\n\n"
+               "I would welcome the chance to talk about the role [M].")
+FULL_MESSAGE = ("Hello,\n\nMy studies of an invented port town's trade led me to archives [E1]. Visitors I guided "
+                "asked about the river most often [E2].\n\nWhat does the team catalogue first [M]?")
+FULL_ANSWERS = [
+    "I would like to look after your collections [M]. My dissertation used such letters [E1]. I would "
+    "like to keep them in order [M].",
+    "My guiding note shows I can explain sources to the public [E2]. My dissertation shows I can read them "
+    "closely [E1].",
+    "I enjoy work where accuracy matters [M]. Sorting merchants' letters for my dissertation needed care [E1]."]
+
+
+class FullWriter(MarkedWriter):
+    """A marked writer whose letter, message and answers are of a real pack's size, and need no fix."""
+
+    def reply(self, system: str, user: str) -> object:
+        pid = prompt_id(system)
+        if pid == "letter":
+            return FULL_LETTER
+        if pid == "message":
+            return FULL_MESSAGE
+        if pid == "answers":
+            return {"answers": [{"question": q, "answer": a} for q, a in zip(
+                ["Why this role?", *pack.COMMON_QUESTIONS], FULL_ANSWERS, strict=True)]}
+        return super().reply(system, user)
+
+
 class Cited(unittest.TestCase):
     def test_every_draft_cites_the_plan_and_is_shown_without_its_markers(self):
         writer = MarkedWriter()
@@ -647,6 +685,20 @@ class Cited(unittest.TestCase):
         counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
         self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "letter": 1,
                                   "message": 1, "sentence_check": 2, "answers": 1})
+
+    def test_a_full_pack_needing_no_fix_checks_each_paragraph_in_one_call(self):
+        # a pack made about 55 calls, most of them one per sentence (2026-11-08); with the fake AI this pack made
+        # 18 calls (10 sentence checks) checked one sentence at a time, and makes 14 (6) with a paragraph's
+        # sentences checked together
+        writer = FullWriter()
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
+        self.assertEqual(section(md, "Check before sending").strip(), pack.NOTHING_TO_CHECK)
+        self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "letter": 1,
+                                  "message": 1, "paragraph_check": 4, "sentence_check": 2, "answers": 1})
+        self.assertLess(len(writer.log), 25)
 
     def test_the_letter_and_message_are_drafted_cooler_than_other_prose(self):
         writer = MarkedWriter()

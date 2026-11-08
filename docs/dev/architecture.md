@@ -449,10 +449,17 @@ runs: tests use `tests/support/fake_claude/`.
   built" of a team's card with no word of the team and under `PART_SHARE` of the person's part, and the
   draft-wide checks (`stage.ended_course`, `drafts.misplaced_tools`, `drafts.wrong_context`,
   `taught.unsupported`) on that sentence. A sentence passing them and not restating its items
-  (`drafts.stated_in`) gets one call (prompt `sentence_check`, `grounded.verdict`) with only the sentence
-  and its items: {supported, unsupported, context_ok, role_ok}. Quoted words its items or the employer's
-  words hold are dropped, and a reply that is not JSON fails nothing. One sentence per call, never a batch:
-  a batch would put other sentences' evidence beside it, as the single verify call did. A failing sentence
+  (`grounded.needs_ai`: not `drafts.stated_in`, and not `grounded.restates`, every content word's root in its
+  items) is checked by the AI with only its own items: {supported, unsupported, context_ok, role_ok}. The
+  sentences of one paragraph that need it go in one call (`grounded.verdicts`, prompt `paragraph_check`),
+  each numbered with its items under it and the prompt saying never to judge one by another's; a paragraph
+  with one such sentence, and a rewrite, use `sentence_check` (`grounded.verdict`). Quoted words its items or
+  the employer's words hold are dropped, and a reply that is not JSON, or leaves a sentence out, fails
+  nothing. Calls per pack, counted with the fake AI of `tests/test_pack.py`
+  (`test_a_full_pack_needing_no_fix_checks_each_paragraph_in_one_call`: a letter of four paragraphs, a
+  message of two, three answers, no fix needed): 18 calls with 10 sentence checks, one a sentence, before;
+  14 with 6 (4 paragraphs, 2 single sentences) after (2026-11-08). A real pack made about 55, most of them
+  sentence checks. A failing sentence
   is rewritten once with its own items (prompt `sentence_fix`, `grounded.fix`), checked again, then taken out
   unless the draft needs it (`only_in_paragraph`, an answer's `first_of_answer`) or its paragraph does not
   read without it (`flow.reads_without`: the next sentence points back at it, "This project", "It"), when it

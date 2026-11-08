@@ -3,6 +3,7 @@ per sentence, and the rewrite, cut or listing of a sentence that fails."""
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -35,6 +36,9 @@ class FakeChecker:
 
     def chat_json(self, system: str, user: str, **kw) -> dict:
         self.asked.append((system.split()[0:3], user))
+        if system.startswith("Check the numbered sentences"):
+            said = re.findall(r"^Sentence (\d+): (.*)$", user, re.M)
+            return {"sentences": [{**self.replies.get(text, FINE), "n": int(n)} for n, text in said]}
         if system.startswith("Rewrite one sentence"):
             return {"sentence": self.fixes.pop(0) if self.fixes else ""}
         if system.startswith(("Rewrite one paragraph", "Write one more paragraph")):
@@ -44,6 +48,9 @@ class FakeChecker:
 
     def checks(self) -> list[str]:
         return [u for s, u in self.asked if s == ["Check", "one", "sentence"]]
+
+    def batches(self) -> list[str]:
+        return [u for s, u in self.asked if s == ["Check", "the", "numbered"]]
 
     def paragraph_calls(self) -> list[str]:
         return [u for s, u in self.asked if s in (["Rewrite", "one", "paragraph"], ["Write", "one", "more"])]
@@ -66,7 +73,7 @@ class NoAI(unittest.TestCase):
             for s in FLAGS["ai_only"]:
                 self.assertEqual(grounded.problems(one(s["text"]), FACTS), [], s["text"])
                 self.assertTrue(grounded.check(one(s["text"]), FACTS), s["text"])
-        self.assertEqual(len(fake.checks()), len(FLAGS["ai_only"]), "one call per sentence, never a batch")
+        self.assertEqual(len(fake.checks()), len(FLAGS["ai_only"]), "one call per sentence checked alone")
 
     def test_a_team_project_written_as_yours_alone_names_your_part(self):
         # "I built the React frontend and Flask backend" of a seven-person project; the person built the
@@ -105,6 +112,36 @@ class SimilarNames(unittest.TestCase):
         facts = grounded.Facts({"E1": item}, [quill, jobs], ["Lua", "Flask"])
         self.assertEqual(grounded.problems(one("Quill is my local job-search helper [E1]."), facts),
                          ["job-search is Quill Employment's, not Quill's"])
+
+
+class Batched(unittest.TestCase):
+    """A pack made about 55 calls, most of them one sentence check each (2026-11-08)."""
+
+    def test_a_paragraphs_sentences_go_in_one_call_each_with_only_its_own_evidence(self):
+        paragraph = " ".join(s["text"] for s in FLAGS["ai_only"])
+        fake = FakeChecker({cites.strip(s["text"]): s["reply"] for s in FLAGS["ai_only"]})
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            done = grounded.ground(paragraph, FACTS, lambda text, sentence: True)
+        self.assertEqual((len(fake.batches()), fake.checks()), (1, []), "one call for the paragraph")
+        asked = fake.batches()[0]
+        first, second = asked.split("\n\nSentence 2: ")
+        self.assertIn('E3: "Databases module', first)
+        self.assertNotIn("E3:", second, "the second sentence sees only its own evidence")
+        self.assertEqual(len(done.failed), len(FLAGS["ai_only"]), "each problem only the AI sees is still found")
+
+    def test_the_fixtures_true_sentences_raise_no_alarm_when_checked_together(self):
+        fine = [s["text"] for s in FLAGS["sentences"] if not s["flagged"] and "[M]" not in s["text"]]
+        fake = FakeChecker()
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            done = grounded.ground(" ".join(fine), FACTS, lambda text, sentence: True)
+        self.assertEqual(done.failed, [])
+        self.assertLessEqual(len(fake.batches()) + len(fake.checks()), 1)
+
+    def test_a_sentence_whose_every_word_its_evidence_holds_is_never_sent(self):
+        said = one("My sensor logger, written in Lua, recorded the river's level every ten minutes [E2].")
+        self.assertTrue(grounded.restates(said.text, [ITEMS["E2"]]))
+        self.assertFalse(grounded.needs_ai(said, FACTS))
+        self.assertTrue(grounded.needs_ai(one("My logger recorded the river for a hospital [E2]."), FACTS))
 
 
 class WithAI(unittest.TestCase):

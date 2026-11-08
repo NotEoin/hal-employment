@@ -2,7 +2,9 @@
 
 `problems(c, facts)` finds, with no AI, what is wrong with one sentence (`writing.cites.Cited`) given the
 evidence plan's items it cites; `verdict(c, facts)` asks the AI about that sentence and those items alone
-(prompt `sentence_check`); `check(c, facts)` is both. `ground(draft, facts, essential)` checks every sentence
+(prompt `sentence_check`), and `verdicts(cs, facts)` asks about the sentences of one paragraph in one call
+(prompt `paragraph_check`), each against its own items; `check(c, facts)` is the checks with no AI, then one
+call. `ground(draft, facts, essential)` checks every sentence
 of a draft, rewrites each that fails once (prompt `sentence_fix`), checks the rewrite, and takes out a
 sentence still failing unless the draft needs it, when it is listed instead; a paragraph that changed is
 smoothed once (`smooth`). `lengthen(done, facts, words, essential)` adds a paragraph to a short letter, and
@@ -12,12 +14,15 @@ them cites.
 
 Design decisions, each with its reason:
 
-- One sentence and its cited items per call, never a batch: the single verify call over a whole pack, with
-  every fact beside every sentence, gave about 20 false alarms for 10 real problems in five packs, mostly a
-  fact of one project held against a sentence about another (2026-11-07). A sentence sees only its own
-  evidence, so a batch would put other sentences' evidence back beside it. The calls are short (one
-  sentence, a few items, a few words back), and only sentences that pass the checks with no AI and do not
-  restate their evidence (`drafts.stated_in`) are sent.
+- Each sentence is judged against its own cited items only, never every fact: the single verify call over a
+  whole pack, with every fact beside every sentence, gave about 20 false alarms for 10 real problems in five
+  packs, mostly a fact of one project held against a sentence about another (2026-11-07). Only sentences
+  that pass the checks with no AI and do not restate their evidence are sent (`needs_ai`): those whose
+  items hold `drafts.CV_SHARE` of their words (`drafts.stated_in`), and those whose every content word,
+  by its root (`_root`), is in their items (`restates`). The sentences of one paragraph that are left go in
+  one call (`verdicts`, prompt `paragraph_check`), each numbered with its own items under it and the prompt
+  saying never to judge one by another's; a paragraph with one such sentence uses `sentence_check`. A pack
+  made about 55 calls, most of them one per sentence (2026-11-08).
 - The checks with no AI come first, and a sentence that fails one is not sent to the AI: a number or a
   known tool the cited items do not hold, degree or own-time words the cited cards' contexts disagree with
   (as `drafts.wrong_context`, but through the markers, so a project described rather than named is
@@ -95,6 +100,9 @@ ONLY_SKILLS = "rests only on a skills list, which says nothing about {card}"
 TOO_MUCH = "gives you more of the work than its evidence does"
 REASON = re.compile(r"\(([^()]*)\)$")
 REPEATS = 'already said as "{sentence}"'   # a sentence repeating an earlier one (`unrepeat`)
+BATCH_PROMPT = "paragraph_check"
+ROOT_MIN = 3               # letters a word keeps when its ending is taken off ("uses" is "use", "is" stays)
+ENDINGS = ("ing", "ed", "es", "s")
 Essential = Callable[[str, str], bool]
 
 
@@ -244,12 +252,38 @@ def _request(c: cites.Cited, items: list[Item]) -> str:
     return f"Sentence: {c.text}\n\nEvidence:\n" + "\n".join(i.words() for i in items)
 
 
-def verdict(c: cites.Cited, facts: Facts) -> list[str]:
-    """What the AI finds wrong with one sentence, given only the items it rests on; [] when nothing is."""
+def _root(word: str) -> str:
+    """A word without its ending ("records", "recorded" and "recording" are "record"; "guide" is "guid")."""
+    for end in ENDINGS:
+        if word.endswith(end) and len(word) - len(end) >= ROOT_MIN:
+            word = word[:-len(end)]
+            break
+    return word[:-1] if word.endswith("e") and len(word) > ROOT_MIN else word
+
+
+def _roots(text: str) -> set[str]:
+    return {_root(w) for w in re.findall(r"[a-z0-9+#]{2,}", (text or "").lower()) if w not in drafts.LITTLE_WORDS}
+
+
+def restates(text: str, items: list[Item]) -> bool:
+    """True when every content word of a sentence is in the items it cites (their quotes, cards, roles and
+    tools), each compared by its root (`_root`): it says nothing they do not."""
+    own = _roots(text)
+    return bool(own) and own <= _roots(_evidence_text(items))
+
+
+def needs_ai(c: cites.Cited, facts: Facts) -> bool:
+    """True when a sentence passes the checks with no AI and rests on evidence it does not restate (`restates`,
+    `drafts.stated_in`), so only the AI can say more."""
     items = cited_items(c, facts)
-    reply = llm.chat_json(prompts.text(CHECK_PROMPT), _request(c, items), role="main")
-    if not isinstance(reply, dict):
-        return []
+    if not items or problems(c, facts):
+        return False
+    return not (drafts.stated_in(c.text, "\n".join(i.text for i in items)) or restates(c.text, items))
+
+
+def _found(reply: dict, items: list[Item], facts: Facts) -> list[str]:
+    """What one reply of the sentence check finds wrong; quoted words the items or the employer hold are no
+    problem."""
     out = []
     if reply.get("supported") is False:
         given = [str(s) for s in reply.get("unsupported") or [] if str(s).strip()]
@@ -266,16 +300,35 @@ def verdict(c: cites.Cited, facts: Facts) -> list[str]:
     return out
 
 
+def verdict(c: cites.Cited, facts: Facts) -> list[str]:
+    """What the AI finds wrong with one sentence, given only the items it rests on; [] when nothing is."""
+    items = cited_items(c, facts)
+    reply = llm.chat_json(prompts.text(CHECK_PROMPT), _request(c, items), role="main")
+    return _found(reply, items, facts) if isinstance(reply, dict) else []
+
+
+def verdicts(cs: list[cites.Cited], facts: Facts) -> list[list[str]]:
+    """What the AI finds wrong with each of the sentences of one paragraph, in one call, each against only the
+    items it rests on; a sentence the reply leaves out or answers wrongly is [] (see the module notes)."""
+    if len(cs) == 1:
+        return [verdict(cs[0], facts)]
+    items = [cited_items(c, facts) for c in cs]
+    request = "\n\n".join(f"Sentence {n}: {c.text}\nEvidence for sentence {n}:\n" + "\n".join(i.words() for i in its)
+                           for n, (c, its) in enumerate(zip(cs, items, strict=True), 1))
+    reply = llm.chat_json(prompts.text(BATCH_PROMPT), request, role="main")
+    said = reply.get("sentences") if isinstance(reply, dict) else None
+    by_n = {}
+    for one in said if isinstance(said, list) else []:
+        n = one.get("n") if isinstance(one, dict) else None
+        if isinstance(n, int) and 1 <= n <= len(cs):
+            by_n[n] = one
+    return [_found(by_n[n], its, facts) if n in by_n else [] for n, its in enumerate(items, 1)]
+
+
 def check(c: cites.Cited, facts: Facts) -> list[str]:
     """What is wrong with one sentence: the checks with no AI, then, when they find nothing and the sentence
-    rests on evidence (`cited_items`) it does not simply restate, one AI call."""
-    found = problems(c, facts)
-    items = cited_items(c, facts)
-    if found or not items:
-        return found
-    if drafts.stated_in(c.text, "\n".join(i.text for i in items)):
-        return []
-    return verdict(c, facts)
+    rests on evidence it does not simply restate (`needs_ai`), one AI call."""
+    return verdict(c, facts) if needs_ai(c, facts) else problems(c, facts)
 
 
 def _pattern(sentence: str) -> re.Pattern:
@@ -376,6 +429,26 @@ def _replace_nth(text: str, sentence: str, nth: int, new: str) -> str:
     return replace(head + marker + tail, marker, new)
 
 
+@dataclass
+class _Batched:
+    """The sentence checks of `ground`, with the AI's verdicts on one paragraph's sentences asked in one call
+    (`verdicts`) before they are judged in turn."""
+
+    facts: Facts
+    said: dict[str, list[str]] = field(default_factory=dict)
+
+    def prepare(self, paragraph: str) -> None:
+        """Asks the AI, in one call, about every sentence of `paragraph` that needs it (`needs_ai`)."""
+        ask = [c for raw in cites.sentences(paragraph) for c in cites.cited(raw)[:1] if needs_ai(c, self.facts)]
+        self.said = dict(zip((c.raw for c in ask), verdicts(ask, self.facts), strict=True)) if ask else {}
+
+    def judge(self, c: cites.Cited, before: str) -> list[str]:
+        """What is wrong with a sentence: the verdict asked for it in its paragraph's call, else `check`."""
+        if c.raw in self.said:
+            return self.said.pop(c.raw)
+        return check(c, self.facts)
+
+
 def _settle_paragraph(paras: list[str], n: int, facts: Facts, essential: Essential, out: Grounded,
                       judge: Judge, recheck: Judge, evidence: Evidence) -> str:
     """Paragraph `n` of `paras` with each sentence `judge` finds wrong rewritten once (`fix` with `evidence`) and
@@ -414,10 +487,12 @@ def _settle_paragraph(paras: list[str], n: int, facts: Facts, essential: Essenti
 
 
 def _settle(draft: str, facts: Facts, essential: Essential, judge: Judge, recheck: Judge,
-            evidence: Evidence) -> Grounded:
+            evidence: Evidence, prepare: Callable[[str], None] | None = None) -> Grounded:
     paras = flow.paragraphs(cites.normalise(draft))
     out = Grounded("")
     for n in range(len(paras)):
+        if prepare is not None:
+            prepare(paras[n])
         paras[n] = _settle_paragraph(paras, n, facts, essential, out, judge, recheck, evidence)
     out.text = "\n\n".join(p for p in paras if p)
     return out
@@ -427,9 +502,11 @@ def ground(draft: str, facts: Facts, essential: Essential) -> Grounded:
     """`draft` with each sentence checked against its own evidence (`check`): a failing one is rewritten once
     (`fix`) and checked again, then taken out when `essential(text, sentence)` says the draft does not need it
     and its paragraph reads without it (`flow.reads_without`), else kept and listed. A paragraph that lost or
-    changed a sentence is smoothed once (`smooth`)."""
-    return _settle(draft, facts, essential, lambda c, before: check(c, facts), lambda c, before: check(c, facts),
-                   lambda c, before: cited_items(c, facts) or list(facts.items.values()))
+    changed a sentence is smoothed once (`smooth`). The AI's checks of one paragraph's sentences are one call
+    (`verdicts`); a rewrite is checked on its own."""
+    batch = _Batched(facts)
+    return _settle(draft, facts, essential, batch.judge, lambda c, before: check(c, facts),
+                   lambda c, before: cited_items(c, facts) or list(facts.items.values()), batch.prepare)
 
 
 @dataclass(frozen=True)

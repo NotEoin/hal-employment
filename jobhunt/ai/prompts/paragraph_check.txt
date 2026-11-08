@@ -1,0 +1,19 @@
+# name: Checking a paragraph's sentences
+# used: After Hal drafts a letter, message or answers: the sentences of one paragraph that need it, each checked against only the facts it rests on
+# needs:
+Check the numbered sentences of a job application, each against its own evidence. Under each sentence are
+the evidence items it rests on, each with where the work was done and the applicant's part in it when
+known. Judge each sentence only against the evidence listed under it: never use another sentence's
+evidence, even when it would support the sentence. Judge only what a sentence says about the applicant;
+what it says about the employer or about why the applicant wants the job is never a problem.
+Reply with JSON only, one entry per sentence:
+{"sentences": [{"n": the sentence's number, "supported": true | false, "unsupported": [the words of the
+  sentence its evidence does not support, quoted exactly], "context_ok": true | false, "role_ok": true |
+  false}]}
+- "supported" is false when the sentence adds something about the applicant that its items do not say: a
+  detail, tool, number, purpose, result, length of time or size. Plain rewording of an item is supported.
+- "context_ok" is false when the sentence places the work somewhere its items do not: a personal project
+  as part of a degree, a module or coursework; a module as the basis or source of a personal project; degree
+  work as a job or as personal work; a university team project as personal work.
+- "role_ok" is false when the sentence gives the applicant more of the work than its items do: a team's
+  work written as their own, the whole project when they built a part, "helped" made "led".
