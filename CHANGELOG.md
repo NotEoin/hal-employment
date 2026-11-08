@@ -196,6 +196,10 @@ What changed in each version, in plain words.
   recent work", for reasons such as having built features for a team project. The opening's reason now
   names one specific thing about the employer, from the advert or the company's own words, and the project
   of yours it connects to, by name; "matches my", "fits my" and the like are written again.
+- **No blank answers or empty messages.** Half the packs had a form answer left empty, or a message with
+  nothing after its introduction, when Hal left out a paragraph it could not check. Hal now tries another
+  piece of your work, then writes the answer or message whole, and lists a question only when nothing could
+  answer it. The message always tells one piece of work and asks one question.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that

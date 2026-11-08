@@ -497,8 +497,12 @@ runs: tests use `tests/support/fake_claude/`.
   example (`plan.examples_wanted`), in shape `paragraphs.answer`, and a question asking why this employer
   (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and
   its item's story (`pack._story_of`). Answers take the stories the letter (`told`) and earlier answers told
-  least (`plan.choose`), and a question no story answers is listed (`pack.NO_ANSWER`). A draft with no story
-  is drafted whole as below.
+  least (`plan.choose`). When an answer's or the message's paragraphs are all dropped the next story is
+  tried, up to `pack.STORY_TRIES` (3) stories (`pack._story_answer`, `pack._story_message`), then the
+  whole-draft path writes what is still empty (`write_others`' `whole_answers`, asking `answers` for the
+  blank questions alone, and `whole_message`); only a question still blank is listed (`pack.NO_ANSWER`), with
+  its dropped paragraphs. A message body must ask a question (`Shape.question`, `paragraphs.NO_QUESTION`). A
+  draft with no story is drafted whole as below.
 - What replaced sentence checks (2026-11-08): a grader capped every graded pack at 2 of 5 for readability
   across four designs that drafted against evidence ids ("[E2]") and checked, rewrote, cut and smoothed each
   sentence, named projects with "For <card>, " and cut the advert's lead-ins with no AI. Those modules

@@ -47,6 +47,9 @@ Design notes:
   with evidence markers, rewrote, cut and smoothed them, named projects with "For <card>, " and cut the
   advert's lead-ins (15 packs, 2026-11-08); all of that is gone. A pack whose plan tells no story is drafted
   whole and checked with `fix_claims`, as before the plan.
+- No answer and no message is left blank (`_story_others`, 2026-11-08): 8 of 15 graded packs had an empty
+  answer or a message with nothing after its introduction, as a dropped paragraph left nothing. The next
+  story is tried, up to `STORY_TRIES`, and what is still empty is written by the whole-draft path.
 - The pack's checklist names no command: every action is a button on the Documents page.
 - Each pack logs how many model calls it made (`build`, `llm.counted`): a pack made about 55 with sentence
   checks, and the stories aim for about 30 at most (2026-11-08), so the count is logged to be measured.
@@ -807,30 +810,67 @@ def _story_of(item: planning.Item, found: list[planning.Story]) -> planning.Stor
                 None)
 
 
+STORY_TRIES = 3            # stories one answer or the message tries before the whole-draft path writes it
+
+
 def _story_answer(question: str, found: list[planning.Story], used: dict[str, int], scope: paragraphs.Scope,
                   pairing: motive.Pairing | None) -> list[paragraphs.Paragraph]:
     """The paragraphs answering one form question: a "why here" question from the motivation `pairing` and its
     item's story, any other from the stories the pack has told least (`plan.choose`), one or two
-    (`plan.examples_wanted`)."""
-    if drafts.why_question(question):
-        story = (_story_of(pairing.item, found) if pairing else None) or planning.choose(found, 1, used)[0]
-        return [paragraphs.settle(story, paragraphs.why(question, pairing), scope)]
-    chosen = planning.choose(found, planning.examples_wanted(question), used)
-    return [paragraphs.settle(s, paragraphs.answer(question, k, len(chosen)), scope) for k, s in enumerate(chosen)]
+    (`plan.examples_wanted`). When every paragraph is dropped the next story is tried, up to `STORY_TRIES`
+    stories; all the paragraphs tried are returned, the ones that stand with text."""
+    out: list[paragraphs.Paragraph] = []
+    left = list(found)
+    for attempt in range(STORY_TRIES):
+        if not left:
+            break
+        if drafts.why_question(question):
+            story = (_story_of(pairing.item, left) if pairing and attempt == 0 else None) or \
+                planning.choose(left, 1, used)[0]
+            said = [paragraphs.settle(story, paragraphs.why(question, pairing), scope)]
+        else:
+            chosen = planning.choose(left, planning.examples_wanted(question), used)
+            said = [paragraphs.settle(s, paragraphs.answer(question, k, len(chosen)), scope)
+                    for k, s in enumerate(chosen)]
+        out += said
+        if any(p.text for p in said):
+            break
+        left = [s for s in left if s not in {p.story for p in said}]
+    return out
+
+
+def _story_message(found: list[planning.Story], scope: paragraphs.Scope, shape: paragraphs.Shape,
+                   used: dict[str, int]) -> list[paragraphs.Paragraph]:
+    """The message's body: one story in `shape`, the next one tried when it is dropped, up to `STORY_TRIES`."""
+    out: list[paragraphs.Paragraph] = []
+    for story in planning.choose(found, STORY_TRIES, dict(used)):
+        out.append(paragraphs.settle(story, shape, scope))
+        if out[-1].text:
+            break
+    return out
 
 
 def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, facts: str, kept: str,
                   plan: list[planning.Item], questions: list[str], pairing: motive.Pairing | None, paired: bool,
-                  told: tuple[str, ...]) -> dict:
+                  told: tuple[str, ...], whole_message=None, whole_answers=None) -> dict:
     """The message and the answers told one piece of work a paragraph (`writing.paragraphs`): the message is its
     built opening and one story's few lines and question; each answer one story, or two when its question asks
-    for more than one example, preferring work the letter (`told`) and earlier answers have not told."""
+    for more than one example, preferring work the letter (`told`) and earlier answers have not told.
+
+    Nothing is left blank (2026-11-08: 8 of 15 graded packs had an empty answer or a message with nothing after
+    its introduction, as a dropped paragraph left nothing): a dropped paragraph's next story is tried
+    (`_story_answer`, `_story_message`), and what is still empty is written by the whole-draft path,
+    `whole_message()` for the message and `whole_answers(questions)` ({question: answer}) for the answers."""
     you, cards, calls = eligibility.person(), list(scope.cards), 0
     found = list(scope.stories)
     first = message_opening(who, job, analysis)
-    body = paragraphs.settle(planning.choose(found, planning.MESSAGE_STORIES, {})[0], paragraphs.MESSAGE, scope)
-    calls += body.calls
+    tried = _story_message(found, scope, paragraphs.MESSAGE, {})
+    body = next((p for p in tried if p.text), tried[-1] if tried else paragraphs.Paragraph(found[0]))
+    calls += sum(p.calls for p in tried)
     flags = [body.listed] if body.dropped else []
+    if not body.text and whole_message is not None:
+        body.text, flags = whole_message(), []
+        calls += 1
     if not paired and any(drafts.why_question(q) for q in questions):
         pairing = motive.make((job["title"], job["company"]), scope.advert, scope.brief, plan)
         calls += 1
@@ -839,11 +879,19 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
     for question in questions:
         said = _story_answer(question, found, used, scope, pairing)
         calls += sum(p.calls for p in said)
-        flags += [p.listed for p in said if p.dropped]
         text = " ".join(p.text for p in said if p.text)
-        if not text:
-            flags.append(NO_ANSWER.format(question=question))
-        answers.append({"question": question, "answer": plain.tidy(relocation.without_own_move(text, you), cards)})
+        answers.append({"question": question, "answer": text, "dropped": [p.listed for p in said if p.dropped]})
+    blank = [a["question"] for a in answers if not a["answer"]]
+    if blank and whole_answers is not None:
+        written = whole_answers(blank)
+        calls += 1
+        for a in answers:
+            a["answer"] = a["answer"] or written.get(a["question"], "")
+    for a in answers:
+        if not a["answer"]:
+            flags += [*a["dropped"], NO_ANSWER.format(question=a["question"])]
+        del a["dropped"]
+        a["answer"] = plain.tidy(relocation.without_own_move(a["answer"], you), cards)
     message = plain.tidy(relocation.without_own_move(body.text, you), cards)
     written = "\n\n".join([message, *(a["answer"] for a in answers)])
     flags = check_drafts(who, written, facts=facts, kept=kept, sources=(scope.advert, scope.brief, scope.allowed),
@@ -878,9 +926,21 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     if found:
         scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
                                 request=request, kind="answer")
+        def whole_message() -> str:
+            return _message(who, f"{message_request}\n\n{message_opening(who, job, analysis).note}", set())
+
+        def whole_answers(blank: list[str]) -> dict[str, str]:
+            rest = answers_request.split("\n\n", 1)[1] if "\n\n" in answers_request else ""
+            asked = "Questions:\n" + "\n".join(f"- {q}" for q in blank) + (f"\n\n{rest}" if rest else "")
+            found, _, _ = _answers(who, asked, facts=facts, kept=kept, sources=their_words,
+                                   names=(job["title"], job["company"]))
+            said = [str(a.get("answer") or "") for a in found]
+            by_question = {str(a.get("question") or ""): s for a, s in zip(found, said, strict=True)}
+            return {q: by_question.get(q) or (said[k] if len(said) == len(blank) else "") for k, q in enumerate(blank)}
+
         return _story_others(who, job, analysis, scope, facts=facts, kept=kept, plan=plan,
                              questions=list(questions) if answers_request else [], pairing=pairing, paired=paired,
-                             told=told)
+                             told=told, whole_message=whole_message, whole_answers=whole_answers)
     first = message_opening(who, job, analysis)
     message_request += f"\n\n{first.note}"
 

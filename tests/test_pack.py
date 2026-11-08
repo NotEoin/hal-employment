@@ -75,6 +75,8 @@ def story_paragraph(user: str) -> str:
     said = [f"I worked on {name}." if name else "I did this work myself."]
     leads = ("What I remember best about this work is this:", "Looking back, the part I would show an employer is that")
     said += [f"{lead} {f}." for lead, f in zip(leads, facts[:len(leads)], strict=False)]
+    if "short message" in user:
+        said = [*said[:2], "What will the team build next?"]
     return " ".join(s for s in said if s) or "I did made-up work."
 
 
@@ -818,7 +820,8 @@ class Others(unittest.TestCase):
         self.assertIn("Project: Quill Employment", why)
         self.assertEqual(len(writer.asked("pairing")), 1, "the letter's pairing serves the answers too")
 
-    def test_a_question_your_facts_cannot_answer_is_listed_for_you(self):
+    def test_a_question_no_story_answers_is_written_whole_and_never_left_blank(self):
+        # 8 of 15 graded packs had an empty answer or an empty message body (2026-11-08)
         writer = QuillWriter()
         plain = writer.reply
         question = "Why are you a good fit for this role?"
@@ -826,7 +829,33 @@ class Others(unittest.TestCase):
                                              and f'"{question}"' in user else plain(system, user))
         with quill_world(writer) as a:
             md = pack.build(a.con, a.job["id"], use_web=False).read_text()
+        tried = [e for e in writer.asked("story") if f'"{question}"' in e["user"]]
+        self.assertEqual(len(tried), 2, "the next story is tried before the whole-draft path")
+        self.assertIn("Questions:\n- Why are you a good fit for this role?\n", writer.asked("answers")[0]["user"])
+        self.assertIn(f"**{question}**\n\nIt matches the work I have done.", md)
+        self.assertNotIn("Hal left out", section(md, "Check before sending"), "a filled answer lists nothing")
+
+    def test_a_question_nothing_answers_is_listed_for_you(self):
+        writer = QuillWriter()
+        plain = writer.reply
+        question = "Why are you a good fit for this role?"
+        writer.reply = lambda system, user: ({"paragraph": ""} if prompt_id(system) == "story"
+                                             and f'"{question}"' in user else
+                                             {"answers": []} if prompt_id(system) == "answers" else plain(system, user))
+        with quill_world(writer) as a:
+            md = pack.build(a.con, a.job["id"], use_web=False).read_text()
         self.assertIn(f"- {pack.NO_ANSWER.format(question=question)}", section(md, "Check before sending"))
+
+    def test_a_message_whose_story_is_dropped_tells_the_next_one(self):
+        writer = QuillWriter()
+        plain = writer.reply
+        writer.reply = lambda system, user: ({"paragraph": ""} if prompt_id(system) == "story" and "short message"
+                                             in user and "Project: Quill (" in user else plain(system, user))
+        with quill_world(writer) as a:
+            md = pack.build(a.con, a.job["id"], use_web=False).read_text()
+        asked = [e["user"] for e in writer.asked("story") if "short message" in e["user"]]
+        self.assertEqual(len(asked), 2)
+        self.assertIn("I worked on Quill Employment.", md)
 
     def test_a_whole_pack_keeps_each_projects_tools_to_itself_within_about_thirty_calls(self):
         # a pack made about 55 calls (2026-11-08); the grader's worst false claims gave the job-search helper's

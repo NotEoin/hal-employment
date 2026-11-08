@@ -264,6 +264,17 @@ class Named(unittest.TestCase):
         self.assertNotIn(paragraphs.NOT_NAMED.format(card="Traffic flow simulation"), [p.reason for p in named])
 
 
+class MessageBody(unittest.TestCase):
+    def test_a_message_body_asks_one_question(self):
+        # a message had nothing after its introduction (2026-11-08); its body tells the work and asks
+        text = "Quill answers questions over my notes in Lua. It runs offline."
+        found = [p.reason for p in paragraphs.problems(text, QUILL_STORY, SCOPE, paragraphs.MESSAGE)]
+        self.assertIn(paragraphs.NO_QUESTION, found)
+        asked = [p.reason for p in paragraphs.problems(f"{text} How does your team search its notes?", QUILL_STORY,
+                                                       SCOPE, paragraphs.MESSAGE)]
+        self.assertNotIn(paragraphs.NO_QUESTION, asked)
+
+
 class Stock(unittest.TestCase):
     def test_plain_finds_a_stock_link_but_never_a_plain_sentence(self):
         self.assertTrue(plain.problems("This aligns with your team's work."))

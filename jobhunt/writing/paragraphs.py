@@ -94,6 +94,7 @@ REPEAT_SAID = "says again what an earlier sentence of the paragraph says"
 LABEL_SAID = 'uses your part as a label ("{label}"); say what you did'
 LIST_SAID = "lists tools rather than saying what you did with them"
 NOT_NAMED = "does not name {card} in its first sentence"
+NO_QUESTION = "asks no question about the team's work"
 NOT_NAMED_ANY = "never names {card}"
 TOO_SHORT = "is too short to tell what the work was, what you did and what came of it"
 NOT_SUPPORTED = 'its facts do not say: "{span}"'
@@ -113,6 +114,7 @@ class Shape:
     words: str
     name: str = "first"
     least: int = 1
+    question: bool = False     # it must ask one question (a message's body)
 
 
 LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 sentences, 60 to 90 words, one "
@@ -121,7 +123,7 @@ LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 
 MESSAGE = Shape("answer", "The body of a short message to the person hiring, after Hal's own greeting and opening "
                           "sentence: one or two sentences about this work, naming it, then one specific question "
                           "about the team's work on what it can help with. At most 60 words in all. No greeting, "
-                          "no introduction and no sign-off.", "any", 2)
+                          "no introduction and no sign-off.", "any", 2, True)
 ANSWER_WORDS = 100         # words of a whole form answer, as the answers prompt asks
 FRAME_WORDS = 70           # words of a letter's opening and closing together: three sentences and one or two
 PARAGRAPH_WORDS = (60, 90)  # least and most words a letter paragraph is asked for, whatever the length setting
@@ -380,6 +382,8 @@ def problems(text: str, story: Story, scope: Scope, shape: Shape) -> list[Proble
         out.append(Problem("", NOT_NAMED_ANY.format(card=story.name)))
     if len(said) < shape.least:
         out.append(Problem("", TOO_SHORT))
+    if shape.question and "?" not in text:
+        out.append(Problem("", NO_QUESTION))
     hits = writing_check.check(text, shape.kind, spelling=scope.values.get("spelling_code", ""),
                                allowed=scope.values.get("own_words") or ())
     for hit in writing_check.high(hits):
