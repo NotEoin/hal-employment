@@ -39,6 +39,19 @@ class Purposes(unittest.TestCase):
             with self.subTest(said):
                 self.assertEqual(found(said, ["Python", "Lua", "Flask", "Docker", "React"]), [])
 
+    def test_a_purpose_another_fact_of_the_work_holds_is_fine(self):
+        # "the daemon in Python" was flagged and a true paragraph dropped, as no fact naming Python said
+        # "daemon" (2026-11-08)
+        facts = ["Gullwing is a daemon that parks low-priority jobs", "Written in Python with SQLite"]
+        for said in ("I wrote the daemon in Python.", "I used SQLite to park low-priority jobs."):
+            with self.subTest(said):
+                self.assertEqual(found(said, ["Python", "SQLite"], facts, "Gullwing"), [])
+
+    def test_a_part_of_a_system_needs_a_fact_naming_the_tool(self):
+        facts = ["Wrenbot has a Flask backend", "Wrenbot has a React dashboard"]
+        self.assertTrue(found("I used React for the backend.", ["React"], facts))
+        self.assertEqual(found("I used Flask for the backend.", ["Flask"], facts), [])
+
     def test_a_purpose_word_counts_by_its_stem(self):
         facts = ["Gullwing packages its route planner in Docker images"]
         self.assertEqual(found("I used Docker for packaging the planner.", ["Docker"], facts, "Gullwing"), [])

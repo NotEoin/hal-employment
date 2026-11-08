@@ -494,11 +494,12 @@ runs: tests use `tests/support/fake_claude/`.
   "fits my", "suits my", "in line with my"); a sentence
   echoing the advert (`drafts.echoes`); a sentence the paragraph already said (`repeats.same`); the part as
   a label ("As the owner, ..."); `paragraphs.LIST_TOOLS` (4) tools in one sentence; a tool given a purpose
-  no fact naming it holds (`writing/purpose.py`, `purpose.unbacked`: "<tool> to/for <purpose>", with at most
+  the work's facts do not hold (`writing/purpose.py`, `purpose.unbacked`: "<tool> to/for <purpose>", with at most
   `purpose.GAP_WORDS` (2) words between, or "the <thing> in/with/using <tool>"; the purpose's content words,
   `purpose.GENERAL` words, tool names and the work's name aside, compared by their first `purpose.STEM` (6)
-  letters, must be at least `purpose.PURPOSE_SHARE` (half) in the story's facts naming the tool or in its
-  name and summary: Docker "to package the application" was an agent sandbox, 2026-11-08); `taught`'s module
+  letters, must be at least `purpose.PURPOSE_SHARE` (half) in the story's facts or in its name and summary,
+  and a part of a system (`purpose.LAYER`: backend, deployment, database ...) must be in a fact naming the
+  tool: Docker "to package the application" was an agent sandbox, 2026-11-08); `taught`'s module
   checks; the work unnamed in the first sentence; too few sentences; and the writing rules' high hits.
   When they find nothing and the paragraph says more than its facts' own words (`paragraphs.restates`),
   one AI call checks it against its story (`verify`, prompt `paragraph_verify`); quoted words its facts or

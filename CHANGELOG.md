@@ -196,7 +196,8 @@ What changed in each version, in plain words.
 - **A tool is used for what your facts say.** Drafts said a project "used Docker to package the application"
   when your record used Docker as a sandbox, called frontend work backend work, and said a module gave you
   C++ knowledge when the module never names C++. A sentence that says what a tool was for now needs that
-  purpose in the facts naming the tool, and a module named with a tool needs the module's own entry to
+  purpose in your facts about the work, and a part of a system (backend, deployment, database) in a fact
+  naming the tool; a module named with a tool needs the module's own entry to
   name it, in letters, answers and messages. Either is written once more when it does not.
 - **The advert's words stay the advert's.** Phrases such as "low-latency systems" or "help clients bring
   their ideas to life" went from the advert into sentences about your own work, as if you had done them. A

@@ -1,8 +1,9 @@
 """What a tool was for: a sentence that says a tool served a purpose ("Docker to package the application",
-"FastAPI for the backend", "the parser in C++") must find that purpose in the facts that name the tool.
+"FastAPI for the backend", "the parser in C++") must find that purpose in the work's facts.
 
 `unbacked(sentence, tools, facts, about, known)` finds, with no AI, each tool of `tools` the sentence gives a
-purpose that no fact naming the tool holds, nor what the work is (`about`: its name and summary).
+purpose that the work's facts and what it is (`about`: its name and summary) do not hold; a part of a system
+(`LAYER`: backend, deployment, database ...) must be in a fact naming the tool itself.
 
 Design decisions, each with its reason:
 
@@ -17,8 +18,13 @@ Design decisions, each with its reason:
   "build", "application", "tool"), tool names and the work's own name are left out, so "Lua to build Quill"
   states no purpose and "moved from Flask to FastAPI" is a change of tools, not a purpose. A word counts when
   its first `STEM` letters match ("packaging" meets "package"), and the purpose is backed when at least
-  `PURPOSE_SHARE` of its words are in the facts naming the tool or in what the work is: "Python to build a
-  pathfinding autopilot" restates the work, which is no new claim.
+  `PURPOSE_SHARE` of its words are in the work's facts or in what the work is: "Python to build a pathfinding
+  autopilot" restates the work, which is no new claim.
+- Ordinary purpose words may come from any of the work's facts, as a project's facts rarely name its language
+  in the sentence that says what it does: holding them to the facts naming the tool flagged "the daemon in
+  Python" and "aircrack-ng to count devices" and dropped true paragraphs (2026-11-08). A part of a system
+  (`LAYER`) is the claim that went wrong, frontend work called backend and a sandbox called deployment, so
+  those words need a fact naming the tool.
 """
 from __future__ import annotations
 
@@ -38,6 +44,10 @@ GENERAL = frozenset("""build built building make made making create created crea
 develop developed developing implement implemented implementing use used using run ran running work worked help
 helped handle handled app apps application applications project projects tool tools code program programs software
 system systems thing things part parts it them this that""".split())
+# Parts of a system: said of a tool, they claim where it sits, so a fact naming the tool must hold them.
+LAYER = frozenset("""backend frontend front-end back-end server database api apis ui interface deploy deployed
+deploying deployment deployments production infrastructure container containers containerise containerize
+package packaging packaged hosting hosted cloud""".split())
 AFTER = re.compile(rf"^(?P<gap>(?:\s+[\w'-]+){{0,{GAP_WORDS}}}?)\s+(?:to|for)\s+(?P<what>[^,.;:!?()]+)", re.I)
 SAID = 'says {tool} was for "{purpose}", which no fact naming {tool} says; say only what its facts say it did'
 
@@ -80,11 +90,14 @@ def unbacked(sentence: str, tools: list[str], facts: list[str], about: str, know
     """What is wrong with each tool of `tools` that `sentence` gives a purpose its facts do not (see the module
     notes): `facts` are the story's facts, `about` its name and what it is, `known` every tool name."""
     out = []
+    anywhere = _stems("\n".join([about, *facts]))
     for tool in dict.fromkeys(t for t in tools if t.strip()):
-        held = _stems("\n".join([about, *(f for f in facts if drafts.names_tool(f, tool))]))
+        own = _stems("\n".join([about, *(f for f in facts if drafts.names_tool(f, tool))]))
         for phrase in _purposes(sentence, tool):
-            wanted = {w[:STEM] for w in purpose_words(phrase, known, about)}
-            if wanted and len(wanted & held) < PURPOSE_SHARE * len(wanted):
+            words = purpose_words(phrase, known, about)
+            wanted = {w[:STEM] for w in words}
+            layers = {w[:STEM] for w in words if w in LAYER}
+            if (wanted and len(wanted & anywhere) < PURPOSE_SHARE * len(wanted)) or layers - own:
                 out.append(SAID.format(tool=tool, purpose=phrase))
                 break
     return out
