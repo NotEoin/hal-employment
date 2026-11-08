@@ -9,13 +9,13 @@ What changed in each version, in plain words.
 - **Drafts rest on evidence chosen first.** Before writing a letter, Hal picks up to eight facts it will
   rest on, each quoted word for word from your CV, the facts you checked or your own documents, with where
   the work was done and your part in it (a team of seven, the features you built) when your files say so.
-  The letter's notes list them under **Evidence**. The letter, the message and the answers are written as
-  connected paragraphs from those facts, then Hal notes which fact each sentence rests on (you never see the
-  marks) and checks each sentence about you against only those facts: a detail added to fit the advert, a
-  personal project placed in your degree, or a team's work written as yours alone is rewritten once where
-  it stands, and listed if it is still wrong. **Check before sending** no longer lists a whole-pack check's
-  guesses, which were mostly false alarms. Letters and messages are written in a steadier style that adds
-  fewer details of its own. The letter's reason for
+  The letter's notes list them under **Evidence**. The letter, the message and the answers mark which fact
+  each sentence rests on (you never see the marks), and Hal checks each sentence about you against only
+  those facts: a detail added to fit the advert, a personal project placed in your degree, or a team's work
+  written as yours alone is rewritten once, then taken out, or listed when the draft needs it. **Check
+  before sending** no longer lists a whole-pack check's guesses, which were mostly false alarms. When the
+  first letter needed such a fix, Hal writes a second and keeps the one with fewer problems, and letters
+  and messages are written in a steadier style that adds fewer details of its own. The letter's reason for
   wanting the job comes from one specific thing about the employer, in the advert's or the company's own
   words, paired with one of your facts; when nothing connects, the letter gives no reason rather than
   a generic one.
@@ -175,32 +175,6 @@ What changed in each version, in plain words.
 
 ### Fixed
 
-- **Drafts read as writing, not a list of facts.** When the writer had to mark the fact behind every sentence
-  as it wrote, letters came out as one fact per sentence, ended on a list of tools and talked about "a
-  113-test suite" without saying which project it was. Drafts are now written freely as connected
-  paragraphs that name each project when they first mention it, and Hal works out afterwards which fact
-  each sentence rests on, so every sentence is still checked against its own facts.
-- **One last polish when a draft reads badly.** Graders marked most packs down for how they read, not for
-  what they claimed: "The role asks for ..." taken from the fit table, one fact said in two paragraphs, a
-  project talked about before it was named, a message that never said who was writing, a fact dropped into
-  a paragraph about something else, and letters ending on a list of tools. Hal now spots each of these and,
-  only then, asks once for a polished draft, which it keeps only when it reads better and passes every
-  check with nothing new added. The letter, message and answers are no longer given the fit table's
-  requirement-by-requirement rows.
-- **Fewer quiet mistakes in drafts.** A letter said "I achieved 86 in a module through a team project"
-  when nothing tied the two, said "I used Azure" of work a project plan only said it would use, gave the
-  same fact in two paragraphs, used one CV line word for word in two drafts, and put "I have the right to
-  work in the UK" in a paragraph about teamwork. Hal now catches each: the first two are rewritten like any
-  unsupported sentence, a repeated fact or copied line is rewritten with another fact, and the stray fact
-  moves to the closing paragraph. A fit table row that calls a team project personal is put right, or listed
-  under **Check before sending** when Hal cannot.
-- **One letter, not two.** When the first letter needed a fix, Hal used to write a second from scratch and
-  keep the better. Now that a wrong sentence is fixed where it stands, the second letter only made a pack
-  slower (5 more AI calls of 23 in our test pack) and was not the one kept, so Hal writes the letter once.
-- **A wrong sentence is fixed where it stands.** Hal used to take out a sentence that was still wrong after
-  its rewrite, which left paragraphs that jumped from one fact to the next. It now rewrites the sentence
-  with its whole paragraph in view, so the paragraph still reads on, and lists it under **Check before
-  sending** if it is still wrong. A sentence is taken out only when none of your facts backs it.
 - **A list of your projects is not one project.** A portfolio folder holding a plan that described all
   your projects turned every one of them into the portfolio, and cards that shared such a plan were merged.
   A document that describes three or more projects now lists them, as a CV does, and a note about another

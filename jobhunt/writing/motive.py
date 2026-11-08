@@ -91,6 +91,6 @@ def block(pairing: Pairing | None) -> str:
     """What the letter request says about the reason for this employer."""
     if pairing is None:
         return NONE_SAID
-    return (f"Motivation pairing (write why this employer from this alone): the employer's "
+    return (f"Motivation pairing (write why this employer from this alone, in [M] sentences): the employer's "
             f"\"{pairing.fact}\" and the applicant's {pairing.item.id} (\"{pairing.item.text}\"), because "
             f"{pairing.reason}")

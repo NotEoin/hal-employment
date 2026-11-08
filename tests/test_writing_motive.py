@@ -47,7 +47,7 @@ class Pairings(unittest.TestCase):
     def test_the_letter_is_told_the_pairing_or_that_there_is_none(self):
         found = motive.checked(reply("flood sensors for river trusts"), ADVERT, BRIEF, PLAN, NAMES)
         self.assertEqual(motive.block(found),
-                         'Motivation pairing (write why this employer from this alone): the '
+                         'Motivation pairing (write why this employer from this alone, in [M] sentences): the '
                          'employer\'s "flood sensors for river trusts" and the applicant\'s E1 ("a sensor logger in '
                          'Lua that records river levels every ten minutes"), because both read river levels')
         self.assertEqual(motive.block(None), motive.NONE_SAID)

@@ -1,8 +1,5 @@
 """Claims about what a module taught: a draft may say what a named module covered only when a source says so.
 
-`joined(draft, modules, sources, cards)` finds a sentence that ties a named module and a mark to a project or
-activity ("I achieved 86 in Machine Learning through a team project") that no source naming the module names.
-
 `unsupported(draft, modules, sources)` finds, with no AI, the sentences of a draft that say a named module
 (one of the person's checked modules, or any module code) covered, taught, included or introduced
 something, when no source passage or fact that names the module also names it. `pack.unsupported_claims`
@@ -24,11 +21,6 @@ Design decisions, each with its reason:
   or a name followed by "module" or "course"), and "covered" only within `VERB_WINDOW` words of it, so
   "databases" as a plain word and a verb about something else later in the sentence say nothing of a
   module.
-- A module and its mark are a fact of the module; tying them to a project or an activity ("through a team
-  project", "by building Ferry planner") claims the project was the module's work. A local model wrote "I
-  achieved 86 in <module> through a team project" from a CV line of the module and its mark alone
-  (2026-11-08), so the tie needs a source naming the module that also names the project (a card's name) or
-  the activity's own words (`ACTIVITY`, compared as `content` words by their first `STEM` letters).
 - Course material is never given to the writer (`record.for_writing`), so the module's own notes cannot
   support a claim: the person checks it under "Check before sending" when the rewrite keeps it.
 """
@@ -37,7 +29,7 @@ from __future__ import annotations
 import re
 
 from jobhunt.profile import merge
-from jobhunt.writing import check, drafts
+from jobhunt.writing import check
 
 TAUGHT = re.compile(r"\b(covered|covers|cover|taught|teaches|teach|included|includes|include|introduced|"
                     r"introduces|explored|explores|focus(s)?ed on|focus(es)? on|centred on|centered on|dealt with|"
@@ -54,12 +46,6 @@ CODE = re.compile(r"\b[A-Z]{2,5}\d{3,5}[A-Z]?\b")   # a module code in a draft, 
 VERB_WINDOW = 4            # words between a module's name and "covered" ("the X module, which covered")
 # A one-word module name ("Databases") names the module only beside a word like "module".
 AS_MODULE = re.compile(r"^\W*(module|course|class|unit)\b", re.I)
-MARK = re.compile(r"\b\d{1,3}(?:\.\d)?\s*(?:%|per ?cent|marks?\b)?|\b(?:first|distinction|merit)\b", re.I)
-# How a sentence ties a module's mark to a piece of work: "through a team project", "by building ...".
-ACTIVITY = re.compile(r"\b(?:through|by|via|from|for|during|on|in)\s+(?:(?:building|making|writing|creating|"
-                      r"developing|designing)\s+)?(?:a|an|the|my|our|one)\s+((?:[\w-]+\s+){0,3}?(?:project|"
-                      r"assignment|coursework|hackathon|placement|competition|prototype|app|tool|game|website|"
-                      r"study))\b", re.I)
 
 
 def _stems(text: str) -> set[str]:
@@ -112,44 +98,6 @@ def _units(sources: tuple[str, ...]) -> list[str]:
         for para in re.split(r"\n\s*\n", text or ""):
             out += [para, *para.splitlines()]
     return [u for u in out if u.strip()]
-
-
-def _module_in(sentence: str, known: list[list[str]]) -> list[str] | None:
-    """The names of the first module a sentence names as a module (`_as_module`), or None."""
-    codes = [[c] for c in dict.fromkeys(CODE.findall(sentence)) if not any(c in k for k in known)]
-    named = [(n, _find(sentence, n)) for n in [*known, *codes] if n]
-    named = sorted(((n, m) for n, m in named if m and _as_module(sentence, m)), key=lambda p: p[1].start())
-    return named[0][0] if named else None
-
-
-def _module_text(units: list[str], names: list[str], others: list[list[str]]) -> str:
-    """What the sources say of one module: the lines naming it (a CV's "Module, mark 86" line), or the passages
-    naming it when no line does, each cut to the module's part (`_segment`). A whole CV is one paragraph, so its
-    other lines would otherwise speak for every module it names."""
-    lines = [u for u in units if "\n" not in u.strip() and _find(u, names)]
-    return " ".join(_segment(u, names, others) for u in (lines or units))
-
-
-def joined(draft: str, modules: list[str], sources: tuple[str, ...], cards: list[dict] = ()) -> list[str]:
-    """The sentences of `draft` that tie a named module and its mark to a project card or an activity
-    (`ACTIVITY`) no source naming the module names, each with the module: "... (nothing in your facts ties
-    Machine Learning to a team project)"."""
-    known = [_names(m) for m in modules if m.strip()]
-    units = _units(sources)
-    out = []
-    for sentence in check.sentences(draft):
-        names = _module_in(sentence, known)
-        if names is None or not MARK.search(sentence):
-            continue
-        held = _module_text(units, names, [n for n in known if n is not names])
-        projects = [c["name"] for c in cards if c["name"].strip() and drafts.names_card(sentence, c, list(cards))
-                    and not drafts.names_card(held, c, list(cards))]
-        activity = ACTIVITY.search(sentence)
-        wanted = {w[:STEM] for w in content(activity.group(1))} if activity else set()
-        if projects or (wanted and not wanted <= _stems(held)):
-            tied = projects[0] if projects else activity.group(1)
-            out.append(f"{sentence} (nothing in your facts ties {names[0]} to {tied})")
-    return out
 
 
 def unsupported(draft: str, modules: list[str], sources: tuple[str, ...]) -> list[str]:

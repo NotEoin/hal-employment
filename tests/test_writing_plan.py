@@ -69,24 +69,6 @@ class SkillsLists(unittest.TestCase):
         self.assertIn("a skills list: what the applicant knows, never which project used it", item.words())
 
 
-class Planned(unittest.TestCase):
-    def test_a_pick_whose_source_says_the_work_was_planned_is_marked_planned(self):
-        # "I used Azure" from a project plan saying the team would use it (2026-11-08)
-        found = plan.sources("Ferry planner: built the timetable views. We will use Azure to host the API.", "",
-                             CARDS)
-        items = plan.checked({"evidence": [{"source": "S1", "quote": "use Azure to host the API"},
-                                           {"source": "S1", "quote": "built the timetable views"}]}, found)
-        self.assertEqual([i.planned for i in items], [True, False])
-        self.assertIn("planned, not done", items[0].words())
-        self.assertNotIn("planned", items[1].words())
-
-    def test_each_kind_of_planned_wording_is_read(self):
-        for said in ("we plan to add maps", "a proposed cache layer", "the intended users", "it will log tides"):
-            with self.subTest(said=said):
-                self.assertTrue(plan.planned(said, f"Notes. {said}. Done."))
-        self.assertFalse(plan.planned("we built maps", "We built maps. We will add more."))
-
-
 class Picks(unittest.TestCase):
     def setUp(self):
         self.found = plan.sources(FACTS, KEPT, CARDS)

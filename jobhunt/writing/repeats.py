@@ -16,10 +16,6 @@ Design decisions, each with its reason:
 - Sentences are near duplicates when the shorter one's own words (little words aside, `drafts.LITTLE_WORDS`)
   number at least `REPEAT_MIN_WORDS` and at least `REPEAT_SHARE` of them are in the other: a shared project
   name in two different sentences is not a repeat, the same three claims in the same order are.
-- A CV line used word for word in two drafts of a pack (`verbatim`: a run of `VERBATIM_RUN` words of the
-  line in the sentence and in an earlier draft) is a repeat even when the sentences around it differ: one CV
-  line turned up in the letter, the message and both answers (2026-11-07). Six words in a row rarely match
-  by chance, and a shorter run is a name or a phrase.
 - Gaps are the same when their words are, case, punctuation, order and the "(no evidence found)" note
   aside (`pack.MISSING_GAP`), as the second ask for a missing must-have can list a gap the first gave.
 """
@@ -32,8 +28,6 @@ from jobhunt.writing.drafts import LITTLE_WORDS
 
 REPEAT_SHARE = 0.7         # share of the shorter sentence's own words the other must hold to repeat it
 REPEAT_MIN_WORDS = 5       # a sentence needs this many own words before it can repeat another
-VERBATIM_RUN = 6           # words in a row of a CV line that make a sentence copy it (see the module notes)
-MARKERS = re.compile(r"\[\s*(?:M|E\d+(?:\s*[,;]\s*E?\d+)*)\s*\]", re.I)   # as `writing.cites.MARKER`
 NO_EVIDENCE_NOTE = re.compile(r"\(no evidence found\)", re.I)
 
 
@@ -51,20 +45,6 @@ def same(a: str, b: str) -> bool:
 def first_said(sentence: str, earlier: list[str]) -> str | None:
     """The first of the `earlier` sentences that `sentence` says nearly again (`same`), or None."""
     return next((e for e in earlier if same(sentence, e)), None)
-
-
-def _runs(text: str) -> set[tuple[str, ...]]:
-    words = re.findall(r"[a-z0-9+#]+", MARKERS.sub(" ", text or "").lower())
-    return {tuple(words[i:i + VERBATIM_RUN]) for i in range(len(words) - VERBATIM_RUN + 1)}
-
-
-def verbatim(sentence: str, sources: tuple[str, ...], earlier: tuple[str, ...]) -> str | None:
-    """The line of `sources` (the CV) that `sentence` and one of the `earlier` drafts both copy word for word
-    (see the module notes), or None."""
-    mine = _runs(sentence)
-    theirs = set().union(*(_runs(e) for e in earlier)) if mine else set()
-    return next((line.strip() for s in sources for line in (s or "").splitlines()
-                 if mine & theirs & _runs(line)), None)
 
 
 def repeated(answers: list[str]) -> list[tuple[int, str, int]]:

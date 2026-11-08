@@ -189,26 +189,6 @@ def wrong_context(draft: str, cards: list[dict]) -> list[str]:
     return out
 
 
-def right_context(text: str, cards: list[dict]) -> str:
-    """`text` with each sentence that `wrong_context` flags given its card's own context words in place of the
-    clashing ones ("Ferry planner, a personal project" of a team's card reads "Ferry planner, a university
-    team project"). Only a sentence with one clashing phrase is changed, as a second ("a personal project
-    built in my own time") would be left saying the opposite of the first; `wrong_context` still finds it."""
-    for flagged in wrong_context(text, cards):
-        sentence = REASON_TAIL.sub("", flagged)
-        card = next((c for c in cards if c["kind"].startswith("project") and c["name"].strip()
-                     and c.get("context") in CLASHES and names_card(sentence, c, cards)), None)
-        clashes = [(w, m) for w in CLASHES[card["context"]] for m in SAID[w].finditer(sentence)] if card else []
-        if len(clashes) != 1:
-            continue
-        clash = clashes[0][0]
-        fixed = ARTICLE_TWICE.sub(r"\1", SAID[clash].sub(IS_WORDS[card["context"]], sentence, count=1))
-        text = text.replace(sentence, fixed, 1)
-    return text
-
-
-REASON_TAIL = re.compile(r" \([^()]*\)$")          # the "(... is ..., not ...)" `wrong_context` adds
-ARTICLE_TWICE = re.compile(r"\b(?:a|an|the|my|our)\s+((?:a|an)\s)", re.I)   # "a a university team project"
 ECHO_RUN = 3               # words in a row that must match the employer's text to count
 ECHO_SHARE = 0.5           # share of a sentence's own words in such runs that makes it an echo
 ECHO_MIN_WORDS = 3         # a sentence needs this many own words in runs before it can echo

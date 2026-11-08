@@ -90,22 +90,16 @@ number, "not just X but Y") is rewritten once, and anything still wrong is liste
 sending**. Before it writes a letter, Hal picks the facts it will rest on: up to eight short quotes
 from your CV, the facts you checked and your own documents, each with where the work was done and your part
 in it when your files say so. The letter's notes list them under **Evidence**. The letter, the message
-and the answers are written as connected paragraphs from these facts, naming each project when they first
-mention it. Hal then works out which of the facts each sentence rests on (you never see this), and
+and the answers say which of these facts each sentence rests on (you never see these marks), and Hal
 checks each sentence about you against only the facts it rests on: a number, tool or detail they do not
 give (a tool you used on a project must be in that project's own facts, as a list of your skills says what
 you know, not where you used it), a project placed somewhere else (your degree instead of your own time),
-or a team's work written as yours alone. Such a sentence is rewritten once where it stands, so its paragraph still reads on; if it is still
-wrong, Hal lists it under **Check before sending**. Hal takes a sentence out only when none of your facts
-backs anything it says, and keeps it (and lists it) when the draft needs it or the next sentence points
-back at it ("This project ..."). After a sentence is rewritten or taken out, Hal rewrites its paragraph once so it reads well,
-keeping the same facts and adding none. Last, when a draft still reads badly (it says "The role asks for
-..." instead of what you did, says one fact twice, talks about a project before naming it, ends the letter
-on a list of tools, puts a fact in a paragraph about something else, or a message does not open by saying
-who you are and why you are writing), Hal asks once for a polished version. It keeps the polish only when
-it reads better and every sentence still passes the same checks, with no new number, tool or project;
-otherwise the draft stays as it was. A letter left well under the length you prefer gets one more
-paragraph from facts it has not used yet, checked the same way.
+or a team's work written as yours alone. Such a sentence is rewritten once; if it is still wrong, Hal takes it out, or lists it under
+**Check before sending** when the draft needs it or the next sentence points back at it ("This project
+..."). After a sentence is rewritten or taken out, Hal rewrites its paragraph once so it reads well,
+keeping the same facts and adding none. A letter left well under the length you prefer gets one more
+paragraph from facts it has not used yet, checked the same way. When the first letter needed such a fix,
+Hal writes a second one from scratch and keeps the one with fewer problems.
 Hal also checks what each letter, message and answer says about you against your CV, the facts
 you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed.
@@ -113,12 +107,7 @@ A sentence that says nearly what an earlier one already said, in the same draft 
 message or an earlier answer, is rewritten once to use a fact the drafts have not used yet, or taken out,
 and listed under **Check before sending** if it has to stay.
 A draft may say what one of your modules covered only when your CV, the facts you checked or your own
-documents say it too, as a module's name alone does not say what it taught. In the same way, a mark is tied
-to a project ("86 in Machine Learning through a team project") only when your facts about that module name
-the project, and work your files describe as planned ("we will use ...") is never said to be done. A fact
-already given in an earlier paragraph, or a line of your CV another draft already uses word for word, is
-rewritten to use another fact. A fact about you that has nothing to do with the paragraph it sits in (your
-right to work in a paragraph about a team project) is moved to the closing paragraph.
+documents say it too, as a module's name alone does not say what it taught.
 The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
 to work here?", should be your own. Before writing a letter, Hal pairs one specific thing about the employer,
 in the advert's or the company's own words (a product, a project, a place; never "innovation" or "a great
@@ -149,8 +138,7 @@ flat. A company with the employer's exact name that Hal cannot tie to the advert
 Every pack has a **Check before sending** section, which says "Nothing to check." when nothing needs
 you. Besides the sentences Hal could not fix, it lists a letter still well under the length you prefer, and
 a paragraph that starts with "This", "It" or "That" pointing at something the paragraph before does not
-say. It also lists a row of the fit table that calls a project something its card does not (a team
-project called personal) when Hal cannot put the row right itself.
+say.
 
 Drafts speak as you, in the first person. A sentence that opens with the advert's wording ("For the
 requirement to ..."), points at your CV ("My CV lists ...") or calls you "the applicant" is rewritten once,

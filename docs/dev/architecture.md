@@ -422,19 +422,10 @@ runs: tests use `tests/support/fake_claude/`.
   letter's Evidence line names the plan's quotes, else the record passages as before. The pack picks one
   plan for the letter, the message and the answers (with `COMMON_QUESTIONS`); `docs.change` picks one for
   the message and answers.
-- Attribution (`writing/attribute.py`, prompt `sentence_attribute`): the letter, message and answers
-  requests carry the plan (`pack._plan_part`) as the facts to use, and their prompts ask for connected
-  paragraphs that name each project when first mentioned, with no markers. Once a draft is written,
-  `pack.marked` (letter, message) and `pack.marked_answers` (all answers in one call) ask once for each
-  numbered sentence's items and kind (`fact`, `motivation`, `courtesy`). `attribute.read_reply` keeps a reply
-  only when it gives every sentence; with no AI, an id the plan lacks is dropped and a sentence about the
-  person (`cites.about_person`) is a fact whatever kind the reply gave. `attribute.marked` writes the
-  result into the draft as markers, so every check below reads it as before. When the reply does not hold,
-  the writer is asked once for its own marked draft (`cites.MARK_NOTE`); a draft that already carries
-  markers is taken as it is. Marking while writing made one-fact sentences that graders held at 2 of 5 for
-  readability; free drafts read well but misframed more (2026-11-08, 2026-11-07).
-- Evidence markers (`writing/cites.py`): "[E2]", "[E2,E5]" after a sentence about the person, "[M]" after
-  a reason for the employer or a courtesy. `cites.normalise` moves a marker written after a full stop before it, and puts a full stop after a marker
+- Evidence markers (`writing/cites.py`): the letter, message and answers requests carry the plan
+  (`pack._plan_part`), and their prompts ask for each sentence about the person to end with the ids it
+  rests on ("[E2]", "[E2,E5]") and a reason for the employer or a closing request with "[M]".
+  `cites.normalise` moves a marker written after a full stop before it, and puts a full stop after a marker
   run that has none when a capital, a quote, a digit, a line break or the end of the text follows it ("on
   one consumer GPU [E1] This project" read as one sentence, 2026-11-07); `cites.sentences` splits after
   every marker run with its stop. Every writing check reads the draft without markers (`cites.strip`).
@@ -450,25 +441,15 @@ runs: tests use `tests/support/fake_claude/`.
   words its cards' contexts disagree with (the rules of `drafts.wrong_context`, through the markers), "I
   built" of a team's card with no word of the team and under `PART_SHARE` of the person's part, and the
   draft-wide checks (`stage.ended_course`, `drafts.misplaced_tools`, `drafts.wrong_context`,
-  `taught.unsupported`) on that sentence. Two more (2026-11-08): planned work said to be done
-  (`grounded.PLANNED`: a first-person past tense, `cites.past_tense`, resting only on items whose source
-  sentence is planned wording, `plan.PLANNED` and `Item.planned`, or naming a known tool only those hold;
-  the item's words say "planned, not done"), and a module and its mark tied to a project card or an
-  activity ("through a team project": `taught.ACTIVITY`) that the lines naming the module never name
-  (`taught.joined`). A sentence passing them and not restating its items
+  `taught.unsupported`) on that sentence. A sentence passing them and not restating its items
   (`drafts.stated_in`) gets one call (prompt `sentence_check`, `grounded.verdict`) with only the sentence
   and its items: {supported, unsupported, context_ok, role_ok}. Quoted words its items or the employer's
   words hold are dropped, and a reply that is not JSON fails nothing. One sentence per call, never a batch:
   a batch would put other sentences' evidence beside it, as the single verify call did. A failing sentence
-  is fixed in place (prompt `sentence_fix`, `grounded.fix`): the request gives its items and its whole
-  paragraph numbered, and asks to rewrite only that sentence, keeping the paragraph flowing and naming the
-  project if it helps. The reply's `ids` attribute it again (`attribute.validated`, among the items given),
-  and it is checked again; one still failing is kept and listed. Only a sentence whose rewrite comes back
-  empty (its evidence supports nothing it was there to say) is taken out, and then only when the draft does
-  not need it (`only_in_paragraph`, an answer's `first_of_answer`) and its paragraph reads without it
-  (`flow.reads_without`: the next sentence points back at it, "This project", "It"); else it is kept and
-  listed. `grounded.unrepeat` still takes out a sentence that repeats after its rewrite. Cutting failing
-  sentences left fact lists and paragraphs that jumped (2026-11-08). A paragraph that lost or changed a sentence, and keeps none that is listed, is
+  is rewritten once with its own items (prompt `sentence_fix`, `grounded.fix`), checked again, then taken out
+  unless the draft needs it (`only_in_paragraph`, an answer's `first_of_answer`) or its paragraph does not
+  read without it (`flow.reads_without`: the next sentence points back at it, "This project", "It"), when it
+  is kept and listed. A paragraph that lost or changed a sentence, and keeps none that is listed, is
   rewritten once from its kept sentences (`grounded.smooth`, prompt `paragraph_smooth`); the rewrite is kept
   only when it cites the same ids and every sentence passes the checks with no AI (`grounded.holds`). A
   letter then under `flow.LENGTH_FLOOR` (0.8) of `cvdocs.letter_words` gets one paragraph from the plan
@@ -484,29 +465,8 @@ runs: tests use `tests/support/fake_claude/`.
   (`flow.dangling`, `pack.DANGLING_FLAG`). `tests/fixtures/grounded_flags.json` holds
   sentences of each kind a local model wrote, and `tests/test_writing_grounded.py` requires each judged
   right.
-- Readability and one polish (`writing/readability.py`, `writing/polish.py`, prompt `draft_polish`): after
-  the sentence checks and `grounded.unrepeat`, `readability.findings` reads each marked letter, message and
-  answer (never the fit table) with no AI for: a sentence framed as the advert's requirement and its
-  evidence (`plain.LEAD_IN`, `plain.REQUIREMENT_TALK`); a fact said again (`repeats.same` against the
-  sentences before it in its draft and earlier drafts, or a sentence whose ids were all cited in an earlier
-  paragraph); the first sentence about a card that neither names it nor follows one that did; a message
-  whose first sentence after its greeting does not say who the person is or why they write
-  (`readability.INTRO`); a stray (a sentence citing items, none of the one card that at least
-  `STRAY_MIN_OTHERS` (2) other sentences of its paragraph cite, and not naming it); and a letter whose last
-  `ENDING_SENTENCES` (2) sentences name `TOOL_LIST_MIN` (3) known tools. Only when a draft has findings,
-  `polish.polish` asks once (the letter in `pack.write_letter`, the message and answers together in
-  `pack._polished`) with each draft and its findings, attributes the polished drafts again in one call, and
-  keeps each only when `polish.kept`: no new failure of `grounded.problems` or `flow.dangling`, no number or
-  known tool the draft lacked and no card it neither named nor cited (`polish.additions`), fewer findings
-  and none of a new kind. `tests/fixtures/readability.json` holds a before and after for each finding; every
-  before must have its finding and every after none. With a plan, the drafting requests leave out the fit
-  map's line (`pack.unmapped`), whose rows leaked into prose as "The role asks for ...". Free and grounded
-  drafts both scored about 2.1 of 5 on a strict rubric, 14 of 15 packs of each held there by readability
-  (30 packs, 2026-11-08).
 - Plain first-person writing (`writing/plain.py`): `plain.problems` finds a sentence opening with the
   advert's requirement ("For the requirement to ...", "Regarding the need for ...", "As required ..."),
-  framed as one anywhere ("The role asks for ...", "as requested in the advert", "evidence for the
-  requirement of ...": `plain.REQUIREMENT_TALK`),
   pointing at the CV ("My CV lists ...", "as listed in my CV"), speaking of the person in the third person
   ("the applicant", "the candidate", their name with a verb) or pasting a setting's wording
   (`plain.settings_labels`: the right-to-work choices' labels, and `you.work_status` unless it is a sentence
@@ -549,10 +509,7 @@ runs: tests use `tests/support/fake_claude/`.
   `drafts.misplaced_tools` reads a draft: a tool of `known_tools` that none of the named cards' own facts,
   nor a CV line naming the card, names (`drafts.backed`) is taken out of the row (`drafts.without_tools`),
   and a part left with no tool is dropped. A row that lost evidence is partial at best, and one left with
-  none becomes a gap. Then `pack.checked_fit_contexts` gives each part that places a project card against
-  its context (`drafts.wrong_context`) the card's own words (`drafts.right_context`, only when one phrase
-  clashes), and lists each part still wrong under "Check before sending" (`pack.FIT_CONTEXT_FLAG`, through
-  the fit map's `context_flags`), so "Nothing to check." never stands beside it.
+  none becomes a gap.
 - Checks with no AI on finished drafts (`writing/drafts.py`): a letter or message whose last line is a
   sentence with no closing punctuation is asked for once more with room to finish (`pack.CUT_NOTE`, a
   wider `ROOM_CTX`); if that one stops too it is kept to its last full sentence and listed (`CUT_FLAG`).
@@ -603,12 +560,7 @@ runs: tests use `tests/support/fake_claude/`.
   the drafts before it (`repeats.first_said`, the same `REPEAT_SHARE` rule; `pack._unrepeated`, and
   `pack.write_others`' `letter`): one saying nearly what an earlier one said is rewritten once (prompt
   `sentence_fix`) from the plan items none of them cites, checked again, then taken out and its paragraph
-  smoothed as `grounded.ground` does, or kept and listed as `pack.REPEAT_FLAG`. The same holds for a sentence
-  whose items were all cited in an earlier paragraph of its draft (`grounded.REPEATS_FACT`) and one that
-  copies a CV line word for word, as an earlier draft does (`repeats.verbatim`: a run of `VERBATIM_RUN` (6)
-  words, `grounded.REPEATS_LINE`). After the sentence checks, `pack.settle` moves each stray sentence
-  (`readability.strays`) of a paragraph before the last to the start of the closing paragraph
-  (`readability.placed`). Packs said one sentence twice
+  smoothed as `grounded.ground` does, or kept and listed as `pack.REPEAT_FLAG`. Packs said one sentence twice
   back to back and reused one CV line in the letter, the message and both answers (2026-11-07). The fit
   map's gaps are kept once each (`unique_gaps`: the same words, case, order and "(no evidence found)"
   aside).
@@ -652,20 +604,11 @@ runs: tests use `tests/support/fake_claude/`.
   (2026-11-07). Anything else reads "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The letter and the message are drafted at
-  `pack.DRAFT_TEMPERATURE` (0.4), cooler than other prose. The letter, the message and the answers are each
-  drafted once. A second letter, drafted when the first needed a rewrite and kept when it had fewer
-  sentences still failing, was dropped (2026-11-08): with sentences fixed in place, it added 5 calls (a
-  letter, an attribution, a check, a rewrite, a smoothing) to a 23-call fake-AI pack whose first letter
-  needed one rewrite, and the first was kept, as both ended with no sentence failing. The pack's
-  `## Letter notes` section says Tone, Length, Evidence and Checked; the application page reads them back.
-- Calls per pack, counted with the fake AI (`tests/test_pack.py`, class `Calls`): a pack whose drafts need
-  nothing makes 11 calls (advert, brief, fit map, plan, pairing, letter, message, answers, and one
-  attribution each for the letter, the message and the answers) and one sentence check per sentence about
-  the person that does not restate its items. A failing sentence adds one rewrite, a paragraph that changed
-  one smoothing, a short letter one added paragraph, and a draft that reads badly one polish and one
-  attribution (the message and the answers share both). Every call but the drafts and the polish replies
-  with a short JSON object. How long a pack takes on a local model is unverified: time a real pack built
-  with `jobhunt pack` to check it.
+  `pack.DRAFT_TEMPERATURE` (0.4), cooler than other prose. When the first letter's sentence checks needed a
+  rewrite, a second is drafted on its own (`pack.LETTER_DRAFTS`, 2), and the one with fewer sentences still
+  failing is kept, then the one with fewer rewrites, then the first (`grounded.Grounded.key`); a draft with
+  no markers is never drafted twice. The message and the answers are drafted once. The pack's `## Letter notes` section says Tone, Length,
+  Evidence and Checked; the application page reads them back.
 - The advert reading keeps only the questions the advert writes out, so a model's own note about questions
   is never answered. When the advert states no requirement, its main duties stand in, so the fit map is
   never empty. The letter greets the first person the advert names, else "Hiring Team", and never adds a

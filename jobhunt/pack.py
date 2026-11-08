@@ -39,28 +39,12 @@ Design notes:
 - Each draft rests on an evidence plan picked before it is written (`evidence_plan`, `writing.plan`): quotes
   of the CV, the Profile block and the record, each with its card's context and the person's part, as a
   local model framed projects in the wrong place and wrote team work as solo when it wrote freely
-  (2026-11-07). The letter, the message and the answers are written freely with the plan as their facts,
-  then one call ties each sentence to the items it rests on (`writing.attribute`, as markers `writing.cites`
-  reads): marking while writing made choppy one-fact sentences that graders held at 2 of 5 for readability
-  (2026-11-08). The writer marks its own draft only when that call fails (`cites.MARK_NOTE`). Each sentence
-  is checked against only what it cites (`settle`, `writing.grounded`) in place of the whole-draft claim
-  check, whose single call over every draft listed about 20 false alarms for 10 real problems in five packs
-  (2026-11-07). The markers are taken out before a draft is returned.
-- After the checks, a letter, or the message and answers together, that reads badly (`writing.readability`)
-  gets one polish, kept only when it reads better and passes every check with no AI (`writing.polish`); with
-  a plan the drafting requests leave out the fit map's rows (`unmapped`), whose requirement framing leaked
-  into the prose (2026-11-08).
+  (2026-11-07). The letter, the message and the answers mark each sentence with the items it rests on
+  (`writing.cites`), and each sentence is checked against only what it cites (`settle`, `writing.grounded`)
+  in place of the whole-draft claim check, whose single call over every draft listed about 20 false alarms
+  for 10 real problems in five packs (2026-11-07). The markers are taken out before a draft is returned.
   The letter's reason for the employer comes from a pairing of one employer fact with one plan item
   (`writing.motive`), or it gives none, as letters gave generic motivation that echoed the advert.
-- A fit row that places a project card against its context is given the card's words, or listed under
-  "Check before sending" when it cannot be (`checked_fit_contexts`): a fit table called a university team
-  project a personal project (2026-11-08).
-- Calls per pack, counted with the fake AI (`tests/test_pack.py`): a pack whose drafts need nothing makes 11
-  calls and one sentence check per sentence about the person; each sentence that fails adds a rewrite, and
-  each paragraph that changes a smoothing call; a draft that reads badly adds one polish and one
-  attribution, the message and the answers sharing both. The letter is drafted once: with sentences fixed in
-  place, a second letter added 5 calls to a 23-call pack whose first letter needed one rewrite, and was not
-  kept, as both ended with no sentence failing (2026-11-08).
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -73,8 +57,8 @@ from .ai import prompts
 from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
+from .writing import check as writing_check
 from .writing import (
-    attribute,
     cites,
     drafts,
     eligibility,
@@ -83,15 +67,12 @@ from .writing import (
     grounded,
     motive,
     plain,
-    polish,
-    readability,
     relocation,
     repeats,
     spelling,
     stage,
     taught,
 )
-from .writing import check as writing_check
 from .writing import plan as planning
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
@@ -151,9 +132,15 @@ SOFTENED = "Hal rewrote it once to take out claims your facts do not support. " 
 CUT_NOTE = "Your last reply stopped mid-sentence. Write the whole draft again, and end it with a full sentence."
 ROOM_CTX = 16384          # tokens for the second ask after a cut-off reply, as for the CV score and critique
 # The letter and the message are drafted cooler than other prose (0.7, `ai.openai_compat.PROSE_TEMPERATURE`): at
-# 0.7 a local model added plausible details to fit the advert in every graded run (2026-11-07). The Claude CLI
+# 0.7 a local model added plausible details to fit the advert in every graded run (2026-11-07), and 0.4 still
+# leaves two drafts of one letter different enough to be worth comparing (`LETTER_DRAFTS`). The Claude CLI
 # takes no temperature, so there it changes nothing.
 DRAFT_TEMPERATURE = 0.4
+# Letters drafted independently, the one with the fewest sentences still failing kept (`write_letter`); the
+# second is skipped when the first needed no rewrite, as it could only tie. Two keep a pack within a few
+# minutes on a local model: each draft adds one call and a call per sentence checked (`tests/test_pack.py`
+# counts them).
+LETTER_DRAFTS = 2
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
 ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its rewrite
@@ -271,7 +258,7 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
 
     fit = complete_fit(ask(_requirements(analysis)), analysis.get("must_have") or [], ask)
     fit = consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
-    fit = checked_fit_contexts(checked_fit_tools(fit, cards, known_tools(cards), facts), cards)
+    fit = checked_fit_tools(fit, cards, known_tools(cards), facts)
     return {**fit, "gaps": repeats.unique_gaps(fit.get("gaps") or [])}
 
 
@@ -369,22 +356,6 @@ def checked_fit_tools(fit: dict, cards: list[dict], known: list[str], facts: str
     return {**fit, "matches": matches, "gaps": gaps}
 
 
-FIT_CONTEXT_FLAG = "the fit table places a project where its card does not; correct this row"
-
-
-def checked_fit_contexts(fit: dict, cards: list[dict]) -> dict:
-    """The fit map with each part of a row's evidence that places a project card against its context
-    (`drafts.wrong_context`) given the card's own context words (`drafts.right_context`), and, under
-    "context_flags", a `FIT_CONTEXT_FLAG` line for each part still wrong, so "Check before sending" lists it. A
-    fit table called a university team project a personal project (2026-11-08)."""
-    matches, flags = [], []
-    for m in (dict(m) for m in fit.get("matches") or [] if isinstance(m, dict)):
-        parts = [drafts.right_context(p, cards) for p in re.split(r"(?<=[.;])\s+", str(m.get("evidence") or ""))]
-        flags += [f"{FIT_CONTEXT_FLAG}: {w}" for p in parts for w in drafts.wrong_context(p, cards)]
-        matches.append({**m, "evidence": " ".join(parts)} if m.get("evidence") else m)
-    return {**fit, "matches": matches, "context_flags": flags}
-
-
 def with_card_tools(fit: dict, cards: list[dict]) -> dict:
     """The fit map with every requirement that names a checked card's tool given that card as evidence.
 
@@ -418,16 +389,6 @@ def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, .
     block and the record passages for the advert's requirements and `questions`."""
     return planning.make(_requirements(analysis), [*(analysis.get("questions") or []), *questions], facts, kept,
                          profile_writing.cards())
-
-
-EVIDENCE_MAP = re.compile(r"^Evidence map: .*\n?", re.M)   # the fit map's line of a request (`_context`)
-
-
-def unmapped(request: str) -> str:
-    """A writing request without the fit map's line: with an evidence plan, the plan is the facts to use, and
-    the map's requirement-to-evidence rows leaked into prose as "The role asks for ..." (30 packs,
-    2026-11-08)."""
-    return EVIDENCE_MAP.sub("", request)
 
 
 def _plan_part(plan: list[planning.Item]) -> str:
@@ -610,58 +571,28 @@ def grounds(who: dict, plan: list[planning.Item], *, facts: str, kept: str, empl
                           tuple(plain.settings_labels()))
 
 
-def marked(draft: str, against: grounded.Facts, remark) -> str:
-    """A free draft with each sentence marked with what it rests on (`writing.attribute`); when attributing
-    fails, the writer's own marking (`remark(cites.MARK_NOTE)`), which may come back unmarked. A draft that
-    already carries markers is taken as it is."""
-    if cites.has_markers(draft):
-        return draft
-    done = attribute.mark([draft], list(against.items.values()), against.motive, against.allowed)
-    return done[0] if done is not None else (remark(cites.MARK_NOTE) or draft)
-
-
 def settle(who: dict, draft: str, rewrite, *, plan: list[planning.Item], essential: grounded.Essential, facts: str,
            kept: str, employer: tuple[str, ...], pairing: motive.Pairing | None = None,
            words: int | None = None) -> grounded.Grounded:
     """A letter or message checked for what it says about the person: its text, what is still wrong and what
-    was done. With an evidence `plan`, the free draft is attributed (`marked`), each sentence is checked
-    against what it rests on (`grounded.ground`), and a letter left short of `words` gets one paragraph more
-    (`grounded.lengthen`); a draft with no plan, or left with no markers, is checked whole and rewritten once
-    (`fix_claims`)."""
-    if plan:
+    was done. One that cites the evidence `plan` is checked sentence by sentence (`grounded.ground`), and a
+    letter left short of `words` gets one paragraph more (`grounded.lengthen`); one with no markers is
+    checked whole and rewritten once (`fix_claims`)."""
+    if plan and cites.has_markers(draft):
         against = grounds(who, plan, facts=facts, kept=kept, employer=employer, pairing=pairing)
-        draft = marked(draft, against, rewrite)
-        if cites.has_markers(draft):
-            done = grounded.ground(draft, against, essential)
-            done.text = readability.placed(done.text, against.items, against.cards)[0]
-            return grounded.lengthen(done, against, words, essential)
+        return grounded.lengthen(grounded.ground(draft, against, essential), against, words, essential)
     text, claims, again = fix_claims(who, draft, rewrite, facts=facts, kept=kept, employer=employer)
     return grounded.Grounded(text, claims, int(again), marked=False)
 
 
-def marked_answers(answers: list[dict], against: grounded.Facts, remark) -> list[dict]:
-    """The answers with each sentence marked, as `marked` marks a draft: one attribution for all of them, else
-    the writer's own marking (`remark(cites.MARK_NOTE)`); answers already carrying markers are taken as they
-    are."""
-    texts = [str(a.get("answer") or "") for a in answers]
-    if any(cites.has_markers(t) for t in texts):
-        return answers
-    done = attribute.mark(texts, list(against.items.values()), against.motive, against.allowed)
-    if done is None:
-        return remark(cites.MARK_NOTE) or answers
-    return [{**a, "answer": t} for a, t in zip(answers, done, strict=True)]
-
-
 def settle_answers(who: dict, answers: list[dict], rewrite, *, plan: list[planning.Item], facts: str, kept: str,
                    employer: tuple[str, ...]) -> tuple[list[dict], list[str]]:
-    """The answers checked as `settle` checks a letter, attributed together (`marked_answers`) and then each
-    checked on its own (an answer's first sentence answers the question, so it is never cut); returns
-    (answers, what is still wrong)."""
-    against = grounds(who, plan, facts=facts, kept=kept, employer=employer) if plan else None
-    if against is not None:
-        answers = marked_answers(answers, against, rewrite)
-    if against is None or not any(cites.has_markers(str(a.get("answer") or "")) for a in answers):
+    """The answers checked as `settle` checks a letter, each answer on its own when they cite the plan (an
+    answer's first sentence answers the question, so it is never cut); returns (answers, what is still
+    wrong)."""
+    if not (plan and any(cites.has_markers(str(a.get("answer") or "")) for a in answers)):
         return fix_claims(who, answers, rewrite, facts=facts, kept=kept, employer=employer, as_text=_answers_text)[:2]
+    against = grounds(who, plan, facts=facts, kept=kept, employer=employer)
     out, failed = [], []
     for a in answers:
         done = grounded.ground(str(a.get("answer") or ""), against, grounded.first_of_answer)
@@ -722,9 +653,10 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
     the fit map made and the evidence plan picked (`evidence_plan`), each unless given, then the letter and its
     checks. `request` holds the person's own words when they asked for a rewrite. Its reason for the employer
-    comes from a motivation pairing (`writing.motive`), or it gives none. The letter is drafted once, each
-    sentence is attributed to the plan's items and checked against its own (`settle`), then it is polished
-    once if it reads badly (`writing.polish`); its markers are taken out before it is returned.
+    comes from a motivation pairing (`writing.motive`), or it gives none. The letter cites the plan's
+    items (`writing.cites`), each sentence is checked against its own (`settle`), and when the first draft
+    needed a rewrite a second is drafted and the better kept (`LETTER_DRAFTS`, `grounded.Grounded.key`); its
+    markers are taken out before it is returned.
     """
     who = who or person(job)
     facts = cv.facts_text()
@@ -735,7 +667,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     names = (job["title"], job["company"])
     pairing = motive.make(names, _job_text(job), about, plan)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
-    text = (unmapped(text) if plan else text) + _plan_part(plan) + (f"\n\n{motive.block(pairing)}" if plan else "")
+    text += _plan_part(plan) + (f"\n\n{motive.block(pairing)}" if plan else "")
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
     if request:
         text += f"\n\nThe applicant asked for this change: {request}"
@@ -758,11 +690,15 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
                       employer=sources, pairing=pairing, words=who.get("letter_words")), revised
 
     best, revised = one_letter()
+    for _ in range(LETTER_DRAFTS - 1):
+        if not best.marked or (not best.failed and not best.rewrites):
+            break
+        again, again_revised = one_letter()
+        if again.key() < best.key():
+            best, revised = again, again_revised
     cut = best.text in trimmed
-    against = grounds(who, plan, facts=facts, kept=kept, employer=sources, pairing=pairing)
-    unique = grounded.unrepeat(best.text, against, grounded.only_in_paragraph)
-    if best.marked:
-        unique.text = polish.polish([polish.Draft(readability.LETTER, unique.text)], against).texts[0]
+    unique = grounded.unrepeat(best.text, grounds(who, plan, facts=facts, kept=kept, employer=sources,
+                                                  pairing=pairing), grounded.only_in_paragraph)
     claims, softened = best.failed, bool(best.rewrites or best.removed or unique.rewrites or unique.removed)
     letter = plain.tidy(relocation.without_own_move(cites.strip(unique.text), eligibility.person(con)),
                         profile_writing.cards())
@@ -866,15 +802,6 @@ def _unrepeated(against: grounded.Facts, letter: str, message: str,
     return message, out, repeated
 
 
-def _polished(against: grounded.Facts, letter: str, message: str, answers: list[dict]) -> tuple[str, list[dict]]:
-    """The message and the answers after one guarded polish pass together (`writing.polish`), the `letter`
-    before them."""
-    done = polish.polish([polish.Draft(readability.MESSAGE, message),
-                          *(polish.Draft(readability.ANSWER, str(a.get("answer") or ""), str(a.get("question") or ""))
-                            for a in answers)], against, (letter,))
-    return done.texts[0], [{**a, "answer": t} for a, t in zip(answers, done.texts[1:], strict=True)]
-
-
 def write_others(who: dict, job, analysis: dict, about: str, *, message_request: str, answers_request: str,
                  facts: str, kept: str, plan: list[planning.Item] | None = None, letter: str = "") -> dict:
     """The message to the person hiring and the form answers, written from their requests and checked as a
@@ -892,8 +819,6 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     job_text = _job_text(job)
     their_words, trimmed = (job_text, about), set()
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
-    if plan:
-        message_request, answers_request = unmapped(message_request), unmapped(answers_request)
     message_request += _plan_part(plan)
     answers_request += _plan_part(plan) if answers_request else ""
 
@@ -909,10 +834,8 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     answers, answer_claims, answer_echoes = _answers(
         who, answers_request, facts=facts, kept=kept, sources=their_words,
         names=(job["title"], job["company"]), plan=plan) if answers_request else ([], [], [])
-    against = grounds(who, plan, facts=facts, kept=kept, employer=their_words)
-    message, answers, repeated = _unrepeated(against, letter, message, answers)
-    if plan:
-        message, answers = _polished(against, letter, message, answers)
+    message, answers, repeated = _unrepeated(grounds(who, plan, facts=facts, kept=kept, employer=their_words),
+                                             letter, message, answers)
     you, cards = eligibility.person(), profile_writing.cards()
     message = plain.tidy(relocation.without_own_move(cites.strip(message), you), cards)
     answers = [{**a, "answer": plain.tidy(relocation.without_own_move(cites.strip(str(a.get("answer") or "")), you),
@@ -1063,7 +986,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
-    flagged = written["flags"] + others["flags"] + list(fit.get("context_flags") or [])
+    flagged = written["flags"] + others["flags"]
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
     employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]

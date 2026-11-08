@@ -1,12 +1,11 @@
 """Plain first-person writing: what a draft must never say about how it was made, and the last tidy before saving.
 
 `problems(sentence, names, labels)` finds, with no AI, a sentence that opens with the advert's requirement
-("For the requirement to ...") or frames itself as one ("The role asks for ..."), points at the CV instead
-of saying the thing ("My CV lists ..."), speaks of the person in the third person ("The applicant developed
-...", "<name> has ...") or pastes the wording of a setting (`labels`, from `settings_labels`);
-`writing.grounded` lists them with a sentence's other problems, so each such sentence is rewritten once.
-`tidy(text, cards)` is the draft as it is saved: straight quotes and apostrophes, no stray space at the start
-of a line, and each project named as its card spells it.
+("For the requirement to ..."), points at the CV instead of saying the thing ("My CV lists ..."), speaks of
+the person in the third person ("The applicant developed ...", "<name> has ...") or pastes the wording of a
+setting (`labels`, from `settings_labels`); `writing.grounded` lists them with a sentence's other problems,
+so each such sentence is rewritten once. `tidy(text, cards)` is the draft as it is saved: straight quotes
+and apostrophes, no stray space at the start of a line, and each project named as its card spells it.
 
 Design decisions, each with its reason:
 
@@ -16,10 +15,6 @@ Design decisions, each with its reason:
   is a UK and Irish citizen), a stray leading space, curly apostrophes and a project name capitalised two
   ways (15 graded packs, 2026-11-07). The wording problems need a rewrite; the rest have one right form, so
   they are fixed in place, as spelling is (`writing.spelling`).
-- Framing a sentence as the advert's requirement and its evidence anywhere in it ("The role asks for ...",
-  "as requested in the advert", "provides strong evidence for the requirement of ...") is the commonest
-  thing that held graded packs at 2 of 5 for readability: the fit table's framing leaking into prose (30
-  packs, 2026-11-08). `REQUIREMENT_TALK` finds it, and `writing.readability` lists it for the polish pass.
 - The settings' own wording reaches a request only as the person's plain values (`cv.status_line`); a
   label still found in a draft is a problem. `you.work_status` is how forms should word the right to work,
   so it is a label too unless it is already a sentence in the first person.
@@ -34,17 +29,6 @@ LEAD_IN = re.compile(
     r"^(?:(?:for|regarding|concerning|with regard to|in regard to|in response to|addressing|on|about) the "
     r"(?:requirements?|need|criteri(?:on|a)|request|ask|point)\b|as (?:required|requested|specified|stated|"
     r"outlined)\b|to (?:meet|address|demonstrate|show|satisfy) the (?:requirements?|need|criteri(?:on|a))\b)", re.I)
-# The fit table's requirement-to-evidence framing anywhere in a sentence (`LEAD_IN` only reads its start).
-REQUIREMENT_TALK = re.compile(
-    r"\b(?:the|this) (?:role|position|job|advert|vacancy|post|job description) (?:asks|calls|looks) for\b|"
-    r"\b(?:the|this) (?:role|position|job|advert|vacancy|post|job description) (?:requires|wants|specifies|"
-    r"lists|stresses|emphasi[sz]es)\b|"
-    r"\bas (?:requested|required|specified|stated|outlined|mentioned|listed) (?:in|by) (?:the|your) (?:advert|role|"
-    r"job description|job posting|posting|vacancy|person specification)\b|"
-    r"\b(?:evidence|proof|example) (?:for|of) (?:the|your|this) requirements?\b|"
-    r"\bthe requirements? (?:of|for|to)\b|"
-    r"\b(?:meets?|meeting|satisf(?:y|ies|ying)|address(?:es|ing)?|fulfils?|fulfills?|fulfilling) (?:the|your|this|"
-    r"each|every) (?:requirements?|criteri(?:on|a))\b", re.I)
 CV_SAYS = re.compile(r"\bmy (?:CV|resume)\s+(?:lists|shows|states|mentions|says|notes|includes|highlights)\b|"
                      r"\b(?:as )?(?:listed|stated|shown|mentioned|noted|detailed|outlined) (?:in|on) my "
                      r"(?:CV|resume)\b", re.I)
@@ -58,7 +42,6 @@ CURLY_RX = re.compile("[" + "".join(CURLY) + "]")
 LEADING = re.compile(r"(?m)^[ \t\u00a0]+(?![-*] )(?=\S)")
 DISTINCT = re.compile(r"\s|[a-z][A-Z]|[A-Z]{2}|\d")
 LEAD_IN_SAID = "opens with the advert's requirement; say what you did in your own words"
-REQUIREMENT_SAID = "frames itself as the advert's requirement and its evidence; say what you did instead"
 CV_SAID = "points at your CV instead of saying it"
 THIRD_SAID = "speaks of you in the third person; write as I"
 LABEL_SAID = 'pastes the settings wording "{label}"; say it in your own words'
@@ -93,8 +76,6 @@ def problems(sentence: str, names: list[str] = (), labels: list[str] = ()) -> li
     out = []
     if LEAD_IN.search(text):
         out.append(LEAD_IN_SAID)
-    elif REQUIREMENT_TALK.search(text):
-        out.append(REQUIREMENT_SAID)
     if CV_SAYS.search(text):
         out.append(CV_SAID)
     if _third_person(text, list(names)):
