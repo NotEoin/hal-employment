@@ -23,8 +23,10 @@ the same for any subject: history essays, design portfolios, lab reports, busine
      are proudest of: each becomes a project of your degree on **Projects**, and Hal tells employers about
      it. Press **Showcase** again to take it out; its skills stay. Press **This is my dissertation** on your
      dissertation, so Hal names it and describes it as your dissertation. Each course has one.
-   - **Lecture material**: slides and notes from the course. Hal counts these as what you studied, never as
-     work you did.
+   - **Lecture material**: slides and notes from the course, including notes an older Hal wrote. Hal counts
+     these as what you studied, never as work you did, and never as a project. Hal takes out email
+     addresses and phone numbers, turns slides into short study notes, and summarises a very long deck
+     instead of keeping every page. Confirm or choose the module under **Module**, as for coursework.
    - **Official papers**: your transcript and certificates. These set your modules, marks and grade.
 4. Open **Projects**. **Add projects** lists the ways to add one: your GitHub account, a link to one code
    project, a folder on this computer, an uploaded folder, a portfolio site, a web page or online document,

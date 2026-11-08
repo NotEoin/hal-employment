@@ -1285,6 +1285,13 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
 - The dissertation is the coursework kind `dissertation` (evidence `doc_type` "dissertation", which
   `writing.stage` frames as degree work). `PUT {"dissertation": true}` sets it and `false` gives "other";
   `store.check_dissertation` refuses a second one on the same card, from a change or an upload.
+- `lecture` (`sections/lecture.py`) gives only `skill` facts, filed as taught (studied). Its note is the
+  material with emails and phone numbers scrubbed (`ingest.lectures.scrub`); a converted deck, PDF or Word
+  file, or anything past `DECK_CHARS`, becomes the AI's study notes (`ingest.lectures.write`), in parts of
+  `DECK_CHARS` and at most `PARTS_MAX` of them, so a large deck is summarised, not read whole. Without the AI
+  a large file keeps its first part and says the rest was left out. The topics come from the
+  `lecture_topics` prompt, each with a quote found in the notes. The notes and topics are cached in
+  `details` by hash, and Hal's suggested module is `details["module"]`, as for coursework.
 
 ## Profile (`jobhunt/profile/`)
 

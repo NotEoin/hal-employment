@@ -16,6 +16,10 @@ What changed in each version, in plain words.
   and the project is hidden, while the skills it showed stay. Mark one piece per course with **This is my
   dissertation**, so Hal names it by its title and describes it as your dissertation.
 
+- **Hal reads your lecture material.** Slides and notes added under **Lecture material** on a course's card
+  become short study notes without the lecturers' contact details, and the topics they teach count as
+  skills you studied, never as work you did. A very long deck is summarised rather than kept whole.
+
 - **Official papers set your marks.** A transcript added under **Official papers** on a course's card now
   gives that course its modules, each with its mark, and its grade. A degree certificate gives the grade.
   Hal reads these with the same fixed rules as a transcript on **Documents**, not the AI, so a mark is never
@@ -28,8 +32,8 @@ What changed in each version, in plain words.
   again** and **Remove**; removing a file takes out everything Hal took from it. **Showcase** marks the
   coursework and projects Hal should tell employers about. Hal says when a file looks like it belongs
   elsewhere ("This looks like a CV") but never moves it by itself. CVs, letters, documents, official
-  papers and coursework are read now; lecture material and the ways to add projects arrive in later
-  updates, and files added to them wait until then. The older bulk read stays under **More ways to add**. See
+  papers, coursework and lecture material are read now; the ways to add projects arrive in a later update,
+  and files added to them wait until then. The older bulk read stays under **More ways to add**. See
   [Add your CVs, education, projects and documents](docs/howto/add-to-your-record.md).
 - **Hal reads the CVs you add.** Each CV you add under **Your CVs** gives your jobs, volunteering,
   education with its modules and marks, skills, projects, awards, contact details and links, each with the

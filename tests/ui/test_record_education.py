@@ -141,5 +141,19 @@ class RecordEducation(unittest.TestCase):
         self.clean(p, refused=(f"/api/v2/record/sources/{listed[0]['id']}",))
 
 
+    def test_lecture_slides_are_read_without_contacts_and_suggest_their_module(self) -> None:
+        course("bsc")
+        p = self.page()
+        slides = self.panel(self.open_card(p, "BSc Made-up Computing"), "Lecture material")
+        self.upload(slides, "comp2040-week3.md", graduates.SLIDES, "Slides")
+        row = slides.locator("li.rec-source", has_text="COMP2040 Week 3: Linear regression")
+        p.shows(row.get_by_text("Hal thinks this is for Data Analysis (COMP2040)."), "the suggested module")
+        self.assertEqual(row.get_by_role("button", name="Showcase", exact=False).count(), 0)
+        self.assertEqual(row.get_by_role("button", name="This is my dissertation", exact=False).count(), 0)
+        note = Path(paths.record_default()) / self.listed("lecture")[0]["note_rel"]
+        self.assertNotIn("ivo.pellingrove@example.org", note.read_text(encoding="utf-8"))
+        self.clean(p)
+
+
 if __name__ == "__main__":
     unittest.main()
