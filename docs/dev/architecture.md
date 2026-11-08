@@ -960,7 +960,11 @@ available yet.
   level (`merge.level`: bachelor, master, GCSE, Access and so on) and subject, not its wording, at
   institutions whose names hold one another ("Wexley University" is "The University of Wexley"); a BA and
   then an MA stay two. Certificate and achievement names that differ by a letter or two merge, never when
-  their numbers differ ("Level 2", "Level 3"). An education fact naming a project, module or dissertation
+  their numbers differ ("Level 2", "Level 3"). Two projects are one when they share a link that names one
+  project (`merge.project_link`): never a profile page on a code host, a site's front page (nothing after
+  the domain but "/", a query or a fragment) or the person's own website (`you.links.website`, read by
+  `merge.own_site`), which many projects share; the same test decides `duplicates.certain` and
+  `duplicates.retake`. An education fact naming a project, module or dissertation
   with no qualification level is refused, as is one whose subject is only a module code ("CSC1034") and a
   training course with no place of study ("CITI Program Training", found as a certificate instead). A job
   whose employer is only a kind of place ("bar", "shop") and that has nothing but a title is refused. Dates are stored as `YYYY-MM` or `YYYY` from UK ways of writing

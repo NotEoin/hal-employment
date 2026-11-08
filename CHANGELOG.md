@@ -186,6 +186,11 @@ What changed in each version, in plain words.
 - **Tidy my record undoes those merges.** A tidy brings back the projects an older Hal folded into a
   portfolio or merged by the old rules, with all their files, and merges them again only where today's
   rules and the AI agree. Cards you checked stay as they are.
+- **Your website no longer joins two projects.** A CV that ends several project lines with "Write-ups at"
+  your site gave those projects your site's address as their link, so your best project was merged into
+  your portfolio site's card, under the portfolio's name. A site's front page and the website in your
+  settings no longer tie two projects together; a link to a page of its own still does. Tidy my record
+  takes apart projects merged this way, each with its own name and tools.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

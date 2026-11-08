@@ -495,9 +495,9 @@ class Store(unittest.TestCase):
         self.assertEqual(add(CV_B, name="Hatch - AI desktop companion"), hatch)
         self.assertEqual(add(CV_B, name="Hatch: a desktop companion and wellbeing app"), hatch)
         self.assertEqual(add(CV_A, name="Tide gauge app"), add(CV_B, name="Tide-Gauge"))
-        site = add(CV_A, name="Portfolio website", link="https://alexdoe.dev")
-        self.assertEqual(add(CV_B, name="alexdoe-portfolio", link="alexdoe.dev/"), site)
-        self.assertEqual(add(CV_B, name="alexdoe.dev"), site)
+        site = add(CV_A, name="Tide gauge dashboard", link="https://alexdoe.dev/tide")
+        self.assertEqual(add(CV_B, name="alexdoe-tide", link="alexdoe.dev/tide/"), site)
+        self.assertEqual(add(CV_B, name="alexdoe.dev/tide"), site)
         self.assertNotEqual(add(CV_A, name="Hatch Employment"), hatch, "one word is too little")
         drone = add(CV_A, name="Recovery drone")
         self.assertEqual(add(CV_B, name="Autonomous Recovery Drone"), drone)
@@ -505,6 +505,19 @@ class Store(unittest.TestCase):
         one = add(CV_A, name="Tide gauge bot", link="https://github.com/alexdoe")
         self.assertNotEqual(add(CV_B, name="Parish map", link="https://github.com/alexdoe"), one,
                             "a profile page is shared by many projects")
+
+    def test_a_sites_front_page_never_ties_two_projects(self):
+        # CV lines ending "Write-ups at <the person's site>" gave a flagship project the site's front page as its
+        # link, and it merged into the portfolio site's card, which took its tools (2026-11-08)
+        def add(**fields):
+            return store.add_found(self.con, "project", fields, ev(CV_A, "cv", "Write-ups at alexdoe.dev"))
+        flagship = add(name="Tidecaster", tools=["PyTorch"], link="https://alexdoe.dev")
+        site = add(name="Portfolio", tools=["Hugo"], link="https://www.alexdoe.dev/")
+        self.assertNotEqual(site, flagship)
+        self.assertNotEqual(add(name="alexdoe.dev", link="alexdoe.dev/#projects"), flagship)
+        self.assertEqual(store.item(self.con, flagship)["fields"]["tools"], ["PyTorch"])
+        self.assertEqual(merge.project_link("https://alexdoe.dev/?from=cv"), "")
+        self.assertEqual(merge.project_link("https://alexdoe.dev/tide"), "alexdoe.dev/tide")
 
     def test_a_named_employer_a_dated_job_and_a_course_of_study_are_kept(self):
         src = ev(CV_A, "cv", "x")

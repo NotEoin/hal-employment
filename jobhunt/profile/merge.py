@@ -1,8 +1,8 @@
 """The profile's merge rules: when two found facts are one, and what the merged fact says.
 
-Everything here is plain code over the facts' fields, never a model, so the same files always give the same
-profile. `store.add_found` uses `same_item` to pick the item a new fact belongs to and `fold` to work out a
-found item's fields from its sources.
+Everything here is plain code over the facts' fields (and the person's website, `own_site`), never a model, so
+the same files always give the same profile. `store.add_found` uses `same_item` to pick the item a new fact
+belongs to and `fold` to work out a found item's fields from its sources.
 
 Design decisions, each with its reason:
 
@@ -23,6 +23,10 @@ Design decisions, each with its reason:
   "Hatch", "Hatch - AI desktop companion" and "Hatch - desktop companion and wellbeing app" were three
   cards (2026-11-06). So is a name of two or more words whose words are all in the other's ("Recovery
   drone", "Autonomous Recovery Drone"). "Hal" and "Hal Employment" stay two: one word is too little.
+  A link ties projects only when it names one (`project_link`): never a profile page, a site's front page
+  (no path beyond "/") or the person's own website from the settings, which many projects share. CV lines
+  ending "Write-ups at <the person's site>" gave a flagship project the site's address as its link, and it
+  merged into the portfolio site's card (2026-11-08).
   A document whose project facts name `LISTING_NAMES` (3) or more projects lists them (`lists_projects`).
 - Skills are compared without case, spaces or punctuation other than "+" and "#" (so "C++" and "C#" stay
   apart), and through a small table of other names for the same skill ("MS Excel" is "Excel"), covering
@@ -545,10 +549,21 @@ def project_key(name: str) -> str:
 
 
 def project_link(url: str) -> str:
-    """A link that names one project; "" for none or a profile page ("github.com/alexdoe") many share."""
+    """A link that names one project; "" for none, or for a link many projects share: a profile page
+    ("github.com/alexdoe"), a site's front page ("alexdoe.dev") or the person's own website (`own_site`)."""
     key = _url_key(url)
     host, _, path = key.partition("/")
-    return "" if host in PROFILE_HOSTS and "/" not in path.strip("/") else key
+    path = re.split(r"[?#]", path, maxsplit=1)[0].strip("/")
+    if not path or (host in PROFILE_HOSTS and "/" not in path):
+        return ""
+    return "" if key == own_site() else key
+
+
+def own_site() -> str:
+    """The person's own website from the settings (`you.links.website`), as links are compared; "" for none."""
+    from jobhunt.core import settings
+
+    return _url_key(str(settings.get("you.links.website") or ""))
 
 
 def _same_project(a: dict, b: dict) -> bool:

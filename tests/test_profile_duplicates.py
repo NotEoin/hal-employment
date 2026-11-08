@@ -17,7 +17,7 @@ from support.api import HalServer
 from support.fake_ai import fake_ai
 
 from jobhunt import db
-from jobhunt.core import paths
+from jobhunt.core import paths, settings
 from jobhunt.core.settings import store as settings_store
 from jobhunt.ingest import items
 from jobhunt.profile import duplicates, store
@@ -119,6 +119,22 @@ class Duplicates(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.merge_into(self.con, other, readme, duplicates.MERGED + "gauge_bot")
         self.assertIsNone(store.item(self.con, other)["merged_into"])
+
+    def test_the_persons_own_website_or_a_sites_front_page_never_makes_two_cards_one(self):
+        # a flagship project's "Write-ups at <the person's site>" merged it into the portfolio site's card
+        # (2026-11-08)
+        settings.set("you.links.website", "https://pages.example.org/~avery")
+        wick = self.project("Wick sensor", REPORT, "report", link="pages.example.org/~avery/")
+        lights = self.project("Harbour lights survey", DRAFT, "dissertation", link="https://pages.example.org/~avery")
+        flagship = self.project("Tidecaster", README, "repository", link="https://example.org")
+        site = self.project("Portfolio", DOSSIER, "report", link="https://example.org/")
+        self.assertEqual(len({wick, lights, flagship, site}), 4, "a new fact never joins a card by such a link")
+        self.assertEqual(duplicates.refresh(self.con, judge=False)["merged"], 0, "nor is it a certain merge")
+        store.merge_into(self.con, flagship, site, duplicates.MERGED + "Portfolio")
+        self.assertEqual(duplicates.retake(self.con), 1, "a tidy takes apart a merge it made")
+        page = self.project("Beam counter", README, "repository", link="https://pages.example.org/~avery/beam")
+        self.assertEqual(self.project("Lantern beam log", REPORT, "report", link="pages.example.org/~avery/beam/"),
+                         page, "a page of the site names one project")
 
     def test_cards_sharing_a_file_that_lists_three_projects_are_not_one(self):
         for name in ("Tide clock", "Wick sensor", "Beam log"):

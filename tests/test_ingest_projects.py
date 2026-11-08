@@ -14,7 +14,7 @@ from test_ingest import NOTE_REPLY, OWNER, home, put, rows, run
 
 from jobhunt.core import settings
 from jobhunt.ingest import group, projects
-from jobhunt.profile import duplicates, store
+from jobhunt.profile import duplicates, merge, store
 
 WORKSPACE = {
     "Lantern workspace/README.md": "# Lantern counter\n\nA workspace for a tool that counts harbour lanterns.",
@@ -280,6 +280,29 @@ class Tidy(unittest.TestCase):
             after = shown_projects(con)
         self.assertGreater(len(before), TICKETS, "the older read made a card of each ticket")
         self.assertEqual(sorted(after), ["Beacon app", "Probe study"], "the CV's project stays; the tickets fold")
+
+    def test_tidying_takes_apart_two_projects_an_older_read_merged_by_the_persons_site(self):
+        # CV lines ending "Write-ups at <the person's site>" gave a flagship project the site's front page as its
+        # link, so it merged into the portfolio site's card, which took its tools (2026-11-08)
+        said = {"Tidecaster": "PyTorch", "Portfolio": "Hugo"}
+
+        def cv(req) -> str:
+            facts = [{"kind": "project", "fields": {"name": n, "tools": [t], "link": "https://example.org"},
+                      "field": "name", "quote": f"{n}. Write-ups at example.org"} for n, t in said.items()]
+            return json.dumps({**NOTE_REPLY, "doc_type": "cv", "category": "CV", "title": "CV", "role": "own",
+                               "facts": facts})
+        with home() as (con, _vault, files):
+            settings.set("you.name", OWNER)
+            put(files, "CV.md", "# Avery Quillon\n\nCurriculum vitae.")
+            older = mock.patch.object(merge, "project_link", merge._url_key)     # the rule before (2026-11-08)
+            with fake_ai({"ingest_doc": cv}), older:
+                run(con, [files], origins={str(files): "mine"})
+            before = shown_projects(con)
+            with fake_ai({}):
+                run(con, [], batch="t", tidy=True)
+            after = shown_projects(con)
+        self.assertEqual(len(before), 1, "the older rule merged the two")
+        self.assertEqual({n: c["fields"]["tools"] for n, c in after.items()}, {n: [t] for n, t in said.items()})
 
 
 if __name__ == "__main__":
