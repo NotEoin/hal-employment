@@ -1473,6 +1473,35 @@ nothing.
   a job by its employer in the folders or the text. `needs_card(section, target_id)` is true for a
   coursework, lecture or job_doc proposal with no card yet.
 
+The review (`sections/sorts.py`, migration 0031): `record_sorts` (one per sort: `kind` folder, upload, inbox
+or move; `roots`, `label`, `state` new | sorting | ready | failed | undone, `skipped`) and `record_sort_rows`
+(one per proposal, `state` proposed | left_out | copy | accepted | added | failed, `ticked`, `by` rules | ai |
+you, `source_id` once added).
+
+- `create`, `run(con, id)` (calls `propose` for each root and `save`s, keeping rows already accepted or
+  added), `counts` (per section: proposed, ticked, needing a card; and each other state), `rows(con, id,
+  section=, state=, offset=, limit=)` (`PAGE` 50), `change_row` (section, kind, card, tick, star; checked
+  with `registry.doc_kind` and `store.target_card`; marks the row `by = "you"`), `tick`, and `accept(con, id,
+  section=)`, which only marks ticked rows `accepted`, never one that still needs a card.
+- `add_accepted` makes each accepted row a source with `pipeline.add_uploads` (a file, or a project folder's
+  files under its name, up to `FOLDER_BYTES_MAX`) or `pipeline.add_link` (a code project on this computer);
+  a duplicate is linked to the source already there, a failure keeps its reason. `star_projects` stars the
+  project cards a guessed showcase row gave once read; `rematch` finds cards again for rows still waiting
+  (the cards an accepted CV gave).
+- Upload sorts keep their files in `data/record-sort/<id>/` (zips unpacked with `ingest.sources.unpack`'s
+  guards) until `remove`.
+- Actions (`sections/sort_actions.py`): `record.sort` (priority 2, one at a time, resumable) runs `sorts.run`;
+  `record.sort_accept` (priority 1) runs `add_accepted`, reads the new sources (`actions.read_all`), then
+  `star_projects` and `rematch`. Both publish a `sort` event naming the sort.
+- Routes (`sections/sort_routes.py`, shapes in its header): `GET/POST /api/v2/record/sort`, `POST
+  .../sort/upload`, `GET .../sort/{id}`, `PUT /api/v2/record/sort-rows/{id}`, `POST .../sort/{id}/tick`,
+  `.../accept`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
+  path is local only.
+- The page (`static/app/record/sort.js`): `SortCard` on Overview (start a sort, list the latest, open one),
+  `SortStart` (a folder path on this computer, or a zip or files uploaded) and `SortReview` (section buttons
+  with counts, a page of rows with tick, section, kind, card and showcase, "Add the ticked ...", "Add
+  everything ticked", and the left out, copies, added and failed rows).
+
 ## Profile (`jobhunt/profile/`)
 
 - The profile is the facts about the person that Hal finds in their record: jobs, education (with modules

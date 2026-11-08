@@ -13,7 +13,7 @@ import { get } from "./api.js";
 
 const STREAM_URL = "/api/v2/events";
 const TYPES = ["status", "action", "step", "activity", "job", "application", "message", "alert", "setting", "cv",
-               "suggestions", "health", "helper", "update", "toast", "notify", "profile"];
+               "suggestions", "health", "helper", "update", "toast", "notify", "profile", "sort"];
 const BACKOFF_S = [3, 6, 12, 30];  // then 30 s for good
 const OFFLINE_AFTER_MS = 20000;    // the status line gives up "Reconnecting" for "not answering" after this
 
@@ -43,6 +43,7 @@ export function stalePaths(ev) {
     case "health": return ["/health*", "/status"];
     case "helper": return ["/helpers*", "/health*"];
     case "profile": return ["/profile*", "/record*"];
+    case "sort": return ["/record/sort*"];
     default: return [];
   }
 }

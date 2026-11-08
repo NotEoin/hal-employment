@@ -4,8 +4,9 @@
 
    The tab is part of the route ("record-work"), so a link opens the right one; the old "record-files" opens
    Documents. Each tab has its own "Add" panel (record/sections.js): Overview the CVs, each job and education
-   card its own documents, Projects its ways to add a project, Documents its upload. Overview keeps the
-   older bulk read under "More ways to add" and shows how reading is going; each profile tab lists what Hal
+   card its own documents, Projects its ways to add a project, Documents its upload. Overview has "Sort a big
+   folder for me" (record/sort.js), whose proposals the person accepts, keeps the older bulk read under "More
+   ways to add" and shows how reading is going; each profile tab lists what Hal
    found for the person to check, change or hide; Documents keeps the folder's groups, whose files download
    from any computer (so a laptop reaches the desktop's record), and "Ask your record", whose answer names
    the files it came from. */
@@ -21,6 +22,7 @@ import { AddCard, IngestCard } from "../record/add.js";
 import { KindSection, ConflictsTab } from "../record/items.js";
 import { basicKey } from "../record/fields.js";
 import { SourcesPanel, ProjectsPanel } from "../record/sections.js";
+import { SortCard } from "../record/sort.js";
 // [tab, words, kinds shown in it]
 const TABS = [["overview", "Overview", []], ["work", "Work history", ["job"]], ["education", "Education", ["education"]],
   ["skills", "Skills", ["skill"]], ["projects", "Projects", ["project"]],
@@ -129,6 +131,7 @@ export function Record({ arg }) {
         <${SourcesPanel} uid="rec-cvs" heading="Your CVs" parts=${[["cv", null], ["letter", null]]}
           hint="Add every CV you have; Hal uses the newest as your main one. Cover letters and personal statements only teach Hal how you write."
           empty="No CVs yet." />
+        <${SortCard} />
         <${IngestCard} />
         ${data && data.exists && html`<details class="rec-hidden rec-more"><summary>More ways to add</summary><${AddCard} /></details>`}</div>
       ${profile ? html`<${Summary} profile=${profile} onTab=${setT} />` : html`<p class="sub">Loading</p>`}</div>`}

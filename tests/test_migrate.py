@@ -180,7 +180,7 @@ class OldDatabases(Folder):
                     "VALUES (1, 'project', '{\"name\": \"Tide gauge\"}', 'x', 'x')")
         con.execute("INSERT INTO profile_evidence (item_id, source_rel, found_at) VALUES (1, 'Sources/CV.md', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [28, 29, 30])
+        self.assertEqual(self.run_migrate(con), [28, 29, 30, 31])
         self.assertEqual(con.execute("SELECT star, star_by, orphaned_from FROM profile_items").fetchone(), (0, "", ""))
         self.assertEqual(con.execute("SELECT source_id, place, line FROM profile_evidence").fetchone(),
                          (None, "", None))
@@ -200,7 +200,7 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO record_sources (section, kind, doc_kind, added) VALUES ('coursework', 'upload', "
                     "'essay', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [29, 30])
+        self.assertEqual(self.run_migrate(con), [29, 30, 31])
         self.assertEqual(con.execute("SELECT module, details FROM record_sources").fetchone(), (None, "{}"))
 
     def test_project_sources_get_a_parent_and_revisions_at_version_30(self):
@@ -213,7 +213,7 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO record_sources (id, section, kind, doc_kind, locator, added) "
                     "VALUES (1, 'project', 'account', 'github_account', 'averyq', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [30])
+        self.assertEqual(self.run_migrate(con), [30, 31])
         self.assertEqual(con.execute("SELECT parent_id, meta, what_changed FROM record_sources").fetchone(),
                          (None, "{}", ""))
         con.execute("PRAGMA foreign_keys = ON")
@@ -223,6 +223,27 @@ class OldDatabases(Folder):
         con.execute("DELETE FROM record_sources WHERE id = 1")
         self.assertEqual(con.execute("SELECT count(*) FROM record_sources").fetchone()[0], 0)
         self.assertEqual(con.execute("SELECT count(*) FROM record_source_revisions").fetchone()[0], 0)
+
+    def test_sorts_and_their_proposals_arrive_at_version_31_and_go_together(self):
+        """A record from version 30 keeps its sources; a sort's proposals and what a move set aside go with it."""
+        con = self.open()
+        up_to_30 = migrate.discover()[:30]
+        with mock.patch.object(migrate, "LATEST", 30), mock.patch.object(migrate, "discover", return_value=up_to_30):
+            self.run_migrate(con)
+        con.execute("INSERT INTO record_sources (id, section, kind, doc_kind, added) "
+                    "VALUES (1, 'cv', 'upload', 'cv', 'x')")
+        con.commit()
+        self.assertEqual(self.run_migrate(con), [31])
+        con.execute("PRAGMA foreign_keys = ON")
+        con.execute("INSERT INTO record_sorts (id, kind, created, updated) VALUES (1, 'folder', 'x', 'x')")
+        con.execute("INSERT INTO record_sort_rows (sort_id, path, rel, held, source_id) "
+                    "VALUES (1, '/a', 'a', 'upload', 1)")
+        con.execute("INSERT INTO record_sort_kept_out (sort_id, what, row) VALUES (1, 'evidence', '{}')")
+        self.assertEqual(con.execute("SELECT state, ticked, by FROM record_sort_rows").fetchone(),
+                         ("proposed", 1, "rules"))
+        con.execute("DELETE FROM record_sorts WHERE id = 1")
+        self.assertEqual([con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+                          for t in ("record_sort_rows", "record_sort_kept_out", "record_sources")], [0, 0, 1])
 
     def test_settings_revision_starts_at_zero(self):
         con = self.open()
@@ -235,8 +256,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 31)))
-        self.assertEqual(migrate.LATEST, 30)
+        self.assertEqual(numbers, list(range(1, 32)))
+        self.assertEqual(migrate.LATEST, 31)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

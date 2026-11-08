@@ -88,3 +88,8 @@
   .rec-kv dd { margin-bottom: 6px; }
   .rec-module { grid-template-columns: minmax(0, 1fr) 72px auto; }
 }
+/* "Sort a big folder for me": the review table (record/sort.js) */
+.rec-sort-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.rec-sort-table th { text-align: left; font-weight: 700; padding: 6px; border-bottom: 1px solid var(--line); }
+.rec-sort-table td { vertical-align: top; padding: 6px; border-bottom: 1px solid var(--line); }
+.rec-sort-table select { min-width: 9rem; }

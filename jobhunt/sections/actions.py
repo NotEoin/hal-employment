@@ -37,10 +37,10 @@ def _example(_world) -> dict:
                example=_example)
 def read_sources(ctx, ids: list, allow: list | None = None) -> dict:
     """Reads each source in `ids` (those in `allow` even when they look private); says what each gave."""
-    return _read_all(ctx, ids, {int(i) for i in allow or []})
+    return read_all(ctx, ids, {int(i) for i in allow or []})
 
 
-def _read_all(ctx, ids: list, allowed: set[int]) -> dict:
+def read_all(ctx, ids: list, allowed: set[int]) -> dict:
     """Reads each source in `ids` and the sources found inside them, once each; says what each gave."""
     out = {"read": 0, "waiting": 0, "failed": 0, "kept_out": 0, "facts": 0, "missing": 0}
     todo = list(dict.fromkeys(int(i) for i in ids))   # grows by the sources a read finds inside one
@@ -91,7 +91,7 @@ def refresh_projects(ctx) -> dict:
 
     ctx.step("Checking your projects")
     ids = refresh.changed(ctx.con)
-    out = {**_read_all(ctx, ids, set()), "checked": ctx.con.execute(
+    out = {**read_all(ctx, ids, set()), "checked": ctx.con.execute(
         "SELECT count(*) FROM record_sources WHERE section = ?", (refresh.SECTION,)).fetchone()[0]}
     if not ids:
         ctx.changed("Nothing in your projects changed.")

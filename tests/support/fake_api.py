@@ -338,6 +338,7 @@ MADE_UP_PAGES = {
          "role": "official", "target": "", "target_required": False,
          "doc_kinds": [{"id": "other", "label": "Something else", "held": "upload", "ready": True}]}],
     "/record/sources": [],
+    "/record/sort": {"sorts": [], "cards": {"education": [], "job": []}},
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
                        "not_downloaded_paths": [], "not_mine": 0, "not_mine_paths": [], "errors": [],
