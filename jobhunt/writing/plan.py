@@ -22,6 +22,11 @@ Design decisions, each with its reason:
   card's Role field and team words), never from the reply: the context is what drafts got wrong.
 - Only a "Project" or "Job" line of the Profile block, a CV line or a passage of a card's file is tied to a
   card: a skill line quoting a project says nothing of where the project was done.
+- A skills list (`skills_line`: a Profile "Skill:" line, or a CV line of a label and a list, "AI and ML:
+  PyTorch, NumPy, pandas") is never tied to a card and is marked as one (`Item.skills`): it says what the
+  person knows, never which project used it. A letter said "I used NumPy and pandas to build" a project whose
+  card never names pandas, citing the CV's skills line (2026-11-07); `writing.grounded` holds a tool claimed
+  for a project to that project's own evidence.
 """
 from __future__ import annotations
 
@@ -43,6 +48,12 @@ KIND_LINE = re.compile(r"^\(Kind: ([^)\n]*)\)\s*$")     # the "(Kind: personal p
 CARD_LINE = re.compile(r"^(Project|Job)\b")              # the Profile block lines that are a card
 BY_WORDS = {words: context for context, words in stage.CONTEXT_WORDS.items()}
 CV, PROFILE = "CV", "Profile"
+# A skills list: "Languages: Python, SQL", or any short label and at least `LIST_ITEMS` comma-separated items.
+SKILLS_LABEL = re.compile(r"^\s*(skills?|languages?|tools?|technologies|frameworks?|libraries|software)\b[^:]{0,30}:",
+                          re.I)
+LABELLED_LIST = re.compile(r"^\s*[A-Za-z][\w &/+#.-]{0,40}:\s*[^,.;]{1,40}(?:,[^,.;]{1,40}){2,}\.?\s*$")
+PROFILE_SKILL = re.compile(r"^Skill\b")
+SKILLS_WORDS = "a skills list: what the applicant knows, never which project used it"
 
 
 @dataclass(frozen=True)
@@ -67,6 +78,7 @@ class Item:
     context: str = ""          # `writing.stage.CONTEXTS`, or "" when unknown
     role: str = ""             # the person's part ("built the statistics features; team of 7"), "" when unsaid
     tools: tuple[str, ...] = ()
+    skills: bool = False       # quoted from a skills list (`skills_line`), so tied to no project
 
     def words(self) -> str:
         """The item as a request lists it: its quote, then where it comes from, its context and role."""
@@ -79,7 +91,17 @@ class Item:
             about.append(f"the applicant's part: {self.role}")
         if self.tools:
             about.append(f"tools: {', '.join(self.tools)}")
+        if self.skills:
+            about.append(SKILLS_WORDS)
         return f"{self.id}: \"{self.text}\" ({'; '.join(about)})"
+
+
+def skills_line(label: str, text: str) -> bool:
+    """True when a source is a skills list: a Profile "Skill:" line, a CV line labelled "Skills:",
+    "Languages:", "Tools:" and the like, or a short label followed by a list of at least three items."""
+    if label == PROFILE:
+        return bool(PROFILE_SKILL.match(text))
+    return label == CV and bool(SKILLS_LABEL.match(text) or LABELLED_LIST.match(text))
 
 
 def _card_of(text: str, cards: list[dict]) -> dict | None:
@@ -146,10 +168,11 @@ def checked(reply: dict, found: list[Source]) -> list[Item]:
             log.info("evidence plan: dropped a pick that quotes no source word for word: %r", pick)
             continue
         seen.add(text.lower())
-        card = source.card or {}
+        skills = skills_line(source.label, source.text)
+        card = {} if skills else source.card or {}
         items.append(Item(f"E{len(items) + 1}", text, source.label, card.get("name", ""),
-                          card.get("context", "") or source.context, _role(source.card, source.text),
-                          tuple(card.get("tools", ()))))
+                          card.get("context", "") or source.context, _role(card or None, source.text),
+                          tuple(card.get("tools", ())), skills))
         if len(items) == MAX_ITEMS:
             break
     return items

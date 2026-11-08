@@ -415,7 +415,10 @@ runs: tests use `tests/support/fake_claude/`.
   text kept is the source's own (`plan.quoted`). Each item (`plan.Item`, E1, E2, ...) carries the card its
   source is about (a Project or Job line of the Profile block, a CV line naming one card, a passage of one of
   the card's `files`), the card's context (`profile.contexts.current`, never the reply's) and the person's
-  part (`profile.writing.card_role`: the card's Role field and its team words, `stage.team_words`). The
+  part (`profile.writing.card_role`: the card's Role field and its team words, `stage.team_words`). A pick
+  from a skills list (`plan.skills_line`: a Profile "Skill:" line, a CV line labelled "Skills:",
+  "Languages:", "Tools:" and the like, or a label and a list of three or more) is tied to no card and marked
+  (`Item.skills`), as it says what the person knows, never which project used it. The
   letter's Evidence line names the plan's quotes, else the record passages as before. The pack picks one
   plan for the letter, the message and the answers (with `COMMON_QUESTIONS`); `docs.change` picks one for
   the message and answers.
@@ -431,7 +434,9 @@ runs: tests use `tests/support/fake_claude/`.
   marked draft one sentence at a time against only the items it cites (`pack.grounds` gathers them). With no
   AI first (`grounded.problems`): a sentence about the person (`cites.about_person`: the first person with a
   past tense, or a number neither the employer's words nor the stage line hold) that cites nothing, an id
-  the plan does not hold, a number (figures or words) or a known tool its items lack, degree or own-time
+  the plan does not hold, a number (figures or words) or a known tool its items lack (for a sentence about a
+  project, named or through its items, only that project's own items and card count, and a sentence about a
+  project resting on skills lists alone fails: `grounded._tool_problems`), degree or own-time
   words its cards' contexts disagree with (the rules of `drafts.wrong_context`, through the markers), "I
   built" of a team's card with no word of the team and under `PART_SHARE` of the person's part, and the
   draft-wide checks (`stage.ended_course`, `drafts.misplaced_tools`, `drafts.wrong_context`,

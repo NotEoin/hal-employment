@@ -92,7 +92,8 @@ from your CV, the facts you checked and your own documents, each with where the 
 in it when your files say so. The letter's notes list them under **Evidence**. The letter, the message
 and the answers say which of these facts each sentence rests on (you never see these marks), and Hal
 checks each sentence about you against only the facts it rests on: a number, tool or detail they do not
-give, a project placed somewhere else (your degree instead of your own time), or a team's work written as
+give (a tool you used on a project must be in that project's own facts, as a list of your skills says what
+you know, not where you used it), a project placed somewhere else (your degree instead of your own time), or a team's work written as
 yours alone. Such a sentence is rewritten once; if it is still wrong, Hal takes it out, or lists it under
 **Check before sending** when the draft needs it or the next sentence points back at it ("This project
 ..."). After a sentence is rewritten or taken out, Hal rewrites its paragraph once so it reads well,

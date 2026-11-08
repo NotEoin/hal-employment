@@ -119,6 +119,32 @@ class WithAI(unittest.TestCase):
             self.assertEqual(fake.checks(), [], text)
 
 
+class SkillsList(unittest.TestCase):
+    """A letter said "I used NumPy and pandas to build" a project whose card never names pandas, citing the CV's
+    skills line (2026-11-07)."""
+
+    def setUp(self):
+        tide = {"kind": "project", "name": "Tide gauge", "tools": ["Lua", "NumPy"], "summary": "Logs river levels.",
+                "aliases": [], "context": "personal"}
+        skills = Item("E5", "AI and ML: NumPy, pandas, scikit-learn", "CV", skills=True)
+        self.facts = grounded.Facts({**ITEMS, "E5": skills}, [tide], [*FLAGS["known"], "NumPy", "pandas"],
+                                    FLAGS["allowed"])
+
+    def test_a_tool_claimed_for_a_project_needs_the_projects_own_evidence(self):
+        found = grounded.problems(one("I used NumPy and pandas to build Tide gauge [E2,E5]."), self.facts)
+        self.assertIn(grounded.NOT_PROJECTS.format(tool="pandas", card="Tide gauge"), found)
+        found = grounded.problems(one("My river logger in Lua uses pandas [E2,E5]."), self.facts)
+        self.assertEqual(found, [grounded.NOT_PROJECTS.format(tool="pandas", card="Tide gauge")],
+                         "a project described rather than named, through its item")
+
+    def test_a_skills_list_alone_never_supports_a_sentence_about_a_project(self):
+        found = grounded.problems(one("I built Tide gauge with NumPy [E5]."), self.facts)
+        self.assertEqual(found, [grounded.ONLY_SKILLS.format(card="Tide gauge")])
+
+    def test_a_skills_list_supports_what_you_know(self):
+        self.assertEqual(grounded.problems(one("I have used NumPy and pandas [E5]."), self.facts), [])
+
+
 class Reason(unittest.TestCase):
     def setUp(self):
         self.facts = grounded.Facts(**{**FACTS.__dict__, "motive": ITEMS["E2"]})

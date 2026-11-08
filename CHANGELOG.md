@@ -160,6 +160,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A tool is only given to the project that used it.** A letter said a project was built with pandas
+  because your CV's skills line lists pandas, though the project never used it. A tool you name for a
+  project now has to be in that project's own facts; your skills list can still back "I know pandas".
 - **No repeats across your drafts.** A letter could say the same sentence twice in a row, and one line of
   your CV turned up in the letter, the message and both answers. Hal now rewrites a sentence that says
   again what an earlier one said, in the same draft or an earlier one, once with a fact not used yet, or

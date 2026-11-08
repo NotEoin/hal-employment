@@ -24,6 +24,10 @@ Design decisions, each with its reason:
   caught), and "I built" of a team's card with no word of the team or of the person's part. The checks the
   whole draft had (a finished course spoken of as to come, a tool on the wrong project, a project in the
   wrong place by name, what a module covered) run on each sentence too.
+- A tool claimed for a project needs that project's own evidence (`_tool_problems`): a cited item tied to its
+  card and not a skills list (`plan.Item.skills`), or the card's own names, summary and tools. "I used NumPy
+  and pandas to build" a project passed on the CV's skills line though the project's card never names pandas
+  (2026-11-07). A skills list may still support "I know pandas", which names no project.
 - A number counts in figures or words ("seven" is "7"), so "a team of seven" meets "team of 7".
 - The AI's "unsupported" words are dropped when the cited items or the employer's words hold them: a reply
   quoting what the evidence says is a false alarm. "supported": false with every quoted word dropped is
@@ -81,6 +85,8 @@ ALONE = "says you did {card} alone; it was a team's work{part}"
 NOT_SUPPORTED = "its evidence does not say: {spans}"
 NOT_SUPPORTED_ANY = "its evidence does not say this"
 WRONG_PLACE = "places the work where its evidence does not"
+NOT_PROJECTS = "{tool} is not in the evidence for {card}; a skills list says what you know, not where you used it"
+ONLY_SKILLS = "rests only on a skills list, which says nothing about {card}"
 TOO_MUCH = "gives you more of the work than its evidence does"
 REASON = re.compile(r"\(([^()]*)\)$")
 REPEATS = 'already said as "{sentence}"'   # a sentence repeating an earlier one (`unrepeat`)
@@ -163,6 +169,30 @@ def _alone_problem(text: str, items: list[Item]) -> str:
     return ALONE.format(card=first.card or "it", part=f"; your part: {part}" if part else "")
 
 
+def _projects(text: str, items: list[Item], facts: Facts) -> list[str]:
+    """The cards a sentence is about: those its items are tied to and those it names (`drafts.names_card`)."""
+    named = [c["name"] for c in facts.cards if c["name"].strip() and drafts.names_card(text, c, facts.cards)]
+    return list(dict.fromkeys([*(i.card for i in items if i.card), *named]))
+
+
+def _tool_problems(text: str, items: list[Item], facts: Facts) -> list[str]:
+    """The tools of `facts.known` a sentence names that its evidence does not hold. For a sentence about a
+    project, only that project's own evidence counts: its items that are not a skills list, and its card's
+    names, summary and tools; a skills list alone never supports it."""
+    projects = _projects(text, items, facts)
+    if not projects:
+        held = _evidence_text(items)
+        return [f"{t} is not in its evidence" for t in dict.fromkeys(facts.known)
+                if drafts.names_tool(text, t) and not drafts.names_tool(held, t)]
+    own = [i for i in items if not i.skills and i.card in projects]
+    cards = [c for c in facts.cards if c["name"] in projects]
+    held = _evidence_text(own) + "\n" + "\n".join(" ".join([*drafts.card_names(c), c["summary"], *c["tools"]])
+                                                     for c in cards)
+    out = [ONLY_SKILLS.format(card=projects[0])] if items and all(i.skills for i in items) else []
+    return out + [NOT_PROJECTS.format(tool=t, card=" or ".join(projects)) for t in dict.fromkeys(facts.known)
+                  if drafts.names_tool(text, t) and not drafts.names_tool(held, t)]
+
+
 def cited_items(c: cites.Cited, facts: Facts) -> list[Item]:
     """The items a sentence rests on: those it cites, or for a reason sentence ([M]) that states something
     about the person, the motivation pairing's item."""
@@ -185,8 +215,7 @@ def problems(c: cites.Cited, facts: Facts) -> list[str]:
     if items:
         held = numbers(_evidence_text(items))
         out += [f"the number {n} is not in its evidence" for n in sorted(numbers(text) - held)]
-        out += [f"{t} is not in its evidence" for t in dict.fromkeys(facts.known)
-                if drafts.names_tool(text, t) and not drafts.names_tool(_evidence_text(items), t)]
+        out += _tool_problems(text, items, facts)
         out += [p for p in (_context_problem(text, items), _alone_problem(text, items)) if p]
     if facts.now is not None and stage.ended_course(text, facts.now):
         out.append(f"the course ended in {facts.now.end or 'the past'}")

@@ -48,6 +48,27 @@ class Sources(unittest.TestCase):
         self.assertIsNone(self.by_text("We measured").card)
 
 
+class SkillsLists(unittest.TestCase):
+    """A letter said "I used NumPy and pandas to build" a project whose card never names pandas, on the CV's
+    skills line (2026-11-07)."""
+
+    def test_a_skills_list_is_told_from_a_line_about_one_piece_of_work(self):
+        for label, text in (("CV", "AI and ML: PyTorch, NumPy, pandas, scikit-learn"), ("CV", "Languages: Lua, SQL"),
+                            ("CV", "Tools: Git"), ("Profile", 'Skill: Lua. Shown by: "the Tide gauge logger"')):
+            self.assertTrue(plan.skills_line(label, text), text)
+        for label, text in (("CV", "Project, Ferry planner (Python, Flask): wrote the statistics features"),
+                            ("CV", "Volunteer guide at a made-up heritage centre, 2024 to 2026"),
+                            ("Profile", "Project (personal project): Tide gauge. Logs river levels. Tools: Lua")):
+            self.assertFalse(plan.skills_line(label, text), text)
+
+    def test_a_pick_from_a_skills_list_is_tied_to_no_project_and_says_so(self):
+        found = plan.sources("Tools: Lua, Tide gauge, SQL", "", CARDS)
+        self.assertIs(found[0].card, TIDE, "the line names the card")
+        item = plan.checked({"evidence": [{"source": "S1", "quote": "Lua, Tide gauge, SQL"}]}, found)[0]
+        self.assertEqual((item.card, item.context, item.tools, item.skills), ("", "", (), True))
+        self.assertIn("a skills list: what the applicant knows, never which project used it", item.words())
+
+
 class Picks(unittest.TestCase):
     def setUp(self):
         self.found = plan.sources(FACTS, KEPT, CARDS)
