@@ -622,15 +622,23 @@ runs: tests use `tests/support/fake_claude/`.
   advert's location names none.
 - The fit map (`pack._fit`) also gets every project and job card the person checked
   (`profile.writing.cards`, each with its kind, tools, summary and other names), never ranked or cut like
-  the Profile block. `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that names a
-  card's tool into a partial match citing the card (`project (personal project): Tide gauge (tools: AWS)`).
+  the Profile block. Each reply first loses the model's own reasoning (`pack.without_reasoning`: a sentence of
+  a row's evidence or of a gap matching `pack.REASONING`, "I will ...", "let me", "if strict", "this table";
+  a row left with no evidence is a gap), as "I will mark this as a gap if strict ..." reached a fit table
+  (2026-11-08). `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that
+  names a card's tool into a partial match citing the card (`project (personal project): Tide gauge (tools:
+  AWS)`).
   Last, `pack.checked_fit_tools` reads each part of a row's evidence that names project cards
   (`drafts.evidence_checked`) as `drafts.misplaced_tools` reads a draft: a tool of `known_tools` that none of
   the named cards' own facts, nor a CV line naming the card as `drafts.named_cards` reads it, names
   (`drafts.backed`), or that only a card of a similar name holds (as `drafts.crossed`), is taken out of the
   row (`drafts.without_tools`), and a part left with no tool is dropped. A row that lost evidence is partial
-  at best, and one left with none becomes a gap. Each card of a similar name a row names is followed by its
-  tag (`drafts.tagged`). The letter's Evidence line goes through the same check, and a plan item about such
+  at best, and one left with none becomes a gap. Then `pack.covered_gaps` turns a gap that names a card's
+  tool or a checked skill, or a skill `pack.EQUIVALENTS` knows (CI/CD: GitHub Actions, GitLab CI, Jenkins;
+  graph algorithms: A*, Dijkstra, BFS), into a partial match citing where the record shows it or its
+  equivalent (a card's tools or quotes, the checked skills or the CV): the fit table listed CI/CD and
+  graph algorithms as gaps although the CV lists GitHub Actions and a project uses A* (2026-11-08). Each
+  card of a similar name a row names is followed by its tag (`drafts.tagged`). The letter's Evidence line goes through the same check, and a plan item about such
   a card that does not name it says the card and its tag (`pack._item_note`). Fit rows and the Evidence line
   gave a local assistant its namesake's stack, as a CV line of "Quill Employment" named "Quill" too
   (2026-11-08).
@@ -816,7 +824,10 @@ runs: tests use `tests/support/fake_claude/`.
   placeholders, stock openings and closings, hedges, weak bullet openers, first person in CV lines, bullets
   over 35 words, a letter sentence copied nearly word for word from a whole CV line (`VERBATIM_SHARE`),
   greeting and sign-off pairing ("Dear" and a name with "Yours sincerely", a team or "Sir or Madam" with
-  "Yours faithfully"), numbers no source holds and length limits. An `-ing` tail (L5) counts only when its
+  "Yours faithfully"), numbers no source holds and length limits. A code (`check.CODE`: capitals then
+  digits, such as a module code "CSC2031/23") is no number to check (`check.without_codes`, also in
+  `paragraphs.numbers`), as one person's module code and year were listed in every pack (2026-11-08).
+  An `-ing` tail (L5) counts only when its
   verb is followed by a quality or significance word (`SIGNIFICANCE`) or by "how", "that" or "why", so a
   factual tail (", ensuring each record keeps its own ID") is not flagged. It replaced `pack.CLICHES`; every word that list flagged is still flagged. An L10 hit
   carries its fix (`Hit.fix`), and the flag reads `... : color (write "colour")`.

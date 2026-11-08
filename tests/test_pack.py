@@ -1141,6 +1141,64 @@ class Fit(unittest.TestCase):
         self.assertIn("Gaps to address or accept: Spreadsheets\n", fit)
 
 
+class Reasoning(unittest.TestCase):
+    """A fit table held the model's own reasoning: "I will mark this as a gap if strict ..." (2026-11-08)."""
+
+    def test_reasoning_and_sentences_about_the_table_are_taken_out_of_fit_rows(self):
+        fit = pack.without_reasoning({
+            "matches": [{"requirement": "SQL", "evidence": "Tide gauge stores readings in SQLite. I will mark this "
+                                                          "as partial if strict.", "strength": "partial"},
+                        {"requirement": "Go", "evidence": "Let me check the CV again. This row is unsure.",
+                         "strength": "partial"},
+                        {"requirement": "Writing reports", "evidence": "", "strength": "strong"}],
+            "gaps": ["Kubernetes", "I'll list Spreadsheets here to be strict."]})
+        self.assertEqual(fit["matches"], [
+            {"requirement": "SQL", "evidence": "Tide gauge stores readings in SQLite.", "strength": "partial"},
+            {"requirement": "Writing reports", "evidence": "", "strength": "strong"}])
+        self.assertEqual(fit["gaps"], ["Go", "Kubernetes"])
+
+    def test_a_table_of_the_persons_own_work_is_not_reasoning(self):
+        fit = pack.without_reasoning({"matches": [{"requirement": "SQL", "evidence": "Tide gauge designed the table "
+                                                   "layout of its SQLite store.", "strength": "strong"}], "gaps": []})
+        self.assertEqual(fit["matches"][0]["evidence"], "Tide gauge designed the table layout of its SQLite store.")
+
+
+GULLWING = {"kind": "project (personal project)", "name": "Gullwing", "tools": ["C++"],
+            "quotes": ["Gullwing plans each route with A* search"]}
+
+
+class CoveredGaps(unittest.TestCase):
+    """The fit table listed CI/CD and graph algorithms as gaps although the CV lists GitHub Actions and a project
+    uses A* (2026-11-08)."""
+
+    def test_a_gap_the_record_shows_by_a_common_equivalent_becomes_a_partial_match(self):
+        fit = pack.covered_gaps({"matches": [], "gaps": ["CI/CD pipelines", "Graph algorithms", "Kubernetes"]},
+                                [GULLWING], [], "Skills: Python, GitHub Actions, Lua")
+        self.assertEqual(fit["gaps"], ["Kubernetes"])
+        self.assertEqual(fit["matches"], [
+            {"requirement": "CI/CD pipelines", "evidence": "your CV (GitHub Actions)", "strength": "partial"},
+            {"requirement": "Graph algorithms", "evidence": "project (personal project): Gullwing (A*)",
+             "strength": "partial"}])
+
+    def test_a_gap_naming_a_checked_skill_is_never_a_gap(self):
+        fit = pack.covered_gaps({"matches": [], "gaps": ["Experience with Terraform"]}, [], ["Terraform"], "")
+        self.assertEqual((fit["gaps"], fit["matches"][0]["evidence"]), ([], "your skills (Terraform)"))
+
+    def test_a_pack_fit_table_shows_the_equivalent_instead_of_the_gap(self):
+        writer = FakeWriter()
+        plain = writer.reply
+        writer.reply = lambda system, user: ({**plain(system, user), "gaps": ["CI/CD", "I will call Spreadsheets a gap "
+                                                                               "if strict."]}
+                                             if prompt_id(system) == "fit" else plain(system, user))
+        with as_applicant(people.TECHNICAL, writer) as a, \
+                mock.patch.object(cv, "facts_text", lambda: f"{FACTS['technical_grad']} Tools: GitHub Actions."):
+            md = pack.build(a.con, add_job(a.con, "technical_grad")["id"], use_web=False).read_text()
+        fit = section(md, "Fit")
+        self.assertIn("| CI/CD | your CV (GitHub Actions) | partial |", fit)
+        self.assertIn("Gaps to address or accept: none found", fit)
+        self.assertNotIn("if strict", md)
+
+
 class ToolsWriter(FakeWriter):
     """A fake writer whose fit map gives two projects tools neither card lists, as a real one did (2026-11-07)."""
 

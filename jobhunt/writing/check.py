@@ -10,7 +10,9 @@ Design decisions, each with its reason:
   flagged only when two or more sit in one paragraph (L2), and evaluative words only by density (L3),
   since each of them is sometimes simply the right word.
 - Numbers are checked with `pack.unsupported_numbers`' rule, kept here as `unsupported_numbers`, so a letter,
-  a CV suggestion and a form answer agree on what counts as an invented number.
+  a CV suggestion and a form answer agree on what counts as an invented number. A code (`CODE`: capitals with
+  digits, such as a module code "CSC2031" and its year "CSC2031/23") is a name, not a number
+  (`without_codes`): "number not in the CV: 2031/23" was listed in every pack of one person (2026-11-08).
 - A letter's greeting and sign-off are checked only when the text holds both; the pack adds them around
   the model's body itself.
 - A word in the other spelling (L10) comes with the form to write instead (`Hit.fix`, from
@@ -128,6 +130,8 @@ ADJECTIVES = frozenset("""
 TRIAD = re.compile(r"\b([a-z-]+),\s+([a-z-]+),?\s+and\s+([a-z-]+)\b", re.I)
 SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'])")
 NUMBER = re.compile(r"\d[\d,.]*")
+# A code: two or more capitals, maybe more letters and a hyphen, then two or more digits, maybe a "/year".
+CODE = re.compile(r"\b[A-Z]{2,}[A-Za-z]*-?\d{2,}\w*(?:/\d{2,4})?\b")
 
 
 @dataclass(frozen=True)
@@ -154,11 +158,16 @@ class Hit:
         return f"{rules.BY_ID[self.rule].name}: {self.quote}" + (f' (write "{self.fix}")' if self.fix else "")
 
 
+def without_codes(text: str) -> str:
+    """`text` with each code (`CODE`, a module code such as "CSC2031/23") taken out, as its digits are no number."""
+    return CODE.sub(" ", text or "")
+
+
 def unsupported_numbers(draft: str, *sources: str) -> list[str]:
-    """Returns numbers in a draft that appear in none of the sources."""
+    """Returns numbers in a draft that appear in none of the sources; a code's digits are no number."""
     # A number ending a sentence ("2023-2024.") is collected with its full stop; it is the same number.
-    known = {n.rstrip(".,") for n in NUMBER.findall(" ".join(sources))}
-    return sorted({n for n in NUMBER.findall(draft) if n.rstrip(".,") not in known and len(n) > 1})
+    known = {n.rstrip(".,") for n in NUMBER.findall(without_codes(" ".join(sources)))}
+    return sorted({n for n in NUMBER.findall(without_codes(draft)) if n.rstrip(".,") not in known and len(n) > 1})
 
 
 def sentences(text: str) -> list[str]:

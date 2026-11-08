@@ -287,8 +287,9 @@ def _called(story: Story) -> str:
 
 
 def numbers(text: str) -> set[str]:
-    """The numbers of a text, in figures, with words read as figures ("seven" is "7")."""
-    found = (m.group(0).lower().rstrip(".,") for m in NUMBER.finditer(text or ""))
+    """The numbers of a text, in figures, with words read as figures ("seven" is "7"); a code's digits
+    (`writing.check.without_codes`) are no number."""
+    found = (m.group(0).lower().rstrip(".,") for m in NUMBER.finditer(writing_check.without_codes(text)))
     return {WORD_NUMBERS.get(n, n).replace(",", "") for n in found}
 
 

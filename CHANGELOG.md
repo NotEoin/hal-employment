@@ -210,6 +210,11 @@ What changed in each version, in plain words.
   still reads, or whole and listed under **Check before sending**. When a paragraph is left out, the letter
   tells your next best piece of work instead, and a letter under half your length setting tries more of
   your work.
+- **A cleaner fit table.** The fit table held the AI's own thinking ("I will mark this as a gap if strict
+  ..."); such sentences are now taken out. A gap such as CI/CD or graph algorithms is no longer listed when
+  your record shows it or a common equivalent (GitHub Actions, GitLab CI or Jenkins for CI/CD; A*,
+  Dijkstra or BFS for graph algorithms); the table cites where instead. A module code with its year, such
+  as CSC2031/23, is no longer listed as a number your CV does not hold.
 - **Answers and messages say which project.** Form answers and messages to the person hiring began "I
   wrote a 113-test suite ..." and named the project later, or never. Like a letter paragraph, each now names
   its project or job in its first sentence, and is written once more when it does not.

@@ -55,6 +55,23 @@ class FalseAlarms(unittest.TestCase):
         self.judged("cv_claim", lambda text: not drafts.stated_in(text, FLAGS["cv"]))
 
 
+class Codes(unittest.TestCase):
+    """"number not in the CV: 2031/23" was listed in every pack of one person: a module code and its year
+    (2026-11-08)."""
+
+    def test_a_module_code_and_its_year_are_never_numbers_to_check(self):
+        for said in ("I took CSC2031/23 in my second year.", "CSC2031 covered databases.", "COMP-1001 taught me C."):
+            self.assertEqual(check.unsupported_numbers(said, "Software Engineering 70"), [], said)
+        self.assertEqual(check.unsupported_numbers("CSC2031 had 40 labs.", "Software Engineering 70"), ["40"])
+        self.assertEqual(check.unsupported_numbers("I scored 2031 points.", "Software Engineering 70"), ["2031"],
+                         "a number on its own is still checked")
+
+    def test_a_paragraphs_numbers_leave_codes_out_too(self):
+        from jobhunt.writing import paragraphs
+
+        self.assertEqual(paragraphs.numbers("CSC2031/23 gave me 12 labs."), {"12"})
+
+
 class Checker(unittest.TestCase):
     def test_a_plain_specific_letter_passes(self):
         hits = check.check(PLAIN_LETTER, "letter", sources=("",), spelling="en-GB", target_words=120)

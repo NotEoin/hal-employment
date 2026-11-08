@@ -253,14 +253,15 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
     shown = profile_writing.cards_block(cards)
 
     def ask(requirements: list[str]) -> dict:
-        return with_card_tools(llm.chat_json(
+        return with_card_tools(without_reasoning(llm.chat_json(
             prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
             + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
-            + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept), role="main"), cards)
+            + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept), role="main")), cards)
 
     fit = complete_fit(ask(_requirements(analysis)), analysis.get("must_have") or [], ask)
     fit = consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
     fit = checked_fit_tools(fit, cards, known_tools(cards), facts)
+    fit = covered_gaps(fit, cards, profile_writing.skill_names(), facts)
     return {**fit, "gaps": repeats.unique_gaps(fit.get("gaps") or [])}
 
 
@@ -370,6 +371,69 @@ def with_card_tools(fit: dict, cards: list[dict]) -> dict:
         found = card_for(str(gap))
         if found:
             matches.append({"requirement": str(gap), "evidence": found, "strength": "partial"})
+        else:
+            gaps.append(gap)
+    return {**fit, "matches": matches, "gaps": gaps}
+
+
+# The model's own reasoning or a sentence about the table, never a fact of the person's: "I will mark this as a
+# gap if strict ..." reached a fit table (2026-11-08).
+REASONING = re.compile(r"\b(?:I(?:'ll| will| would| shall| am going to| need to| think)|let me|let's|if (?:being )?"
+                       r"strict(?:ly)?|to be strict|this (?:table|row|column)|the fit (?:map|table))\b", re.I)
+
+
+def _unreasoned(text: str) -> str:
+    """`text` without its sentences of the model's own reasoning (`REASONING`)."""
+    return " ".join(s for s in writing_check.sentences(text) if not REASONING.search(s))
+
+
+def without_reasoning(fit: dict) -> dict:
+    """The fit map with the model's reasoning taken out of each row's evidence and each gap; a row left with no
+    evidence is a gap, and a gap left with no words is gone."""
+    matches, gaps = [], []
+    for m in (dict(m) for m in fit.get("matches") or [] if isinstance(m, dict)):
+        said = str(m.get("evidence") or "")
+        kept = _unreasoned(said)
+        if kept or not said.strip():
+            matches.append({**m, "evidence": kept} if said.strip() else m)
+        else:
+            gaps.append(str(m.get("requirement") or ""))
+    gaps += [g for g in (_unreasoned(str(gap)) for gap in fit.get("gaps") or []) if g]
+    return {**fit, "matches": matches, "gaps": gaps}
+
+
+# What a fit gap may call a skill, with the tools and methods that show it (2026-11-08): the fit table listed
+# CI/CD and graph algorithms as gaps although the CV lists GitHub Actions and a project uses A*.
+EQUIVALENTS = (
+    (("CI/CD", "CI / CD", "continuous integration", "continuous delivery", "continuous deployment"),
+     ("GitHub Actions", "GitLab CI", "Jenkins")),
+    (("graph algorithms", "graph algorithm", "graph search"), ("A*", "Dijkstra", "BFS", "breadth-first search")),
+)
+
+
+def _gap_terms(gap: str, named: list[str]) -> list[str]:
+    """The skills a gap names: each of `named` (a card's tool or a checked skill) it names, and for a skill
+    `EQUIVALENTS` knows, its names and the tools and methods that show it."""
+    out = [t for t in named if t.strip() and drafts.names_tool(gap, t)]
+    for names, shown_by in EQUIVALENTS:
+        if any(drafts.names_tool(gap, n) for n in names):
+            out += [*names, *shown_by]
+    return list(dict.fromkeys(out))
+
+
+def covered_gaps(fit: dict, cards: list[dict], skills: list[str], facts: str) -> dict:
+    """The fit map with each gap naming a skill the person's record shows made a partial match citing where:
+    a card's tools or quotes, a checked skill, or the CV (`facts`), for the skill or one that shows it
+    (`EQUIVALENTS`)."""
+    places = [(f"{c['kind']}: {c['name']}", "\n".join([*c.get("tools", ()), *c.get("quotes", ())])) for c in cards]
+    places += [("your skills", "\n".join(skills)), ("your CV", facts)]
+    named = [*(t for c in cards for t in c.get("tools", ())), *skills]
+    matches, gaps = list(fit.get("matches") or []), []
+    for gap in fit.get("gaps") or []:
+        found = next(((where, t) for t in _gap_terms(str(gap), named) for where, text in places
+                      if drafts.names_tool(text, t)), None)
+        if found:
+            matches.append({"requirement": str(gap), "evidence": f"{found[0]} ({found[1]})", "strength": "partial"})
         else:
             gaps.append(gap)
     return {**fit, "matches": matches, "gaps": gaps}
