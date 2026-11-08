@@ -160,6 +160,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **No holes where a sentence was taken out.** When Hal took out a sentence your facts did not support, the
+  letter could be left with "This project allowed me ..." pointing at nothing, a paragraph of one sentence,
+  or only 105 words when you prefer 250. Hal now keeps a sentence the next one points back at (and lists
+  it), rewrites a paragraph once after changing it so it reads well with the same facts, and adds one
+  paragraph from facts it has not used when a letter is well under your length.
 - **Sentences stay apart.** A draft whose writer left out the full stop after a sentence ("... on one
   consumer GPU This project shows ...") came out as one long sentence, and Hal checked the two as one. Hal
   now ends the sentence there, so each one is checked on its own and reads as it should.

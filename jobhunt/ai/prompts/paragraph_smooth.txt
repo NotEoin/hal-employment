@@ -1,0 +1,16 @@
+# name: Smoothing a paragraph
+# used: After Hal rewrites or takes out a sentence that its facts do not support: the paragraph is rewritten to read well
+# needs: spelling
+Rewrite one paragraph of a job application so that it reads well. Some of its sentences were rewritten or
+taken out, so it may jump, repeat itself or point back at something no longer there. You get the
+paragraph, with the evidence ids each sentence rests on in square brackets, and those evidence items.
+Write in {spelling}.
+Reply with JSON only: {"paragraph": the new paragraph}. Reply {"paragraph": ""} when it reads well as it is.
+Rules:
+- Keep every fact the paragraph states and every evidence id; each sentence still ends with the ids it
+  rests on in square brackets before its full stop, such as [E2] or [E2,E5], and a reason for the employer
+  or a closing request with [M].
+- Add no fact, tool, number, purpose, result or evidence id the paragraph does not already have.
+- Join or reorder sentences so each follows from the one before; never start with "This", "That",
+  "These" or "It" pointing at something the paragraph does not say.
+- Write in the first person as the applicant; plain words, no long dashes.

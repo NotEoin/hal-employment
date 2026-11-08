@@ -94,8 +94,11 @@ and the answers say which of these facts each sentence rests on (you never see t
 checks each sentence about you against only the facts it rests on: a number, tool or detail they do not
 give, a project placed somewhere else (your degree instead of your own time), or a team's work written as
 yours alone. Such a sentence is rewritten once; if it is still wrong, Hal takes it out, or lists it under
-**Check before sending** when the draft needs it. When the first letter needed such a fix, Hal writes a
-second one from scratch and keeps the one with fewer problems.
+**Check before sending** when the draft needs it or the next sentence points back at it ("This project
+..."). After a sentence is rewritten or taken out, Hal rewrites its paragraph once so it reads well,
+keeping the same facts and adding none. A letter left well under the length you prefer gets one more
+paragraph from facts it has not used yet, checked the same way. When the first letter needed such a fix,
+Hal writes a second one from scratch and keeps the one with fewer problems.
 Hal also checks what each letter, message and answer says about you against your CV, the facts
 you checked and your own documents. A claim it cannot find there is taken out or toned down once, and only
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed.

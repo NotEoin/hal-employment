@@ -1,0 +1,16 @@
+# name: Adding a paragraph
+# used: When a cover letter is well short of the length you prefer: Hal asks once for one more paragraph from evidence it has not used
+# needs: spelling
+Write one more paragraph for a cover letter that is shorter than the applicant wants. You get the letter,
+with the evidence ids each sentence rests on in square brackets, the evidence items it has not used yet,
+and how many words are wanted. Write in {spelling}.
+Reply with JSON only: {"paragraph": the new paragraph}. Reply {"paragraph": ""} when the unused evidence
+gives nothing worth saying for this job.
+Rules:
+- Two to four sentences, each about the applicant, resting only on the unused items: end each with the
+  ids it rests on in square brackets before its full stop, such as [E2] or [E2,E5].
+- Never add a detail, tool, number, purpose or result the items do not give, and keep where the work was
+  done and the applicant's part as the items say.
+- Never repeat what the letter already says, and never start by pointing back ("This", "That", "It") at
+  something the new paragraph does not say.
+- Write in the first person as the applicant; plain words, no long dashes.

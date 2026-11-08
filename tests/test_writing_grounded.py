@@ -27,20 +27,26 @@ def one(text: str) -> cites.Cited:
 
 
 class FakeChecker:
-    """Answers the sentence check with `replies` by sentence, else as fine, and the fix with `fixes` in turn."""
+    """Answers the sentence check with `replies` by sentence, else as fine, the fix with `fixes` in turn, and the
+    paragraph smoothing and adding with `paragraphs` in turn."""
 
-    def __init__(self, replies: dict | None = None, fixes: list[str] = ()):
-        self.replies, self.fixes, self.asked = replies or {}, list(fixes), []
+    def __init__(self, replies: dict | None = None, fixes: list[str] = (), paragraphs: list[str] = ()):
+        self.replies, self.fixes, self.paragraphs, self.asked = replies or {}, list(fixes), list(paragraphs), []
 
     def chat_json(self, system: str, user: str, **kw) -> dict:
         self.asked.append((system.split()[0:3], user))
         if system.startswith("Rewrite one sentence"):
             return {"sentence": self.fixes.pop(0) if self.fixes else ""}
+        if system.startswith(("Rewrite one paragraph", "Write one more paragraph")):
+            return {"paragraph": self.paragraphs.pop(0) if self.paragraphs else ""}
         said = user.split("\n", 1)[0].removeprefix("Sentence: ")
         return self.replies.get(said, FINE)
 
     def checks(self) -> list[str]:
         return [u for s, u in self.asked if s == ["Check", "one", "sentence"]]
+
+    def paragraph_calls(self) -> list[str]:
+        return [u for s, u in self.asked if s in (["Rewrite", "one", "paragraph"], ["Write", "one", "more"])]
 
 
 class NoAI(unittest.TestCase):
@@ -136,13 +142,18 @@ LETTER = ("I wrote the statistics features of Ferry planner [E1]. I scored 75 in
           "logger records river levels every ten minutes [E2].\n\nI would welcome a call [M].")
 
 
-class Ground(unittest.TestCase):
-    def ground(self, text: str, fixes: list[str], essential=grounded.only_in_paragraph) -> grounded.Grounded:
-        fake = FakeChecker(fixes=fixes)
+class Grounding(unittest.TestCase):
+    """Runs `grounded.ground` with a fake checker kept as `self.fake`."""
+
+    def ground(self, text: str, fixes: list[str], essential=grounded.only_in_paragraph,
+               paragraphs: list[str] = ()) -> grounded.Grounded:
+        fake = FakeChecker(fixes=fixes, paragraphs=paragraphs)
         with mock.patch.object(llm, "chat_json", fake.chat_json):
             self.fake = fake
             return grounded.ground(text, FACTS, essential)
 
+
+class Ground(Grounding):
     def test_a_failing_sentence_rewritten_to_fit_its_evidence_is_kept(self):
         done = self.ground(LETTER, ["I scored 72 in the Databases module [E3]."])
         self.assertIn("I scored 72 in the Databases module [E3].", done.text)
@@ -168,6 +179,73 @@ class Ground(unittest.TestCase):
         done = self.ground(answer, [], grounded.first_of_answer)
         self.assertEqual(len(done.failed), 1)
         self.assertEqual(done.text, answer)
+
+
+class Smooth(Grounding):
+    """Sentences taken out left "This project allowed me ...", one-sentence paragraphs and fragments in 15
+    graded packs (2026-11-07): a paragraph that changed is rewritten once to read well, and checked again."""
+
+    def test_a_sentence_the_next_one_points_back_at_is_kept_and_listed_not_cut(self):
+        text = ("I scored 75 in the Databases module [E3]. This module taught me to plan queries [E3]. My logger "
+                "records river levels every ten minutes [E2].\n\nI would welcome a call [M].")
+        done = self.ground(text, [])
+        self.assertIn("I scored 75 in the Databases module [E3].", done.text)
+        self.assertEqual((len(done.failed), done.removed), (1, 0))
+        self.assertEqual(self.fake.paragraph_calls(), [], "a paragraph keeping a listed sentence is not smoothed")
+
+    def test_a_paragraph_that_lost_a_sentence_is_smoothed_once_keeping_its_evidence(self):
+        smoothed = ("I wrote the statistics features of Ferry planner [E1], and in my own time my logger records "
+                    "river levels every ten minutes [E2].")
+        done = self.ground(LETTER, ["I scored 80 in the Databases module [E3]."], paragraphs=[smoothed])
+        self.assertEqual(done.text, f"{smoothed}\n\nI would welcome a call [M].")
+        self.assertEqual((done.removed, done.smoothed), (1, 1))
+        asked = self.fake.paragraph_calls()
+        self.assertEqual(len(asked), 1, "one call for the one paragraph that changed")
+        self.assertIn("Paragraph:\nI wrote the statistics features of Ferry planner [E1]. My logger", asked[0])
+        self.assertIn('E2: "a sensor logger in Lua', asked[0])
+
+    def test_a_smoothing_that_changes_the_evidence_or_adds_a_fact_is_refused(self):
+        for smoothed in ("I wrote the statistics features of Ferry planner and a logger [E1].",
+                         "I wrote the statistics features of Ferry planner [E1], and my logger records river "
+                         "levels every five minutes [E2]."):
+            done = self.ground(LETTER, ["I scored 80 in the Databases module [E3]."], paragraphs=[smoothed])
+            self.assertEqual(done.text, "I wrote the statistics features of Ferry planner [E1]. My logger records "
+                                        "river levels every ten minutes [E2].\n\nI would welcome a call [M].")
+            self.assertEqual(done.smoothed, 0)
+
+
+SHORT = "I wrote the statistics features of Ferry planner [E1].\n\nI would welcome a call [M]."
+
+
+class Lengthen(unittest.TestCase):
+    """Letters were 105 to 216 words against a preferred 250 once sentences were taken out (2026-11-07)."""
+
+    def lengthen(self, text: str, words: int, paragraphs: list[str]) -> tuple[grounded.Grounded, FakeChecker]:
+        fake = FakeChecker(paragraphs=paragraphs)
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            return grounded.lengthen(grounded.Grounded(text), FACTS, words, grounded.only_in_paragraph), fake
+
+    def test_a_short_letter_gets_one_paragraph_from_unused_evidence_before_its_close(self):
+        added = "I built a sensor logger in Lua in my own time [E2]. I scored 72 in the Databases module [E3]."
+        done, fake = self.lengthen(SHORT, 250, [added])
+        self.assertEqual(done.text, f"I wrote the statistics features of Ferry planner [E1].\n\n{added}\n\n"
+                                    "I would welcome a call [M].")
+        self.assertTrue(done.added)
+        asked = fake.paragraph_calls()[0]
+        self.assertIn("Unused evidence:\nE2:", asked)
+        self.assertNotIn("E1:", asked, "only the evidence the letter does not cite")
+        self.assertIn("the applicant wants about 250", asked)
+
+    def test_the_added_paragraph_is_checked_like_any_other(self):
+        added = "I built a sensor logger in Lua in my own time [E2]. I scored 99 in the Databases module [E3]."
+        done, _ = self.lengthen(SHORT, 250, [added])
+        self.assertIn("I built a sensor logger in Lua in my own time [E2].\n\nI would welcome", done.text)
+        self.assertNotIn("99", done.text)
+        self.assertEqual(done.removed, 1)
+
+    def test_a_letter_near_its_length_is_left_alone(self):
+        done, fake = self.lengthen(SHORT, 10, ["I built a sensor logger in Lua in my own time [E2]."])
+        self.assertEqual((done.text, done.added, fake.asked), (SHORT, False, []))
 
 
 if __name__ == "__main__":

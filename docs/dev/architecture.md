@@ -441,8 +441,15 @@ runs: tests use `tests/support/fake_claude/`.
   words hold are dropped, and a reply that is not JSON fails nothing. One sentence per call, never a batch:
   a batch would put other sentences' evidence beside it, as the single verify call did. A failing sentence
   is rewritten once with its own items (prompt `sentence_fix`, `grounded.fix`), checked again, then taken out
-  unless the draft needs it (`only_in_paragraph`, an answer's `first_of_answer`), when it is kept and
-  listed. "Check before sending" lists those, the eligibility lines, cut-offs and the checks with no AI on
+  unless the draft needs it (`only_in_paragraph`, an answer's `first_of_answer`) or its paragraph does not
+  read without it (`flow.reads_without`: the next sentence points back at it, "This project", "It"), when it
+  is kept and listed. A paragraph that lost or changed a sentence, and keeps none that is listed, is
+  rewritten once from its kept sentences (`grounded.smooth`, prompt `paragraph_smooth`); the rewrite is kept
+  only when it cites the same ids and every sentence passes the checks with no AI (`grounded.holds`). A
+  letter then under `flow.LENGTH_FLOOR` (0.8) of `cvdocs.letter_words` gets one paragraph from the plan
+  items it does not cite (`grounded.lengthen`, prompt `paragraph_add`, through `pack.settle`'s `words`),
+  checked sentence by sentence and put before its last paragraph. Cut sentences had left "This project
+  allowed me ..." and letters of 105 to 216 words against 250 (2026-11-07). "Check before sending" lists those, the eligibility lines, cut-offs and the checks with no AI on
   style; the verify call is not made for a marked draft. `tests/fixtures/grounded_flags.json` holds
   sentences of each kind a local model wrote, and `tests/test_writing_grounded.py` requires each judged
   right.

@@ -4,7 +4,8 @@
 evidence plan's items it cites; `verdict(c, facts)` asks the AI about that sentence and those items alone
 (prompt `sentence_check`); `check(c, facts)` is both. `ground(draft, facts, essential)` checks every sentence
 of a draft, rewrites each that fails once (prompt `sentence_fix`), checks the rewrite, and takes out a
-sentence still failing unless the draft needs it, when it is listed instead.
+sentence still failing unless the draft needs it, when it is listed instead; a paragraph that changed is
+smoothed once (`smooth`). `lengthen(done, facts, words, essential)` adds a paragraph to a short letter.
 
 Design decisions, each with its reason:
 
@@ -28,7 +29,18 @@ Design decisions, each with its reason:
   pairing's item (`writing.motive`), and is checked against it as if it cited it.
 - A failing sentence is rewritten once with its own items (or the whole plan when it cited none), then
   checked again. One still failing is taken out unless the draft needs it (`essential`): a paragraph's only
-  sentence, or an answer's first, which answers the question. A needed one is kept and listed.
+  sentence, or an answer's first, which answers the question, or the paragraph does not read without it (the
+  next sentence points back at it, `flow.reads_without`). A needed one is kept and listed.
+- Rewrite, then smooth, never just delete: sentences taken out left "This project allowed me ...", one-sentence
+  paragraphs and fragments in 15 graded packs, which graders marked down more than the claims the checks
+  caught (2026-11-07). A paragraph that lost or changed a sentence is rewritten once from its kept sentences
+  (prompt `paragraph_smooth`), keeping its evidence ids and adding none, and the rewrite is kept only when it
+  cites the same ids and every sentence passes the checks with no AI (`holds`); else the paragraph stays as
+  the sentence checks left it. A paragraph keeping a sentence that is listed is not smoothed, so the listed
+  words stay the ones the person reads.
+- A letter left under `flow.LENGTH_FLOOR` of the person's preferred length gets one paragraph more from the
+  plan items it does not cite (`lengthen`, prompt `paragraph_add`), checked sentence by sentence like any
+  other; letters were 105 to 216 words against a preferred 250 (2026-11-07).
 """
 from __future__ import annotations
 
@@ -40,12 +52,13 @@ from dataclasses import dataclass, field
 from jobhunt import llm
 from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import cites, drafts, spelling, stage, taught
+from jobhunt.writing import cites, drafts, flow, spelling, stage, taught
 from jobhunt.writing.plan import Item
 
 log = logging.getLogger(__name__)
 
 CHECK_PROMPT, FIX_PROMPT = "sentence_check", "sentence_fix"
+SMOOTH_PROMPT, ADD_PROMPT = "paragraph_smooth", "paragraph_add"
 WORD_NUMBERS = {w: str(n) for n, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve "
                                                 "thirteen fourteen fifteen sixteen seventeen eighteen nineteen "
                                                 "twenty".split())}
@@ -94,6 +107,8 @@ class Grounded:
     rewrites: int = 0
     removed: int = 0
     marked: bool = True        # False for a draft with no markers, checked whole instead
+    smoothed: int = 0          # paragraphs rewritten to read well after a sentence was rewritten or cut
+    added: bool = False        # a paragraph was added to a short letter (`lengthen`)
 
     def key(self) -> tuple[bool, int, int]:
         """How a draft ranks against another of the same document, lowest best: marked first, then fewer
@@ -270,26 +285,96 @@ def fix(c: cites.Cited, found: list[str], text: str, facts: Facts) -> str:
     return said
 
 
-def ground(draft: str, facts: Facts, essential: Essential) -> Grounded:
-    """`draft` with each sentence checked against its own evidence (`check`): a failing one is rewritten once
-    (`fix`) and checked again, then taken out, or kept and listed when `essential(text, sentence)` says the
-    draft needs it."""
-    out = Grounded(cites.normalise(draft))
-    for c in cites.cited(out.text):
+def _ids(text: str) -> set[str]:
+    return {i for c in cites.cited(text) for i in c.ids}
+
+
+def _ask_paragraph(prompt_id: str, request: str, facts: Facts) -> str:
+    """One paragraph from the AI (`{"paragraph": ...}`), undashed, respelt and with its markers normalised; ""
+    when the reply gives none."""
+    reply = llm.chat_json(prompts.text(prompt_id, spelling=facts.values.get("spelling", "")), request, role="writer")
+    said = str(reply.get("paragraph") or "").strip() if isinstance(reply, dict) else ""
+    return cites.normalise(spelling.respell(llm.undash(said), facts.values.get("spelling_code"))) if said else ""
+
+
+def holds(paragraph: str, facts: Facts) -> list[str]:
+    """What is wrong with a paragraph, with no AI: each sentence's `problems`; [] when nothing is."""
+    return [p for c in cites.cited(paragraph) for p in problems(c, facts)]
+
+
+def smooth(paragraph: str, facts: Facts) -> str:
+    """`paragraph` rewritten once by the AI (prompt `paragraph_smooth`) to read well from its kept sentences, or
+    as it was when the reply changes its evidence ids or a sentence fails the checks with no AI (`holds`)."""
+    ids = dict.fromkeys(i for c in cites.cited(paragraph) for i in c.ids)
+    items = [facts.items[i] for i in ids if i in facts.items]
+    request = f"Paragraph:\n{paragraph}\n\nEvidence:\n" + ("\n".join(i.words() for i in items) or "none")
+    said = _ask_paragraph(SMOOTH_PROMPT, request, facts)
+    if not said or said == paragraph:
+        return paragraph
+    if _ids(said) != _ids(paragraph) or holds(said, facts):
+        log.info("paragraph smoothing: kept the paragraph; the rewrite changed its evidence or failed a check: %r",
+                 said)
+        return paragraph
+    return said
+
+
+def _ground_paragraph(paras: list[str], n: int, facts: Facts, essential: Essential, out: Grounded) -> str:
+    """Paragraph `n` of `paras` with each sentence checked (see `ground`), smoothed once when a sentence was
+    rewritten or taken out and none is kept failing."""
+    text, changed, failing = paras[n], False, False
+    for c in cites.cited(paras[n]):
         found = check(c, facts)
         if not found:
             continue
-        new = fix(c, found, out.text, facts)
+        whole = "\n\n".join([*paras[:n], text, *paras[n + 1:]])
+        new = fix(c, found, whole, facts)
         out.rewrites += 1
-        again = [p for n in cites.cited(new) for p in check(n, facts)] if new else found
+        again = [p for m in cites.cited(new) for p in check(m, facts)] if new else found
         if new and not again:
-            out.text = replace(out.text, c.raw, new)
-        elif not essential(out.text, c.raw):
-            out.text = replace(out.text, c.raw, "")
+            text, changed = replace(text, c.raw, new), True
+        elif not essential(whole, c.raw) and flow.reads_without(text, c.raw):
+            text, changed = replace(text, c.raw, ""), True
             out.removed += 1
         else:
             kept = new or c.raw
-            out.text = replace(out.text, c.raw, kept)
+            text, failing = replace(text, c.raw, kept), True
             out.failed.append(f"{cites.strip(kept)} ({'; '.join(again)})")
         log.info("sentence check: %r failed (%s); now %r", c.text, "; ".join(found), new)
+    if changed and not failing and text:
+        smoothed = smooth(text, facts)
+        out.smoothed += smoothed != text
+        text = smoothed
+    return text
+
+
+def ground(draft: str, facts: Facts, essential: Essential) -> Grounded:
+    """`draft` with each sentence checked against its own evidence (`check`): a failing one is rewritten once
+    (`fix`) and checked again, then taken out when `essential(text, sentence)` says the draft does not need it
+    and its paragraph reads without it (`flow.reads_without`), else kept and listed. A paragraph that lost or
+    changed a sentence is smoothed once (`smooth`)."""
+    paras = flow.paragraphs(cites.normalise(draft))
+    out = Grounded("")
+    for n in range(len(paras)):
+        paras[n] = _ground_paragraph(paras, n, facts, essential, out)
+    out.text = "\n\n".join(p for p in paras if p)
     return out
+
+
+def lengthen(done: Grounded, facts: Facts, words: int | None, essential: Essential) -> Grounded:
+    """A letter under `flow.LENGTH_FLOOR` of the preferred length `words` with one paragraph added from the plan
+    items it does not cite (prompt `paragraph_add`), checked as `ground` checks any paragraph and put before
+    its last paragraph; the letter as it was when it is long enough, nothing is unused or nothing holds."""
+    unused = [i for i in facts.items.values() if i.id not in _ids(done.text)]
+    if not (done.marked and unused and flow.short(done.text, words)):
+        return done
+    request = (f"The letter:\n{done.text}\n\nUnused evidence:\n" + "\n".join(i.words() for i in unused)
+               + f"\n\nThe letter has {flow.word_count(done.text)} words; the applicant wants about {words}.")
+    said = _ask_paragraph(ADD_PROMPT, request, facts)
+    added = ground(said, facts, essential) if said else None
+    if added is None or not cites.strip(added.text).strip():
+        return done
+    paras = flow.paragraphs(done.text)
+    at = len(paras) - 1 if len(paras) > 1 else len(paras)
+    paras[at:at] = flow.paragraphs(added.text)
+    return Grounded("\n\n".join(paras), done.failed + added.failed, done.rewrites + added.rewrites,
+                    done.removed + added.removed, smoothed=done.smoothed + added.smoothed, added=True)

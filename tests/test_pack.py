@@ -58,7 +58,8 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "answers": "Answer these application questions", "verify": "Check drafts written",
     "prep": "Prepare ", "contacts_pick": "You choose who", "plan": "Choose the evidence",
     "sentence_check": "Check one sentence", "sentence_fix": "Rewrite one sentence",
-    "pairing": "Find the applicant's own reason",
+    "pairing": "Find the applicant's own reason", "smooth": "Rewrite one paragraph",
+    "add": "Write one more paragraph",
 }
 WAIT_S = 10.0
 POLL_S = 0.05
@@ -108,6 +109,8 @@ class FakeWriter:
             return {"sentence": ""}
         if pid == "pairing":
             return self.pairing
+        if pid in ("smooth", "add"):
+            return {"paragraph": ""}
         if pid == "contacts_pick":
             return {"picks": [{"n": 1, "why": "Leads the team that is hiring.", "sure": True}]}
         if pid == "prep":
@@ -571,8 +574,9 @@ class Cited(unittest.TestCase):
             job = add_job(a.con, "humanities_grad")
             pack.build(a.con, job["id"], use_web=False)
         counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
+        # the made-up letter is far under the preferred 250 words, so one paragraph more is asked for
         self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "letter": 1,
-                                  "message": 1, "sentence_check": 2, "answers": 1})
+                                  "add": 1, "message": 1, "sentence_check": 2, "answers": 1})
 
     def test_the_letter_and_message_are_drafted_cooler_than_other_prose(self):
         writer = MarkedWriter()

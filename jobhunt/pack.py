@@ -549,13 +549,15 @@ def grounds(who: dict, plan: list[planning.Item], *, facts: str, kept: str, empl
 
 
 def settle(who: dict, draft: str, rewrite, *, plan: list[planning.Item], essential: grounded.Essential, facts: str,
-           kept: str, employer: tuple[str, ...], pairing: motive.Pairing | None = None) -> grounded.Grounded:
+           kept: str, employer: tuple[str, ...], pairing: motive.Pairing | None = None,
+           words: int | None = None) -> grounded.Grounded:
     """A letter or message checked for what it says about the person: its text, what is still wrong and what
-    was done. One that cites the evidence `plan` is checked sentence by sentence (`grounded.ground`); one with
-    no markers is checked whole and rewritten once (`fix_claims`)."""
+    was done. One that cites the evidence `plan` is checked sentence by sentence (`grounded.ground`), and a
+    letter left short of `words` gets one paragraph more (`grounded.lengthen`); one with no markers is
+    checked whole and rewritten once (`fix_claims`)."""
     if plan and cites.has_markers(draft):
-        return grounded.ground(draft, grounds(who, plan, facts=facts, kept=kept, employer=employer,
-                                              pairing=pairing), essential)
+        against = grounds(who, plan, facts=facts, kept=kept, employer=employer, pairing=pairing)
+        return grounded.lengthen(grounded.ground(draft, against, essential), against, words, essential)
     text, claims, again = fix_claims(who, draft, rewrite, facts=facts, kept=kept, employer=employer)
     return grounded.Grounded(text, claims, int(again), marked=False)
 
@@ -659,7 +661,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
                                lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed))
         return settle(who, letter, lambda note: _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed),
                       plan=plan, essential=grounded.only_in_paragraph, facts=facts, kept=kept,
-                      employer=sources, pairing=pairing), revised
+                      employer=sources, pairing=pairing, words=who.get("letter_words")), revised
 
     best, revised = one_letter()
     for _ in range(LETTER_DRAFTS - 1):
