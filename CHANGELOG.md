@@ -12,6 +12,10 @@ What changed in each version, in plain words.
   your showcase leads the letter. A project only your CV names is told only when nothing is in your
   showcase.
 
+- **Tested for every kind of graduate.** Whole application packs are now tested on two made-up records
+  built through Your record, one for a software graduate and one for a history graduate, each within 30
+  AI calls.
+
 - **The fit table says where each row comes from.** A new Source column says "from the code project",
   "from your coursework", "from your current CV" and so on. A tool only an older CV gives a project is no
   longer said to be used in it, in drafts or in the table.

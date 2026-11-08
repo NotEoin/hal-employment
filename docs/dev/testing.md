@@ -135,6 +135,16 @@ the files on disk.
 .venv/bin/python tests/support/make_cv_fixtures.py --check   # 0 when tests/fixtures/cv/ is up to date
 ```
 
+Two made-up graduates' sectioned records, a software graduate (Avery Quillon) and a history graduate
+(Marnie Quillfeather), are in `tests/support/graduates.py`. `graduates.sectioned(con, who, folder)` builds
+one through the sections as a person would on Your record: two CVs, a letter, a course with a starred
+dissertation, other coursework, lecture material and a starred project (a code project made by
+`tests/support/repos.py`, or an exhibition added by hand). Run it with a fake AI in place.
+`tests/test_pack_graduates.py` writes a whole pack for each with the fake writer of `test_pack.py`, and checks
+that only starred projects and jobs are told, that the dissertation is told under its title, that no
+studied-only skill is said to be used, that the letter carries the person's voice, that the fit table cites
+its sources, and that the pack makes at most 30 model calls (23 and 19 when measured on 2026-11-08).
+
 ## Command-line goldens
 
 `tests/goldens/cli/*.txt` hold what each command printed before the app was added, run in-process in a fresh

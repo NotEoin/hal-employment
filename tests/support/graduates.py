@@ -10,6 +10,10 @@ Diploma and BSc, the history graduate's BA), with their coursework, lecture mate
 texts below it: a report and code, two dissertations, essays, slides and seminar notes. `education(con, key)`
 adds a course's card as a read of the person's CV would, and returns its id.
 
+`sectioned(con, who, folder)` builds a graduate's whole record through the sections (CVs, a letter, a course
+with a starred dissertation, other coursework, lecture material and a starred project: the software
+graduate's code project, the history graduate's exhibition added by hand), for whole-pack tests.
+
 Every name, employer, place, module code, mark and address is invented; email addresses use the reserved
 `example.org` domain and phone numbers Ofcom's drama range.
 """
@@ -17,6 +21,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 
 from jobhunt.profile import store
 
@@ -365,3 +370,63 @@ def education(con: sqlite3.Connection, key: str) -> int:
     """Adds one course of `COURSES` as a read of the person's CV would; its card's id."""
     return store.add_found(con, "education", dict(COURSES[key]), {"source_rel": CV_REL, "doc_type": "cv",
                                                                   "role": "own"})
+
+
+# Whole sectioned records -------------------------------------------------------------------------------------------
+
+# The history graduate's exhibition, added by hand on Projects.
+EXHIBITION = {"name": "Lantern letters exhibition",
+              "what": "A made-up exhibition of 40 letters from the Fenwick archive, with labels I wrote for "
+                      "each letter.",
+              "when": "Spring 2025", "part": "Curator", "tools": "archival research, label writing"}
+
+
+def _upload(con: sqlite3.Connection, section: str, name: str, text: str, kind: str, target: int | None = None,
+            **changes) -> int:
+    """`text` added to `section` as the file `name`, changed by `changes` (a star, the dissertation toggle) and
+    read; its source's id."""
+    from jobhunt.sections import pipeline
+    from jobhunt.sections import store as sources
+
+    source_id = pipeline.add_uploads(con, section, [pipeline.Incoming(name, text.encode())], doc_kind=kind,
+                                     target_id=target)["added"][0]
+    for key, value in changes.items():
+        sources.change(con, source_id, {key: value})
+    pipeline.read(con, source_id)
+    return source_id
+
+
+def sectioned(con: sqlite3.Connection, who: Graduate, folder: Path) -> None:
+    """Builds `who`'s whole record through the sections, as the person would on Your record, and checks every
+    card: their CVs, their letter, a course with a starred dissertation, lecture material and a starred project
+    (Avery's code project in `folder`, Marnie's exhibition added by hand). Run it with a fake AI in place."""
+    from jobhunt.sections import pipeline
+    from jobhunt.sections import store as sources
+
+    from . import repos
+
+    _upload(con, "cv", "cv.md", who.cv, "cv")
+    _upload(con, "cv", "older-cv.md", who.older_cv, "cv")
+    _upload(con, "letter", "letter.md", who.letter, "cover_letter" if who is AVERY else "statement")
+    if who is AVERY:
+        course = education(con, "bsc")
+        _upload(con, "coursework", "ferries.md", DISSERTATION, "dissertation", course, starred=True)
+        _upload(con, "coursework", "rainfall.md", REPORT, "report", course)
+        _upload(con, "lecture", "week3.md", SLIDES, "slides", course)
+        code = repos.make(folder / "tide-model", {k.split("/", 1)[1]: v for k, v in CODE.items()})
+        project = pipeline.add_link(con, "project", str(code), doc_kind="repo")["added"][0]
+    else:
+        course = education(con, "ba")
+        _upload(con, "coursework", "bread.md", HISTORY_DISSERTATION, "dissertation", course, starred=True)
+        _upload(con, "coursework", "registers.md", ESSAY, "essay", course)
+        _upload(con, "lecture", "seminar4.md", SEMINAR_NOTES, "notes", course)
+        project = pipeline.add_link(con, "project", EXHIBITION["name"], doc_kind="manual")["added"][0]
+        sources.change(con, project, {"form": EXHIBITION})
+    pipeline.read(con, project)
+    for kind in store.KINDS:
+        ids = [it["id"] for it in store.items(con, kind, hidden=False)]
+        if ids:
+            store.confirm_many(con, ids)
+    for card in store.items(con, "project", hidden=False):
+        if not card["star"] and any(e.get("section") == "project" for e in card["evidence"]):
+            store.set_star(con, card["id"], True)
