@@ -382,14 +382,35 @@ REASONING = re.compile(r"\b(?:I(?:'ll| will| would| shall| am going to| need to|
                        r"strict(?:ly)?|to be strict|this (?:table|row|column)|the fit (?:map|table))\b", re.I)
 
 
+# Words that mark a whole cell as the model thinking aloud: a reply of about 400 words, "Wait, re-reading the
+# advert ... However, the instruction says ...", survived the sentence filter in a fit row (2026-11-08), so a cell
+# holding any of these is reasoning throughout and is taken out whole. "Wait" counts only before a comma or a stop,
+# as "wait times" can be a fact.
+THINKING = re.compile(r"\b(?:wait\s*[,.!:;]|(?:let me|re-?reading|however, the|I need to|the instruction says)\b)",
+                      re.I)
+CELL_WORDS = 40            # words of a fit row's evidence or a gap; a fact of the record is a sentence, not a page
+
+
+def _capped(text: str) -> str:
+    """`text` when within `CELL_WORDS`, else its first sentence, cut at `CELL_WORDS` words when still longer."""
+    if len(text.split()) <= CELL_WORDS:
+        return text
+    first = next(iter(writing_check.sentences(text)), "")
+    words = first.split()
+    return first if len(words) <= CELL_WORDS else " ".join(words[:CELL_WORDS]) + " ..."
+
+
 def _unreasoned(text: str) -> str:
-    """`text` without its sentences of the model's own reasoning (`REASONING`)."""
-    return " ".join(s for s in writing_check.sentences(text) if not REASONING.search(s))
+    """`text` without the model's own reasoning: "" for a cell that thinks aloud (`THINKING`), else without its
+    sentences matching `REASONING`, at most `CELL_WORDS` words (`_capped`)."""
+    if THINKING.search(text):
+        return ""
+    return _capped(" ".join(s for s in writing_check.sentences(text) if not REASONING.search(s)))
 
 
 def without_reasoning(fit: dict) -> dict:
-    """The fit map with the model's reasoning taken out of each row's evidence and each gap; a row left with no
-    evidence is a gap, and a gap left with no words is gone."""
+    """The fit map with the model's reasoning taken out of each row's evidence and each gap, each at most
+    `CELL_WORDS` words; a row left with no evidence is a gap, and a gap left with no words is gone."""
     matches, gaps = [], []
     for m in (dict(m) for m in fit.get("matches") or [] if isinstance(m, dict)):
         said = str(m.get("evidence") or "")

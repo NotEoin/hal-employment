@@ -627,7 +627,9 @@ runs: tests use `tests/support/fake_claude/`.
   the Profile block. Each reply first loses the model's own reasoning (`pack.without_reasoning`: a sentence of
   a row's evidence or of a gap matching `pack.REASONING`, "I will ...", "let me", "if strict", "this table";
   a row left with no evidence is a gap), as "I will mark this as a gap if strict ..." reached a fit table
-  (2026-11-08). `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that
+  (2026-11-08). A cell holding a mark of thinking aloud (`pack.THINKING`: "Wait,", "re-reading", "however,
+  the", "I need to", "the instruction says") is taken out whole, and a cell still over `pack.CELL_WORDS` (40)
+  words keeps its first sentence, as a reasoning dump of about 400 words survived the sentence filter. `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that
   names a card's tool into a partial match citing the card (`project (personal project): Tide gauge (tools:
   AWS)`).
   Last, `pack.checked_fit_tools` reads each part of a row's evidence that names project cards

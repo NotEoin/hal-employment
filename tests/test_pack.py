@@ -1198,6 +1198,22 @@ class Reasoning(unittest.TestCase):
                                                    "layout of its SQLite store.", "strength": "strong"}], "gaps": []})
         self.assertEqual(fit["matches"][0]["evidence"], "Tide gauge designed the table layout of its SQLite store.")
 
+    def test_a_cell_thinking_aloud_is_taken_out_whole_and_a_long_cell_keeps_its_first_sentence(self):
+        # a ~400-word reasoning dump survived the sentence filter in a fit row (2026-11-08)
+        dump = ("Tide gauge stores readings in SQLite. Wait, re-reading the advert, the role wants Postgres. "
+                "However, the instruction says to cite the CV. " + "The table layout matters here. " * 60)
+        long = "Tide gauge logs river levels every minute to a SQLite store. " + "It has a web chart of them. " * 10
+        fit = pack.without_reasoning({"matches": [
+            {"requirement": "SQL", "evidence": dump, "strength": "partial"},
+            {"requirement": "Data", "evidence": long, "strength": "strong"},
+            {"requirement": "Queues", "evidence": "Ferry planner cut wait times for 30 staff.", "strength": "strong"}],
+            "gaps": ["Kubernetes. Let me think about whether Helm counts."]})
+        self.assertEqual([m["requirement"] for m in fit["matches"]], ["Data", "Queues"])
+        self.assertEqual(fit["matches"][0]["evidence"], "Tide gauge logs river levels every minute to a SQLite store.")
+        self.assertEqual(fit["matches"][1]["evidence"], "Ferry planner cut wait times for 30 staff.")
+        self.assertEqual(fit["gaps"], ["SQL"])
+        self.assertTrue(all(len(m["evidence"].split()) <= pack.CELL_WORDS for m in fit["matches"]))
+
 
 GULLWING = {"kind": "project (personal project)", "name": "Gullwing", "tools": ["C++"],
             "quotes": ["Gullwing plans each route with A* search"]}

@@ -211,7 +211,8 @@ What changed in each version, in plain words.
   tells your next best piece of work instead, and a letter under half your length setting tries more of
   your work.
 - **A cleaner fit table.** The fit table held the AI's own thinking ("I will mark this as a gap if strict
-  ..."); such sentences are now taken out. A gap such as CI/CD or graph algorithms is no longer listed when
+  ...", and once about 400 words of "Wait, re-reading the advert ..."); such sentences, and any entry that
+  thinks aloud, are now taken out, and an entry longer than 40 words keeps only its first sentence. A gap such as CI/CD or graph algorithms is no longer listed when
   your record shows it or a common equivalent (GitHub Actions, GitLab CI or Jenkins for CI/CD; A*,
   Dijkstra or BFS for graph algorithms); the table cites where instead. A module code with its year, such
   as CSC2031/23, is no longer listed as a number your CV does not hold.
