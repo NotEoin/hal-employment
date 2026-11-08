@@ -889,8 +889,14 @@ them the same way (`attach.place`).
 Notes from a person's vault (`vaultnotes.py`). In `engine._prepare`, before the privacy check, a text or
 Markdown file with fewer than `EMPTY_WORDS` (2) words of its own, once headings and tag lines, lines of
 links, embeds, code and query blocks and placeholder lines (`_(empty ...)_`, a short line saying a tool made a
-stub) are taken out, is `skipped` with "an empty note": no note, no AI call. A file with no text at all is
-still `no_text`. A Markdown note whose frontmatter names a slide deck, PDF or Word file (`source_file`,
+stub) and template lines are taken out, is `skipped` with "an empty note": no note, no AI call; so is a note
+whose frontmatter says `status: stub`. A template line (`vaultnotes.Templates`, counted once per read by
+`engine._read_items` over every Markdown file of the batch, whatever its state, so a carry-on counts the
+same) is one whose `template_key` (the note's own title as a mark, bold and spacing evened out, lower case)
+is in at least `TEMPLATE_NOTES` (10) of the read's Markdown notes and `TEMPLATE_SHARE` (0.5%) of them. The
+counts only decide emptiness; a note with words of its own keeps its template lines. `tidy.prepare` counts
+over every file row's Markdown file and judges each filed note from its file while it is there
+(`tidy._empty`). A file with no text at all is still `no_text`. A Markdown note whose frontmatter names a slide deck, PDF or Word file (`source_file`,
 `source_path`, `source`, `original` ...; never in a Hal note, which has `hal`) and whose source is slides or
 lecture notes by `rank.rule_for`, or whose `role` or `type` says lecture, exam, handout, solution, exercise or
 tutorial, is described by rules with `said` taught, so it is taught for every origin, and gets `model` 2

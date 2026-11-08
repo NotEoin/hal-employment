@@ -11,7 +11,20 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.api import HalServer
 from support.fake_ai import fake_ai
-from test_ingest import FROM_SLIDES, NOTE_REPLY, OWNER, REPLY, STUB, home, module_folder, put, rows, run
+from test_ingest import (
+    CONCEPTS,
+    FROM_SLIDES,
+    NOTE_REPLY,
+    OWNER,
+    REPLY,
+    STUB,
+    concept_stub,
+    home,
+    module_folder,
+    put,
+    rows,
+    run,
+)
 
 from jobhunt.core import settings
 from jobhunt.ingest import actions as ingest_actions
@@ -320,6 +333,19 @@ class Tidy(unittest.TestCase):
         self.assertEqual((got["Files/Vault/Lecture 4 Recursion.md"]["role"],
                           got["Files/Vault/Lecture 4 Recursion.md"]["model"]), ("taught", 2))
         self.assertEqual((out["tidied"]["empty"], asked), (1, []))
+
+    def test_concept_stubs_an_older_read_filed_go_as_empty_notes(self):
+        with home() as (con, _vault, files):
+            with fake_ai({}), mock.patch.object(vaultnotes, "is_empty", return_value=False):   # an older Hal
+                for name in CONCEPTS:
+                    put(files, f"Vault/{name}.md", concept_stub(name))
+                put(files, "Vault/Rivers.md", "# Rivers\n\nMeanders and oxbow lakes from the 2022 fieldwork trip.")
+                run(con, [files])
+            with fake_ai({}):
+                out = run(con, [], batch="t", tidy=True)
+            got = rows(con)
+        self.assertEqual(out["tidied"]["empty"], len(CONCEPTS))
+        self.assertEqual(got["Files/Vault/Rivers.md"]["state"], "done")
 
 
 class Route(unittest.TestCase):

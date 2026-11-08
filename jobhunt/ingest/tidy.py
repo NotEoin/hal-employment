@@ -174,6 +174,16 @@ def _rewrite(path: Path, fm: dict, body: str, role: str, source: str) -> None:
     notes.write(path, frontmatter.dump(fm) + body)
 
 
+def _empty(row: sqlite3.Row, body: str, templates: vaultnotes.Templates) -> bool:
+    """True when a filed note's file is empty (`vaultnotes.is_empty`), judged from the file itself while it is
+    there, as the link pass may have changed its note's text."""
+    path = Path(row["path"])
+    text = body.split(TEXT, 1)[1] if TEXT in body else ""
+    if path.suffix.lower() in vaultnotes.MARKDOWN and path.is_file():
+        text = path.read_text(encoding="utf-8", errors="replace")
+    return vaultnotes.is_empty(row["rel"], text, templates, vaultnotes.front(path))
+
+
 def _left_out(rel: str) -> bool:
     parts = PurePosixPath(rel).parts
     return discover.is_tool_file(parts[-1]) or any(p.startswith(".") for p in parts[:-1])
@@ -212,6 +222,8 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
     done = {"left_out": 0, "private": 0, "covered": 0, "again": 0, "older_version": 0, "judged": 0,
             attach.STATE: 0, "skipped": 0, "empty": 0}
     units: attach.Units | None = None
+    templates = vaultnotes.Templates.of(con.execute("SELECT DISTINCT path, rel FROM ingest_items "
+                                                    "WHERE kind = 'file'").fetchall())
     done["older_version"] = _versions(con, vault)
     done["projects"] = projects.find_in_record(con, batch, vault)
     rows = con.execute("""SELECT * FROM ingest_items WHERE state = 'done' AND note IS NOT NULL
@@ -235,7 +247,7 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
             units = units or attach.Units(con)
             done[attach.place(con, vault, row, units)] += 1
             continue
-        if row["kind"] == "file" and vaultnotes.is_empty(row["rel"], body.split(TEXT, 1)[1] if TEXT in body else ""):
+        if row["kind"] == "file" and _empty(row, body, templates):
             drop_note(con, vault, row["note"])
             items.update(con, row["id"], state="skipped", error=vaultnotes.EMPTY, note=None)
             done["empty"] += 1

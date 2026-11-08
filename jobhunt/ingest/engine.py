@@ -342,15 +342,17 @@ def _model(desc: dict) -> int:
     return {"model": 1, BY_SOURCE: items.BY_SOURCE}.get(str(desc.get("by")), 0)
 
 
-def _prepare(row: dict, rule: rank.Rule) -> _Read:
+def _prepare(row: dict, rule: rank.Rule, templates: vaultnotes.Templates | None = None) -> _Read:
     """Converts one item and describes it, by the AI or by rules; touches neither the database nor the record.
 
-    Runs on a worker thread, so several items can be with the AI at once (`ai.parallel`).
+    Runs on a worker thread, so several items can be with the AI at once (`ai.parallel`). `templates` are the
+    read's template lines (`vaultnotes.Templates`), which are not words of a note's own.
     """
     path = Path(row["path"])
     text = convert.repo_text(path) if row["kind"] == "repo" else convert.text_of(path, rule)
     is_picture = path.suffix.lower() in rank.IMAGE_SUFFIXES | rank.MEDIA_SUFFIXES
-    if row["kind"] == "file" and text.strip() and vaultnotes.is_empty(row["rel"], text):
+    fm = vaultnotes.front(path) if row["kind"] == "file" else {}
+    if row["kind"] == "file" and text.strip() and vaultnotes.is_empty(row["rel"], text, templates, fm):
         return _Read("", None, skip=vaultnotes.EMPTY)
     if why := privacy.held_back(row, text):        # checked before any AI call, so the text never reaches it
         return _Read("", None, why)
@@ -358,7 +360,7 @@ def _prepare(row: dict, rule: rank.Rule) -> _Read:
     redacted, text = clean != text, clean
     if not text.strip() and not is_picture:
         return _Read(text, None)
-    if row["kind"] == "file" and vaultnotes.taught_from_source(vaultnotes.front(path)):
+    if row["kind"] == "file" and vaultnotes.taught_from_source(fm):
         # a note made from slides is course material whatever the AI would say of it, so it is not asked
         desc = understand.light(row["rel"], text, rule)
         desc["said"], desc["by"] = roles.TAUGHT, BY_SOURCE
@@ -495,6 +497,9 @@ def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, dr
 
     workers = max(1, int(settings.get("ai.parallel")))
     covered = lectures.Covered(con)
+    # every Markdown file of the batch, whatever its state, so a carry-on after a restart counts the same lines
+    templates = vaultnotes.Templates.of(con.execute("SELECT path, rel FROM ingest_items WHERE batch = ? "
+                                                    "AND kind = 'file'", (batch,)).fetchall())
     written: list[str] = []
     queue = iter(todo)
     in_hand: deque[tuple[sqlite3.Row, Future | None]] = deque()
@@ -513,7 +518,7 @@ def _read_items(con: sqlite3.Connection, todo: list[sqlite3.Row], batch: str, dr
                     continue
                 if sha:
                     handed.add(sha)
-                in_hand.append((row, pool.submit(_prepare, dict(row), _rule(row))))
+                in_hand.append((row, pool.submit(_prepare, dict(row), _rule(row), templates)))
             if not in_hand:
                 break
             row, job = in_hand.popleft()

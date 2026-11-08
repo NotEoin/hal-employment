@@ -290,7 +290,9 @@ Some files are listed rather than read:
   certificates** is off or tesseract is not installed. Hal never guesses what such a file says.
 - **Copies** of a file Hal has already read are named in the first copy's note, not read again.
 - **Empty notes**: a note with only a heading, links or a line a note-taking tool wrote, and fewer than two
-  words of your own, is skipped. The Overview counts them.
+  words of your own, is skipped. So is a note marked `status: stub`. A line that appears in ten or more of
+  the notes you add at once, such as the same sentence a tool put in every note it made, does not count as
+  your own words. The Overview counts them.
 - **Notes made from slides**: when a note in your notes app says which slides, handout or past paper it was
   made from, Hal files it as course material without asking the AI.
 - **Supporting files**: data files and exports, figures, logs, diffs, circuit and 3D-printing files, and

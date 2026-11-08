@@ -58,7 +58,9 @@ What changed in each version, in plain words.
   or module it belongs to, and a loose one is skipped. **Tidy my record** does the same for notes an older
   Hal made of them.
 - **Empty notes and notes made from slides.** Notes with no words of their own, such as the stubs a
-  note-taking tool makes, are skipped and counted on the Overview. A note that says which slides or handout
+  note-taking tool makes, are skipped and counted on the Overview. A line a tool put in many notes (ten
+  or more of those read at once) is not counted as your words, and a note marked `status: stub` is
+  empty, so thousands of stubs no longer go to the AI one by one. A note that says which slides or handout
   it was made from is filed as course material without the AI. **Tidy my record** applies both to notes
   an older Hal filed.
 - **The newest copy of each project.** When a folder holds several copies of one code project ("Robot",

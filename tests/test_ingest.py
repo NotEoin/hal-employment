@@ -1145,6 +1145,47 @@ class VaultNotes(unittest.TestCase):
             shown = items.summary(con)
         self.assertEqual(shown["skipped"], {"an empty note": 1})
 
+    def test_a_tools_line_in_many_notes_is_no_words_of_their_own(self):
+        # thousands of concept stubs each held one long quoted line naming its own concept in bold (2026-11-08)
+        stubs = {f"Vault/{name}.md": concept_stub(name) for name in CONCEPTS}
+        own = "Vault/Tide tables.md"
+        files = {**stubs, own: concept_stub("Tide tables") + "\nI drew tide tables for the 2023 bay survey.\n"}
+        with tempfile.TemporaryDirectory() as tmp:
+            for rel, text in files.items():
+                put(Path(tmp), rel, text)
+            many = vaultnotes.Templates.of([(str(Path(tmp) / rel), rel) for rel in files])
+            few = vaultnotes.Templates.of([(str(Path(tmp) / rel), rel) for rel in list(files)[:3]])
+        stub = next(iter(stubs))
+        self.assertTrue(vaultnotes.is_empty(stub, stubs[stub], many))
+        self.assertFalse(vaultnotes.is_empty(own, files[own], many), "a note with words of its own keeps them")
+        self.assertFalse(vaultnotes.is_empty(stub, stubs[stub], few), "a line in three notes may be the person's")
+        self.assertFalse(vaultnotes.is_empty(stub, stubs[stub]))
+
+    def test_frontmatter_that_says_stub_is_an_empty_note(self):
+        self.assertTrue(vaultnotes.is_empty("Vault/Tides.md", "Tides rise twice a day.", fm={"status": "stub"}))
+        self.assertTrue(vaultnotes.is_empty("Vault/Tides.md", "---\nstatus: Stub\n---\nTides rise twice a day."))
+        self.assertFalse(vaultnotes.is_empty("Vault/Tides.md", "Tides rise twice a day.", fm={"status": "draft"}))
+
+    def test_a_read_sends_no_concept_stub_to_the_ai(self):
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": json.dumps(NOTE_REPLY)}) as backend:
+            settings.set("record.read_all", True)
+            for name in CONCEPTS:
+                put(files, f"Vault/{name}.md", concept_stub(name))
+            put(files, "Vault/Rivers.md", "# Rivers\n\nMeanders and oxbow lakes from the 2022 fieldwork trip.")
+            run(con, [files])
+            asked = len(backend.requests("ingest_doc"))
+            skipped = items.counts(con, "b1")["states"].get("skipped", 0)
+        self.assertEqual((asked, skipped), (1, len(CONCEPTS)))
+
+
+CONCEPTS = [f"Concept {n}" for n in range(vaultnotes.TEMPLATE_NOTES + 2)]
+
+
+def concept_stub(name: str) -> str:
+    """A made-up note tool's concept stub: a heading and one long quoted line that names the note in bold."""
+    return (f"# {name}\n\n> Concept stub, made by a note tool. Every note that mentions **{name}** links here, "
+            "so this page gathers them all in one place for you.\n")
+
 
 class Origins(unittest.TestCase):
     """Where the person said a folder came from settles whose its documents are (`roles.ORIGINS`).
