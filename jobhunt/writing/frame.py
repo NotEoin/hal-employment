@@ -24,7 +24,9 @@ Design decisions, each with its reason:
   told a project that a paragraph then told again (5 cases in 15 graded packs), and the two that escaped the
   readability cap gave the name, the role and the reason alone and left the projects to the paragraphs. The
   stock links ("matches my", "fits my") and the advert's lead-ins ("Your requirement to ...", "Your work on
-  ...") are `plain.STOCK` and `plain.LEAD_IN`.
+  ...") are `plain.STOCK` and `plain.LEAD_IN`. A sentence of the opening about the employer that restates
+  the advert (`motive.restated`: a run of five words, or most of its words from one advert sentence) is
+  drafted again with the frame's one redraft (2026-11-08).
 - The frame never retells the middle (`retold`, `Facts.middle`, 2026-11-08): a sentence of the opening or
   closing that says nearly what a paragraph's sentence says, shares `RETOLD_RUN` own words in a row with it
   or gives one of its numbers is a problem, drafted again with the frame's one redraft.
@@ -140,6 +142,9 @@ def problems(text: str, facts: Facts, scope: Scope, first: bool) -> list[Problem
         out.append(Problem("", WHO_MISSING.format(who=facts.who)))
     if first:
         out += [Problem("", p) for p in motive_problems(text, facts, list(scope.cards))]
+        fact = facts.pairing.fact if facts.pairing else ""
+        out += [Problem(s, r) for s in said if motive.addresses(s, facts.employer, fact)
+                for r in [motive.restated(s, scope.advert, scope.names)] if r]
     hits = writing_check.check(text, "letter", spelling=scope.values.get("spelling_code", ""),
                                allowed=scope.values.get("own_words") or ())
     return out + [Problem("", f"{h.message} ({h.quote})") for h in writing_check.high(hits)]

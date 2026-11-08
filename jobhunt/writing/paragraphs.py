@@ -46,6 +46,10 @@ Design decisions, each with its reason:
   the work's facts that the advert and the brief do not hold, unless the ranking places the work in its top
   half (`Shape.fits`, `rank.fits`), when the job is about that work's area. It is drafted again once when it
   fails.
+- A "why here" answer is at least `WHY_LEAST` sentences, the reason about the employer then a tie to its
+  one piece of work (`untied`, 2026-11-08): graders saw answers restating the advert and others with no tie.
+  Its first sentence restating the advert (`motive.restated`) or no later sentence naming its work asks for
+  one redraft, as a missing link does; neither cuts nor drops it.
 - A message body never says the degree again (`message`, `says_again`, 2026-11-08): Hal's built opening says
   "I'm <name>, a first-class <subject> graduate from <university>", and the next sentence said the degree
   again. A sentence repeating the opening, or naming a degree with its words, is drafted again as a fact of
@@ -144,6 +148,8 @@ QUESTION_OWN = ('its question asks about your own work ("{words}"), not the empl
 NO_LINK = ("its last sentence names nothing of this job; end with one sentence, in your own words, tying a "
            "result of this work (never a bug fix or a detail) to a named task, system or product of the "
            "employer's, from the advert or the company brief")
+NOT_TIED = ("does not tie the reason to {card} in a sentence after the first; name it and one concrete thing it "
+            "did")
 NOT_EMPLOYER = ("does not give the reason about the employer in its first sentence; say what of the employer "
                 "draws you, its product or its mission, then tie it to the work in one sentence at most")
 SAID_AGAIN = "says your degree again, which Hal's opening already says; tell a fact of the work instead"
@@ -208,6 +214,7 @@ def says_again(sentence: str, after: str) -> bool:
 
 
 ANSWER_WORDS = 100         # words of a whole form answer, as the answers prompt asks
+WHY_LEAST = 2              # sentences of a "why here" answer: the reason about the employer, then the work
 FRAME_WORDS = 70           # words of a letter's opening and closing together: three sentences and one or two
 PARAGRAPH_WORDS = (60, 90)  # least and most words a letter paragraph is asked for, whatever the length setting
 PARAGRAPH_SPREAD = 15      # words either side of a paragraph's share of the letter
@@ -233,18 +240,20 @@ def answer(question: str, nth: int = 0, of: int = 1) -> Shape:
                            f"{ANSWER_WORDS // of} words.", "first", 1)
 
 
-def why(question: str, pairing: Pairing | None) -> Shape:
+def why(question: str, pairing: Pairing | None, tied: bool = True) -> Shape:
     """The shape of an answer to a question asking why this job or employer: the reason about the employer
-    first, from the motivation `pairing`'s fact, then at most one sentence tying it to this work."""
+    first, from the motivation `pairing`'s fact, then one sentence tying it to this work, with the pairing's
+    reason when the work is the pairing's own (`tied`)."""
+    because = f", because {pairing.reason}," if pairing and tied else ""
     reason = (f"The reason about the employer: \"{pairing.fact}\". Say in the first sentence one concrete thing "
-              f"about the employer from it (its product, its mission or this fact), in your own words; never "
-              f"restate the advert. Then you may tie it to this work, because {pairing.reason}, in one sentence "
-              f"at most, naming the work." if pairing else
+              f"about the employer from it (its product, its mission or this fact), as you see it, in your own "
+              f"words; never restate the advert or quote an employee. Then tie it to this work{because} in one "
+              f"sentence, naming the work and one concrete thing it did." if pairing else
               "No fact about the employer was found: say in the first sentence what of this role or this employer "
-              "draws you, in your own words, without a fact about the employer you were not given; then you may "
-              "tie it to this work in one sentence at most, naming the work.")
+              "draws you, in your own words, without a fact about the employer you were not given; then tie it "
+              "to this work in one sentence, naming the work and one concrete thing it did.")
     return Shape("answer", f'The answer to the application question "{question}", in 2 to 3 sentences and at most '
-                           f"80 words, answering it in the first sentence. {reason}", "", 1,
+                           f"80 words, answering it in the first sentence. {reason}", "", WHY_LEAST,
                  employer=True, fact=pairing.fact if pairing else "")
 
 
@@ -588,6 +597,19 @@ def unlinked(text: str, story: Story, scope: Scope, shape: Shape) -> list[Proble
     return [Problem("", NO_LINK)]
 
 
+def untied(text: str, story: Story, scope: Scope, shape: Shape) -> list[Problem]:
+    """What a "why here" answer (`Shape.employer`) lacks: its first sentence restates the advert
+    (`motive.restated`), or no later sentence names its work (`NOT_TIED`); [] else, and [] for other shapes.
+    Like `unlinked`, it asks for a redraft but never cuts or drops a paragraph."""
+    said = writing_check.sentences(text)
+    if not shape.employer or not said:
+        return []
+    out = [Problem("", r) for r in [motive.restated(said[0], scope.advert, scope.names)] if r]
+    if story.name and len(said) > 1 and not any(_names(s, story, scope) for s in said[1:]):
+        out.append(Problem("", NOT_TIED.format(card=story.name)))
+    return out
+
+
 def restates(text: str, story: Story, scope: Scope) -> bool:
     """True when every content word of a paragraph, by its root, is in its story's facts or the employer's words:
     it says nothing they do not, so no AI check is needed."""
@@ -729,7 +751,7 @@ def settle(story: Story, shape: Shape, scope: Scope) -> Paragraph:
         return out
     found, by_ai = _judge(text, story, scope, shape, out)
     first = (text, found, by_ai)
-    asked = [*found, *unlinked(text, story, scope, shape)]
+    asked = [*found, *unlinked(text, story, scope, shape), *untied(text, story, scope, shape)]
     if asked:
         log.info("paragraph about %s: %s", _called(story), "; ".join(p.line() for p in asked))
         again = draft(story, shape, scope, text, asked)

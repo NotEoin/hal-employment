@@ -326,6 +326,13 @@ class Frame(unittest.TestCase):
         self.assertNotIn("Quill answers questions", request, "the opening names no project, so it is given none")
         self.assertIn("The letter's middle tells (never name or retell them): Quill", request)
 
+    def test_an_opening_restating_the_advert_is_drafted_again(self):
+        # openings gave the advert back as the reason for the employer (2026-11-08)
+        echoed = ("I am Avery Quillon, a first-class History graduate from Made-up University, and I am applying "
+                  "for the Graduate Developer role. I want to maintain our ticket triage service with you.")
+        found = frame.problems(echoed, self.FACTS, SCOPE, True)
+        self.assertTrue(any(p.reason.startswith("restates the advert") for p in found), found)
+
     def test_an_opening_without_who_is_writing_falls_back_to_the_built_sentence(self):
         fake = FakeAI(["I am applying for the Graduate Developer role, as I am finishing my degree."])
         done = self.settle(fake)
@@ -476,12 +483,32 @@ class WhyHere(unittest.TestCase):
         self.assertIn(paragraphs.NOT_EMPLOYER, self.reasons("Quill Employment taught me to test. It drafts letters.",
                                                             None))
 
+    def test_a_one_sentence_answer_is_too_short_and_an_untied_or_restating_one_is_drafted_again(self):
+        # all 15 graded "why here" answers restated the advert, paraphrased a testimonial or gave no reason
+        # (2026-11-08)
+        self.assertIn(paragraphs.TOO_SHORT, self.reasons("Your triage service for river trusts is what I want."))
+        shape = paragraphs.why("Why do you want to work here?", self.PAIRING)
+        untied = "Your triage service for river trusts is what I want. I like sorting things."
+        self.assertEqual([p.reason for p in paragraphs.untied(untied, EMPLOYMENT_STORY, SCOPE, shape)],
+                         [paragraphs.NOT_TIED.format(card="Quill Employment")])
+        echoed = ("I want to maintain our ticket triage service with you. Quill Employment drafts letters and has a "
+                  "113-test suite.")
+        self.assertTrue(paragraphs.untied(echoed, EMPLOYMENT_STORY, SCOPE, shape))
+        good = ("A triage service for river trusts sorts what people ask, and that is the product I want to work on. "
+                "Quill Employment, my job-search helper, sorts requests with a 113-test suite behind it.")
+        self.assertEqual(paragraphs.untied(good, EMPLOYMENT_STORY, SCOPE, shape), [])
+        fake = FakeAI([untied, good])
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            done = paragraphs.settle(EMPLOYMENT_STORY, shape, SCOPE)
+        self.assertIn(paragraphs.NOT_TIED.format(card="Quill Employment"), fake.calls("Write")[1])
+        self.assertEqual(done.text, good)
+
     def test_the_shape_asks_for_the_employer_first_and_one_sentence_of_work_at_most(self):
         shape = paragraphs.why("Why do you want to work here?", self.PAIRING)
         self.assertIn('The reason about the employer: "ticket triage service for river trusts". Say in the first '
                       "sentence one concrete thing about the employer", shape.words)
-        self.assertIn("in one sentence at most, naming the work", shape.words)
-        self.assertEqual((shape.name, shape.employer), ("", True))
+        self.assertIn("in one sentence, naming the work", shape.words)
+        self.assertEqual((shape.name, shape.employer, shape.least), ("", True, paragraphs.WHY_LEAST))
 
 
 class MessageBody(unittest.TestCase):

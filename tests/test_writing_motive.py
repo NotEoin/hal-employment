@@ -73,6 +73,44 @@ class Pairings(unittest.TestCase):
         self.assertFalse(motive.addresses("I enjoy work with real impact.", "Brightwater Tools", fact),
                          "a word any employer uses is no product")
 
+    def test_a_testimonial_a_list_of_asks_or_a_line_to_the_job_holder_is_no_fact_about_the_employer(self):
+        # "why here" answers restated "Your focus on ownership and working with stakeholders ..." or paraphrased
+        # an employee's testimonial (15 graded packs, 2026-11-08)
+        advert = (f"{ADVERT} Your focus on ownership and working with stakeholders. You will need Python, SQL and "
+                  "Docker. \"I joined to map flood risk for river trusts\" says Avery, Analyst.")
+        for fact in ("Your focus on ownership and working with stakeholders", "Python, SQL and Docker",
+                     "I joined to map flood risk for river trusts"):
+            self.assertIsNone(motive.checked(reply(fact), advert, BRIEF, PLAN, NAMES), fact)
+        brief = "Brightwater Tools makes flood sensors, river gauges and data dashboards for councils."
+        self.assertIsNotNone(motive.checked(reply("flood sensors, river gauges and data dashboards"), ADVERT, brief,
+                                            PLAN, NAMES), "a list of the employer's own products is a fact")
+
+    def test_the_brief_is_read_before_the_advert(self):
+        brief = "Brightwater Tools builds flood sensors for river trusts in three made-up counties."
+        found = motive.checked(reply("Flood sensors for river trusts"), ADVERT, brief, PLAN, NAMES)
+        self.assertEqual(found.fact, "flood sensors for river trusts")
+        with mock.patch.object(llm, "chat_json", return_value={}) as asked:
+            motive.make(NAMES, ADVERT, brief, PLAN)
+        request = asked.call_args.args[1]
+        self.assertLess(request.index("Company brief"), request.index("Advert:"))
+
+    def test_only_work_the_ranking_fits_to_the_job_may_carry_the_reason(self):
+        work = [*PLAN, Item("E3", "an expense tracker for a coursework module", "CV", "Pennywise", "degree")]
+        self.assertEqual([i.id for i in motive.offered(work, {"Tide gauge"})], ["E1"])
+        self.assertEqual([i.id for i in motive.offered(work)], ["E1", "E3"])
+        self.assertEqual([i.id for i in motive.offered(work, {"Elsewhere"})], ["E1", "E3"])
+
+    def test_a_reason_restating_the_advert_is_found(self):
+        advert = f"{ADVERT} Your focus on ownership and working with stakeholders is key."
+        self.assertTrue(motive.restated("Your focus on ownership and working with stakeholders is a clear priority "
+                                        "for me.", advert, NAMES))
+        self.assertTrue(motive.restated("I want to help you build flood sensors for river trusts.", advert, NAMES))
+        self.assertTrue(motive.restated("You value excellence and innovation and training.", advert, NAMES),
+                        "most of its own words from one advert sentence")
+        for own in ("Flood sensors that warn river trusts early are what draw me to you.",
+                    "I am applying for the Graduate Analyst role at Brightwater Tools."):
+            self.assertEqual(motive.restated(own, advert, NAMES), "", own)
+
     def test_no_plan_means_no_call(self):
         with mock.patch.object(llm, "chat_json", side_effect=AssertionError("no call")):
             self.assertIsNone(motive.make(NAMES, ADVERT, BRIEF, []))

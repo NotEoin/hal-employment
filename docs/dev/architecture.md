@@ -568,17 +568,23 @@ runs: tests use `tests/support/fake_claude/`.
   half (`Shape.fits`); one redraft with `QUESTION_OFF` or `QUESTION_OWN`, as graders saw "cross-platform
   window management" asked of a consultancy, 2026-11-08); an answer is one story, or two when its question asks for more than one
   example (`plan.examples_wanted`), in shape `paragraphs.answer`, and a question asking why this employer
-  (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and
-  its item's story (`pack._story_of`) while the pack has told that story no more than any other, else the
-  story told least, counted as told either way (`pack._why_story`): a project the letter told was told
-  again in the "why here" answer while other work was untold (2026-11-08). Every one of these shapes but `why` names its work in its first
+  (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and,
+  among the stories the ranking places in its top half (`pack._fitting`, `rank.fits`; all of them with no
+  ranking), its item's story (`pack._story_of`) while the pack has told that story no more than any other,
+  else the story told least, counted as told either way (`pack._why_story`): a project the letter told was
+  told again in the "why here" answer while other work was untold, and graders saw a device-tracking
+  sniffer offered to an ML employer (2026-11-08). A question asking why the person fits (`drafts.fit_question`)
+  takes its stories from the same top half, as a coursework expense tracker was given as the fit. Every one of these shapes but `why` names its work in its first
   sentence (`Shape.name`, `paragraphs.NOT_NAMED`), as a letter paragraph does, and is drafted again once when
   it does not: answers and messages opened "I wrote a 113-test suite ..." in 12 of 15 graded packs
-  (2026-11-08). A `why` answer leads with the reason about the employer from the pairing's fact and may tie
-  it to its story in one sentence at most: its first sentence must say "you" or "your", name the employer,
+  (2026-11-08). A `why` answer is at least `paragraphs.WHY_LEAST` (2) sentences: the reason about the
+  employer from the pairing's fact, then one sentence tying it to its story (with the pairing's reason only
+  when the story is the pairing's item's): its first sentence must say "you" or "your", name the employer,
   or share a specific word (`motive.STEM` (5) letters) of the fact (`Shape.employer`, `motive.addresses`,
   `paragraphs.NOT_EMPLOYER`), and is drafted again once when it does not, as four graded answers said only
-  "because I built <project>" (2026-11-08). The message, then the answers, take the stories the letter (`told`:
+  "because I built <project>" (2026-11-08). A first sentence restating the advert (`motive.restated`) or no
+  later sentence naming the story (`paragraphs.NOT_TIED`) asks for that one redraft too, but never cuts or
+  drops the answer (`paragraphs.untied`). The message, then the answers, take the stories the letter (`told`:
   its paragraphs' stories), the message and earlier answers told
   least (`plan.choose`), best first in the ranking's order (`rank.Told.others`), so they tell the next work
   the letter did not. When an answer's or the message's paragraphs are all dropped the next story is
@@ -743,17 +749,27 @@ runs: tests use `tests/support/fake_claude/`.
   employer's name or the job title) may use them. "low-latency systems" and "AI agents for customer
   support" became the person's claims in sentences mostly their own (2026-11-08).
 - The letter's reason for the employer (`writing/motive.py`, prompt `motive_pair`): with a plan,
-  `pack.write_letter` asks once (`motive.make`) for one fact of the advert or the company brief, one plan
-  item and a one-line reason. `motive.checked` keeps the pairing only when the fact is in the advert or the
-  brief word for word (`plan.quoted`), at least `MIN_SPECIFIC` (2) of its own words are not words any
+  `pack.write_letter` asks once (`motive.make`) for one fact of the company brief or the advert (the brief
+  given first and read first: what the company makes, for whom, its product or mission), one plan item and a
+  one-line reason. `motive.checked` keeps the pairing only when the fact is in the brief or the advert word
+  for word (`plan.quoted`, the brief's words when both hold it), at least `MIN_SPECIFIC` (2) of its own words are not words any
   employer uses of itself (`GENERIC`, the little words, the job title and the employer's name), the item
   is the plan's, there is a reason, and the fact is not a duty or requirement of the job (`motive.duty`,
   `motive.DUTY`: "write and improve ...", "experience of ...", "you will ...", as openings led in with "Your
-  requirement to write and improve SQL queries ...", 2026-11-08). The letter's opening (`writing.frame`) is
+  requirement to write and improve SQL queries ...", 2026-11-08; "Your ..." too), not one person's words
+  (`motive.testimonial`: in the first person, or from a quoted line), and not a list of what the job asks
+  (`motive.requirements`: a word of `motive.REQUIRES`, or `motive.LIST_ITEMS` (3) items of the advert), as
+  all 15 graded "why here" answers restated the advert ("Your focus on ownership and working with
+  stakeholders ..."), paraphrased a testimonial or gave no reason (2026-11-08). A sentence of the opening
+  that speaks of the employer (`motive.addresses`) and a "why here" answer's first sentence fail when they
+  restate the advert (`motive.restated`: a run of `motive.RUN_WORDS` (5) words with it, or more than
+  `motive.SENTENCE_SHARE` (60%) of at least `motive.RESTATED_MIN` (3) own words in one advert sentence, the
+  title's and employer's words aside), with one redraft each. The letter's opening (`writing.frame`) is
   drafted from the pairing's fact alone and a "why here" answer (`paragraphs.why`) from the fact and its item,
   or each is told there is none and to give no reason beyond the role; a letter with no story gets the
   pairing in its request (`motive.block`, or `motive.NONE_SAID`). The pairing is offered every plan item
-  tied to a card (`motive.offered`), as the opening names no project.
+  tied to a card (`motive.offered`), as the opening names no project, of the cards the ranking places in its
+  top half when there are any (`pack.fitting_names`).
 - `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
   (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer. `pack.fix_repeats`
   rewrites the answers once, in one call, asking for other evidence in the later ones, after the echo

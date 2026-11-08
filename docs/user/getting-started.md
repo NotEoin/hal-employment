@@ -101,8 +101,8 @@ the advert or the company brief names, rather than about your project's subject.
 tells one piece of work, or two when the question asks for more than one example, and the message and the
 answers take work the letter, the message and earlier answers have not told first where your record has
 enough, also in the answer to "Why do you want to work here?". An answer to "Why do
-you want to work here?" opens with what draws you to the employer, then may tie it to one piece of your
-work in a sentence. Each paragraph is
+you want to work here?" opens with what draws you to the employer, in your own words rather than the
+advert's, then ties it in a sentence to one piece of your work that fits the job well. Each paragraph is
 checked against its own work's facts: a number or tool they do not give (a tool you used on a project must
 be in that project's own facts, as a list of your skills says what you know, not where you used it), a tool
 or name that belongs to another of your projects, the project placed somewhere else (your degree instead of
@@ -124,8 +124,9 @@ Each module and its mark is a fact of its own, even when your CV lists them all 
 cannot tie one module's mark to a project or a piece of work that only another module's line names.
 The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
 to work here?", should be your own. Before writing a letter, Hal pairs one specific thing about the employer,
-in the advert's or the company's own words (a product, a project, a place; never "innovation" or "a great
-culture", and never a duty of the job such as "write SQL queries"), with one of the facts it picked, and
+in the company's or the advert's own words, the company brief first (a product, a project, a place; never
+"innovation" or "a great culture", never a duty of the job such as "write SQL queries", and never an
+employee's quote), with one of the facts it picked from work that fits the job, and
 the letter's reason comes from that pairing. When nothing of yours connects to it, the letter names the role
 and gives no reason rather than invent one. A sentence
 that only repeats the advert or what the company says about itself is rewritten once to link something of

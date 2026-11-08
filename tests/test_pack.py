@@ -672,7 +672,8 @@ class Paragraphs(unittest.TestCase):
 
         self.assertEqual(told("cover letter"), ["Ferry log", "Quill Employment", "Tide gauge"])
         self.assertEqual(told("short message"), ["Harbour lights"], "the next work the letter did not tell")
-        self.assertEqual(told("application question")[0], "Quill")
+        self.assertEqual(told("application question"), ["Ferry log", "Quill Employment"],
+                         "why here and why fit tell work the ranking's top half holds, never Quill, its last")
         self.assertEqual(len(writer.asked("rank")), 1, "one ranking serves the whole pack")
         self.assertIn("- Ferry log (personal project): Writing reports of river levels",
                       writer.asked("rank")[0]["user"])
@@ -837,7 +838,7 @@ class Paragraphs(unittest.TestCase):
             written = pack.write_letter(a.con, job, about="A made-up trust that looks after river boats.")
         asked = writer.asked("pairing")[0]["user"]
         self.assertIn("Advert:\nCollections Assistant", asked)
-        self.assertIn("Company brief:\nA made-up trust that looks after river boats.", asked)
+        self.assertIn("Company brief (look here first):\nA made-up trust that looks after river boats.", asked)
         self.assertIn('E2: "A made-up note about guiding visitors"', asked)
         self.assertIn('The reason for this employer: the employer\'s "looks after river boats". Say one concrete '
                       "thing about the employer", writer.asked("frame")[0]["user"])
@@ -965,13 +966,14 @@ class Others(unittest.TestCase):
         told = [(re.search(r'question "(.+?)"', e["user"]).group(1),
                  re.search(r"^Project: (.+?)(?: \(|$)", e["user"], re.M).group(1))
                 for e in writer.asked("story") if "application question" in e["user"]]
-        self.assertEqual(told, [("Why do you want to work here?", "Quill Employment"),
+        self.assertEqual(told, [("Why do you want to work here?", "Quill"),
                                 ("Why are you a good fit for this role?", "Quill")],
-                         "the letter told both once and the message the first; the answers take the other first")
+                         "of two, the ranking fits only Quill to the job, so both answers tell it")
         self.assertEqual(writer.asked("answers"), [], "no free answers are drafted")
 
-    def test_the_why_here_answer_never_retells_the_letters_work_while_other_work_is_untold(self):
-        # one project was told in a letter and again in the "why here" answer (2026-11-08)
+    def test_the_why_here_answer_never_offers_work_the_ranking_puts_in_its_bottom_half(self):
+        # graders saw a device-tracking sniffer offered to an ML employer as the reason (2026-11-08), which beats
+        # telling untold work: the letter told Quill, and Harbour lights is untold but ranked last
         from jobhunt.profile import store
 
         order = ["Quill", "Quill Employment", "Tide gauge", "Ferry log", "Harbour lights"]
@@ -995,8 +997,19 @@ class Others(unittest.TestCase):
 
         self.assertEqual(told("cover letter"), ["Quill", "Quill Employment", "Tide gauge"])
         self.assertEqual(told("short message"), ["Ferry log"])
-        self.assertEqual(told("Why do you want to work here?"), ["Harbour lights"],
-                         "the pairing's project was told in the letter, and other work was untold")
+        self.assertEqual(told("Why do you want to work here?"), ["Quill"],
+                         "the pairing's project fits the job, though the letter told it")
+
+    def test_why_here_and_why_fit_answers_choose_among_work_the_ranking_fits(self):
+        found = [pack.planning.Story(n, n, "") for n in ("Gullwing", "Tide gauge", "Pennywise", "Sniffer")]
+        ranking = [pack.rank.Ranked(s.name) for s in found]
+        self.assertEqual([s.name for s in pack._fitting(found, ranking)], ["Gullwing", "Tide gauge"])
+        self.assertEqual(pack._fitting(found, []), found)
+        self.assertEqual(pack.fitting_names(ranking), {"Gullwing", "Tide gauge"})
+        self.assertIsNone(pack.fitting_names([]))
+        self.assertTrue(pack.drafts.fit_question("Why are you a good fit for this role?"))
+        self.assertTrue(pack.drafts.fit_question("What makes you suitable for the post?"))
+        self.assertFalse(pack.drafts.fit_question("Tell us about a project you are proud of."))
 
     def test_the_why_here_answer_keeps_the_pairings_work_when_it_is_told_no_more_than_the_rest(self):
         found = [pack.planning.Story("Quill", "Quill", ""), pack.planning.Story("Tide gauge", "Tide gauge", "")]
@@ -1025,24 +1038,23 @@ class Others(unittest.TestCase):
 
     def test_a_why_here_answer_ties_the_pairings_fact_to_its_own_projects_facts(self):
         writer = QuillWriter()
-        writer.pairing = {"employer_fact": "internal tools in Python", "item": "E2",
-                          "reason": "a job-search helper is an internal tool for graduates"}
+        writer.pairing = {"employer_fact": "internal tools in Python", "item": "E1",
+                          "reason": "an offline assistant is an internal tool for staff"}
         with quill_world(writer) as a:
             pack.build(a.con, a.job["id"], use_web=False)
         why = next(e["user"] for e in writer.asked("story") if "Why do you want to work here?" in e["user"])
         self.assertIn('The reason about the employer: "internal tools in Python". Say in the first sentence one '
                       "concrete thing about the employer", why)
-        self.assertIn("Then you may tie it to this work, because a job-search helper is an internal tool for "
-                      "graduates, in one sentence at most", why)
-        self.assertIn("Project: Quill Employment", why)
+        self.assertIn("Then tie it to this work, because an offline assistant is an internal tool for staff, in "
+                      "one sentence", why)
+        self.assertIn("Project: Quill (", why)
         self.assertEqual(len(writer.asked("pairing")), 1, "the letter's pairing serves the answers too")
 
     def test_a_why_here_answer_giving_no_reason_about_the_employer_is_drafted_again_once(self):
         # four graded "why here" answers said only "because I built <project>" (2026-11-08)
-        built = ("I built Quill Employment, a job-search helper in Preact with a 113-test suite and SQLite storage. "
-                 "It drafts letters for graduates.")
-        better = ("Brightwater Tools builds internal tools, which is the work I want to do. Quill Employment, a "
-                  "job-search helper in Preact with a 113-test suite and SQLite storage, was such a tool.")
+        built = "I built Quill, an offline assistant over personal notes, in Lua. It answers questions over my notes."
+        better = ("Brightwater Tools makes the internal tools its own staff rely on, which is the work I want. Quill, "
+                  "my offline assistant in Lua, answers questions over my notes in the same way.")
         writer = QuillWriter()
         plain = writer.reply
         tries = [built, better]

@@ -201,9 +201,14 @@ What changed in each version, in plain words.
   names a project, repeats a paragraph's details or numbers, or begins "Your requirement", "Your need" or
   "Your work on" is written once more.
 - **"Why do you want to work here?" is about the employer.** Four answers said only "because I built"
-  a project. The answer now opens with what draws you to the employer, such as its product or its mission,
-  in your own words, and may then tie it to one piece of your work in a sentence. An answer whose first
-  sentence does not speak of the employer is written once more.
+  a project, and others gave the advert back ("Your focus on ownership and working with stakeholders ...")
+  or an employee's quote as the reason. The answer now opens with what you see in the employer, such as its
+  product or its mission, in your own words, then ties it in a sentence to one piece of your work that fits
+  the job well: never one the job ranks in its bottom half, also for "Why are you a good fit?". Hal looks
+  for the employer's reason in the company brief before the advert, and never takes it from a quote, a
+  list of what the job asks, or a line written to you. An answer, or a letter's opening, whose reason
+  repeats five words in a row of the advert or mostly one of its sentences is written once more, and an
+  answer that does not speak of the employer or tie it to your work is too.
 - **A letter keeps its true paragraphs.** One letter came out at 56 words: three paragraphs were left out,
   two of them over claims your record supports, because the AI check still doubted them after one rewrite.
   A paragraph that passes every other check is now kept, without the sentence the AI doubted when the rest

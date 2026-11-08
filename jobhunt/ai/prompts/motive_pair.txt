@@ -9,7 +9,10 @@ Reply with JSON only: {"employer_fact": the employer's words, copied exactly fro
 "item": "E3", "reason": one line in plain words}
 Rules:
 - The fact is something only this employer has: a product, project, service, place, client, method or
-  result of theirs, or its mission; the company brief is the best place to find one. Never a general value
+  result of theirs, or its mission. Look in the company brief first (what the company makes, for whom, a
+  fact about its product or mission); use the advert only when the brief has none. Never an employee's
+  quote or testimonial, never a sentence listing what the job asks for ("ownership and working with
+  stakeholders"), and never a line written to the job holder ("Your focus on ..."). Never a general value
   (innovation, excellence, a great culture, growth, diversity), what any employer offers (training,
   progression, a friendly team), or a duty or requirement of the job ("write SQL queries", "experience of
   Python"): those say what the job holder does, not what the employer is.

@@ -811,7 +811,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
         ranking = story_ranking(job, analysis, about, found, cards) if asked else ranking
         wanted = "\n".join(_requirements(analysis))
         told = rank.order(found, cards, ranking, wanted)
-        pairing = motive.make(names, _job_text(job), about, plan)
+        pairing = motive.make(names, _job_text(job), about, plan, fitting_names(ranking))
         written = _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing,
                                 chosen=list(told.letter), wanted=wanted, spare=list(told.others))
         return {**written, "ranking": ranking, "calls": written["calls"] + asked}
@@ -959,12 +959,25 @@ def _story_of(item: planning.Item, found: list[planning.Story]) -> planning.Stor
 STORY_TRIES = 3            # stories one answer or the message tries before the whole-draft path writes it
 
 
+def _fitting(left: list[planning.Story], ranking: list[rank.Ranked]) -> list[planning.Story]:
+    """The stories of `left` the ranking fits to the job (`rank.fits`), or all of `left` with no ranking or when it
+    fits none of them: a "why here" or "why fit" answer never offers work the ranking puts in its bottom half,
+    as graders saw a device-tracking sniffer offered to an ML employer (2026-11-08)."""
+    return [s for s in left if rank.fits(s.name, ranking)] or left
+
+
+def fitting_names(ranking: list[rank.Ranked]) -> set[str] | None:
+    """The names of the work the ranking fits to the job (`rank.fits`), for `motive.make`; None with no ranking."""
+    return {r.name for r in ranking if rank.fits(r.name, ranking)} if ranking else None
+
+
 def _why_story(left: list[planning.Story], used: dict[str, int],
-               pairing: motive.Pairing | None) -> planning.Story:
-    """The story a "why here" answer ties its reason to: the pairing's item's story while the pack has told it no
-    more than any other (`used`), else the one told least (`plan.choose`); counted in `used` either way. A
-    project the letter told was told again in the "why here" answer while other work was left untold
-    (2026-11-08)."""
+               pairing: motive.Pairing | None, ranking: list[rank.Ranked] = ()) -> planning.Story:
+    """The story a "why here" answer ties its reason to, among those the ranking fits to the job (`_fitting`):
+    the pairing's item's story while the pack has told it no more than any other (`used`), else the one told
+    least (`plan.choose`); counted in `used` either way. A project the letter told was told again in the "why
+    here" answer while other work was left untold (2026-11-08)."""
+    left = _fitting(left, list(ranking))
     own = _story_of(pairing.item, left) if pairing else None
     if own is None or used.get(own.key, 0) > min(used.get(s.key, 0) for s in left):
         return planning.choose(left, 1, used)[0]
@@ -973,7 +986,7 @@ def _why_story(left: list[planning.Story], used: dict[str, int],
 
 
 def _story_answer(question: str, found: list[planning.Story], used: dict[str, int], scope: paragraphs.Scope,
-                  pairing: motive.Pairing | None) -> list[paragraphs.Paragraph]:
+                  pairing: motive.Pairing | None, ranking: list[rank.Ranked] = ()) -> list[paragraphs.Paragraph]:
     """The paragraphs answering one form question: a "why here" question from the motivation `pairing` and the
     story `_why_story` gives, any other from the stories the pack has told least (`plan.choose`), one or two
     (`plan.examples_wanted`). When every paragraph is dropped the next story is tried, up to `STORY_TRIES`
@@ -984,10 +997,12 @@ def _story_answer(question: str, found: list[planning.Story], used: dict[str, in
         if not left:
             break
         if drafts.why_question(question):
-            story = _why_story(left, used, pairing)
-            said = [paragraphs.settle(story, paragraphs.why(question, pairing), scope)]
+            story = _why_story(left, used, pairing, ranking)
+            tied = pairing is not None and story is _story_of(pairing.item, [story])
+            said = [paragraphs.settle(story, paragraphs.why(question, pairing, tied), scope)]
         else:
-            chosen = planning.choose(left, planning.examples_wanted(question), used)
+            pool = _fitting(left, list(ranking)) if drafts.fit_question(question) else left
+            chosen = planning.choose(pool, planning.examples_wanted(question), used)
             said = [paragraphs.settle(s, paragraphs.answer(question, k, len(chosen)), scope)
                     for k, s in enumerate(chosen)]
         out += said
@@ -1043,11 +1058,12 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
         body.text, flags = whole_message(), []
         calls += 1
     if not paired and any(drafts.why_question(q) for q in questions):
-        pairing = motive.make((job["title"], job["company"]), scope.advert, scope.brief, plan)
+        pairing = motive.make((job["title"], job["company"]), scope.advert, scope.brief, plan,
+                              fitting_names(list(ranking)))
         calls += 1
     answers = []
     for question in questions:
-        said = _story_answer(question, found, used, scope, pairing)
+        said = _story_answer(question, found, used, scope, pairing, ranking)
         calls += sum(p.calls for p in said)
         text = " ".join(p.text for p in said if p.text)
         flags += [line for p in said if p.text for line in p.checks]

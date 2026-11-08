@@ -426,6 +426,17 @@ def stated_in(claim: str, cv_text: str) -> bool:
     return any(len(own & part) >= CV_SHARE * len(own) for part in parts)
 
 
+# A form question asking why the person fits the job: graders saw a coursework expense tracker given as the fit
+# (2026-11-08), so its answer tells work the ranking fits to the job.
+FIT_QUESTION = re.compile(r"\b(?:good|great|right|best|strong) (?:fit|match)\b|\bsuit(?:ed|able|s you)\b|"
+                          r"\bwhy should we\b|\bwhat makes you\b", re.I)
+
+
+def fit_question(question: str) -> bool:
+    """True for a form question that asks why the person fits the job (`FIT_QUESTION`)."""
+    return bool(FIT_QUESTION.search(question or ""))
+
+
 def why_question(question: str) -> bool:
     """True for a form question that asks why the person wants this job or employer."""
     return bool(WHY_QUESTION.search(question or ""))
