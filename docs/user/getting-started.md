@@ -396,6 +396,10 @@ Each job, qualification or skill is a card:
   speaks for your CVs, so Hal leaves that detail out of your letters, messages and answers unless your
   newest CV, a repository or another document of your own gives it too. **Edit** the card and remove it,
   or add it to your newest CV if it is still true.
+- **planned in** and a document's name beside a tool or a skill means only a plan gives it: a design
+  document, a specification or a proposal, or words such as "we will use". Hal leaves it out of your
+  letters, messages and answers, which never say you used it, as a plan is not what was built. If you did
+  use it, add it to a document that says so, such as your CV or the project's README.
 - **Confirm** says it is right. **Edit** lets you change any field, and **Save** keeps your words; Hal never
   changes them when it reads your files again. **Hide** keeps it out of your letters and CVs; hidden cards
   are folded away at the end of the tab, with **Show again**.

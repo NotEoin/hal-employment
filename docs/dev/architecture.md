@@ -425,7 +425,12 @@ runs: tests use `tests/support/fake_claude/`.
   part (`profile.writing.card_role`: the card's Role field and its team words, `stage.team_words`). A pick
   from a skills list (`plan.skills_line`: a Profile "Skill:" line, a CV line labelled "Skills:",
   "Languages:", "Tools:" and the like, or a label and a list of three or more) is tied to no card and marked
-  (`Item.skills`), as it says what the person knows, never which project used it. The
+  (`Item.skills`), as it says what the person knows, never which project used it. A pick whose quote is a
+  plan (`writing.planned.planned`, from its words or its passage's file) is marked (`Item.planned`) and
+  says so in the request; a sentence citing only such items fails unless it says the thing was planned
+  (`grounded.PLANNED_ONLY`), and a tool a sentence says was used must be in evidence that is not a plan. A
+  draft or fit row may name a card's planned tool only in words of a plan (`drafts.misplaced_tools`,
+  `drafts.evidence_checked`). The
   letter's Evidence line names the plan's quotes, else the record passages as before. The pack picks one
   plan for the letter, the message and the answers (with `COMMON_QUESTIONS`); `docs.change` picks one for
   the message and answers.
@@ -1082,7 +1087,15 @@ available yet.
   block and of `cards` (`writing.for_writing`), and `GET /api/v2/profile/{kind}` gives each item's
   `older_cv` ({field: [value]}, `writing.older_cv_only`), shown as "only in an older CV". A card the person
   added, and a value no source gives (typed in an edit), are theirs. An older draft gave a team project
-  tools the newest CV does not claim and its code never used (2026-11-08). Each item is one line of at most
+  tools the newest CV does not claim and its code never used (2026-11-08). Planned is not done
+  (`writing/planned.py`): a project's tool, or a skill, whose every source giving it is a plan (plan words
+  such as "will use", "we plan to", "the proposed", "to be deployed", or a plan document by its file name,
+  `PLAN_FILE`: a design document, a specification, a proposal, unless its words say something was done) is
+  left out of the block, of `cards`' `tools` and of `skill_names` (`writing.planned_only`); `cards` keeps
+  such tools as `planned`, which `pack.known_tools` counts, so a draft or fit row giving one to the project
+  is caught. `GET /api/v2/profile/{kind}` gives each item's `planned` ({field: {value: document}}), shown as
+  "planned in <document>". A team's design document planned Docker and PostgreSQL, the app used SQLite, and
+  every pack said the person used them (2026-11-08). Each item is one line of at most
   `LINE_MAX` characters, cut at a whole list item, and one location is named. A course's modules and a
   job's duties and achievements are one line each under it, naming the course or job (`entry_lines`:
   "Module (BA History): Oral History (68)", "Job duty (Guide at Fenwick Museum): Ran tours"), at most

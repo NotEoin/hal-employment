@@ -378,6 +378,29 @@ class SayWhichProject(unittest.TestCase):
             self.assertIsNone(grounded.unnamed(cites.cited(text)[0], [], WITH_PROJECTS))
 
 
+PLANNED_ITEM = Item("E5", "The app will use Docker and PostgreSQL", "Design Document.md > Stack", "Ferry planner",
+                    "team", "", ("Python", "Flask"), planned=True)
+WITH_PLAN = grounded.Facts({**ITEMS, "E5": PLANNED_ITEM},
+                           [PROJECTS[0], {**PROJECTS[1], "planned": ["Docker", "PostgreSQL"]}],
+                           [*FLAGS["known"], "Docker", "PostgreSQL"], FLAGS["allowed"])
+
+
+class PlannedNotDone(unittest.TestCase):
+    """Every pack said the person used tools a team's design document only planned (2026-11-08)."""
+
+    def test_a_plan_never_supports_saying_you_used_it(self):
+        found = grounded.problems(one("For Ferry planner, we used Docker and PostgreSQL [E5]."), WITH_PLAN)
+        self.assertIn(grounded.PLANNED_ONLY, found)
+        found = grounded.problems(one("I wrote the statistics features of Ferry planner with Docker [E1,E5]."),
+                                  WITH_PLAN)
+        self.assertIn("Docker is not in the evidence for Ferry planner; a skills list says what you know, not where "
+                      "you used it", found)
+
+    def test_a_plan_supports_saying_it_was_planned(self):
+        said = one("For Ferry planner, the team planned to use Docker and PostgreSQL [E5].")
+        self.assertEqual(grounded.problems(said, WITH_PLAN), [])
+
+
 class Unrepeat(unittest.TestCase):
     """Packs said the same sentence twice back to back, and reused one CV line in the letter, the message and both
     answers (2026-11-07)."""

@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import re
 
-from jobhunt.writing import check, stage
+from jobhunt.writing import check, planned, stage
 
 SIGNOFF_WORDS = 4          # a last line this short is a sign-off or a name, not a sentence
 ENDS = re.compile(r"[.!?:;)\]\"'\u2019]\s*$")
@@ -163,6 +163,12 @@ def crossed(draft: str, cards: list[dict]) -> list[str]:
     return out
 
 
+def _planned_said(text: str, *cards: dict) -> list[str]:
+    """The tools the `cards`' plans name (`profile.writing.planned_only`), when `text` says they were planned;
+    [] otherwise, as a plan never backs a tool said to be used."""
+    return [t for c in cards for t in c.get("planned", ())] if planned.said(text) else []
+
+
 def misplaced_tools(draft: str, cards: list[dict], known: list[str]) -> list[str]:
     """Sentences that give a project card a tool from `known` that the card's own facts never name, each
     with the tool and the project: "The Lua tide gauge needed C++. (C++ is not among Tide gauge's tools)"."""
@@ -173,7 +179,7 @@ def misplaced_tools(draft: str, cards: list[dict], known: list[str]) -> list[str
         if len(named) != 1:
             continue
         card = named[0]
-        own = " ".join([*card_names(card), card["summary"], *card["tools"]])
+        own = " ".join([*card_names(card), card["summary"], *card["tools"], *_planned_said(sentence, card)])
         for tool in dict.fromkeys(known):
             if names_tool(sentence, tool) and not names_tool(own, tool):
                 out.append(f"{sentence} ({tool} is not among {card['name']}'s tools)")
@@ -242,7 +248,7 @@ def evidence_checked(text: str, cards: list[dict], known: list[str], facts: str 
     for part in re.split(r"(?<=[.;])\s+", str(text or "")):
         named = named_cards(part, projects)
         wrong = [t for t in dict.fromkeys(known) if named and names_tool(part, t)
-                 and not backed(t, named, facts, projects)]
+                 and not backed(t, named, facts, projects) and t not in _planned_said(part, *named)]
         if len(named) == 1:
             wrong += _others_tools(part, named[0], by_name)
         if wrong:

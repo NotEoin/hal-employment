@@ -37,12 +37,18 @@ export function Sources({ evidence }) {
 
 // Beside a value only an older CV of yours gives: Hal leaves it out of your letters (`profile.writing.older_cv_only`).
 const OlderCv = () => html` <${Chip} tone="warn">only in an older CV<//>`;
+// Beside a value only a plan gives (a design document, a proposal): Hal leaves it out of your letters
+// (`profile.writing.planned_only`).
+const Planned = ({ doc }) => html` <${Chip} tone="warn">planned in ${doc}<//>`;
 
-function Value({ type, v, older = [] }) {
+/** A value's chips: only in an older CV, or planned in a document. */
+const marks = (x, older, planned) => html`${older.includes(x) && html`<${OlderCv} />`}${planned[x] && html`<${Planned} doc=${planned[x]} />`}`;
+
+function Value({ type, v, older = [], planned = {} }) {
   const s = shown(type, v);
-  if (type === "list") return html`<ul class="rec-list">${s.map((x, i) => html`<li key=${i}>${x}${older.includes(x) && html`<${OlderCv} />`}</li>`)}</ul>`;
+  if (type === "list") return html`<ul class="rec-list">${s.map((x, i) => html`<li key=${i}>${x}${marks(x, older, planned)}</li>`)}</ul>`;
   if (type === "modules") return html`<ul class="rec-list">${s.map((m, i) => html`<li key=${i}>${m.name}${m.mark ? ": " + m.mark : ""}</li>`)}</ul>`;
-  return older.includes(s) ? html`${s}<${OlderCv} />` : s;
+  return older.includes(s) || planned[s] ? html`${s}${marks(s, older, planned)}` : s;
 }
 
 /** An item's fields as a list of words and values; nothing when it has none. */
@@ -51,7 +57,8 @@ export function Fields({ item }) {
   if (!rows.length) return null;
   return html`<dl class="kv rec-kv">${rows.map(([f, words, type]) => html`<dt>${words}</dt><dd>
     ${item.kind === "basic" && f === "key" ? basicKey(item.fields[f])
-      : html`<${Value} type=${type} v=${item.fields[f]} older=${(item.older_cv || {})[f] || []} />`}</dd>`)}</dl>`;
+      : html`<${Value} type=${type} v=${item.fields[f]} older=${(item.older_cv || {})[f] || []}
+        planned=${(item.planned || {})[f] || {}} />`}</dd>`)}</dl>`;
 }
 
 const keepAllWords = c => (c.kind === "gap" ? "The gap is right" : c.kind === "overlap" ? "Both are right" : "Keep it as it is");

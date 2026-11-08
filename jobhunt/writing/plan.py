@@ -30,6 +30,9 @@ Design decisions, each with its reason:
   (`drafts.named_cards`).
 - Only a "Project" or "Job" line of the Profile block, a CV line or a passage of a card's file is tied to a
   card: a skill line quoting a project says nothing of where the project was done.
+- A pick whose quote is a plan (`writing.planned`: plan words, or a passage of a design document,
+  specification or proposal saying nothing was done) is marked (`Item.planned`) and says so: a design
+  document's planned tools became "I used Docker" in every pack (2026-11-08).
 - A skills list (`skills_line`: a Profile "Skill:" line, or a CV line of a label and a list, "AI and ML:
   PyTorch, NumPy, pandas") is never tied to a card and is marked as one (`Item.skills`): it says what the
   person knows, never which project used it. A letter said "I used NumPy and pandas to build" a project whose
@@ -44,7 +47,7 @@ from dataclasses import dataclass
 
 from jobhunt import llm
 from jobhunt.ai import prompts
-from jobhunt.writing import atoms, drafts, stage
+from jobhunt.writing import atoms, drafts, planned, stage
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +65,7 @@ SKILLS_LABEL = re.compile(r"^\s*(skills?|languages?|tools?|technologies|framewor
 LABELLED_LIST = re.compile(r"^\s*[A-Za-z][\w &/+#.-]{0,40}:\s*[^,.;]{1,40}(?:,[^,.;]{1,40}){2,}\.?\s*$")
 PROFILE_SKILL = re.compile(r"^Skill\b")
 SKILLS_WORDS = "a skills list: what the applicant knows, never which project used it"
+PLANNED_WORDS = "a plan, not something done: it never says the applicant used it"
 
 
 @dataclass(frozen=True)
@@ -90,6 +94,7 @@ class Item:
     tools: tuple[str, ...] = ()
     skills: bool = False       # quoted from a skills list (`skills_line`), so tied to no project
     tag: str = ""              # the card's tag when its name is like another card's (`profile.writing.tag`)
+    planned: bool = False      # it says what was planned, not done (`writing.planned`)
 
     def words(self) -> str:
         """The item as a request lists it: its quote, then where it comes from, its card (with its tag), context
@@ -106,6 +111,8 @@ class Item:
             about.append(f"tools: {', '.join(self.tools)}")
         if self.skills:
             about.append(SKILLS_WORDS)
+        if self.planned:
+            about.append(PLANNED_WORDS)
         return f"{self.id}: \"{self.text}\" ({'; '.join(about)})"
 
 
@@ -197,10 +204,16 @@ def checked(reply: dict, found: list[Source]) -> list[Item]:
         card = {} if skills else source.card or {}
         items.append(Item(f"E{len(items) + 1}", text, source.label, card.get("name", ""),
                           card.get("context", "") or source.context, _role(card or None, source.text),
-                          tuple(card.get("tools", ())), skills, card.get("tag", "")))
+                          tuple(card.get("tools", ())), skills, card.get("tag", ""),
+                          planned.planned(text, _file_of(source.label))))
         if len(items) == MAX_ITEMS:
             break
     return items
+
+
+def _file_of(label: str) -> str:
+    """The file a source comes from: a passage's "file > heading" label names it; a CV or Profile line none."""
+    return "" if label in (CV, PROFILE) else label.split(" > ", 1)[0]
 
 
 def request(requirements: list[str], questions: list[str], found: list[Source]) -> str:

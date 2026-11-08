@@ -43,6 +43,9 @@ Design decisions, each with its reason:
   in its paragraph, back to one about another project, name the card (or an alias), a sentence opening "I
   <verb>" is given "For <card>, " with no AI (`name_projects`); any other is rewritten once, and kept as it
   was when the rewrite fails, as it says nothing untrue.
+- A plan is not what was done: a sentence citing only items that quote a plan (`plan.Item.planned`) fails
+  unless it says the thing was planned (`PLANNED_ONLY`), and a tool a sentence says was used must be in
+  items that are not plans (2026-11-08).
 - A number counts in figures or words ("seven" is "7"), so "a team of seven" meets "team of 7".
 - The AI's "unsupported" words are dropped when the cited items or the employer's words hold them: a reply
   quoting what the evidence says is a false alarm. "supported": false with every quoted word dropped is
@@ -74,7 +77,7 @@ from dataclasses import dataclass, field
 from jobhunt import llm
 from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import cites, drafts, flow, plain, repeats, spelling, stage, taught
+from jobhunt.writing import cites, drafts, flow, plain, planned, repeats, spelling, stage, taught
 from jobhunt.writing.plan import Item
 
 log = logging.getLogger(__name__)
@@ -103,6 +106,7 @@ WRONG_PLACE = "places the work where its evidence does not"
 NOT_PROJECTS = "{tool} is not in the evidence for {card}; a skills list says what you know, not where you used it"
 ONLY_SKILLS = "rests only on a skills list, which says nothing about {card}"
 TOO_MUCH = "gives you more of the work than its evidence does"
+PLANNED_ONLY = "its evidence is a plan, not something done; say it was planned, or leave it out"
 REASON = re.compile(r"\(([^()]*)\)$")
 REPEATS = 'already said as "{sentence}"'   # a sentence repeating an earlier one (`unrepeat`)
 # A sentence telling again of a project an earlier paragraph told with the same evidence (`unrepeat`).
@@ -206,6 +210,8 @@ def _tool_problems(text: str, items: list[Item], facts: Facts) -> list[str]:
     """The tools of `facts.known` a sentence names that its evidence does not hold. For a sentence about a
     project, only that project's own evidence counts: its items that are not a skills list, and its card's
     names, summary and tools; a skills list alone never supports it."""
+    if not planned.said(text):
+        items = [i for i in items if not i.planned]   # a plan never backs a tool said to be used
     projects = _projects(text, items, facts)
     if not projects:
         held = _evidence_text(items)
@@ -291,6 +297,8 @@ def problems(c: cites.Cited, facts: Facts) -> list[str]:
         out += [f"the number {n} is not in its evidence" for n in sorted(numbers(text) - held)]
         out += _tool_problems(text, items, facts)
         out += [p for p in (_context_problem(text, items), _alone_problem(text, items)) if p]
+        if all(i.planned for i in items) and not planned.said(text):
+            out.append(PLANNED_ONLY)
     if facts.now is not None and stage.ended_course(text, facts.now):
         out.append(stage.ended_said(facts.now))
     out += _reason(drafts.misplaced_tools(text, facts.cards, facts.known))

@@ -161,7 +161,8 @@ def _cards(cards: list[dict]) -> list[dict]:
 @route("GET", PREFIX + "/{kind}")
 def of_kind(req: Request) -> dict:
     """Every item of one kind with its sources and conflicts, and for each card what only an older CV of the
-    person's gives it (`older_cv`, {field: [value, ...]}: `profile.writing.older_cv_only`)."""
+    person's gives it (`older_cv`, {field: [value, ...]}: `profile.writing.older_cv_only`) and what only a plan
+    gives it (`planned`, {field: {value: document}}: `profile.writing.planned_only`)."""
     kind = req.params["kind"]
     if kind not in store.KINDS:
         raise NotFound("Your profile has no such list.")
@@ -169,7 +170,8 @@ def of_kind(req: Request) -> dict:
     ids = {i["id"] for i in found}
     cvs = profile_writing.CvAuthority.of(req.con)
     return {"kind": kind, "label": LABELS[kind],
-            "items": [{**with_files(i), "older_cv": profile_writing.older_cv_only(req.con, i, cvs)} for i in found],
+            "items": [{**with_files(i), "older_cv": profile_writing.older_cv_only(req.con, i, cvs),
+                       "planned": profile_writing.planned_only(req.con, i)} for i in found],
             "conflicts": [c for c in conflicts.listing(req.con) if ids & set(c["item_ids"])]}
 
 

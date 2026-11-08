@@ -302,5 +302,61 @@ class NewestCv(unittest.TestCase):
                          "the newest CV no longer names Ferry planner's tools")
 
 
+DESIGN = "Sources/Projects/Ferry planner/Design Document.md"
+
+
+class PlannedNotDone(unittest.TestCase):
+    """A team project card listed Docker and PostgreSQL because the team's design document planned them; the
+    built app used SQLite, and every pack said the person used them (2026-11-08)."""
+
+    def setUp(self):
+        self.home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(paths.set_override(self.home))
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+        self.con = db.connect()
+        self.addCleanup(self.con.close)
+
+    def ferry(self, rel: str, tools: list[str], quote: str, doc_type: str) -> int:
+        return store.add_found(self.con, "project", {"name": "Ferry planner", "tools": tools},
+                               {"source_rel": rel, "quote": quote, "field": "tools", "doc_type": doc_type,
+                                "role": "own"})
+
+    def seed(self) -> int:
+        self.ferry(DESIGN, ["Docker", "PostgreSQL"], "The app will use Docker and PostgreSQL", "report")
+        item_id = self.ferry(REPO, ["SQLite"], "Stores timetables in SQLite", "repository")
+        store.add_found(self.con, "skill", {"name": "Kubernetes"},
+                        {"source_rel": DESIGN, "quote": "we plan to run it on Kubernetes", "doc_type": "report",
+                         "role": "own"})
+        store.add_found(self.con, "skill", {"name": "SQLite"},
+                        {"source_rel": REPO, "quote": "Stores timetables in SQLite", "doc_type": "repository",
+                         "role": "own"})
+        check_everything(self.con)
+        return item_id
+
+    def test_a_tool_only_a_plan_gives_is_left_out_of_writing(self):
+        self.seed()
+        card = writing.cards(self.con)[0]
+        self.assertEqual((card["tools"], card["planned"]), (["SQLite"], ["Docker", "PostgreSQL"]))
+        block = profile.context_block(self.con)
+        self.assertIn("Tools: SQLite", block)
+        for planned_tool in ("Docker", "PostgreSQL", "Kubernetes"):
+            self.assertNotIn(planned_tool, block)
+        self.assertEqual(writing.skill_names(self.con), ["SQLite"], "a skill only a plan names is left out")
+        self.assertIn("Docker", pack.known_tools(writing.cards(self.con)), "still a tool a draft may misplace")
+
+    def test_the_profile_says_which_document_plans_each_value(self):
+        item = store.item(self.con, self.seed())
+        self.assertEqual(writing.planned_only(self.con, item),
+                         {"tools": {"Docker": "Design Document", "PostgreSQL": "Design Document"}})
+        mine = store.add_by_hand(self.con, "project", {"name": "Tide gauge", "tools": ["Docker"]})
+        self.assertEqual(writing.planned_only(self.con, mine), {}, "a card you added is all yours")
+
+    def test_a_tool_a_plan_and_a_record_of_the_work_both_give_is_kept(self):
+        self.ferry(DESIGN, ["Docker"], "The app will use Docker", "report")
+        self.ferry(REPO, ["Docker"], "Runs in Docker", "repository")
+        check_everything(self.con)
+        self.assertEqual(writing.cards(self.con)[0]["tools"], ["Docker"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -40,6 +40,11 @@ Design decisions, each with its reason:
   its code never used, and every pack said the person used them (2026-11-08). The newest CV is the one whose
   own period (its note's `period`) ends latest, then the newest file (`ingest_items.mtime`); only CVs whose
   role is `own` count, and with one CV or none nothing is left out.
+- Planned is not done (`planned_only`, `writing.planned`): a project's tool, or a skill, that only plans
+  give (plan words, or a design document, specification or proposal saying nothing was done) is left out
+  of the block, the cards' tools and the skill names, kept as the card's `planned`, and the profile page
+  says "planned in <document>". A team's design document planned Docker and PostgreSQL, the app used
+  SQLite, and every pack said the person used them (2026-11-08).
 - Project cards with similar names (`similar`: the same first word, or one name inside the other) are each
   named with a few words of their own summary (`tag`: "Quill (offline assistant over personal notes)",
   "Quill Employment (job-search helper)") on their Profile line and in `cards` (`tag`, `similar`): drafts gave
@@ -61,7 +66,7 @@ from dataclasses import dataclass, field
 from jobhunt import db, record
 from jobhunt.ingest import frontmatter
 from jobhunt.profile import contexts, merge, store, tiers
-from jobhunt.writing import stage
+from jobhunt.writing import planned, stage
 
 log = logging.getLogger(__name__)
 
@@ -326,9 +331,57 @@ def older_cv_only(con: sqlite3.Connection, item: dict, cvs: CvAuthority | None =
     return out
 
 
+# Planned, not done -----------------------------------------------------------------------------------------
+
+# The field of each kind whose values a plan may give: a project's tools, a skill's name (the whole skill).
+PLANNED_FIELDS = {"project": "tools", "skill": "name"}
+
+
+def _sources(con: sqlite3.Connection, item_id: int) -> list[dict]:
+    """Each source of an item: {source_rel, quote, said} with `said` the fields it gives."""
+    out = []
+    for e in con.execute("SELECT source_rel, quote, said FROM profile_evidence WHERE item_id = ?", (item_id,)):
+        try:
+            said = json.loads(e["said"] or "{}")
+        except ValueError:
+            log.warning("profile writing: a source of item %s holds fields that do not read as JSON", item_id)
+            said = {}
+        out.append({"source_rel": e["source_rel"], "quote": e["quote"] or "",
+                    "said": said if isinstance(said, dict) else {}})
+    return out
+
+
+def _source_gives(source: dict, name: str, value: str) -> bool:
+    """True when a source gives `value` for field `name`: in the fields it gives, or as a word of its quote."""
+    if _gives(source["said"].get(name), value):
+        return True
+    word = rf"(?<![\w+#]){re.escape(value.strip())}(?![\w+#])"
+    return bool(value.strip()) and re.search(word, source["quote"], re.I) is not None
+
+
+def planned_only(con: sqlite3.Connection, item: dict) -> dict[str, dict[str, str]]:
+    """The values of a card's field that only plans give (`writing.planned`), each with the document that plans
+    it: {field: {value: document}}; {} for an item the person added themselves, or one with none."""
+    name = PLANNED_FIELDS.get(item["kind"])
+    if not name or item.get("origin") == "you":
+        return {}
+    value = item["fields"].get(name)
+    values = value if isinstance(value, list) else [value] if value else []
+    sources = _sources(con, item["id"])
+    out: dict[str, str] = {}
+    for v in (str(v) for v in values):
+        givers = [s for s in sources if _source_gives(s, name, v)]
+        if givers and all(planned.planned(s["quote"], s["source_rel"]) for s in givers):
+            out[v] = planned.document_name(givers[0]["source_rel"])
+    return {name: out} if out else {}
+
+
 def for_writing(con: sqlite3.Connection, item: dict, cvs: CvAuthority | None = None) -> dict:
-    """A card's fields as writing uses them: without what only older CVs give (`older_cv_only`)."""
+    """A card's fields as writing uses them: without what only older CVs give (`older_cv_only`) and without
+    the tools only a plan gives (`planned_only`)."""
     dropped = older_cv_only(con, item, cvs)
+    for field_name, values in planned_only(con, item).items():
+        dropped[field_name] = [*dropped.get(field_name, []), *values]
     if not dropped:
         return item["fields"]
     fields = dict(item["fields"])
@@ -367,6 +420,8 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
                 continue
             if kind == "basic" and it["fields"].get("key", "").lower() in CONTACT_KEYS:
                 continue
+            if kind == "skill" and planned_only(con, it):
+                continue                   # a skill only a plan names is not one the person has shown
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
             made = contexts.current(it, worked_for) if kind in contexts.CONTEXT_KINDS else ""
             fields = for_writing(con, it, cvs)
@@ -492,7 +547,8 @@ def aliases(item: dict, hidden: list[dict]) -> list[str]:
 
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
-    tools, summary, context, aliases, role, files, tag, similar}; `role` is the person's part (`card_role`),
+    tools, summary, planned, context, aliases, role, files, tag, similar}; `planned` holds the tools only a plan
+    gives (`planned_only`), left out of `tools`; `role` is the person's part (`card_role`),
     `files` the record files it rests on, and a project whose name is like another's (`similar`) has those
     names and its `tag`.
 
@@ -516,13 +572,14 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                 said = stage.CONTEXT_WORDS.get(context, "")
                 out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),
                             "tools": list(f.get("tools") or []), "summary": f.get("summary") or "",
+                            "planned": list(planned_only(con, it).get("tools", {})),
                             "context": context, "aliases": aliases(it, hidden), "role": card_role(it),
                             "files": [e["source_rel"] for e in it["evidence"] if e["source_rel"]],
                             "tag": "", "similar": []})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
-                            "tools": [], "summary": "; ".join(f.get("duties") or []), "context": context,
-                            "role": "", "files": [], "tag": "", "similar": []})
+                            "tools": [], "summary": "; ".join(f.get("duties") or []), "planned": [],
+                            "context": context, "role": "", "files": [], "tag": "", "similar": []})
     projects = [c for c in out if c["kind"].startswith("project")]
     alike = similar([c["name"] for c in projects])
     for c in projects:
@@ -559,7 +616,7 @@ def skill_names(con: sqlite3.Connection | None = None) -> list[str]:
         with closing(db.connect()) as own:
             return skill_names(own)
     return [it["fields"].get("name", "") for it in store.items(con, "skill", hidden=False)
-            if it["state"] in USED_STATES and it["fields"].get("name")]
+            if it["state"] in USED_STATES and it["fields"].get("name") and not planned_only(con, it)]
 
 
 def cards_block(found: list[dict]) -> str:

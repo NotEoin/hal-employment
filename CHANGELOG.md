@@ -175,6 +175,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Planned is not done.** A team project listed tools its design document only planned, and every letter
+  said you used them. A tool or skill that only a plan gives (a design document, a specification, a
+  proposal, or words such as "we will use") is now left out of your letters, messages and answers, and Your
+  record marks it **planned in** and the document's name. A draft may still say it was planned.
 - **Projects with similar names stay apart in the fit table too.** The fit table and the letter's
   **Evidence** note still gave a local assistant the tools of a job-search helper with a similar name. Each
   project with a similar name is now named there with a few words of its own description, and a tool only

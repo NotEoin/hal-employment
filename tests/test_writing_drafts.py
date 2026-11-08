@@ -40,6 +40,17 @@ class Tools(unittest.TestCase):
                                        ["Lua", "C++"])
         self.assertEqual(found, ["My Tide gauge needed C++ and threads. (C++ is not among Tide gauge's tools)"])
 
+    def test_a_tool_only_a_plan_names_may_be_said_as_planned_never_as_used(self):
+        # a team's design document planned Docker; the built app used SQLite (2026-11-08)
+        cards = [{**CARDS[1], "tools": ["SQLite"], "planned": ["Docker"]}]
+        used = "Harbour survey ran in Docker."
+        self.assertEqual(drafts.misplaced_tools(used, cards, ["SQLite", "Docker"]),
+                         [f"{used} (Docker is not among Harbour survey's tools)"])
+        self.assertEqual(drafts.misplaced_tools("Harbour survey was planned to run in Docker.", cards,
+                                                ["SQLite", "Docker"]), [])
+        self.assertEqual(drafts.evidence_checked("Harbour survey uses SQLite and Docker.", cards,
+                                                 ["SQLite", "Docker"]), ("Harbour survey uses SQLite.", True))
+
     def test_a_sentence_naming_two_projects_is_left_alone(self):
         self.assertEqual(drafts.misplaced_tools("Tide gauge and Harbour survey used Lua and C++.", CARDS,
                                                 ["Lua", "C++"]), [])

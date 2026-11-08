@@ -263,8 +263,9 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
 
 
 def known_tools(cards: list[dict]) -> list[str]:
-    """Every tool a checked card or skill names: what a draft or fit row may wrongly give to a project."""
-    return [t for c in cards for t in c["tools"]] + profile_writing.skill_names()
+    """Every tool a checked card or skill names, and every tool a card's plan names (`planned`): what a draft or
+    fit row may wrongly give to a project."""
+    return [t for c in cards for t in (*c["tools"], *c.get("planned", ()))] + profile_writing.skill_names()
 
 
 NO_EVIDENCE = re.compile(r"^\s*(no|none|not)\b|\bno (evidence|mention)\b", re.I)   # a fit row that found nothing

@@ -227,6 +227,20 @@ class RecordPage(unittest.TestCase):
         job = self.page("record-work")
         self.assertEqual(self.card(job, "Collections volunteer").get_by_text("Quote not found in the file").count(), 0)
 
+    def test_a_tool_only_a_plan_gives_is_marked_planned_in_its_document(self) -> None:
+        # a team's design document planned tools the built app never used, and every letter said the person
+        # used them (2026-11-08)
+        design = "Sources/Projects/Ferry planner/Design Document.md"
+        found("project", {"name": "Ferry planner", "tools": ["Docker"]}, design, "report",
+              "The app will use Docker")
+        found("project", {"name": "Ferry planner", "tools": ["SQLite"]}, "Sources/Code/ferry/README.md",
+              "repository", "Stores timetables in SQLite")
+        p = self.page("record-projects")
+        card = self.card(p, "Ferry planner")
+        p.shows(card.get_by_text("planned in Design Document"), "the mark")
+        self.assertEqual(card.locator("li", has_text="SQLite").get_by_text("planned in").count(), 0)
+        self.clean(p)
+
     def test_choosing_a_value_settles_the_conflict(self) -> None:
         ids = self.profile()
         p = self.page("record-work")

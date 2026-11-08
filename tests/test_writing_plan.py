@@ -118,6 +118,21 @@ class SimilarNames(unittest.TestCase):
         self.assertIn("about Quill Employment (job-search helper), university team project", item.words())
 
 
+class PlannedNotDone(unittest.TestCase):
+    def test_an_item_quoting_a_plan_is_marked_planned_and_says_so(self):
+        # a team's design document planned Docker; the built app used SQLite, and every pack said the person
+        # used Docker (2026-11-08)
+        kept = ("[Sources/Projects/Ferry planner/Design Document.md > Stack]\nThe app uses Docker and PostgreSQL."
+                "\n\n[Sources/Code/ferry/README.md > Storage]\nTimetables are stored in SQLite.\n\n"
+                "[Notes/ferry.md > Next]\nWe will use Redis for caching.")
+        found = plan.sources("", kept, CARDS)
+        picks = [{"source": s.id, "quote": s.text} for s in found]
+        items = plan.checked({"evidence": picks}, found)
+        self.assertEqual([i.planned for i in items], [True, False, True])
+        self.assertIn(plan.PLANNED_WORDS, items[0].words())
+        self.assertNotIn(plan.PLANNED_WORDS, items[1].words())
+
+
 class Picks(unittest.TestCase):
     def setUp(self):
         self.found = plan.sources(FACTS, KEPT, CARDS)
