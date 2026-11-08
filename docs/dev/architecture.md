@@ -459,12 +459,19 @@ runs: tests use `tests/support/fake_claude/`.
   every named story, card or not, to be named in its first sentence (`paragraphs._names`).
   Which work is told comes from one AI ranking per pack (`writing/rank.py`, prompt `story_rank`,
   `pack.story_ranking`): `rank.make` offers every project and job card that is not archived (with its
-  `profile.writing.cards` `tier`, "core" marked as the tie-break at a close fit) and the plan's named
-  project stories with no card (`rank.candidates`), with the job's title, summary, requirements and the
-  company brief (`rank.Job`), and keeps the reply's names that are among them, each once, with a one-line
-  reason (`rank.checked`, `rank.Ranked`). `rank.order` gives the letter the first `plan.LETTER_STORIES` ranked
-  project or job stories with facts (modules and other lines only below `plan.MIN_PROJECTS`), and the
-  message and answers every story in ranked order, the plan's unranked stories last (`rank.Told`). The pack
+  `profile.writing.cards` `tier`, "core" marked, and its summary, else its first quote, else the person's
+  part, `rank._line`) and the plan's named project stories with no card (`rank.candidates`), with the job's
+  title, summary, requirements and the company brief (`rank.Job`). The prompt says core is the work the
+  person counts as their best and asks for every piece of work ranked by fit. `rank.checked` keeps the
+  reply's names that are among them (matched by their words, a trailing tag or a card's aliases aside),
+  each once, with a one-line reason (`rank.Ranked`), and `rank.with_core` adds every core card the reply
+  left out, last, so core work is always ranked (one core project was missing from 3 graded rankings,
+  2026-11-08). `rank.order` puts the ranked stories in the order `rank.led` gives: the core ones in the
+  ranking's top half, then the others in its top `rank.TOP_PLACES` (3), then the other core ones, then the
+  rest, each in ranking order (a core AI assistant came 13th behind first-year coursework, 2026-11-08). It
+  gives the letter the first `plan.LETTER_STORIES` project or job stories with facts in that order (modules
+  and other lines only below `plan.MIN_PROJECTS`), and the message and answers every story in that order,
+  the plan's unranked stories last (`rank.Told`). The pack
   log has the ranking and its reasons. `write_letter` makes the call unless given a `ranking`, and the pack
   passes the letter's to `write_others`, so a pack ranks once. Word overlap led with weak projects in 15
   graded packs (2026-11-08). When the call gives no usable name (or the AI is unavailable for it), the word

@@ -73,7 +73,34 @@ class Ranking(unittest.TestCase):
                                           {"name": "Netferret", "reason": "again"},
                                           {"name": "A trading bot", "reason": "invented"}, "Parrot"]})
         self.assertEqual(ranked, [rank.Ranked("Netferret", "packet capture work"),
-                                  rank.Ranked("Gullwing", "real-time code"), rank.Ranked("Parrot", "")])
+                                  rank.Ranked("Gullwing", "real-time code"), rank.Ranked("Parrot", ""),
+                                  rank.Ranked("Quill Employment")], "core work the reply left out comes last")
+
+    def test_a_core_card_the_reply_leaves_out_is_still_ranked(self):
+        # one core project was missing from 3 graded rankings (2026-11-08)
+        with self.assertLogs("jobhunt.writing.rank", "INFO") as logged:
+            ranked, _ = self.ask(reply("Netferret", "Gullwing"))
+        self.assertEqual([r.name for r in ranked], ["Netferret", "Gullwing", "Parrot", "Quill Employment"])
+        self.assertIn("core work the reply left out, ranked last: Parrot; Quill Employment", "\n".join(logged.output))
+
+    def test_a_name_matches_by_its_words_and_by_the_cards_other_names(self):
+        sniffer = {**SNIFFER, "aliases": ["PCAP reader"]}
+        offered = [sniffer, PILOT, {**JOBS, "tier": "supporting"}]
+        ranked = rank.checked(reply("quill-employment", "PCAP Reader", "Gullwing (personal project; core)"),
+                              offered)
+        self.assertEqual([r.name for r in ranked], ["Quill Employment", "Netferret", "Gullwing"])
+
+    def test_a_card_with_no_summary_is_offered_with_its_first_quote_never_as_a_bare_name(self):
+        bare = card("Kestrel", "", ["Rust"], ["Kestrel plans drone routes with A* search"], tier="core")
+        self.assertEqual(rank._line(bare),
+                         "- Kestrel (personal project; core): Kestrel plans drone routes with A* search. Tools: Rust")
+
+    def test_the_prompt_asks_for_every_piece_of_work_and_says_what_core_means(self):
+        from jobhunt.ai import prompts
+
+        said = prompts.text(rank.PROMPT)
+        self.assertIn("never leave one out", said)
+        self.assertIn('marks as "core" the work they\ncount as their best', said)
 
     def test_a_reply_with_no_ranking_or_no_ai_gives_none(self):
         self.assertEqual(self.ask({})[0], [])
@@ -91,6 +118,33 @@ class Order(unittest.TestCase):
         self.assertEqual([s.name for s in told.others],
                          ["Netferret", "Old blog", "Gullwing", "Quill Employment", "Parrot"])
         self.assertIn("Netferret has a 113-test suite over recorded PCAP captures", told.letter[0].facts)
+
+    def test_core_work_the_ranking_places_in_its_top_half_leads_the_letter(self):
+        # a fintech letter told two first-year coursework apps while the core AI assistant came 13th (2026-11-08)
+        course = [card(f"Coursework {k}", f"A first-year app number {k}", ["Java"], [f"Coursework {k} sorts lists"])
+                  for k in range(1, 6)]
+        helper = card("Owlet", "An AI assistant over a person's notes", ["Python"], ["Owlet answers questions"],
+                      tier="core")
+        cards = [*course, helper]
+        names = ["Coursework 1", "Coursework 2", "Owlet", "Coursework 3", "Coursework 4", "Coursework 5"]
+        told = rank.order([], cards, [rank.Ranked(n) for n in names], WANTED)
+        self.assertEqual([s.name for s in told.letter], ["Owlet", "Coursework 1", "Coursework 2"])
+        self.assertEqual([s.name for s in told.others][:4], ["Owlet", "Coursework 1", "Coursework 2", "Coursework 3"])
+
+    def test_work_that_is_not_core_leads_core_work_only_from_the_top_three_over_core_work_below_the_half(self):
+        # a trading letter left a core real-time pathfinding project 14th, behind Java coursework (2026-11-08)
+        course = [card(f"Coursework {k}", f"A first-year app number {k}", ["Java"], [f"Coursework {k} sorts lists"])
+                  for k in range(1, 7)]
+        pilot = {**PILOT, "tier": "core"}
+        names = ["Coursework 1", "Coursework 2", "Coursework 3", "Coursework 4", "Coursework 5", "Gullwing"]
+        told = rank.order([], [*course, pilot], [rank.Ranked(n) for n in names], WANTED)
+        self.assertEqual([s.name for s in told.letter], ["Coursework 1", "Coursework 2", "Coursework 3"])
+        self.assertEqual([s.name for s in told.others][3:5], ["Gullwing", "Coursework 4"],
+                         "core work goes before work that is not core below the top three")
+        two = rank.order([], [*course, pilot], [rank.Ranked(n) for n in ["Coursework 1", "Coursework 2",
+                                                                         "Gullwing", "Coursework 3",
+                                                                         "Coursework 4"]], WANTED)
+        self.assertEqual([s.name for s in two.letter], ["Gullwing", "Coursework 1", "Coursework 2"])
 
     def test_the_plans_own_story_of_a_ranked_card_is_told_and_its_unranked_stories_come_last(self):
         items = [plan.Item("E1", "Parrot answers spoken questions about recipes", "CV", "Parrot"),

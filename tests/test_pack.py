@@ -652,6 +652,29 @@ class Paragraphs(unittest.TestCase):
         self.assertIn(f"story ranking for job {a.job['id']}: 1. Ferry log (Ferry log is like the job); 2. Quill "
                       "Employment", "\n".join(logged.output))
 
+    def test_core_work_the_ranking_places_in_its_top_half_leads_the_letter(self):
+        # tier was a tie-break only, so a core AI assistant came 13th behind first-year coursework (2026-11-08)
+        from jobhunt.profile import store, tiers
+
+        order = ["Ferry log", "Tide gauge", "Quill", "Quill Employment", "Harbour lights"]
+        writer = QuillWriter()
+        plain = writer.reply
+        writer.reply = lambda system, user: ({"ranking": [{"name": n, "reason": "made-up"} for n in order]}
+                                             if prompt_id(system) == "rank" else plain(system, user))
+        with quill_world(writer) as a:
+            for name in ("Tide gauge", "Ferry log", "Harbour lights"):
+                store.confirm(a.con, store.add_found(a.con, "project", {
+                    "name": name, "summary": "Writing reports of river levels and spreadsheets"},
+                    {"source_rel": f"Sources/Code/{name}.md", "quote": f"{name} writes reports every hour",
+                     "field": "", "doc_type": "repository"}))
+            quill = next(it for it in store.items(a.con, "project") if it["fields"].get("name") == "Quill")
+            tiers.set_tier(a.con, quill["id"], tiers.CORE)
+            pack.write_letter(a.con, a.job)
+        lettered = [re.search(r"^Project: (.+?)(?: \(|$)", e["user"], re.M).group(1)
+                    for e in writer.asked("story") if "cover letter" in e["user"]]
+        self.assertEqual(lettered, ["Quill", "Ferry log", "Tide gauge"])
+        self.assertIn("- Quill (personal project; core): ", writer.asked("rank")[0]["user"])
+
     def test_the_openings_reason_is_chosen_from_the_work_the_letter_tells_after_the_ranking(self):
         # the opening named a project the letter never otherwise introduced, or one a paragraph retold
         # (2026-11-08)

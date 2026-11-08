@@ -183,8 +183,15 @@ What changed in each version, in plain words.
   common with the advert, so a letter for a networking role led with a voice assistant while a packet
   sniffer waited in the fit table. The AI now ranks all your projects and jobs against the job once per
   pack, with a short reason for each, and the letter tells the three best that have facts to tell. The
-  message and the answers take the next ones. Work you marked as one to lead with comes first when two fit
-  about as well. If the ranking fails, Hal chooses by the advert's words as before.
+  message and the answers take the next ones (see **Your best work leads**). If the ranking fails, Hal
+  chooses by the advert's words as before.
+- **Your best work leads.** The projects and jobs you would lead with (your best, at the top of **Check your
+  record**) only broke a tie in the ranking, so a letter for a web role told two first-year coursework apps
+  and left the person's AI assistant 13th. A letter now tells first the work you would lead with that the
+  ranking places in its top half, then the next best; other work goes before it only when that work is in
+  the top three and yours is not in the top half. The message and the answers follow the same order. Work
+  you would lead with is always ranked, also when the AI leaves it out, its name is written a little
+  differently, or its card has no summary.
 - **The opening no longer tells a project twice.** A letter's opening named the project behind your reason
   for the employer with its details, and a paragraph then told the same details again, or the opening named
   a project the letter never came back to. The reason now rests on a project the letter tells, the opening
