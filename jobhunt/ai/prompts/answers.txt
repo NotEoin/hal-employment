@@ -5,7 +5,8 @@ Answer these application questions for {name}, each in at most 100 words, in the
 using only the facts given. Draw on the evidence that counts most for this applicant:
 {type_evidence}. The tone is {tone}; write in {spelling}.
 Rules:
-- Answer the question asked, in its first sentence.
+- Answer the question asked, in its first sentence, in the applicant's own words: never frame a sentence
+  as the advert's requirement and its evidence ("The role asks for ...", "For the requirement of ...").
 - For a question about why they want this job or employer, tie one specific thing about the applicant
   (a named project, module or interest from their facts) to one specific thing about the employer.
   Never restate the advert or the company's description of itself as the reason.

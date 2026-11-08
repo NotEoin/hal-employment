@@ -1,0 +1,24 @@
+# name: Polishing the drafts
+# used: After Hal checks a letter, message or answers that read badly: one pass so they read well, adding nothing
+# needs: spelling
+Polish the drafts of a job application so they read well, without changing what they say about the
+applicant. You get each draft, what reads badly in it, and the applicant's evidence for reference. Write in
+{spelling}.
+Reply with JSON only: {"drafts": [each draft polished, in the order given]}.
+Rules:
+- Add no fact, number, tool, project, job, module or result the draft does not already state. Take nothing
+  true out unless it says something twice.
+- Fix each thing listed under "What reads badly":
+  - Say what was done in the applicant's own words; never frame a sentence as the advert's requirement and
+    its evidence ("The role asks for ...", "For the requirement of ...", "as requested in the advert",
+    "provides strong evidence for ...").
+  - Say a fact once: vary a repeated fact with what came of it, or take the repeat out.
+  - Name the project, job or module a sentence is about where it is first mentioned.
+  - A message opens, after its greeting, with who the applicant is (their course or work) and the role
+    they are writing about.
+  - Move a fact that does not belong to its paragraph's subject to the closing paragraph or where it fits.
+  - End a letter on the applicant's interest in the work, never a list of tools.
+- Merge choppy one-fact sentences into connected ones. Keep each draft's paragraphs, greeting and length
+  about the same, and each answer still answering its question in its first sentence.
+- Write in the first person as the applicant; plain words, no long dashes, no evidence ids.
+- Return a draft with nothing listed exactly as it is.

@@ -479,8 +479,29 @@ runs: tests use `tests/support/fake_claude/`.
   (`flow.dangling`, `pack.DANGLING_FLAG`). `tests/fixtures/grounded_flags.json` holds
   sentences of each kind a local model wrote, and `tests/test_writing_grounded.py` requires each judged
   right.
+- Readability and one polish (`writing/readability.py`, `writing/polish.py`, prompt `draft_polish`): after
+  the sentence checks and `grounded.unrepeat`, `readability.findings` reads each marked letter, message and
+  answer (never the fit table) with no AI for: a sentence framed as the advert's requirement and its
+  evidence (`plain.LEAD_IN`, `plain.REQUIREMENT_TALK`); a fact said again (`repeats.same` against the
+  sentences before it in its draft and earlier drafts, or a sentence whose ids were all cited in an earlier
+  paragraph); the first sentence about a card that neither names it nor follows one that did; a message
+  whose first sentence after its greeting does not say who the person is or why they write
+  (`readability.INTRO`); a stray (a sentence citing items, none of the one card that at least
+  `STRAY_MIN_OTHERS` (2) other sentences of its paragraph cite, and not naming it); and a letter whose last
+  `ENDING_SENTENCES` (2) sentences name `TOOL_LIST_MIN` (3) known tools. Only when a draft has findings,
+  `polish.polish` asks once (the letter in `pack.write_letter`, the message and answers together in
+  `pack._polished`) with each draft and its findings, attributes the polished drafts again in one call, and
+  keeps each only when `polish.kept`: no new failure of `grounded.problems` or `flow.dangling`, no number or
+  known tool the draft lacked and no card it neither named nor cited (`polish.additions`), fewer findings
+  and none of a new kind. `tests/fixtures/readability.json` holds a before and after for each finding; every
+  before must have its finding and every after none. With a plan, the drafting requests leave out the fit
+  map's line (`pack.unmapped`), whose rows leaked into prose as "The role asks for ...". Free and grounded
+  drafts both scored about 2.1 of 5 on a strict rubric, 14 of 15 packs of each held there by readability
+  (30 packs, 2026-11-08).
 - Plain first-person writing (`writing/plain.py`): `plain.problems` finds a sentence opening with the
   advert's requirement ("For the requirement to ...", "Regarding the need for ...", "As required ..."),
+  framed as one anywhere ("The role asks for ...", "as requested in the advert", "evidence for the
+  requirement of ...": `plain.REQUIREMENT_TALK`),
   pointing at the CV ("My CV lists ...", "as listed in my CV"), speaking of the person in the third person
   ("the applicant", "the candidate", their name with a verb) or pasting a setting's wording
   (`plain.settings_labels`: the right-to-work choices' labels, and `you.work_status` unless it is a sentence

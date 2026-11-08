@@ -99,7 +99,12 @@ or a team's work written as yours alone. Such a sentence is rewritten once where
 wrong, Hal lists it under **Check before sending**. Hal takes a sentence out only when none of your facts
 backs anything it says, and keeps it (and lists it) when the draft needs it or the next sentence points
 back at it ("This project ..."). After a sentence is rewritten or taken out, Hal rewrites its paragraph once so it reads well,
-keeping the same facts and adding none. A letter left well under the length you prefer gets one more
+keeping the same facts and adding none. Last, when a draft still reads badly (it says "The role asks for
+..." instead of what you did, says one fact twice, talks about a project before naming it, ends the letter
+on a list of tools, puts a fact in a paragraph about something else, or a message does not open by saying
+who you are and why you are writing), Hal asks once for a polished version. It keeps the polish only when
+it reads better and every sentence still passes the same checks, with no new number, tool or project;
+otherwise the draft stays as it was. A letter left well under the length you prefer gets one more
 paragraph from facts it has not used yet, checked the same way. When the first letter needed such a fix,
 Hal writes a second one from scratch and keeps the one with fewer problems.
 Hal also checks what each letter, message and answer says about you against your CV, the facts

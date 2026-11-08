@@ -46,6 +46,10 @@ Design notes:
   is checked against only what it cites (`settle`, `writing.grounded`) in place of the whole-draft claim
   check, whose single call over every draft listed about 20 false alarms for 10 real problems in five packs
   (2026-11-07). The markers are taken out before a draft is returned.
+- After the checks, a letter, or the message and answers together, that reads badly (`writing.readability`)
+  gets one polish, kept only when it reads better and passes every check with no AI (`writing.polish`); with
+  a plan the drafting requests leave out the fit map's rows (`unmapped`), whose requirement framing leaked
+  into the prose (2026-11-08).
   The letter's reason for the employer comes from a pairing of one employer fact with one plan item
   (`writing.motive`), or it gives none, as letters gave generic motivation that echoed the advert.
 - The pack's checklist names no command: every action is a button on the Documents page.
@@ -70,6 +74,8 @@ from .writing import (
     grounded,
     motive,
     plain,
+    polish,
+    readability,
     relocation,
     repeats,
     spelling,
@@ -395,6 +401,16 @@ def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, .
                          profile_writing.cards())
 
 
+EVIDENCE_MAP = re.compile(r"^Evidence map: .*\n?", re.M)   # the fit map's line of a request (`_context`)
+
+
+def unmapped(request: str) -> str:
+    """A writing request without the fit map's line: with an evidence plan, the plan is the facts to use, and
+    the map's requirement-to-evidence rows leaked into prose as "The role asks for ..." (30 packs,
+    2026-11-08)."""
+    return EVIDENCE_MAP.sub("", request)
+
+
 def _plan_part(plan: list[planning.Item]) -> str:
     """The evidence plan's section of a writing request; "" for an empty plan, which leaves the draft unmarked."""
     return f"\n\n{planning.block(plan)}" if plan else ""
@@ -699,7 +715,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     names = (job["title"], job["company"])
     pairing = motive.make(names, _job_text(job), about, plan)
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
-    text += _plan_part(plan) + (f"\n\n{motive.block(pairing)}" if plan else "")
+    text = (unmapped(text) if plan else text) + _plan_part(plan) + (f"\n\n{motive.block(pairing)}" if plan else "")
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
     if request:
         text += f"\n\nThe applicant asked for this change: {request}"
@@ -729,8 +745,10 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
         if again.key() < best.key():
             best, revised = again, again_revised
     cut = best.text in trimmed
-    unique = grounded.unrepeat(best.text, grounds(who, plan, facts=facts, kept=kept, employer=sources,
-                                                  pairing=pairing), grounded.only_in_paragraph)
+    against = grounds(who, plan, facts=facts, kept=kept, employer=sources, pairing=pairing)
+    unique = grounded.unrepeat(best.text, against, grounded.only_in_paragraph)
+    if best.marked:
+        unique.text = polish.polish([polish.Draft(readability.LETTER, unique.text)], against).texts[0]
     claims, softened = best.failed, bool(best.rewrites or best.removed or unique.rewrites or unique.removed)
     letter = plain.tidy(relocation.without_own_move(cites.strip(unique.text), eligibility.person(con)),
                         profile_writing.cards())
@@ -834,6 +852,15 @@ def _unrepeated(against: grounded.Facts, letter: str, message: str,
     return message, out, repeated
 
 
+def _polished(against: grounded.Facts, letter: str, message: str, answers: list[dict]) -> tuple[str, list[dict]]:
+    """The message and the answers after one guarded polish pass together (`writing.polish`), the `letter`
+    before them."""
+    done = polish.polish([polish.Draft(readability.MESSAGE, message),
+                          *(polish.Draft(readability.ANSWER, str(a.get("answer") or ""), str(a.get("question") or ""))
+                            for a in answers)], against, (letter,))
+    return done.texts[0], [{**a, "answer": t} for a, t in zip(answers, done.texts[1:], strict=True)]
+
+
 def write_others(who: dict, job, analysis: dict, about: str, *, message_request: str, answers_request: str,
                  facts: str, kept: str, plan: list[planning.Item] | None = None, letter: str = "") -> dict:
     """The message to the person hiring and the form answers, written from their requests and checked as a
@@ -851,6 +878,8 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     job_text = _job_text(job)
     their_words, trimmed = (job_text, about), set()
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
+    if plan:
+        message_request, answers_request = unmapped(message_request), unmapped(answers_request)
     message_request += _plan_part(plan)
     answers_request += _plan_part(plan) if answers_request else ""
 
@@ -866,8 +895,10 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     answers, answer_claims, answer_echoes = _answers(
         who, answers_request, facts=facts, kept=kept, sources=their_words,
         names=(job["title"], job["company"]), plan=plan) if answers_request else ([], [], [])
-    message, answers, repeated = _unrepeated(grounds(who, plan, facts=facts, kept=kept, employer=their_words),
-                                             letter, message, answers)
+    against = grounds(who, plan, facts=facts, kept=kept, employer=their_words)
+    message, answers, repeated = _unrepeated(against, letter, message, answers)
+    if plan:
+        message, answers = _polished(against, letter, message, answers)
     you, cards = eligibility.person(), profile_writing.cards()
     message = plain.tidy(relocation.without_own_move(cites.strip(message), you), cards)
     answers = [{**a, "answer": plain.tidy(relocation.without_own_move(cites.strip(str(a.get("answer") or "")), you),

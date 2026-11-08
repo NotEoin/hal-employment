@@ -181,6 +181,13 @@ What changed in each version, in plain words.
   113-test suite" without saying which project it was. Drafts are now written freely as connected
   paragraphs that name each project when they first mention it, and Hal works out afterwards which fact
   each sentence rests on, so every sentence is still checked against its own facts.
+- **One last polish when a draft reads badly.** Graders marked most packs down for how they read, not for
+  what they claimed: "The role asks for ..." taken from the fit table, one fact said in two paragraphs, a
+  project talked about before it was named, a message that never said who was writing, a fact dropped into
+  a paragraph about something else, and letters ending on a list of tools. Hal now spots each of these and,
+  only then, asks once for a polished draft, which it keeps only when it reads better and passes every
+  check with nothing new added. The letter, message and answers are no longer given the fit table's
+  requirement-by-requirement rows.
 - **A wrong sentence is fixed where it stands.** Hal used to take out a sentence that was still wrong after
   its rewrite, which left paragraphs that jumped from one fact to the next. It now rewrites the sentence
   with its whole paragraph in view, so the paragraph still reads on, and lists it under **Check before
