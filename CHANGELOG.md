@@ -11,6 +11,11 @@ What changed in each version, in plain words.
   skills and methods they show, each with the words it came from. Hal suggests which module each piece was
   for, and you confirm it or choose another.
 
+- **Showcase your best coursework.** Press **Showcase** on a piece of coursework and it becomes a project of
+  your degree on **Projects**, built only from that piece, which Hal tells employers about. Press it again
+  and the project is hidden, while the skills it showed stay. Mark one piece per course with **This is my
+  dissertation**, so Hal names it by its title and describes it as your dissertation.
+
 - **Official papers set your marks.** A transcript added under **Official papers** on a course's card now
   gives that course its modules, each with its mark, and its grade. A degree certificate gives the grade.
   Hal reads these with the same fixed rules as a transcript on **Documents**, not the AI, so a mark is never

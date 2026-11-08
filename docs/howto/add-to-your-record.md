@@ -20,7 +20,9 @@ the same for any subject: history essays, design portfolios, lab reports, busine
      dissertation. Hal writes a short summary of each, notes its mark if the work states one, and takes the
      skills and methods it shows as done in your coursework. Hal also suggests which module it was for:
      press **Yes, that is right**, or choose another under **Module**. Press **Showcase** on the pieces you
-     are proudest of.
+     are proudest of: each becomes a project of your degree on **Projects**, and Hal tells employers about
+     it. Press **Showcase** again to take it out; its skills stay. Press **This is my dissertation** on your
+     dissertation, so Hal names it and describes it as your dissertation. Each course has one.
    - **Lecture material**: slides and notes from the course. Hal counts these as what you studied, never as
      work you did.
    - **Official papers**: your transcript and certificates. These set your modules, marks and grade.
@@ -53,4 +55,5 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | The wrong CV is marked **Current CV** | Press **Make this my current CV** on the one you use now. Hal works out your cards again from it. |
 | A fact says "from an older CV" | Only an older CV gives it. Add it to your current CV if it is still true, or hide it. |
 | A module or mark is missing after you added a transcript | Hal reads table rows with a module's name and mark, and lines with a module code and a mark at the end ("HIS2040 Archival Methods 75"). Edit the course's card to add what it missed. |
+| "... is already this course's dissertation." | Press **My dissertation** on the piece marked now to undo it, then mark the right one. |
 | A card disappeared after you pressed **Remove** | It came only from that file, so Hal hid it. Add the file again and the card comes back as you left it. |

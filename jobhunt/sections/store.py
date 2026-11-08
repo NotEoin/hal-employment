@@ -18,6 +18,9 @@ Design decisions, each with its reason:
 - Coursework and lecture material can be for one module of their education card (`MODULE_SECTIONS`,
   migration 0029). `module` is only the person's choice, NULL until they make one and '' for "not for one
   module"; Hal's suggestion is the reader's (`details["module"]`), so a read again never changes the choice.
+- An education card has at most one dissertation: one coursework source of kind `dissertation`
+  (`check_dissertation`). "This is my dissertation" sets that kind (`change(..., {"dissertation": True})`);
+  taking it off gives `NOT_DISSERTATION`, as the kind the piece had before is not kept.
 """
 from __future__ import annotations
 
@@ -37,6 +40,8 @@ STATE_WORDS = {"new": "Waiting to be read", "reading": "Reading", "read": "Read"
 STAR_SECTIONS = ("coursework",)
 CURRENT_SECTIONS = ("cv",)
 MODULE_SECTIONS = ("coursework", "lecture")
+DISSERTATION_SECTION, DISSERTATION = "coursework", "dissertation"
+NOT_DISSERTATION = "other"     # the kind a piece takes when the person says it is not the dissertation after all
 TITLE_MAX = 200            # a title is a line; a longer one is a pasted paragraph
 FILES_FOLDER = "record-sources"
 
@@ -147,7 +152,9 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
             "suggestion_label": suggestion.label if suggestion else "", "suggestion_kind": hint,
             "suggestion_kind_label": registry.DOC_KINDS[hint].label if hint in registry.DOC_KINDS else "",
             "mark": str(found.get("mark") or ""), "summary": str(found.get("summary") or ""),
-            **_module_shape(con, r, found)}
+            **_module_shape(con, r, found),
+            "dissertation": r["section"] == DISSERTATION_SECTION and r["doc_kind"] == DISSERTATION,
+            "can_be_dissertation": r["section"] == DISSERTATION_SECTION}
 
 
 def listing(con: sqlite3.Connection, section: str | None = None, target: int | None = None) -> list[dict]:
@@ -202,7 +209,8 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
     there. The caller reads a moved source again, so its note and facts follow it.
     """
     r = row(con, source_id)
-    unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "current", "section", "module"})
+    unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "current", "section", "module",
+                                     "dissertation"})
     if unknown:
         raise ValueError(f"A source has no {', '.join(unknown)} to change.")
     section = registry.get(str(changes.get("section") or r["section"]))
@@ -216,6 +224,15 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
     if moved or "doc_kind" in changes:
         kind = changes.get("doc_kind") or (r["doc_kind"] if section.accepts(r["doc_kind"]) else None)
         sets["doc_kind"] = registry.doc_kind(section, kind).id
+    if "dissertation" in changes:
+        if not isinstance(changes["dissertation"], bool):
+            raise ValueError("Say whether it is your dissertation: true or false.")
+        if section.id != DISSERTATION_SECTION:
+            raise ValueError(f"{section.label} cannot be your dissertation; add it to a course's Coursework.")
+        if changes["dissertation"]:
+            sets["doc_kind"] = DISSERTATION
+        elif sets.get("doc_kind", r["doc_kind"]) == DISSERTATION:
+            sets["doc_kind"] = NOT_DISSERTATION
     if moved or "target_id" in changes:
         sets["target_id"] = target_card(con, section, changes.get("target_id", r["target_id"] if not moved else None))
     for flag, allowed in (("starred", STAR_SECTIONS), ("current", CURRENT_SECTIONS)):
@@ -231,6 +248,8 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
         sets["module"] = None
     if moved:
         sets.update({"section": section.id, "suggestion": "", "starred": 0, "current": 0})
+    check_dissertation(con, section.id, sets.get("doc_kind", r["doc_kind"]), sets.get("target_id", r["target_id"]),
+                       but=r["id"])
     with con:
         if sets.get("current"):
             con.execute("UPDATE record_sources SET current = 0 WHERE section = ?", (section.id,))
@@ -256,6 +275,22 @@ def _module(con: sqlite3.Connection, section: registry.Section, target_id: int |
         raise ValueError(f"{name} is not one of this course's modules. Choose one of: {', '.join(choices)}."
                          if choices else "This course has no modules yet. Add its transcript under Official papers.")
     return name
+
+
+def check_dissertation(con: sqlite3.Connection, section: str, doc_kind: str, target_id: int | None, *,
+                       adding: int = 1, but: int | None = None) -> None:
+    """ValueError when `adding` pieces of kind `doc_kind` would give the education card `target_id` a second
+    dissertation (another source than `but` already is one); nothing for any other kind or section."""
+    if section != DISSERTATION_SECTION or doc_kind != DISSERTATION or target_id is None:
+        return
+    if adding > 1:
+        raise ValueError("A course has one dissertation. Add its files as one folder, or one file at a time.")
+    found = con.execute("SELECT * FROM record_sources WHERE section = ? AND doc_kind = ? AND target_id = ? "
+                        "AND id != ? ORDER BY id LIMIT 1", (section, DISSERTATION, target_id,
+                                                            -1 if but is None else but)).fetchone()
+    if found is not None:
+        raise ValueError(f"{shape(con, found)['title']} is already this course's dissertation. Say it is not "
+                         "first, then choose this one.")
 
 
 def set_state(con: sqlite3.Connection, source_id: int, state: str, error: str = "") -> None:

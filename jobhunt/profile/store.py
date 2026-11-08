@@ -33,7 +33,9 @@ Design decisions, each with its reason:
   never works out again what they checked or typed. Hal's own merges (`merge_into`) still never take a card
   the person checked.
 - A project or job card can carry the person's star (`set_star`, migration 0028): a starred project is one to
-  tell an employer about, a starred job one to lead with. Only the person sets it, so no read changes it.
+  tell an employer about, a starred job one to lead with. Only the person sets it, so no read changes it: on
+  the card (`star_by` "you"), or by putting a piece of coursework in their showcase, which gives its project
+  card the star (`star_by` "coursework", `sections.coursework.settle`).
 - Evidence may name the source of the record it came from (`source_id`, with `place` and `line` inside it),
   for facts read from a section's sources (`jobhunt.sections`). Reading a source again replaces its facts in
   one transaction (`swap_source`), so a failed read leaves the old ones whole. A card Hal found that no

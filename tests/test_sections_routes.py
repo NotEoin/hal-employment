@@ -148,8 +148,8 @@ class SourceRoutes(unittest.TestCase):
         ended(essay["action_id"])
         path = f"/api/v2/record/sources/{essay_id}"
         r = self.put(path, {"starred": True, "title": "My dissertation"})
-        self.assertEqual((r.status, r.json()["starred"], r.json()["title"], r.json()["action_id"]),
-                         (200, True, "My dissertation", None))
+        self.assertEqual((r.status, r.json()["starred"], r.json()["title"]), (200, True, "My dissertation"))
+        ended(r.json()["action_id"])           # a starred piece is read again into a showcase project
         self.assertEqual(self.put(path, {"current": True}).status, 400)
         _, cvs = form(self.hal, self.c, "/document", [("Avery Quillon CV.md", CV, "")])
         ended(cvs["action_id"])

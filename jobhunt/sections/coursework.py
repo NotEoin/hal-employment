@@ -10,7 +10,10 @@ What the reader gives:
   68"), Hal's suggested module (`suggest_module`), and the AI's reading, kept so a read again asks nothing new;
 - as facts: each skill or method the work shows ("archival research", "thematic analysis", "regression in
   R", "close reading", "lab titration"), with its quote and line, and each programming language of its code
-  files. The pipeline files them with the section's role, so they count as done in coursework.
+  files. The pipeline files them with the section's role, so they count as done in coursework;
+- and, only when the person put the piece in their showcase (its star), a project fact: its name, a summary
+  saying what it was for (its module, or the course; "Dissertation for ..." for the dissertation) and its
+  mark, its methods and languages as tools, and its date as the period.
 
 Design decisions, each with its reason:
 
@@ -20,6 +23,16 @@ Design decisions, each with its reason:
   have.
 - Without the AI the summary is the work's own abstract or first paragraph, and only languages are found:
   the work is still read, and reading it again later finds the rest.
+- Coursework never makes a project card on its own: a course's every essay as a project crowded out the
+  person's real projects. A star makes one, evidenced by the piece alone, and `settle` gives that card the
+  star and the context "degree" (`STAR_BY`); taking the star off reads the piece again with no project fact,
+  so the card no source names any more is hidden (`profile.store.swap_source`) and its star goes, while the
+  piece's skills stay. A card the person starred or unstarred themselves (`profile.store.STAR_BY_YOU`) keeps
+  their choice.
+- The dissertation is a kind of document (`dissertation`), set by the "This is my dissertation" toggle
+  (`store.change`) and at most one per education card (`store.check_dissertation`), so its evidence carries
+  the type the writer frames as a dissertation (`writing.stage.DEGREE_TYPES`) and its card is named by the
+  dissertation's own title.
 - Hal suggests a module, never sets one: a module code in the file's name or opening lines first, then the
   share of a module's own words found there (`SHARE_MIN`, as `ingest.lectures.same_lecture`). The person
   confirms or changes it on the page, and their choice is kept apart from Hal's (`store.MODULE_SECTIONS`).
@@ -29,10 +42,13 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import sqlite3
 from pathlib import PurePosixPath
 
+from jobhunt import db
 from jobhunt.ingest import convert, lectures, rank
 from jobhunt.profile import merge
+from jobhunt.profile import store as profile_store
 from jobhunt.sections import readers
 
 log = logging.getLogger(__name__)
@@ -54,6 +70,9 @@ MARK = re.compile(r"^\W*(?:final |overall )?(?:mark|grade|score)(?: awarded| giv
                   r"pass)(?![\w:])", re.I | re.M)
 ABSTRACT = re.compile(r"^#{1,4}\s*(?:abstract|summary|overview|introduction)\s*$", re.I | re.M)
 SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+DISSERTATION = "dissertation"      # the kind of document of the dissertation (`registry.DOC_KINDS`)
+STAR_BY = "coursework"             # `profile_items.star_by` of a card starred through its coursework
+DEGREE = "degree"                  # the context of a showcase piece (`writing.stage.DEGREE`)
 FILE_HEADING = re.compile(r"^### (.+)$")     # `readers.text_of`'s heading over each file of a source
 LOCATE_CHARS = 30          # a quote's start, enough to find its line; a quote may run on past the line's end
 
@@ -173,6 +192,44 @@ def ask(source: readers.Source, title: str, text: str) -> dict | None:
     return {"sha": sha, "summary": summary[:SUMMARY_CHARS * 2], "methods": methods[:METHODS_MAX]}
 
 
+def framed(source: readers.Source, summary: str, mark: str) -> str:
+    """A showcase piece's summary, opening with what it was for: "Dissertation for the BA History, marked 72%."."""
+    what = "Dissertation" if source.doc_kind == DISSERTATION else "Coursework"
+    course = (source.target or {}).get("title", "")
+    module = source.module or ""
+    where = f" for {module}" if module else (f" for the {course}" if course else "")
+    opening = f"{what}{where}" + (f", marked {mark}" if mark else "") + "."
+    return f"{opening} {summary}".strip()
+
+
+def showcase(source: readers.Source, title: str, text: str, date: str, summary: str, mark: str,
+             tools: list[str]) -> readers.Fact:
+    """The project fact of a piece in the person's showcase, resting on its title's line."""
+    name = source.title or title
+    place, line = locate(name, text, source.files)
+    fields = {"name": name, "summary": framed(source, summary, mark), "tools": tools,
+              "period": merge.date_words(date)}
+    return readers.Fact("project", {k: v for k, v in fields.items() if v},
+                        readers.Quote("name", name if line else title, place, line))
+
+
+def settle(con: sqlite3.Connection) -> None:
+    """After coursework was read or removed: the project cards a starred piece rests on carry the star and the
+    context "degree", and a card starred through coursework that no starred piece rests on any more loses it.
+    A card the person starred or unstarred themselves keeps their choice."""
+    showcase_cards = """SELECT e.item_id FROM profile_evidence e JOIN record_sources s ON s.id = e.source_id
+                        WHERE s.section = 'coursework' AND s.starred = 1"""
+    now = db.now()
+    with con:
+        con.execute(f"""UPDATE profile_items SET star = 1, star_by = ?, updated = ? WHERE kind = 'project'
+                        AND star = 0 AND star_by != ? AND id IN ({showcase_cards})""",
+                    (STAR_BY, now, profile_store.STAR_BY_YOU))
+        con.execute(f"""UPDATE profile_items SET context = ?, context_by = 'hal' WHERE kind = 'project'
+                        AND context_by != 'person' AND id IN ({showcase_cards})""", (DEGREE,))
+        con.execute(f"""UPDATE profile_items SET star = 0, star_by = '', updated = ? WHERE star_by = ?
+                        AND id NOT IN ({showcase_cards})""", (now, STAR_BY))
+
+
 class CourseworkReader:
     """Reads one piece of coursework: its title, date, mark, summary, suggested module, and the skills it shows."""
 
@@ -192,12 +249,18 @@ class CourseworkReader:
             place, line = locate(quote, text, source.files)
             facts.append(readers.Fact("skill", {"name": method}, readers.Quote("name", quote, place, line)))
         facts += _languages(source.files, text)
+        mark, date = mark_in(text), readers.date_in(text)
+        if source.starred:
+            facts.append(showcase(source, title, text, date, summary, mark, [f.fields["name"] for f in facts]))
         choices = [m["name"] for m in ((source.target or {}).get("fields") or {}).get("modules") or []
                    if m.get("name")]
-        details = {"mark": mark_in(text), "summary": summary,
-                   "module": suggest_module(name, title, text, choices), **({"ai": read} if read else {})}
-        return readers.Reading(title=title, date=readers.date_in(text), text=text, summary=summary, facts=facts,
-                               details=details)
+        details = {"mark": mark, "summary": summary, "module": suggest_module(name, title, text, choices),
+                   **({"ai": read} if read else {})}
+        return readers.Reading(title=title, date=date, text=text, summary=summary, facts=facts, details=details)
+
+    def settle(self, con: sqlite3.Connection) -> None:
+        """Gives the showcase pieces' project cards their star and context (`settle`)."""
+        settle(con)
 
 
 readers.register(CourseworkReader())

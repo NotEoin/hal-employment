@@ -17,6 +17,8 @@ Design decisions, each with its reason:
   `pipeline.READER_MODULES`, and puts itself in place with `register` when imported; a test can do the same
   with a made-up one. A reader still to come is a stub (`Stub`) that raises `NotReadYet` naming the phase
   that brings it, and the page shows its choices as coming soon (`ready`).
+- A reader may also have `settle(con)`, which the pipeline runs after the source's facts are filed or
+  removed (`settle`), for what the facts mean for the cards beyond themselves.
 """
 from __future__ import annotations
 
@@ -105,6 +107,14 @@ class Reader(Protocol):
 
     def read(self, source: Source) -> Reading:
         """The source's title, date, text, summary and facts."""
+
+
+def settle(reader: Reader, con) -> None:
+    """Runs a reader's own `settle(con)`, when it has one, after its source's facts were filed or removed: what
+    the facts mean for the cards beyond the facts themselves (a showcase piece's star)."""
+    own = getattr(reader, "settle", None)
+    if own is not None:
+        own(con)
 
 
 class NotReadYet(NotImplementedError):

@@ -9,7 +9,9 @@
    that looks like it belongs elsewhere, or (in Documents) looks like another kind of document (Hal never
    moves or changes it on its own). Documents may name the card they are about: a course, a job or a
    certificate. Coursework and lecture material say which of the course's modules they are for: Hal suggests
-   one, and the person confirms or changes it (`ModuleChoice`). Reading runs as the
+   one, and the person confirms or changes it (`ModuleChoice`). A piece of coursework in the showcase becomes
+   a project card of the degree, and one piece per course can be marked "This is my dissertation". Reading
+   runs as the
    `record.sources` action; its events and `profile` events reload the lists. A kind of document whose reader
    is still to come can still be uploaded: Hal keeps the file and reads it once it can. A link, folder or
    account whose reader is still to come is shown, but switched off as "coming soon". */
@@ -113,6 +115,10 @@ function SourceRow({ s }) {
         aria-label=${(s.starred ? "Take out of your showcase: " : "Showcase: ") + s.title}
         onClick=${() => act(() => put(path, { starred: !s.starred }), s.starred ? "Taken out of your showcase." : "In your showcase. Hal tells employers about it.")}>
         <${Icon} n="star" c="s" />${s.starred ? "In your showcase" : "Showcase"}</button>`}
+      ${s.can_be_dissertation && html`<button type="button" class="btn small" aria-pressed=${s.dissertation ? "true" : "false"}
+        aria-label=${(s.dissertation ? "This is my dissertation, press to undo: " : "This is my dissertation: ") + s.title}
+        onClick=${() => act(() => put(path, { dissertation: !s.dissertation }), s.dissertation ? "No longer marked as your dissertation." : "Marked as your dissertation.")}>
+        ${s.dissertation ? "My dissertation" : "This is my dissertation"}</button>`}
       ${s.can_be_current && !s.current && html`<button type="button" class="btn small"
         onClick=${() => act(() => put(path, { current: true }), "This is your current CV now.")}>Make this my current CV</button>`}
       ${s.state === "kept_out" && html`<button type="button" class="btn small" aria-label=${"Add " + s.title + " anyway"}

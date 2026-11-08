@@ -138,6 +138,7 @@ def add_uploads(con: sqlite3.Connection, section_id: str, uploads: list[Incoming
     target = store.target_card(con, section, target_id)
     if not uploads:
         raise ValueError("Choose one or more files to add.")
+    store.check_dissertation(con, section.id, kind.id, target, adding=len(_groups(uploads)))
     out: dict = {"added": [], "duplicates": [], "problems": []}
     work = store.files_root()
     work.mkdir(parents=True, exist_ok=True)
@@ -328,6 +329,7 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
                      int(swapped["changed"]), now, suggestion, json.dumps(reading.details), r["id"]))
     if section.id == cv_reader.SECTION:
         cv_reader.settle(con)
+    readers.settle(readers.get(section.reader_of(r["doc_kind"])), con)
     return {**out, "state": "read", "facts": swapped["added"], "left_out": len(reading.facts) - len(facts)
             + len(swapped["left_out"]), "hidden": swapped["hidden"], "suggestion": suggestion}
 
@@ -343,4 +345,5 @@ def remove(con: sqlite3.Connection, source_id) -> dict:
         con.execute("DELETE FROM record_sources WHERE id = ?", (r["id"],))
     if r["section"] == cv_reader.SECTION:
         cv_reader.settle(con)
+    readers.settle(readers.get(registry.get(r["section"]).reader_of(r["doc_kind"])), con)
     return {"hidden": gone["hidden"]}

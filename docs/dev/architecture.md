@@ -1273,6 +1273,18 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
 - The module a piece is for is the person's choice (`record_sources.module`, migration 0029: NULL until they
   choose, "" for none), checked against the card's modules (`store.module_choices`); Hal's suggestion stays
   in `details["module"]`, so no read changes the choice. Moving a source to another card clears it.
+- Showcase coursework: coursework gives a `project` fact only while its source is starred (`showcase`): the
+  piece's name (the source's title, else its heading), a summary opening with what it was for ("Coursework
+  for <module>, marked 72%." or "Dissertation for the <course>."), its methods and languages as `tools`,
+  and its date as `period`. A star or the dissertation mark reads the source again (`routes.REREAD_ON`).
+  Unstarring reads it with no project fact, so `swap_source` hides the card no other source names, and the
+  skills stay. A reader's optional `settle(con)` runs after each read and removal (`readers.settle`); the
+  coursework one gives every project card resting on a starred piece `star` with `star_by` "coursework" and
+  the context "degree", and takes that star off a card no starred piece rests on. A star the person set or
+  took off on the card itself (`star_by` "you") is left as it is.
+- The dissertation is the coursework kind `dissertation` (evidence `doc_type` "dissertation", which
+  `writing.stage` frames as degree work). `PUT {"dissertation": true}` sets it and `false` gives "other";
+  `store.check_dissertation` refuses a second one on the same card, from a change or an upload.
 
 ## Profile (`jobhunt/profile/`)
 
