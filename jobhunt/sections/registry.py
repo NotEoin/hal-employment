@@ -79,7 +79,7 @@ DOC_KINDS: dict[str, DocKind] = {k.id: k for k in (
     DocKind("upload", "Uploaded folder or files", "project", FILES),
     DocKind("portfolio_site", "Portfolio site", "project", LINK),
     DocKind("web_page", "Web page or online document", "writing", LINK),
-    DocKind("manual", "Added by hand", "project", MANUAL),
+    DocKind("manual", "Added by hand", "by_you", MANUAL),
     DocKind("other", "Something else", "other"),
 )}
 

@@ -54,7 +54,8 @@ from jobhunt.core import clock
 
 # Rank of each kind of document; a higher rank's value wins. The person's own edits are above all of these
 # and are never folded at all (see store.py).
-RANKS = {"transcript": 5, "certificate": 4, "cv": 3, "letter": 2, "notes": 1}
+RANKS = {"transcript": 5, "certificate": 4, "cv": 3, "letter": 2, "notes": 1,
+         "by_you": 6}      # a project the person typed into Hal (`sections.manual`): their word on their own work
 DOC_TYPES = {  # other names the ingest may give a document type
     "hear": "transcript", "degree_transcript": "transcript", "marks": "transcript",
     "degree_certificate": "certificate", "award": "certificate", "certificates": "certificate",
@@ -96,7 +97,8 @@ LIST_FIELDS = {"duties", "achievements", "tools", "modules"}
 
 
 def rank(doc_type: str) -> int:
-    """How much a document type is trusted: transcript 5, certificate 4, CV 3, letter 2, notes 1, else 0."""
+    """How much a document type is trusted: typed by the person 6, transcript 5, certificate 4, CV 3, letter 2,
+    notes 1, else 0."""
     key = (doc_type or "").strip().lower().replace(" ", "_").replace("-", "_")
     return RANKS.get(DOC_TYPES.get(key, key), UNKNOWN_RANK)
 

@@ -74,6 +74,13 @@ Google Doc or Slides shared with anyone who has the link. Hal takes the title, t
 materials the page names (such as Figma, Excel or screen printing) and your role when the page says it in a
 line like "Role: Lead designer". The AI writes the summary from the page's own words only.
 
+## Projects with no page or code
+
+**Add one by hand** is for anything else: an exhibition, a campaign, an event, research, writing, something
+you built. Fill in its name, what it was, when, your part, the tools or methods you used and any links, and
+attach files or pictures if you have them. What you type counts above your CV, since it is your own word on
+your own work. Attached files help Hal search and quote, but Hal takes no facts from them.
+
 How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-record-jobhuntsections).
 
 | Symptom | Fix |

@@ -1365,6 +1365,12 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   `PIECE_PATHS`, never `NOT_PIECES`) in `details.pieces`; `PUT .../sources/{id}` with `{"picked": [urls]}`
   keeps the person's picks in `meta.picked` and reads it again, and each picked piece becomes a `web_page`
   child. Details keep the page's `etag` and a `hash` of its words for `pages.check`.
+- Added by hand (`sections/manual.py`, `manual`): the form (`clean_form`: name, what, when, part, tools,
+  links) comes with `POST .../project/link` as `"form"` or later with `PUT .../sources/{id}`, and is kept in
+  `meta.form`. `ManualReader` gives one project fact per filled field and a skill per tool, each quoting its
+  line of the note (place "typed by you"). The kind of document's type is `by_you`, ranked 6 in
+  `merge.RANKS`, above every document. `pipeline.attach` (`POST .../sources/{id}/files`) adds files to its
+  `record_source_files`; their text goes into the note and gives no facts.
 
 ## Profile (`jobhunt/profile/`)
 

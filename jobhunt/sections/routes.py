@@ -50,11 +50,17 @@ Routes:
   "duplicates": [{"name", "id", "section_label"}], "problems": [words], "action_id"}.
 - `POST /api/v2/record/sources/{section}/link` {"locator", "doc_kind", "target_id"}: a web address, an account
   name, a folder on this computer (only from this computer, and never the record or Hal's own folder) or a
-  project's name typed in; returns the same as an upload.
+  project's name typed in; returns the same as an upload. A project added by hand may send `"form"` (name,
+  what, when, part, tools, links; `sections.manual.clean_form`), whose name is then its locator.
+- `POST /api/v2/record/sources/{id}/files`: files `file0`, `file1`, ... attached to a project added by hand;
+  {"added": [names], "problems": [words], "action_id"}.
 - `PUT /api/v2/record/sources/{id}` {"title", "doc_kind", "target_id", "starred", "current", "section",
   "module", "dissertation"}: any of them; a new section, kind of document, card, module, star or dissertation
   mark reads the source again (a starred piece of coursework is read into a showcase project). Returns SOURCE
-  with "action_id".
+  with "action_id". A project also takes `"theirs"` (true: one with none of the person's commits is theirs), a portfolio
+  `"picked"` (the web addresses of the pieces to add) and a project added by hand `"form"`; each reads it
+  again. A project's SOURCE adds "parent_id", "what_changed", "not_yours", "theirs", "pieces" [{"url",
+  "title"}], "picked" and "form".
 - `POST /api/v2/record/sources/{id}/reread` {"allow": true to read one kept out as private}: {"action_id"}.
 - `DELETE /api/v2/record/sources/{id}`: removes it with its note and facts; {"hidden": [card ids]}.
 
@@ -73,7 +79,7 @@ from jobhunt.web.router import BadRequest, NotFound, NotHere, Request, route
 
 PREFIX = "/api/v2/record/sources"
 FILE_FIELD, PATH_FIELD = "file", "path"
-REREAD_ON = ("section", "doc_kind", "target_id", "module", "starred", "dissertation", "theirs", "picked")
+REREAD_ON = ("section", "doc_kind", "target_id", "module", "starred", "dissertation", "theirs", "picked", "form")
 
 
 def _session(req: Request) -> str | None:
@@ -166,10 +172,32 @@ def link(req: Request) -> dict:
         kind = registry.doc_kind(section, body.get("doc_kind") or None)
         if kind.held == registry.FOLDER and locator.strip():
             locator = _folder(req, locator)
+        if kind.held == registry.MANUAL and body.get("form") is not None:
+            from jobhunt.sections import manual
+
+            form = manual.clean_form(body["form"])
+            locator = form["name"]
         out = pipeline.add_link(req.con, section.id, locator, doc_kind=kind.id, target_id=body.get("target_id"))
+        if kind.held == registry.MANUAL and body.get("form") is not None:
+            for source_id in out["added"]:
+                store.set_meta(req.con, source_id, form=form)
     except ValueError as e:
         raise BadRequest(str(e), field="locator") from e
     return _added(req, out, f"You added {kind.label.lower()} to {section.label}")
+
+
+@route("POST", PREFIX + "/{source_id}/files", max_body=UPLOAD_MAX_BODY)
+def attach(req: Request) -> dict:
+    """Attaches files and pictures to a project added by hand, and reads it again."""
+    uploads = [pipeline.Incoming(up.name, up.data) for key, up in sorted(req.files.items())
+               if key.startswith(FILE_FIELD)]
+    try:
+        out = pipeline.attach(req.con, req.params["source_id"], uploads)
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    source_id = int(req.params["source_id"])
+    events.publish("profile", source_id=source_id)
+    return {**out, "action_id": _start(req, [source_id], why="You attached files to a project")}
 
 
 @route("PUT", PREFIX + "/{source_id}")

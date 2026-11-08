@@ -185,16 +185,14 @@ class RecordSections(unittest.TestCase):
                          ["Reference", "Contract", "Job description", "Something else"])
         self.clean(p)
 
-    def test_the_ways_to_add_a_project_show_and_wait_as_coming_soon_and_a_project_is_starred(self) -> None:
+    def test_every_way_to_add_a_project_is_offered_and_a_project_is_starred(self) -> None:
         project = found("project", {"name": "Tide gauge"})
         p = self.page("record-projects")
         panel = self.panel(p, "Add projects")
         for words in ("Upload a folder", "Your GitHub account", "Link to one code project",
-                      "A folder on this computer", "Portfolio site", "Web page or online document"):
+                      "A folder on this computer", "Portfolio site", "Web page or online document", "Add one by hand"):
             self.assertTrue(panel.get_by_role("button", name=words).is_enabled(), words)
-        for words in ("Add one by hand",):
-            self.assertTrue(panel.get_by_role("button", name=words).is_disabled(), words)
-        self.assertEqual(panel.get_by_text("Coming soon").count(), 1)
+        self.assertEqual(panel.get_by_text("Coming soon").count(), 0)
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Tide gauge"))
         p.shows(card.get_by_text("from your CV only"), "the mark on a project only a CV gives")
         card.get_by_role("button", name="Showcase: Tide gauge").click()
@@ -252,6 +250,23 @@ class RecordSections(unittest.TestCase):
         picker.get_by_role("button", name="Add the ticked pieces").click()
         p.shows(panel.locator("li.rec-source.rec-child", has_text="Harbour posters"), "the piece")
         p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Harbour posters")).wait_for()
+
+    def test_a_project_added_by_hand_with_a_file_becomes_a_card(self) -> None:
+        p = self.page("record-projects", "narrow", "dark")
+        panel = self.panel(p, "Add projects")
+        panel.get_by_role("button", name="Add one by hand").click()
+        form = panel.get_by_role("form", name="Add a project by hand")
+        form.get_by_label("Name").fill("Harbour clean-up day")
+        form.get_by_label("Your part").fill("Organiser")
+        form.get_by_label("Tools or methods").fill("Event planning, Canva")
+        form.get_by_label("Files and pictures").set_input_files(self.file("poster.md", "# Poster\n\nMade-up.\n"))
+        self.clean(p)
+        form.get_by_role("button", name="Add the project").click()
+        card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Harbour clean-up day"))
+        card.wait_for()
+        p.shows(card.get_by_text("Organiser"), "the part")
+        with closing(db.connect()) as con:
+            self.assertEqual(sources.listing(con, "project")[0]["files"], 1)
 
 
 if __name__ == "__main__":

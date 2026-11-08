@@ -84,8 +84,7 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual(next(iter(got)), "cv")
         self.assertEqual((got["coursework"]["target"], got["coursework"]["target_required"]), ("education", True))
         self.assertTrue(all(k["ready"] for k in got["document"]["doc_kinds"]))
-        self.assertEqual({k["id"] for k in got["project"]["doc_kinds"] if k["ready"]},
-                         {"repo", "upload", "repo_url", "github_account", "local_folder", "portfolio_site", "web_page"})
+        self.assertTrue(all(k["ready"] for k in got["project"]["doc_kinds"]))
         held = {k["id"]: k["held"] for k in got["project"]["doc_kinds"]}
         self.assertEqual((held["github_account"], held["local_folder"], held["web_page"], held["upload"]),
                          ("account", "folder", "link", "files"))
@@ -128,6 +127,21 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual(got["state"], "new")
         self.assertIn("phase 3", got["error"])
         bad = self.c.post("/api/v2/record/sources/project/link", {"locator": "example.org", "doc_kind": "web_page"})
+        self.assertEqual(bad.status, 400)
+
+    def test_a_project_added_by_hand_takes_its_form_and_then_its_files(self):
+        r = self.c.post("/api/v2/record/sources/project/link", {"doc_kind": "manual", "form": {
+            "name": "Harbour clean-up day", "part": "Organiser", "tools": "Event planning, Canva"}})
+        self.assertEqual(r.status, 200, r.text)
+        ended(r.json()["action_id"])
+        got = r.json()["added"][0]
+        self.assertEqual((got["title"], got["form"]["part"]), ("Harbour clean-up day", "Organiser"))
+        status, out = form(self.hal, self.c, f"/{got['id']}/files", [("poster.md", b"# Poster\n\nMade-up.\n", "")])
+        self.assertEqual((status, out["added"]), (200, ["poster.md"]))
+        ended(out["action_id"])
+        listed = self.c.get("/api/v2/record/sources?section=project").json()[0]
+        self.assertEqual((listed["files"], listed["state"]), (1, "read"))
+        bad = self.c.post("/api/v2/record/sources/project/link", {"doc_kind": "manual", "form": {"name": ""}})
         self.assertEqual(bad.status, 400)
 
     def test_a_folder_on_this_computer_is_added_only_from_this_computer_and_never_the_record(self):

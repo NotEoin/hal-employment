@@ -71,6 +71,9 @@ What changed in each version, in plain words.
   or your own) lists its pieces, and each one you tick becomes a project. A single page, article or shared
   Google Doc becomes a project with its title, date, the tools and materials it names, and your role when it
   states it.
+- **Add a project by hand.** For an exhibition, event, campaign, piece of research or anything else, type
+  its name, what it was, when, your part, the tools or methods and links, and attach files or pictures. What
+  you type counts above your CV.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

@@ -47,6 +47,7 @@ from jobhunt.sections import (
     github,
     lecture,
     letters,
+    manual,
     pages,
     readers,
     registry,
@@ -58,7 +59,7 @@ from jobhunt.sections import cv as cv_reader
 
 log = logging.getLogger(__name__)
 # The sections' own reader modules: each puts its readers in place (`readers.register`) when it is imported.
-READER_MODULES = (cv_reader, coursework, documents, folders, github, lecture, letters, pages, repo)
+READER_MODULES = (cv_reader, coursework, documents, folders, github, lecture, letters, manual, pages, repo)
 CHUNK = 1 << 20            # files are hashed 1 MiB at a time
 SKIPPED_PARTS = {"__MACOSX", ".git", ".DS_Store", "Thumbs.db", "desktop.ini"}
 ZIP = ".zip"
@@ -216,6 +217,33 @@ def add_link(con: sqlite3.Connection, section_id: str, locator: str, *, doc_kind
     with con:
         source_id = store.add(con, section.id, held=kind.held, doc_kind=kind.id, locator=words, target_id=target)
     return {"added": [source_id], "duplicates": []}
+
+
+def attach(con: sqlite3.Connection, source_id, uploads: list[Incoming]) -> dict:
+    """Attaches files and pictures to a project added by hand; returns {"added": [names], "problems": [words]}.
+
+    A file with the name of one already attached replaces it. ValueError for a source that is not a project
+    added by hand, or nothing to attach; LookupError for a source that is not there.
+    """
+    r = store.row(con, source_id)
+    if r["kind"] != registry.MANUAL:
+        raise ValueError("Files are attached only to a project added by hand.")
+    if not uploads:
+        raise ValueError("Choose one or more files to attach.")
+    folder = store.files_dir(r["id"])
+    folder.mkdir(parents=True, exist_ok=True)
+    out: dict = {"added": [], "problems": []}
+    for up in uploads:
+        name = Path(up.name).name.strip()
+        if not name or name.startswith(".") or _skipped(name):
+            out["problems"].append(f"{up.name or 'A file'} cannot be attached: its name starts with a dot.")
+            continue
+        (folder / name).write_bytes(up.data)
+        with con:
+            con.execute("INSERT OR REPLACE INTO record_source_files (source_id, rel, size, sha256) VALUES (?, ?, ?, ?)",
+                        (r["id"], name, len(up.data), _sha(up.data)))
+        out["added"].append(name)
+    return out
 
 
 def _source(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:

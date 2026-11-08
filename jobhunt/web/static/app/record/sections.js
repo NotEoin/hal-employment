@@ -244,6 +244,44 @@ export function SourcesPanel({ uid, heading, hint, parts, target, empty, cards, 
   </section>`;
 }
 
+// The fields of a project added by hand (jobhunt/sections/manual.py FIELDS): [field, label, hint, many lines].
+const MANUAL_FIELDS = [["name", "Name", "Harbour clean-up day", false],
+  ["what", "What it was", "An exhibition, a campaign, a piece of research, an event, something you built", true],
+  ["when", "When", "Spring 2025", false], ["part", "Your part", "Organiser, lead designer, researcher", false],
+  ["tools", "Tools or methods", "Separate them with commas", false], ["links", "Links", "One web address a line", true]];
+
+/** The form for a project added by hand, with files and pictures to attach. */
+function ManualForm({ onDone }) {
+  const [form, setForm] = useState({});
+  const [files, setFiles] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const go = async e => {
+    e.preventDefault();
+    if (!(form.name || "").trim()) { toast("Give the project a name."); return; }
+    setBusy(true);
+    const out = await act(() => post(SOURCES + "/project/link", { doc_kind: "manual", form }), saidAdded);
+    if (out && out.added.length && files.length) {
+      const data = new FormData();
+      files.forEach((f, i) => data.append("file" + i, f, f.name));
+      await act(() => api("POST", SOURCES + "/" + encodeURIComponent(out.added[0].id) + "/files", data),
+        "Attached " + plural(files.length, "file") + ".");
+    }
+    setBusy(false);
+    if (out) onDone();
+  };
+  return html`<form class="stack s rec-manual" onSubmit=${go} aria-label="Add a project by hand">
+    ${MANUAL_FIELDS.map(([key, label, hint, many]) => html`<div class="rec-field" key=${key}>
+      <label class="lab" for=${"rec-manual-" + key}>${label}</label>
+      ${many ? html`<textarea class="input" id=${"rec-manual-" + key} rows="3" placeholder=${hint}
+          onInput=${e => setForm({ ...form, [key]: e.target.value })}>${form[key] || ""}</textarea>`
+        : html`<input class="input" id=${"rec-manual-" + key} placeholder=${hint} value=${form[key] || ""}
+          onInput=${e => setForm({ ...form, [key]: e.target.value })} />`}</div>`)}
+    <div class="rec-field"><label class="lab" for="rec-manual-files">Files and pictures</label>
+      <input id="rec-manual-files" type="file" multiple onChange=${e => setFiles([...e.target.files])} /></div>
+    <div class="row wrap"><button type="submit" class="btn small primary" disabled=${busy}>${busy ? "Adding" : "Add the project"}</button>
+      <button type="button" class="btn quiet small" onClick=${onDone}>Cancel</button></div></form>`;
+}
+
 /** The ways to add a project: each one's box, or "coming soon" while its reader is still to come. */
 export function ProjectsPanel() {
   const sections = useSections();
@@ -265,6 +303,7 @@ export function ProjectsPanel() {
     })}</ul>
     ${chosen && (UPLOADS.has(chosen.held)
       ? html`<div class="row wrap"><${Upload} uid="rec-proj-folder" section="project" kind=${way} folder=${true} words="Choose a folder" /></div>`
+      : chosen.held === "manual" ? html`<${ManualForm} onDone=${() => setWay(null)} />`
       : html`<${LinkBox} uid=${"rec-proj-" + way} section="project" kind=${way} label=${entry[1]} hint=${entry[2]} />`)}
     <${SourceList} section="project" />
   </section>`;

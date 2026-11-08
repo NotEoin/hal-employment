@@ -190,7 +190,8 @@ def _project_shape(r: sqlite3.Row, found: dict) -> dict:
     m = m if isinstance(m, dict) else {}
     return {"parent_id": r["parent_id"], "what_changed": r["what_changed"],
             "not_yours": bool(found.get("not_yours")), "theirs": bool(m.get("theirs")),
-            "pieces": list(found.get("pieces") or []), "picked": list(m.get("picked") or [])}
+            "pieces": list(found.get("pieces") or []), "picked": list(m.get("picked") or []),
+            "form": m.get("form") or None}
 
 
 def listing(con: sqlite3.Connection, section: str | None = None, target: int | None = None) -> list[dict]:
@@ -246,9 +247,15 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
     """
     r = row(con, source_id)
     unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "current", "section", "module",
-                                     "dissertation", "theirs", "picked"})
+                                     "dissertation", "theirs", "picked", "form"})
     if unknown:
         raise ValueError(f"A source has no {', '.join(unknown)} to change.")
+    if "form" in changes:
+        if r["kind"] != registry.MANUAL:
+            raise ValueError("Only a project added by hand has a form to fill in.")
+        from jobhunt.sections import manual
+
+        set_meta(con, r["id"], form=manual.clean_form(changes["form"]))
     if "picked" in changes:
         picked = changes["picked"]
         if r["doc_kind"] != "portfolio_site" or not isinstance(picked, list) or not all(
