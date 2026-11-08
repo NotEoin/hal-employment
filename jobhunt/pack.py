@@ -680,7 +680,8 @@ def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, k
                     kind: str = "letter") -> paragraphs.Scope:
     """What each paragraph of one job's `kind` of draft is drafted with and checked against beside its own story
     (`writing.paragraphs`): the job and its advert, today, the field's conventions, the employer's words, every
-    story and card, and the person's names, modules and settings wording."""
+    story and card, the person's names, modules and settings wording, and for a letter, while "Match my own
+    writing" is on, short excerpts of the person's own letters for their voice (`sections.letters`)."""
     now, advert = stage.current(), _job_text(job)
     brief = (f"What the employer does (from the company brief; never copy its words):\n"
              f"{about.strip()[:paragraphs.BRIEF_CHARS]}\n\n") if (about or "").strip() else ""
@@ -691,7 +692,18 @@ def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, k
                             f"{advert}\n{about}\n{stage.today_lines(now)}", advert, about,
                             (job["title"], job["company"]), now, tuple(profile_writing.module_names()), (facts, kept),
                             tuple(applicant_names(who)), tuple(plain.settings_labels()), who, context.strip(), request,
-                            tuple(profile_writing.studied_skills()))
+                            tuple(profile_writing.studied_skills()), _voice(kind))
+
+
+def _voice(kind: str) -> tuple[str, ...]:
+    """Excerpts of the person's own letters for a letter's requests (`sections.letters.voice_excerpts`); none for
+    another kind of draft, or while "Match my own writing" (`cvdocs.voice`) is off."""
+    from .core import settings
+    from .sections import letters
+
+    if kind != "letter" or not settings.get("cvdocs.voice"):
+        return ()
+    return tuple(letters.voice_excerpts())
 
 
 def letter_frame(who: dict, job, scope: paragraphs.Scope, pairing: motive.Pairing | None,

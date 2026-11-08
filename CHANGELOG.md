@@ -12,6 +12,10 @@ What changed in each version, in plain words.
   your showcase leads the letter. A project only your CV names is told only when nothing is in your
   showcase.
 
+- **Letters sound like you.** With **Match my own writing** on, the cover letters and personal statements
+  you added on Your record give each new letter a short sample of your own words, so Hal matches your tone
+  and sentence length. Nothing in them becomes a fact about you.
+
 - **Skills you studied are told as studied.** Letters and answers tell a skill from your own work or your
   coursework as something you did, list a skill from your CV, and say a skill you only met in lectures was
   studied, never used. A sentence that says you used one is drafted again. On **CV**, a skills line that

@@ -75,6 +75,10 @@ Design decisions, each with its reason:
   asks for that last sentence. A check that redrafted a paragraph until its last sentence shared a word with
   the advert left generic ties ("This experience in building precise.") and raised generic sentences from 7
   to 19 in 15 graded packs (2026-11-08).
+- A letter's requests carry one or two short excerpts of the person's own cover letters
+  (`Scope.voice`, `voice_block`, `sections.letters.voice_excerpts`) to match their tone and sentence length,
+  never as facts: no check counts their words, so a fact only an excerpt holds is flagged like any other
+  (sections plan, 2026-11-09).
 - A letter's paragraphs share the person's letter length (`letter`): what the opening and closing leave
   (`FRAME_WORDS`) divided among the stories, never under `PARAGRAPH_WORDS`, so three project paragraphs
   reach the length setting (a letter came to 118 words against 250, 2026-11-08).
@@ -268,6 +272,7 @@ class Scope:
     context: str = ""                  # the job lines every request carries
     request: str = ""                  # the person's own words, when they asked for a change
     studied: tuple[str, ...] = ()      # skills only course material shows (`profile.writing.studied_skills`)
+    voice: tuple[str, ...] = ()        # excerpts of the person's own letters, for their voice only, never facts
 
 
 @dataclass(frozen=True)
@@ -638,8 +643,17 @@ def clean(said, scope: Scope) -> str:
     return spelling.respell(llm.undash(text), scope.values.get("spelling_code")) if text else ""
 
 
+VOICE_HEADING = ("How this person writes (from their own letters; match the tone and sentence length, never copy "
+                 "a fact or a phrase from it):")
+
+
+def voice_block(scope: Scope) -> str:
+    """The person's voice excerpts as a request carries them; "" when there are none."""
+    return "\n".join([VOICE_HEADING, *(f"<<<\n{v}\n>>>" for v in scope.voice)]) if scope.voice else ""
+
+
 def _request(story: Story, shape: Shape, scope: Scope, last: str = "", found: list[Problem] = ()) -> str:
-    parts = [f"Shape: {shape.words}", story.block(), scope.context]
+    parts = [f"Shape: {shape.words}", story.block(), scope.context, voice_block(scope)]
     if scope.request:
         parts.append(f"The applicant asked for this change: {scope.request}")
     if last:

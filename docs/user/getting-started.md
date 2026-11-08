@@ -550,7 +550,10 @@ beside it. Hal never merges it unless you do.
   folder), the answers you rewrote and your edits of its drafts. It tells the writer your usual sentence
   length, whether you use contractions, your spelling and your usual words, and shows it two or three
   short passages of yours as examples of style, never of facts. A word Hal would normally avoid stays
-  yours if you use it yourself.
+  yours if you use it yourself. When you have added cover letters or personal statements on Your record,
+  each letter Hal writes also gets a short passage from one or two of them, to match your tone and
+  sentence length. Nothing in them is used as a fact about you: a detail found only there is flagged if a
+  draft uses it.
 - **Your edits.** When you change a letter, an answer, the message or a CV line Hal wrote, Hal keeps both
   versions. A word you take out of three drafts becomes the suggestion **Never use "word"?**, and letters
   you cut short become **Write letters of about 150 words?**. Like every suggestion, nothing changes until

@@ -1235,8 +1235,14 @@ people). Readers only take facts out of a source, within that frame.
   `from_older_cv` and a project card that only CVs give `cv_only` ("from your CV only" on the page).
 - `letter` (`sections/letters.py`): cover letters and personal statements keep their text, title and date
   and give no facts. `letters.voice_samples(con, n)` returns the words of the `n` newest letters that were
-  read (by their own date, then when added), from the kept files rather than the notes; no writer reads them
-  yet.
+  read (by their own date, then when added), from the kept files rather than the notes.
+  `letters.voice_excerpts(con, n=2)` cuts each to its own prose (`excerpt`: no heading, date, greeting or
+  sign-off) of at most `EXCERPT_WORDS` (150) words, ending at a sentence. `pack.paragraph_scope` puts them in
+  `paragraphs.Scope.voice` for a letter only, while `cvdocs.voice` is on, and `paragraphs.voice_block` adds
+  them, under "How this person writes ... never copy a fact or a phrase from it", to every paragraph request
+  and to the frame request (`frame.Facts.request`). No check reads them: `paragraph_verify` and the checks
+  with no AI see the story's facts alone, so a number or name found only in an excerpt is flagged when
+  drafted.
 - `document` (`sections/documents.py`, in place of the generic reader for the Documents section) reads by
   the kind the person chose, all by rules: a transcript gives one education fact (qualification, subject,
   institution, grade, period or award date, and `modules_in`: table rows by their mark column, or lines with

@@ -64,5 +64,27 @@ class Letters(unittest.TestCase):
         self.assertEqual((state, samples), ("kept_out", []))
 
 
+class Excerpts(unittest.TestCase):
+    def test_an_excerpt_is_the_letters_own_prose_cut_at_a_sentence_within_150_words(self):
+        said = letters.excerpt(AVERY.letter)
+        self.assertTrue(said.startswith("I would like to join Made-up Harbour Software as a graduate developer."))
+        for left_out in ("# Letter", "12 February 2025", "Dear hiring team", "Yours sincerely", "Avery Quillon"):
+            self.assertNotIn(left_out, said)
+        long = "# Statement\n\n" + " ".join(f"Sentence {k} says a little more about the archive." for k in range(60))
+        cut = letters.excerpt(long)
+        self.assertLessEqual(len(cut.split()), letters.EXCERPT_WORDS)
+        self.assertTrue(cut.endswith("archive."), "cut at the end of a sentence")
+
+    def test_voice_excerpts_are_the_newest_letters_and_none_without_a_letter(self):
+        with home() as (con, _, _):
+            nothing = letters.voice_excerpts(con)
+            add_letter(con, "avery.md", AVERY.letter)
+            add_letter(con, "statement.md", MARNIE.letter, "statement")
+            got = letters.voice_excerpts(con)
+        self.assertEqual(nothing, [])
+        self.assertEqual(len(got), letters.EXCERPTS)
+        self.assertTrue(got[0].startswith("Old letters fascinate me"), "March 2025 is newer than February 2025")
+
+
 if __name__ == "__main__":
     unittest.main()

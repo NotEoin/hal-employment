@@ -53,6 +53,7 @@ from jobhunt.writing.paragraphs import (
     ask,
     clean,
     numbers,
+    voice_block,
 )
 
 log = logging.getLogger(__name__)
@@ -100,6 +101,7 @@ class Facts:
         lines.append(stage.today_lines(scope.now) if scope.now else "")
         if scope.request:
             lines.append(f"The applicant asked for this change: {scope.request}")
+        lines.append(voice_block(scope))
         return "\n".join(line for line in lines if line)
 
     def words(self) -> str:

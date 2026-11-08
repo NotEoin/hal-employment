@@ -869,6 +869,24 @@ class Paragraphs(unittest.TestCase):
         self.assertEqual(written["calls"], 5,
                          "the letter's own calls: the ranking, two paragraphs, one check and the frame")
 
+    def test_your_own_letters_set_the_voice_of_a_letter_and_never_of_the_answers(self):
+        from jobhunt.sections import letters
+
+        sample = "I like short sentences. I say what I did and why it mattered."
+        writer = QuillWriter()
+        with quill_world(writer) as a, mock.patch.object(letters, "voice_excerpts", lambda *x: [sample]):
+            pack.build(a.con, a.job["id"], use_web=False)
+            settings.set("cvdocs.voice", False)
+            pack.write_letter(a.con, a.job)
+        letter_asks = [e["user"] for e in writer.log if e["id"] in ("story", "frame") and "short message" not in
+                       e["user"] and "application question" not in e["user"]]
+        first = letter_asks[:3]
+        self.assertTrue(first and all(sample in u for u in first))
+        others = [e["user"] for e in writer.log if e["id"] == "story" and ("short message" in e["user"]
+                                                                           or "application question" in e["user"])]
+        self.assertTrue(others and not any(sample in u for u in others))
+        self.assertFalse(any(sample in u for u in letter_asks[-3:]), "Match my own writing off: no sample")
+
     def test_your_own_words_asking_for_a_change_reach_every_paragraph(self):
         writer = QuillWriter()
         with quill_world(writer) as a:

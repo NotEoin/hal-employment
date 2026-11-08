@@ -607,5 +607,31 @@ class Motive(unittest.TestCase):
         self.assertEqual(motive.offered([cv]), [cv])
 
 
+VOICE = "I ran a choir of 35 singers for three winters, and I like plain sentences that get to the point."
+
+
+class Voice(unittest.TestCase):
+    """Excerpts of the person's own letters shape the voice of a letter's requests and are never facts."""
+
+    def test_the_paragraph_and_frame_requests_carry_the_voice_and_the_check_never_does(self):
+        fake = FakeAI([f"{GOOD} I rely on it each week."])
+        scope = replace(SCOPE, voice=(VOICE,))
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            paragraphs.settle(QUILL_STORY, paragraphs.LETTER, scope)
+        request = fake.calls("Write")[0]
+        self.assertIn(f"{paragraphs.VOICE_HEADING}\n<<<\n{VOICE}\n>>>", request)
+        self.assertIn(VOICE, frame.Facts("Avery Quillon", "a graduate", "Graduate Developer", "Brightwater Tools")
+                      .request(scope))
+        checks = fake.calls("Check")
+        self.assertTrue(checks, "the paragraph went to the AI check")
+        self.assertFalse([u for u in checks if VOICE in u], "the check reads the story's facts alone")
+
+    def test_a_fact_found_only_in_a_voice_sample_is_flagged_when_drafted(self):
+        # the voice sample's choir of 35 is no fact of Quill, however often the writer read it
+        scope = replace(SCOPE, voice=(VOICE,))
+        found = paragraphs.sentence_problems("Quill grew from running a choir of 35 singers.", QUILL_STORY, scope)
+        self.assertIn("the number 35 is not in the facts of Quill", found)
+
+
 if __name__ == "__main__":
     unittest.main()
