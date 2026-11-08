@@ -61,3 +61,9 @@ def suggest_kind(section: str, doc_kind: str, name: str, text: str) -> str:
         if kind in kinds and (peek.search(head) or rule.words.search(stem)):
             return "" if kind == doc_kind else KIND_PREFIX + kind
     return ""
+
+
+def looks_like(name: str, text: str) -> list[str]:
+    """The sections (cv, official, letter) a file with this name and text looks like it belongs in, most
+    telling first; [] when none. The sorter's first glance at a document (`sections.sorter`)."""
+    return _looks_like(name, text)

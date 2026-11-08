@@ -1441,6 +1441,38 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   with `meta.git_root` the repository's root, so `repo.git_history(folder, root)` counts only the commits
   that touched it. The whole project stays beside its parts.
 
+### Sorting a big folder (`sections/sorter.py`)
+
+`sorter.propose(con, root, local=, prefix=, known=)` walks a folder with the bulk read's discovery
+(`discover.walk`, `group.outermost`, `group.projects`, `group.courses`) and returns a `Sorted`: one
+`Proposal(path, rel, held, section, doc_kind, target_id, star, by, why, state, copy_of)` per file or project
+folder, and the walk's own counts of what it skipped (junk folders, programs). It reads no facts and writes
+nothing.
+
+- Code projects (repositories) and README folders are one proposal each for Projects: a repository on this
+  computer as `repo` held as a folder (its history stays readable), anything else as `upload` (its files).
+  `star` is guessed when the README has `SHOWCASE_README_CHARS` or more. Copies of one code project
+  (`versions.project_key`, and `versions.shared` files for name keys) keep only the newest by last commit,
+  else newest file.
+- A loose document is placed by rules: `rank.rule_for` on its path, then `wrong_place.looks_like` on the
+  start of its text (converted with `convert.text_of`, a PDF's first pages only). A course folder (one of
+  `group.courses`, or a folder named like `COURSE_NAME`) makes notes and slides `lecture` and named work
+  `coursework` (essay, report, dissertation, slides). Certificates go to `official` in a course folder or
+  with a degree word, else `document`; references and contracts go to `document`, or `job_doc` when a job's
+  employer is named (`fill_card`). Only a document the rules cannot place goes to the AI (`sort_pick`
+  prompt), which picks one of `CHOICES` (`section/kind`) or "none"; at most `AI_ASKS_MAX` a sort.
+- Left out, with the reason: pictures (unless named as a certificate), recordings, code outside a project,
+  emails, other kinds of file, files only online, files with no words, files `privacy.held_back` keeps out
+  (checked before the AI sees any text), files already in the record (`store.by_hash`), job descriptions
+  for no job on the record, and documents neither the rules nor the AI could place.
+- Copies of documents: the same SHA-256 anywhere, or the same name saved again in one folder (`saved_as`
+  strips "final", "(2)", "v3" and the like, never a bare number); only the newest is proposed. One
+  dissertation per course is kept; others become reports.
+- Cards: `match_card(con, kind, rel, mtime, text)` names an education card by its institution, subject or
+  qualification words in the file's folders, else by its dates holding the file's date, else the only one;
+  a job by its employer in the folders or the text. `needs_card(section, target_id)` is true for a
+  coursework, lecture or job_doc proposal with no card yet.
+
 ## Profile (`jobhunt/profile/`)
 
 - The profile is the facts about the person that Hal finds in their record: jobs, education (with modules
