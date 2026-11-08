@@ -480,14 +480,18 @@ runs: tests use `tests/support/fake_claude/`.
   sentences of each kind a local model wrote, and `tests/test_writing_grounded.py` requires each judged
   right.
 - Plain first-person writing (`writing/plain.py`): `plain.problems` finds a sentence opening with the
-  advert's requirement ("For the requirement to ...", "Regarding the need for ...", "As required ..."),
+  advert's requirement ("For the requirement to ...", "Regarding the need for ...", "As required ...", "The
+  advert requires ...", "The role asks for ...", "Regarding <X>, ...", "In terms of <X>, ..."),
   pointing at the CV ("My CV lists ...", "as listed in my CV"), speaking of the person in the third person
   ("the applicant", "the candidate", their name with a verb) or pasting a setting's wording
   (`plain.settings_labels`: the right-to-work choices' labels, and `you.work_status` unless it is a sentence
   in the first person). It is one of each sentence's problems with no AI (`grounded.problems`, through
   `grounded.Facts.names` and `labels`), so it gets the sentence's one rewrite; what is left in any draft is
-  listed by `pack.check_drafts`. `plain.tidy` is applied to the letter, the message and the answers before
-  they are returned: straight quotes and apostrophes, no space before a line's first word, and each
+  listed by `pack.check_drafts`. `plain.unlead` takes such a lead-in out with no AI, up to its first comma,
+  when the rest opens with a subject ("I", "My", "We", "Our", a card's name or alias): `grounded.ground` does
+  it before the sentence checks, so only a sentence it cannot fix gets the rewrite, and `plain.tidy` again.
+  Every graded pack still opened sentences this way (2026-11-08). `plain.tidy` is applied to the letter, the
+  message and the answers before they are returned: straight quotes and apostrophes, no space before a line's first word, and each
   distinctive project name (two words or more, or capitals, an acronym or a digit inside a word) spelt as its
   card spells it. The settings reach a request only as plain values: `cv.status_line` says the right to
   work in `cv.WORK_WORDS` (shared with form filling) and the nationality the person gave, never

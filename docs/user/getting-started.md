@@ -146,9 +146,11 @@ a paragraph that starts with "This", "It" or "That" pointing at something the pa
 say.
 
 Drafts speak as you, in the first person. A sentence that opens with the advert's wording ("For the
-requirement to ..."), points at your CV ("My CV lists ...") or calls you "the applicant" is rewritten once,
-and your right to work is said in plain words rather than as the choice in Settings. Quotes and
-apostrophes are kept plain, and each project is spelt as it is on Your record.
+requirement to ...", "The role asks for ...", "Regarding teamwork, ...") loses that opening when the rest
+says what you did ("Regarding teamwork, I ran ..." becomes "I ran ..."). Such a sentence that cannot simply
+lose its opening, or one that points at your CV ("My CV lists ...") or calls you "the applicant", is
+rewritten once, and your right to work is said in plain words rather than as the choice in Settings. Quotes
+and apostrophes are kept plain, and each project is spelt as it is on Your record.
 
 Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
 English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the

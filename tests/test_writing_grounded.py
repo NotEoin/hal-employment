@@ -266,6 +266,13 @@ class Ground(Grounding):
         self.assertIn('E3: "Databases module: SQL, normalisation and query plans, mark 72"', fix)
         self.assertNotIn("E1:", fix, "the rewrite sees the sentence's own evidence")
 
+    def test_a_lead_in_before_a_subject_is_taken_out_with_no_ai(self):
+        # "The advert requires ...", "Regarding <X>, ..." opened sentences in every graded pack (2026-11-08)
+        done = self.ground("Regarding statistics, I wrote the statistics features of Ferry planner [E1].", [])
+        self.assertEqual(done.text, "I wrote the statistics features of Ferry planner [E1].")
+        self.assertEqual(done.rewrites, 0)
+        self.assertFalse([u for s, u in self.fake.asked if s == ["Rewrite", "one", "sentence"]])
+
     def test_a_sentence_still_failing_is_taken_out_and_the_paragraphs_kept(self):
         done = self.ground(LETTER, ["I scored 80 in the Databases module [E3]."])
         self.assertEqual(done.text, "I wrote the statistics features of Ferry planner [E1]. My logger records river "

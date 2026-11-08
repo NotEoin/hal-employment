@@ -175,6 +175,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **No "The advert requires ..." openings.** Sentences still began by restating the advert: "The role asks
+  for ...", "Regarding teamwork, ...", "In terms of testing, ...", "As required, ...". When the rest of the
+  sentence says what you did, Hal now takes the opening out without asking the AI ("Regarding teamwork, I
+  ran ..." becomes "I ran ..."); any other such sentence is rewritten once.
 - **No "still studying" after you graduate.** "I am currently completing a degree, on track to achieve a
   First" was left in drafts written after the course ended. Hal now also finds "currently completing", "on
   track to", "expected to graduate", a predicted grade and "now in my final year" once your course has

@@ -503,9 +503,10 @@ def ground(draft: str, facts: Facts, essential: Essential) -> Grounded:
     (`fix`) and checked again, then taken out when `essential(text, sentence)` says the draft does not need it
     and its paragraph reads without it (`flow.reads_without`), else kept and listed. A paragraph that lost or
     changed a sentence is smoothed once (`smooth`). The AI's checks of one paragraph's sentences are one call
-    (`verdicts`); a rewrite is checked on its own."""
+    (`verdicts`); a rewrite is checked on its own. A lead-in from the advert that can simply be taken out is
+    taken out first (`plain.unlead`), with no AI."""
     batch = _Batched(facts)
-    return _settle(draft, facts, essential, batch.judge, lambda c, before: check(c, facts),
+    return _settle(plain.unlead(draft, facts.cards), facts, essential, batch.judge, lambda c, before: check(c, facts),
                    lambda c, before: cited_items(c, facts) or list(facts.items.values()), batch.prepare)
 
 

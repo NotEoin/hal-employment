@@ -4,8 +4,10 @@
 ("For the requirement to ..."), points at the CV instead of saying the thing ("My CV lists ..."), speaks of
 the person in the third person ("The applicant developed ...", "<name> has ...") or pastes the wording of a
 setting (`labels`, from `settings_labels`); `writing.grounded` lists them with a sentence's other problems,
-so each such sentence is rewritten once. `tidy(text, cards)` is the draft as it is saved: straight quotes
-and apostrophes, no stray space at the start of a line, and each project named as its card spells it.
+so each such sentence is rewritten once. `unlead(text, cards)` takes a lead-in clause out with no AI when
+the rest of its sentence opens with a subject. `tidy(text, cards)` is the draft as it is saved: no lead-in
+that `unlead` can take out, straight quotes and apostrophes, no stray space at the start of a line, and each
+project named as its card spells it.
 
 Design decisions, each with its reason:
 
@@ -15,6 +17,11 @@ Design decisions, each with its reason:
   is a UK and Irish citizen), a stray leading space, curly apostrophes and a project name capitalised two
   ways (15 graded packs, 2026-11-07). The wording problems need a rewrite; the rest have one right form, so
   they are fixed in place, as spelling is (`writing.spelling`).
+- Lead-ins mapping the advert kept coming in every graded pack ("The advert requires ...", "The role asks for
+  ...", "Regarding <X>, ...", "In terms of <X>, ...", "As required, ...", 2026-11-08). When the rest of the
+  sentence after the lead-in's first comma opens with a subject ("I", "My", "We", "Our", a project's name),
+  the lead-in is taken out with no AI (`unlead`), before the sentence checks and again as the draft is
+  saved; otherwise the sentence gets its one rewrite.
 - The settings' own wording reaches a request only as the person's plain values (`cv.status_line`); a
   label still found in a draft is a problem. `you.work_status` is how forms should word the right to work,
   so it is a label too unless it is already a sentence in the first person.
@@ -26,9 +33,17 @@ from __future__ import annotations
 import re
 
 LEAD_IN = re.compile(
-    r"^(?:(?:for|regarding|concerning|with regard to|in regard to|in response to|addressing|on|about) the "
+    r"^\W*(?:(?:for|regarding|concerning|with regard to|in regard to|in response to|addressing|on|about) the "
     r"(?:requirements?|need|criteri(?:on|a)|request|ask|point)\b|as (?:required|requested|specified|stated|"
-    r"outlined)\b|to (?:meet|address|demonstrate|show|satisfy) the (?:requirements?|need|criteri(?:on|a))\b)", re.I)
+    r"outlined)\b|to (?:meet|address|demonstrate|show|satisfy) the (?:requirements?|need|criteri(?:on|a))\b|"
+    r"(?:the|this|your) (?:advert(?:isement)?|role|job(?: description)?|position|post|vacancy|person "
+    r"specification|listing) (?:requires|asks for|calls for|specifies|states|mentions|lists|seeks|wants|"
+    r"is looking for|emphasi[sz]es|highlights)\b|you (?:require|ask for|are looking for|are seeking)\b|"
+    r"(?:regarding|concerning|in terms of|with (?:regard|respect) to|in relation to|as for|when it comes to)"
+    r"\b[^,.;]{1,80},)", re.I)
+# What may open a sentence once its lead-in is taken out: the person or their work (or a project's name).
+SUBJECT = re.compile(r"(?:I|My|We|Our)\b", re.I)
+SPLIT = re.compile(r"((?<=[.!?])\s+|\s*\n\s*)")   # between sentences and lines, kept to join them again
 CV_SAYS = re.compile(r"\bmy (?:CV|resume)\s+(?:lists|shows|states|mentions|says|notes|includes|highlights)\b|"
                      r"\b(?:as )?(?:listed|stated|shown|mentioned|noted|detailed|outlined) (?:in|on) my "
                      r"(?:CV|resume)\b", re.I)
@@ -85,14 +100,37 @@ def problems(sentence: str, names: list[str] = (), labels: list[str] = ()) -> li
     return out
 
 
+def _unlead_one(sentence: str, names: list[str]) -> str:
+    """`sentence` without its lead-in clause (up to its first comma) when what is left opens with a subject;
+    the sentence as it is otherwise."""
+    if not LEAD_IN.match(sentence):
+        return sentence
+    comma = sentence.find(",")
+    rest = sentence[comma + 1:].lstrip() if comma >= 0 else ""
+    named = any(re.match(rf"{re.escape(n)}(?![\w-])", rest, re.I) for n in names)
+    if not rest or not (SUBJECT.match(rest) or named):
+        return sentence
+    return rest[0].upper() + rest[1:]
+
+
+def unlead(text: str, cards: list[dict] = ()) -> str:
+    """`text` with each sentence's lead-in from the advert taken out ("As required, I have used SQL" is "I have
+    used SQL") when the rest opens with a subject: "I", "My", "We", "Our" or a project's name or alias
+    (`cards`). A sentence whose rest does not is left for its one rewrite (`problems`)."""
+    names = [n.strip() for c in cards for n in (c.get("name") or "", *c.get("aliases", ())) if n.strip()]
+    parts = SPLIT.split(text or "")
+    return "".join(p if n % 2 else _unlead_one(p, names) for n, p in enumerate(parts))
+
+
 def _distinct(name: str) -> bool:
     return bool(DISTINCT.search(name.strip()))
 
 
 def tidy(text: str, cards: list[dict] = ()) -> str:
-    """A draft as it is saved: curly quotes and apostrophes straight, no space before a line's first word (a
-    bullet's indent aside), and each distinctive project name spelt as its card spells it."""
-    out = LEADING.sub("", CURLY_RX.sub(lambda m: CURLY[m.group(0)], text or ""))
+    """A draft as it is saved: lead-ins taken out (`unlead`), curly quotes and apostrophes straight, no space
+    before a line's first word (a bullet's indent aside), and each distinctive project name spelt as its card
+    spells it."""
+    out = unlead(LEADING.sub("", CURLY_RX.sub(lambda m: CURLY[m.group(0)], text or "")), cards)
     for card in cards:
         name = str(card.get("name") or "").strip()
         if name and _distinct(name):
