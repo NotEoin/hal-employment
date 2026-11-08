@@ -21,7 +21,8 @@ Design decisions, each with its reason:
   remembers where it was (`moved_from`), and the card is hidden with `merged_into` and a few words on why
   (`merged_why`). A new fact that matches a folded card goes to the card it was folded into. Only cards
   nobody checked are folded. A duplicate merged whole (`merge_into`) can be taken out again (`unfold`): its
-  evidence comes back and Hal never merges it on its own again (`APART`).
+  evidence comes back and Hal never merges it on its own again (`APART`). Nothing is merged into a card
+  that was merged away itself, so merges never chain.
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
@@ -364,11 +365,13 @@ APART = "apart"            # `merged_why` of a card the person took back out of 
 
 def merge_into(con: sqlite3.Connection, item_id: int, into: int, why: str) -> None:
     """Merges a card Hal found and nobody checked into the card `into`: its evidence moves there, remembering
-    where it was, and it is hidden as folded, saying `why`. ValueError as `fold_away`, and for a card the
-    person took out of a merge before."""
+    where it was, and it is hidden as folded, saying `why`. ValueError as `fold_away`, for a card the person
+    took out of a merge before, and for a target that was itself merged away."""
     row = _row(con, item_id)
     if row["merged_why"] == APART:
         raise ValueError("You took this card out of a merge, so Hal leaves it on its own.")
+    if _row(con, into)["merged_into"] is not None:   # chains made one card of unrelated work (2026-11-08)
+        raise ValueError("That card was merged into another, so nothing is merged into it.")
     fold_away(con, item_id, into, why)
     with con:
         con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = coalesce(moved_from, ?) "

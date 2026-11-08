@@ -16,6 +16,8 @@ repository, not a collection of projects). This module gives each its name, its 
 - So does a fact whose project is plainly another one of the person's (`Others`): a card a file outside the
   folder speaks for, a repository or another project folder, matched by a close name or a distinctive word
   the names share, as a note names a repository's project in its own words.
+- `note_units` names the repository or project folder each note belongs to, so `profile.duplicates` never
+  merges two projects that each hold one.
 - Each folder gets one note (`write_notes`) listing its files' notes, which link back to it under "Part of",
   as a course's do; its data files and figures are listed in it (`attach`).
 - A tidy (`find_in_record`, `fold_cards`) holds a record an older read filed to the same rules: it finds the
@@ -209,6 +211,21 @@ def facts_in(con: sqlite3.Connection, row: sqlite3.Row | dict, desc: dict) -> li
     top = _is_top(path, folder)
     return [{**f, "fields": redirect(f["fields"], units[folder], others, top)} if f["kind"] == KIND else f
             for f in facts]
+
+
+def note_units(con: sqlite3.Connection) -> dict[str, tuple[str, str | None]]:
+    """The unit each note of a repository or of a file inside a project folder belongs to: {note: (path, name)},
+    with the project folder's name (`name_of`), or None for a repository, all of whose facts are its own."""
+    units = _units(con)
+    folders = set(units)
+    out: dict[str, tuple[str, str | None]] = {}
+    for r in con.execute("SELECT note, path, kind FROM ingest_items WHERE kind IN ('file', 'repo') "
+                         "AND state = 'done' AND note IS NOT NULL ORDER BY id"):
+        if r["kind"] == "repo":
+            out[r["note"]] = (r["path"], None)
+        elif (folder := group.project_of(Path(r["path"]), folders)) is not None:
+            out[r["note"]] = (str(folder), units[folder])
+    return out
 
 
 def _under(folder: Path) -> tuple[int, str]:

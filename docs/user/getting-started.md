@@ -463,7 +463,9 @@ different names, such as a project's working title and its final title, or the n
 name of its folder. It keeps one card with all their files, named as your CV names it when your CV has it,
 and lists what it merged under **Hal merged these**. If two of them are really different, press **Undo**:
 Hal shows them apart again and never merges them on its own after that. Hal never merges a card you
-confirmed or edited, and never two whose dates are years apart unless one file names both.
+confirmed or edited, and never two whose dates are years apart unless one file names both, or two projects
+that each have a folder or repository of their own. Without its AI, Hal merges only cards that share a
+project link: two cards found in one file can still be two pieces of work.
 
 ## What Hal remembers
 

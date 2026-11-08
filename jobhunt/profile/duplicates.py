@@ -8,17 +8,21 @@ navigation project and two for one network sniffer, under names `merge.same_item
 1. The cards it may merge (`candidates`): projects, courses and achievements Hal found and nobody checked,
    not hidden, and not taken out of a merge by the person before (`store.APART`). A card the person confirmed
    or edited is never merged without their action.
-2. Rules that are certain (`certain`): two cards with the same project link, or found in the same file of
-   one piece of work, are one. A CV, letter or transcript lists every experience, and so does a file whose
-   project facts name three or more projects (`listing_files`), such as a dossier of all the person's
-   work: sharing one says nothing, and the AI is not shown it.
+2. The one rule that is certain (`certain`): two cards with the same project link are one.
 3. The AI (`profile_same` prompt, checker role, JSON, `BATCH` cards a call, each with its name, summary,
-   tools, dates, links and files) groups the rest.
-4. A rule that is never broken (`never`): cards whose dates are `YEARS_APART` or more years apart and that
-   share no file are two experiences, whatever the AI says.
+   tools, dates, links and files) groups the rest. A shared file is shown to it, never taken as proof: a
+   shared listing merged a portfolio into a dissertation (2026-11-08). A CV, letter or transcript lists
+   every experience, and so does a file whose project facts name three or more projects (`listing_files`),
+   such as a dossier of all the person's work: sharing one says nothing, and the AI is not shown it.
+4. Rules that are never broken: cards whose dates are `YEARS_APART` or more years apart and that share no
+   file are two experiences (`never`), and so are two projects holding different repositories or project
+   folders (`apart`, `card_units`), whatever the AI says.
 
 Each group is merged into its strongest card (`target`: the one the person's CV names, else the best shown,
 `check.strength`), which keeps its name unless a better-ranked source names it otherwise (`store.refold`).
+Every card merged into it is one the AI put with it or that shares its link: pairs never chain, as a chain
+put a tool pack and an unrelated card into one scheduler's card (2026-11-08). A card merged away is never a
+target (`store.merge_into`).
 The others are hidden as "Merged into <card>" with their evidence moved to it (`store.merge_into`). The Check
 your record page lists each merge under "Hal merged these" (`listing`) with **Undo** (`undo`), which puts the
 cards back as they were and keeps them apart from then on. Without an AI only the certain rule merges.
@@ -89,10 +93,38 @@ def _span(item: dict) -> tuple[int, int] | None:
     return (point, point) if point is not None else None
 
 
-def certain(a: dict, b: dict, listings: frozenset[str] = frozenset()) -> bool:
-    """True when two cards are surely one: the same project link, or a shared file of one piece of work."""
+def certain(a: dict, b: dict) -> bool:
+    """True when two cards are surely one: the same project link."""
     link = _link(a)
-    return bool(link and link == _link(b)) or bool(_files(a, listings) & _files(b, listings))
+    return bool(link and link == _link(b))
+
+
+def card_units(con: sqlite3.Connection, found: list[dict], listings: frozenset[str] = frozenset()) -> dict:
+    """Each project card's repositories and project folders: {card id: {path}}. A repository's note counts for
+    every card it speaks for, a note inside a project folder only for the folder's own card, and a file that
+    lists projects (`listings`) for none."""
+    from jobhunt.ingest import projects
+
+    by_note = projects.note_units(con)
+    out: dict[int, set[str]] = {}
+    for item in found:
+        name = {"name": str(item["fields"].get("name") or "")}
+        held = set()
+        for e in item["evidence"]:
+            unit = by_note.get(e["source_rel"])
+            if unit is None or e["source_rel"] in listings:
+                continue
+            path, own = unit
+            if own is None or merge.same_item("project", {"name": own}, name):
+                held.add(path)
+        out[item["id"]] = held
+    return out
+
+
+def apart(a: dict, b: dict, units: dict) -> bool:
+    """True when two cards hold different repositories or project folders (`card_units`): two projects."""
+    ua, ub = units.get(a["id"], set()), units.get(b["id"], set())
+    return bool(ua and ub and not ua & ub)
 
 
 def never(a: dict, b: dict, listings: frozenset[str] = frozenset()) -> bool:
@@ -142,11 +174,19 @@ def _ask(con: sqlite3.Connection, cards: list[dict]) -> list[list[int]]:
     return out
 
 
-def groups(found: list[dict], said: list[list[int]], listings: frozenset[str] = frozenset()) -> list[list[dict]]:
-    """The groups of cards to merge: the certain pairs, and the AI's groups (`said`) without the pairs that
-    are never one; each group holds no two cards that are never one."""
+def groups(found: list[dict], said: list[list[int]], listings: frozenset[str] = frozenset(),
+           units: dict | None = None) -> list[list[dict]]:
+    """The groups of cards to merge: the certain pairs and the AI's groups (`said`), without the pairs that
+    are never one (`never`) or hold two units (`apart`). Each card in a group is one its target (`target`) is
+    certainly one with or the AI put with it, so a chain of pairs never joins two cards nothing tied; and no
+    two cards in a group are never one or apart."""
     by_id = {i["id"]: i for i in found}
     root = {i: i for i in by_id}
+    units = units or {}
+    agreed: set[frozenset[int]] = set()
+
+    def refused(a: dict, b: dict) -> bool:
+        return never(a, b, listings) or apart(a, b, units)
 
     def top(i: int) -> int:
         while root[i] != i:
@@ -159,23 +199,25 @@ def groups(found: list[dict], said: list[list[int]], listings: frozenset[str] = 
 
     for n, a in enumerate(found):
         for b in found[n + 1:]:
-            if certain(a, b, listings):
-                join(a["id"], b["id"])
+            if certain(a, b):
+                agreed.add(frozenset((a["id"], b["id"])))
     for ids in said:
-        for n, a in enumerate(ids):
-            for b in ids[n + 1:]:
-                if a in by_id and b in by_id and not never(by_id[a], by_id[b], listings):
-                    join(a, b)
+        agreed.update(frozenset((a, b)) for n, a in enumerate(ids) for b in ids[n + 1:]
+                      if a != b and a in by_id and b in by_id)
+    for pair in agreed:
+        a, b = sorted(pair)
+        if not refused(by_id[a], by_id[b]):
+            join(a, b)
     parts: dict[int, list[dict]] = {}
     for i in by_id:
         parts.setdefault(top(i), []).append(by_id[i])
     out = []
     for part in parts.values():
         left = sorted(part, key=_order)
-        while len(left) > 1:          # a chain of AI pairs may join two cards that are never one: split them
+        while len(left) > 1:          # a chain of pairs joined cards nothing tied: each must agree with the target
             kept = [left[0]]
             for c in left[1:]:
-                if not any(never(c, k, listings) for k in kept):
+                if frozenset((c["id"], kept[0]["id"])) in agreed and not any(refused(c, k) for k in kept):
                     kept.append(c)
             if len(kept) > 1:
                 out.append(kept)
@@ -246,7 +288,8 @@ def refresh(con: sqlite3.Connection, *, judge: bool = True) -> dict[str, int]:
             continue
         said, missed = _said(con, found, listings) if use_ai else ([], 0)
         counts["unjudged"] += missed
-        for group in groups(found, said, listings):
+        units = card_units(con, found, listings) if kind == "project" else {}
+        for group in groups(found, said, listings, units):
             into = target(group)
             why = MERGED + into["title"]
             for other in group:

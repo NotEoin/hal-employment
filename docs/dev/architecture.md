@@ -1113,14 +1113,19 @@ available yet.
   `POST /api/v2/profile/tiers` starts it as the action `profile.tiers`.
 - Duplicates (`duplicates.py`, migration 0027): after each read, before sorting, the ingest action runs
   `profile.actions.dedupe`, one pass of `duplicates.refresh(con)` over the projects, courses and achievements
-  Hal found and nobody checked (`candidates`: not hidden, `merged_why` not `apart`). Pairs with the same
-  project link (`merge.project_link`) or a shared file that is not a CV, letter, transcript or listing
-  (`duplicates.listing_files`: a file whose project facts name three or more projects, counted under the
-  names of the cards a tidy moved them from) are one (`certain`); the rest go to the `profile_same` prompt (checker role, JSON, `duplicates.BATCH` (60) cards a
-  call, sorted by name so likely twins share a call), which answers `{"groups": [[id, ...]]}`; a pair whose
-  dates are `YEARS_APART` (2) or more years apart with no shared file is never joined (`never`), and a
-  chain of the AI's pairs that would join one is split. Each group goes into its `target` (the card a CV
-  names, then `check.strength`, then the oldest) with `store.merge_into`, as "Merged into <name>"; `refold`
+  Hal found and nobody checked (`candidates`: not hidden, `merged_why` not `apart`). Only pairs with the
+  same project link (`merge.project_link`) are one without asking (`certain`); the rest go to the
+  `profile_same` prompt (checker role, JSON, `duplicates.BATCH` (60) cards a call, sorted by name so likely
+  twins share a call), which answers `{"groups": [[id, ...]]}`. A shared file is shown to the AI but is
+  no proof; a CV, letter, transcript or listing (`duplicates.listing_files`: a file whose project facts
+  name three or more projects, counted under the names of the cards a tidy moved them from) is not shown
+  and never counts as shared. A pair whose dates are `YEARS_APART` (2) or more years apart with no shared
+  file is never joined (`never`), nor two projects whose repositories or project folders differ (`apart`,
+  from `duplicates.card_units` over `projects.note_units`: a repository's note counts for each card it
+  speaks for, a note inside a project folder only for the folder's own card). Each group goes into its
+  `target` (the card a CV names, then `check.strength`, then the oldest) with `store.merge_into`, as
+  "Merged into <name>", and holds only cards that share the target's link or that the AI put with the
+  target itself, so pairs never chain; `store.merge_into` refuses a target that was merged away. `refold`
   puts a card's own sources before moved ones of the same rank, so the target keeps its name unless a
   better-ranked file, such as the CV, names it otherwise. Without an AI only `certain` merges.
   `duplicates.listing` gives each target with its merged cards to `GET /api/v2/profile/check` (`merged`),

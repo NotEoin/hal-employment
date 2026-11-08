@@ -205,6 +205,10 @@ What changed in each version, in plain words.
   your projects turned every one of them into the portfolio, and cards that shared such a plan were merged.
   A document that describes three or more projects now lists them, as a CV does, and a note about another
   of your projects keeps its own name, even when it words the name differently from the project's folder.
+- **Hal merges only what it has checked.** Cards found in one file were merged without asking the AI, and
+  merges chained, so unrelated projects ended up in one card. Now only cards with the same project link
+  are merged without the AI; every other merge needs the AI to say the two cards are one, two projects
+  with their own folders or repositories are never merged, and a merged card never takes in others.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

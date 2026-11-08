@@ -19,6 +19,7 @@ from support.fake_ai import fake_ai
 from jobhunt import db
 from jobhunt.core import paths
 from jobhunt.core.settings import store as settings_store
+from jobhunt.ingest import items
 from jobhunt.profile import duplicates, store
 
 NOW = "2026-11-08T09:00:00Z"
@@ -27,6 +28,7 @@ README = "Sources/Code/gauge_bot.md"
 REPORT = "Sources/Coursework/Tide gauge report.md"
 DRAFT = "Sources/Coursework/Harbour lights draft.md"
 DOSSIER = "Sources/Coursework/Project dossier.md"
+BEAM_README = "Sources/Code/beam_bot.md"
 
 
 def own(source: str, doc_type: str, quote: str = "") -> dict:
@@ -75,18 +77,48 @@ class Duplicates(unittest.TestCase):
                          ("hidden", cv, "Merged into Tide gauge logger"))
         self.assertEqual(duplicates.listing(self.con)[0]["item"]["id"], cv)
 
-    def test_a_shared_file_of_one_piece_of_work_merges_without_the_ai_and_a_shared_cv_does_not(self):
+    def test_a_shared_file_merges_only_when_the_ai_agrees_and_a_shared_cv_never_does(self):
         a = self.project("Harbour lights", DRAFT, "dissertation")
         b = self.project("Beacon survey", DRAFT, "dissertation")
         c = self.project("Wick sensor", CV, "cv")
         d = self.project("Beam log", CV, "cv")
-        counts = duplicates.refresh(self.con, judge=False)
+        alone = duplicates.refresh(self.con, judge=False)
+        self.assertEqual(alone["merged"], 0, "one file can hold two pieces of work")
+        with fake_ai({"profile_same": grouping(["Harbour lights", "Beacon survey"])}):
+            counts = duplicates.refresh(self.con)
         self.assertEqual(counts["groups"], 1)
         self.assertEqual(store.item(self.con, b)["merged_into"], a)
         self.assertIsNone(store.item(self.con, d)["merged_into"], "a CV lists every project: sharing it says nothing")
         self.assertIsNone(store.item(self.con, c)["merged_into"])
         linked = {"kind": "project", "fields": {"link": "https://example.org/code/wick"}, "evidence": []}
         self.assertTrue(duplicates.certain(linked, {**linked, "fields": {"link": "example.org/code/wick/"}}))
+
+    def test_a_card_joins_a_group_only_when_it_agrees_with_the_card_kept(self):
+        cv, readme = self.twins()
+        other = self.project("Moon dial", REPORT, "report")
+        with fake_ai({"profile_same": grouping(["Tide gauge logger", "gauge_bot"], ["gauge_bot", "Moon dial"])}):
+            counts = duplicates.refresh(self.con)
+        self.assertEqual((counts["merged"], store.item(self.con, readme)["merged_into"]), (1, cv))
+        self.assertIsNone(store.item(self.con, other)["merged_into"],
+                          "a chain of pairs put an unrelated card in the CV's card (2026-11-08)")
+
+    def test_cards_of_two_repositories_are_never_merged_whatever_the_ai_says(self):
+        for n, note in enumerate((README, BEAM_README)):
+            unit = items.add(self.con, "b0", path=f"/made/up/repo{n}", rel=f"repo{n}", kind="repo", state="done")
+            items.update(self.con, unit, note=note)
+        self.project("gauge_bot", README, "repository")
+        self.project("beam_bot", BEAM_README, "repository")
+        with fake_ai({"profile_same": grouping(["gauge_bot", "beam_bot"])}):
+            counts = duplicates.refresh(self.con)
+        self.assertEqual(counts["merged"], 0, "a tool pack merged into a scheduler's card (2026-11-08)")
+
+    def test_a_card_merged_away_is_never_a_merge_target(self):
+        cv, readme = self.twins()
+        other = self.project("Moon dial", REPORT, "report")
+        store.merge_into(self.con, readme, cv, duplicates.MERGED + "Tide gauge logger")
+        with self.assertRaises(ValueError):
+            store.merge_into(self.con, other, readme, duplicates.MERGED + "gauge_bot")
+        self.assertIsNone(store.item(self.con, other)["merged_into"])
 
     def test_cards_sharing_a_file_that_lists_three_projects_are_not_one(self):
         for name in ("Tide clock", "Wick sensor", "Beam log"):
