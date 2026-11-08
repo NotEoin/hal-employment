@@ -175,6 +175,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Each sentence says which project.** "I wrote a 113-test suite that ..." left the reader guessing which
+  project it meant. A sentence about one of your projects that nothing before it in its paragraph names
+  now starts with the project's name ("For <project>, I wrote ..."), or is rewritten once to name it.
 - **No "The advert requires ..." openings.** Sentences still began by restating the advert: "The role asks
   for ...", "Regarding teamwork, ...", "In terms of testing, ...", "As required, ...". When the rest of the
   sentence says what you did, Hal now takes the opening out without asking the AI ("Regarding teamwork, I

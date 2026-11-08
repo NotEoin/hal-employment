@@ -38,6 +38,11 @@ Design decisions, each with its reason:
 - Wording that shows how a draft was made (an advert's requirement as a lead-in, "my CV lists", the person
   in the third person, a settings label pasted in: `writing.plain`) is a problem of the sentence like any
   other, so it gets the same one rewrite.
+- A sentence resting on one project's items says which project (`unnamed`): "I wrote a 113-test suite that
+  ..." left the reader guessing in every graded pack (2026-11-08). When neither it nor the sentences before it
+  in its paragraph, back to one about another project, name the card (or an alias), a sentence opening "I
+  <verb>" is given "For <card>, " with no AI (`name_projects`); any other is rewritten once, and kept as it
+  was when the rewrite fails, as it says nothing untrue.
 - A number counts in figures or words ("seven" is "7"), so "a team of seven" meets "team of 7".
 - The AI's "unsupported" words are dropped when the cited items or the employer's words hold them: a reply
   quoting what the evidence says is a false alarm. "supported": false with every quoted word dropped is
@@ -100,6 +105,11 @@ ONLY_SKILLS = "rests only on a skills list, which says nothing about {card}"
 TOO_MUCH = "gives you more of the work than its evidence does"
 REASON = re.compile(r"\(([^()]*)\)$")
 REPEATS = 'already said as "{sentence}"'   # a sentence repeating an earlier one (`unrepeat`)
+UNNAMED = "does not say which project it is about; name {card}"   # (`unnamed`)
+# "I wrote", "I also built": a sentence that can open "For <project>, " as it stands. Words of wanting or feeling
+# ("I hope", "I would") are left to the rewrite.
+ON_A_PROJECT = re.compile(r"^I\s+(?:(?:also|then|later|first|\w+ly)\s+)?(?!(?:am|would|will|can|could|should|"
+                          r"hope|believe|feel|want|look|enjoy|love|like)\b)[a-z]+\b")
 BATCH_PROMPT = "paragraph_check"
 ROOT_MIN = 3               # letters a word keeps when its ending is taken off ("uses" is "use", "is" stays)
 ENDINGS = ("ing", "ed", "es", "s")
@@ -215,6 +225,53 @@ def cited_items(c: cites.Cited, facts: Facts) -> list[Item]:
     if not items and c.motive and facts.motive is not None and cites.about_person(c.text, facts.allowed):
         return [facts.motive]
     return items
+
+
+def _project_cards(facts: Facts) -> list[dict]:
+    return [c for c in facts.cards if c["kind"].startswith("project") and c["name"].strip()]
+
+
+def _project_of(c: cites.Cited, facts: Facts) -> dict | None:
+    """The one project card every item a sentence cites with a card is about; None for none or several."""
+    named = {facts.items[i].card for i in c.ids if i in facts.items and facts.items[i].card}
+    return next((p for p in _project_cards(facts) if {p["name"]} == named), None)
+
+
+def unnamed(c: cites.Cited, earlier: list[str], facts: Facts) -> dict | None:
+    """The project card a sentence's items are all about when the reader cannot tell it: neither the sentence
+    nor the `earlier` sentences of its paragraph name it, back to one about another project."""
+    card = _project_of(c, facts)
+    if card is None:
+        return None
+    projects = _project_cards(facts)
+    for raw in [c.raw, *reversed(earlier)]:
+        said = cites.cited(raw)[:1]
+        if not said:
+            continue
+        named = drafts.named_cards(said[0].text, projects)
+        if card in named:
+            return None
+        if named or _project_of(said[0], facts) not in (None, card):
+            return card
+    return card
+
+
+def name_projects(draft: str, facts: Facts) -> str:
+    """`draft` with "For <project>, " put before each sentence that leaves its project unnamed (`unnamed`) and
+    opens "I <verb>" ("I wrote a 113-test suite" of one card's items); other such sentences are left to
+    their one rewrite."""
+    paras = flow.paragraphs(cites.normalise(draft))
+    for n, para in enumerate(paras):
+        now: list[str] = []
+        for raw in cites.sentences(para):
+            card = unnamed(cites.cited(raw)[0], now, facts)
+            if card is not None and ON_A_PROJECT.match(raw):
+                named = f"For {card['name']}, {raw}"
+                para = _replace_nth(para, raw, sum(_pattern(raw).search(x) is not None for x in now), named)
+                raw = named
+            now.append(raw)
+        paras[n] = para
+    return "\n\n".join(paras)
 
 
 def problems(c: cites.Cited, facts: Facts) -> list[str]:
@@ -414,6 +471,11 @@ def smooth(paragraph: str, facts: Facts) -> str:
     return said
 
 
+def _only_unnamed(found: list[str]) -> bool:
+    """True when all that is wrong with a sentence is the project it leaves unnamed, which never cuts it."""
+    return bool(found) and all(f.startswith(UNNAMED.split("{", 1)[0]) for f in found)
+
+
 Judge = Callable[[cites.Cited, str], list[str]]     # what is wrong with a sentence, given the text before it
 Evidence = Callable[[cites.Cited, str], list[Item]]  # the items its rewrite may rest on, given the text before it
 
@@ -443,10 +505,11 @@ class _Batched:
         self.said = dict(zip((c.raw for c in ask), verdicts(ask, self.facts), strict=True)) if ask else {}
 
     def judge(self, c: cites.Cited, before: str) -> list[str]:
-        """What is wrong with a sentence: the verdict asked for it in its paragraph's call, else `check`."""
-        if c.raw in self.said:
-            return self.said.pop(c.raw)
-        return check(c, self.facts)
+        """What is wrong with a sentence: the verdict asked for it in its paragraph's call, else `check`, and
+        a project it leaves unnamed (`unnamed`)."""
+        found = self.said.pop(c.raw) if c.raw in self.said else check(c, self.facts)
+        card = unnamed(c, cites.sentences(before.rsplit("\n\n", 1)[-1]), self.facts)
+        return found + ([UNNAMED.format(card=card["name"])] if card else [])
 
 
 def _settle_paragraph(paras: list[str], n: int, facts: Facts, essential: Essential, out: Grounded,
@@ -471,6 +534,8 @@ def _settle_paragraph(paras: list[str], n: int, facts: Facts, essential: Essenti
         again = [p for m in cites.cited(new) for p in recheck(m, before)] if new else found
         if new and not again:
             text, now[k], changed = _replace_nth(text, raw, nth, new), new, True
+        elif _only_unnamed(found):
+            pass                       # a true sentence that names no project stays as it was
         elif not essential(whole, raw) and flow.reads_without(text, raw):
             text, now[k], changed = _replace_nth(text, raw, nth, ""), "", True
             out.removed += 1
@@ -504,9 +569,11 @@ def ground(draft: str, facts: Facts, essential: Essential) -> Grounded:
     and its paragraph reads without it (`flow.reads_without`), else kept and listed. A paragraph that lost or
     changed a sentence is smoothed once (`smooth`). The AI's checks of one paragraph's sentences are one call
     (`verdicts`); a rewrite is checked on its own. A lead-in from the advert that can simply be taken out is
-    taken out first (`plain.unlead`), with no AI."""
+    taken out first (`plain.unlead`), and a project left unnamed is named (`name_projects`), with no AI; a
+    sentence that leaves its project unnamed otherwise is rewritten once, and kept as it was if that fails."""
     batch = _Batched(facts)
-    return _settle(plain.unlead(draft, facts.cards), facts, essential, batch.judge, lambda c, before: check(c, facts),
+    draft = name_projects(plain.unlead(draft, facts.cards), facts)
+    return _settle(draft, facts, essential, batch.judge, lambda c, before: check(c, facts),
                    lambda c, before: cited_items(c, facts) or list(facts.items.values()), batch.prepare)
 
 

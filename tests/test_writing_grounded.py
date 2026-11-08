@@ -19,6 +19,11 @@ ITEMS = {k: Item(k, v["text"], "CV", v["card"], v["context"], v["role"], tuple(v
          for k, v in FLAGS["evidence"].items()}
 FACTS = grounded.Facts(ITEMS, [], FLAGS["known"], FLAGS["allowed"], None, ["Databases"],
                        ("\n".join(i.text for i in ITEMS.values()),), {"spelling": "UK English"})
+PROJECTS = [{"kind": "project (personal project)", "name": "Tide gauge", "tools": ["Lua"], "summary": "",
+             "aliases": ["tide-logger"]},
+            {"kind": "project (university team project)", "name": "Ferry planner", "tools": ["Python", "Flask"],
+             "summary": ""}]
+WITH_PROJECTS = grounded.Facts(ITEMS, PROJECTS, FLAGS["known"], FLAGS["allowed"])
 FINE = {"supported": True, "unsupported": [], "context_ok": True, "role_ok": True}
 
 
@@ -326,6 +331,51 @@ class Smooth(Grounding):
 
 TWICE = ("I wrote the statistics features of Ferry planner for a team of 7 [E1]. I wrote the statistics features of "
          "Ferry planner for a team of 7 [E1].\n\nI would welcome a call [M].")
+
+
+class SayWhichProject(unittest.TestCase):
+    """"I wrote a 113-test suite that ..." cited one project's evidence and never named the project, so the
+    reader could not tell which (2026-11-08)."""
+
+    def ground(self, text: str, fixes: list[str] = ()) -> grounded.Grounded:
+        self.fake = FakeChecker(fixes=list(fixes))
+        with mock.patch.object(llm, "chat_json", self.fake.chat_json):
+            return grounded.ground(text, WITH_PROJECTS, grounded.only_in_paragraph)
+
+    def fixes(self) -> list[str]:
+        return [u for s, u in self.fake.asked if s == ["Rewrite", "one", "sentence"]]
+
+    def test_an_i_sentence_about_an_unnamed_project_is_given_its_name_with_no_ai(self):
+        done = self.ground("I wrote a logger that records river levels every ten minutes [E2].")
+        self.assertEqual(done.text, "For Tide gauge, I wrote a logger that records river levels every ten minutes "
+                                    "[E2].")
+        self.assertEqual(self.fixes(), [])
+
+    def test_a_project_named_before_it_in_the_paragraph_is_not_named_again(self):
+        text = ("Tide gauge is a logger I wrote in my own time [E2]. I also made it record river levels every ten "
+                "minutes [E2]. I wrote the statistics features of Ferry planner [E1].")
+        self.assertEqual(self.ground(text).text, text)
+        alias = "My tide-logger runs in Lua [E2]. I wrote it to record river levels every ten minutes [E2]."
+        self.assertEqual(self.ground(alias).text, alias, "an alias names the project")
+
+    def test_another_project_in_between_means_the_project_is_named_again(self):
+        text = ("Tide gauge is a logger I wrote in my own time [E2]. I wrote the statistics features of Ferry "
+                "planner [E1]. I made the logger record river levels every ten minutes [E2].")
+        self.assertTrue(self.ground(text).text.endswith(
+            "For Tide gauge, I made the logger record river levels every ten minutes [E2]."))
+
+    def test_a_sentence_that_cannot_take_the_name_is_rewritten_once_and_kept_if_that_fails(self):
+        text = "It records river levels every ten minutes [E2]."
+        done = self.ground(text, ["Tide gauge records river levels every ten minutes [E2]."])
+        self.assertEqual(done.text, "Tide gauge records river levels every ten minutes [E2].")
+        self.assertIn("What is wrong: does not say which project it is about; name Tide gauge", self.fixes()[0])
+        kept = self.ground(text, [""])
+        self.assertEqual((kept.text, kept.failed, kept.removed), (text, [], 0), "never cut or listed for it")
+
+    def test_a_sentence_citing_no_project_or_two_is_left_alone(self):
+        for text in ("I scored 72 in the Databases module [E3].", "I worked on two apps in Lua and Python [E1,E2]."):
+            self.assertEqual(grounded.name_projects(text, WITH_PROJECTS), text)
+            self.assertIsNone(grounded.unnamed(cites.cited(text)[0], [], WITH_PROJECTS))
 
 
 class Unrepeat(unittest.TestCase):

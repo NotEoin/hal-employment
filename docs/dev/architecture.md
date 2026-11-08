@@ -448,7 +448,11 @@ runs: tests use `tests/support/fake_claude/`.
   words its cards' contexts disagree with (the rules of `drafts.wrong_context`, through the markers), "I
   built" of a team's card with no word of the team and under `PART_SHARE` of the person's part, and the
   draft-wide checks (`stage.ended_course`, `drafts.misplaced_tools`, `drafts.wrong_context`,
-  `taught.unsupported`) on that sentence. A sentence passing them and not restating its items
+  `taught.unsupported`) on that sentence. A sentence whose cited items are all one project card's, when
+  neither it nor the sentences before it in its paragraph (back to one about another project) name the card
+  or an alias (`grounded.unnamed`), is given "For <card>, " with no AI when it opens "I <verb>"
+  (`grounded.name_projects`, before the checks), else rewritten once as `UNNAMED` and kept as it was if the
+  rewrite fails ("I wrote a 113-test suite that ..." named no project, 2026-11-08). A sentence passing them and not restating its items
   (`grounded.needs_ai`: not `drafts.stated_in`, and not `grounded.restates`, every content word's root in its
   items) is checked by the AI with only its own items: {supported, unsupported, context_ok, role_ok}. The
   sentences of one paragraph that need it go in one call (`grounded.verdicts`, prompt `paragraph_check`),
