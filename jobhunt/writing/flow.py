@@ -10,8 +10,9 @@ Design decisions, each with its reason:
 
 - The sentence checks took failing sentences out and left "This project allowed me ...", "that RAG
   experience" and "I am ready to apply this experience" pointing at nothing, and letters of 105 to 216 words
-  against a preferred 250 (15 graded packs, 2026-11-07). A sentence the next one points back at is kept,
-  and a short letter gets one more paragraph from evidence it has not used (`writing.grounded`).
+  against a preferred 250 (15 graded packs, 2026-11-07). A sentence the next one points back at is kept
+  (`writing.paragraphs` cuts a sentence only when its paragraph reads without it), and a short letter is
+  listed.
 - A back reference is "This", "That", "These", "Those", "Such" or "It" at the start of a sentence. With a
   noun after it ("This project") it points at that noun, so it refers to nothing when none of the noun's
   words (by their first `STEM` letters) is in the text before it; a bare pronoun ("It runs", "This
@@ -27,7 +28,7 @@ from __future__ import annotations
 
 import re
 
-from jobhunt.writing import check, cites
+from jobhunt.writing import check
 from jobhunt.writing.drafts import LITTLE_WORDS
 
 LENGTH_FLOOR = 0.8          # share of the preferred length a letter must reach (see the module notes)
@@ -40,6 +41,10 @@ VERBS = frozenset("""is was are were has had have will would can could may might
 allows allowed helps helped shows showed taught teaches led leads made makes let lets runs ran works worked
 proved proves took takes kept keeps""".split())
 JOB_NOUNS = frozenset("role position job post opportunity vacancy application".split())
+# Past tenses with no "-ed" ending, which start a bare pronoun's verb ("It ran", "This led").
+IRREGULAR = frozenset("""built rebuilt led made wrote rewrote ran won taught began became did found gave got grew held
+kept knew met sold spent took brought chose fought went spoke lost paid undertook oversaw drove""".split())
+PAST_ED = 5                 # an "-ed" word at least this long ("based" and up) can be a past tense
 
 
 def _stem(word: str) -> str:
@@ -49,7 +54,7 @@ def _stem(word: str) -> str:
 def back_reference(sentence: str) -> tuple[str, ...] | None:
     """The words a sentence's opening points back at: None when it does not open by pointing back, () for a
     bare pronoun ("It runs", "This shows"), else the noun's words ("project", "rag experience")."""
-    found = OPENER.match(cites.strip(sentence or "").strip())
+    found = OPENER.match((sentence or "").strip())
     if not found:
         return None
     if found.group(1).lower() == "it":
@@ -57,7 +62,7 @@ def back_reference(sentence: str) -> tuple[str, ...] | None:
     phrase = []
     for word in re.findall(r"[A-Za-z][A-Za-z'-]*", found.group(2))[:PHRASE_WORDS]:
         lower = word.lower()
-        if lower in VERBS or lower in cites.IRREGULAR or (lower.endswith("ed") and len(lower) >= cites.PAST_ED):
+        if lower in VERBS or lower in IRREGULAR or (lower.endswith("ed") and len(lower) >= PAST_ED):
             break
         if lower not in LITTLE_WORDS:
             phrase.append(lower)
@@ -70,17 +75,17 @@ def refers_to_nothing(sentence: str, before: str) -> bool:
     if phrase is None:
         return False
     if not phrase:
-        return not cites.strip(before or "").strip()
+        return not (before or "").strip()
     if phrase[0] in JOB_NOUNS:
         return False
-    held = {_stem(w) for w in check.words_of(cites.strip(before or ""))}
+    held = {_stem(w) for w in check.words_of(before or "")}
     return not any(_stem(w) in held for w in phrase)
 
 
 def reads_without(paragraph: str, sentence: str) -> bool:
     """True when `paragraph` still reads with `sentence` taken out: it keeps another sentence, and the sentence
     after it does not point back at it (a bare pronoun, or a noun the rest before it does not hold)."""
-    said = cites.sentences(paragraph)
+    said = check.sentences(paragraph)
     if sentence not in said or len(said) <= 1:
         return False
     at = said.index(sentence)
@@ -102,16 +107,16 @@ def dangling(text: str) -> list[str]:
     """The first sentence of each paragraph that opens by pointing back at nothing in the paragraph before."""
     out, before = [], ""
     for para in paragraphs(text):
-        said = cites.sentences(para)
+        said = check.sentences(para)
         if said and refers_to_nothing(said[0], before):
-            out.append(cites.strip(said[0]))
+            out.append(said[0])
         before = para
     return out
 
 
 def word_count(text: str) -> int:
     """The words of a draft as the person sees it."""
-    return len(cites.strip(text or "").split())
+    return len((text or "").split())
 
 
 def short(text: str, words: int | None) -> bool:

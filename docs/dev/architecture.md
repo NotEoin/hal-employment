@@ -427,8 +427,8 @@ runs: tests use `tests/support/fake_claude/`.
   "Languages:", "Tools:" and the like, or a label and a list of three or more) is tied to no card and marked
   (`Item.skills`), as it says what the person knows, never which project used it. A pick whose quote is a
   plan (`writing.planned.planned`, from its words or its passage's file) is marked (`Item.planned`) and
-  says so in the request; a sentence citing only such items fails unless it says the thing was planned
-  (`grounded.PLANNED_ONLY`), and a tool a sentence says was used must be in evidence that is not a plan. A
+  says so in the request; a story lists such quotes apart (`Story.planned`), and a paragraph naming a tool
+  only a plan gives fails unless it says the tool was planned (`paragraphs.PLANNED_SAID`). A
   draft or fit row may name a card's planned tool only in words of a plan (`drafts.misplaced_tools`,
   `drafts.evidence_checked`). The
   letter's Evidence line names the plan's quotes, else the record passages as before. The pack picks one
@@ -476,79 +476,43 @@ runs: tests use `tests/support/fake_claude/`.
   its item's story (`pack._story_of`). Answers take the stories the letter (`told`) and earlier answers told
   least (`plan.choose`), and a question no story answers is listed (`pack.NO_ANSWER`). A draft with no story
   is drafted whole as below.
-- Evidence markers (`writing/cites.py`): the letter, message and answers requests carry the plan
-  (`pack._plan_part`), and their prompts ask for each sentence about the person to end with the ids it
-  rests on ("[E2]", "[E2,E5]") and a reason for the employer or a closing request with "[M]".
-  `cites.normalise` moves a marker written after a full stop before it, and puts a full stop after a marker
-  run that has none when a capital, a quote, a digit, a line break or the end of the text follows it ("on
-  one consumer GPU [E1] This project" read as one sentence, 2026-11-07); `cites.sentences` splits after
-  every marker run with its stop. Every writing check reads the draft without markers (`cites.strip`).
-  The markers are taken out before a draft is returned, shown or
-  saved. An empty plan, or a draft with no marker at all, is checked whole as before (`pack.fix_claims`).
-- Sentence checks (`writing/grounded.py`): `pack.settle` (letter, message) and `pack.settle_answers` check a
-  marked draft one sentence at a time against only the items it cites (`pack.grounds` gathers them). With no
-  AI first (`grounded.problems`): a sentence about the person (`cites.about_person`: the first person with a
-  past tense, or a number neither the employer's words nor the stage line hold) that cites nothing, an id
-  the plan does not hold, a number (figures or words) or a known tool its items lack (for a sentence about a
-  project, named or through its items, only that project's own items and card count, and a sentence about a
-  project resting on skills lists alone fails: `grounded._tool_problems`), degree or own-time
-  words its cards' contexts disagree with (the rules of `drafts.wrong_context`, through the markers), "I
-  built" of a team's card with no word of the team and under `PART_SHARE` of the person's part, and the
-  draft-wide checks (`stage.ended_course`, `drafts.misplaced_tools`, `drafts.wrong_context`,
-  `taught.unsupported`) on that sentence. A sentence whose cited items are all one project card's, when
-  neither it nor the sentences before it in its paragraph (back to one about another project) name the card
-  or an alias (`grounded.unnamed`), is given "For <card>, " with no AI when it opens "I <verb>"
-  (`grounded.name_projects`, before the checks), else rewritten once as `UNNAMED` and kept as it was if the
-  rewrite fails ("I wrote a 113-test suite that ..." named no project, 2026-11-08). A sentence passing them and not restating its items
-  (`grounded.needs_ai`: not `drafts.stated_in`, and not `grounded.restates`, every content word's root in its
-  items) is checked by the AI with only its own items: {supported, unsupported, context_ok, role_ok}. The
-  sentences of one paragraph that need it go in one call (`grounded.verdicts`, prompt `paragraph_check`),
-  each numbered with its items under it and the prompt saying never to judge one by another's; a paragraph
-  with one such sentence, and a rewrite, use `sentence_check` (`grounded.verdict`). Quoted words its items or
-  the employer's words hold are dropped, and a reply that is not JSON, or leaves a sentence out, fails
-  nothing. Calls per pack, counted with the fake AI of `tests/test_pack.py`
-  (`test_a_full_pack_needing_no_fix_checks_each_paragraph_in_one_call`: a letter of four paragraphs, a
-  message of two, three answers, no fix needed): 18 calls with 10 sentence checks, one a sentence, before;
-  14 with 6 (4 paragraphs, 2 single sentences) after (2026-11-08). A real pack made about 55, most of them
-  sentence checks. A failing sentence
-  is rewritten once with its own items (prompt `sentence_fix`, `grounded.fix`), checked again, then taken out
-  unless the draft needs it (`only_in_paragraph`, an answer's `first_of_answer`) or its paragraph does not
-  read without it (`flow.reads_without`: the next sentence points back at it, "This project", "It"), when it
-  is kept and listed. A paragraph that lost or changed a sentence, and keeps none that is listed, is
-  rewritten once from its kept sentences (`grounded.smooth`, prompt `paragraph_smooth`); the rewrite is kept
-  only when it cites the same ids and every sentence passes the checks with no AI (`grounded.holds`). A
-  letter then under `flow.LENGTH_FLOOR` (0.8) of `cvdocs.letter_words` gets one paragraph from the plan
-  items it does not cite (`grounded.lengthen`, prompt `paragraph_add`, through `pack.settle`'s `words`),
-  checked sentence by sentence and put before its last paragraph. Cut sentences had left "This project
-  allowed me ..." and letters of 105 to 216 words against 250 (2026-11-07). "Check before sending" lists
-  those, the eligibility lines, cut-offs and the checks with no AI on style; the verify call is not made
-  for a marked draft. The section is in every pack, saying `pack.NOTHING_TO_CHECK` when it lists nothing
-  (`pack.add_company_check` replaces that line with its flags), since packs without it gave no sign of a
-  broken letter (2026-11-07). It also lists a letter still under `flow.LENGTH_FLOOR` of the preferred
-  length after the added paragraph (`pack.SHORT_FLAG`), and a paragraph of the letter or the message that
-  opens by pointing back ("This", "It", "That", "These" and a noun) at nothing the paragraph before says
-  (`flow.dangling`, `pack.DANGLING_FLAG`). `tests/fixtures/grounded_flags.json` holds
-  sentences of each kind a local model wrote, and `tests/test_writing_grounded.py` requires each judged
-  right.
+- What replaced sentence checks (2026-11-08): a grader capped every graded pack at 2 of 5 for readability
+  across four designs that drafted against evidence ids ("[E2]") and checked, rewrote, cut and smoothed each
+  sentence, named projects with "For <card>, " and cut the advert's lead-ins with no AI. Those modules
+  (`writing/cites.py`, `writing/grounded.py`), their prompts (`sentence_check`, `sentence_fix`,
+  `paragraph_check`, `paragraph_smooth`, `paragraph_add`), the second letter draft and the cross-draft
+  repeat rewrite are gone; one story a paragraph tells each piece of work once instead.
+  `tests/fixtures/paragraph_flags.json` holds the sentences of each kind a local model wrote, each tied to
+  the story its paragraph tells, and `tests/test_writing_paragraphs.py` requires each judged right with no
+  AI, and the ones only the AI can see left to it. Calls per pack, counted with the fake AI of
+  `tests/test_pack.py` (`test_a_whole_pack_keeps_each_projects_tools_to_itself_within_about_thirty_calls`:
+  two look-alike projects, a letter, a message and two answers, no fix needed): 16. A real pack made about
+  55 with sentence checks. "Check before sending" lists the paragraphs left out, the questions no story
+  answers, the eligibility lines, cut-offs and the checks with no AI on style; the verify call is not made
+  for a draft told by stories. The section is in every pack, saying `pack.NOTHING_TO_CHECK` when it lists
+  nothing (`pack.add_company_check` replaces that line with its flags), since packs without it gave no sign
+  of a broken letter (2026-11-07). It also lists a letter under `flow.LENGTH_FLOOR` (0.8) of
+  `cvdocs.letter_words` (`pack.SHORT_FLAG`), and a paragraph of the letter or the message that opens by
+  pointing back ("This", "It", "That", "These" and a noun) at nothing the paragraph before says
+  (`flow.dangling`, `pack.DANGLING_FLAG`).
 - Plain first-person writing (`writing/plain.py`): `plain.problems` finds a sentence opening with the
   advert's requirement ("For the requirement to ...", "Regarding the need for ...", "As required ...", "The
-  advert requires ...", "The role asks for ...", "Regarding <X>, ...", "In terms of <X>, ..."),
-  pointing at the CV ("My CV lists ...", "as listed in my CV"), speaking of the person in the third person
-  ("the applicant", "the candidate", their name with a verb) or pasting a setting's wording
-  (`plain.settings_labels`: the right-to-work choices' labels, and `you.work_status` unless it is a sentence
-  in the first person). It is one of each sentence's problems with no AI (`grounded.problems`, through
-  `grounded.Facts.names` and `labels`), so it gets the sentence's one rewrite; what is left in any draft is
-  listed by `pack.check_drafts`. `plain.unlead` takes such a lead-in out with no AI, up to its first comma,
-  when the rest opens with a subject ("I", "My", "We", "Our", a card's name or alias): `grounded.ground` does
-  it before the sentence checks, so only a sentence it cannot fix gets the rewrite, and `plain.tidy` again.
-  Every graded pack still opened sentences this way (2026-11-08). `plain.tidy` is applied to the letter, the
-  message and the answers before they are returned: straight quotes and apostrophes, no space before a line's first word, and each
-  distinctive project name (two words or more, or capitals, an acronym or a digit inside a word) spelt as its
-  card spells it. The settings reach a request only as plain values: `cv.status_line` says the right to
-  work in `cv.WORK_WORDS` (shared with form filling) and the nationality the person gave, never
+  advert requires ...", "The role asks for ...", "Regarding <X>, ...", "In terms of <X>, ..."), tying the
+  work to the job with a stock phrase (`plain.STOCK`), pointing at the CV ("My CV lists ...", "as listed in
+  my CV"), speaking of the person in the third person ("the applicant", "the candidate", their name with a
+  verb) or pasting a setting's wording (`plain.settings_labels`: the right-to-work choices' labels, and
+  `you.work_status` unless it is a sentence in the first person). It is one of each paragraph's problems
+  with no AI (`paragraphs.sentence_problems`, through `paragraphs.Scope.person` and `labels`), so its
+  paragraph is drafted again; what is left in any draft is listed by `pack.check_drafts`. A lead-in is never
+  cut out with no AI, as cutting one left garbled text (2026-11-08). `plain.tidy` is applied to the letter,
+  the message and the answers before they are returned: no stray evidence id (`plain.STRAY_ID`, as a
+  "[E4,M]" reached a form answer), straight quotes and apostrophes, no space before a line's first word,
+  and each distinctive project name (two words or more, or capitals, an acronym or a digit inside a word)
+  spelt as its card spells it. The settings reach a request only as plain values: `cv.status_line` says the
+  right to work in `cv.WORK_WORDS` (shared with form filling) and the nationality the person gave, never
   `you.work_status`, after a letter said "as a British or Irish citizen" for a UK and Irish citizen
   (2026-11-07).
-- The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts with no markers, and form
+- The claim check, `pack.unsupported_claims` (prompt `verify`), checks drafts with no story to tell, and form
   answers, against the CV, the checked
   profile and the passages of the person's own documents. The advert and the company brief go in a fenced
   `EMPLOYER` block as the employer's own words, never flagged for being restated; the fit map is not a
@@ -619,8 +583,8 @@ runs: tests use `tests/support/fake_claude/`.
   `joined(draft, modules, sources, cards)` finds a sentence tying a named module and a mark to a project
   card or an activity (`ACTIVITY`: "through a team project", "where I contributed to a team project", "by
   building Ferry planner") that the module's own entry (`atoms.split` of the sources' lines) never names;
-  the modules of a list in the sources (`modules_listed`) count as named. It is one of each sentence's checks with
-  no AI (`grounded.problems`).
+  the modules of a list in the sources (`modules_listed`) count as named. Both are among each paragraph's
+  checks with no AI (`paragraphs.sentence_problems`).
 - `drafts.echoes(sentence, advert, brief, names)` finds a sentence that restates the employer: at least
   `ECHO_SHARE` (half) of its own words sit in runs of `ECHO_RUN` (three) words found in the advert or the
   brief, with little words and the words of the job title and employer's name (`names`) never counted, and
@@ -634,23 +598,15 @@ runs: tests use `tests/support/fake_claude/`.
   item and a one-line reason. `motive.checked` keeps the pairing only when the fact is in the advert or the
   brief word for word (`plan.quoted`), at least `MIN_SPECIFIC` (2) of its own words are not words any
   employer uses of itself (`GENERIC`, the little words, the job title and the employer's name), the item
-  is the plan's and there is a reason. The letter request then gives the pairing for its [M] sentences, or
-  `motive.NONE_SAID`: name the role and give no reason beyond it. A reason sentence ([M]) that states a fact
-  about the person is checked against the pairing's item (`grounded.cited_items`), and fails as citing
-  nothing when there is no pairing; `drafts.echoes` still reads the first paragraph.
+  is the plan's and there is a reason. The letter's opening (`writing.frame`) and a "why here" answer
+  (`paragraphs.why`) are drafted from the pairing, or told there is none and to give no reason beyond the
+  role; a letter with no story gets the pairing in its request (`motive.block`, or `motive.NONE_SAID`).
 - `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
   (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer. `pack.fix_repeats`
   rewrites the answers once, in one call, asking for other evidence in the later ones, after the echo
-  rewrite and before the claim check. After the sentence checks, `grounded.unrepeat` reads every sentence of
-  the letter, then the message, then each answer, against the sentences before it in its own draft and in
-  the drafts before it (`repeats.first_said`, the same `REPEAT_SHARE` rule; `pack._unrepeated`, and
-  `pack.write_others`' `letter`): one saying nearly what an earlier one said is rewritten once (prompt
-  `sentence_fix`) from the plan items none of them cites, checked again, then taken out and its paragraph
-  smoothed as `grounded.ground` does, or kept and listed as `pack.REPEAT_FLAG`. Packs said one sentence twice
-  back to back and reused one CV line in the letter, the message and both answers (2026-11-07). Within one
-  draft, a sentence citing a project card's item that a paragraph two or more before its own already cites
-  (`repeats.card_again`) tells that project again and gets the same one rewrite (`grounded.REPEATS_CARD`); the
-  paragraph just before is left alone. A letter told one pipeline three times in other words (2026-11-08). The fit
+  rewrite and before the claim check; one still repeating is listed as `pack.REPEAT_FLAG`. `repeats.same`
+  also finds a sentence a paragraph says twice (`paragraphs.REPEAT_SAID`). Told by stories, a pack tells each
+  piece of work once by how it is drafted (`plan.choose`), so no sentence is compared across drafts. The fit
   map's gaps are kept once each (`unique_gaps`: the same words, case, order and "(no evidence found)"
   aside).
 - `writing/eligibility.py`: `blockers(must_haves, person())` finds, with no AI, a degree level above the
@@ -693,11 +649,9 @@ runs: tests use `tests/support/fake_claude/`.
   (2026-11-07). Anything else reads "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The letter and the message are drafted at
-  `pack.DRAFT_TEMPERATURE` (0.4), cooler than other prose. When the first letter's sentence checks needed a
-  rewrite, a second is drafted on its own (`pack.LETTER_DRAFTS`, 2), and the one with fewer sentences still
-  failing is kept, then the one with fewer rewrites, then the first (`grounded.Grounded.key`); a draft with
-  no markers is never drafted twice. The message and the answers are drafted once. The pack's `## Letter notes` section says Tone, Length,
-  Evidence and Checked; the application page reads them back.
+  `pack.DRAFT_TEMPERATURE` (`paragraphs.DRAFT_TEMPERATURE`, 0.4), cooler than other prose, and drafted once:
+  only a failing paragraph or frame is drafted again, once. The pack's `## Letter notes` section says Tone,
+  Length, Evidence and Checked; the application page reads them back.
 - The advert reading keeps only the questions the advert writes out, so a model's own note about questions
   is never answered. When the advert states no requirement, its main duties stand in, so the fit map is
   never empty. The letter greets the first person the advert names, else "Hiring Team", and never adds a
@@ -709,7 +663,7 @@ runs: tests use `tests/support/fake_claude/`.
   (`stage.Stage.subject`, `institution` and `grade`: the checked course's, else `you.education.subject`,
   `university` and `grade`). The message request carries `Opening.note` (the opening, and to write only what
   follows it); a greeting or an introduction the writer still adds is taken out (`opening.body_of`) before
-  the sentence checks, and `write_others` returns `Opening.put(body)`, which starts with the opening
+  the claim check, and `write_others` returns `Opening.put(body)`, which starts with the opening
   (`Opening.starts`). All 15 graded messages lacked an introduction (2026-11-08). The writer's greeting is
   never kept, so no rewrite for a greeting is asked.
 - The message's "To:" line (`pack.message_to`) and its greeting name only the advert's hiring

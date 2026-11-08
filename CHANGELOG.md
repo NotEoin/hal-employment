@@ -9,13 +9,12 @@ What changed in each version, in plain words.
 - **Drafts rest on evidence chosen first.** Before writing a letter, Hal picks up to eight facts it will
   rest on, each quoted word for word from your CV, the facts you checked or your own documents, with where
   the work was done and your part in it (a team of seven, the features you built) when your files say so.
-  The letter's notes list them under **Evidence**. The letter, the message and the answers mark which fact
-  each sentence rests on (you never see the marks), and Hal checks each sentence about you against only
-  those facts: a detail added to fit the advert, a personal project placed in your degree, or a team's work
-  written as yours alone is rewritten once, then taken out, or listed when the draft needs it. **Check
-  before sending** no longer lists a whole-pack check's guesses, which were mostly false alarms. When the
-  first letter needed such a fix, Hal writes a second and keeps the one with fewer problems, and letters
-  and messages are written in a steadier style that adds fewer details of its own. The letter's reason for
+  The letter's notes list them under **Evidence**. Each paragraph rests on one piece of work's facts and is
+  checked against them (see **Each piece of work is told once** under Fixed): a detail added to fit the
+  advert, a personal project placed in your degree, or a team's work written as yours alone is written
+  again once, then taken out or named. **Check before sending** no longer lists a whole-pack check's
+  guesses, which were mostly false alarms, and drafts are written in a steadier style that adds fewer
+  details of its own. The letter's reason for
   wanting the job comes from one specific thing about the employer, in the advert's or the company's own
   words, paired with one of your facts; when nothing connects, the letter gives no reason rather than
   a generic one.
@@ -200,16 +199,13 @@ What changed in each version, in plain words.
   **Evidence** note still gave a local assistant the tools of a job-search helper with a similar name. Each
   project with a similar name is now named there with a few words of its own description, and a tool only
   the other project used is taken out.
-- **One project, told once.** A letter told the same project three times, in other words each time, so no
-  sentence repeated another word for word. A letter or an answer that comes back to a project with the same
-  facts, after a paragraph about something else, now uses another of your facts there or leaves it out.
-- **Each sentence says which project.** "I wrote a 113-test suite that ..." left the reader guessing which
-  project it meant. A sentence about one of your projects that nothing before it in its paragraph names
-  now starts with the project's name ("For <project>, I wrote ..."), or is rewritten once to name it.
+- **Each paragraph says which project.** "I wrote a 113-test suite that ..." left the reader guessing which
+  project it meant. Each paragraph about your work now names it in its first sentence, as it is about that
+  one project or job alone.
 - **No "The advert requires ..." openings.** Sentences still began by restating the advert: "The role asks
-  for ...", "Regarding teamwork, ...", "In terms of testing, ...", "As required, ...". When the rest of the
-  sentence says what you did, Hal now takes the opening out without asking the AI ("Regarding teamwork, I
-  ran ..." becomes "I ran ..."); any other such sentence is rewritten once.
+  for ...", "Regarding teamwork, ...", "In terms of testing, ...", "As required, ...". A paragraph with such an
+  opening is now written again. Hal no longer cuts the opening out on its own, as that left broken
+  sentences.
 - **No "still studying" after you graduate.** "I am currently completing a degree, on track to achieve a
   First" was left in drafts written after the course ended. Hal now also finds "currently completing", "on
   track to", "expected to graduate", a predicted grade and "now in my final year" once your course has
@@ -218,9 +214,9 @@ What changed in each version, in plain words.
   course ended. A sentence that calls you a student now, such as "As a Computer Science student, I am keen
   to ...", is rewritten once your course has ended; "As a student, I built ..." is about the past and stays.
 - **Packs are drafted with fewer AI calls.** Hal checked every sentence about you in a call of its own, about
-  55 calls for one pack. A sentence whose every word is already in the facts it rests on is no longer sent,
-  and the sentences of one paragraph are checked in one call, each still against only its own facts. Our
-  test pack went from 18 calls to 14.
+  55 calls for one pack. It now makes one call for each paragraph, at most one check of it (none when it
+  only says its facts' own words) and one more draft when something is wrong. Our test pack, with two
+  projects, a letter, a message and two answers, makes 16 calls.
 - **Projects with similar names stay apart.** When two of your projects share a name, such as an
   assistant and a job-search helper both starting with the same word, letters gave one the other's tools or
   purpose. Hal now names each with a few words of its own description in the facts the writer reads, and
@@ -285,24 +281,19 @@ What changed in each version, in plain words.
   starts by pointing back at something the paragraph before does not say.
 - **Drafts speak as you.** Letters opened sentences with the advert's wording ("For the requirement to
   ..."), wrote "My CV lists C++", called you "the applicant", or pasted a settings choice ("as a British or
-  Irish citizen"). Hal now rewrites such a sentence once and lists it if it stays, gives the writer your
+  Irish citizen"). Hal now writes such a paragraph again once, gives the writer your
   right to work and nationality in plain words, and saves drafts with plain quotes, no stray space at the
   start and each project spelt as on Your record.
 - **A tool is only given to the project that used it.** A letter said a project was built with pandas
   because your CV's skills line lists pandas, though the project never used it. A tool you name for a
   project now has to be in that project's own facts; your skills list can still back "I know pandas".
 - **No repeats across your drafts.** A letter could say the same sentence twice in a row, and one line of
-  your CV turned up in the letter, the message and both answers. Hal now rewrites a sentence that says
-  again what an earlier one said, in the same draft or an earlier one, once with a fact not used yet, or
-  takes it out.
+  your CV turned up in the letter, the message and both answers. A paragraph that says one thing twice is
+  now written again, and the answers take work the letter has not told first.
 - **No holes where a sentence was taken out.** When Hal took out a sentence your facts did not support, the
   letter could be left with "This project allowed me ..." pointing at nothing, a paragraph of one sentence,
-  or only 105 words when you prefer 250. Hal now keeps a sentence the next one points back at (and lists
-  it), rewrites a paragraph once after changing it so it reads well with the same facts, and adds one
-  paragraph from facts it has not used when a letter is well under your length.
-- **Sentences stay apart.** A draft whose writer left out the full stop after a sentence ("... on one
-  consumer GPU This project shows ...") came out as one long sentence, and Hal checked the two as one. Hal
-  now ends the sentence there, so each one is checked on its own and reads as it should.
+  or only 105 words when you prefer 250. Hal now takes a sentence out only when its paragraph still reads
+  without it, and otherwise leaves the paragraph out and says so; a letter well under your length is listed.
 - **Letters and answers use only your own documents.** Hal searched every note in your record when it
   wrote, so lecture notes, other people's files and files it was unsure about could turn up in a letter as
   your own work. Letters, form answers, interview notes and CV suggestions now read only your own documents

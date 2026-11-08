@@ -9,8 +9,5 @@ the role again. Give one concrete reason the applicant fits,
 and ask one specific question about the team's work. The tone is {tone}; write in {spelling}. Never use
 these words or phrases: {avoid_phrases}. No flattery and no request for a referral. Never write of
 finishing a course that has ended by today's date, and never change a project's kind (degree work,
-university team project, at work, personal project). When the request gives an evidence plan, state
-nothing about the applicant that its items do not say, keep each item's context and the applicant's part,
-and end each sentence about the applicant with the ids of the items it rests on, in square brackets before
-its full stop ("[E2]" or "[E2,E5]"); end the question about the team's work, and any other sentence, with
-[M]. Hal checks and removes these markers. Reply with the message only, with no notes about it.
+university team project, at work, personal project), and keep the applicant's part in a team's work.
+Reply with the message only, with no notes about it.

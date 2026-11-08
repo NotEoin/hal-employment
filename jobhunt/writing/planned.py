@@ -5,7 +5,7 @@
 proposal). `planned(text, source)` puts them together for one piece of evidence: plan words, or a plan
 document's words that say nothing was done. `profile.writing.planned_only` leaves a card's tool out of writing
 when every source giving it is planned, and `writing.plan.Item.planned` marks an evidence item, which
-`writing.grounded` never lets support a sentence saying the person used something.
+a paragraph never says was used (`writing.plan.Story.planned`, `writing.paragraphs`).
 
 Design decisions, each with its reason:
 

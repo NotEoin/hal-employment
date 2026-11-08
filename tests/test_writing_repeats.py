@@ -23,18 +23,10 @@ class Repeats(unittest.TestCase):
                                            "I like tides."]), [])
         self.assertEqual(repeats.repeated(["I like tides.", "I like tides."]), [], "too short to count")
 
-    def test_the_earlier_sentence_a_sentence_says_again_is_found(self):
+    def test_a_sentence_saying_nearly_what_another_says_is_the_same(self):
         later = "My made-up tide pipeline cleans sensor logs, stores them in Postgres and charts every week."
-        self.assertEqual(repeats.first_said(later, ["I like tides.", PIPELINE]), PIPELINE)
-        self.assertIsNone(repeats.first_said("The tide pipeline taught me to test each change.", [PIPELINE]))
-
-    def test_a_project_told_again_with_evidence_a_far_paragraph_cites_is_found(self):
-        # a letter told the same pipeline three times, each time in other words (2026-11-08)
-        card_of = {"E1": "Tide pipeline", "E2": "Tide pipeline", "E3": ""}
-        far = ["I built the pipeline that cleans sensor logs [E1].", "I scored 72 in Databases [E3]."]
-        self.assertEqual(repeats.card_again(("E1",), far, card_of), "Tide pipeline")
-        self.assertEqual(repeats.card_again(("E2",), far, card_of), "", "other evidence of the project is new")
-        self.assertEqual(repeats.card_again(("E3",), far, card_of), "", "an item of no project is not a project")
+        self.assertTrue(repeats.same(later, PIPELINE))
+        self.assertFalse(repeats.same("The tide pipeline taught me to test each change.", PIPELINE))
 
     def test_a_gap_listed_twice_is_listed_once(self):
         # a gap was listed twice (2026-11-07)

@@ -91,7 +91,7 @@ class Entries(unittest.TestCase):
             {"source": "S1", "quote": "Ferry Studies 86, River Trade 79, Software Engineering Team Project 73"},
             {"source": "S1", "quote": "Ferry Studies 86"}]}, found)
         self.assertEqual([i.text for i in items], ["Second year modules (overall 73.3): Ferry Studies 86"])
-        self.assertNotIn("Team Project", plan.block(items))
+        self.assertNotIn("Team Project", items[0].words())
 
     def test_a_skills_list_is_one_source_per_skill_and_each_says_it_is_a_skills_list(self):
         found = plan.sources("AI and ML: PyTorch, NumPy, pandas", "", CARDS)
@@ -171,11 +171,10 @@ class Picks(unittest.TestCase):
 
     def test_the_plan_reads_as_its_ids_quotes_contexts_and_roles(self):
         items = plan.checked({"evidence": [{"source": "S2", "quote": "wrote the statistics features"}]}, self.found)
-        self.assertEqual(plan.block(items),
-                         f"{plan.HEADING}\nE1: \"wrote the statistics features\" (from the CV; about Ferry planner, "
+        self.assertEqual(items[0].words(),
+                         "E1: \"wrote the statistics features\" (from the CV; about Ferry planner, "
                          "university team project; the applicant's part: built the statistics features; team of 7; "
                          "tools: Python, Flask)")
-        self.assertEqual(plan.block([]), "")
 
     def test_one_call_asks_for_the_plan_with_the_requirements_and_every_source(self):
         asked = []

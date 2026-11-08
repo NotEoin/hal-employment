@@ -27,25 +27,25 @@ class BackReferences(unittest.TestCase):
             self.assertFalse(flow.refers_to_nothing(sentence, ""), sentence)
 
     def test_a_paragraph_opening_by_pointing_back_at_nothing_is_found(self):
-        text = "I built a made-up tide logger [E1].\n\nThis project allowed me to test changes [E1].\n\nIt helps."
+        text = "I built a made-up tide logger.\n\nThis project allowed me to test changes.\n\nIt helps."
         self.assertEqual(flow.dangling(text), ["This project allowed me to test changes."])
 
 
 class ReadsWithout(unittest.TestCase):
-    PARA = "I like tides [E1]. I built Hal [E2]. It runs offline [E2]. My logger works [E3]."
+    PARA = "I like tides. I built Hal. It runs offline. My logger works."
 
     def test_a_sentence_the_next_one_points_back_at_cannot_go(self):
-        self.assertFalse(flow.reads_without(self.PARA, "I built Hal [E2]."))
+        self.assertFalse(flow.reads_without(self.PARA, "I built Hal."))
 
     def test_any_other_sentence_can_go_but_never_the_last_one_left(self):
-        for sentence in ("I like tides [E1].", "It runs offline [E2].", "My logger works [E3]."):
+        for sentence in ("I like tides.", "It runs offline.", "My logger works."):
             self.assertTrue(flow.reads_without(self.PARA, sentence), sentence)
-        self.assertFalse(flow.reads_without("I built Hal [E2].", "I built Hal [E2]."))
+        self.assertFalse(flow.reads_without("I built Hal.", "I built Hal."))
 
 
 class Length(unittest.TestCase):
     def test_a_letter_under_the_floor_of_your_length_is_short(self):
-        words = " ".join(["word"] * 199) + " [E1]."
+        words = " ".join(["word"] * 199) + "."
         self.assertTrue(flow.short(words, 250))
         self.assertFalse(flow.short(words + " more", 250))
         self.assertFalse(flow.short(words, None), "no preferred length, no floor")

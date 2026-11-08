@@ -2,8 +2,10 @@
 redraft, and what is cut, dropped or listed."""
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import date
+from pathlib import Path
 from unittest import mock
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
@@ -116,6 +118,34 @@ class Scoped(unittest.TestCase):
         found = paragraphs.problems("Quill answers questions over my notes offline.", QUILL_STORY, SCOPE,
                                     paragraphs.LETTER)
         self.assertEqual([p.reason for p in found], [paragraphs.TOO_SHORT])
+
+
+FLAGS = json.loads((Path(__file__).parent / "fixtures" / "paragraph_flags.json").read_text(encoding="utf-8"))
+FIXTURE_CARDS = {k: {"kind": "project", "name": v["name"], "tools": v["tools"], "summary": "", "context": v["context"],
+                     "aliases": [], "role": v["role"], "tag": "", "similar": []}
+                 for k, v in FLAGS["stories"].items() if v["name"]}
+FIXTURE_STORIES = {k: Story(k, v["name"], "", v["context"], v["role"], "", tuple(v["tools"]), tuple(v["facts"]),
+                            card=FIXTURE_CARDS.get(k)) for k, v in FLAGS["stories"].items()}
+FIXTURE_SCOPE = paragraphs.Scope(tuple(FIXTURE_STORIES.values()), tuple(FIXTURE_CARDS.values()),
+                                 tuple(FLAGS["known"]), FLAGS["allowed"], modules=("Databases",))
+
+
+class Fixture(unittest.TestCase):
+    """Five graded packs listed about 20 false alarms for 10 real problems (2026-11-07); each kind is in
+    `fixtures/paragraph_flags.json`, scoped to the story its paragraph tells."""
+
+    def test_every_sentence_of_the_fixture_is_judged_right_with_no_ai(self):
+        wrong = [s["text"] for s in FLAGS["sentences"]
+                 if bool(paragraphs.sentence_problems(s["text"], FIXTURE_STORIES[s["story"]], FIXTURE_SCOPE))
+                 != s["flagged"]]
+        self.assertEqual(wrong, [], f"{len(wrong)} judged wrong of {len(FLAGS['sentences'])}")
+
+    def test_what_only_the_ai_can_see_is_left_to_it_and_found_there(self):
+        for s in FLAGS["ai_only"]:
+            story = FIXTURE_STORIES[s["story"]]
+            self.assertEqual(paragraphs.sentence_problems(s["text"], story, FIXTURE_SCOPE), [], s["text"])
+            with mock.patch.object(llm, "chat_json", lambda system, user, reply=s["reply"], **kw: reply):
+                self.assertTrue(paragraphs.verify(s["text"], story, FIXTURE_SCOPE), s["text"])
 
 
 class FakeAI:

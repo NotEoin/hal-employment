@@ -151,16 +151,16 @@ flat. A company with the employer's exact name that Hal cannot tie to the advert
 "Possible match: ... (check it is the same company)", and any other is left out.
 
 Every pack has a **Check before sending** section, which says "Nothing to check." when nothing needs
-you. Besides the sentences Hal could not fix, it lists a letter still well under the length you prefer, and
-a paragraph that starts with "This", "It" or "That" pointing at something the paragraph before does not
-say.
+you. It lists only what you should act on: a paragraph Hal left out and why, a question your facts could
+not answer, a letter well under the length you prefer, and a paragraph that starts with "This", "It" or
+"That" pointing at something the paragraph before does not say. Something Hal already fixed is never
+listed.
 
-Drafts speak as you, in the first person. A sentence that opens with the advert's wording ("For the
-requirement to ...", "The role asks for ...", "Regarding teamwork, ...") loses that opening when the rest
-says what you did ("Regarding teamwork, I ran ..." becomes "I ran ..."). Such a sentence that cannot simply
-lose its opening, or one that points at your CV ("My CV lists ...") or calls you "the applicant", is
-rewritten once, and your right to work is said in plain words rather than as the choice in Settings. Quotes
-and apostrophes are kept plain, and each project is spelt as it is on Your record.
+Drafts speak as you, in the first person. A paragraph with a sentence that opens with the advert's
+wording ("For the requirement to ...", "The role asks for ...", "Regarding teamwork, ..."), points at your
+CV ("My CV lists ...") or calls you "the applicant" is written once more, and your right to work is said in
+plain words rather than as the choice in Settings. Quotes and apostrophes are kept plain, and each project
+is spelt as it is on Your record.
 
 Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
 English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the

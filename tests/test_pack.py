@@ -28,7 +28,7 @@ from support.world import World
 
 from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
 from jobhunt.core import runner, settings
-from jobhunt.writing import cites, flow, motive
+from jobhunt.writing import flow
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.
 ADVERTS = {
@@ -57,10 +57,8 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "fit": "Match a candidate's evidence", "letter": "Write a cover letter", "message": "Write a short message",
     "answers": "Answer these application questions", "verify": "Check drafts written",
     "prep": "Prepare ", "contacts_pick": "You choose who", "plan": "Choose the evidence",
-    "sentence_check": "Check one sentence", "sentence_fix": "Rewrite one sentence",
-    "paragraph_check": "Check the numbered sentences",
-    "pairing": "Find the applicant's own reason", "smooth": "Rewrite one paragraph",
-    "add": "Write one more paragraph", "story": "Write one paragraph of", "frame": "Write the first and the last",
+    "pairing": "Find the applicant's own reason", "story": "Write one paragraph of",
+    "frame": "Write the first and the last",
     "paragraph_verify": "Check one paragraph",
 }
 WAIT_S = 10.0
@@ -124,17 +122,8 @@ class FakeWriter:
             return {"unsupported": []}
         if pid == "plan":
             return {"evidence": self.plan}
-        if pid == "sentence_check":
-            return {"supported": True, "unsupported": [], "context_ok": True, "role_ok": True}
-        if pid == "paragraph_check":
-            return {"sentences": [{"n": int(n), "supported": True, "unsupported": [], "context_ok": True,
-                                   "role_ok": True} for n in re.findall(r"^Sentence (\d+):", user, re.M)]}
-        if pid == "sentence_fix":
-            return {"sentence": ""}
         if pid == "pairing":
             return self.pairing
-        if pid in ("smooth", "add"):
-            return {"paragraph": ""}
         if pid == "story":
             return {"paragraph": story_paragraph(user)}
         if pid == "frame":

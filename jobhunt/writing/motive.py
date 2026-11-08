@@ -15,8 +15,7 @@ Design decisions, each with its reason:
   uses of itself (`GENERIC`, the little words, the job title and the employer's name). "a culture of
   innovation and excellence" fits every employer, so it is no reason.
 - The item must be one of the plan's, so the person's side is a fact they checked; with no pairing that
-  holds, the letter says less rather than invent one, and a reason sentence that states a fact about the
-  person then fails its check (`writing.grounded`).
+  holds, the letter says less rather than invent one (`writing.frame`).
 """
 from __future__ import annotations
 
@@ -91,6 +90,5 @@ def block(pairing: Pairing | None) -> str:
     """What the letter request says about the reason for this employer."""
     if pairing is None:
         return NONE_SAID
-    return (f"Motivation pairing (write why this employer from this alone, in [M] sentences): the employer's "
-            f"\"{pairing.fact}\" and the applicant's {pairing.item.id} (\"{pairing.item.text}\"), because "
-            f"{pairing.reason}")
+    return (f"Motivation pairing (write why this employer from this alone): the employer's \"{pairing.fact}\" "
+            f"and the applicant's \"{pairing.item.text}\", because {pairing.reason}")

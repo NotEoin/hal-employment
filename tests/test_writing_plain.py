@@ -57,38 +57,20 @@ class Problems(unittest.TestCase):
             self.assertNotIn("I have the right to work in the UK", plain.settings_labels())
 
 
-class Unlead(unittest.TestCase):
-    CARDS = ({"name": "Tide gauge", "aliases": ["tide-logger"]},)
+class Saved(unittest.TestCase):
+    """What the saved draft keeps: a lead-in is never cut with no AI, as cutting one left garbled text
+    (2026-11-08), and a stray evidence id never reaches the person."""
 
-    def test_a_lead_in_before_a_subject_is_taken_out_with_no_ai(self):
-        cases = {
-            "As required, I have used SQL on every project [E1].": "I have used SQL on every project [E1].",
-            "Regarding testing, I wrote 40 tests [E2].": "I wrote 40 tests [E2].",
-            "In terms of communication, my weekly reports went to a client.": "My weekly reports went to a client.",
-            "The advert requires Lua, and Tide gauge was written in it.": "The advert requires Lua, and Tide gauge "
-                                                                          "was written in it.",
-            "The role asks for teamwork, Tide gauge was a team's work.": "Tide gauge was a team's work.",
-            "For the requirement to show SQL, we built a booking app.": "We built a booking app.",
-        }
-        for said, left in cases.items():
-            self.assertEqual(plain.unlead(said, self.CARDS), left, said)
+    def test_a_lead_in_is_left_for_its_paragraph_to_be_drafted_again(self):
+        said = "Regarding testing, I wrote 40 tests."
+        self.assertEqual(plain.tidy(said), said)
+        self.assertEqual(plain.problems(said), [plain.LEAD_IN_SAID])
 
-    def test_each_sentence_and_line_of_a_draft_is_read_on_its_own(self):
-        draft = ("Hello,\n\nAs requested, I attach my CV. The role requires SQL, which I used.\n"
-                 "Regarding the team, our standups were daily.")
-        self.assertEqual(plain.unlead(draft), "Hello,\n\nI attach my CV. The role requires SQL, which I used.\n"
-                                              "Our standups were daily.")
-
-    def test_a_rest_that_is_not_a_sentence_is_left_for_its_rewrite(self):
-        for said in ("Regarding SQL, Python and Lua, I used all three.", "The role requires SQL, which I used.",
-                     "Regarding testing in my projects."):
-            self.assertEqual(plain.unlead(said), said)
-
-    def test_the_saved_draft_has_no_lead_in_that_can_be_taken_out(self):
-        self.assertEqual(plain.tidy(" As required, \u201cI\u201d mean it.", self.CARDS),
-                         "As required, \"I\" mean it.", "a quote is not a subject")
-        self.assertEqual(plain.tidy("In terms of code, tide-logger ran for a year.", self.CARDS),
-                         "Tide-logger ran for a year.")
+    def test_a_stray_evidence_id_is_taken_out(self):
+        # a leftover "[E4,M]" reached a form answer (2026-11-08)
+        self.assertEqual(plain.tidy("I wrote the tests [E4,M]. I ran them weekly [E2]."),
+                         "I wrote the tests. I ran them weekly.")
+        self.assertEqual(plain.tidy("Lists [like this] stay."), "Lists [like this] stay.")
 
 
 class Tidy(unittest.TestCase):

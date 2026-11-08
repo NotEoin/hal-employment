@@ -18,11 +18,7 @@ Rules:
 - A project's kind is given where it is known (degree work, university team project, at work, personal
   project). Never change it: a personal project is never part of a degree, coursework or research, a
   university team project is never a personal project, degree work is never personal work or a job.
-- When the request gives an evidence plan, state nothing about the applicant that its items do not say,
-  and keep each item's context and the applicant's part as given (a team's work stays a team's). End
-  each sentence that says anything about the applicant with the ids of the items it rests on, in square
-  brackets before its full stop: [E2] or [E2,E5]. End a sentence about why this job or employer
-  with [M]. Hal checks and removes these markers.
+- Keep the applicant's part in a team's work as given: a team's work stays a team's.
 - Plain words and short sentences: no stock openings, no "not just X but Y", no list of three
   qualities, no long dashes, no hedging.
 Never use these words or phrases: {avoid_phrases}.

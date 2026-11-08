@@ -4,11 +4,10 @@
 ("For the requirement to ..."), ties the work to the job with a stock phrase ("aligns with", `STOCK`),
 points at the CV instead of saying the thing ("My CV lists ..."), speaks of
 the person in the third person ("The applicant developed ...", "<name> has ...") or pastes the wording of a
-setting (`labels`, from `settings_labels`); `writing.grounded` lists them with a sentence's other problems,
-so each such sentence is rewritten once. `unlead(text, cards)` takes a lead-in clause out with no AI when
-the rest of its sentence opens with a subject. `tidy(text, cards)` is the draft as it is saved: no lead-in
-that `unlead` can take out, straight quotes and apostrophes, no stray space at the start of a line, and each
-project named as its card spells it.
+setting (`labels`, from `settings_labels`); `writing.paragraphs` lists them with a sentence's other problems,
+so its paragraph is drafted again. `tidy(text, cards)` is the draft as it is saved: no stray evidence id,
+straight quotes and apostrophes, no stray space at the start of a line, and each project named as its card
+spells it.
 
 Design decisions, each with its reason:
 
@@ -19,10 +18,9 @@ Design decisions, each with its reason:
   ways (15 graded packs, 2026-11-07). The wording problems need a rewrite; the rest have one right form, so
   they are fixed in place, as spelling is (`writing.spelling`).
 - Lead-ins mapping the advert kept coming in every graded pack ("The advert requires ...", "The role asks for
-  ...", "Regarding <X>, ...", "In terms of <X>, ...", "As required, ...", 2026-11-08). When the rest of the
-  sentence after the lead-in's first comma opens with a subject ("I", "My", "We", "Our", a project's name),
-  the lead-in is taken out with no AI (`unlead`), before the sentence checks and again as the draft is
-  saved; otherwise the sentence gets its one rewrite.
+  ...", "Regarding <X>, ...", "In terms of <X>, ...", "As required, ...", 2026-11-08). They are never cut out
+  with no AI: cutting them left garbled text ("applying for the ... role in London, where I achieved a top
+  score of 96", 2026-11-08), so a paragraph holding one is drafted again instead.
 - The same move mid-sentence is a problem too (`STOCK`): "satisfies the requirement for", "directly supports
   the requirement for", "addresses the need for", "aligns with", "resonates with", "the role requires",
   "matters for the role", "demonstrates my ability to", and every closing sentence of a prototype's paragraphs
@@ -31,6 +29,8 @@ Design decisions, each with its reason:
 - The settings' own wording reaches a request only as the person's plain values (`cv.status_line`); a
   label still found in a draft is a problem. `you.work_status` is how forms should word the right to work,
   so it is a label too unless it is already a sentence in the first person.
+- An evidence id such as "[E4,M]" is taken out as the draft is saved: one reached a form answer when drafts
+  marked their evidence (2026-11-08). No draft is asked for ids now, so this only catches a model's habit.
 - A project name is respelt only when it is distinctive (two words or more, or a capital, an acronym or a
   digit inside a word): "Tide gauge" for "tide Gauge", but never "website" for a card named "Website".
 """
@@ -47,9 +47,8 @@ LEAD_IN = re.compile(
     r"is looking for|emphasi[sz]es|highlights)\b|you (?:require|ask for|are looking for|are seeking)\b|"
     r"(?:regarding|concerning|in terms of|with (?:regard|respect) to|in relation to|as for|when it comes to)"
     r"\b[^,.;]{1,80},)", re.I)
-# What may open a sentence once its lead-in is taken out: the person or their work (or a project's name).
-SUBJECT = re.compile(r"(?:I|My|We|Our)\b", re.I)
-SPLIT = re.compile(r"((?<=[.!?])\s+|\s*\n\s*)")   # between sentences and lines, kept to join them again
+# A stray evidence id and the space before it: "[E4]", "[E2,E5]", "[M]", "[E4,M]".
+STRAY_ID = re.compile(r"[ \t]*\[\s*(?:M|E\d+)(?:\s*[,;]\s*(?:M|E?\d+))*\s*\]", re.I)
 CV_SAYS = re.compile(r"\bmy (?:CV|resume)\s+(?:lists|shows|states|mentions|says|notes|includes|highlights)\b|"
                      r"\b(?:as )?(?:listed|stated|shown|mentioned|noted|detailed|outlined) (?:in|on) my "
                      r"(?:CV|resume)\b", re.I)
@@ -119,37 +118,15 @@ def problems(sentence: str, names: list[str] = (), labels: list[str] = ()) -> li
     return out
 
 
-def _unlead_one(sentence: str, names: list[str]) -> str:
-    """`sentence` without its lead-in clause (up to its first comma) when what is left opens with a subject;
-    the sentence as it is otherwise."""
-    if not LEAD_IN.match(sentence):
-        return sentence
-    comma = sentence.find(",")
-    rest = sentence[comma + 1:].lstrip() if comma >= 0 else ""
-    named = any(re.match(rf"{re.escape(n)}(?![\w-])", rest, re.I) for n in names)
-    if not rest or not (SUBJECT.match(rest) or named):
-        return sentence
-    return rest[0].upper() + rest[1:]
-
-
-def unlead(text: str, cards: list[dict] = ()) -> str:
-    """`text` with each sentence's lead-in from the advert taken out ("As required, I have used SQL" is "I have
-    used SQL") when the rest opens with a subject: "I", "My", "We", "Our" or a project's name or alias
-    (`cards`). A sentence whose rest does not is left for its one rewrite (`problems`)."""
-    names = [n.strip() for c in cards for n in (c.get("name") or "", *c.get("aliases", ())) if n.strip()]
-    parts = SPLIT.split(text or "")
-    return "".join(p if n % 2 else _unlead_one(p, names) for n, p in enumerate(parts))
-
-
 def _distinct(name: str) -> bool:
     return bool(DISTINCT.search(name.strip()))
 
 
 def tidy(text: str, cards: list[dict] = ()) -> str:
-    """A draft as it is saved: lead-ins taken out (`unlead`), curly quotes and apostrophes straight, no space
+    """A draft as it is saved: no stray evidence id (`STRAY_ID`), curly quotes and apostrophes straight, no space
     before a line's first word (a bullet's indent aside), and each distinctive project name spelt as its card
     spells it."""
-    out = unlead(LEADING.sub("", CURLY_RX.sub(lambda m: CURLY[m.group(0)], text or "")), cards)
+    out = LEADING.sub("", CURLY_RX.sub(lambda m: CURLY[m.group(0)], STRAY_ID.sub("", text or "")))
     for card in cards:
         name = str(card.get("name") or "").strip()
         if name and _distinct(name):

@@ -81,7 +81,7 @@ def _changed_others(ctx, job, who: dict, docs: dict, words: str, read: dict, abo
         who, job, read["analysis"], about, facts=facts, kept=read["kept"],
         message_request=f"{context}\n\nThe message as it stands:\n{docs.get('message') or ''}\n\n{asked}",
         answers_request=f"Questions:\n{listing}\n\n{context}\n\n{conventions}\n\n{asked}" if given else "",
-        letter=(letter or {}).get("text", ""), questions=[a.get("question", "") for a in given], request=words,
+        questions=[a.get("question", "") for a in given], request=words,
         pairing=(letter or {}).get("pairing"), paired=letter is not None, told=tuple((letter or {}).get("told", ())))
     by_question = {a.get("question", ""): a.get("answer", "") for a in out["answers"]}
     answers = [{"question": a.get("question", ""),

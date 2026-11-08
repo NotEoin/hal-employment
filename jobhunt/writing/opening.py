@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from jobhunt.writing import cites, stage
+from jobhunt.writing import check, stage
 
 HIRING_MANAGER = "Hiring Manager"     # whom the greeting names when the advert names no hiring contact
 # Grades a reader knows as a class, as the words before "graduate", and those said after it.
@@ -111,10 +111,10 @@ class Opening:
 
 def body_of(draft: str) -> str:
     """A drafted message without a greeting or an introduction of the applicant at its start, which the opening
-    says instead; its evidence markers are kept."""
+    says instead."""
     text = GREETING.sub("", draft or "", count=1).lstrip()
-    said = cites.sentences(text)
-    first = cites.strip(said[0]).strip() if said else ""
+    said = check.sentences(text)
+    first = said[0] if said else ""
     if first and (INTRO.match(first) or NAMED.match(first)):
         found = re.search(r"\s+".join(map(re.escape, said[0].split())), text)
         text = text[found.end():].lstrip() if found else text

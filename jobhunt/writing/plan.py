@@ -5,7 +5,7 @@ chosen before anything is written.
 of the Profile block and each passage of the person's own documents (`kept`, as `pack._kept` gathers them),
 with the card each one is about. `make(requirements, questions, facts, kept, cards)` asks the AI once (prompt
 `evidence_plan`) to pick up to `MAX_ITEMS` quotes from them, and `checked(reply, found)` keeps the picks that
-hold, as `Item`s with ids E1, E2, ... `block(items)` is the plan as a writing request shows it.
+hold, as `Item`s with ids E1, E2, ... (`Item.words` is one as the motivation pairing's request lists it).
 `stories(items, cards)` groups the items into the pieces of work a draft tells, one paragraph each (`Story`),
 and `choose(found, n, used)` picks which of them a letter, an answer or a message tells.
 
@@ -16,8 +16,7 @@ Design decisions, each with its reason:
   added details to fit the advert in every graded run (2026-11-07).
 - `MAX_ITEMS` is 8: a letter's middle gives two or three pieces of evidence, each of which may need a second
   item for what came of it, its reason for the employer needs one more, and answers to two or three questions
-  each need their own. More would be a list to copy out rather than a choice, and each item is read again by
-  every sentence check that cites it.
+  each need their own. More would be a list to copy out rather than a choice.
 - A pick is kept only when its source exists and its quote is in that source word for word, spaces and case
   aside; the text kept is the source's own, so a model's paraphrase never becomes evidence.
 - The card, its context and the person's role come from Hal's reading of the card (`profile.contexts`, the
@@ -38,8 +37,8 @@ Design decisions, each with its reason:
 - A skills list (`skills_line`: a Profile "Skill:" line, or a CV line of a label and a list, "AI and ML:
   PyTorch, NumPy, pandas") is never tied to a card and is marked as one (`Item.skills`): it says what the
   person knows, never which project used it. A letter said "I used NumPy and pandas to build" a project whose
-  card never names pandas, citing the CV's skills line (2026-11-07); `writing.grounded` holds a tool claimed
-  for a project to that project's own evidence.
+  card never names pandas, citing the CV's skills line (2026-11-07); a skills list is never a story, so a
+  paragraph about a project holds a tool to that project's own facts (`writing.paragraphs`).
 - One piece of work is one paragraph, told once (`Story`, 2026-11-08): a grader capped every pack at 2 of 5
   for readability, as drafts retold one project in several paragraphs (10 of 15 packs), gave one project's
   test suite or tools to another, and read as lists of facts. Each story holds one card's facts alone (its
@@ -249,13 +248,6 @@ def make(requirements: list[str], questions: list[str], facts: str, kept: str, c
     reply = llm.chat_json(prompts.text(PROMPT), request(requirements, questions, found), role="main")
     return checked(reply, found)
 
-
-HEADING = "Evidence plan (the only facts about the applicant a draft may state):"
-
-
-def block(items: list[Item]) -> str:
-    """The plan as a writing request shows it; "" for an empty plan."""
-    return "\n".join([HEADING, *(i.words() for i in items)]) if items else ""
 
 
 STORY_FACTS = 12           # facts a paragraph is given: the prototype's (2026-11-08); more would be a list to copy
