@@ -47,6 +47,9 @@ Design notes:
   with evidence markers, rewrote, cut and smoothed them, named projects with "For <card>, " and cut the
   advert's lead-ins (15 packs, 2026-11-08); all of that is gone. A pack whose plan tells no story is drafted
   whole and checked with `fix_claims`, as before the plan.
+- Which work the drafts tell comes from one AI ranking per pack (`story_ranking`, `writing.rank`), made by
+  `write_letter` and passed to `write_others`: word overlap with the advert led letters with weak projects
+  (15 graded packs, 2026-11-08). The letter tells the ranking's best, the message and answers the next.
 - No answer and no message is left blank (`_story_others`, 2026-11-08): 8 of 15 graded packs had an empty
   answer or a message with nothing after its introduction, as a dropped paragraph left nothing. The next
   story is tried, up to `STORY_TRIES`, and what is still empty is written by the whole-draft path.
@@ -76,6 +79,7 @@ from .writing import (
     opening,
     paragraphs,
     plain,
+    rank,
     relocation,
     repeats,
     spelling,
@@ -610,13 +614,13 @@ def letter_frame(who: dict, job, scope: paragraphs.Scope, pairing: motive.Pairin
 
 
 def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, kept: str, facts: str,
-                  plan: list[planning.Item], pairing: motive.Pairing | None, wanted: str = "") -> dict:
-    """A letter told one piece of work a paragraph (`writing.paragraphs`): the stories of `plan.letter_stories`
-    for the job's requirements (`wanted`), projects first, each drafted from its own facts and checked against
-    them, at a length that fills the person's letter length (`paragraphs.letter`), between an opening and a
-    closing drafted from the fixed facts of who is writing, the role and the reason for this employer
-    (`letter_frame`, `writing.frame`)."""
-    chosen = planning.letter_stories(list(scope.stories), list(scope.cards), wanted)
+                  plan: list[planning.Item], pairing: motive.Pairing | None, chosen: list[planning.Story],
+                  wanted: str = "") -> dict:
+    """A letter told one piece of work a paragraph (`writing.paragraphs`): the `chosen` stories (`rank.order`),
+    each drafted from its own facts and checked against them, at a length that fills the person's letter length
+    (`paragraphs.letter`), between an opening and a closing drafted from the fixed facts of who is writing, the
+    role and the reason for this employer (`letter_frame`, `writing.frame`); `wanted` is the job's requirements,
+    for the modules the opening may name."""
     shape = paragraphs.letter(who.get("letter_words"), len(chosen))
     bodies = [paragraphs.settle(s, shape, scope) for s in chosen]
     told = tuple(b.story.name for b in bodies if b.text and b.story.name)
@@ -644,16 +648,30 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
             "notes": letter_notes(who, letter, shown, flags, softened=softened)}
 
 
+def story_ranking(job, analysis: dict, about: str, found: list[planning.Story],
+                  cards: list[dict]) -> list[rank.Ranked]:
+    """The one AI ranking of the person's work for one job (`writing.rank`), logged with its reasons; [] when it
+    gave nothing usable, so the job's words choose the work."""
+    ranked = rank.make(rank.Job(job["title"], job["company"], str(analysis.get("summary") or ""),
+                                tuple(_requirements(analysis)), about or ""), cards, found)
+    if ranked:
+        log.info("story ranking for job %s: %s", job["id"], rank.said(ranked))
+    else:
+        log.info("story ranking for job %s: nothing usable, so the job's words chose the work", job["id"])
+    return ranked
+
+
 def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = None, about: str = "",
                  kept: str | None = None, fit: dict | None = None, request: str = "",
-                 plan: list[planning.Item] | None = None) -> dict:
-    """Writes and checks a cover letter for one job: {text, flags, used, notes, plan, pairing}.
+                 plan: list[planning.Item] | None = None, ranking: list[rank.Ranked] | None = None) -> dict:
+    """Writes and checks a cover letter for one job: {text, flags, used, notes, plan, pairing, ranking}.
 
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
     the fit map made and the evidence plan picked (`evidence_plan`), each unless given, then the letter and its
     checks. `request` holds the person's own words when they asked for a rewrite. Its reason for the employer
     comes from a motivation pairing (`writing.motive`), or it gives none. When the plan tells any piece of work
-    (`plan.stories`), the letter is one paragraph per piece of work (`_story_letter`). Otherwise it is drafted
+    (`plan.stories`), the letter is one paragraph per piece of work (`_story_letter`), the work chosen by the
+    `ranking` (`story_ranking`, one AI call made here unless given). Otherwise it is drafted
     whole, revised once for the writing rules and once for restating the advert, and checked whole for claims
     the facts do not support (`fix_claims`).
     """
@@ -670,8 +688,13 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     if found:
         scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
                                 request=request, kind="letter")
-        return _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing,
-                             wanted="\n".join(_requirements(analysis)))
+        asked = ranking is None
+        ranking = story_ranking(job, analysis, about, found, cards) if asked else ranking
+        wanted = "\n".join(_requirements(analysis))
+        told = rank.order(found, cards, ranking, wanted)
+        written = _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing,
+                                chosen=list(told.letter), wanted=wanted)
+        return {**written, "ranking": ranking, "calls": written["calls"] + asked}
     text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
     text += f"\n\n{motive.block(pairing)}" if pairing is not None else ""
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
@@ -706,7 +729,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
                                                             if m.get("strength") == "strong"]
     shown = [e for e in (drafts.evidence_checked(s, cards, known_tools(cards), facts)[0] for s in shown) if e]
     return {"text": letter, "flags": flags, "used": used, "revised": revised, "softened": softened, "plan": plan,
-            "pairing": pairing,
+            "pairing": pairing, "ranking": [],
             "notes": letter_notes(who, letter, shown, flags, revised=revised, softened=softened)}
 
 
@@ -843,32 +866,36 @@ def _story_answer(question: str, found: list[planning.Story], used: dict[str, in
 
 def _story_message(found: list[planning.Story], scope: paragraphs.Scope, shape: paragraphs.Shape,
                    used: dict[str, int]) -> list[paragraphs.Paragraph]:
-    """The message's body: one story in `shape`, the next one tried when it is dropped, up to `STORY_TRIES`."""
+    """The message's body: one story in `shape`, the story the pack has told least first (`used`, counted up for
+    the one that stands), the next one tried when it is dropped, up to `STORY_TRIES`."""
     out: list[paragraphs.Paragraph] = []
-    for story in planning.choose(found, STORY_TRIES, dict(used)):
+    for story in sorted(found, key=lambda s: used.get(s.key, 0))[:STORY_TRIES]:   # stable: best first at a tie
         out.append(paragraphs.settle(story, shape, scope))
         if out[-1].text:
+            used[story.key] = used.get(story.key, 0) + 1
             break
     return out
 
 
 def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, facts: str, kept: str,
                   plan: list[planning.Item], questions: list[str], pairing: motive.Pairing | None, paired: bool,
-                  told: tuple[str, ...], whole_message=None, whole_answers=None) -> dict:
+                  told: tuple[str, ...], ordered: list[planning.Story], whole_message=None,
+                  whole_answers=None) -> dict:
     """The message and the answers told one piece of work a paragraph (`writing.paragraphs`): the message is its
     built opening and one story's few lines and question; each answer one story, or two when its question asks
-    for more than one example, preferring work the letter (`told`: its paragraphs and its opening's reason) and
-    earlier answers have not told, among the plan's stories and the other cards the job fits (`plan.fitting`).
+    for more than one example. Each prefers work the letter (`told`: its paragraphs and its opening's reason),
+    the message and earlier answers have not told, in the order of `ordered` (`rank.Told.others`: the ranking's,
+    else the plan's stories and the other cards the job fits).
 
     Nothing is left blank (2026-11-08: 8 of 15 graded packs had an empty answer or a message with nothing after
     its introduction, as a dropped paragraph left nothing): a dropped paragraph's next story is tried
     (`_story_answer`, `_story_message`), and what is still empty is written by the whole-draft path,
     `whole_message()` for the message and `whole_answers(questions)` ({question: answer}) for the answers."""
     you, cards, calls = eligibility.person(), list(scope.cards), 0
-    found = list(scope.stories)
-    found += planning.fitting(found, cards, "\n".join(_requirements(analysis)))
+    found = list(ordered)
+    used = dict.fromkeys(told, 1)
     first = message_opening(who, job, analysis)
-    tried = _story_message(found, scope, paragraphs.message(first.sentence), {})
+    tried = _story_message(found, scope, paragraphs.message(first.sentence), used)
     body = next((p for p in tried if p.text), tried[-1] if tried else paragraphs.Paragraph(found[0]))
     calls += sum(p.calls for p in tried)
     flags = [body.listed] if body.dropped else []
@@ -878,7 +905,6 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
     if not paired and any(drafts.why_question(q) for q in questions):
         pairing = motive.make((job["title"], job["company"]), scope.advert, scope.brief, plan)
         calls += 1
-    used = dict.fromkeys(told, 1)
     answers = []
     for question in questions:
         said = _story_answer(question, found, used, scope, pairing)
@@ -906,15 +932,16 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
 def write_others(who: dict, job, analysis: dict, about: str, *, message_request: str, answers_request: str,
                  facts: str, kept: str, plan: list[planning.Item] | None = None,
                  questions: list[str] = (), request: str = "", pairing: motive.Pairing | None = None,
-                 paired: bool = False, told: tuple[str, ...] = ()) -> dict:
+                 paired: bool = False, told: tuple[str, ...] = (), ranking: list[rank.Ranked] | None = None) -> dict:
     """The message to the person hiring and the form answers, written from their requests and checked as a
     pack checks them: {message, answers, flags}. `answers_request` "" writes no answers.
 
     When the evidence `plan` tells any piece of work (`plan.stories`), they are told one piece of work a
     paragraph (`_story_others`): the answers to `questions`, the person's own words (`request`) in every
     request, a "why here" answer from the letter's motivation `pairing` (`paired` when the letter asked for
-    one, which may be None; else one is asked for here), and the work the letter told (`told`) left to the
-    answers last. Otherwise the message is written after its opening (`message_opening`: the greeting and who
+    one, which may be None; else one is asked for here), the work the letter told (`told`) left to the
+    answers last, and the rest in the order of the letter's `ranking` (one AI call made here unless given,
+    `story_ranking`). Otherwise the message is written after its opening (`message_opening`: the greeting and who
     is writing, with no AI), asked for again when it stops mid-sentence and rewritten once without claims the
     facts do not support (project contexts and misplaced tools included); a greeting or introduction the
     writer adds is taken out (`writing.opening.body_of`), and the message returned starts with the opening.
@@ -942,9 +969,14 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
             by_question = {str(a.get("question") or ""): s for a, s in zip(found, said, strict=True)}
             return {q: by_question.get(q) or (said[k] if len(said) == len(blank) else "") for k, q in enumerate(blank)}
 
-        return _story_others(who, job, analysis, scope, facts=facts, kept=kept, plan=plan,
-                             questions=list(questions) if answers_request else [], pairing=pairing, paired=paired,
-                             told=told, whole_message=whole_message, whole_answers=whole_answers)
+        asked = ranking is None
+        ranking = story_ranking(job, analysis, about, found, cards) if asked else ranking
+        ordered = rank.order(found, cards, ranking, "\n".join(_requirements(analysis))).others
+        written = _story_others(who, job, analysis, scope, facts=facts, kept=kept, plan=plan,
+                                questions=list(questions) if answers_request else [], pairing=pairing,
+                                paired=paired, told=told, ordered=list(ordered), whole_message=whole_message,
+                                whole_answers=whole_answers)
+        return {**written, "calls": written["calls"] + asked}
     first = message_opening(who, job, analysis)
     message_request += f"\n\n{first.note}"
 
@@ -1089,7 +1121,8 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     others = write_others(who, job, analysis, about, message_request=context,
                           answers_request=answers_request(job, who, analysis, questions, context),
                           facts=facts, kept=kept, plan=plan, questions=questions,
-                          pairing=written["pairing"], paired=True, told=tuple(written.get("told", ())))
+                          pairing=written["pairing"], paired=True, told=tuple(written.get("told", ())),
+                          ranking=written.get("ranking"))
     message, answers = others["message"], others["answers"]
 
     variant, track = cv.tailor(job_text)

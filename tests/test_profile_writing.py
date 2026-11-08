@@ -310,6 +310,9 @@ class NewestCv(unittest.TestCase):
         self.assertEqual(writing.older_cv_only(self.con, mine), {}, "a card you added is all yours")
         self.assertEqual([c["tools"] for c in writing.cards(self.con)], [[], ["Azure"]],
                          "the newest CV no longer names Ferry planner's tools")
+        tiers.set_tier(self.con, mine["id"], tiers.CORE)
+        self.assertEqual({c["name"]: c["tier"] for c in writing.cards(self.con)}["Tide gauge"], tiers.CORE,
+                         "the ranking of a pack's work reads the tier you gave")
 
 
 DESIGN = "Sources/Projects/Ferry planner/Design Document.md"

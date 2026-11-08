@@ -1,0 +1,17 @@
+# name: Choosing which work to tell
+# used: Before Hal drafts a letter, a message or answers: which of your projects and jobs fit this job best
+# needs:
+Rank the applicant's work for this job. The request gives the job (its title, what it is, its requirements
+and what the employer does), then every project and job of the applicant's, one a line: its name, where it
+was done, whether the applicant leads with it ("core"), what it is and its tools.
+Reply with JSON only:
+{"ranking": [{"name": the name of a project or job exactly as the request gives it,
+  "reason": one short line on the concrete work in this job it shows, in your own plain words}]}
+Rules:
+- Put first the work closest to what this job does day to day: the same kind of system, problem, data,
+  users or tools. A shared general word ("data", "team", "software") is not a fit.
+- Rank every project and job that fits at all, the best first; leave out the ones that do not fit.
+- When two fit about as well, put the one marked "core" first. Never put a weaker fit first for being core.
+- Each reason names a task or a system of this job and what of the work shows it, never the advert's own
+  wording and never a skill in general.
+- Use only the names given; never invent a project or join two.

@@ -59,7 +59,7 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "prep": "Prepare ", "contacts_pick": "You choose who", "plan": "Choose the evidence",
     "pairing": "Find the applicant's own reason", "story": "Write one paragraph of",
     "frame": "Write the first and the last",
-    "paragraph_verify": "Check one paragraph",
+    "paragraph_verify": "Check one paragraph", "rank": "Rank the applicant's work",
 }
 REAL_CHAT, REAL_CHAT_JSON = llm.chat, llm.chat_json   # the counting shim, for the test of the count
 WAIT_S = 10.0
@@ -78,6 +78,13 @@ def story_paragraph(user: str) -> str:
     if "short message" in user:
         said = [*said[:2], "What will the team build next?"]
     return " ".join(s for s in said if s) or "I did made-up work."
+
+
+def ranked_as_listed(user: str) -> dict:
+    """A ranking that keeps the order the request lists the work in, each with a made-up reason."""
+    work = user.split("The applicant's work:\n", 1)[-1].splitlines()
+    return {"ranking": [{"name": line[2:].split(" (", 1)[0], "reason": "made-up work like this job's"}
+                        for line in work if line.startswith("- ")]}
 
 
 def frame_opening(user: str) -> str:
@@ -133,6 +140,8 @@ class FakeWriter:
             return {"opening": frame_opening(user), "closing": "I would welcome the chance to talk about the role."}
         if pid == "paragraph_verify":
             return {"supported": True, "unsupported": [], "context_ok": True, "role_ok": True}
+        if pid == "rank":
+            return ranked_as_listed(user)
         if pid == "contacts_pick":
             return {"picks": [{"n": 1, "why": "Leads the team that is hiring.", "sure": True}]}
         if pid == "prep":
@@ -595,7 +604,7 @@ class Paragraphs(unittest.TestCase):
         self.assertEqual(paragraph_about(written["text"], "Quill"), "", "its paragraph was left out")
         self.assertEqual(written["told"], ["Quill Employment", "Quill"])
 
-    def test_answers_prefer_a_project_the_letter_did_not_tell(self):
+    def test_the_message_and_answers_prefer_a_project_the_letter_did_not_tell(self):
         from jobhunt.profile import store
 
         writer = QuillWriter()
@@ -608,8 +617,49 @@ class Paragraphs(unittest.TestCase):
             pack.build(a.con, a.job["id"], use_web=False)
         lettered = [e["user"] for e in writer.asked("story") if "cover letter" in e["user"]]
         self.assertTrue(any("Project: Tide gauge" in u for u in lettered), "a third card the job fits fills the letter")
-        answered = [e["user"] for e in writer.asked("story") if "application question" in e["user"]]
-        self.assertIn("Project: Ferry log", answered[0], "untold work first")
+        messaged = [e["user"] for e in writer.asked("story") if "short message" in e["user"]]
+        self.assertIn("Project: Ferry log", messaged[0], "untold work first")
+
+    def test_one_ranking_chooses_the_letters_work_and_the_message_and_answers_take_the_next(self):
+        # a trading-firm letter led with a voice assistant and a job-search app while the packet sniffer and the
+        # autopilot were left to the fit table (2026-11-08)
+        from jobhunt.profile import store
+
+        order = ["Ferry log", "Quill Employment", "Tide gauge", "Harbour lights", "Quill"]
+        writer = QuillWriter()
+        plain = writer.reply
+        writer.reply = lambda system, user: ({"ranking": [{"name": n, "reason": f"{n} is like the job"}
+                                                          for n in order]}
+                                             if prompt_id(system) == "rank" else plain(system, user))
+        with quill_world(writer) as a, self.assertLogs("jobhunt.pack", "INFO") as logged:
+            for name in ("Tide gauge", "Ferry log", "Harbour lights"):
+                store.confirm(a.con, store.add_found(a.con, "project", {
+                    "name": name, "summary": "Writing reports of river levels and spreadsheets"},
+                    {"source_rel": f"Sources/Code/{name}.md", "quote": f"{name} writes reports every hour",
+                     "field": "", "doc_type": "repository"}))
+            pack.build(a.con, a.job["id"], use_web=False)
+
+        def told(where: str) -> list[str]:
+            return [re.search(r"^(?:Project|Job): (.+?)(?: \(|$)", e["user"], re.M).group(1)
+                    for e in writer.asked("story") if where in e["user"]]
+
+        self.assertEqual(told("cover letter"), ["Ferry log", "Quill Employment", "Tide gauge"])
+        self.assertEqual(told("short message"), ["Harbour lights"], "the next work the letter did not tell")
+        self.assertEqual(told("application question")[0], "Quill")
+        self.assertEqual(len(writer.asked("rank")), 1, "one ranking serves the whole pack")
+        self.assertIn("- Ferry log (personal project): Writing reports of river levels",
+                      writer.asked("rank")[0]["user"])
+        self.assertIn(f"story ranking for job {a.job['id']}: 1. Ferry log (Ferry log is like the job); 2. Quill "
+                      "Employment", "\n".join(logged.output))
+
+    def test_a_ranking_that_fails_leaves_the_job_words_to_choose(self):
+        writer = replying("rank", "{}", writer=QuillWriter())
+        writer.reply = lambda system, user, original=writer.reply: (
+            json.loads(original(system, user)) if prompt_id(system) == "rank" else original(system, user))
+        with quill_world(writer) as a, self.assertLogs("jobhunt.pack", "INFO") as logged:
+            written = pack.write_letter(a.con, a.job)
+        self.assertEqual(written["told"], ["Quill", "Quill Employment"], "the plan's stories, as before")
+        self.assertIn("nothing usable, so the job's words chose the work", "\n".join(logged.output))
 
     def test_an_eligibility_line_about_where_you_live_reads_your_relocation_setting(self):
         # "ELIGIBILITY: ... must be in <town>" reached a person whose settings say they will move (2026-11-08)
@@ -735,9 +785,10 @@ class Paragraphs(unittest.TestCase):
         with quill_world(writer) as a:
             written = pack.write_letter(a.con, a.job)
         counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
-        self.assertEqual(counts, {"analyse": 1, "fit": 1, "plan": 1, "pairing": 1, "story": 2,
+        self.assertEqual(counts, {"analyse": 1, "fit": 1, "plan": 1, "pairing": 1, "rank": 1, "story": 2,
                                   "paragraph_verify": 1, "frame": 1})
-        self.assertEqual(written["calls"], 4, "the letter's own calls: two paragraphs, one check and the frame")
+        self.assertEqual(written["calls"], 5,
+                         "the letter's own calls: the ranking, two paragraphs, one check and the frame")
 
     def test_your_own_words_asking_for_a_change_reach_every_paragraph(self):
         writer = QuillWriter()
@@ -824,9 +875,9 @@ class Others(unittest.TestCase):
         told = [(re.search(r'question "(.+?)"', e["user"]).group(1),
                  re.search(r"^Project: (.+?)(?: \(|$)", e["user"], re.M).group(1))
                 for e in writer.asked("story") if "application question" in e["user"]]
-        self.assertEqual(told, [("Why do you want to work here?", "Quill"),
-                                ("Why are you a good fit for this role?", "Quill Employment")],
-                         "the letter told both once; the first answer takes the plan's best, the next the other")
+        self.assertEqual(told, [("Why do you want to work here?", "Quill Employment"),
+                                ("Why are you a good fit for this role?", "Quill")],
+                         "the letter told both once and the message the first; the answers take the other first")
         self.assertEqual(writer.asked("answers"), [], "no free answers are drafted")
 
     def test_a_question_asking_for_two_examples_is_answered_from_two_projects(self):
@@ -909,7 +960,7 @@ class Others(unittest.TestCase):
             for theirs in ("SQLite", "Preact", "Playwright", "113"):
                 self.assertNotIn(theirs, s)
         counts = {pid: sum(e["id"] == pid for e in writer.log) for pid in dict.fromkeys(e["id"] for e in writer.log)}
-        self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "story": 5,
+        self.assertEqual(counts, {"analyse": 1, "brief": 1, "fit": 1, "plan": 1, "pairing": 1, "rank": 1, "story": 5,
                                   "paragraph_verify": 5, "frame": 1})
         self.assertLessEqual(len(writer.log), 30)
         self.assertEqual(section(md, "Check before sending").strip(), pack.NOTHING_TO_CHECK)
@@ -923,7 +974,7 @@ class Others(unittest.TestCase):
                 self.assertLogs("jobhunt.pack", "INFO") as logged:
             pack.build(a.con, a.job["id"], use_web=False)
         self.assertIn(f"pack for job {a.job['id']}: {len(writer.log)} model calls", "\n".join(logged.output))
-        self.assertEqual(len(writer.log), 16)
+        self.assertEqual(len(writer.log), 17)
 
 
 class Today(unittest.TestCase):

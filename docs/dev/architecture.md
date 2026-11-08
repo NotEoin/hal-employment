@@ -457,9 +457,21 @@ runs: tests use `tests/support/fake_claude/`.
   named after its module. A passage of a project's own file (it has a "(Kind: ...)" line) tied to no card is
   a project story named after its file (`profile.owners.file_name`), and `paragraphs.problems` requires
   every named story, card or not, to be named in its first sentence (`paragraphs._names`).
-  A letter tells `plan.letter_stories`: the plan's project and job stories, then cards no story tells whose
-  words share at least `plan.RELEVANT_MIN` (2) words with the job's requirements (`plan.relevance`), up to
-  `plan.LETTER_STORIES`; modules and other lines only below `plan.MIN_PROJECTS` (2) of those. A CV or Profile
+  Which work is told comes from one AI ranking per pack (`writing/rank.py`, prompt `story_rank`,
+  `pack.story_ranking`): `rank.make` offers every project and job card that is not archived (with its
+  `profile.writing.cards` `tier`, "core" marked as the tie-break at a close fit) and the plan's named
+  project stories with no card (`rank.candidates`), with the job's title, summary, requirements and the
+  company brief (`rank.Job`), and keeps the reply's names that are among them, each once, with a one-line
+  reason (`rank.checked`, `rank.Ranked`). `rank.order` gives the letter the first `plan.LETTER_STORIES` ranked
+  project or job stories with facts (modules and other lines only below `plan.MIN_PROJECTS`), and the
+  message and answers every story in ranked order, the plan's unranked stories last (`rank.Told`). The pack
+  log has the ranking and its reasons. `write_letter` makes the call unless given a `ranking`, and the pack
+  passes the letter's to `write_others`, so a pack ranks once. Word overlap led with weak projects in 15
+  graded packs (2026-11-08). When the call gives no usable name (or the AI is unavailable for it), the word
+  count chooses as before: `plan.letter_stories`, the plan's project and job stories, then cards no story
+  tells whose words share at least `plan.RELEVANT_MIN` (2) words with the job's requirements
+  (`plan.relevance`, `plan.fitting`, core work first at an equal count), up to `plan.LETTER_STORIES`;
+  modules and other lines only below `plan.MIN_PROJECTS` (2) of those. A CV or Profile
   line's sentences saying what the person is looking for (`plain.GOAL`) are taken out before it is a
   source (`plan.without_goal`), and `plain.problems` finds one in a draft (`plain.GOAL_SAID`). The modules
   the job's requirements name and no paragraph shows, best mark first (`plan.relevant_modules`, at most
@@ -503,9 +515,10 @@ runs: tests use `tests/support/fake_claude/`.
   question about the team's work); an answer is one story, or two when its question asks for more than one
   example (`plan.examples_wanted`), in shape `paragraphs.answer`, and a question asking why this employer
   (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and
-  its item's story (`pack._story_of`). Answers take the stories the letter (`told`: its paragraphs' stories
-  and the story its opening's reason rests on) and earlier answers told least (`plan.choose`), among the
-  plan's stories and the other cards the job fits (`plan.fitting`), so they tell work the letter did not. When an answer's or the message's paragraphs are all dropped the next story is
+  its item's story (`pack._story_of`). The message, then the answers, take the stories the letter (`told`:
+  its paragraphs' stories and the story its opening's reason rests on), the message and earlier answers told
+  least (`plan.choose`), best first in the ranking's order (`rank.Told.others`), so they tell the next work
+  the letter did not. When an answer's or the message's paragraphs are all dropped the next story is
   tried, up to `pack.STORY_TRIES` (3) stories (`pack._story_answer`, `pack._story_message`), then the
   whole-draft path writes what is still empty (`write_others`' `whole_answers`, asking `answers` for the
   blank questions alone, and `whole_message`); only a question still blank is listed (`pack.NO_ANSWER`), with
@@ -524,7 +537,7 @@ runs: tests use `tests/support/fake_claude/`.
   the story its paragraph tells, and `tests/test_writing_paragraphs.py` requires each judged right with no
   AI, and the ones only the AI can see left to it. Calls per pack, counted with the fake AI of
   `tests/test_pack.py` (`test_a_whole_pack_keeps_each_projects_tools_to_itself_within_about_thirty_calls`:
-  two look-alike projects, a letter, a message and two answers, no fix needed): 16. A real pack made about
+  two look-alike projects, a letter, a message and two answers, no fix needed): 17, the ranking among them. A real pack made about
   55 with sentence checks. `pack.build` logs each pack's count ("pack for job <id>: <n> model calls",
   through `llm.counted`, a context variable that counts this thread's `llm.chat` and `llm.chat_json`
   calls; blocks nest), so the count on a real model can be measured. "Check before sending" lists the paragraphs left out, the questions no story

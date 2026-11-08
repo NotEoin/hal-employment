@@ -179,6 +179,12 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Letters tell the work that fits the job best.** Hal chose a letter's projects by a couple of words in
+  common with the advert, so a letter for a networking role led with a voice assistant while a packet
+  sniffer waited in the fit table. The AI now ranks all your projects and jobs against the job once per
+  pack, with a short reason for each, and the letter tells the three best that have facts to tell. The
+  message and the answers take the next ones. Work you marked as one to lead with comes first when two fit
+  about as well. If the ranking fails, Hal chooses by the advert's words as before.
 - **A note about all your projects no longer mixes them up.** A note describing about ten projects tied
   each of them to the others, so a letter put one project's network sniffer in another project. Hal now
   reads such a note only for the parts that name one project, and never takes another name for a project
@@ -263,7 +269,7 @@ What changed in each version, in plain words.
 - **Packs are drafted with fewer AI calls.** Hal checked every sentence about you in a call of its own, about
   55 calls for one pack. It now makes one call for each paragraph, at most one check of it (none when it
   only says its facts' own words) and one more draft when something is wrong. Our test pack, with two
-  projects, a letter, a message and two answers, makes 16 calls, and each pack's log says how many it made.
+  projects, a letter, a message and two answers, makes 17 calls, and each pack's log says how many it made.
 - **Projects with similar names stay apart.** When two of your projects share a name, such as an
   assistant and a job-search helper both starting with the same word, letters gave one the other's tools or
   purpose. Hal now names each with a few words of its own description in the facts the writer reads, and

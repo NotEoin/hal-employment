@@ -62,7 +62,9 @@ Design decisions, each with its reason:
   fewer than `MIN_PROJECTS` project or job stories exist. The degree itself (`DEGREE`, a line or a card named
   like "First-Class Honours") is never a story, as the opening says it. The answers may tell those other
   cards too (`fitting`), so they prefer work the letter did not tell: one project was told in a letter's
-  opening, a letter paragraph and an answer (2026-11-08).
+  opening, a letter paragraph and an answer (2026-11-08). An AI ranking (`writing.rank`) now chooses the work
+  first; this word count chooses when the ranking gives nothing usable, with the person's core work
+  (`profile.tiers.CORE`) first at an equal count.
 - Every story names its work (`Story.name`, 2026-11-08): passages tied to no card were drafted as "I designed a
   pure simulation engine ..." and "I implemented config-hashed result caching ..." with nothing saying which
   project. A passage of a project's own file (one with a "(Kind: ...)" line) tied to no card is named after
@@ -81,7 +83,7 @@ from dataclasses import dataclass, field
 
 from jobhunt import llm
 from jobhunt.ai import prompts
-from jobhunt.profile import owners
+from jobhunt.profile import owners, tiers
 from jobhunt.writing import atoms, drafts, plain, planned, stage
 from jobhunt.writing import check as writing_check
 
@@ -432,14 +434,19 @@ def relevant_modules(modules: list[tuple[str, str]], wanted: str, told: str, n: 
     return tuple(f"{fits[k][0]} ({fits[k][1]})" if str(fits[k][1]).strip() else fits[k][0] for k in best)
 
 
+def card_story(card: dict) -> Story:
+    """The story of a card the plan picked nothing of: its own quotes, tools, part and where it was done."""
+    return _story(card["name"], [], card)
+
+
 def fitting(found: list[Story], cards: list[dict], wanted: str) -> list[Story]:
     """The stories of the cards no story of `found` tells whose words share at least `RELEVANT_MIN` words with
-    the job's requirements (`wanted`), the best fit first."""
+    the job's requirements (`wanted`), the best fit first and, at an equal fit, the person's core work first."""
     names = {s.name for s in found}
     fits = sorted(((relevance(c, wanted), k) for k, c in enumerate(cards)
                    if c.get("name") and c["name"] not in names and (c.get("quotes") or c.get("summary"))),
-                  key=lambda r: (-r[0], r[1]))
-    return [_story(cards[k]["name"], [], cards[k]) for r, k in fits if r >= RELEVANT_MIN]
+                  key=lambda r: (-r[0], cards[r[1]].get("tier") != tiers.CORE, r[1]))
+    return [card_story(cards[k]) for r, k in fits if r >= RELEVANT_MIN]
 
 
 def letter_stories(found: list[Story], cards: list[dict], wanted: str, n: int = LETTER_STORIES) -> list[Story]:

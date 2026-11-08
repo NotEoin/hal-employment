@@ -583,7 +583,8 @@ def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) ->
 
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
-    tools, summary, planned, context, aliases, role, files, quotes, tag, similar}; `planned` holds the tools only
+    tools, summary, planned, context, tier, aliases, role, files, quotes, tag, similar}; `tier` is its
+    `profile.tiers` tier ("core", "supporting", "archive", "" unsorted); `planned` holds the tools only
     a plan gives (`planned_only`), left out of `tools`; `role` is the person's part (`card_role`),
     `files` the record files it rests on, `quotes` its own evidence for a paragraph about it (`quotes`), and a
     project whose name is like another's (`similar`) has those names and its `tag`.
@@ -610,7 +611,8 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                 out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),
                             "tools": list(f.get("tools") or []), "summary": f.get("summary") or "",
                             "planned": list(planned_only(con, it).get("tools", {})),
-                            "context": context, "aliases": aliases(it, hidden, view), "role": card_role(it),
+                            "context": context, "tier": it.get("tier") or "", "aliases": aliases(it, hidden, view),
+                            "role": card_role(it),
                             "files": list(dict.fromkeys(e["source_rel"] for e in it["evidence"]
                                                         if e["source_rel"]
                                                         and view.belongs(it["id"], e["source_rel"]))),
@@ -618,7 +620,8 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
                             "tools": [], "summary": "; ".join(f.get("duties") or []), "planned": [],
-                            "context": context, "role": "", "files": [], "quotes": quotes(it, f, cvs, view, names),
+                            "context": context, "tier": it.get("tier") or "", "role": "", "files": [],
+                            "quotes": quotes(it, f, cvs, view, names),
                             "tag": "", "similar": []})
     projects = [c for c in out if c["kind"].startswith("project")]
     alike = similar([c["name"] for c in projects])

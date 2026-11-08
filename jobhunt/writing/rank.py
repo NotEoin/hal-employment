@@ -1,0 +1,173 @@
+"""Which pieces of work a pack's drafts tell, and in what order: one AI ranking of the person's projects and jobs
+against the job.
+
+`make(job, cards, found)` asks the AI once (prompt `story_rank`) to order every project and job card that is not
+archived, with the plan's named project stories that have no card (`candidates`), against the job's own words
+(`Job`: its title, summary, requirements and the company brief), and `checked` keeps the names that are among
+them, each with its one-line reason (`Ranked`). `order(found, cards, ranked, wanted)` turns a ranking into the
+stories a letter tells and the order the message and the answers take the rest in (`Told`).
+
+Design decisions, each with its reason:
+
+- One call ranks the work, as two words in common chose it badly (`plan.relevance`, at least two shared
+  words; 15 graded packs, 2026-11-08): a trading firm's software letter led with a voice assistant and a
+  job-search app while a packet sniffer and a real-time autopilot were left to the fit table, a fintech
+  letter left out the one project on the advert's own stack, and an ML letter told a first-year coursework
+  instead of the dissertation. Ranking needs the whole job and every project at once, which a word count
+  cannot weigh.
+- The reply's names are kept only when they are names the request gave (spaces and case aside), each once:
+  the ranking chooses among the person's work, never adds to it.
+- The person's "core" tier (`profile.tiers.CORE`) is in the request and the prompt makes it a tie-break when
+  two fit about as well, never a reason to put a weaker fit first: what the person leads with matters, but a
+  letter for one job should tell what that job needs. Archived work is never offered.
+- The letter tells the first `plan.LETTER_STORIES` ranked project or job stories that have facts (a story
+  with none gives a paragraph nothing to rest on); modules and other lines only below `plan.MIN_PROJECTS`
+  of those, as `plan.letter_stories` does. The message and the answers take the rest in the same order,
+  so they tell the next work the letter did not (`plan.choose`).
+- A failed call (no usable names, or the AI unavailable for it) falls back to the word count
+  (`plan.letter_stories`, `plan.fitting`), so a pack is never lost to the ranking.
+"""
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass, field
+
+from jobhunt import llm
+from jobhunt.ai import prompts
+from jobhunt.profile import tiers
+from jobhunt.writing import plan as planning
+from jobhunt.writing import stage
+from jobhunt.writing.plan import Story
+
+log = logging.getLogger(__name__)
+
+PROMPT = "story_rank"
+BRIEF_CHARS = 2000         # of the company brief a ranking request carries: what the employer does, not its history
+SUMMARY_CHARS = 300        # of each card's summary: what the work is, not its whole write-up
+
+
+@dataclass(frozen=True)
+class Job:
+    """What a ranking reads of the job: its title and employer, its summary, its requirements and the brief."""
+
+    title: str
+    employer: str
+    summary: str = ""
+    requirements: tuple[str, ...] = ()
+    brief: str = ""
+
+
+@dataclass(frozen=True)
+class Ranked:
+    """One piece of work in a ranking: its card's (or story's) name and why it fits, in the model's words."""
+
+    name: str
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class Told:
+    """What a ranking makes of the stories: the letter's, and every story the message and answers may tell."""
+
+    letter: tuple[Story, ...] = ()
+    others: tuple[Story, ...] = ()
+    ranked: tuple[Ranked, ...] = field(default=())
+
+
+def candidates(found: list[Story], cards: list[dict]) -> list[dict]:
+    """The work a ranking orders: every project and job card that is not archived, then each named project story
+    of the plan that has no card (a passage of a project's own file, such as a dissertation), as card fields."""
+    out = [c for c in cards if c.get("name", "").strip() and c.get("tier") != tiers.ARCHIVE
+           and (str(c.get("kind", "")).startswith("project") or c.get("kind") == "job")]
+    names = {c["name"] for c in out}
+    out += [{"kind": "project", "name": s.name, "tools": list(s.tools),
+             "summary": s.summary or (s.facts[0] if s.facts else ""), "planned": [], "context": s.context,
+             "tier": "", "aliases": list(s.aliases), "role": s.role, "files": [], "quotes": list(s.facts),
+             "tag": s.tag, "similar": []}
+            for s in found if s.card is None and s.kind == planning.PROJECT and s.name and s.name not in names]
+    return out
+
+
+def _line(card: dict) -> str:
+    """One card as a request lists it: its name, where it was done, its tier when core, what it is, its tools."""
+    where = "a job" if card.get("kind") == "job" else stage.CONTEXT_WORDS.get(card.get("context", ""), "project")
+    about = [where] + (["core"] if card.get("tier") == tiers.CORE else [])
+    summary = " ".join(str(card.get("summary") or "").split())[:SUMMARY_CHARS]
+    tools = ", ".join(card.get("tools") or ())
+    return (f"- {card['name']} ({'; '.join(about)})" + (f": {summary}" if summary else "")
+            + (f". Tools: {tools}" if tools else ""))
+
+
+def request(job: Job, offered: list[dict]) -> str:
+    """The ranking request: the job's own words, then every piece of work offered, one a line."""
+    wanted = "".join(f"- {r}\n" for r in job.requirements)
+    return (f"Job: {job.title} at {job.employer}\n"
+            + (f"What the job is: {job.summary}\n" if job.summary else "")
+            + (f"\nRequirements:\n{wanted}" if wanted else "")
+            + (f"\nWhat the employer does:\n{job.brief[:BRIEF_CHARS]}\n" if job.brief.strip() else "")
+            + "\nThe applicant's work:\n" + "\n".join(_line(c) for c in offered))
+
+
+def _key(name: str) -> str:
+    return " ".join(re.sub(r"\s*\([^)]*\)\s*$", "", name or "").lower().split())
+
+
+def checked(reply: dict, offered: list[dict]) -> list[Ranked]:
+    """The ranking of a reply: the names that are among `offered` (spaces, case and a trailing tag aside), each
+    once, in the reply's order, with their reasons; [] for a reply that holds none."""
+    by_key = {_key(c["name"]): c["name"] for c in offered}
+    picks = reply.get("ranking") if isinstance(reply, dict) else None
+    out: list[Ranked] = []
+    for pick in picks if isinstance(picks, list) else []:
+        said = pick.get("name") if isinstance(pick, dict) else pick
+        name = by_key.get(_key(str(said or "")))
+        if name is None:
+            log.info("story ranking: dropped a name that is no card's: %r", said)
+            continue
+        if any(r.name == name for r in out):
+            continue
+        reason = " ".join(str(pick.get("reason") or "").split()) if isinstance(pick, dict) else ""
+        out.append(Ranked(name, reason))
+    return out
+
+
+def make(job: Job, cards: list[dict], found: list[Story]) -> list[Ranked]:
+    """The ranking of the person's work for one job: one AI call, then `checked`; [] when there is nothing to rank
+    or the call gives nothing usable."""
+    offered = candidates(found, cards)
+    if not offered:
+        return []
+    try:
+        reply = llm.chat_json(prompts.text(PROMPT), request(job, offered), role="main")
+    except llm.LLMUnavailable as e:
+        log.warning("story ranking: the AI could not rank the work (%s); the job's words choose it", e)
+        return []
+    return checked(reply, offered)
+
+
+def order(found: list[Story], cards: list[dict], ranked: list[Ranked], wanted: str,
+          n: int = planning.LETTER_STORIES) -> Told:
+    """The stories a letter tells and the order the message and the answers take every story in (see the module
+    notes); with no ranking, the word count's (`plan.letter_stories`, `plan.fitting`). `wanted` is the job's
+    requirements."""
+    if not ranked:
+        fits = planning.fitting(found, cards, wanted)
+        return Told(tuple(planning.letter_stories(found, cards, wanted, n)), tuple([*found, *fits]))
+    by_story = {s.name: s for s in found if s.name}
+    by_card = {c["name"]: c for c in cards if c.get("name")}
+    first: list[Story] = []
+    for r in ranked:
+        story = by_story.get(r.name) or (planning.card_story(by_card[r.name]) if r.name in by_card else None)
+        if story is not None and story not in first:
+            first.append(story)
+    every = [*first, *(s for s in found if s not in first)]
+    told = [s for s in every if s.kind in (planning.PROJECT, planning.JOB) and s.facts][:n]
+    if len(told) < planning.MIN_PROJECTS:
+        told += [s for s in every if s.kind not in (planning.PROJECT, planning.JOB)]
+    return Told(tuple(told[:n]), tuple(every), tuple(ranked))
+
+
+def said(ranked: list[Ranked]) -> str:
+    """A ranking as a log line says it: "1. Name (reason); 2. ..."."""
+    return "; ".join(f"{k}. {r.name}" + (f" ({r.reason})" if r.reason else "") for k, r in enumerate(ranked, 1))
