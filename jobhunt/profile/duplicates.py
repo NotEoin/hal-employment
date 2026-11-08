@@ -35,6 +35,13 @@ target (`store.merge_into`).
 The others are hidden as "Merged into <card>" with their evidence moved to it (`store.merge_into`). The Check
 your record page lists each merge under "Hal merged these" (`listing`) with **Undo** (`undo`), which puts the
 cards back as they were and keeps them apart from then on. Without an AI only the certain rule merges.
+
+The person merges two cards themselves with "Same as..." (`same_as`, `store.same_as`), checked or not, as
+Hal never does: a project was two cards, one holding its repository's notes and one resting only on a list
+of projects, and hiding one lost its facts (2026-11-08). The card they keep keeps its name, the tier Hal's AI
+gave it (`tiers.keep_judged`) and the context they chose; the merge is listed under "You merged these" with
+the same **Undo**. A card the person hid whose files are all repository or project files of a shown card
+(`hidden_twins`) is offered to them as maybe the same, never merged without them.
 """
 from __future__ import annotations
 
@@ -44,7 +51,7 @@ import re
 import sqlite3
 from pathlib import PurePath
 
-from jobhunt.profile import check, merge, store
+from jobhunt.profile import check, merge, store, tiers
 
 log = logging.getLogger(__name__)
 
@@ -387,28 +394,76 @@ def retake(con: sqlite3.Connection) -> int:
     return back
 
 
+BY_HAL, BY_PERSON = "hal", "person"
+
+
+def merged_by(item: dict) -> str:
+    """Who merged a card into another: `BY_HAL` (`refresh`), `BY_PERSON` (`same_as`), or "" for a fold or none."""
+    why = item.get("merged_why") or ""
+    if item.get("merged_into") is None:
+        return ""
+    if why.startswith(MERGED):
+        return BY_HAL
+    return BY_PERSON if any(why.startswith(w) for w in store.SAME_AS.values()) else ""
+
+
 def listing(con: sqlite3.Connection) -> list[dict]:
-    """Each card Hal merged others into, shown on Check your record: [{"item": ITEM, "merged": [ITEM]}]."""
+    """Each card others were merged into, shown on Check your record, once for Hal's merges and once for the
+    person's: [{"item": ITEM, "merged": [ITEM], "by": "hal" | "person"}]."""
     out = []
-    for kind in KINDS:
+    for kind in tiers.TIERED_KINDS:
         found = store.items(con, kind)
-        merged: dict[int, list[dict]] = {}
+        merged: dict[tuple[int, str], list[dict]] = {}
         for i in found:
-            if i["merged_into"] is not None and i["merged_why"].startswith(MERGED):
-                merged.setdefault(i["merged_into"], []).append(i)
-        out += [{"item": i, "merged": merged[i["id"]]} for i in found if i["id"] in merged and i["state"] != "hidden"]
+            if by := merged_by(i):
+                merged.setdefault((i["merged_into"], by), []).append(i)
+        out += [{"item": i, "merged": merged[(i["id"], by)], "by": by} for by in (BY_HAL, BY_PERSON)
+                for i in found if (i["id"], by) in merged and i["state"] != "hidden"]
     return out
 
 
 def undo(con: sqlite3.Connection, item_id) -> dict:
-    """Takes the cards Hal merged into this one back out, as they were, and keeps them all apart from then on;
-    returns the card. LookupError for an unknown card, ValueError for one Hal merged nothing into."""
+    """Takes the cards Hal or the person merged into this one back out, as they were, and keeps them all apart
+    from then on; returns the card. LookupError for an unknown card, ValueError for one nothing was merged
+    into."""
     item = store.item(con, item_id)
-    merged = [i for i in store.items(con, item["kind"]) if i["merged_into"] == item["id"]
-              and i["merged_why"].startswith(MERGED)]
+    merged = [i for i in store.items(con, item["kind"]) if i["merged_into"] == item["id"] and merged_by(i)]
     if not merged:
-        raise ValueError("Hal merged nothing into this card.")
+        raise ValueError("Nothing was merged into this card.")
     for i in merged:
         store.unfold(con, i["id"])
     store.keep_apart(con, item["id"])
     return store.item(con, item["id"])
+
+
+def same_as(con: sqlite3.Connection, item_id, into) -> dict:
+    """The person says card `item_id` is the same as card `into`, which they keep: `store.same_as`, and the
+    kept card keeps the tier Hal's AI gave it (`tiers.keep_judged`); returns the kept card. LookupError for an
+    unknown card; ValueError as `store.same_as`, and for a kind that is no experience (`tiers.TIERED_KINDS`)."""
+    gone, kept = store.item(con, item_id), store.item(con, into)
+    if gone["kind"] not in tiers.TIERED_KINDS:
+        raise ValueError("Only jobs, courses, projects, achievements and certificates can be merged.")
+    store.same_as(con, gone["id"], kept["id"])
+    tiers.keep_judged(con, kept["id"])
+    return store.item(con, kept["id"])
+
+
+def hidden_twins(con: sqlite3.Connection) -> list[dict]:
+    """Each shown card with the cards the person hid whose files are all repository or project files that
+    shown card rests on too, maybe the same work (never merged without them): [{"item": ITEM, "hidden": [ITEM]}].
+    A card they kept apart before (`store.APART`) is not offered again."""
+    # loaded late: `owners` reads `listing_files` from this module
+    from jobhunt.profile import owners
+
+    out = []
+    for kind in tiers.TIERED_KINDS:
+        found = store.items(con, kind)
+        hid = [i for i in found if i["state"] == "hidden" and i["merged_into"] is None
+               and i["merged_why"] != store.APART and i["evidence"]
+               and all(e["doc_type"] in owners.PROJECT_FILES for e in i["evidence"])]
+        for shown in (i for i in found if i["state"] != "hidden"):
+            files = {e["source_rel"] for e in shown["evidence"]}
+            same = [h for h in hid if {e["source_rel"] for e in h["evidence"]} <= files]
+            if same:
+                out.append({"item": shown, "hidden": same})
+    return out

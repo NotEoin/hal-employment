@@ -493,6 +493,24 @@ telling word "name" with a card that links to that site. Without its AI, Hal mer
 project link: two cards found in one file can still be two pieces of work. A link to the front page of a
 site, or to the website in your settings, is not a project link, as many projects point to it.
 
+You can merge two cards yourself. When a project or job shows up twice, for example once under the name of
+its repository and once under the name from a list of your projects, press **Same as...** on one of them.
+This button is on the project and job cards under **Your best experiences** and **Check the rest**.
+
+1. Under **Which card is the same as this one?**, pick the other card. Cards you hid are listed too, marked
+   "(hidden)".
+2. Under **Which name should Hal keep?**, pick the name you want.
+3. Press **Merge them**.
+
+Hal keeps the card whose name you picked, with the files of both, so the tools and quotes of both are on it.
+It keeps where you said that card's work was done and how Hal sorted it. Hiding a duplicate
+instead would hide its files too, and Hal could not write about that project. Your merges are listed under
+**You merged these**, and **Undo** puts both cards back as they were, checked or not.
+
+When you hid a card that comes only from the same repository or project files as a card you can see, Hal
+lists it under **Hidden cards from the same files**. If it is the same piece of work, press **Same as**
+beside it. Hal never merges it unless you do.
+
 ## What Hal remembers
 
 - **Waiting for you**: suggestions from your choices, for example a smaller travel distance after you hide

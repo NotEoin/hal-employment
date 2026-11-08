@@ -5,7 +5,8 @@
    way and coming back starts where the person stopped. Conflicts come first as "Which is right?", then the
    facts most worth checking, then skills in groups; the skills Hal is least sure of wait under "Show more",
    the cards Hal merged as one experience found under different names are listed with Undo under "Hal merged
-   these", the skills only course material names are listed apart as "Studied in your course", and the other
+   these" and the ones the person merged with "Same as..." under "You merged these", cards the person hid that
+   come from a shown card's own files are offered under "Hidden cards from the same files", the skills only course material names are listed apart as "Studied in your course", and the other
    skills not on a CV, not checked and not a tool of a project worth telling an employer about are folded
    away as "Mentioned in your files".
    Above the queue, "Your best experiences" (`record/best.js`) lists what Hal would lead with, to check first.
@@ -18,6 +19,7 @@ import { Head, Note, Bar } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { BestExperiences } from "../record/best.js";
 import { ItemCheck, SkillsCheck, ConflictCheck, StudiedSkills, MentionedSkills, MergedCards } from "../record/check.js";
+import { HiddenTwins } from "../record/same.js";
 
 const PERCENT = 100;
 
@@ -68,7 +70,11 @@ export function Check() {
       ${data.more.length > 0 && html`<details class="rec-hidden rec-check-more"><summary>Show more (${plural(data.more.reduce((n, c) => n + c.items.length, 0), "skill")} Hal is less sure of)</summary>
         <p class="small sub rec-line">Hal is less sure of these: most come from only one file, such as course notes. Keep the ones that are yours; Hal never uses the rest.</p>
         <div class="stack s">${data.more.map(c => html`<${SkillsCheck} key=${c.key} card=${c} sub=${true} />`)}</div></details>`}
-      ${(data.merged || []).length > 0 && html`<${MergedCards} groups=${data.merged} />`}
+      ${["hal", "person"].map(by => {
+        const groups = (data.merged || []).filter(g => (g.by || "hal") === by);
+        return groups.length > 0 && html`<${MergedCards} key=${by} groups=${groups} by=${by} />`;
+      })}
+      ${(data.hidden_twins || []).length > 0 && html`<${HiddenTwins} twins=${data.hidden_twins} />`}
       ${(data.studied || []).length > 0 && html`<${StudiedSkills} items=${data.studied} />`}
       ${(data.mentioned || []).length > 0 && html`<${MentionedSkills} items=${data.mentioned} />`}
     </div>`}`;

@@ -20,7 +20,7 @@ from jobhunt import db
 from jobhunt.core import paths, settings
 from jobhunt.core.settings import store as settings_store
 from jobhunt.ingest import items
-from jobhunt.profile import duplicates, store
+from jobhunt.profile import duplicates, store, tiers
 
 NOW = "2026-11-08T09:00:00Z"
 CV = "Sources/CVs and letters/Avery Quillon CV.md"
@@ -256,7 +256,120 @@ class Duplicates(unittest.TestCase):
         self.assertEqual(store.item(self.con, b)["merged_into"], a)
 
 
+class PersonMerges(unittest.TestCase):
+    """One project was two cards, one with its repository's notes and one resting only on a list of projects;
+    hiding either lost its facts, so letters never told it (2026-11-08). The cards here are made up."""
+
+    def setUp(self):
+        self.home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(paths.set_override(self.home))
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+        self.con = db.connect()
+        self.addCleanup(self.con.close)
+        self.listed = store.add_found(self.con, "project", {"name": "BEAM Navigation"}, own(DOSSIER, "project"))
+        self.real = store.add_found(self.con, "project", {"name": "Rover pilot - real-time control",
+                                                          "tools": ["Rust"]},
+                                    own(BEAM_README, "repository", "Beam steers the rover in real time."))
+
+    def test_the_person_merges_a_checked_card_into_the_one_they_keep_with_all_its_evidence(self):
+        store.confirm(self.con, self.real)
+        kept = duplicates.same_as(self.con, self.real, self.listed)
+        gone = store.item(self.con, self.real)
+        self.assertEqual((kept["id"], kept["fields"]["name"]), (self.listed, "BEAM Navigation"))
+        self.assertEqual(sorted(e["source_rel"] for e in kept["evidence"]), sorted([DOSSIER, BEAM_README]))
+        self.assertIn("Rust", kept["fields"]["tools"])
+        self.assertEqual((gone["state"], gone["merged_into"]), ("hidden", self.listed))
+        self.assertEqual(gone["merged_why"], "You checked it, then said it is the same as BEAM Navigation")
+        moved = self.con.execute("SELECT moved_from FROM profile_evidence WHERE source_rel = ?",
+                                 (BEAM_README,)).fetchone()[0]
+        self.assertEqual(moved, self.real)
+
+    def test_the_kept_card_keeps_its_name_when_the_merged_cards_file_ranks_higher(self):
+        cv = store.add_found(self.con, "project", {"name": "Rover steering"}, own(CV, "cv"))
+        kept = duplicates.same_as(self.con, cv, self.listed)
+        self.assertEqual(kept["fields"]["name"], "BEAM Navigation")
+        later = store.add_found(self.con, "project", {"name": "Rover steering", "tools": ["Lua"]}, own(CV, "cv"))
+        self.assertEqual(later, self.listed, "a new fact naming the merged card goes to the card kept")
+
+    def test_unmerge_gives_the_merged_card_back_its_state_its_words_and_its_evidence(self):
+        store.edit(self.con, self.real, {"summary": "Steers a rover from its lidar."})
+        duplicates.same_as(self.con, self.real, self.listed)
+        duplicates.undo(self.con, self.listed)
+        back, kept = store.item(self.con, self.real), store.item(self.con, self.listed)
+        self.assertEqual((back["state"], back["merged_into"]), ("edited", None))
+        self.assertEqual(back["fields"]["summary"], "Steers a rover from its lidar.")
+        self.assertEqual([e["source_rel"] for e in back["evidence"]], [BEAM_README])
+        self.assertEqual([e["source_rel"] for e in kept["evidence"]], [DOSSIER])
+
+    def test_hals_own_merges_still_never_take_a_card_the_person_checked(self):
+        store.confirm(self.con, self.real)
+        with self.assertRaises(ValueError):
+            store.merge_into(self.con, self.real, self.listed, duplicates.MERGED + "BEAM Navigation")
+        self.assertIsNone(store.item(self.con, self.real)["merged_into"])
+
+    def test_the_kept_card_keeps_the_tier_hals_ai_gave_it(self):
+        with self.con:
+            self.con.execute("UPDATE profile_items SET tier = 'core', tier_by = 'hal', tier_why = 'Made up', "
+                             "tier_basis = 'made-up' WHERE id = ?", (self.listed,))
+        duplicates.same_as(self.con, self.real, self.listed)
+        self.assertEqual(tiers.refresh(self.con, judge=False)["unjudged"], 0, "nothing for the AI to judge again")
+        self.assertEqual(store.item(self.con, self.listed)["tier"], "core")
+
+    def test_a_hidden_card_the_person_keeps_is_shown_again(self):
+        store.hide(self.con, self.real)
+        kept = duplicates.same_as(self.con, self.listed, self.real)
+        self.assertEqual(kept["state"], "hal")
+        self.assertEqual(store.item(self.con, self.listed)["state"], "hidden")
+
+    def test_a_merge_that_makes_no_sense_is_refused_and_changes_nothing(self):
+        skill = store.add_found(self.con, "skill", {"name": "Rust"}, own(CV, "cv"))
+        other = store.add_found(self.con, "skill", {"name": "Lua"}, own(CV, "cv"))
+        job = store.add_found(self.con, "job", {"title": "Rover tester", "employer": "Brackwater Robotics"},
+                              own(CV, "cv"))
+        for gone, into in ((self.real, self.real), (self.real, job), (skill, other)):
+            with self.assertRaises(ValueError):
+                duplicates.same_as(self.con, gone, into)
+        duplicates.same_as(self.con, self.real, self.listed)
+        for gone, into in ((self.real, self.listed), (self.listed, self.real)):
+            with self.assertRaises(ValueError):
+                duplicates.same_as(self.con, gone, into)
+        with self.assertRaises(LookupError):
+            duplicates.same_as(self.con, self.listed, 9999)
+        self.assertEqual(store.item(self.con, self.listed)["state"], "hal")
+
+    def test_a_hidden_card_from_a_shown_cards_own_files_is_offered_and_never_merged(self):
+        twin = store.add_found(self.con, "project", {"name": "beam_bot"}, own(BEAM_README, "repository"))
+        store.hide(self.con, twin)
+        (found,) = duplicates.hidden_twins(self.con)
+        self.assertEqual((found["item"]["id"], [i["id"] for i in found["hidden"]]), (self.real, [twin]))
+        self.assertEqual((store.item(self.con, twin)["state"], store.item(self.con, twin)["merged_into"]),
+                         ("hidden", None))
+        store.hide(self.con, self.listed)
+        self.assertEqual([t["item"]["id"] for t in duplicates.hidden_twins(self.con)], [self.real],
+                         "a card resting on a list of projects is not a twin")
+
+
 class Route(unittest.TestCase):
+    def test_the_person_says_two_cards_are_one_and_unmerge_takes_them_apart(self):
+        hal = self.enterContext(HalServer())
+        c = hal.signed_in()
+        with closing(db.connect()) as con:
+            listed = store.add_found(con, "project", {"name": "BEAM Navigation"}, own(DOSSIER, "project"))
+            real = store.add_found(con, "project", {"name": "Rover pilot"}, own(BEAM_README, "repository"))
+            store.confirm(con, real)
+        kept = c.post(f"/api/v2/profile/items/{real}/same-as", {"into": listed}).json()
+        self.assertEqual((kept["id"], kept["title"]), (listed, "BEAM Navigation"))
+        (group,) = c.get("/api/v2/profile/check").json()["merged"]
+        self.assertEqual((group["item"]["id"], [i["id"] for i in group["merged"]], group["by"]),
+                         (listed, [real], "person"))
+        self.assertEqual(c.post(f"/api/v2/profile/items/{real}/same-as", {"into": listed}).status, 400)
+        self.assertEqual(c.post(f"/api/v2/profile/items/{listed}/same-as", {"into": "x"}).status, 400)
+        self.assertEqual(c.post(f"/api/v2/profile/items/{listed}/same-as", {"into": 9999}).status, 404)
+        c.post(f"/api/v2/profile/items/{listed}/unmerge")
+        with closing(db.connect()) as con:
+            self.assertEqual(store.item(con, real)["state"], "confirmed")
+
+
     def test_the_check_page_lists_what_hal_merged_and_undo_restores_it(self):
         hal = self.enterContext(HalServer())
         c = hal.signed_in()

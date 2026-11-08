@@ -122,6 +122,18 @@ def set_tier(con: sqlite3.Connection, item_id, tier: str) -> dict:
     return store.item(con, found["id"])
 
 
+def keep_judged(con: sqlite3.Connection, item_id: int) -> None:
+    """Keeps the tier Hal's AI gave a card whose evidence grew because the person merged another card into it
+    (`profile.duplicates.same_as`): its fingerprint is taken afresh, so the next refresh does not judge it
+    again. A tier the person set or a rule gave, or none, is left as it is."""
+    row = con.execute("SELECT tier, tier_by, tier_basis FROM profile_items WHERE id = ?", (item_id,)).fetchone()
+    if row is None or row["tier_by"] != BY_HAL or not row["tier"] or row["tier_basis"] in ("", RULE_BASIS):
+        return
+    with con:
+        con.execute("UPDATE profile_items SET tier_basis = ? WHERE id = ?",
+                    (_fingerprints(con, [item_id])[item_id], item_id))
+
+
 def _fingerprints(con: sqlite3.Connection, ids: list[int]) -> dict[int, str]:
     """A short hash of each item's evidence (file, quote and what it said), to see when it changes."""
     rows: dict[int, list] = {i: [] for i in ids}

@@ -21,6 +21,7 @@ PROJECT = "Sources/Projects/Mill town letters.md"
 MODULE = "Sources/Study notes/Archive methods week 3.md"
 OLD_CV = "Sources/CVs and letters/Alex Doe CV 2022.md"
 PLAN = "Sources/Projects/Mill town plan.md"
+REPO = "Sources/Code/spinning-room repository.md"
 EMPLOYER = "Fenwick Lantern Museum Trust"
 # The shell asks for Home's summary, which this test does not serve; its 404 is not this page's fault.
 NOT_YET = ("/api/v2/home",)
@@ -186,6 +187,56 @@ class CheckPage(unittest.TestCase):
         merged.get_by_role("button", name="Undo: Mill town letters").click()
         merged.wait_for(state="detached")
         self.assertEqual(state(twin), "hal")
+
+    def test_the_person_says_a_project_is_the_same_as_another_keeps_one_name_and_can_undo_it(self) -> None:
+        # one project was two cards, and hiding either lost its files (2026-11-08)
+        listed = found("project", {"name": "Mill town letters"}, PROJECT, "project", "Mill town letters", "own")
+        real = found("project", {"name": "Spinning room archive - letters edition"}, REPO, "repository",
+                     "Spinning room archive sorts the letters by mill.", "own")
+        with closing(db.connect()) as con:
+            store.confirm(con, real)
+        judged(listed, "core", "Work in the field you want")
+        p = self.page("check", "narrow")
+        card = p.page.locator(f"li[data-best='{listed}']")
+        card.get_by_role("button", name="Same as...").click()
+        pick = card.get_by_label("Which card is the same as this one?")
+        p.shows(pick, "the picker")
+        pick.select_option(label="Spinning room archive - letters edition")
+        keep = card.get_by_role("group", name="Which name should Hal keep?")
+        p.shows(keep, "the choice of name")
+        self.assertTrue(keep.get_by_label("Mill town letters").is_checked(), "this card's name by default")
+        self.clean(p)
+        card.get_by_role("button", name="Merge them").click()
+        mine = p.page.locator("details.rec-check-mine")
+        p.shows(mine, "the merge listed as the person's")
+        self.assertIn("You merged these (1 experience)", mine.inner_text())
+        with closing(db.connect()) as con:
+            gone, kept = store.item(con, real), store.item(con, listed)
+        self.assertEqual((gone["state"], gone["merged_into"], kept["fields"]["name"]),
+                         ("hidden", listed, "Mill town letters"))
+        self.assertIn(REPO, [e["source_rel"] for e in kept["evidence"]])
+        mine.locator("summary").click()
+        self.assertIn("also found as Spinning room archive - letters edition", mine.inner_text())
+        mine.get_by_role("button", name="Undo: Mill town letters").click()
+        mine.wait_for(state="detached")
+        self.assertEqual(state(real), "confirmed", "back as the person checked it")
+
+    def test_a_hidden_card_from_a_shown_cards_own_files_is_offered_as_the_same(self) -> None:
+        shown = found("project", {"name": "Mill town letters"}, REPO, "repository", "Mill town letters", "own")
+        found("project", {"name": "Mill town letters"}, CV, "cv", "Mill town letters", "own")
+        twin = found("project", {"name": "spinning_room"}, REPO, "repository", "spinning_room", "own")
+        with closing(db.connect()) as con:
+            store.hide(con, twin)
+        p = self.page()
+        twins = p.page.locator("details.rec-check-twins")
+        p.shows(twins, "the hidden card offered")
+        self.assertIn("Hidden cards from the same files (1)", twins.inner_text())
+        twins.locator("summary").click()
+        self.clean(p)
+        twins.get_by_role("button", name="Same as Mill town letters: spinning_room").click()
+        twins.wait_for(state="detached")
+        with closing(db.connect()) as con:
+            self.assertEqual(store.item(con, twin)["merged_into"], shown)
 
     def test_the_best_experiences_come_first_and_each_can_be_confirmed_archived_or_moved_up(self) -> None:
         job = found("job", {"title": "Collections volunteer", "employer": EMPLOYER, "start": "2023-09",

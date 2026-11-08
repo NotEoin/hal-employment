@@ -1,7 +1,7 @@
 /* Check your record, "Your best experiences": the jobs, courses, projects, achievements and certificates Hal
    would tell an employer first (`check.best` on the server), each with why, where it was done (a plain
-   choice the person can change), and Confirm, Edit and Move to archive. The archived ones are folded away
-   below, each with Move up a tier.
+   choice the person can change), and Confirm, Edit, Move to archive and, for a project or job, Same as...
+   (`record/same.js`). The archived ones are folded away below, each with Move up a tier.
 
    Every choice goes to the profile routes, which publish a `profile` event, so the list is read again and a
    moved card leaves it at once. Moving a card sets the person's own tier, which Hal never changes. */
@@ -11,6 +11,7 @@ import { toast } from "../core/store.js";
 import { Icon } from "../ui/icons.js";
 import { ItemForm } from "./fields.js";
 import { KIND_NAME, act } from "./check.js";
+import { SameAs } from "./same.js";
 
 const CHECKED = ["confirmed", "edited"];
 // Where an experience was done, as `profile.contexts` keeps it, in the person's words.
@@ -55,7 +56,8 @@ function BestCard({ item }) {
         <button type="button" class="btn" disabled=${busy} onClick=${() => setEditing(true)}><${Icon} n="edit" c="s" />Edit</button>
         <button type="button" class="btn" disabled=${busy}
           onClick=${() => choose(() => put(tierPath(item), { tier: "archive" }), "Moved to the archive. Hal will not write about it.")}>
-          Move to archive</button></div>`}
+          Move to archive</button>
+        <${SameAs} item=${item} busy=${busy} /></div>`}
   </li>`;
 }
 

@@ -61,6 +61,12 @@
 .rec-best-archived li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
 .rec-best-archived .btn { min-height: 44px; }
 .rec-check-rest { margin: 8px 0 0; }
+/* "Same as...": pick the other card and the name to keep, in the card's own flow */
+.rec-same { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+.rec-same .input { width: auto; max-width: 100%; min-height: 44px; }
+.rec-same-keep { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rec-same-name { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.rec-same-name input { width: 20px; height: 20px; margin: 0; flex: none; }
 @media (max-width: 640px) {
   .rec-check-btns .btn { flex: 1 1 100%; white-space: normal; }
   .rec-form { grid-template-columns: minmax(0, 1fr); }

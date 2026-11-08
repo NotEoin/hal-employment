@@ -226,7 +226,7 @@ MADE_UP_PROFILE_CHECK = {
                "best": [4]},
               {"type": "skills", "key": "skills:" + PROFILE_CV, "source_rel": PROFILE_CV,
                "file_id": _SKILL["evidence"][0]["file_id"], "items": [_SKILL], "best": [3]}],
-    "more": [], "studied": [], "mentioned": [], "merged": [], "done": 2, "total": 5}
+    "more": [], "studied": [], "mentioned": [], "merged": [], "hidden_twins": [], "done": 2, "total": 5}
 
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.

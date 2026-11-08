@@ -6,6 +6,11 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
+  Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,
+  even if you had already checked or hidden one, where hiding a duplicate used to hide its files too. Your
+  merges are listed under **You merged these** with **Undo**, and a card you hid that comes from the same
+  repository or project files as one you can see is offered under **Hidden cards from the same files**.
 - **Drafts rest on evidence chosen first.** Before writing a letter, Hal picks up to eight facts it will
   rest on, each quoted word for word from your CV, the facts you checked or your own documents, with where
   the work was done and your part in it (a team of seven, the features you built) when your files say so.

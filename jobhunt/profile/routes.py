@@ -33,8 +33,8 @@ education, projects, achievements and certificates (`profile.tiers`); `tier_by` 
 `context` is degree | team | work | personal | "" (not known), for the same kinds (`profile.contexts`), with
 `context_by` hal | person | "" and `context_words` the page's words for it ("Part of my degree",
 "University team project", "At work", "In my own time"). `merged_into` is the id of the card a hidden card
-was folded into by Hal (`store.fold_away`), else null, and `merged_why` Hal's words on why ("Part of
-Lantern workspace").
+was folded into by Hal (`store.fold_away`) or the person (`store.same_as`), else null, and `merged_why` the
+words on why ("Part of Lantern workspace", "You said it is the same as Tide gauge").
 
 A conflict (`CONFLICT`):
 
@@ -68,18 +68,24 @@ Routes:
 - `GET /api/v2/profile/check`: the best experiences (`check.best`) and the Check your record queue
   (`check.queue`): {"best": [ITEM], "archived": [ITEM], "conflicts": [NAMED_CONFLICT],
   "cards": [CARD], "more": [CARD], "studied": [ITEM], "mentioned": [ITEM],
-  "merged": [{"item": ITEM, "merged": [ITEM]}],
-  "done": n, "total": n}. A card (`CARD`) is
+  "merged": [{"item": ITEM, "merged": [ITEM], "by": "hal" | "person"}],
+  "hidden_twins": [{"item": ITEM, "hidden": [ITEM]}], "done": n, "total": n}. A card (`CARD`) is
   {"type": "item" | "skills", "key", "source_rel", "file_id", "items": [ITEM], "best": [evidence id]}: an item
   card holds one item and no file (`source_rel` "", `file_id` null); a skills card holds the skills that rest
   most on one file. `best` gives, for each item, the id of the source whose quote to show.
   `more` is what the page keeps under "Show more"; `studied` the skills only course material names
   (`store.is_studied`), shown apart; `mentioned` the other skills that are not on a CV, checked or a tool of a
-  core or supporting project (`store.is_usable`), folded away; `merged` each card Hal merged others into after a read
-  (`duplicates.listing`), with the cards hidden into it; `done` of `total` is the progress bar.
-- `POST /api/v2/profile/items/{id}/unmerge`: takes the cards Hal merged into this one back out, as they were,
-  and Hal never merges them on its own again (`duplicates.undo`); ITEM. A card Hal merged nothing into is
-  400.
+  core or supporting project (`store.is_usable`), folded away; `merged` each card Hal (`by` "hal") or the
+  person ("person") merged others into (`duplicates.listing`), with the cards hidden into it; `hidden_twins`
+  each shown card with the cards the person hid whose files are all its repository or project files
+  (`duplicates.hidden_twins`), offered as maybe the same; `done` of `total` is the progress bar.
+- `POST /api/v2/profile/items/{id}/unmerge`: takes the cards Hal or the person merged into this one back out,
+  as they were, and Hal never merges them on its own again (`duplicates.undo`); ITEM. A card nothing was
+  merged into is 400.
+- `POST /api/v2/profile/items/{id}/same-as` {"into": 4}: the person says card {id} is the same as card 4,
+  which they keep: {id} is merged into it, checked or not (`duplicates.same_as`), and Unmerge undoes it.
+  Returns the kept card's ITEM. An unknown card is 404; `into` missing or not a number, the same card, two
+  kinds, a kind that is no experience, or a card already merged is 400.
 - `PUT /api/v2/profile/items/{id}/tier` {"tier": "archive"}: the person's tier for an experience, which Hal
   never changes; ITEM. A tier that is not core, supporting or archive, or an item with no tier, is 400.
 - `PUT /api/v2/profile/items/{id}/context` {"context": "personal"}: where the person says an experience was
@@ -148,8 +154,10 @@ def check_queue(req: Request) -> dict:
             "conflicts": named(req.con, found["conflicts"]), "cards": _cards(found["cards"]),
             "more": _cards(found["more"]), "studied": [with_files(i) for i in found["studied"]],
             "mentioned": [with_files(i) for i in found["mentioned"]],
-            "merged": [{"item": with_files(m["item"]), "merged": [with_files(i) for i in m["merged"]]}
+            "merged": [{"item": with_files(m["item"]), "merged": [with_files(i) for i in m["merged"]], "by": m["by"]}
                        for m in duplicates.listing(req.con)],
+            "hidden_twins": [{"item": with_files(t["item"]), "hidden": [with_files(i) for i in t["hidden"]]}
+                             for t in duplicates.hidden_twins(req.con)],
             "done": found["done"], "total": found["total"]}
 
 
@@ -209,6 +217,18 @@ def unmerge(req: Request) -> dict:
         return _changed(duplicates.undo(req.con, req.params["item_id"]))
     except ValueError as e:
         raise BadRequest(str(e)) from e
+
+
+@route("POST", PREFIX + "/items/{item_id}/same-as")
+def same_as(req: Request) -> dict:
+    """The person says this card is the same as another, which they keep: this one is merged into it."""
+    into = req.body.get("into") if isinstance(req.body, dict) else None
+    if not isinstance(into, int) or isinstance(into, bool):
+        raise BadRequest("Pick the card this one is the same as.", field="into")
+    try:
+        return _changed(duplicates.same_as(req.con, req.params["item_id"], into))
+    except ValueError as e:
+        raise BadRequest(str(e), field="into") from e
 
 
 @route("PUT", PREFIX + "/items/{item_id}/tier")

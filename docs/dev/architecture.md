@@ -1230,6 +1230,22 @@ available yet.
   and marks every card of the group `apart`, so Hal never merges them again on its own. Folded cards are
   left out of the check queue's `done` and `total`, and a merged card's name is one of its target's
   `writing.aliases`.
+- The person's merges ("Same as...", `record/same.js`, on the project and job cards of the check queue and
+  of "Your best experiences"): `POST /api/v2/profile/items/{id}/same-as` {"into": kept id} runs
+  `duplicates.same_as(con, item_id, into)`, which refuses a kind outside `tiers.TIERED_KINDS` and calls
+  `store.same_as`. That merges a card of any state, unlike `store.merge_into`, which Hal's own pass uses and
+  which still refuses a card the person checked (through `store.fold_away`). Its evidence moves with
+  `moved_from`, each moved `said` takes the kept card's naming fields (`store.NAMED_BY`) so `refold` never
+  renames the kept card, a hidden kept card is shown again as `hal`, and the merged card is hidden with
+  `merged_why` from `store.SAME_AS` by the state it had ("You checked it, then said it is the same as
+  <name>"). `store.unfold` gives that state back, so `edited` fields are never worked out again.
+  `tiers.keep_judged` takes the kept card's evidence fingerprint afresh, so a tier Hal's AI gave stays; a
+  context the person chose stays as it is. `duplicates.listing` reports Hal's merges and the person's apart
+  (`by` "hal" or "person", `duplicates.merged_by`); the page shows the person's as "You merged these" with
+  the same Undo (`duplicates.undo` takes both). `duplicates.hidden_twins` gives each shown card with the
+  cards the person hid (not merged, not `apart`) whose evidence is all repository or project files
+  (`owners.PROJECT_FILES`) the shown card also rests on, as `hidden_twins` of the check payload, shown as
+  "Hidden cards from the same files" with a "Same as" button; nothing merges them without the person.
 - Contexts (`contexts.py`, migration 0026): each card of the tiered kinds has a `context` (`degree`,
   `team`, `work`, `personal`, or '' when nothing shows it) and `context_by` (`hal` or `person`). A job is
   work and a course degree work by their kind; a project, achievement or certificate is read from its fields

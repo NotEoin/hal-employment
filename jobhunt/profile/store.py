@@ -25,6 +25,13 @@ Design decisions, each with its reason:
   that was merged away itself, so merges never chain. A tidy takes apart what older rules folded or merged
   (`unfold` with `apart=False`, and `take_back` for facts filed away from a card that stayed), and
   `rebuild_found` keeps where each moved fact came from, so all of it can be taken apart.
+- The person may merge any two cards of one kind themselves (`same_as`, "Same as..." on the Check your
+  record page), checked or not: one project was two cards, one with the repository's notes and one resting
+  only on a list of projects, and hiding either lost its facts (2026-11-08). The card they keep keeps its
+  name, as the facts moved to it are filed under its name, and the merged card's `merged_why` says the person
+  did it and which state it had (`SAME_AS`), so taking it back out (`unfold`) gives that state back and
+  never works out again what they checked or typed. Hal's own merges (`merge_into`) still never take a card
+  the person checked.
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
@@ -363,6 +370,11 @@ def fold_away(con: sqlite3.Connection, item_id: int, into: int, why: str) -> Non
 
 
 APART = "apart"            # `merged_why` of a card the person took back out of a merge (`unfold`)
+# `merged_why` of a card the person merged into another (`same_as`), by the state it had then, followed by the
+# kept card's name; `unfold` gives the card that state back.
+SAME_AS = {"hal": "You said it is the same as ", "confirmed": "You checked it, then said it is the same as ",
+           "edited": "You edited it, then said it is the same as ",
+           "hidden": "You hid it, then said it is the same as "}
 
 
 def merge_into(con: sqlite3.Connection, item_id: int, into: int, why: str) -> None:
@@ -382,23 +394,61 @@ def merge_into(con: sqlite3.Connection, item_id: int, into: int, why: str) -> No
         conflicts.refresh(con)
 
 
+def same_as(con: sqlite3.Connection, item_id: int, into: int) -> None:
+    """Merges card `item_id` into card `into` because the person said they are one: its evidence moves there,
+    remembering where it was and filed under the kept card's name, and it is hidden, saying the person did it
+    (`SAME_AS`). Any state may go, as the person asks; a hidden card kept is shown again for them to check.
+
+    LookupError for an unknown card; ValueError for the same card twice, two kinds, a card already merged into
+    another, and a target that was merged away itself."""
+    row, target = _row(con, item_id), _row(con, into)
+    if row["id"] == target["id"]:
+        raise ValueError("Pick another card: a card is always the same as itself.")
+    if row["kind"] != target["kind"]:
+        raise ValueError("Only two cards of the same kind can be one.")
+    if row["merged_into"] is not None:
+        raise ValueError("That card is already merged into another.")
+    if target["merged_into"] is not None:
+        raise ValueError("That card was merged into another, so nothing is merged into it.")
+    kept = _row_fields(target)
+    why = SAME_AS.get(row["state"], SAME_AS["hal"]) + title(target["kind"], kept)
+    moved = [(e["id"], json.loads(e["said"])) for e in
+             con.execute("SELECT id, said FROM profile_evidence WHERE item_id = ?", (row["id"],))]
+    named = {f: kept[f] for f in NAMED_BY.get(target["kind"], ()) if kept.get(f)}
+    now = db.now()
+    with con:
+        if target["state"] == "hidden":
+            con.execute("UPDATE profile_items SET state = 'hal', updated = ? WHERE id = ?", (now, target["id"]))
+        con.execute("UPDATE profile_items SET state = 'hidden', merged_into = ?, merged_why = ?, updated = ? "
+                    "WHERE id = ?", (target["id"], why, now, row["id"]))
+        con.execute("UPDATE profile_items SET merged_into = ? WHERE merged_into = ?", (target["id"], row["id"]))
+        # filed under the kept card's name, so a better-ranked file of the merged card never renames it
+        con.executemany("UPDATE profile_evidence SET item_id = ?, said = ?, moved_from = coalesce(moved_from, ?) "
+                        "WHERE id = ?", [(target["id"], json.dumps({**said, **named}), row["id"], evidence_id)
+                                         for evidence_id, said in moved])
+        refold(con, target["id"])
+        conflicts.refresh(con)
+
+
 def unfold(con: sqlite3.Connection, item_id: int, *, apart: bool = True) -> None:
     """Takes a merged or folded card back out of the card it was put into: its evidence returns, and it is found
-    by Hal again. Hal never merges it again on its own (`APART`) unless `apart` is False, as when a tidy takes
-    apart what today's rules refuse. A fact filed again under the other card's name (`refile`) goes back
-    saying what this card was. LookupError for an unknown card, ValueError for one that was not merged."""
+    by Hal again, or has the state it had when the person merged it (`SAME_AS`). Hal never merges it again on
+    its own (`APART`) unless `apart` is False, as when a tidy takes apart what today's rules refuse. A fact
+    filed again under the other card's name (`refile`, `same_as`) goes back saying what this card was.
+    LookupError for an unknown card, ValueError for one that was not merged."""
     row = _row(con, item_id)
     if row["merged_into"] is None:
         raise ValueError("That card was not merged into another.")
     was = _row_fields(row)
+    state = next((s for s, words in SAME_AS.items() if row["merged_why"].startswith(words)), "hal")
     with con:
         for e in con.execute("SELECT id, said FROM profile_evidence WHERE moved_from = ?", (item_id,)).fetchall():
             if not merge.same_item(row["kind"], json.loads(e["said"]), was):
                 con.execute("UPDATE profile_evidence SET said = ? WHERE id = ?", (json.dumps(was), e["id"]))
         con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = NULL WHERE moved_from = ?",
                     (item_id, item_id))
-        con.execute("UPDATE profile_items SET state = 'hal', merged_into = NULL, merged_why = ?, updated = ? "
-                    "WHERE id = ?", (APART if apart else "", db.now(), item_id))
+        con.execute("UPDATE profile_items SET state = ?, merged_into = NULL, merged_why = ?, updated = ? "
+                    "WHERE id = ?", (state, APART if apart else "", db.now(), item_id))
         refold(con, item_id)
         refold(con, row["merged_into"])
         conflicts.refresh(con)
