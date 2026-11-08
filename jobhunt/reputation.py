@@ -33,6 +33,13 @@ Design decisions, each with its reason:
   graduate jobs has traded for longer than that, and a lender's pack showed a finance company of the same
   name incorporated ten days before (2026-11-07). A new company of a known name is as likely a namesake or
   an imitation as the employer.
+- A registration is stated as the employer only when the advert's own web address is on its company page,
+  or its name is the employer's and its address names the advert's town and its SIC codes one of the
+  advert's trades, at an address that is not a flat or a room (`SMALL_ADDRESS`) and with accounts that are
+  not a micro-entity's (`SMALL_RECORD`). A registration with the employer's exact name that fits the advert
+  by trade or town alone is shown as "Possible match: <name> (check it is the same company)" (`POSSIBLE`);
+  any other is not shown. A large trading firm's pack stated an IT consultancy of the same name, registered
+  at a flat, as the employer (2026-11-07): a name, a town and a trade were all a one-person company had.
 - Anything else reads "No reliable match found", with no sections to read.
 - Sector words are compared whole, with a plural "s" dropped (`_forms`), so "loans" meets "loan" but
   "markets" never meets "marketing".
@@ -72,6 +79,10 @@ SHORT_WORD = 3            # a word this short keeps a final "s" ("gas", "bus")
 SUMMARY_WORDS = 80        # of an article's first section, shown in the pack
 NEW_COMPANY_DAYS = 365   # a company younger than a year has no trading history to check (see the module notes)
 INCORPORATED = re.compile(r"Incorporated on (\d{1,2} [A-Za-z]+ \d{4})")
+# An address or a record that says a company is one person's, not an employer hiring graduates.
+SMALL_ADDRESS = re.compile(r"\b(flat|apartment|apt|room|unit)\s+[0-9a-z]*\d", re.I)
+SMALL_RECORD = re.compile(r"\bmicro[- ]entity\b", re.I)
+POSSIBLE = "Possible match: {name} (check it is the same company)"
 # Words a Wikipedia title adds to a name that say only that it is a company: "Brightvale (company)".
 COMPANY_WORDS = {"company", "companies", "corporation", "corp", "inc", "llc", "co", "incorporated"}
 DISAMBIGUATION = re.compile(r"\b(may|can|might) (also )?(refer|be used to refer) to\b|\(disambiguation\)", re.I)
@@ -321,10 +332,21 @@ def young_namesake(text: str, held: list[str], wanted: list[str], record: str, a
     return held != wanted or not any(h in record for h in hosts(advert))
 
 
+def stated(found: dict, text: str, theirs: set[int], ours: set[int], advert: Advert) -> bool:
+    """True when a registration named like the employer may be stated as the employer: the advert's own web
+    address is on its company page, or its address names the advert's town and its codes one of the
+    advert's trades, and neither its address nor its record says it is small (see the module notes)."""
+    if any(h in found["text"] for h in hosts(advert)):
+        return True
+    small = SMALL_ADDRESS.search(text) or SMALL_RECORD.search(found["text"])
+    return bool(theirs & ours) and _named_in(text, towns(advert)) and not small
+
+
 def companies_house(company: str, advert: Advert | None = None, today: date | None = None) -> list[str]:
     """The Companies House registrations that are plausibly the advert's employer, as one-line descriptions:
     named like it, active, in one of the advert's trades or its town, and not a new namesake (see the module
-    notes)."""
+    notes). One that is not plainly the employer (`stated`) is listed as a possible match (`POSSIBLE`) when
+    its name is the employer's exactly, else left out."""
     from .core import clock
 
     advert, today = advert or Advert(), today or clock.local_day()
@@ -348,8 +370,15 @@ def companies_house(company: str, advert: Advert | None = None, today: date | No
         if young_namesake(text, held, wanted, found["text"], advert, today):
             log.info("company check: Companies House %r is new and not plainly the employer", text[:80])
             continue
-        if found["status"].lower() == "active" and fits:
+        if found["status"].lower() != "active" or not fits:
+            continue
+        if stated(found, text, theirs, ours, advert):
             results.append(f"{text[:160]} ({found['status']}; {'; '.join(found['sic'])})")
+        elif held == wanted:
+            named = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", name.group(1))).split())
+            results.append(POSSIBLE.format(name=f"{named} {number.group(1)}"))
+        else:
+            log.info("company check: Companies House %r is named like the employer but not plainly it", text[:80])
         if len(results) == REGISTRATIONS:
             break
     return results

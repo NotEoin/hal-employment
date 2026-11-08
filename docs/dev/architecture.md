@@ -595,8 +595,13 @@ runs: tests use `tests/support/fake_claude/`.
   other sector, its company page says Active, and its SIC divisions share a sector with the advert; codes
   that name no trade (`NO_TRADE_SIC`) need the advert's town in its address instead. A registration
   incorporated within `NEW_COMPANY_DAYS` (365) of today is kept only when its name is the employer's
-  exactly and one of the advert's own web addresses (`hosts`) is on its company page. Anything else reads
-  "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
+  exactly and one of the advert's own web addresses (`hosts`) is on its company page. A kept registration
+  is stated as the employer only when the advert's own web address is on its company page, or its address
+  names the advert's town and its SIC divisions one of the advert's sectors, at an address that is not a
+  flat or a room (`SMALL_ADDRESS`) and with no micro-entity accounts (`SMALL_RECORD`) (`reputation.stated`);
+  else one with the employer's exact name reads "Possible match: <name> (check it is the same company)"
+  (`POSSIBLE`), and any other is left out. An IT consultancy at a flat was stated as a large trading firm
+  (2026-11-07). Anything else reads "No reliable match found" with no sections to read. `tests/test_reputation.py` fakes every lookup.
 - One letter path, `pack.write_letter` (advert, record, fit map, letter, checks), serves the pack, the letter
   drafted at form time and the writing actions. The letter and the message are drafted at
   `pack.DRAFT_TEMPERATURE` (0.4), cooler than other prose. When the first letter's sentence checks needed a

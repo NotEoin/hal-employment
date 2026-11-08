@@ -160,6 +160,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
+  the same name, registered at a flat, as the employer. A registered company is now named as the employer
+  only when the advert's own website is on its record, or it is in the advert's town and trade at an
+  address that is not a flat; a company with the same exact name is otherwise shown as a possible match to
+  check, or not at all.
 - **Check before sending is always there.** Some packs had no **Check before sending** at all, so nothing
   said a letter was too short or did not read well. Every pack now has the section, saying "Nothing to
   check." when that is so, and it lists a letter well under your preferred length and a paragraph that

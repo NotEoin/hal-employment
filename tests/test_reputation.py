@@ -106,7 +106,8 @@ class CompanyCheck(unittest.TestCase):
         flags, md = self.check(EMPLOYER, ADVERT,
                                {"Riverside Heritage Trust": ("A charity in Made-up Town that runs a museum.", [])},
                                {"01234567": ("RIVERSIDE HERITAGE TRUST LIMITED", "Active",
-                                             ["91020 - Museums activities"])})
+                                             ["91020 - Museums activities"])},
+                               {"01234567": "1 Made-up Street, Made-up Town"})
         self.assertIn("[Riverside Heritage Trust]", md)
         self.assertIn("- Companies House: RIVERSIDE HERITAGE TRUST LIMITED 01234567", md)
         self.assertIn("(Active; 91020 - Museums activities)", md)
@@ -135,7 +136,7 @@ class CompanyCheck(unittest.TestCase):
     def test_an_article_in_the_adverts_trade_is_the_employer(self):
         articles = {"Brightledger": ("Brightledger is a lender offering payments and open banking loans.", [])}
         registrations = {"07654323": ("BRIGHTLEDGER LIMITED", "Active", ["64929 - Other credit granting"])}
-        _, md = self.check(FINTECH, FINTECH_ADVERT, articles, registrations)
+        _, md = self.check(FINTECH, FINTECH_ADVERT, articles, registrations, {"07654323": "2 Made-up Wharf, London"})
         self.assertIn("[Brightledger]", md)
         self.assertIn("- Companies House: BRIGHTLEDGER LIMITED 07654323", md)
 
@@ -209,15 +210,39 @@ class CompanyCheck(unittest.TestCase):
                            pages={"44444442": "<p>Website: brightvale-loans.co.uk</p>"})
         self.assertIn("- Companies House: BRIGHTVALE LIMITED 44444442", md, "its exact name and the advert's site")
         self.assertNotIn("FINANCE", md)
-        _, md = self.check(LENDER, LIVE_LENDER_ADVERT, {}, registrations, born={"44444441": "2 May 2019"})
+        _, md = self.check(LENDER, LIVE_LENDER_ADVERT, {}, registrations, {"44444441": "5 Made-up Row, London"},
+                           born={"44444441": "2 May 2019"})
         self.assertIn("- Companies House: BRIGHTVALE FINANCE LTD 44444441", md, "an older one in the trade is")
 
-    def test_a_registration_in_the_adverts_trade_or_town_is_the_employer(self):
+    def test_a_registration_in_the_adverts_trade_and_town_is_the_employer(self):
         registrations = {"33333331": ("BRIGHTVALE FINANCE LIMITED", "Active", ["64929 - Other credit granting n.e.c."]),
                          "33333332": ("BRIGHTVALE LTD", "Active", ["70100 - Activities of head offices"])}
-        _, md = self.check(LENDER, LENDER_ADVERT, {}, registrations, {"33333332": "9 Made-up Lane, London"})
+        _, md = self.check(LENDER, LENDER_ADVERT, {}, registrations, {"33333331": "8 Made-up Lane, London",
+                                                                      "33333332": "9 Made-up Lane, London"})
         self.assertIn("- Companies House: BRIGHTVALE FINANCE LIMITED 33333331", md)
-        self.assertIn("- Companies House: BRIGHTVALE LTD 33333332", md, "no trade, but the advert's town")
+        self.assertIn(f"- Companies House: {reputation.POSSIBLE.format(name='BRIGHTVALE LTD 33333332')}", md,
+                      "the advert's town but no trade: its exact name makes it possible at most")
+
+    def test_an_exact_name_that_fits_by_one_thing_or_is_small_is_only_a_possible_match(self):
+        # a large trading firm's pack stated an IT consultancy of the same name, registered at a flat, as the
+        # employer (2026-11-07)
+        advert = reputation.Advert(location="London", url="https://jobs.example.org/kestrelmark/6",
+                                   text=f"{TRADER_ADVERT.text} Our software engineers build trading systems. "
+                                        "More at www.kestrelmark-trading.co.uk.")
+        registrations = {"55555551": ("KESTRELMARK LTD", "Active", ["62020 - Information technology consultancy "
+                                                                    "activities"])}
+        possible = f"- Companies House: {reputation.POSSIBLE.format(name='KESTRELMARK LTD 55555551')}"
+        for address in ("Flat 4, 12 Made-up Court, London", "3 Made-up Mews, Leeds"):
+            _, md = self.check(TRADER, advert, {}, registrations, {"55555551": address})
+            self.assertIn(possible, md, address)
+            self.assertNotIn("Made-up", md, "nothing of it is stated as the employer's")
+        _, md = self.check(TRADER, advert, {}, registrations, {"55555551": "Flat 4, 12 Made-up Court, London"},
+                           pages={"55555551": "<p>Website: kestrelmark-trading.co.uk</p>"})
+        self.assertIn("- Companies House: KESTRELMARK LTD 55555551", md, "the advert's own site on its page")
+        longer = {"55555552": ("KESTRELMARK DIGITAL LTD", "Active", registrations["55555551"][2])}
+        _, md = self.check(TRADER, advert, {}, longer, {"55555552": "3 Made-up Mews, Leeds"})
+        self.assertIn(f"- Companies House: {reputation.NO_MATCH}", md,
+                      "a longer name fitting by trade alone is left out")
 
     def test_a_job_boards_link_names_no_employer(self):
         self.assertEqual(reputation.domains(FINTECH_ADVERT), set())

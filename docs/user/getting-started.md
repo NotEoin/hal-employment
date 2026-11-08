@@ -130,6 +130,11 @@ a draft keeps it that way. A sentence that calls a project something else, such 
 for a project you did in your own time, is rewritten once, and listed under **Check before sending** if it
 is still there. This also works when the draft calls the project by a shorter name or its folder's name.
 
+The pack's **Company check** names a registered company as the employer only when the advert's own
+website is on its record, or it is registered in the advert's town and trade at an address that is not a
+flat. A company with the employer's exact name that Hal cannot tie to the advert that firmly is shown as
+"Possible match: ... (check it is the same company)", and any other is left out.
+
 Every pack has a **Check before sending** section, which says "Nothing to check." when nothing needs
 you. Besides the sentences Hal could not fix, it lists a letter still well under the length you prefer, and
 a paragraph that starts with "This", "It" or "That" pointing at something the paragraph before does not
