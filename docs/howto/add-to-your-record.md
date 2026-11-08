@@ -25,7 +25,9 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    or a project added by hand. Ways marked **Coming soon** are not ready yet. Press **Showcase** on a
    project's card to have Hal tell employers about it.
 5. Open **Documents** and add certificates, awards, references, checks and anything else that helps.
-   Choose what each one is under **What is it?**.
+   Choose what each one is under **What is it?**, and, if it is about one course, job or certificate, pick
+   it under **Is it about one of these?**. A transcript sets that course's modules, marks and grade. A
+   certificate gets its own card. A reference is kept on its job as the referee's words, not yours.
 6. Each place lists what you added, with its state (**Waiting to be read**, **Read**, **Could not be read**
    or **Kept out: it looks private**) and when Hal last read it. Press **Read again** after you change a
    file's kind, or **Remove** to take it out with everything Hal took from it.
@@ -38,6 +40,8 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | --- | --- |
 | "Hal cannot read these yet (the ... reader comes in phase ...)." | Nothing to do: Hal keeps the file and reads it once that part of Hal is ready. |
 | "... is already in your record, under Documents." | The same file is in your record already. Remove it there first if it belongs here instead. |
+| "This looks like a transcript." | Press **Mark it as a transcript** if Hal is right, and Hal reads it again as one. |
+| A reference added nothing to a job | Choose the job under **Is it about one of these?**, or add it from the job's own card on **Work history**. |
 | "This looks like it belongs in CVs." | Press **Move it to CVs** if Hal is right. Hal never moves a file by itself. |
 | "Kept out: it looks private" | The file looks like it holds bank, ID or medical details. If it is fine to keep, press **Add it anyway**. |
 | "Choose which education Coursework belongs to." | Add coursework from the course's own card on **Education**, not from another tab. |

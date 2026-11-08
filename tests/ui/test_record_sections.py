@@ -29,6 +29,9 @@ AWARD = "# Volunteer of the year\n\nAwarded to Marnie Quillfeather on 5 March 20
 ESSAY = "# The parish registers of Harrowgate Vale\n\nAn essay on baptisms, 1750 to 1850.\n"
 CV = ("# Marnie Quillfeather\n\nCurriculum vitae\n\n## Work experience\n\nCollections volunteer.\n\n"
       "## Education\n\nBA History.\n")
+REFERENCE = ("# Reference for Marnie\n\nTo whom it may concern,\n\nMarnie has volunteered as a Collections "
+             "volunteer at the Fenwick Lantern Museum Trust since 2023.\n")
+TRANSCRIPT = "# Transcript of study\n\nProgramme: BA (Hons) History\n\nHIS1010 Medieval Europe 66\n"
 OLDER_CV = "# Marnie Quillfeather\n\nCV, May 2019\n\n## Work experience\n\nPaper round, Harrowgate Gazette, 2018\n"
 
 
@@ -126,6 +129,24 @@ class RecordSections(unittest.TestCase):
         row.get_by_role("button", name="Remove: Volunteer of the year").click()
         p.shows(p.page.get_by_text("Removed, with what Hal took from it."), "the toast")
         self.assertEqual(self.listed("document"), [])
+
+    def test_a_document_can_name_its_card_and_hal_suggests_its_kind(self) -> None:
+        job = found("job", {"title": "Collections volunteer", "employer": "Fenwick Lantern Museum Trust"})
+        p = self.page("record-documents")
+        docs = self.panel(p, "Add documents")
+        docs.get_by_label("What is it?").select_option(label="Reference")
+        docs.get_by_label("Is it about one of these? (optional)").select_option(label="Collections volunteer")
+        docs.locator("input[type=file]").first.set_input_files(self.file("reference.md", REFERENCE))
+        row = docs.locator("li.rec-source", has_text="Reference for Marnie")
+        p.shows(row.get_by_text("Read", exact=True), "the read chip")
+        self.assertEqual(self.listed("document")[0]["target_id"], job)
+        docs.get_by_label("What is it?").select_option(label="Something else")
+        docs.get_by_label("Is it about one of these? (optional)").select_option(label="None of them")
+        docs.locator("input[type=file]").first.set_input_files(self.file("marks.md", TRANSCRIPT))
+        marks = docs.locator("li.rec-source", has_text="Transcript of study")
+        marks.get_by_role("button", name="Mark it as a transcript").click()
+        p.shows(marks.get_by_text("Transcript", exact=True), "the new kind")
+        self.clean(p)
 
     def test_an_old_link_to_the_files_tab_opens_documents(self) -> None:
         p = self.page("record-files")

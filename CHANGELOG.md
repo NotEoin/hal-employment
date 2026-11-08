@@ -27,6 +27,11 @@ What changed in each version, in plain words.
   mention shows "from your CV only".
 - **Cover letters and personal statements are kept as samples of how you write.** Hal reads them and lists
   them under **Your CVs**, but takes no facts from them.
+- **Transcripts, certificates and references on Documents.** A transcript sets your course's modules, marks
+  and grade, ahead of what any CV says. A certificate gets its own card with who issued it and when. A
+  reference is kept on the job it is about, with the referee's words marked as theirs, not yours. Under
+  **Is it about one of these?** you can say which course, job or certificate a document is for. When a file
+  looks like another kind ("This looks like a transcript"), Hal suggests it, and you decide.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

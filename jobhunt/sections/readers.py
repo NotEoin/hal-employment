@@ -46,11 +46,15 @@ class Quote:
 
 @dataclass(frozen=True)
 class Fact:
-    """One fact for the profile: a kind of `profile.store.KINDS`, its fields, and the quote it rests on."""
+    """One fact for the profile: a kind of `profile.store.KINDS`, its fields, and the quote it rests on.
+
+    `role` is whose words the quote is (`ingest.roles`), "" for the section's own: a referee's words about the
+    person are `others`, never the person's own claims."""
 
     kind: str
     fields: dict
     quote: Quote
+    role: str = ""
 
 
 @dataclass(frozen=True)

@@ -1232,6 +1232,16 @@ people). Readers only take facts out of a source, within that frame.
   and give no facts. `letters.voice_samples(con, n)` returns the words of the `n` newest letters that were
   read (by their own date, then when added), from the kept files rather than the notes; no writer reads them
   yet.
+- `document` (`sections/documents.py`, in place of the generic reader for the Documents section) reads by
+  the kind the person chose, all by rules: a transcript gives one education fact (qualification, subject,
+  institution, grade, period or award date, and `modules_in`: table rows by their mark column, or lines with
+  a module code and a mark) at the transcript's rank; a certificate gives a certificate fact (title, issuer,
+  date, grade); a reference about a job card gives that job's fact quoting the referee's sentence with
+  `Fact.role = others`; anything else keeps its text, title and date. The card a document names fills the
+  identifying fields it leaves out, so the fact lands there; with none named, a transcript joins the course
+  at its institution (`merge.same_item`). Documents may name an education, job or certificate card
+  (`Section.targets`, checked by `store.target_card`). `wrong_place.suggest_kind` suggests a transcript,
+  certificate or reference kind, kept as `suggestion = "kind:<id>"` and shown as `suggestion_kind`.
 
 ## Profile (`jobhunt/profile/`)
 

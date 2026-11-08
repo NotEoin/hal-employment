@@ -6,7 +6,9 @@
    choices: "Showcase" (coursework; the app's word for a star, as "STAR" names a way to tell examples),
    "Make this my current CV" (the newest-dated CV is current until the person picks another; the others show
    "Older CV, fills gaps"), "Read again", "Remove", and a hint to move one
-   that looks like it belongs elsewhere (Hal never moves it on its own). Reading runs as the
+   that looks like it belongs elsewhere, or (in Documents) looks like another kind of document (Hal never
+   moves or changes it on its own). Documents may name the card they are about: a course, a job or a
+   certificate. Reading runs as the
    `record.sources` action; its events and `profile` events reload the lists. A kind of document whose reader
    is still to come can still be uploaded: Hal keeps the file and reads it once it can. A link, folder or
    account whose reader is still to come is shown, but switched off as "coming soon". */
@@ -83,7 +85,10 @@ function SourceRow({ s }) {
       ${s.error && html`<p class="small sub rec-line">${s.error}</p>`}
       ${s.suggestion && html`<${Note} tone="info">This looks like it belongs in ${s.suggestion_label}.
         <button type="button" class="btn small" onClick=${() => act(() => put(path, { section: s.suggestion }),
-          "Moved to " + s.suggestion_label + ". Hal is reading it again.")}>Move it to ${s.suggestion_label}</button><//>`}</div>
+          "Moved to " + s.suggestion_label + ". Hal is reading it again.")}>Move it to ${s.suggestion_label}</button><//>`}
+      ${s.suggestion_kind && html`<${Note} tone="info">This looks like a ${s.suggestion_kind_label.toLowerCase()}.
+        <button type="button" class="btn small" onClick=${() => act(() => put(path, { doc_kind: s.suggestion_kind }),
+          "Marked as a " + s.suggestion_kind_label.toLowerCase() + ". Hal is reading it again.")}>Mark it as a ${s.suggestion_kind_label.toLowerCase()}</button><//>`}</div>
     <div class="row wrap rec-acts">
       ${s.can_star && html`<button type="button" class="btn small" aria-pressed=${s.starred ? "true" : "false"}
         aria-label=${(s.starred ? "Take out of your showcase: " : "Showcase: ") + s.title}
@@ -138,12 +143,30 @@ function LinkBox({ uid, section, kind, target, label, hint }) {
     <button type="submit" class="btn small" disabled=${busy}>Add</button></form>`;
 }
 
+// The cards a document may be about, in the order the page offers them, with the words for each kind.
+const CARD_KINDS = [["education", "Education"], ["job", "Work"], ["certificate", "Certificates"]];
+
+/** "Is it about one of these?": the cards of `kinds` a document may name, or none. */
+function CardPick({ uid, kinds, value, onChange }) {
+  const path = kind => (kinds.includes(kind) ? "/profile/" + kind : null);
+  const lists = [useApi(path("education")).data, useApi(path("job")).data, useApi(path("certificate")).data];
+  return html`<div class="rec-field"><label class="lab" for=${uid}>Is it about one of these? (optional)</label>
+    <select class="input" id=${uid} value=${value == null ? "" : String(value)}
+      onChange=${e => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <option value="">None of them</option>
+      ${CARD_KINDS.map(([kind, words], i) => lists[i] && lists[i].items.length > 0 && html`<optgroup label=${words}>
+        ${lists[i].items.filter(it => it.state !== "hidden").map(it => html`<option value=${String(it.id)}>${it.title}</option>`)}</optgroup>`)}
+    </select></div>`;
+}
+
 /** The panel of a section (or of a few that share one, as CVs and letters do): what is it, add it, and the list.
 
-    `parts` lists [section id, kinds to offer or null for all]; `target` is the card the sources belong to. */
-export function SourcesPanel({ uid, heading, hint, parts, target, empty, level = "h2" }) {
+    `parts` lists [section id, kinds to offer or null for all]; `target` is the card the sources belong to;
+    `cards` lists the kinds of card the person may say a document is about (Documents). */
+export function SourcesPanel({ uid, heading, hint, parts, target, empty, cards, level = "h2" }) {
   const sections = useSections();
   const [choice, setChoice] = useState(0);
+  const [about, setAbout] = useState(null);
   if (!sections) return null;
   const options = parts.flatMap(([id, kinds]) => {
     const s = sections[id];
@@ -159,11 +182,12 @@ export function SourcesPanel({ uid, heading, hint, parts, target, empty, level =
       <select class="input" id=${uid + "-kind"} value=${String(Math.min(choice, options.length - 1))}
         onChange=${e => setChoice(Number(e.target.value))}>
         ${options.map((o, i) => html`<option value=${String(i)}>${o.kind.label}</option>`)}</select></div>`}
+    ${cards && html`<${CardPick} uid=${uid + "-about"} kinds=${cards} value=${about} onChange=${setAbout} />`}
     <div class="row wrap">
       ${UPLOADS.has(chosen.kind.held) && html`<${Upload} uid=${uid + "-files"} section=${chosen.section.id} kind=${chosen.kind.id}
-        target=${target} words="Add files" />`}
+        target=${target ?? about} words="Add files" />`}
       ${chosen.kind.held === "files" && html`<${Upload} uid=${uid + "-folder"} section=${chosen.section.id} kind=${chosen.kind.id}
-        target=${target} folder=${true} words="Add a folder" />`}</div>
+        target=${target ?? about} folder=${true} words="Add a folder" />`}</div>
     ${!chosen.kind.ready && html`<p class="small sub rec-line">Hal keeps these now and reads them once it can.</p>`}
     ${parts.map(([id]) => html`<${SourceList} key=${id} section=${id} target=${target} empty=${empty} />`)}
   </section>`;

@@ -25,7 +25,7 @@ from jobhunt import db
 from jobhunt.core import paths
 from jobhunt.profile import cvs
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import registry
+from jobhunt.sections import registry, wrong_place
 
 STATES = ("new", "reading", "read", "failed", "kept_out")
 STATE_WORDS = {"new": "Waiting to be read", "reading": "Reading", "read": "Read", "failed": "Could not be read",
@@ -96,7 +96,9 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
     rels = file_rels(con, r["id"])
     name = rels[0] if len(rels) == 1 else (r["locator"] or (rels[0].split("/")[0] if rels else ""))
     kind = registry.DOC_KINDS.get(r["doc_kind"])
-    suggestion = registry.SECTIONS.get(r["suggestion"])
+    hint = r["suggestion"].removeprefix(wrong_place.KIND_PREFIX) if r["suggestion"].startswith(
+        wrong_place.KIND_PREFIX) else ""
+    suggestion = None if hint else registry.SECTIONS.get(r["suggestion"])
     return {"id": r["id"], "section": r["section"], "section_label": section.label, "target_id": r["target_id"],
             "held": r["kind"], "doc_kind": r["doc_kind"], "doc_kind_label": kind.label if kind else r["doc_kind"],
             "title": r["title"] or name, "name": name, "files": len(rels), "locator": r["locator"],
@@ -106,8 +108,9 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
             "dated": r["dated"], "note_rel": r["note_rel"],
             "added": r["added"], "last_checked": r["last_checked"], "last_changed": r["last_changed"],
             "revision": r["revision"], "state": r["state"], "state_words": STATE_WORDS.get(r["state"], r["state"]),
-            "error": r["error"], "suggestion": r["suggestion"],
-            "suggestion_label": suggestion.label if suggestion else ""}
+            "error": r["error"], "suggestion": "" if hint else r["suggestion"],
+            "suggestion_label": suggestion.label if suggestion else "", "suggestion_kind": hint,
+            "suggestion_kind_label": registry.DOC_KINDS[hint].label if hint in registry.DOC_KINDS else ""}
 
 
 def listing(con: sqlite3.Connection, section: str | None = None, target: int | None = None) -> list[dict]:
@@ -138,7 +141,7 @@ def target_card(con: sqlite3.Connection, section: registry.Section, target_id) -
         if section.target_required:
             raise ValueError(f"Choose which {section.target} {section.label.lower()} belongs to.")
         return None
-    if not section.target:
+    if not section.target and not section.targets:
         raise ValueError(f"{section.label} do not belong to a card.")
     try:
         key = int(target_id)
@@ -147,8 +150,9 @@ def target_card(con: sqlite3.Connection, section: registry.Section, target_id) -
     found = con.execute("SELECT kind FROM profile_items WHERE id = ?", (key,)).fetchone()
     if found is None:
         raise LookupError("That card is not in your profile.")
-    if found["kind"] != section.target:
-        raise ValueError(f"{section.label} belong to a {section.target}, not a {found['kind']}.")
+    if not section.belongs_to(found["kind"]):
+        kinds = " or ".join(k for k in (section.target, *section.targets) if k)
+        raise ValueError(f"{section.label} belong to a {kinds}, not a {found['kind']}.")
     return key
 
 

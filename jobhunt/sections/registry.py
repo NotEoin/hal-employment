@@ -17,6 +17,8 @@ Design decisions, each with its reason:
   changing any section.
 - A section names a reader per document kind (`readers`, with `reader` for the rest); `sections.readers` holds
   them, and a reader not written yet raises `readers.NotReadYet`, naming the phase that brings it.
+- A section's sources may also belong to a card of another kind (`targets`), never required: a transcript
+  under Documents may name the education card it is for, a reference the job.
 - `folder` is where the section's notes go inside `Sources/` of the record; `{target}` is the title of the card
   a source belongs to, so the record's folders mirror the sections (`Sources/Education/<BSc ...>/Coursework`).
 """
@@ -97,6 +99,7 @@ class Section:
     readers: dict[str, str] = field(default_factory=dict)    # a reader per document kind, where it differs
     target: str = ""                     # the profile kind of the card a source belongs to, "" for none
     target_required: bool = False
+    targets: tuple[str, ...] = ()        # other kinds of card a source may belong to, never required
     hint: str = ""                       # one plain line for the page
 
     def rank(self, field_name: str) -> int:
@@ -106,6 +109,10 @@ class Section:
     def accepts(self, doc_kind: str) -> bool:
         """True when `doc_kind` is one of this section's kinds of document."""
         return doc_kind in self.doc_kinds
+
+    def belongs_to(self, kind: str) -> bool:
+        """True when a source of this section may belong to a card of profile kind `kind`."""
+        return bool(kind) and (kind == self.target or kind in self.targets)
 
     def reader_of(self, doc_kind: str) -> str:
         """The name of the reader for a source of `doc_kind` in this section."""
@@ -146,7 +153,8 @@ SECTIONS: dict[str, Section] = {s.id: s for s in (
             hint="Anything you made: code, designs, research, writing, events, campaigns."),
     Section("document", "Documents", "Documents",
             ("other", "certificate", "transcript", "reference", "contract", "report"), OFFICIAL,
-            ("certificate", "achievement"), {ALL_FIELDS: LETTER_RANK}, "document",
+            ("certificate", "achievement", "education", "job"), {ALL_FIELDS: LETTER_RANK}, "document",
+            targets=("education", "job", "certificate"),
             hint="Certificates, awards, references, checks and anything else that helps."),
 )}
 
@@ -183,8 +191,9 @@ def _check() -> None:
         for k in s.creates:
             if k not in store.KINDS:
                 raise ValueError(f"section {s.id}: no profile kind {k!r}")
-        if s.target and s.target not in store.KINDS:
-            raise ValueError(f"section {s.id}: no profile kind {s.target!r} to belong to")
+        for k in (s.target, *s.targets):
+            if k and k not in store.KINDS:
+                raise ValueError(f"section {s.id}: no profile kind {k!r} to belong to")
 
 
 _check()

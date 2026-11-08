@@ -74,6 +74,7 @@ function Group({ g }) {
 
 function DocumentsTab({ data }) {
   return html`<div class="stack"><${SourcesPanel} uid="rec-docs" heading="Add documents" parts=${[["document", null]]}
+      cards=${["education", "job", "certificate"]}
       hint="Certificates, awards, references, checks and anything else that helps. Choose what each one is."
       empty="Nothing added here yet." />
     ${data && data.exists && html`<div class="grid2"><section class="card"><h2 class="h2">What is in it</h2>

@@ -16,7 +16,8 @@ Design decisions, each with its reason:
   belongs to (`Sources/Education/BSc History/Coursework/`), so the record's folders mirror the sections. A
   source read again keeps its note's path while its folder stays the same, so links to it still work.
 - Every fact carries the section's role and the kind of document's type (which sets its rank), its source's id,
-  and the place and line it came from; a fact of a kind the section may not create is left out.
+  and the place and line it came from; a fact of a kind the section may not create is left out. A reader may
+  give a fact another role (`Fact.role`): a referee's words are `others`, never the person's own claims.
 - The privacy check of the bulk read applies (`ingest.privacy.held_back`): a source that looks private gets no
   note and no facts until the person lets it in (`read(..., allow_private=True)`).
 - Reading or removing a CV may change which CV is current (`profile.cvs`), so every card the CVs give is
@@ -39,6 +40,7 @@ from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import cv as cv_reader  # importing it puts the cv reader in place (`readers.register`)
+from jobhunt.sections import documents as _documents  # noqa: F401 - puts the Documents reader in place
 from jobhunt.sections import letters as _letters  # noqa: F401 - puts the letter reader in place
 from jobhunt.sections import readers, registry, store, wrong_place
 
@@ -249,7 +251,7 @@ def _evidence(section: registry.Section, kind: registry.DocKind, source_id: int,
             continue
         out.append((fact.kind, fact.fields, {
             "source_rel": note_rel, "quote": fact.quote.quote, "field": fact.quote.field, "doc_type": kind.doc_type,
-            "verified": _found_in(fact.quote.quote, reading.text), "role": section.evidence_role,
+            "verified": _found_in(fact.quote.quote, reading.text), "role": fact.role or section.evidence_role,
             "source_id": source_id, "place": fact.quote.place, "line": fact.quote.line}))
     return out
 
@@ -312,7 +314,8 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
     note_rel = _write_note(r, section, kind, source, reading, name)
     facts = _evidence(section, kind, r["id"], note_rel, reading)
     swapped = profile_store.swap_source(con, r["id"], facts)
-    suggestion = wrong_place.suggest(section.id, name, reading.text)
+    suggestion = wrong_place.suggest(section.id, name, reading.text) or \
+        wrong_place.suggest_kind(section.id, r["doc_kind"], name, reading.text)
     now = db.now()
     with con:
         con.execute("""UPDATE record_sources SET title = CASE WHEN title = '' THEN ? ELSE title END, dated = ?,
