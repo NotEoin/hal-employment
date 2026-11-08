@@ -601,7 +601,10 @@ runs: tests use `tests/support/fake_claude/`.
   `owners.Files.owners`: a repository or project file whose name is a visible card's name, link end or merged
   card's name, case and separators aside, which gives every other card no tool, quote, file, alias or
   passage context, `profile.writing.elsewhere_only`; the record keeps the evidence as stored), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
-  ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). A card named only inside a longer
+  ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). In evidence words (a fit row, the
+  letter's Evidence line) a kind of project ("personal projects", `drafts.CONTEXT_PHRASE`) that does not fit a
+  named card's context (`drafts.PHRASE_FITS`) is taken out and each card's own context words follow its name
+  (`drafts.own_contexts`). A card named only inside a longer
   named card's name ("Quill" in "Quill Employment") is not named (`drafts.named_cards`). Both go into the one
   rewrite per draft that `pack.fix_claims` asks for, and what is left is listed.
 - Similar names (`profile.writing.similar`): project cards with the same first word of at least

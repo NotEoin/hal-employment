@@ -209,6 +209,9 @@ What changed in each version, in plain words.
   First-Class Honours: your facts gave nothing". Your degree is in the letter's opening and your CV, so a
   paragraph about it or a module that had nothing to say is no longer listed. A requirement to be in a
   town no longer shows as an eligibility warning when your settings say you are willing to move.
+- **The fit table says where each project was done.** It called a university team project a personal one
+  ("personal projects like ... and ..."). When a row's words do not fit one of the projects it names, each
+  project is now followed by where it was done, as your record says.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that

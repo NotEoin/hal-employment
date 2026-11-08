@@ -18,6 +18,9 @@ Design decisions, each with its reason:
   on purpose ("module" only as course work, "personal" only as personal work or project), as "a Lua module"
   or "personal data" say nothing about where the work was done. A sentence that also says words agreeing
   with the card ("alongside my degree, in my own time") is left alone.
+- A fit row says each project's own kind (`own_contexts`): "personal projects like Hal and CramBerry" called a
+  degree team project personal (2026-11-08), so a kind that does not fit a named card is taken out and each
+  card's own context words follow its name.
 - A sentence names a project card by its name, by another name the card carries (`aliases`: the names of
   hidden cards resting on the same file, and its repository's or folder's name), or by a distinctive word
   of its name used as a name ("LIDAR" in "the LIDAR Autonavigation project" for "LIDAR Autonomous
@@ -240,8 +243,35 @@ def evidence_checked(text: str, cards: list[dict], known: list[str], facts: str 
             part = without_tools(part, list(dict.fromkeys(wrong)))
             if not any(names_tool(part, t) for t in known):
                 continue
-        parts.append(tagged(part, projects))
+        parts.append(tagged(own_contexts(part, named), projects))
     return " ".join(parts), dropped
+
+
+# "personal projects", "university project": a kind of project said of the cards a fit row names, with the
+# contexts (`stage.CONTEXTS`) each word fits.
+CONTEXT_PHRASE = re.compile(r"\b(personal|side|hobby|university|uni|degree|coursework|academic|module|team|group)"
+                            r"\s+(projects?)\b", re.I)
+PHRASE_FITS = {"personal": {stage.PERSONAL}, "side": {stage.PERSONAL}, "hobby": {stage.PERSONAL},
+               "university": {stage.DEGREE, stage.TEAM}, "uni": {stage.DEGREE, stage.TEAM},
+               "degree": {stage.DEGREE, stage.TEAM}, "coursework": {stage.DEGREE, stage.TEAM},
+               "academic": {stage.DEGREE, stage.TEAM}, "module": {stage.DEGREE, stage.TEAM},
+               "team": {stage.TEAM, stage.WORK}, "group": {stage.TEAM, stage.WORK}}
+
+
+def own_contexts(text: str, named: list[dict]) -> str:
+    """Evidence words whose kind of project ("personal projects like Quill and Ferry planner") does not fit a
+    named card's own context, with the kind taken out and each card's own context words after its name
+    ("projects like Quill (personal project) and Ferry planner (university team project)"); `text` as it is
+    when every named card fits. A fit row called a degree team project personal (2026-11-08)."""
+    found = list(CONTEXT_PHRASE.finditer(text or ""))
+    known = [c for c in named if c.get("context") in stage.CONTEXT_WORDS]
+    if not found or not any(c["context"] not in PHRASE_FITS[m.group(1).lower()] for m in found for c in known):
+        return text
+    out = CONTEXT_PHRASE.sub(lambda m: m.group(2), text)
+    for card in known:
+        out = re.sub(rf"(?<![\w-]){re.escape(card['name'])}(?![\w-])(?!\s*\()",
+                     lambda m, c=card: f"{m.group(0)} ({stage.CONTEXT_WORDS[c['context']]})", out, count=1, flags=re.I)
+    return out
 
 
 def without_tools(text: str, tools: list[str]) -> str:

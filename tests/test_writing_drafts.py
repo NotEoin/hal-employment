@@ -134,6 +134,16 @@ class SimilarNames(unittest.TestCase):
 
 
 class Contexts(unittest.TestCase):
+    def test_a_fit_row_says_each_projects_own_kind(self):
+        # "personal projects like Hal and CramBerry" called a degree team project personal (2026-11-08)
+        said, _ = drafts.evidence_checked("Built personal projects like Tide gauge and Ferry planner.", PLACED, [])
+        self.assertEqual(said, "Built projects like Tide gauge (personal project) and Ferry planner (university "
+                               "team project).")
+        self.assertEqual(drafts.evidence_checked("Built personal projects like Tide gauge.", PLACED, [])[0],
+                         "Built personal projects like Tide gauge.", "a kind that fits is left as it is")
+        self.assertEqual(drafts.evidence_checked("A university project, Harbour survey.", PLACED, [])[0],
+                         "A university project, Harbour survey.")
+
     def test_a_personal_project_placed_in_a_degree_is_found(self):
         # "My first-class Computer Science degree includes building a local RAG assistant", a personal project
         # (2026-11-07)
