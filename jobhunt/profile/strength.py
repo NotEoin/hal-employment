@@ -3,7 +3,8 @@
 Each piece of a skill's evidence has a strength (`of_evidence`), and a skill the strongest of its evidence's
 (`of_skill`). In order, strongest first, as the sections plan ranks a skill's sources (2026-11-09):
 
-- `shown`: the person's own work outside a course (a repository, a project's files);
+- `shown`: the person's own work outside a course (any source on Projects: code, a page, files or a project added
+  by hand; or a repository or project file of the bulk read);
 - `coursework`: a piece of their coursework (the `coursework` section, or a coursework, dissertation, essay or
   report file of their own);
 - `cv`: one of their CVs;
@@ -29,7 +30,7 @@ from jobhunt.profile import merge
 
 SHOWN, COURSEWORK, ON_CV, STUDIED = "shown", "coursework", "cv", "studied"
 ORDER = (SHOWN, COURSEWORK, ON_CV, STUDIED)        # strongest first
-SECTION_STRENGTH = {"coursework": COURSEWORK, "lecture": STUDIED}
+SECTION_STRENGTH = {"project": SHOWN, "coursework": COURSEWORK, "lecture": STUDIED}
 OWN, TAUGHT = "own", "taught"                      # evidence roles (`ingest.roles`)
 OWN_WORK_TYPES = ("repository", "project")
 COURSEWORK_TYPES = ("coursework", "dissertation", "essay", "report")

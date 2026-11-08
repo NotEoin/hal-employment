@@ -1307,8 +1307,8 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   a large file keeps its first part and says the rest was left out. The topics come from the
   `lecture_topics` prompt, each with a quote found in the notes. The notes and topics are cached in
   `details` by hash, and Hal's suggested module is `details["module"]`, as for coursework.
-- Skill strength (`profile/strength.py`): each piece of a skill's evidence is `shown` (own repository or
-  project files), `coursework` (the coursework section, or an own coursework, dissertation, essay or report
+- Skill strength (`profile/strength.py`): each piece of a skill's evidence is `shown` (any
+  Projects source, or own repository or project files), `coursework` (the coursework section, or an own coursework, dissertation, essay or report
   file), `cv`, `studied` (the lecture section, or role `taught`) or "" (`of_evidence`), worked out from its
   source's section through `source_id`, never stored, so choosing a module later changes the words at once.
   `store.evidence_of` gives a skill's evidence `strength` and `strength_words` ("Done in your coursework:

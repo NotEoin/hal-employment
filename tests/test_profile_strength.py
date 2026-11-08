@@ -87,6 +87,14 @@ class Strength(unittest.TestCase):
                                "Cataloguing": "cv"})
         self.assertTrue(cv_skill)
 
+    def test_a_skill_from_any_source_on_projects_is_shown_in_own_work(self):
+        # a project added by hand, a web page or a portfolio piece has document types other than a repository's,
+        # and their skills had no strength at all (2026-11-08)
+        for doc_type in ("by_you", "writing", "project", "repository"):
+            with self.subTest(doc_type):
+                self.assertEqual(strength.of_evidence({"section": "project", "role": "own", "doc_type": doc_type}),
+                                 strength.SHOWN)
+
     def test_the_profile_block_says_how_each_skill_may_be_told_and_names_the_studied_ones(self):
         with home() as (con, _, _), fake_ai(REPLIES):
             ba = graduates.education(con, "ba")
