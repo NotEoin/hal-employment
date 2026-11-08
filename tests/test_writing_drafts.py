@@ -192,6 +192,41 @@ BRIEF = "Brightloan is a made-up consumer lender that uses open banking data to 
 NAMES = ("Graduate Credit Analyst", "Brightloan")
 
 
+TRADING = ("Graduate Software Engineer at Made-up Markets. You will build low-latency systems for our traders and "
+           "help clients bring their ideas to life. We care about the reliability of financial calculations and "
+           "are building AI agents for customer support.")
+TRADING_NAMES = ("Graduate Software Engineer", "Made-up Markets")
+
+
+class Lifted(unittest.TestCase):
+    """Advert phrases were put into the person's own claims in most graded packs (2026-11-08)."""
+
+    def test_an_advert_phrase_in_a_sentence_about_your_work_is_found(self):
+        for said, phrase in (
+                ("Netferret taught me to build low-latency systems in C++.", "build low latency systems"),
+                ("In my job at a print shop I helped clients bring their ideas to life.",
+                 "clients bring their ideas to life"),
+                ("My tests checked the reliability of financial calculations.",
+                 "the reliability of financial calculations"),
+                ("Parrot is one of my AI agents for customer support.", "ai agents for customer support")):
+            with self.subTest(said):
+                self.assertEqual(drafts.lifted(said, TRADING, "", TRADING_NAMES), phrase)
+
+    def test_a_phrase_your_facts_hold_or_a_short_shared_run_is_yours(self):
+        own = "Netferret builds low-latency packet systems in C++"
+        self.assertEqual(drafts.lifted("Netferret taught me to build low-latency systems in C++.", TRADING, "",
+                                       TRADING_NAMES, own), "")
+        self.assertEqual(drafts.lifted("I care about the tests I write.", TRADING, "", TRADING_NAMES), "")
+
+    def test_a_sentence_about_the_employer_may_use_the_adverts_words(self):
+        self.assertTrue(drafts.about_employer("I would like to help your traders with low-latency systems.",
+                                              TRADING_NAMES))
+        self.assertTrue(drafts.about_employer("Made-up Markets builds AI agents for customer support.",
+                                              TRADING_NAMES))
+        self.assertFalse(drafts.about_employer("Parrot is one of my AI agents for customer support.",
+                                               TRADING_NAMES))
+
+
 class Echoes(unittest.TestCase):
     def test_a_sentence_that_restates_the_advert_or_brief_echoes(self):
         # "drawn to the challenge of maintaining low default rates", "the role offers full in-house training"

@@ -20,7 +20,8 @@ Design decisions, each with its reason:
   hold; a plan's tool said to be used (`writing.planned`); words placing the work in a degree or in the
   person's own time against its context; "I built" of a team's work without the person's part; a course that
   has ended spoken of as running (`stage.ended_course`); the wording `writing.plain` finds, the stock links of
-  `plain.STOCK` among them; a sentence restating the advert (`drafts.echoes`) or one already said in the
+  `plain.STOCK` among them; a sentence restating the advert (`drafts.echoes`), one about the person's work
+  taking an advert phrase as its fact (`drafts.lifted`, `LIFTED_SAID`), or one already said in the
   paragraph; the person's part used as a label ("As the owner, I built ...", seen in the prototype); and
   four or more tools in one sentence, a list rather than a story. As a paragraph holds one piece of work, a
   tool or the name of another card in it is a crossed project, named with the other card's name.
@@ -99,6 +100,8 @@ PLANNED_SAID = "{tool} was only planned for {card}; say it was planned, or leave
 ALONE = "says you did {card} alone; it was a team's work{part}"
 CONTEXT_SAID = "calls {card} {wrong}; its facts say {said}"
 ECHO_SAID = "restates the advert; say it in your own words"
+LIFTED_SAID = ('takes "{phrase}" from the advert as a fact of your work; say what you did in your facts\' words, '
+               "or keep the advert's words for a sentence about the employer")
 REPEAT_SAID = "says again what an earlier sentence of the paragraph says"
 LABEL_SAID = 'uses your part as a label ("{label}"); say what you did'
 LIST_SAID = "lists tools rather than saying what you did with them"
@@ -406,6 +409,10 @@ def sentence_problems(sentence: str, story: Story, scope: Scope, before: list[st
     out += plain.problems(sentence, list(scope.person), list(scope.labels))
     if scope.advert and drafts.echoes(sentence, scope.advert, scope.brief, scope.names):
         out.append(ECHO_SAID)
+    phrase = "" if not scope.advert or drafts.about_employer(sentence, scope.names) else \
+        drafts.lifted(sentence, scope.advert, scope.brief, scope.names, own)
+    if phrase:
+        out.append(LIFTED_SAID.format(phrase=phrase))
     if any(repeats.same(sentence, b) for b in before):
         out.append(REPEAT_SAID)
     if sum(drafts.names_tool(sentence, t) for t in dict.fromkeys(scope.known)) >= LIST_TOOLS:

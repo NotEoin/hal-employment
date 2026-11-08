@@ -670,7 +670,14 @@ runs: tests use `tests/support/fake_claude/`.
   answers whose question asks why this job or employer (`why_question`). `pack.fix_echoes` rewrites the
   letter, or all the answers in one call, once with the instruction to tie one specific thing of the
   applicant's to one specific thing about the employer, before the claim check; a sentence still echoing
-  is listed as `pack.ECHO_FLAG`. The letter and answers prompts ask for this up front.
+  is listed as `pack.ECHO_FLAG`. The letter and answers prompts ask for this up front. Every paragraph a
+  story tells (letter, answer, message) is also checked with `drafts.lifted(sentence, advert, brief, names,
+  own)`: a run of `ECHO_RUN` (three) or more words found in the advert or the brief holding at least
+  `drafts.LIFT_CONTENT` (2) own words, not all of them (by their first `drafts.LIFT_STEM` (5) letters) in the
+  story's facts, fails a sentence about the person's work (`paragraphs.LIFTED_SAID`, drafted again once).
+  A sentence about the employer or the role (`drafts.about_employer`: "you", "your", "this role", the
+  employer's name or the job title) may use them. "low-latency systems" and "AI agents for customer
+  support" became the person's claims in sentences mostly their own (2026-11-08).
 - The letter's reason for the employer (`writing/motive.py`, prompt `motive_pair`): with a plan,
   `pack.write_letter` asks once (`motive.make`) for one fact of the advert or the company brief, one plan
   item and a one-line reason. `motive.checked` keeps the pairing only when the fact is in the advert or the

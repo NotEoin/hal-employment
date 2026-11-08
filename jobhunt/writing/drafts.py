@@ -38,6 +38,13 @@ Design decisions, each with its reason:
   words rarely match by chance, and a sentence half made of them restates rather than gives a reason. The
   words of the job title and the employer's name (`names`) never count, so a sentence that only names the
   role or the company is not an echo, and neither is one with fewer than `ECHO_MIN_WORDS` other words.
+- An advert phrase is never a fact of the person's work (`lifted`, 2026-11-08): "low-latency systems", "help
+  clients bring their ideas to life", "reliability of financial calculations" and "AI agents for customer
+  support" were the advert's words put into claims about the person, in sentences mostly their own, so
+  `echoes` let them through. A run of `ECHO_RUN` or more words found in the advert or the brief, with at
+  least `LIFT_CONTENT` own words, fails a sentence about the person's work, unless the person's facts hold
+  every one of those words. A sentence about the employer or the role (`about_employer`: "you", "your", "this
+  role", the employer's name or the job title) may use the advert's words.
 """
 from __future__ import annotations
 
@@ -354,6 +361,45 @@ def echoes(sentence: str, advert: str, brief: str = "", names: tuple[str, ...] =
     own = [c for w, c in zip(words, covered, strict=True) if w not in LITTLE_WORDS and w not in named]
     echoed = sum(own)
     return echoed >= ECHO_MIN_WORDS and echoed >= ECHO_SHARE * len(own)
+
+
+LIFT_CONTENT = 2           # own words an advert phrase of `ECHO_RUN` or more words needs to be a claim of its own
+LIFT_STEM = 5              # letters compared when the person's facts excuse a phrase ("builds" meets "build")
+# A sentence about the employer: it addresses them, or speaks of the role itself.
+ABOUT_EMPLOYER = re.compile(r"\b(?:you|your|yours)\b|\b(?:this|the) (?:role|job|position|post|vacancy)\b", re.I)
+
+
+def about_employer(sentence: str, names: tuple[str, ...] = ()) -> bool:
+    """True when a sentence is about the employer or the role (`ABOUT_EMPLOYER`, or it names the job title or
+    the employer, `names`), not about the person's own work."""
+    return bool(ABOUT_EMPLOYER.search(sentence or "")) or any(
+        n.strip() and re.search(rf"(?<!\w){re.escape(n.strip())}(?!\w)", sentence or "", re.I) for n in names)
+
+
+def lifted(sentence: str, advert: str, brief: str = "", names: tuple[str, ...] = (), own: str = "") -> str:
+    """The first phrase of at least `ECHO_RUN` words a sentence takes from the advert or the brief that holds at
+    least `LIFT_CONTENT` own words (little words and `names` aside) the person's facts (`own`) do not all hold
+    (by their first `LIFT_STEM` letters); "" when there is none (see the module notes)."""
+    words = _tokens(sentence)
+    theirs = [*_tokens(advert), "|", *_tokens(brief)]
+    runs = {tuple(theirs[i:i + ECHO_RUN]) for i in range(len(theirs) - ECHO_RUN + 1)}
+    covered = [False] * len(words)
+    for i in range(len(words) - ECHO_RUN + 1):
+        if tuple(words[i:i + ECHO_RUN]) in runs:
+            covered[i:i + ECHO_RUN] = [True] * ECHO_RUN
+    named = {w for n in names for w in _tokens(n)}
+    held = {w[:LIFT_STEM] for w in _tokens(own)}
+    k = 0
+    while k < len(words):
+        if not covered[k]:
+            k += 1
+            continue
+        end = next((j for j in range(k, len(words)) if not covered[j]), len(words))
+        content = [w for w in words[k:end] if w not in LITTLE_WORDS and w not in named]
+        if len(content) >= LIFT_CONTENT and not all(w[:LIFT_STEM] in held for w in content):
+            return " ".join(words[k:end])
+        k = end
+    return ""
 
 
 def first_paragraph(text: str) -> str:

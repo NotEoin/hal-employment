@@ -272,6 +272,28 @@ class Reframed(unittest.TestCase):
         self.assertEqual(done.text, GOOD)
 
 
+class AdvertPhrases(unittest.TestCase):
+    """"low-latency systems" and "AI agents for customer support" went from the advert into the person's claims
+    (2026-11-08)."""
+
+    SCOPE = replace(SCOPE, advert="You will build low-latency systems and AI agents for customer support.",
+                    allowed="You will build low-latency systems and AI agents for customer support.")
+
+    def reasons(self, sentence: str, shape: paragraphs.Shape) -> list[str]:
+        return [p.reason for p in paragraphs.problems(sentence, QUILL_STORY, self.SCOPE, shape)]
+
+    def test_an_advert_phrase_fails_a_sentence_about_your_work_in_every_shape(self):
+        claim = "Quill answers questions over my notes offline, like AI agents for customer support."
+        lifted = paragraphs.LIFTED_SAID.format(phrase="ai agents for customer support")
+        for shape in (paragraphs.LETTER, paragraphs.answer("Tell us about a project."), paragraphs.message("Hi.")):
+            self.assertIn(lifted, self.reasons(claim, shape), shape.words[:40])
+
+    def test_the_adverts_words_are_fine_about_the_employer(self):
+        said = ("Quill answers questions over my notes offline. How do your AI agents for customer support find "
+                "their answers?")
+        self.assertFalse([r for r in self.reasons(said, paragraphs.message("Hi.")) if "from the advert" in r])
+
+
 class Retold(unittest.TestCase):
     """The opening named the pairing's project with its facts, then a paragraph told them again (2026-11-08)."""
 
