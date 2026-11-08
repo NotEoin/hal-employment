@@ -15,9 +15,13 @@ Design decisions, each with its reason:
   current; a project's star is on its card (`profile.store.set_star`). The `current` column keeps only the
   person's choice; the current CV shown is `profile.cvs.current_source` (their choice, else the newest-dated),
   and choosing another works out again every card the CVs give.
+- Coursework and lecture material can be for one module of their education card (`MODULE_SECTIONS`,
+  migration 0029). `module` is only the person's choice, NULL until they make one and '' for "not for one
+  module"; Hal's suggestion is the reader's (`details["module"]`), so a read again never changes the choice.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -32,6 +36,7 @@ STATE_WORDS = {"new": "Waiting to be read", "reading": "Reading", "read": "Read"
                "kept_out": "Kept out: it looks private"}
 STAR_SECTIONS = ("coursework",)
 CURRENT_SECTIONS = ("cv",)
+MODULE_SECTIONS = ("coursework", "lecture")
 TITLE_MAX = 200            # a title is a line; a longer one is a pasted paragraph
 FILES_FOLDER = "record-sources"
 
@@ -90,6 +95,35 @@ def by_locator(con: sqlite3.Connection, held: str, locator: str) -> sqlite3.Row 
                        (held, locator)).fetchone()
 
 
+def details(r: sqlite3.Row) -> dict:
+    """What the last read found about a source (`readers.Reading.details`); {} before its first read."""
+    try:
+        found = json.loads(r["details"] or "{}")
+    except ValueError:
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def module_choices(con: sqlite3.Connection, target_id: int | None) -> list[str]:
+    """The names of the modules of an education card, in its order; [] for none or no card."""
+    if target_id is None:
+        return []
+    found = con.execute("SELECT kind, fields FROM profile_items WHERE id = ?", (target_id,)).fetchone()
+    if found is None or found["kind"] != "education":
+        return []
+    return [m["name"] for m in json.loads(found["fields"]).get("modules") or [] if m.get("name")]
+
+
+def _module_shape(con: sqlite3.Connection, r: sqlite3.Row, found: dict) -> dict:
+    """A source's module as the page shows it: the person's choice, Hal's suggestion, and the card's modules."""
+    if r["section"] not in MODULE_SECTIONS:
+        return {"can_have_module": False, "module": None, "module_suggested": "", "module_choices": []}
+    choices = module_choices(con, r["target_id"])
+    suggested = str(found.get("module") or "")
+    return {"can_have_module": True, "module": r["module"],
+            "module_suggested": suggested if suggested in choices else "", "module_choices": choices}
+
+
 def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
     """A source as the page shows it."""
     section = registry.get(r["section"])
@@ -99,6 +133,7 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
     hint = r["suggestion"].removeprefix(wrong_place.KIND_PREFIX) if r["suggestion"].startswith(
         wrong_place.KIND_PREFIX) else ""
     suggestion = None if hint else registry.SECTIONS.get(r["suggestion"])
+    found = details(r)
     return {"id": r["id"], "section": r["section"], "section_label": section.label, "target_id": r["target_id"],
             "held": r["kind"], "doc_kind": r["doc_kind"], "doc_kind_label": kind.label if kind else r["doc_kind"],
             "title": r["title"] or name, "name": name, "files": len(rels), "locator": r["locator"],
@@ -110,7 +145,9 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
             "revision": r["revision"], "state": r["state"], "state_words": STATE_WORDS.get(r["state"], r["state"]),
             "error": r["error"], "suggestion": "" if hint else r["suggestion"],
             "suggestion_label": suggestion.label if suggestion else "", "suggestion_kind": hint,
-            "suggestion_kind_label": registry.DOC_KINDS[hint].label if hint in registry.DOC_KINDS else ""}
+            "suggestion_kind_label": registry.DOC_KINDS[hint].label if hint in registry.DOC_KINDS else "",
+            "mark": str(found.get("mark") or ""), "summary": str(found.get("summary") or ""),
+            **_module_shape(con, r, found)}
 
 
 def listing(con: sqlite3.Connection, section: str | None = None, target: int | None = None) -> list[dict]:
@@ -157,14 +194,15 @@ def target_card(con: sqlite3.Connection, section: registry.Section, target_id) -
 
 
 def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
-    """Changes a source's title, kind of document, card, star, current mark or section; returns the source.
+    """Changes a source's title, kind of document, card, star, current mark, section or module; returns the
+    source.
 
     Moving it to another section takes that section's default kind of document unless one is given, and drops
     the suggestion. ValueError for a change that does not fit, LookupError for a source or card that is not
     there. The caller reads a moved source again, so its note and facts follow it.
     """
     r = row(con, source_id)
-    unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "current", "section"})
+    unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "current", "section", "module"})
     if unknown:
         raise ValueError(f"A source has no {', '.join(unknown)} to change.")
     section = registry.get(str(changes.get("section") or r["section"]))
@@ -187,6 +225,10 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
             if section.id not in allowed:
                 raise ValueError(f"{section.label} cannot be {'starred' if flag == 'starred' else 'marked current'}.")
             sets[flag] = int(changes[flag])
+    if "module" in changes:
+        sets["module"] = _module(con, section, sets.get("target_id", r["target_id"]), changes["module"])
+    elif sets.get("target_id", r["target_id"]) != r["target_id"]:    # another card, other modules: choose again
+        sets["module"] = None
     if moved:
         sets.update({"section": section.id, "suggestion": "", "starred": 0, "current": 0})
     with con:
@@ -198,6 +240,22 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
     if "current" in sets or (moved and r["section"] in CURRENT_SECTIONS):
         profile_store.refold_sources(con, [*cvs.cv_sources(con), r["id"]])
     return get(con, r["id"])
+
+
+def _module(con: sqlite3.Connection, section: registry.Section, target_id: int | None, module) -> str | None:
+    """The module the person chose, checked: one of the card's modules, "" for none, or None to choose again."""
+    if section.id not in MODULE_SECTIONS:
+        raise ValueError(f"{section.label} are not for a module.")
+    if module is None:
+        return None
+    if not isinstance(module, str):
+        raise ValueError("Choose a module by its name.")
+    name = " ".join(module.split())
+    choices = module_choices(con, target_id)
+    if name and name not in choices:
+        raise ValueError(f"{name} is not one of this course's modules. Choose one of: {', '.join(choices)}."
+                         if choices else "This course has no modules yet. Add its transcript under Official papers.")
+    return name
 
 
 def set_state(con: sqlite3.Connection, source_id: int, state: str, error: str = "") -> None:

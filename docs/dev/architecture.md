@@ -1189,8 +1189,11 @@ people). Readers only take facts out of a source, within that frame.
   `DocKind` has `id`, `label`, `doc_type` (what evidence carries, which sets its rank today) and `held`
   (upload, files, link, account, folder, manual).
 - `readers`: `Reader.read(Source) -> Reading`. A `Source` is `id, section, doc_kind, title, held, locator,
-  files (SourceFile rel, path), target` (the card as `profile.store.item`); a `Reading` is `title, date,
-  text, summary, facts`, each `Fact(kind, fields, Quote(field, quote, place, line))`. `document` keeps the
+  files (SourceFile rel, path), target, starred, module, details` (the card as `profile.store.item`; the
+  person's star and chosen module; what the last read found); a `Reading` is `title, date, text, summary,
+  facts, details`, each `Fact(kind, fields, Quote(field, quote, place, line))`, and `details` (a mark, a
+  suggested module, a cached AI reading) is stored as JSON on the source (`record_sources.details`, migration
+  0029). `document` keeps the
   text and finds a title and date only. The rest are `Stub`s raising `NotReadYet` (a `NotImplementedError`
   naming the phase: cv and letter 2; repo, github_account, project_files, portfolio, page and manual 3;
   coursework, lecture and official 4; job_doc 5). A phase plugs its reader in with `readers.register`, from
@@ -1259,6 +1262,17 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   (`class_of_degree`: a labelled grade, else the first class of degree named) as an education fact instead of
   a certificate card. The card the papers were added on names every education fact (`_on_card`), over what
   the papers call the course.
+- `coursework` (`sections/coursework.py`) reads one piece of work of any field. Computed: its title (the
+  first heading of its own words, never a file heading), date, mark (`mark_in`: "Mark: 68", "Grade: 2:1"),
+  the languages of its code files (`convert.LANGUAGES`) and the module Hal suggests (`suggest_module`: a
+  module code in the name or opening lines, else at least `SHARE_MIN` of a module's own words). The AI
+  (`coursework_read` prompt) writes the summary and names the methods the work shows, each with a quote; a
+  method whose quote is not in the work is dropped. The AI's reply is cached in `details["ai"]` by a hash of
+  the title and text, so reading the same work again asks nothing. Without the AI the summary is the
+  abstract or first full paragraph. Every method is a `skill` fact, filed with the section's role (own).
+- The module a piece is for is the person's choice (`record_sources.module`, migration 0029: NULL until they
+  choose, "" for none), checked against the card's modules (`store.module_choices`); Hal's suggestion stays
+  in `details["module"]`, so no read changes the choice. Moving a source to another card clears it.
 
 ## Profile (`jobhunt/profile/`)
 

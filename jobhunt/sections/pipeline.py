@@ -28,6 +28,7 @@ Design decisions, each with its reason:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import shutil
 import sqlite3
@@ -39,12 +40,12 @@ from jobhunt import db, record
 from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
+from jobhunt.sections import coursework, documents, letters, readers, registry, store, wrong_place
 from jobhunt.sections import cv as cv_reader
-from jobhunt.sections import documents, letters, readers, registry, store, wrong_place
 
 log = logging.getLogger(__name__)
 # The sections' own reader modules: each puts its readers in place (`readers.register`) when it is imported.
-READER_MODULES = (cv_reader, documents, letters)
+READER_MODULES = (cv_reader, coursework, documents, letters)
 CHUNK = 1 << 20            # files are hashed 1 MiB at a time
 SKIPPED_PARTS = {"__MACOSX", ".git", ".DS_Store", "Thumbs.db", "desktop.ini"}
 ZIP = ".zip"
@@ -213,7 +214,8 @@ def _source(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
         except LookupError:
             target = None
     return readers.Source(id=r["id"], section=r["section"], doc_kind=r["doc_kind"], title=r["title"],
-                          held=r["kind"], locator=r["locator"], files=files, target=target)
+                          held=r["kind"], locator=r["locator"], files=files, target=target,
+                          starred=bool(r["starred"]), module=r["module"], details=store.details(r))
 
 
 def vault() -> Path:
@@ -321,9 +323,9 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
         con.execute("""UPDATE record_sources SET title = CASE WHEN title = '' THEN ? ELSE title END, dated = ?,
                        note_rel = ?, revision = revision + 1, last_checked = ?,
                        last_changed = CASE WHEN ? OR revision = 0 THEN ? ELSE last_changed END,
-                       state = 'read', error = '', suggestion = ? WHERE id = ?""",
+                       state = 'read', error = '', suggestion = ?, details = ? WHERE id = ?""",
                     (reading.title or readers.title_in(reading.text, name), reading.date, note_rel, now,
-                     int(swapped["changed"]), now, suggestion, r["id"]))
+                     int(swapped["changed"]), now, suggestion, json.dumps(reading.details), r["id"]))
     if section.id == cv_reader.SECTION:
         cv_reader.settle(con)
     return {**out, "state": "read", "facts": swapped["added"], "left_out": len(reading.facts) - len(facts)

@@ -4,6 +4,9 @@ A reader is given a `Source` (its section, kind of document, title, files or lin
 to) and returns a `Reading`: the source's title, a date found in it, its text for the record's note, a short
 summary, and its facts. Each `Fact` is a profile kind and fields (`profile.store.KINDS`) with one `Quote`:
 the field it supports, the words, and where they are (a file inside the source or a URL, and the line).
+The source also carries the person's choices that change what a reader gives (its star, the module it is
+for) and what the last read found about it (`details`), so a read again can reuse what it already asked the
+AI; a reader returns its new `details` with the reading.
 
 Design decisions, each with its reason:
 
@@ -78,6 +81,9 @@ class Source:
     locator: str = ""                          # a URL, an account name or a folder's path
     files: tuple[SourceFile, ...] = ()
     target: dict | None = None                 # the profile card it belongs to (`profile.store.item`), if any
+    starred: bool = False                      # in the person's showcase (coursework)
+    module: str | None = None                  # the card's module the person chose; None until they choose
+    details: dict = field(default_factory=dict)    # what the last read found about the source (`Reading.details`)
 
 
 @dataclass
@@ -89,6 +95,7 @@ class Reading:
     text: str = ""                             # what the record's note keeps
     summary: str = ""
     facts: list[Fact] = field(default_factory=list)
+    details: dict = field(default_factory=dict)    # about the source itself, not the person: a mark, a module
 
 
 class Reader(Protocol):

@@ -6,6 +6,11 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Hal reads your coursework.** Essays, reports, lab reports, portfolios, code and anything else you add
+  under **Coursework** on a course's card get a short summary, their mark when the work states one, and the
+  skills and methods they show, each with the words it came from. Hal suggests which module each piece was
+  for, and you confirm it or choose another.
+
 - **Official papers set your marks.** A transcript added under **Official papers** on a course's card now
   gives that course its modules, each with its mark, and its grade. A degree certificate gives the grade.
   Hal reads these with the same fixed rules as a transcript on **Documents**, not the AI, so a mark is never
@@ -17,9 +22,9 @@ What changed in each version, in plain words.
   Hal what it is and whose it is, so Hal no longer guesses. Each place lists what you added with **Read
   again** and **Remove**; removing a file takes out everything Hal took from it. **Showcase** marks the
   coursework and projects Hal should tell employers about. Hal says when a file looks like it belongs
-  elsewhere ("This looks like a CV") but never moves it by itself. CVs, letters, documents and official
-  papers are read now; coursework, lecture material and the ways to add projects arrive in later updates,
-  and files added to them wait until then. The older bulk read stays under **More ways to add**. See
+  elsewhere ("This looks like a CV") but never moves it by itself. CVs, letters, documents, official
+  papers and coursework are read now; lecture material and the ways to add projects arrive in later
+  updates, and files added to them wait until then. The older bulk read stays under **More ways to add**. See
   [Add your CVs, education, projects and documents](docs/howto/add-to-your-record.md).
 - **Hal reads the CVs you add.** Each CV you add under **Your CVs** gives your jobs, volunteering,
   education with its modules and marks, skills, projects, awards, contact details and links, each with the

@@ -162,10 +162,11 @@ class RecordSections(unittest.TestCase):
             p.shows(self.panel(p, heading), heading)
         work.get_by_label("What is it?").select_option(label="Dissertation")
         work.locator("input[type=file]").first.set_input_files(self.file("dissertation.md", ESSAY))
-        row = work.locator("li.rec-source", has_text="dissertation.md")
+        title = "The parish registers of Harrowgate Vale"     # the coursework reader takes it from the heading
+        row = work.locator("li.rec-source", has_text=title)
         p.shows(row, "the coursework")
-        row.get_by_role("button", name="Showcase: dissertation.md").click()
-        p.shows(row.get_by_role("button", name="Take out of your showcase: dissertation.md"), "the showcase")
+        row.get_by_role("button", name="Showcase: " + title).click()
+        p.shows(row.get_by_role("button", name="Take out of your showcase: " + title), "the showcase")
         got = self.listed("coursework")[0]
         self.assertEqual((got["doc_kind"], got["starred"]), ("dissertation", True))
         self.clean(p)

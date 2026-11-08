@@ -26,11 +26,16 @@ A source (`SOURCE`), from `sections.store.shape`:
      "can_be_current": false, "dated": "2025-03", "note_rel": "Sources/Documents/Volunteer of the year.md",
      "added": "2026-11-09T09:00:00Z", "last_checked": "...", "last_changed": "...", "revision": 1,
      "state": "read", "state_words": "Read", "error": "", "suggestion": "cv", "suggestion_label": "CVs",
-     "suggestion_kind": "", "suggestion_kind_label": "", "current_chosen": false}
+     "suggestion_kind": "", "suggestion_kind_label": "", "current_chosen": false, "mark": "", "summary": "",
+     "can_have_module": false, "module": null, "module_suggested": "", "module_choices": []}
 
 `suggestion` is a section the source looks like it belongs in, and `suggestion_kind` another kind of document of
 its own section that it looks like (a transcript added to Documents as "Something else"). `current` marks the
 CV that leads (`profile.cvs`), and `current_chosen` says the person chose it.
+
+`mark` and `summary` are what the reader found (coursework). For coursework and lecture material
+`can_have_module` is true, `module` is the person's choice (null until they choose, "" for none),
+`module_suggested` Hal's suggestion (one of `module_choices`, the card's modules, or "").
 
 Routes:
 
@@ -44,8 +49,9 @@ Routes:
 - `POST /api/v2/record/sources/{section}/link` {"locator", "doc_kind", "target_id"}: a web address, an account
   name, a folder on this computer (only from this computer, and never the record or Hal's own folder) or a
   project's name typed in; returns the same as an upload.
-- `PUT /api/v2/record/sources/{id}` {"title", "doc_kind", "target_id", "starred", "current", "section"}: any of
-  them; a new section, kind of document or card reads the source again. Returns SOURCE with "action_id".
+- `PUT /api/v2/record/sources/{id}` {"title", "doc_kind", "target_id", "starred", "current", "section",
+  "module"}: any of them; a new section, kind of document, card or module reads the source again. Returns
+  SOURCE with "action_id".
 - `POST /api/v2/record/sources/{id}/reread` {"allow": true to read one kept out as private}: {"action_id"}.
 - `DELETE /api/v2/record/sources/{id}`: removes it with its note and facts; {"hidden": [card ids]}.
 
@@ -64,7 +70,7 @@ from jobhunt.web.router import BadRequest, NotFound, NotHere, Request, route
 
 PREFIX = "/api/v2/record/sources"
 FILE_FIELD, PATH_FIELD = "file", "path"
-REREAD_ON = ("section", "doc_kind", "target_id")
+REREAD_ON = ("section", "doc_kind", "target_id", "module")
 
 
 def _session(req: Request) -> str | None:

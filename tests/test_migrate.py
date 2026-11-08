@@ -180,7 +180,7 @@ class OldDatabases(Folder):
                     "VALUES (1, 'project', '{\"name\": \"Tide gauge\"}', 'x', 'x')")
         con.execute("INSERT INTO profile_evidence (item_id, source_rel, found_at) VALUES (1, 'Sources/CV.md', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [28])
+        self.assertEqual(self.run_migrate(con), [28, 29])
         self.assertEqual(con.execute("SELECT star, star_by, orphaned_from FROM profile_items").fetchone(), (0, "", ""))
         self.assertEqual(con.execute("SELECT source_id, place, line FROM profile_evidence").fetchone(),
                          (None, "", None))
@@ -191,6 +191,17 @@ class OldDatabases(Folder):
         con.execute("DELETE FROM profile_items WHERE id = 1")
         self.assertEqual(con.execute("SELECT target_id, state, revision FROM record_sources").fetchone(),
                          (None, "new", 0))
+
+    def test_a_record_source_from_version_28_has_no_module_chosen_and_no_details(self):
+        con = self.open()
+        up_to_28 = migrate.discover()[:28]
+        with mock.patch.object(migrate, "LATEST", 28), mock.patch.object(migrate, "discover", return_value=up_to_28):
+            self.run_migrate(con)
+        con.execute("INSERT INTO record_sources (section, kind, doc_kind, added) VALUES ('coursework', 'upload', "
+                    "'essay', 'x')")
+        con.commit()
+        self.assertEqual(self.run_migrate(con), [29])
+        self.assertEqual(con.execute("SELECT module, details FROM record_sources").fetchone(), (None, "{}"))
 
     def test_settings_revision_starts_at_zero(self):
         con = self.open()
@@ -203,8 +214,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 29)))
-        self.assertEqual(migrate.LATEST, 28)
+        self.assertEqual(numbers, list(range(1, 30)))
+        self.assertEqual(migrate.LATEST, 29)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

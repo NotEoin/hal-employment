@@ -8,7 +8,8 @@
    "Older CV, fills gaps"), "Read again", "Remove", and a hint to move one
    that looks like it belongs elsewhere, or (in Documents) looks like another kind of document (Hal never
    moves or changes it on its own). Documents may name the card they are about: a course, a job or a
-   certificate. Reading runs as the
+   certificate. Coursework and lecture material say which of the course's modules they are for: Hal suggests
+   one, and the person confirms or changes it (`ModuleChoice`). Reading runs as the
    `record.sources` action; its events and `profile` events reload the lists. A kind of document whose reader
    is still to come can still be uploaded: Hal keeps the file and reads it once it can. A link, folder or
    account whose reader is still to come is shown, but switched off as "coming soon". */
@@ -72,6 +73,22 @@ function uploadFiles(section, kind, target, list, folder) {
   return act(() => api("POST", SOURCES + "/" + section, form), saidAdded);
 }
 
+/** Which of the course's modules a piece of coursework or lecture material is for: Hal's suggestion to
+    confirm, or the person's own choice; `null` until they choose, "" for not one module. */
+function ModuleChoice({ s, path }) {
+  const uid = "rec-mod-" + s.id;
+  if (!s.module_choices.length) return html`<p class="small sub rec-line">Add your transcript under Official papers to say which module this is for.</p>`;
+  const choose = value => act(() => put(path, { module: value }), value ? "Saved: this is for " + value + "." : "Saved: not for one module.");
+  return html`<div class="stack s rec-module">
+    ${s.module === null && s.module_suggested && html`<${Note} tone="info">Hal thinks this is for ${s.module_suggested}.
+      <button type="button" class="btn small" onClick=${() => choose(s.module_suggested)}>Yes, that is right</button><//>`}
+    <div class="rec-field"><label class="lab" for=${uid}>Module</label>
+      <select class="input" id=${uid} value=${s.module === null ? "?" : s.module} onChange=${e => choose(e.target.value)}>
+        ${s.module === null && html`<option value="?" disabled>Choose a module</option>`}
+        ${s.module_choices.map(m => html`<option key=${m} value=${m}>${m}</option>`)}
+        <option value="">Not for one module</option></select></div></div>`;
+}
+
 /** One source: its title, kind, state and last read, with the person's choices. */
 function SourceRow({ s }) {
   const id = encodeURIComponent(s.id);
@@ -81,8 +98,10 @@ function SourceRow({ s }) {
       <div class="chips"><${Chip} tone=${STATE_TONE[s.state] || "line"}>${s.state_words}<//>
         ${s.current && html`<${Chip} tone="info">Current CV<//>`}
         ${s.can_be_current && !s.current && s.state === "read" && html`<${Chip} tone="line">Older CV, fills gaps<//>`}</div>
-      <div class="small sub">${s.last_checked ? "Last read " + agoWords(s.last_checked) : "Not read yet"}${s.dated ? ", dated " + s.dated : ""}</div>
+      <div class="small sub">${s.last_checked ? "Last read " + agoWords(s.last_checked) : "Not read yet"}${s.dated ? ", dated " + s.dated : ""}${s.mark ? ". Mark: " + s.mark : ""}</div>
+      ${s.summary && html`<p class="small rec-line">${s.summary}</p>`}
       ${s.error && html`<p class="small sub rec-line">${s.error}</p>`}
+      ${s.can_have_module && s.state === "read" && html`<${ModuleChoice} s=${s} path=${path} />`}
       ${s.suggestion && html`<${Note} tone="info">This looks like it belongs in ${s.suggestion_label}.
         <button type="button" class="btn small" onClick=${() => act(() => put(path, { section: s.suggestion }),
           "Moved to " + s.suggestion_label + ". Hal is reading it again.")}>Move it to ${s.suggestion_label}</button><//>`}

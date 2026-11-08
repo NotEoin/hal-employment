@@ -16,7 +16,10 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    contract or the job description. Hal takes the job's title, dates and duties from it, after your current
    CV.
 3. Open **Education**. On a course's card, open **Coursework, lecture material and official papers**:
-   - **Coursework**: your essays, reports, portfolios and dissertation. Press **Showcase** on the pieces you
+   - **Coursework**: your essays, reports, lab reports, portfolios, presentations, code, designs and
+     dissertation. Hal writes a short summary of each, notes its mark if the work states one, and takes the
+     skills and methods it shows as done in your coursework. Hal also suggests which module it was for:
+     press **Yes, that is right**, or choose another under **Module**. Press **Showcase** on the pieces you
      are proudest of.
    - **Lecture material**: slides and notes from the course. Hal counts these as what you studied, never as
      work you did.
