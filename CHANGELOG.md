@@ -193,6 +193,11 @@ What changed in each version, in plain words.
 - **Answers and messages say which project.** Form answers and messages to the person hiring began "I
   wrote a 113-test suite ..." and named the project later, or never. Like a letter paragraph, each now names
   its project or job in its first sentence, and is written once more when it does not.
+- **A tool is used for what your facts say.** Drafts said a project "used Docker to package the application"
+  when your record used Docker as a sandbox, called frontend work backend work, and said a module gave you
+  C++ knowledge when the module never names C++. A sentence that says what a tool was for now needs that
+  purpose in the facts naming the tool, and a module named with a tool needs the module's own entry to
+  name it, in letters, answers and messages. Either is written once more when it does not.
 - **A note about all your projects no longer mixes them up.** A note describing about ten projects tied
   each of them to the others, so a letter put one project's network sniffer in another project. Hal now
   reads such a note only for the parts that name one project, and never takes another name for a project

@@ -59,7 +59,7 @@ from dataclasses import dataclass, field
 from jobhunt import llm
 from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import drafts, flow, plain, planned, repeats, spelling, stage, taught
+from jobhunt.writing import drafts, flow, plain, planned, purpose, repeats, spelling, stage, taught
 from jobhunt.writing.motive import Pairing
 from jobhunt.writing.plan import DEGREE, MODULE, Story
 
@@ -392,6 +392,10 @@ def sentence_problems(sentence: str, story: Story, scope: Scope, before: list[st
     out = [NUMBER_SAID.format(n=n, card=_called(story))
            for n in sorted(numbers(sentence) - numbers(f"{own}\n{scope.allowed}"))]
     out += _tool_problems(sentence, story, scope)
+    held = [t for t in dict.fromkeys([*story.tools, *scope.known])
+            if t.strip() and drafts.names_tool(sentence, t) and drafts.names_tool(story.words(), t)]
+    out += purpose.unbacked(sentence, held, list(story.facts), f"{story.name}\n{story.summary}",
+                            list(dict.fromkeys([*scope.known, *story.tools])))
     out += _crossed_names(sentence, story, scope)
     if story.card is not None:
         out += _reasons(drafts.crossed(sentence, list(scope.cards)))
@@ -408,6 +412,7 @@ def sentence_problems(sentence: str, story: Story, scope: Scope, before: list[st
         out.append(LIST_SAID)
     out += _reasons(taught.unsupported(sentence, list(scope.modules), (*scope.sources, own)))
     out += _reasons(taught.joined(sentence, list(scope.modules), scope.sources, list(scope.cards)))
+    out += _reasons(taught.tooled(sentence, list(scope.modules), (*scope.sources, own), list(scope.known)))
     return list(dict.fromkeys(out))
 
 

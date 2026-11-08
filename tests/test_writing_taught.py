@@ -73,5 +73,23 @@ class Taught(unittest.TestCase):
                 self.assertEqual(taught.unsupported(said, MODULES, (CV,)), [])
 
 
+class Tooled(unittest.TestCase):
+    """"Algorithm Design & Analysis gave me the specific C++ knowledge" of a module that never names C++
+    (2026-11-08)."""
+
+    KNOWN = ("SQL", "C++", "Python")
+
+    def test_a_module_named_with_a_tool_its_own_entry_never_names_is_found(self):
+        said = "Statistics for Seafarers gave me the specific C++ knowledge this role needs."
+        self.assertEqual(taught.tooled(said, MODULES, (CV, PASSAGE), list(self.KNOWN)),
+                         [f"{said} (nothing in your facts ties Statistics for Seafarers to C++)"])
+
+    def test_a_tool_the_modules_own_entry_names_is_left_alone(self):
+        for said in ("In Foundations of Imaginary Data I wrote SQL queries over a harbour database.",
+                     "I learnt C++ on my own, and Python at work."):
+            with self.subTest(said):
+                self.assertEqual(taught.tooled(said, MODULES, (CV, PASSAGE), list(self.KNOWN)), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -31,6 +31,10 @@ Design decisions, each with its reason:
   the project (a card's name) or the activity's own words (`ACTIVITY`, compared as `content` words by their
   first `STEM` letters). The modules of a list in the sources count as named modules too, as a CV's modules
   are often not among the person's checked ones.
+- A module named with a tool or a language (`tooled`) claims the module used it: "Algorithm Design & Analysis
+  gave me the specific C++ knowledge" of a module whose own entry never names C++ (2026-11-08). It needs no
+  "covered" verb, so it is a check of its own; the tool must be in the module's own entry (`_module_text`)
+  or its name.
 - Course material is never given to the writer (`record.for_writing`), so the module's own notes cannot
   support a claim: the person checks it under "Check before sending" when the rewrite keeps it.
 """
@@ -159,6 +163,28 @@ def joined(draft: str, modules: list[str], sources: tuple[str, ...], cards: list
         if projects or (wanted and not wanted <= _stems(held)):
             tied = projects[0] if projects else activity.group("said")
             out.append(f"{sentence} (nothing in your facts ties {names[0]} to {tied})")
+    return out
+
+
+def tooled(draft: str, modules: list[str], sources: tuple[str, ...], known: list[str]) -> list[str]:
+    """The sentences of `draft` that name a module (checked, or in a module list of `sources`) with a tool or
+    language of `known` the module's own entry never names, each with the module and the tool: "...
+    (nothing in your facts ties Algorithm Design to C++)". A listed entry that is a tool's name ("SQL" of
+    "Databases module: SQL, query plans") is what a module covered, never a module of its own."""
+    tools = {t.strip().lower() for t in known}
+    names_of = {m.lower(): m for m in [*modules, *modules_listed(sources)] if m.strip() and m.lower() not in tools}
+    known_names = [_names(m) for m in names_of.values()]
+    units = _units(sources)
+    out = []
+    for sentence in check.sentences(draft):
+        names = _module_in(sentence, known_names)
+        if names is None:
+            continue
+        held = _module_text(units, names, [n for n in known_names if n is not names])
+        tools = [t for t in dict.fromkeys(known) if t.strip() and drafts.names_tool(sentence, t)
+                 and not drafts.names_tool(held, t) and not drafts.names_tool(" ".join(names), t)]
+        if tools:
+            out.append(f"{sentence} (nothing in your facts ties {names[0]} to {tools[0]})")
     return out
 
 

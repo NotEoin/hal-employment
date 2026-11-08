@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from unittest import mock
@@ -11,7 +12,7 @@ from unittest import mock
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt import llm
-from jobhunt.writing import frame, motive, paragraphs, plain, stage
+from jobhunt.writing import frame, motive, paragraphs, plain, purpose, stage
 from jobhunt.writing.motive import Pairing
 from jobhunt.writing.plan import Item, Story
 
@@ -247,6 +248,28 @@ class Frame(unittest.TestCase):
         self.assertIn("does not say who is writing", fake.calls("Write")[1])
         self.assertEqual(done.opening, "I'm Avery Quillon, a first-class History graduate from Made-up University "
                                        "(2026), applying for the Graduate Developer role.")
+
+
+class Reframed(unittest.TestCase):
+    """Facts were reframed into claims the record never makes: Docker "to package the application" when it was
+    an agent sandbox, and a module "gave me the specific C++ knowledge" when it never names C++ (2026-11-08)."""
+
+    def test_a_tools_purpose_its_facts_never_say_is_a_problem(self):
+        story = Story("Quill", "Quill", "personal project", "personal", "", QUILL["summary"], ("Lua", "Docker"),
+                      ("Quill runs each plugin in a Docker sandbox",), card=QUILL)
+        found = said("I used Docker to package Quill for consistent deployment.", story)
+        self.assertEqual(found, [purpose.SAID.format(tool="Docker", purpose="package Quill")])
+        self.assertEqual(said("I used Docker to sandbox each plugin of Quill.", story), [])
+
+    def test_a_module_claim_naming_a_tool_is_found_in_an_answer_and_drafted_again(self):
+        scope = replace(SCOPE, modules=("Algorithm Design",), known=(*SCOPE.known, "C++"),
+                        sources=("Year 2 modules: Algorithm Design 70, Ferry Studies 64",))
+        claim = "Quill answers questions over my notes offline. Algorithm Design gave me the C++ knowledge for it."
+        fake = FakeAI([claim, GOOD])
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            done = paragraphs.settle(QUILL_STORY, paragraphs.answer("Tell us about your skills."), scope)
+        self.assertIn("nothing in your facts ties Algorithm Design to C++", fake.calls("Write")[1])
+        self.assertEqual(done.text, GOOD)
 
 
 class Retold(unittest.TestCase):

@@ -493,7 +493,12 @@ runs: tests use `tests/support/fake_claude/`.
   requirement", "the role requires", "matters for the role", "demonstrates my ability to", "matches my",
   "fits my", "suits my", "in line with my"); a sentence
   echoing the advert (`drafts.echoes`); a sentence the paragraph already said (`repeats.same`); the part as
-  a label ("As the owner, ..."); `paragraphs.LIST_TOOLS` (4) tools in one sentence; `taught`'s module
+  a label ("As the owner, ..."); `paragraphs.LIST_TOOLS` (4) tools in one sentence; a tool given a purpose
+  no fact naming it holds (`writing/purpose.py`, `purpose.unbacked`: "<tool> to/for <purpose>", with at most
+  `purpose.GAP_WORDS` (2) words between, or "the <thing> in/with/using <tool>"; the purpose's content words,
+  `purpose.GENERAL` words, tool names and the work's name aside, compared by their first `purpose.STEM` (6)
+  letters, must be at least `purpose.PURPOSE_SHARE` (half) in the story's facts naming the tool or in its
+  name and summary: Docker "to package the application" was an agent sandbox, 2026-11-08); `taught`'s module
   checks; the work unnamed in the first sentence; too few sentences; and the writing rules' high hits.
   When they find nothing and the paragraph says more than its facts' own words (`paragraphs.restates`),
   one AI call checks it against its story (`verify`, prompt `paragraph_verify`); quoted words its facts or
@@ -652,8 +657,12 @@ runs: tests use `tests/support/fake_claude/`.
   `joined(draft, modules, sources, cards)` finds a sentence tying a named module and a mark to a project
   card or an activity (`ACTIVITY`: "through a team project", "where I contributed to a team project", "by
   building Ferry planner") that the module's own entry (`atoms.split` of the sources' lines) never names;
-  the modules of a list in the sources (`modules_listed`) count as named. Both are among each paragraph's
-  checks with no AI (`paragraphs.sentence_problems`).
+  the modules of a list in the sources (`modules_listed`) count as named. `tooled(draft, modules, sources,
+  known)` finds a sentence naming a module with a known tool or language its own entry and name never name
+  ("Algorithm Design & Analysis gave me the specific C++ knowledge", 2026-11-08); a listed entry that is a
+  tool's name is never a module. All three are among each paragraph's checks with no AI
+  (`paragraphs.sentence_problems`), so they run on letter paragraphs, answers and messages alike, and
+  `unsupported` and `tooled` on whole drafts (`pack.unsupported_claims`).
 - `drafts.echoes(sentence, advert, brief, names)` finds a sentence that restates the employer: at least
   `ECHO_SHARE` (half) of its own words sit in runs of `ECHO_RUN` (three) words found in the advert or the
   brief, with little words and the words of the job title and employer's name (`names`) never counted, and

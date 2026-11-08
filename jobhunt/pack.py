@@ -478,7 +478,8 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     has ended (`stage.ended_course`), a tool given to a project whose own facts never name it
     (`drafts.misplaced_tools`), a project placed in a degree or in the person's own time against its
     card's context (`drafts.wrong_context`), and what a named module covered when no source naming the module
-    says it (`taught.unsupported`). Each goes into the one rewrite `fix_claims` asks for. A draft told one piece
+    says it (`taught.unsupported`) or which tool a named module used when its own entry never names it
+    (`taught.tooled`). Each goes into the one rewrite `fix_claims` asks for. A draft told one piece
     of work a paragraph is checked paragraph by paragraph instead (`writing.paragraphs`); this whole-draft check
     is for drafts with no story to tell, and for form filling.
     """
@@ -497,7 +498,8 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     return claims + [f"{s} ({stage.ended_said(now)})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
         + drafts.crossed(written, cards) \
-        + taught.unsupported(written, profile_writing.module_names(), (facts, kept))
+        + taught.unsupported(written, profile_writing.module_names(), (facts, kept)) \
+        + taught.tooled(written, profile_writing.module_names(), (facts, kept), known)
 
 
 def claims_note(claims: list[str]) -> str:
