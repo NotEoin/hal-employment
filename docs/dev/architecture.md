@@ -487,7 +487,9 @@ runs: tests use `tests/support/fake_claude/`.
   AI, and the ones only the AI can see left to it. Calls per pack, counted with the fake AI of
   `tests/test_pack.py` (`test_a_whole_pack_keeps_each_projects_tools_to_itself_within_about_thirty_calls`:
   two look-alike projects, a letter, a message and two answers, no fix needed): 16. A real pack made about
-  55 with sentence checks. "Check before sending" lists the paragraphs left out, the questions no story
+  55 with sentence checks. `pack.build` logs each pack's count ("pack for job <id>: <n> model calls",
+  through `llm.counted`, a context variable that counts this thread's `llm.chat` and `llm.chat_json`
+  calls; blocks nest), so the count on a real model can be measured. "Check before sending" lists the paragraphs left out, the questions no story
   answers, the eligibility lines, cut-offs and the checks with no AI on style; the verify call is not made
   for a draft told by stories. The section is in every pack, saying `pack.NOTHING_TO_CHECK` when it lists
   nothing (`pack.add_company_check` replaces that line with its flags), since packs without it gave no sign

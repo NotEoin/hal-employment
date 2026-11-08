@@ -61,6 +61,7 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "frame": "Write the first and the last",
     "paragraph_verify": "Check one paragraph",
 }
+REAL_CHAT, REAL_CHAT_JSON = llm.chat, llm.chat_json   # the counting shim, for the test of the count
 WAIT_S = 10.0
 POLL_S = 0.05
 
@@ -830,6 +831,17 @@ class Others(unittest.TestCase):
                                   "paragraph_verify": 5, "frame": 1})
         self.assertLessEqual(len(writer.log), 30)
         self.assertEqual(section(md, "Check before sending").strip(), pack.NOTHING_TO_CHECK)
+
+    def test_each_pack_logs_how_many_model_calls_it_made(self):
+        # the count per pack is how the cut from about 55 calls is measured (2026-11-08); the fake answers below
+        # the counting shim, as the real AI would
+        writer = QuillWriter()
+        with quill_world(writer) as a, mock.patch.object(llm, "chat", REAL_CHAT), \
+                mock.patch.object(llm, "chat_json", REAL_CHAT_JSON), mock.patch.object(llm.ai, "chat", writer.chat), \
+                self.assertLogs("jobhunt.pack", "INFO") as logged:
+            pack.build(a.con, a.job["id"], use_web=False)
+        self.assertIn(f"pack for job {a.job['id']}: {len(writer.log)} model calls", "\n".join(logged.output))
+        self.assertEqual(len(writer.log), 16)
 
 
 class Today(unittest.TestCase):

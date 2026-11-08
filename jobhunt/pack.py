@@ -48,7 +48,10 @@ Design notes:
   advert's lead-ins (15 packs, 2026-11-08); all of that is gone. A pack whose plan tells no story is drafted
   whole and checked with `fix_claims`, as before the plan.
 - The pack's checklist names no command: every action is a button on the Documents page.
+- Each pack logs how many model calls it made (`build`, `llm.counted`): a pack made about 55 with sentence
+  checks, and the stories aim for about 30 at most (2026-11-08), so the count is logged to be measured.
 """
+import logging
 import re
 import textwrap
 from datetime import date
@@ -77,6 +80,8 @@ from .writing import (
     taught,
 )
 from .writing import plan as planning
+
+log = logging.getLogger(__name__)
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
 _LIVE = {"PACKS": paths.legacy_packs_dir}
@@ -976,10 +981,18 @@ def salutation(analysis: dict) -> str:
 
 
 def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
-    """Drafts the pack for one job and returns the pack's Markdown path.
+    """Drafts the pack for one job and returns the pack's Markdown path; the log says how many model calls it
+    made (`llm.counted`), the measure of a pack's cost on a local model.
 
     With `ctx` (a running action) the record passages used are noted under its Activity "Used".
     """
+    with llm.counted() as calls:
+        pack_md = _build(con, job_id, use_web, ctx)
+    log.info("pack for job %s: %d model calls", job_id, calls.n)
+    return pack_md
+
+
+def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     from . import documents
 

@@ -246,5 +246,19 @@ class Servers(unittest.TestCase):
         self.assertEqual(classify("https://models.example.com/v1"), (True, False))
 
 
+class Counted(unittest.TestCase):
+    """A pack's model calls are counted so the cut from about 55 can be measured (2026-11-08)."""
+
+    def test_calls_inside_a_block_are_counted_and_an_outer_block_counts_the_inner(self):
+        with mock.patch.object(ai, "chat", lambda *a, **k: "{}"):
+            llm.chat("s", "u")
+            with llm.counted() as outer:
+                llm.chat("s", "u")
+                with llm.counted() as inner:
+                    llm.chat_json("s", "u")
+            llm.chat("s", "u")
+        self.assertEqual((outer.n, inner.n), (2, 1))
+
+
 if __name__ == "__main__":
     unittest.main()
