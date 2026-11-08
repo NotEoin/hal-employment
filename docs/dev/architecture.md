@@ -565,7 +565,10 @@ runs: tests use `tests/support/fake_claude/`.
   project cards resting on one of its project files, its repository's or folder's name, the end of its
   link; never through a file that lists projects, `profile.owners.Files.listings`, a file backing two or more
   visible project cards or naming several projects, which is in no card's `files`, gives no passage context
-  and gives a card no quote naming another card and not it), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
+  and gives a card no quote naming another card and not it; nor through another card's own file,
+  `owners.Files.owners`: a repository or project file whose name is a visible card's name, link end or merged
+  card's name, case and separators aside, which gives every other card no tool, quote, file, alias or
+  passage context, `profile.writing.elsewhere_only`; the record keeps the evidence as stored), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
   ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). A card named only inside a longer
   named card's name ("Quill" in "Quill Employment") is not named (`drafts.named_cards`). Both go into the one
   rewrite per draft that `pack.fix_claims` asks for, and what is left is listed.

@@ -178,6 +178,10 @@ What changed in each version, in plain words.
   each of them to the others, so a letter put one project's network sniffer in another project. Hal now
   reads such a note only for the parts that name one project, and never takes another name for a project
   from it.
+- **A project's own repository speaks only for that project.** An earlier project picked up facts from the
+  repository of a later project with a longer name, and letters said it used the later one's database. A
+  repository or project file named after one of your projects now gives its tools and quotes to that
+  project alone. Your record still shows every file as Hal found it.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that

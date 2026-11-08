@@ -427,5 +427,42 @@ class Listings(unittest.TestCase):
                                                                        "Tide gauge")])
 
 
+class OwnFiles(unittest.TestCase):
+    """An earlier project's card carried evidence from the repository of a later project with a longer name,
+    and letters said the earlier one used the later one's database (2026-11-08)."""
+
+    def setUp(self):
+        self.home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(paths.set_override(self.home))
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+        self.con = db.connect()
+        self.addCleanup(self.con.close)
+        later = "Sources/Code/quill-employment/README.md"
+        self.quill = store.add_found(self.con, "project", {"name": "Quill", "tools": ["Lua"]},
+                                     own("Sources/Code/quill/README.md", "repository", "Quill answers offline"))
+        store.add_found(self.con, "project", {"name": "Quill", "tools": ["SQLite"]},
+                        own(later, "repository", "Stores each application in SQLite"))
+        store.add_found(self.con, "project", {"name": "Quill Employment", "tools": ["Preact", "SQLite"]},
+                        own(later, "repository", "Quill Employment drafts letters"))
+        check_everything(self.con)
+        self.cards = {c["name"]: c for c in writing.cards(self.con)}
+
+    def test_another_projects_own_file_gives_this_card_no_tool_quote_file_or_alias(self):
+        quill = self.cards["Quill"]
+        self.assertEqual((quill["tools"], quill["quotes"]), (["Lua"], ["Quill answers offline"]))
+        self.assertEqual((quill["files"], quill["aliases"]), (["Sources/Code/quill/README.md"], []))
+        line = next(x for x in profile.context_block(self.con).splitlines() if ": Quill" in x and "Employment" not in x)
+        self.assertTrue(line.endswith("Tools: Lua"), line)
+
+    def test_the_project_whose_file_it_is_keeps_it(self):
+        employment = self.cards["Quill Employment"]
+        self.assertEqual(employment["tools"], ["Preact", "SQLite"])
+        self.assertEqual(employment["files"], ["Sources/Code/quill-employment/README.md"])
+
+    def test_the_record_keeps_the_evidence_as_it_was_stored(self):
+        self.assertIn("SQLite", store.item(self.con, self.quill)["fields"]["tools"])
+        self.assertEqual(writing.elsewhere_only(self.con, store.item(self.con, self.quill)), {"tools": ["SQLite"]})
+
+
 if __name__ == "__main__":
     unittest.main()

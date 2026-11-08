@@ -56,6 +56,11 @@ Design decisions, each with its reason:
   the course or job they belong to and naming it, at most `LINE_MAX` characters of them per item: one line of
   every module was one piece of evidence, so a sentence about one module could cite another's words
   (2026-11-08).
+- A project's own file belongs to it (`owners.Files.owners`: a repository or project file named as a visible
+  card is named, case and separators aside): evidence from it is left out of every other card's writing
+  view, its tools (`elsewhere_only`, `for_writing`), quotes, files, aliases and passage context. An earlier
+  project's card carried quotes from a later project's repository, and letters gave it the later one's
+  database (2026-11-08). The record and the review page keep the evidence as stored.
 - A card carries its own evidence quotes (`quotes`) for the paragraph that tells it (`writing.plan.Story`):
   only the person's own sources, never an older CV's, a plan's, or one naming a tool the card's writing
   fields leave out, so a quote never brings back what `for_writing` took out (2026-11-08).
@@ -383,11 +388,27 @@ def planned_only(con: sqlite3.Connection, item: dict) -> dict[str, dict[str, str
     return {name: out} if out else {}
 
 
-def for_writing(con: sqlite3.Connection, item: dict, cvs: CvAuthority | None = None) -> dict:
-    """A card's fields as writing uses them: without what only older CVs give (`older_cv_only`) and without
-    the tools only a plan gives (`planned_only`)."""
+def elsewhere_only(con: sqlite3.Connection, item: dict, view: owners.Files | None = None) -> dict[str, list[str]]:
+    """The tools of a project card that only another card's own files give (`owners.Files.belongs`), {"tools":
+    [tool, ...]}; {} for a card the person added themselves, or one with none."""
+    if item["kind"] != "project" or item.get("origin") == "you":
+        return {}
+    view = view if view is not None else owners.Files.of(con)
+    sources = _sources(con, item["id"])
+    out = []
+    for tool in (str(t) for t in item["fields"].get("tools") or []):
+        givers = [s for s in sources if _source_gives(s, "tools", tool)]
+        if givers and not any(view.belongs(item["id"], s["source_rel"]) for s in givers):
+            out.append(tool)
+    return {"tools": out} if out else {}
+
+
+def for_writing(con: sqlite3.Connection, item: dict, cvs: CvAuthority | None = None,
+                view: owners.Files | None = None) -> dict:
+    """A card's fields as writing uses them: without what only older CVs give (`older_cv_only`), the tools
+    only a plan gives (`planned_only`) and the tools only another card's own files give (`elsewhere_only`)."""
     dropped = older_cv_only(con, item, cvs)
-    for field_name, values in planned_only(con, item).items():
+    for field_name, values in [*planned_only(con, item).items(), *elsewhere_only(con, item, view).items()]:
         dropped[field_name] = [*dropped.get(field_name, []), *values]
     if not dropped:
         return item["fields"]
@@ -410,7 +431,7 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
     out = []
     wanted = set(merge.text_key(" ".join(queries or [])).split()) - QUERY_STOP
     worked_for = employers(con)
-    cvs = CvAuthority.of(con)
+    cvs, view = CvAuthority.of(con), owners.Files.of(con)
     tags = _tags([it for it in store.items(con, "project", hidden=False)
                   if it["state"] in USED_STATES and it["tier"] != tiers.ARCHIVE])
     for kind in KIND_ORDER:
@@ -431,7 +452,7 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
                 continue                   # a skill only a plan names is not one the person has shown
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
             made = contexts.current(it, worked_for) if kind in contexts.CONTEXT_KINDS else ""
-            fields = for_writing(con, it, cvs)
+            fields = for_writing(con, it, cvs, view)
             out.append("- " + line(kind, fields, quote, made, entries=False,
                                    tag=tags.get(fields.get("name", "")) if kind == "project" else ""))
             out += ["- " + x for x in entry_lines(kind, fields)]
@@ -487,14 +508,15 @@ def block(queries: list[str] | None = None) -> str:
 
 def passage_contexts(con: sqlite3.Connection) -> dict[str, str]:
     """The context, in a prompt's words, of each file a project card rests on: {file in the record: words}; a
-    file that lists projects (`owners.Files.listings`) says none, as its passages are about many."""
+    file that lists projects (`owners.Files.listings`) says none, as its passages are about many, and a
+    project's own file says its owner's."""
     worked_for = employers(con)
     view = owners.Files.of(con)
     out: dict[str, str] = {}
     for it in store.items(con, "project", hidden=False):
         context = contexts.current(it, worked_for)
         for e in it["evidence"] if context else []:
-            if view.ties(e["source_rel"]):
+            if view.belongs(it["id"], e["source_rel"]):
                 out.setdefault(e["source_rel"], stage.CONTEXT_WORDS[context])
     return out
 
@@ -524,23 +546,9 @@ def with_record(queries: list[str]) -> str:
     return "\n\n".join(p for p in (block(queries), with_contexts(record.context(queries), by_file)) if p)
 
 
-# File names that name no project: a repository's note is named after its folder, but these are not.
-GENERIC_FILES = {"readme", "index", "notes", "main", "untitled", "project", "code", "src", "app", "cv"}
-ALIAS_MIN = 3              # a file name this short ("ui", "v2") names no project
-# Document types that hold one project: `writing.stage` PERSONAL_TYPES and DEGREE_TYPES, written out because
-# `stage` is still loading when the profile package is.
-PROJECT_FILES = ("repository", "project", "coursework", "dissertation")
-FOLDER_DEPTH = 4           # "Sources/<category>/<folder>/<file>": a file inside a project's own folder
-
-
-def _file_name(source_rel: str) -> str:
-    """The name a project's file goes by: its note's name, or its folder's when the note is a README inside
-    one ("Sources/Code/<repository>/README.md"); "" when it names no project."""
-    parts = [p for p in source_rel.replace("\\", "/").split("/") if p]
-    stems = [p.rsplit(".", 1)[0] if "." in p else p for p in parts[-1:]]
-    if len(parts) >= FOLDER_DEPTH:
-        stems.append(parts[-2])
-    return next((s for s in stems if s.lower() not in GENERIC_FILES and len(s) >= ALIAS_MIN), "")
+# Document types that hold one project: `writing.stage` PERSONAL_TYPES and DEGREE_TYPES, written out (in
+# `owners`) because `stage` is still loading when the profile package is.
+PROJECT_FILES = owners.PROJECT_FILES
 
 
 def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) -> list[str]:
@@ -548,23 +556,23 @@ def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) ->
     its project files or merged into it (`profile.duplicates`), the name of its repository or project file, and
     the last part of its link.
 
-    Only a file of one project (`PROJECT_FILES`, and never a listing of `view`) ties two cards together: a CV
-    names every project, and a dossier of every project gave a hidden copy's name to two other cards
-    (2026-11-08).
+    Only a file of one project (`PROJECT_FILES`, never a listing of `view` nor another card's own file) ties
+    two cards together: a CV names every project, a dossier of every project gave a hidden copy's name to two
+    other cards, and a later project's repository gave its name to an earlier project (2026-11-08).
     """
     view = view or owners.Files()
 
     def files(it: dict) -> set[str]:
         return {e["source_rel"] for e in it["evidence"]
-                if e["doc_type"] in PROJECT_FILES and view.ties(e["source_rel"])}
+                if e["doc_type"] in PROJECT_FILES and view.belongs(item["id"], e["source_rel"])}
 
     own = files(item)
     found = [h["fields"].get("name", "") for h in hidden if own & files(h) or h.get("merged_into") == item["id"]]
-    found += [_file_name(e["source_rel"]) for e in item["evidence"]
-              if e["doc_type"] in stage.PERSONAL_TYPES and view.ties(e["source_rel"])]
+    found += [owners.file_name(e["source_rel"]) for e in item["evidence"]
+              if e["doc_type"] in stage.PERSONAL_TYPES and view.belongs(item["id"], e["source_rel"])]
     link = str(item["fields"].get("link") or "").rstrip("/")
     if link:
-        found.append(_file_name(link.rsplit("/", 1)[-1]))
+        found.append(owners.file_name(link.rsplit("/", 1)[-1]))
     name = item["fields"].get("name", "").lower()
     return [a for a in dict.fromkeys(a.strip() for a in found) if a and a.lower() != name]
 
@@ -592,7 +600,7 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
         for it in store.items(con, kind, hidden=False):
             if it["state"] not in USED_STATES:
                 continue
-            f, context = for_writing(con, it, cvs), contexts.current(it, worked_for)
+            f, context = for_writing(con, it, cvs, view), contexts.current(it, worked_for)
             if kind == "project":
                 said = stage.CONTEXT_WORDS.get(context, "")
                 out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),
@@ -600,7 +608,8 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                             "planned": list(planned_only(con, it).get("tools", {})),
                             "context": context, "aliases": aliases(it, hidden, view), "role": card_role(it),
                             "files": list(dict.fromkeys(e["source_rel"] for e in it["evidence"]
-                                                        if e["source_rel"] and view.ties(e["source_rel"]))),
+                                                        if e["source_rel"]
+                                                        and view.belongs(it["id"], e["source_rel"]))),
                             "quotes": quotes(it, f, cvs, view, names), "tag": "", "similar": []})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
@@ -625,8 +634,8 @@ def quotes(item: dict, fields: dict, cvs: CvAuthority, view: owners.Files | None
            names: list[str] = ()) -> list[str]:
     """A card's own evidence quotes a paragraph about it may rest on, at most `CARD_QUOTES`: from the person's own
     sources only, never an older CV's (`CvAuthority`), never a plan (`writing.planned`), never one naming a
-    tool its writing fields (`fields`, from `for_writing`) leave out, and never one from a listing (`view`)
-    that names another card (`names`) and not this one."""
+    tool its writing fields (`fields`, from `for_writing`) leave out, never one from another card's own file,
+    and never one from a listing (`view`) that names another card (`names`) and not this one."""
     view = view or owners.Files()
     tools = item["fields"].get("tools") or []
     dropped = [str(t) for t in tools if str(t) not in {str(k) for k in fields.get("tools") or []}]
@@ -635,6 +644,7 @@ def quotes(item: dict, fields: dict, cvs: CvAuthority, view: owners.Files | None
         said = " ".join(str(e.get("quote") or "").split())
         if not said or e.get("role", "") not in (OWN_ROLE, "") or e["source_rel"] in cvs.older \
                 or planned.planned(said, e["source_rel"]) \
+                or view.owners.get(e["source_rel"], item["id"]) != item["id"] \
                 or (not view.ties(e["source_rel"]) and _about_another(said, item, list(names))) \
                 or any(re.search(rf"(?<![\w+#]){re.escape(t)}(?![\w+#])", said, re.I) for t in dropped):
             continue
