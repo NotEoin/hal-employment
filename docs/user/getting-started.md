@@ -136,7 +136,8 @@ for a project you did in your own time, is rewritten once, and listed under **Ch
 is still there. This also works when the draft calls the project by a shorter name or its folder's name.
 When two of your projects have similar names, Hal adds a few words of each one's own description to its
 name in what the writer reads, and a sentence that gives one of them a tool or a purpose only the other has
-is rewritten the same way.
+is rewritten the same way. The pack's fit table and the letter's **Evidence** note name each with those few
+words too, and lose a tool given to the wrong one.
 
 The pack's **Company check** names a registered company as the employer only when the advert's own
 website is on its record, or it is registered in the advert's town and trade at an address that is not a

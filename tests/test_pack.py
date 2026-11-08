@@ -862,6 +862,33 @@ class FitTools(unittest.TestCase):
         self.assertIn("| Writing reports | a made-up report | strong |", fit)
         self.assertIn("Gaps to address or accept: Spreadsheets; Python data libraries\n", fit)
 
+    def test_fit_rows_and_evidence_notes_never_give_one_card_its_namesakes_tools(self):
+        # the fit table and the letter's evidence notes gave a local assistant a job-search helper's stack
+        # (2026-11-08)
+        from jobhunt.profile import store
+
+        writer = FakeWriter()
+        plain = writer.reply
+        rows = [{"requirement": "Web apps", "evidence": "Quill using Flask; Quill Employment uses Flask.",
+                 "strength": "strong"},
+                {"requirement": "Notes search", "evidence": "Quill reads notes with Lua.", "strength": "strong"}]
+        writer.reply = lambda system, user: ({**plain(system, user), "matches": rows}
+                                             if prompt_id(system) == "fit" else plain(system, user))
+        with as_applicant(people.TECHNICAL, writer) as a, mock.patch.object(record, "context", lambda *q, **k: ""):
+            ev = {"source_rel": "Sources/Code/quill.md", "quote": "", "field": "", "doc_type": "repository"}
+            store.confirm(a.con, store.add_found(a.con, "project", {
+                "name": "Quill", "tools": ["Lua"], "summary": "An offline assistant over personal notes"}, ev))
+            store.confirm(a.con, store.add_found(a.con, "project", {
+                "name": "Quill Employment", "tools": ["Flask"], "summary": "A job-search helper for graduates"},
+                {**ev, "source_rel": "Sources/Code/quill-employment.md"}))
+            job = add_job(a.con, "technical_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+            notes = pack.read_letter_notes(job)
+        self.assertIn("| Web apps | Quill Employment (job-search helper) uses Flask. | partial |", section(md, "Fit"))
+        self.assertTrue(notes["evidence"].startswith("Quill (offline assistant over personal notes) reads notes "
+                                                     "with Lua"), notes["evidence"])
+        self.assertNotIn("Quill using Flask", md)
+
 
 class TableWriter(FakeWriter):
     """A fake writer whose fit map leaves out a must-have, rates a row with no evidence partial, and calls

@@ -527,11 +527,16 @@ runs: tests use `tests/support/fake_claude/`.
   (`profile.writing.cards`, each with its kind, tools, summary and other names), never ranked or cut like
   the Profile block. `pack.with_card_tools` then turns a gap, or a row whose evidence says there is none, that names a
   card's tool into a partial match citing the card (`project (personal project): Tide gauge (tools: AWS)`).
-  Last, `pack.checked_fit_tools` reads each part of a row's evidence that names project cards as
-  `drafts.misplaced_tools` reads a draft: a tool of `known_tools` that none of the named cards' own facts,
-  nor a CV line naming the card, names (`drafts.backed`) is taken out of the row (`drafts.without_tools`),
-  and a part left with no tool is dropped. A row that lost evidence is partial at best, and one left with
-  none becomes a gap.
+  Last, `pack.checked_fit_tools` reads each part of a row's evidence that names project cards
+  (`drafts.evidence_checked`) as `drafts.misplaced_tools` reads a draft: a tool of `known_tools` that none of
+  the named cards' own facts, nor a CV line naming the card as `drafts.named_cards` reads it, names
+  (`drafts.backed`), or that only a card of a similar name holds (as `drafts.crossed`), is taken out of the
+  row (`drafts.without_tools`), and a part left with no tool is dropped. A row that lost evidence is partial
+  at best, and one left with none becomes a gap. Each card of a similar name a row names is followed by its
+  tag (`drafts.tagged`). The letter's Evidence line goes through the same check, and a plan item about such
+  a card that does not name it says the card and its tag (`pack._item_note`). Fit rows and the Evidence line
+  gave a local assistant its namesake's stack, as a CV line of "Quill Employment" named "Quill" too
+  (2026-11-08).
 - Checks with no AI on finished drafts (`writing/drafts.py`): a letter or message whose last line is a
   sentence with no closing punctuation is asked for once more with room to finish (`pack.CUT_NOTE`, a
   wider `ROOM_CTX`); if that one stops too it is kept to its last full sentence and listed (`CUT_FLAG`).

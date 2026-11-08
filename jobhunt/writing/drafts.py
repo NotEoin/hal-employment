@@ -27,6 +27,11 @@ Design decisions, each with its reason:
   Navigation"): a letter placed a personal project in a degree under a shorter name and was not caught
   (2026-11-07). A distinctive word is an acronym or a word with inner capitals that no other card's names
   hold, and it counts only before another capitalised word or "project", so "about LIDAR" names nothing.
+- Evidence words (a fit row, the letter's Evidence line) get the same checks (`evidence_checked`), fixed in
+  place since each tool there is a list entry: a tool given to the wrong card is taken out, and a card of a
+  similar name is followed by its tag (`tagged`). A CV line names a card only as `named_cards` reads it in
+  `backed`, as "Quill Employment: SQLite" backed SQLite for "Quill" and the fit table gave the assistant its
+  namesake's stack (2026-11-08).
 - A sentence echoes the employer when at least `ECHO_SHARE` of its own words sit in runs of `ECHO_RUN` words
   found in the advert or the company brief: "I am drawn to the challenge of maintaining low default rates"
   and "the role offers full in-house training" restated the advert as a reason (2026-11-07). Runs of three
@@ -176,16 +181,77 @@ def misplaced_tools(draft: str, cards: list[dict], known: list[str]) -> list[str
     return out
 
 
-def backed(tool: str, named: list[dict], facts: str = "") -> bool:
+def backed(tool: str, named: list[dict], facts: str = "", cards: list[dict] = ()) -> bool:
     """True when one of the `named` project cards names `tool` in its own facts (names, summary, tools), or a
-    line of `facts` (the CV) names the card and the tool together."""
+    line of `facts` (the CV) names the card and the tool together. With every card (`cards`), a line names a
+    card only as `named_cards` reads it, so "Quill Employment: SQLite" never backs SQLite for "Quill"."""
     lines = (facts or "").splitlines()
     for card in named:
         if names_tool(" ".join([*card_names(card), card["summary"], *card["tools"]]), tool):
             return True
-        if any(names_tool(line, tool) and any(names_tool(line, n) for n in card_names(card)) for line in lines):
+        if any(names_tool(line, tool) and _names_in(line, card, cards) for line in lines):
             return True
     return False
+
+
+def _names_in(line: str, card: dict, cards: list[dict]) -> bool:
+    if cards:
+        return card in named_cards(line, list(cards))
+    return any(names_tool(line, n) for n in card_names(card))
+
+
+def _others_tools(text: str, card: dict, by_name: dict[str, dict]) -> list[str]:
+    """The tools `text` names that only a card of a name like `card`'s holds (`crossed`)."""
+    own = " ".join([*card_names(card), card["kind"], card["summary"], *card["tools"], card.get("tag") or ""])
+    return [t for n in card.get("similar") or () if n in by_name for t in by_name[n]["tools"]
+            if names_tool(text, t) and not names_tool(own, t)]
+
+
+def tagged(text: str, cards: list[dict]) -> str:
+    """`text` with the first mention of each card of a similar name followed by its tag ("Quill (offline
+    assistant over personal notes)"), unless the tag is there already; a name inside a longer card's name
+    ("Quill" in "Quill Employment") is not a mention."""
+    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    for card in named_cards(text, projects):
+        tag = (card.get("tag") or "").strip()
+        if not tag or not card.get("similar") or tag.lower() in text.lower():
+            continue
+        longer = [n for o in projects if o is not card and len(o["name"]) > len(card["name"])
+                  for n in card_names(o) if names_tool(n, card["name"])]
+        inside = [m.span() for n in longer for m in re.finditer(re.escape(n), text, re.I)]
+        for m in re.finditer(rf"(?<![\w-]){re.escape(card['name'])}(?![\w-])", text, re.I):
+            if not any(a <= m.start() and m.end() <= b for a, b in inside):
+                text = f"{text[:m.end()]} ({tag}){text[m.end():]}"
+                break
+    return text
+
+
+def evidence_checked(text: str, cards: list[dict], known: list[str], facts: str = "") -> tuple[str, bool]:
+    """Evidence words (a fit row's, a letter note's) with each tool given to a project card that never used it
+    taken out, and each card of a similar name followed by its tag (`tagged`): (the words, whether a tool was
+    taken out).
+
+    Each part (a sentence or a ";" clause) naming project cards is read as `misplaced_tools` reads a draft: a
+    tool of `known` that none of the named cards' own facts, nor a CV line naming the card (`backed`), names,
+    or that only a card of a similar name holds (`crossed`), is taken out (`without_tools`); a part left with
+    no tool is dropped. A fit table gave a local assistant its namesake's database (2026-11-08).
+    """
+    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    by_name = {c["name"]: c for c in projects}
+    parts, dropped = [], False
+    for part in re.split(r"(?<=[.;])\s+", str(text or "")):
+        named = named_cards(part, projects)
+        wrong = [t for t in dict.fromkeys(known) if named and names_tool(part, t)
+                 and not backed(t, named, facts, projects)]
+        if len(named) == 1:
+            wrong += _others_tools(part, named[0], by_name)
+        if wrong:
+            dropped = True
+            part = without_tools(part, list(dict.fromkeys(wrong)))
+            if not any(names_tool(part, t) for t in known):
+                continue
+        parts.append(tagged(part, projects))
+    return " ".join(parts), dropped
 
 
 def without_tools(text: str, tools: list[str]) -> str:

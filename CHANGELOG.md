@@ -175,6 +175,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Projects with similar names stay apart in the fit table too.** The fit table and the letter's
+  **Evidence** note still gave a local assistant the tools of a job-search helper with a similar name. Each
+  project with a similar name is now named there with a few words of its own description, and a tool only
+  the other project used is taken out.
 - **One project, told once.** A letter told the same project three times, in other words each time, so no
   sentence repeated another word for word. A letter or an answer that comes back to a project with the same
   facts, after a paragraph about something else, now uses another of your facts there or leaves it out.

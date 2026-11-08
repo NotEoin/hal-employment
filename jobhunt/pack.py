@@ -323,33 +323,21 @@ def consistent_fit(fit: dict, you, towns: list[str], facts: str) -> dict:
 
 
 def checked_fit_tools(fit: dict, cards: list[dict], known: list[str], facts: str) -> dict:
-    """The fit map with every tool a row gives to a project card that never used it taken out of the row.
+    """The fit map with every tool a row gives to a project card that never used it taken out of the row, and
+    each card of a similar name named with its tag (`drafts.evidence_checked`).
 
-    Each part of a row's evidence (a sentence or a ";" clause) that names project cards is read as
-    `drafts.misplaced_tools` reads a draft: a tool from `known` that none of the named cards' own facts, nor a
-    CV line naming the card, names (`drafts.backed`) is taken out (`drafts.without_tools`), and a part left
-    with no tool is dropped. A row that lost evidence is partial at best, and one left with none is a gap. A
-    fit row said two projects used Pandas, Scikit-learn and Matplotlib when no source had either using them
-    (2026-11-07).
+    A part of a row's evidence left with no tool is dropped; a row that lost evidence is partial at best, and
+    one left with none is a gap. A fit row said two projects used Pandas, Scikit-learn and Matplotlib when no
+    source had either using them (2026-11-07), and rows gave a local assistant its namesake's stack
+    (2026-11-08).
     """
-    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
     matches, gaps = [], list(fit.get("gaps") or [])
     for m in (dict(m) for m in fit.get("matches") or [] if isinstance(m, dict)):
-        parts, dropped = [], False
-        for part in re.split(r"(?<=[.;])\s+", str(m.get("evidence") or "")):
-            named = [c for c in projects if drafts.names_card(part, c, projects)]
-            wrong = [t for t in dict.fromkeys(known) if named and drafts.names_tool(part, t)
-                     and not drafts.backed(t, named, facts)]
-            if wrong:
-                dropped = True
-                part = drafts.without_tools(part, wrong)
-                if not any(drafts.names_tool(part, t) for t in known):
-                    continue
-            parts.append(part)
+        evidence, dropped = drafts.evidence_checked(str(m.get("evidence") or ""), cards, known, facts)
         if not dropped:
-            matches.append(m)
-        elif parts:
-            matches.append({**m, "evidence": " ".join(parts),
+            matches.append({**m, "evidence": evidence} if m.get("evidence") else m)
+        elif evidence:
+            matches.append({**m, "evidence": evidence,
                             "strength": "partial" if m.get("strength") == "strong" else m.get("strength")})
         else:
             gaps.append(str(m.get("requirement") or ""))
@@ -712,11 +700,22 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     if cut:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["letter"]))
     used = passages(kept)
-    shown = [i.text for i in plan] or used or [m.get("evidence", "") for m in fit.get("matches", [])
-                                               if m.get("strength") == "strong"]
+    cards = profile_writing.cards()
+    shown = [_item_note(i, cards) for i in plan] or used or [m.get("evidence", "") for m in fit.get("matches", [])
+                                                            if m.get("strength") == "strong"]
+    shown = [e for e in (drafts.evidence_checked(s, cards, known_tools(cards), facts)[0] for s in shown) if e]
     return {"text": letter, "flags": flags, "used": used, "revised": revised, "softened": softened, "plan": plan,
             "pairing": pairing,
             "notes": letter_notes(who, letter, shown, flags, revised=revised, softened=softened)}
+
+
+def _item_note(item: planning.Item, cards: list[dict]) -> str:
+    """A plan item as the letter's Evidence line shows it: its quote, with its card and tag after it when the
+    card's name is like another's and the quote does not name it."""
+    card = next((c for c in cards if c["name"] == item.card), None)
+    if not item.tag or card is None or card in drafts.named_cards(item.text, cards):
+        return item.text
+    return f"{item.text} ({item.card}, {item.tag})"
 
 
 def _answers_text(answers: list[dict]) -> str:

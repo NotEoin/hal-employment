@@ -105,6 +105,30 @@ class SimilarNames(unittest.TestCase):
             with self.subTest(said=said):
                 self.assertEqual(drafts.crossed(said, ALIKE), [])
 
+    def test_a_cv_line_of_the_longer_name_never_backs_a_tool_for_the_shorter(self):
+        cv_line = "Quill Employment: Python, Flask, PostgreSQL"
+        self.assertFalse(drafts.backed("PostgreSQL", [QUILL], cv_line, ALIKE))
+        self.assertTrue(drafts.backed("PostgreSQL", [QUILL_JOBS], cv_line, ALIKE))
+
+    def test_evidence_giving_one_card_its_namesakes_tool_loses_the_tool_and_names_each_with_its_tag(self):
+        # the fit table and the letter's evidence notes said the assistant used the job-search helper's stack
+        # (2026-11-08)
+        known = ["Lua", "SQLite", "Python", "Flask", "PostgreSQL"]
+        cv_line = "Quill Employment: Python, Flask, PostgreSQL"
+        said, dropped = drafts.evidence_checked("Quill using Flask and Lua; Quill Employment uses PostgreSQL.",
+                                                ALIKE, known, cv_line)
+        self.assertTrue(dropped)
+        self.assertEqual(said, "Quill (offline assistant over personal notes) using Lua; Quill Employment "
+                               "(job-search helper) uses PostgreSQL.")
+        said, dropped = drafts.evidence_checked("Quill uses PostgreSQL.", ALIKE, known, cv_line)
+        self.assertEqual((said, dropped), ("", True), "a part left with no tool is dropped")
+        said, dropped = drafts.evidence_checked("Tide gauge logs tides in Lua.", ALIKE, known)
+        self.assertEqual((said, dropped), ("Tide gauge logs tides in Lua.", False))
+
+    def test_a_tag_already_given_is_not_given_twice(self):
+        said = "Quill (offline assistant over personal notes) runs on Lua."
+        self.assertEqual(drafts.tagged(said, ALIKE), said)
+
 
 class Contexts(unittest.TestCase):
     def test_a_personal_project_placed_in_a_degree_is_found(self):
