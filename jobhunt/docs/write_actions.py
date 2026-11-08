@@ -66,10 +66,11 @@ def rewrite_letter_now(ctx, job, words: str, **read) -> dict:
     return written
 
 
-def _changed_others(ctx, job, who: dict, docs: dict, words: str, read: dict, about: str, facts: str) -> dict:
+def _changed_others(ctx, job, who: dict, docs: dict, words: str, read: dict, about: str, facts: str,
+                    letter: str = "") -> dict:
     """The message and answers rewritten as the person asked and checked as the pack checks them
-    (`pack.write_others`): {message, answers, flags}. Each answer keeps its question, and one the AI left out
-    keeps its old words."""
+    (`pack.write_others`, against the new `letter` too): {message, answers, flags}. Each answer keeps its
+    question, and one the AI left out keeps its old words."""
     context = pack.shared_context(ctx.con, job, who, read, about, facts)
     asked = f"The applicant asked for this change: {words}"
     given = docs.get("answers") or []
@@ -79,7 +80,8 @@ def _changed_others(ctx, job, who: dict, docs: dict, words: str, read: dict, abo
     out = pack.write_others(
         who, job, read["analysis"], about, facts=facts, kept=read["kept"],
         message_request=f"{context}\n\nThe message as it stands:\n{docs.get('message') or ''}\n\n{asked}",
-        answers_request=f"Questions:\n{listing}\n\n{context}\n\n{conventions}\n\n{asked}" if given else "")
+        answers_request=f"Questions:\n{listing}\n\n{context}\n\n{conventions}\n\n{asked}" if given else "",
+        letter=letter)
     by_question = {a.get("question", ""): a.get("answer", "") for a in out["answers"]}
     answers = [{"question": a.get("question", ""),
                 "answer": by_question.get(a.get("question", "")) or a.get("answer", "")} for a in given]
@@ -100,7 +102,7 @@ def change(ctx, job_id: str, words: str) -> dict:
     read, about = pack.read_job(job, who, facts), documents.summary(job).get("company", "")
     written = rewrite_letter_now(ctx, job, words, who=who, about=about, **read)
     docs = documents.load(ctx.con, job)
-    others = _changed_others(ctx, job, who, docs, words, read, about, facts)
+    others = _changed_others(ctx, job, who, docs, words, read, about, facts, written["text"])
     flags = list(dict.fromkeys(written["flags"] + others["flags"]))
     out = apply_actions.save_documents(ctx.con, job_id, {"message": others["message"], "answers": others["answers"]})
     ctx.changed("Hal rewrote the letter, the message and the answers as you asked. Read them before you approve.")

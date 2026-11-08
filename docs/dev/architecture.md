@@ -529,7 +529,13 @@ runs: tests use `tests/support/fake_claude/`.
 - `writing/repeats.py`: `repeated(answers)` finds each sentence of a later form answer whose own words
   (at least `REPEAT_MIN_WORDS`) are `REPEAT_SHARE` in a sentence of an earlier answer. `pack.fix_repeats`
   rewrites the answers once, in one call, asking for other evidence in the later ones, after the echo
-  rewrite and before the claim check; a sentence still repeating is listed as `pack.REPEAT_FLAG`. The fit
+  rewrite and before the claim check. After the sentence checks, `grounded.unrepeat` reads every sentence of
+  the letter, then the message, then each answer, against the sentences before it in its own draft and in
+  the drafts before it (`repeats.first_said`, the same `REPEAT_SHARE` rule; `pack._unrepeated`, and
+  `pack.write_others`' `letter`): one saying nearly what an earlier one said is rewritten once (prompt
+  `sentence_fix`) from the plan items none of them cites, checked again, then taken out and its paragraph
+  smoothed as `grounded.ground` does, or kept and listed as `pack.REPEAT_FLAG`. Packs said one sentence twice
+  back to back and reused one CV line in the letter, the message and both answers (2026-11-07). The fit
   map's gaps are kept once each (`unique_gaps`: the same words, case, order and "(no evidence found)"
   aside).
 - `writing/eligibility.py`: `blockers(must_haves, person())` finds, with no AI, a degree level above the

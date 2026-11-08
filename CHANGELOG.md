@@ -160,6 +160,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **No repeats across your drafts.** A letter could say the same sentence twice in a row, and one line of
+  your CV turned up in the letter, the message and both answers. Hal now rewrites a sentence that says
+  again what an earlier one said, in the same draft or an earlier one, once with a fact not used yet, or
+  takes it out.
 - **No holes where a sentence was taken out.** When Hal took out a sentence your facts did not support, the
   letter could be left with "This project allowed me ..." pointing at nothing, a paragraph of one sentence,
   or only 105 words when you prefer 250. Hal now keeps a sentence the next one points back at (and lists

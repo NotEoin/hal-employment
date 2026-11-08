@@ -33,7 +33,9 @@ Design notes:
 - A form answer that repeats an earlier one nearly word for word is rewritten once, with the others, to
   use other evidence (`fix_repeats`, `repeats.repeated`), and the fit map lists each gap once
   (`repeats.unique_gaps`): two answers of a real pack gave the same details and a gap was listed twice
-  (2026-11-07).
+  (2026-11-07). After the sentence checks, a sentence of the letter, the message or an answer that says
+  what an earlier one said, in its own draft or an earlier one, is rewritten once from unused evidence,
+  else taken out or listed (`_unrepeated`, `grounded.unrepeat`).
 - Each draft rests on an evidence plan picked before it is written (`evidence_plan`, `writing.plan`): quotes
   of the CV, the Profile block and the record, each with its card's context and the person's part, as a
   local model framed projects in the wrong place and wrote team work as solo when it wrote freely
@@ -128,7 +130,7 @@ LETTER_DRAFTS = 2
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}
 ECHO_FLAG = "restates the advert rather than your own reason"   # a sentence still echoing after its rewrite
-REPEAT_FLAG = "repeats an earlier answer"   # a sentence of an answer still repeating another after its rewrite
+REPEAT_FLAG = "says what an earlier sentence or draft already says"   # still repeating after its rewrite
 # The recipient's greeting when the message greeted the applicant: the advert's named person, else this.
 HELLO = "Hello,"
 GREETING_NOTE = ("Your draft greets the applicant, who is the one writing it. Greet the person it goes to "
@@ -670,11 +672,14 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
         again, again_revised = one_letter()
         if again.key() < best.key():
             best, revised = again, again_revised
-    claims, softened = best.failed, bool(best.rewrites or best.removed)
     cut = best.text in trimmed
-    letter = relocation.without_own_move(cites.strip(best.text), eligibility.person(con))
+    unique = grounded.unrepeat(best.text, grounds(who, plan, facts=facts, kept=kept, employer=sources,
+                                                  pairing=pairing), grounded.only_in_paragraph)
+    claims, softened = best.failed, bool(best.rewrites or best.removed or unique.rewrites or unique.removed)
+    letter = relocation.without_own_move(cites.strip(unique.text), eligibility.person(con))
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in echoed_in(letter)]
+    flags += [f"{REPEAT_FLAG}: {s}" for s in unique.failed]
     if cut:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["letter"]))
     used = passages(kept)
@@ -755,8 +760,22 @@ def answers_request(job, who: dict, analysis: dict, questions: list[str], contex
             + f"\n\n{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}")
 
 
+def _unrepeated(against: grounded.Facts, letter: str, message: str,
+                answers: list[dict]) -> tuple[str, list[dict], list[str]]:
+    """The message and the answers with each sentence that says what the letter, the message or an earlier
+    answer already says rewritten or taken out (`grounded.unrepeat`): (message, answers, what still repeats)."""
+    done = grounded.unrepeat(message, against, grounded.only_in_paragraph, (letter,))
+    message, repeated, out = done.text, list(done.failed), []
+    for a in answers:
+        earlier = (letter, message, *(str(b.get("answer") or "") for b in out))
+        done = grounded.unrepeat(str(a.get("answer") or ""), against, grounded.first_of_answer, earlier)
+        out.append({**a, "answer": done.text})
+        repeated += done.failed
+    return message, out, repeated
+
+
 def write_others(who: dict, job, analysis: dict, about: str, *, message_request: str, answers_request: str,
-                 facts: str, kept: str, plan: list[planning.Item] | None = None) -> dict:
+                 facts: str, kept: str, plan: list[planning.Item] | None = None, letter: str = "") -> dict:
     """The message to the person hiring and the form answers, written from their requests and checked as a
     pack checks them: {message, answers, flags}. `answers_request` "" writes no answers.
 
@@ -765,7 +784,9 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     answers are revised for the writing rules, for restating the advert and for claims (`_answers`). The pack
     and a change the person asks for (`docs.change`) both write them here, so neither skips a check. Both
     cite the evidence `plan` (the pack's, else one picked here for the advert's and the common questions);
-    their markers are taken out before they are returned.
+    their markers are taken out before they are returned. A sentence saying what the `letter`, the message or
+    an earlier answer already says is rewritten once from other evidence, else taken out or listed
+    (`grounded.unrepeat`).
     """
     job_text = _job_text(job)
     their_words, trimmed = (job_text, about), set()
@@ -781,11 +802,13 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
                      kept=kept, employer=their_words)
     message, message_claims = settled.text, settled.failed
     message = to_recipient(who, message, analysis, rewrite_message, job_text)
+    cut = message in trimmed
     answers, answer_claims, answer_echoes = _answers(
         who, answers_request, facts=facts, kept=kept, sources=their_words,
         names=(job["title"], job["company"]), plan=plan) if answers_request else ([], [], [])
+    message, answers, repeated = _unrepeated(grounds(who, plan, facts=facts, kept=kept, employer=their_words),
+                                             letter, message, answers)
     you = eligibility.person()
-    cut = message in trimmed
     message = relocation.without_own_move(cites.strip(message), you)
     answers = [{**a, "answer": relocation.without_own_move(cites.strip(str(a.get("answer") or "")), you)}
                for a in answers]
@@ -793,7 +816,7 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     flags = check_drafts(who, written, facts=facts, kept=kept, sources=their_words, kind="answer",
                          claims=message_claims + answer_claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in answer_echoes]
-    flags += [f"{REPEAT_FLAG}: {s}" for _, s, _ in repeated_answers(answers)]
+    flags += [f"{REPEAT_FLAG}: {s}" for s in repeated]
     if cut:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
     return {"message": message, "answers": answers, "flags": flags}
@@ -929,7 +952,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     questions = [*(analysis.get("questions") or []), *COMMON_QUESTIONS]
     others = write_others(who, job, analysis, about, message_request=context,
                           answers_request=answers_request(job, who, analysis, questions, context),
-                          facts=facts, kept=kept, plan=plan)
+                          facts=facts, kept=kept, plan=plan, letter=letter)
     message, answers = others["message"], others["answers"]
 
     variant, track = cv.tailor(job_text)

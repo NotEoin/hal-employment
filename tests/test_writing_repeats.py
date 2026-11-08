@@ -23,6 +23,11 @@ class Repeats(unittest.TestCase):
                                            "I like tides."]), [])
         self.assertEqual(repeats.repeated(["I like tides.", "I like tides."]), [], "too short to count")
 
+    def test_the_earlier_sentence_a_sentence_says_again_is_found(self):
+        later = "My made-up tide pipeline cleans sensor logs, stores them in Postgres and charts every week."
+        self.assertEqual(repeats.first_said(later, ["I like tides.", PIPELINE]), PIPELINE)
+        self.assertIsNone(repeats.first_said("The tide pipeline taught me to test each change.", [PIPELINE]))
+
     def test_a_gap_listed_twice_is_listed_once(self):
         # a gap was listed twice (2026-11-07)
         self.assertEqual(repeats.unique_gaps(["Experience with React", "Spreadsheets",

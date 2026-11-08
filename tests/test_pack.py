@@ -482,8 +482,8 @@ class MarkedWriter(FakeWriter):
         if pid == "message":
             return "Hello,\n\nI guided visitors at a made-up heritage centre [E2]. What does the team catalogue [M]?"
         if pid == "answers":
-            return {"answers": [{"question": "Why this role?", "answer": "I guided visitors at a made-up heritage "
-                                                                     "centre [E2]."}]}
+            return {"answers": [{"question": "Why this role?", "answer": "Guiding visitors taught me to answer "
+                                                                     "questions clearly [E2]."}]}
         return super().reply(system, user)
 
 
@@ -503,7 +503,7 @@ class Cited(unittest.TestCase):
                       "role.", section(md, "Cover letter"))
         self.assertIn("I guided visitors at a made-up heritage centre. What does the team catalogue?",
                       section(md, "Message to the hiring manager"))
-        self.assertIn("I guided visitors at a made-up heritage centre.", section(md, "Form answers"))
+        self.assertIn("Guiding visitors taught me to answer questions clearly.", section(md, "Form answers"))
         self.assertEqual(writer.asked("verify"), [], "a marked draft is checked sentence by sentence")
         self.assertNotRegex(md, r"\[(E\d|M)", "no marker reaches the pack")
 
@@ -550,6 +550,31 @@ class Cited(unittest.TestCase):
         checked = writer.asked("sentence_check")
         self.assertEqual(len(checked), 2, "one call in each of the two drafts; restating its evidence needs none")
         self.assertNotIn("Dissertation", checked[0]["user"], "a sentence sees only the evidence it cites")
+
+    def test_a_message_saying_what_the_letter_said_is_rewritten_from_other_evidence(self):
+        # packs reused one CV line in the letter, the message and both answers (2026-11-07)
+        writer = MarkedWriter()
+        plain = writer.reply
+        said = "My dissertation was on river trade in an invented port town [E1]."
+
+        def reply(system: str, user: str) -> object:
+            pid = prompt_id(system)
+            if pid == "message":
+                return f"Hello,\n\n{said} What does the team catalogue [M]?"
+            if pid == "sentence_fix" and "already said as" in user:
+                return {"sentence": "I guided visitors at a made-up heritage centre [E2]."}
+            return plain(system, user)
+
+        writer.reply = reply
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        fix = writer.asked("sentence_fix")[0]["user"]
+        self.assertIn('already said as "My dissertation was on river trade in an invented port town."', fix)
+        self.assertNotIn("E1:", fix)
+        self.assertIn("I guided visitors at a made-up heritage centre. What does the team catalogue?",
+                      section(md, "Message to the hiring manager"))
+        self.assertNotIn(pack.REPEAT_FLAG, md)
 
     def test_of_two_letters_the_one_with_fewer_sentences_still_failing_is_kept(self):
         writer = MarkedWriter(first=["I led every tour of the heritage centre [E7].", CITED])

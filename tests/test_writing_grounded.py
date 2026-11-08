@@ -214,6 +214,56 @@ class Smooth(Grounding):
             self.assertEqual(done.smoothed, 0)
 
 
+TWICE = ("I wrote the statistics features of Ferry planner for a team of 7 [E1]. I wrote the statistics features of "
+         "Ferry planner for a team of 7 [E1].\n\nI would welcome a call [M].")
+
+
+class Unrepeat(unittest.TestCase):
+    """Packs said the same sentence twice back to back, and reused one CV line in the letter, the message and both
+    answers (2026-11-07)."""
+
+    def unrepeat(self, text: str, fixes: list[str], earlier: tuple[str, ...] = (),
+                 essential=grounded.only_in_paragraph, paragraphs: list[str] = ()) -> grounded.Grounded:
+        self.fake = FakeChecker(fixes=fixes, paragraphs=paragraphs)
+        with mock.patch.object(llm, "chat_json", self.fake.chat_json):
+            return grounded.unrepeat(text, FACTS, essential, earlier)
+
+    def fixes(self) -> list[str]:
+        return [u for s, u in self.fake.asked if s == ["Rewrite", "one", "sentence"]]
+
+    def test_a_sentence_said_twice_is_rewritten_once_from_evidence_not_yet_used(self):
+        new = "I scored 72 in the Databases module [E3]."
+        done = self.unrepeat(TWICE, [new])
+        self.assertEqual(done.text, "I wrote the statistics features of Ferry planner for a team of 7 [E1]. "
+                                    f"{new}\n\nI would welcome a call [M].")
+        asked = self.fixes()[0]
+        self.assertIn('What is wrong: already said as "I wrote the statistics features', asked)
+        self.assertIn("E3:", asked)
+        self.assertNotIn("E1:", asked, "the rewrite rests on evidence the draft has not used")
+
+    def test_a_rewrite_still_repeating_is_taken_out_and_the_paragraph_smoothed(self):
+        done = self.unrepeat(TWICE, ["I wrote the statistics features of Ferry planner for a team of seven [E1]."])
+        self.assertEqual(done.text, "I wrote the statistics features of Ferry planner for a team of 7 [E1].\n\n"
+                                    "I would welcome a call [M].")
+        self.assertEqual((done.removed, done.failed), (1, []))
+
+    def test_a_sentence_saying_what_an_earlier_draft_said_is_rewritten(self):
+        letter = "I built a sensor logger in Lua that records river levels every ten minutes [E2]."
+        message = "Hello,\n\nMy sensor logger in Lua records river levels every ten minutes [E2]. Can we talk [M]?"
+        done = self.unrepeat(message, ["I scored 72 in the Databases module [E3]."], (letter,))
+        self.assertIn("I scored 72 in the Databases module [E3]. Can we talk [M]?", done.text)
+        self.assertNotIn("E2:", self.fixes()[0], "evidence an earlier draft cites is not offered again")
+
+    def test_an_answers_first_sentence_still_repeating_is_kept_and_listed(self):
+        earlier = ("I built a sensor logger in Lua that records river levels every ten minutes [E2].",)
+        answer = "My sensor logger in Lua records river levels every ten minutes [E2]."
+        done = self.unrepeat(answer, [], earlier, grounded.first_of_answer)
+        self.assertEqual(done.text, answer)
+        self.assertEqual(done.failed, ['My sensor logger in Lua records river levels every ten minutes. (already said '
+                                       'as "I built a sensor logger in Lua that records river levels every ten '
+                                       'minutes.")'])
+
+
 SHORT = "I wrote the statistics features of Ferry planner [E1].\n\nI would welcome a call [M]."
 
 

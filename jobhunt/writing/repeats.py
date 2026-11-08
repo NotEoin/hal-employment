@@ -1,13 +1,18 @@
-"""No repeated answers: the same sentence in two form answers, and the same gap listed twice.
+"""No repeats: the same sentence twice in one draft or in two of a pack's drafts, and the same gap listed twice.
 
 `repeated(answers)` finds, with no AI, each sentence of a later answer that says nearly what a sentence of an
-earlier one says; `pack._answers` has the answers rewritten once so the later one uses other evidence, and
-lists what still repeats. `unique_gaps(gaps)` keeps the first of the fit map's gaps that say the same thing.
+earlier one says; `pack._answers` has the answers rewritten once so the later one uses other evidence.
+`first_said(sentence, earlier)` is the earlier sentence one repeats, which `writing.grounded.unrepeat` uses for
+every sentence of the letter, the message and the answers, against the sentences before it in its own draft
+and in the drafts before it. `unique_gaps(gaps)` keeps the first of the fit map's gaps that say the same thing.
 
 Design decisions, each with its reason:
 
 - Two answers of one pack repeated the same pipeline details nearly word for word, and a gap was listed
   twice (2026-11-07). A reader of a form sees every answer, so each should add something.
+- Packs said the same sentence twice back to back, and reused one CV line in the letter, the message and both
+  answers (15 graded packs, 2026-11-07), so a sentence is compared with every sentence before it in the
+  pack's order: the letter, the message, then the answers in turn.
 - Sentences are near duplicates when the shorter one's own words (little words aside, `drafts.LITTLE_WORDS`)
   number at least `REPEAT_MIN_WORDS` and at least `REPEAT_SHARE` of them are in the other: a shared project
   name in two different sentences is not a repeat, the same three claims in the same order are.
@@ -35,6 +40,11 @@ def same(a: str, b: str) -> bool:
     one, two = _own(a), _own(b)
     shorter = min(len(one), len(two))
     return shorter >= REPEAT_MIN_WORDS and len(one & two) >= REPEAT_SHARE * shorter
+
+
+def first_said(sentence: str, earlier: list[str]) -> str | None:
+    """The first of the `earlier` sentences that `sentence` says nearly again (`same`), or None."""
+    return next((e for e in earlier if same(sentence, e)), None)
 
 
 def repeated(answers: list[str]) -> list[tuple[int, str, int]]:
