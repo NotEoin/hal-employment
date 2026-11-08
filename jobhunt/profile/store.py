@@ -273,19 +273,38 @@ def _row_fields(row: sqlite3.Row) -> dict:
     return json.loads(row["fields"])
 
 
+def section_rank(section: str | None) -> int:
+    """The rank the Projects section gives its facts (`sections.registry.Section.authority`), so a project's
+    own source outranks a CV's line about it; none for any other section or a fact read before the sections.
+
+    Only Projects lifts its facts: every other section's facts keep their document type's rank, so an older CV
+    stays below the current CV and documents (`profile.cvs`)."""
+    if section != PROJECT_SECTION:
+        return merge.UNKNOWN_RANK
+    # the sections import this store, so the registry is imported when first needed
+    from jobhunt.sections import registry
+
+    found = registry.SECTIONS.get(section)
+    return found.rank(registry.ALL_FIELDS) if found else merge.UNKNOWN_RANK
+
+
 def refold(con: sqlite3.Connection, item_id: int) -> None:
     """Works out a found item's fields again from its sources; an item the person checked is left alone.
 
     Among sources of one rank its own come before those moved from cards merged into it, so a merged card
-    keeps its own name unless a better source, such as the person's CV, names it otherwise.
+    keeps its own name unless a better source, such as the person's CV, names it otherwise. A fact from a
+    section's source ranks at least as its section says (`section_rank`): a project's own repository or page
+    outranks a CV's line about it.
     """
     row = con.execute("SELECT kind, state FROM profile_items WHERE id = ?", (item_id,)).fetchone()
     if row is None or row["state"] != "hal":
         return
     older = cvs.older_sources(con)
-    sources = [(cvs.rank(e["doc_type"], e["source_id"], older), json.loads(e["said"]))
-               for e in con.execute("SELECT doc_type, said, source_id FROM profile_evidence WHERE item_id = ? "
-                                    "ORDER BY moved_from IS NOT NULL, id", (item_id,))]
+    sources = [(max(cvs.rank(e["doc_type"], e["source_id"], older), section_rank(e["section"])),
+                json.loads(e["said"]))
+               for e in con.execute("SELECT e.doc_type, e.said, e.source_id, s.section FROM profile_evidence e "
+                                    "LEFT JOIN record_sources s ON s.id = e.source_id WHERE e.item_id = ? "
+                                    "ORDER BY e.moved_from IS NOT NULL, e.id", (item_id,))]
     if not sources:
         return
     fields = merge.fold(sources)
@@ -803,6 +822,7 @@ def delete(con: sqlite3.Connection, item_id) -> None:
 # The kinds a star means something for: a showcase project, a job to lead with (sections plan, 2026-11-09).
 STAR_KINDS = ("project", "job")
 STAR_BY_YOU = "you"
+PROJECT_SECTION = "project"     # the section whose facts are a project's own source (`section_rank`)
 
 
 def set_star(con: sqlite3.Connection, item_id, on: bool) -> dict:

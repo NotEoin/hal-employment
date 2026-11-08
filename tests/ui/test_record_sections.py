@@ -265,6 +265,7 @@ class RecordSections(unittest.TestCase):
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Harbour clean-up day"))
         card.wait_for()
         p.shows(card.get_by_text("Organiser"), "the part")
+        self.assertEqual(card.get_by_text("From your CV only").count(), 0)
         with closing(db.connect()) as con:
             self.assertEqual(sources.listing(con, "project")[0]["files"], 1)
 

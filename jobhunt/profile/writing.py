@@ -591,7 +591,9 @@ def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) ->
 
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
-    tools, summary, planned, context, tier, aliases, role, files, quotes, tag, similar}; `tier` is its
+    tools, summary, planned, context, tier, aliases, role, files, quotes, tag, similar, star}; `star` is the
+    person's showcase mark (`store.set_star`), which chooses the projects told as stories
+    (`writing.plan.story_cards`); `tier` is its
     `profile.tiers` tier ("core", "supporting", "archive", "" unsorted); `planned` holds the tools only
     a plan gives (`planned_only`), left out of `tools`; `role` is the person's part (`card_role`),
     `files` the record files it rests on, `quotes` its own evidence for a paragraph about it (`quotes`), and a
@@ -624,12 +626,13 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                             "files": list(dict.fromkeys(e["source_rel"] for e in it["evidence"]
                                                         if e["source_rel"]
                                                         and view.belongs(it["id"], e["source_rel"]))),
-                            "quotes": quotes(it, f, cvs, view, names), "tag": "", "similar": []})
+                            "quotes": quotes(it, f, cvs, view, names), "tag": "", "similar": [],
+                            "star": bool(it.get("star"))})
             else:
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
                             "tools": [], "summary": "; ".join(f.get("duties") or []), "planned": [],
                             "context": context, "tier": it.get("tier") or "", "role": "", "files": [],
-                            "quotes": quotes(it, f, cvs, view, names),
+                            "quotes": quotes(it, f, cvs, view, names), "star": bool(it.get("star")),
                             "tag": "", "similar": []})
     projects = [c for c in out if c["kind"].startswith("project")]
     alike = similar([c["name"] for c in projects])

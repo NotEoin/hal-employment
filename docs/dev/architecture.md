@@ -1371,6 +1371,15 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   line of the note (place "typed by you"). The kind of document's type is `by_you`, ranked 6 in
   `merge.RANKS`, above every document. `pipeline.attach` (`POST .../sources/{id}/files`) adds files to its
   `record_source_files`; their text goes into the note and gives no facts.
+- Showcase: `profile.writing.cards()` carries each card's `star`. Once any project card is starred, the
+  writer tells only starred projects (`writing.plan.story_cards` for cards, `plan.offered` for the plan's
+  stories), in `rank.candidates`, `rank.order`, `plan.fitting` and `plan.letter_stories`; jobs are always
+  offered, and unstarred projects still give the fit map and skills their evidence. With nothing starred,
+  every project is offered as before.
+- Authority: `profile.store.refold` ranks a fact from a Projects source at least at that section's
+  `authority` (`store.section_rank`, through `record_sources.section`), so a project's own repository, page
+  or files (rank 4) outrank the current CV (3). Every other fact keeps its rank from `profile.cvs.rank`, so an
+  older CV stays at `merge.OLDER_CV_RANK`, below documents and the current CV.
 
 ## Profile (`jobhunt/profile/`)
 

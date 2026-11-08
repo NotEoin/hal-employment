@@ -74,6 +74,15 @@ Google Doc or Slides shared with anyone who has the link. Hal takes the title, t
 materials the page names (such as Figma, Excel or screen printing) and your role when the page says it in a
 line like "Role: Lead designer". The AI writes the summary from the page's own words only.
 
+## Your showcase
+
+Press **Showcase** on the projects you want employers to hear about. Once one project is in your showcase,
+Hal tells only showcase projects in letters, answers and messages. The others still count for your skills.
+If nothing is in your showcase, Hal chooses from all your projects, as before.
+
+What a project's own code, page or files say counts above what your CV says about it. A project card that
+only your CV names is marked **from your CV only**: add the project itself to give Hal more to go on.
+
 ## Projects with no page or code
 
 **Add one by hand** is for anything else: an exhibition, a campaign, an event, research, writing, something

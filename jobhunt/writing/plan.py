@@ -447,6 +447,31 @@ def relevant_modules(modules: list[tuple[str, str]], wanted: str, told: str, n: 
     return tuple(f"{fits[k][0]} ({fits[k][1]})" if str(fits[k][1]).strip() else fits[k][0] for k in best)
 
 
+def _is_project(card: dict | None) -> bool:
+    return card is not None and str(card.get("kind", "")).startswith("project")
+
+
+def showcase_on(cards: list[dict]) -> bool:
+    """True when the person starred any project card: then only starred projects are told as stories."""
+    return any(_is_project(c) and c.get("star") for c in cards)
+
+
+def story_cards(cards: list[dict]) -> list[dict]:
+    """The cards a draft may tell as stories: every job, and the starred projects once any project is starred
+    (all projects while none is, so a record from before stars is not left with nothing to tell). The cards
+    left out still give the fit map and skills their evidence."""
+    if not showcase_on(cards):
+        return cards
+    return [c for c in cards if not _is_project(c) or c.get("star")]
+
+
+def offered(found: list[Story], cards: list[dict]) -> list[Story]:
+    """`found` without the stories of unstarred project cards once any project is starred (`story_cards`)."""
+    if not showcase_on(cards):
+        return found
+    return [s for s in found if not _is_project(s.card) or s.card.get("star")]
+
+
 def card_story(card: dict) -> Story:
     """The story of a card the plan picked nothing of: its own quotes, tools, part and where it was done."""
     return _story(card["name"], [], card)
@@ -454,8 +479,10 @@ def card_story(card: dict) -> Story:
 
 def fitting(found: list[Story], cards: list[dict], wanted: str) -> list[Story]:
     """The stories of the cards no story of `found` tells whose words share at least `RELEVANT_MIN` words with
-    the job's requirements (`wanted`), the best fit first and, at an equal fit, the person's core work first."""
+    the job's requirements (`wanted`), the best fit first and, at an equal fit, the person's core work first.
+    Only the cards a draft may tell (`story_cards`) are offered."""
     names = {s.name for s in found}
+    cards = story_cards(cards)
     fits = sorted(((relevance(c, wanted), k) for k, c in enumerate(cards)
                    if c.get("name") and c["name"] not in names and (c.get("quotes") or c.get("summary"))),
                   key=lambda r: (-r[0], cards[r[1]].get("tier") != tiers.CORE, r[1]))
@@ -466,6 +493,7 @@ def letter_stories(found: list[Story], cards: list[dict], wanted: str, n: int = 
     """The `n` stories a letter tells (see the module notes): the plan's project and job stories, then the cards
     the job's requirements (`wanted`) fit best that no story tells, then, only below `MIN_PROJECTS` of those,
     modules and other lines in the plan's order."""
+    found = offered(found, cards)
     told = [s for s in found if s.kind in (PROJECT, JOB)]
     told += fitting(found, cards, wanted)[:max(n - len(told), 0)]
     if len(told) < MIN_PROJECTS:

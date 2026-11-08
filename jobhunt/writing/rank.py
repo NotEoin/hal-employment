@@ -87,8 +87,9 @@ class Told:
 
 def candidates(found: list[Story], cards: list[dict]) -> list[dict]:
     """The work a ranking orders: every project and job card that is not archived, then each named project story
-    of the plan that has no card (a passage of a project's own file, such as a dissertation), as card fields."""
-    out = [c for c in cards if c.get("name", "").strip() and c.get("tier") != tiers.ARCHIVE
+    of the plan that has no card (a passage of a project's own file, such as a dissertation), as card fields.
+    Once the person starred a project, only starred projects are offered (`plan.story_cards`)."""
+    out = [c for c in planning.story_cards(cards) if c.get("name", "").strip() and c.get("tier") != tiers.ARCHIVE
            and (str(c.get("kind", "")).startswith("project") or c.get("kind") == "job")]
     names = {c["name"] for c in out}
     out += [{"kind": "project", "name": s.name, "tools": list(s.tools),
@@ -201,12 +202,14 @@ def order(found: list[Story], cards: list[dict], ranked: list[Ranked], wanted: s
           n: int = planning.LETTER_STORIES) -> Told:
     """The stories a letter tells and the order the message and the answers take every story in (see the module
     notes); with no ranking, the word count's (`plan.letter_stories`, `plan.fitting`). `wanted` is the job's
-    requirements."""
+    requirements. Once the person starred a project, the stories of unstarred projects are told nowhere
+    (`plan.offered`)."""
+    found = planning.offered(found, cards)
     if not ranked:
         fits = planning.fitting(found, cards, wanted)
         return Told(tuple(planning.letter_stories(found, cards, wanted, n)), tuple([*found, *fits]))
     by_story = {s.name: s for s in found if s.name}
-    by_card = {c["name"]: c for c in cards if c.get("name")}
+    by_card = {c["name"]: c for c in planning.story_cards(cards) if c.get("name")}
     first: list[Story] = []
     for r in ranked:
         story = by_story.get(r.name) or (planning.card_story(by_card[r.name]) if r.name in by_card else None)
