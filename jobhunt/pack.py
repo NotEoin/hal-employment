@@ -873,18 +873,77 @@ def _unrepeated(against: grounded.Facts, letter: str, message: str,
     return message, out, repeated
 
 
+NO_ANSWER = 'Hal drafted no answer to "{question}": your facts gave nothing it could check. Answer it yourself'
+
+
+def _story_of(item: planning.Item, found: list[planning.Story]) -> planning.Story | None:
+    """The story a plan item belongs to: its card's, else the one holding its quote."""
+    return next((s for s in found if (item.card and s.name == item.card) or item.text in (*s.facts, *s.planned)),
+                None)
+
+
+def _story_answer(question: str, found: list[planning.Story], used: dict[str, int], scope: paragraphs.Scope,
+                  pairing: motive.Pairing | None) -> list[paragraphs.Paragraph]:
+    """The paragraphs answering one form question: a "why here" question from the motivation `pairing` and its
+    item's story, any other from the stories the pack has told least (`plan.choose`), one or two
+    (`plan.examples_wanted`)."""
+    if drafts.why_question(question):
+        story = (_story_of(pairing.item, found) if pairing else None) or planning.choose(found, 1, used)[0]
+        return [paragraphs.settle(story, paragraphs.why(question, pairing), scope)]
+    chosen = planning.choose(found, planning.examples_wanted(question), used)
+    return [paragraphs.settle(s, paragraphs.answer(question, k, len(chosen)), scope) for k, s in enumerate(chosen)]
+
+
+def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, facts: str, kept: str,
+                  plan: list[planning.Item], questions: list[str], pairing: motive.Pairing | None, paired: bool,
+                  told: tuple[str, ...]) -> dict:
+    """The message and the answers told one piece of work a paragraph (`writing.paragraphs`): the message is its
+    built opening and one story's few lines and question; each answer one story, or two when its question asks
+    for more than one example, preferring work the letter (`told`) and earlier answers have not told."""
+    you, cards, calls = eligibility.person(), list(scope.cards), 0
+    found = list(scope.stories)
+    first = message_opening(who, job, analysis)
+    body =paragraphs.settle(planning.choose(found, planning.MESSAGE_STORIES, {})[0], paragraphs.MESSAGE, scope)
+    calls += body.calls
+    flags = [body.listed] if body.dropped else []
+    if not paired and any(drafts.why_question(q) for q in questions):
+        pairing = motive.make((job["title"], job["company"]), scope.advert, scope.brief, plan)
+        calls += 1
+    used = dict.fromkeys(told, 1)
+    answers = []
+    for question in questions:
+        said = _story_answer(question, found, used, scope, pairing)
+        calls += sum(p.calls for p in said)
+        flags += [p.listed for p in said if p.dropped]
+        text = " ".join(p.text for p in said if p.text)
+        if not text:
+            flags.append(NO_ANSWER.format(question=question))
+        answers.append({"question": question, "answer": plain.tidy(relocation.without_own_move(text, you), cards)})
+    message = plain.tidy(relocation.without_own_move(body.text, you), cards)
+    written = "\n\n".join([message, *(a["answer"] for a in answers)])
+    flags = check_drafts(who, written, facts=facts, kept=kept, sources=(scope.advert, scope.brief, scope.allowed),
+                         kind="answer", claims=[]) + flags
+    return {"message": first.put(message), "answers": answers, "flags": flags, "calls": calls}
+
+
 def write_others(who: dict, job, analysis: dict, about: str, *, message_request: str, answers_request: str,
-                 facts: str, kept: str, plan: list[planning.Item] | None = None, letter: str = "") -> dict:
+                 facts: str, kept: str, plan: list[planning.Item] | None = None, letter: str = "",
+                 questions: list[str] = (), request: str = "", pairing: motive.Pairing | None = None,
+                 paired: bool = False, told: tuple[str, ...] = ()) -> dict:
     """The message to the person hiring and the form answers, written from their requests and checked as a
     pack checks them: {message, answers, flags}. `answers_request` "" writes no answers.
 
-    The message is written after its opening (`message_opening`: the greeting and who is writing, with no AI),
-    asked for again when it stops mid-sentence and rewritten once without claims the facts do not support
-    (project contexts and misplaced tools included); a greeting or introduction the writer adds is taken out
-    (`writing.opening.body_of`), and the message returned starts with the opening. The answers are revised
-    for the writing rules, for restating the advert and for claims (`_answers`). The pack and a change the
-    person asks for (`docs.change`) both write them here, so neither skips a check. Both
-    cite the evidence `plan` (the pack's, else one picked here for the advert's and the common questions);
+    When the evidence `plan` tells any piece of work (`plan.stories`), they are told one piece of work a
+    paragraph (`_story_others`): the answers to `questions`, the person's own words (`request`) in every
+    request, a "why here" answer from the letter's motivation `pairing` (`paired` when the letter asked for
+    one, which may be None; else one is asked for here), and the work the letter told (`told`) left to the
+    answers last. Otherwise the message is written after its opening (`message_opening`: the greeting and who
+    is writing, with no AI), asked for again when it stops mid-sentence and rewritten once without claims the
+    facts do not support (project contexts and misplaced tools included); a greeting or introduction the
+    writer adds is taken out (`writing.opening.body_of`), and the message returned starts with the opening.
+    The answers are revised for the writing rules, for restating the advert and for claims (`_answers`). The
+    pack and a change the person asks for (`docs.change`) both write them here, so neither skips a check.
+    Both cite the evidence `plan` (the pack's, else one picked here for the advert's and the common questions);
     their markers are taken out before they are returned. A sentence saying what the `letter`, the message or
     an earlier answer already says is rewritten once from other evidence, else taken out or listed
     (`grounded.unrepeat`).
@@ -892,6 +951,14 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     job_text = _job_text(job)
     their_words, trimmed = (job_text, about), set()
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
+    cards = profile_writing.cards()
+    found = planning.stories(plan, cards)
+    if found:
+        scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
+                                request=request, kind="answer")
+        return _story_others(who, job, analysis, scope, facts=facts, kept=kept, plan=plan,
+                             questions=list(questions) if answers_request else [], pairing=pairing, paired=paired,
+                             told=told)
     first = message_opening(who, job, analysis)
     message_request += f"\n\n{first.note}" + _plan_part(plan)
     answers_request += _plan_part(plan) if answers_request else ""
@@ -1029,7 +1096,8 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     questions = [*(analysis.get("questions") or []), *COMMON_QUESTIONS]
     others = write_others(who, job, analysis, about, message_request=context,
                           answers_request=answers_request(job, who, analysis, questions, context),
-                          facts=facts, kept=kept, plan=plan, letter=letter)
+                          facts=facts, kept=kept, plan=plan, letter=letter, questions=questions,
+                          pairing=written["pairing"], paired=True, told=tuple(written.get("told", ())))
     message, answers = others["message"], others["answers"]
 
     variant, track = cv.tailor(job_text)

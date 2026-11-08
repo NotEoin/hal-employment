@@ -183,7 +183,10 @@ What changed in each version, in plain words.
   the sentence at fault, or is left out and named under **Check before sending**. A sentence that ties your
   work to the job with stock words ("aligns with", "meets the requirement for") is written again too. The
   letter opens with who you are (your course, grade, university and year), the role and your one reason
-  for this employer, and closes by asking for the next step.
+  for this employer, and closes by asking for the next step. The message to the person hiring tells one
+  piece of work in a sentence or two and asks one question, and each form answer tells one (two when the
+  question asks for more than one example), taking work the letter has not told first. A question your facts
+  cannot answer is named under **Check before sending** rather than answered with a guess.
 - **Every message says who is writing.** Messages to the person hiring opened with a bare question, "I also
   ...", or "I am available to start immediately", never saying who you are. Hal now writes the opening
   itself from your settings and the course you checked: "Hello <your contact>, I'm <your name>, a

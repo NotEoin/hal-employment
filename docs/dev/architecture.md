@@ -467,8 +467,15 @@ runs: tests use `tests/support/fake_claude/`.
   (`pack.letter_frame`: the name, `opening.described`, the role, the motivation pairing, the stories the
   middle tells and today), checked the same way with the role and the institution required, drafted once
   more when either fails; an opening still failing is `opening.Opening`'s built sentence and a closing
-  still failing is left out. Paragraphs and the frame are drafted at `paragraphs.DRAFT_TEMPERATURE`. A
-  letter with no story is drafted whole as below.
+  still failing is left out. Paragraphs and the frame are drafted at `paragraphs.DRAFT_TEMPERATURE`. The
+  message and the answers are told the same way (`pack._story_others`, through `pack.write_others`): the
+  message is `opening.Opening` and one story in shape `paragraphs.MESSAGE` (one or two sentences, then one
+  question about the team's work); an answer is one story, or two when its question asks for more than one
+  example (`plan.examples_wanted`), in shape `paragraphs.answer`, and a question asking why this employer
+  (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and
+  its item's story (`pack._story_of`). Answers take the stories the letter (`told`) and earlier answers told
+  least (`plan.choose`), and a question no story answers is listed (`pack.NO_ANSWER`). A draft with no story
+  is drafted whole as below.
 - Evidence markers (`writing/cites.py`): the letter, message and answers requests carry the plan
   (`pack._plan_part`), and their prompts ask for each sentence about the person to end with the ids it
   rests on ("[E2]", "[E2,E5]") and a reason for the employer or a closing request with "[M]".
@@ -714,8 +721,10 @@ runs: tests use `tests/support/fake_claude/`.
   contexts and misplaced tools), greeting, writing rules and restating the advert. The pack and
   `docs.change` both use it; `docs.change` reads the job once (`pack.read_job`), passes the reading to
   `pack.write_letter`, and gives the message and answers the same shared context
-  (`pack.shared_context`) with the current draft and the person's words. The action's result `flags` holds
-  the letter's and the others'.
+  (`pack.shared_context`) with the current draft and the person's words. For the story path it also takes
+  the `questions`, the person's words (`request`), the letter's `pairing` (`paired` when the letter asked
+  for one) and the stories the letter `told`. The action's result `flags` holds the letter's and the
+  others'.
 - `docs/write_routes.py` serves the document change, letter rewrite, interview prep and contacts routes;
   each starts its kind in `docs/write_actions.py` and returns `{action_id}`.
 - Critique as a recruiter: `POST /applications/{id}/documents/critique` starts `docs.critique` (priority 0,
