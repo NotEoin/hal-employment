@@ -93,6 +93,8 @@ Routes:
   kinds, a kind that is no experience, or a card already merged is 400.
 - `PUT /api/v2/profile/items/{id}/tier` {"tier": "archive"}: the person's tier for an experience, which Hal
   never changes; ITEM. A tier that is not core, supporting or archive, or an item with no tier, is 400.
+- `PUT /api/v2/profile/items/{id}/star` {"star": true}: the person's star on a project or job
+  (`store.set_star`); ITEM. Any other kind, or `star` not true or false, is 400.
 - `PUT /api/v2/profile/items/{id}/context` {"context": "personal"}: where the person says an experience was
   done, which Hal never changes; ITEM. A context that is not one of the four, or an item with none, is 400.
 - `POST /api/v2/profile/tiers`: starts sorting the experiences again (action `profile.tiers`);
@@ -244,6 +246,16 @@ def set_tier(req: Request) -> dict:
         return _changed(tiers.set_tier(req.con, req.params["item_id"], tier))
     except ValueError as e:
         raise BadRequest(str(e), field="tier") from e
+
+
+@route("PUT", PREFIX + "/items/{item_id}/star")
+def set_star(req: Request) -> dict:
+    """The person stars a project or job, or takes the star off; no read changes it after this."""
+    on = (req.body or {}).get("star") if isinstance(req.body, dict) else None
+    try:
+        return _changed(store.set_star(req.con, req.params["item_id"], on))
+    except ValueError as e:
+        raise BadRequest(str(e), field="star") from e
 
 
 @route("PUT", PREFIX + "/items/{item_id}/context")
