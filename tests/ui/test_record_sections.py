@@ -14,6 +14,7 @@ from unittest import mock
 
 from support import repos
 from support.api import HalServer
+from support.fake_github import FakeGitHub
 from support.ui import AppPage, chromium, skip_unless_browser
 
 from jobhunt import db, record
@@ -187,11 +188,11 @@ class RecordSections(unittest.TestCase):
         project = found("project", {"name": "Tide gauge"})
         p = self.page("record-projects")
         panel = self.panel(p, "Add projects")
-        self.assertTrue(panel.get_by_role("button", name="Upload a folder").is_enabled())
-        for words in ("Your GitHub account", "Link to one code project", "A folder on this computer",
-                      "Portfolio site", "Web page or online document", "Add one by hand"):
+        for words in ("Upload a folder", "Your GitHub account", "Link to one code project"):
+            self.assertTrue(panel.get_by_role("button", name=words).is_enabled(), words)
+        for words in ("A folder on this computer", "Portfolio site", "Web page or online document", "Add one by hand"):
             self.assertTrue(panel.get_by_role("button", name=words).is_disabled(), words)
-        self.assertEqual(panel.get_by_text("Coming soon").count(), 6)
+        self.assertEqual(panel.get_by_text("Coming soon").count(), 4)
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Tide gauge"))
         p.shows(card.get_by_text("from your CV only"), "the mark on a project only a CV gives")
         card.get_by_role("button", name="Showcase: Tide gauge").click()
@@ -215,6 +216,23 @@ class RecordSections(unittest.TestCase):
         row.get_by_role("button", name="This is mine: lent").click()
         p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="lent")).wait_for()
         self.assertTrue(self.listed("project")[0]["theirs"])
+
+    def test_a_github_account_lists_each_project_under_it_with_its_own_card(self) -> None:
+        settings.set("you.name", repos.AVERY[0])
+        settings.set("you.email", repos.AVERY[1])
+        gh = self.enterContext(FakeGitHub())
+        gh.api["/users/averyq"] = (200, {"login": "averyq"})
+        gh.api["/users/averyq/repos"] = (200, [gh.project("averyq", "tide", {"README.md": "# Tide\n"}),
+                                               gh.project("averyq", "harbour", {"README.md": "# Harbour\n"})])
+        p = self.page("record-projects")
+        panel = self.panel(p, "Add projects")
+        panel.get_by_role("button", name="Your GitHub account").click()
+        panel.get_by_label("Your GitHub account").fill("averyq")
+        panel.get_by_role("button", name="Add", exact=True).click()
+        for name in ("tide", "harbour"):
+            p.shows(panel.locator("li.rec-source.rec-child", has_text=name), name)
+            p.page.locator("article.rec-item", has=p.page.locator("h3", has_text=name)).wait_for()
+        self.clean(p)
 
 
 if __name__ == "__main__":

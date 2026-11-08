@@ -62,6 +62,9 @@ What changed in each version, in plain words.
   from its history, its dates and whether you made it alone or with others (and what share of the changes
   were yours). The AI writes only a short summary from the README, and every fact says which file and line
   it came from. A project with none of your changes makes no card until you say it is yours.
+- **Add your GitHub account or one project's link.** Hal lists your own projects, each on its own so you
+  can remove or showcase one, and leaves out copies of other people's projects you never changed. Hal keeps
+  a copy of each, so it still reads them when GitHub is down. Private projects need a GitHub token.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

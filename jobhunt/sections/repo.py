@@ -536,14 +536,14 @@ class RepoReader:
 
     def read(self, source: readers.Source) -> readers.Reading:
         """The project's reading (`read_folder`), with GitHub's details for a clone."""
+        root = root_of(source)              # a clone is made or brought up to date first, with GitHub's details
         meta: dict = {}
         if source.held == "link":
             from jobhunt.sections import github
 
-            meta = github.meta_of(source.locator)
-        return read_folder(root_of(source), name=source.title or (source.locator if source.held == "files" else ""),
-                           meta=meta,
-                           theirs=bool((source.meta or {}).get("theirs")))
+            meta = {"link": source.locator, **github.meta_of(source.locator)}
+        return read_folder(root, name=source.title or (source.locator if source.held == "files" else ""),
+                           meta=meta, theirs=bool((source.meta or {}).get("theirs")))
 
 
 def is_code(folder: Path) -> bool:

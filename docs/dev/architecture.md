@@ -1335,6 +1335,21 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   as a project named after the folder). `Reading.details` (tools, commits, mine, first, last, role, head,
   link, not_yours) is kept in `record_sources.details` (migration 0029) for later checks. `repo` is in
   `pipeline.READER_MODULES`, and `record_sources.meta` (migration 0030) keeps what the person said.
+- GitHub (`sections/github.py`): `repo_url` (`RepoLinkReader`) clones a repository into
+  `data/projects/<owner>/<repo>` with `--filter=blob:limit=1m` and `--depth=CLONE_DEPTH`, or fetches into the
+  clone it has, then reads it as `repo` with GitHub's details (`about`: name, description, topics, SPDX
+  licence, link, `pushed_at`, kept beside the clone as `<repo>.json`, `meta_of`). A private repository is
+  read only with `record.github_token`, which reaches git as an `http.extraHeader` through `GIT_CONFIG_*`
+  variables, never in `.git/config`. When GitHub or the network fails, an existing clone is read as it is.
+  `github_account` (`AccountReader`, `account_repos`) lists the account's own repositories (with a token for
+  the account itself, `/user/repos` with organisation membership); a fork or another owner's repository counts
+  only when `/repos/{o}/{r}/commits?author=<login>` finds one. API calls go through `ingest.web._api`; a used
+  limit that resets within `BACKOFF_MAX_S` is waited out once (`_api`).
+- Sources inside sources: a `Reading.children` list of `readers.Child(doc_kind, held, locator)` becomes
+  sources with `parent_id` (`pipeline.add_children`), and `read` returns their ids so `record.sources` reads
+  them in the same run. One already in the record, or one the person removed from that parent (kept in the
+  parent's `meta.dropped`), is not added again. `pipeline.remove` removes the children first, and calls the
+  reader's `forget(source)` when it has one (a clone is deleted with its source).
 
 ## Profile (`jobhunt/profile/`)
 

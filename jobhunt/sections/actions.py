@@ -36,8 +36,9 @@ def read_sources(ctx, ids: list, allow: list | None = None) -> dict:
     """Reads each source in `ids` (those in `allow` even when they look private); says what each gave."""
     allowed = {int(i) for i in allow or []}
     out = {"read": 0, "waiting": 0, "failed": 0, "kept_out": 0, "facts": 0, "missing": 0}
-    for n, source_id in enumerate(ids):
-        ctx.step(f"Reading {n + 1} of {len(ids)}", total=len(ids))
+    todo = list(ids)             # grows by the sources a read finds inside one (an account's projects)
+    for n, source_id in enumerate(todo):
+        ctx.step(f"Reading {n + 1} of {len(todo)}", total=len(todo))
         try:
             store.row(ctx.con, source_id)
         except LookupError:      # removed while it waited
@@ -47,9 +48,10 @@ def read_sources(ctx, ids: list, allow: list | None = None) -> dict:
         state = {"new": "waiting", "read": "read", "failed": "failed", "kept_out": "kept_out"}[done["state"]]
         out[state] += 1
         out["facts"] += done["facts"]
-        ctx.progress(n + 1, len(ids))
+        todo += done.get("children", [])
+        ctx.progress(n + 1, len(todo))
     if out["read"] or out["kept_out"]:
-        events.publish("profile", sources=[int(i) for i in ids])
+        events.publish("profile", sources=[int(i) for i in todo])
     if out["read"]:
         ctx.changed(f"Read {out['read']} of what you added, with {out['facts']} facts for your profile.")
     if out["waiting"]:

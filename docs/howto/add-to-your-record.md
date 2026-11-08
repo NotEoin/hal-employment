@@ -52,6 +52,12 @@ project's README. Hal never reads `.env` files, keys or anything that looks priv
 For Hal to know which changes are yours, give your name and email under **Settings**, **You**. Add any
 usernames you commit under to **Other names you go by**.
 
+**Your GitHub account** takes your username. Hal lists your own projects, each as its own entry under the
+account, so you can remove one or press **Showcase** on its card. Copies of other people's projects (forks)
+are left out unless you changed them. **Link to one code project** takes the address of one project on
+GitHub. Hal keeps its own copy of each project, so it can still read them when GitHub cannot be reached.
+Private projects need a GitHub token, under **Settings**, **CV and documents**.
+
 How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-record-jobhuntsections).
 
 | Symptom | Fix |
@@ -70,4 +76,6 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | "... is already this course's dissertation." | Press **My dissertation** on the piece marked now to undo it, then mark the right one. |
 | A card disappeared after you pressed **Remove** | It came only from that file, so Hal hid it. Add the file again and the card comes back as you left it. |
 | A code project says "None of the changes are yours" | Hal found none of its changes under your name or email. If you made it, press **This is mine**, and add the name or email you used to **Other names you go by**. |
+| "GitHub has no project at this link that Hal can see." | Check the link. For a private project, add a GitHub token under **Settings**, **CV and documents**, then press **Read again**. |
+| A project you removed from your GitHub account does not come back | Hal remembers you removed it. Add its link with **Link to one code project** to bring it back. |
 | A code project has no "sole author" or "contributor" line | It has no history Hal can read (an uploaded copy often has none), so Hal shows its file dates instead. |

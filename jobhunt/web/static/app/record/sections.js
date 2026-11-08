@@ -95,7 +95,7 @@ function ModuleChoice({ s, path }) {
 function SourceRow({ s }) {
   const id = encodeURIComponent(s.id);
   const path = SOURCES + "/" + id;
-  return html`<li class="rec-source" data-source=${s.id}>
+  return html`<li class=${"rec-source" + (s.parent_id != null ? " rec-child" : "")} data-source=${s.id}>
     <div class="grow"><div><b>${s.title}</b> <span class="small sub">${s.doc_kind_label}</span></div>
       <div class="chips"><${Chip} tone=${STATE_TONE[s.state] || "line"}>${s.state_words}<//>
         ${s.current && html`<${Chip} tone="info">Current CV<//>`}
@@ -139,7 +139,15 @@ export function SourceList({ section, target, empty }) {
   if (error) return html`<p class="small sub">${error.message}</p>`;
   if (!data) return html`<p class="small sub">Loading</p>`;
   if (!data.length) return empty ? html`<p class="small sub rec-line">${empty}</p>` : null;
-  return html`<ul class="rec-source-list">${data.map(s => html`<${SourceRow} key=${s.id + ":" + s.revision + ":" + s.state} s=${s} />`)}</ul>`;
+  return html`<ul class="rec-source-list">${nested(data).map(s => html`<${SourceRow} key=${s.id + ":" + s.revision + ":" + s.state} s=${s} />`)}</ul>`;
+}
+
+/** Sources in order with each one's children (an account's projects) right after it. */
+function nested(list) {
+  const ids = new Set(list.map(s => s.id));
+  const kids = id => list.filter(s => s.parent_id === id);
+  const walk = s => [s, ...kids(s.id).flatMap(walk)];
+  return list.filter(s => s.parent_id == null || !ids.has(s.parent_id)).flatMap(walk);
 }
 
 /** An upload button for one section and kind; `folder` picks a whole folder instead of files. */

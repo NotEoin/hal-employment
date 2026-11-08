@@ -40,12 +40,23 @@ from jobhunt import db, record
 from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import coursework, documents, lecture, letters, readers, registry, repo, store, wrong_place
+from jobhunt.sections import (
+    coursework,
+    documents,
+    github,
+    lecture,
+    letters,
+    readers,
+    registry,
+    repo,
+    store,
+    wrong_place,
+)
 from jobhunt.sections import cv as cv_reader
 
 log = logging.getLogger(__name__)
 # The sections' own reader modules: each puts its readers in place (`readers.register`) when it is imported.
-READER_MODULES = (cv_reader, coursework, documents, lecture, letters, repo)
+READER_MODULES = (cv_reader, coursework, documents, github, lecture, letters, repo)
 CHUNK = 1 << 20            # files are hashed 1 MiB at a time
 SKIPPED_PARTS = {"__MACOSX", ".git", ".DS_Store", "Thumbs.db", "desktop.ini"}
 ZIP = ".zip"
@@ -287,7 +298,8 @@ def _write_note(r: sqlite3.Row, section: registry.Section, kind: registry.DocKin
 def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> dict:
     """Reads one source with its section's reader, writes its note and puts its facts in the profile.
 
-    Returns {"id", "state", "facts", "left_out", "hidden", "suggestion"}; a reader not written yet leaves the
+    Returns {"id", "state", "facts", "left_out", "hidden", "suggestion", "children"} (the ids of sources the read
+    found inside this one, added under it and still to read); a reader not written yet leaves the
     source waiting (state `new`), and one that cannot read it marks it failed with the reason. LookupError for
     a source that is not there.
     """
@@ -332,19 +344,58 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
         cv_reader.settle(con)
     readers.settle(readers.get(section.reader_of(r["doc_kind"])), con)
     return {**out, "state": "read", "facts": swapped["added"], "left_out": len(reading.facts) - len(facts)
-            + len(swapped["left_out"]), "hidden": swapped["hidden"], "suggestion": suggestion}
+            + len(swapped["left_out"]), "hidden": swapped["hidden"], "suggestion": suggestion,
+            "children": add_children(con, r["id"], reading.children)}
+
+
+def add_children(con: sqlite3.Connection, parent_id: int, children: list[readers.Child]) -> list[int]:
+    """Adds the sources a read found inside a source (an account's repositories, a folder's projects) under it;
+    returns the ids of the new ones, to be read next.
+
+    One already in the record anywhere, or one the person removed from this parent (`meta.dropped`), is not
+    added again, so removing one project of an account keeps it out after the next read.
+    """
+    if not children:
+        return []
+    parent = store.row(con, parent_id)
+    dropped = set(store.meta(con, parent_id).get("dropped") or [])
+    new = []
+    with con:
+        for child in children:
+            if child.locator in dropped or store.by_locator(con, child.held, child.locator) is not None:
+                continue
+            child_id = store.add(con, parent["section"], held=child.held, doc_kind=child.doc_kind,
+                                 locator=child.locator, target_id=parent["target_id"])
+            con.execute("UPDATE record_sources SET parent_id = ?, title = ? WHERE id = ?",
+                        (parent_id, child.title, child_id))
+            new.append(child_id)
+    return new
 
 
 def remove(con: sqlite3.Connection, source_id) -> dict:
-    """Takes a source out of the record: its facts, its note and Hal's copy of its files; returns {"hidden": [ids
-    of the cards Hal found that no source names any more, now hidden]}. LookupError when it is not there."""
+    """Takes a source out of the record: its facts, its note and Hal's copy of its files, and the sources found
+    inside it; returns {"hidden": [ids of the cards Hal found that no source names any more, now hidden]}.
+
+    A source found inside another is remembered on that parent as removed, so its next read does not add it
+    back. LookupError when it is not there.
+    """
     r = store.row(con, source_id)
+    hidden = []
+    for (child_id,) in con.execute("SELECT id FROM record_sources WHERE parent_id = ?", (r["id"],)).fetchall():
+        hidden += remove(con, child_id)["hidden"]
     gone = profile_store.swap_source(con, r["id"], [])
     _drop_note(r["note_rel"])
     shutil.rmtree(store.files_dir(r["id"]), ignore_errors=True)
+    forget = getattr(readers.get(registry.get(r["section"]).reader_of(r["doc_kind"])), "forget", None)
+    if forget is not None:
+        forget(_source(con, r))
+    if r["parent_id"] is not None and con.execute("SELECT 1 FROM record_sources WHERE id = ?",
+                                                  (r["parent_id"],)).fetchone():
+        dropped = store.meta(con, r["parent_id"]).get("dropped") or []
+        store.set_meta(con, r["parent_id"], dropped=sorted({*dropped, r["locator"]}))
     with con:
         con.execute("DELETE FROM record_sources WHERE id = ?", (r["id"],))
     if r["section"] == cv_reader.SECTION:
         cv_reader.settle(con)
     readers.settle(readers.get(registry.get(r["section"]).reader_of(r["doc_kind"])), con)
-    return {"hidden": gone["hidden"]}
+    return {"hidden": hidden + gone["hidden"]}
