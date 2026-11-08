@@ -35,7 +35,10 @@ Design decisions, each with its reason:
 - A project or job card can carry the person's star (`set_star`, migration 0028): a starred project is one to
   tell an employer about, a starred job one to lead with. Only the person sets it, so no read changes it.
 - Evidence may name the source of the record it came from (`source_id`, with `place` and `line` inside it),
-  for facts read from a section's sources (`jobhunt.sections`), so removing a source removes exactly its facts.
+  for facts read from a section's sources (`jobhunt.sections`). Reading a source again replaces its facts in
+  one transaction (`swap_source`), so a failed read leaves the old ones whole. A card Hal found that no
+  source names any more is hidden, not deleted, remembering its state (`orphaned_from`): adding the source
+  again brings it back as the person left it.
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
@@ -300,29 +303,35 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, 
     said = clean(kind, fields)
     _named(kind, said)
     ev = _evidence(evidence)
-    now = db.now()
     with con:
-        # the item's own fields or any of its sources count, so a fact the person corrected (a misspelt
-        # employer) still matches when the same file is read again, instead of coming back as a second item
-        item_id = index.match(con, kind, said)
-        moved_from = None
-        if item_id is not None and (into := _folded_into(con, item_id)) is not None:
-            item_id, moved_from = into, item_id       # a card folded into another: its new facts go there too
-        if item_id is None:
-            item_id = con.execute("INSERT INTO profile_items (kind, fields, state, origin, created, updated) "
-                                  "VALUES (?, ?, 'hal', 'found', ?, ?)",
-                                  (kind, json.dumps(said), now, now)).lastrowid
-        con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, verified, "
-                    "role, found_at, moved_from, source_id, place, line) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (item_id, ev["source_rel"], ev["quote"], ev["field"], ev["doc_type"], json.dumps(said),
-                     int(ev["verified"]), ev["role"], now, moved_from, ev["source_id"], ev["place"], ev["line"]))
-        refold(con, item_id)
+        item_id, fields_now = _put(con, kind, said, ev)
         if refresh:
             conflicts.refresh(con)
-        fields_now = _row_fields(con.execute("SELECT fields FROM profile_items WHERE id = ?", (item_id,)).fetchone())
     index.added(con, item_id, kind, said, fields_now)
     return item_id
+
+
+def _put(con: sqlite3.Connection, kind: str, said: dict, ev: dict) -> tuple[int, dict]:
+    """Files one checked fact on its item (a new one when none matches) inside the caller's transaction; returns
+    the item's id and its fields now."""
+    now = db.now()
+    # the item's own fields or any of its sources count, so a fact the person corrected (a misspelt
+    # employer) still matches when the same file is read again, instead of coming back as a second item
+    item_id = index.match(con, kind, said)
+    moved_from = None
+    if item_id is not None and (into := _folded_into(con, item_id)) is not None:
+        item_id, moved_from = into, item_id       # a card folded into another: its new facts go there too
+    if item_id is None:
+        item_id = con.execute("INSERT INTO profile_items (kind, fields, state, origin, created, updated) "
+                              "VALUES (?, ?, 'hal', 'found', ?, ?)",
+                              (kind, json.dumps(said), now, now)).lastrowid
+    con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, verified, "
+                "role, found_at, moved_from, source_id, place, line) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (item_id, ev["source_rel"], ev["quote"], ev["field"], ev["doc_type"], json.dumps(said),
+                 int(ev["verified"]), ev["role"], now, moved_from, ev["source_id"], ev["place"], ev["line"]))
+    refold(con, item_id)
+    return item_id, _row_fields(con.execute("SELECT fields FROM profile_items WHERE id = ?", (item_id,)).fetchone())
 
 
 def _folded_into(con: sqlite3.Connection, item_id: int) -> int | None:
@@ -492,11 +501,12 @@ def keep_apart(con: sqlite3.Connection, item_id: int) -> None:
                     (APART, _row(con, item_id)["id"]))
 
 
-def _said_by(con: sqlite3.Connection, source_rel: str) -> dict[int, list[str]]:
-    """What one file said about each item, as sorted JSON texts, so before and after can be compared."""
+def _said_by(con: sqlite3.Connection, source, column: str = "source_rel") -> dict[int, list[str]]:
+    """What one file (or one source of the record, by `source_id`) said about each item, as sorted JSON texts,
+    so before and after can be compared."""
     out: dict[int, list[str]] = {}
-    for e in con.execute("SELECT item_id, said FROM profile_evidence WHERE source_rel = ? ORDER BY id",
-                         (source_rel,)):
+    where = {"source_rel": "source_rel = ?", "source_id": "source_id = ?"}[column]
+    for e in con.execute(f"SELECT item_id, said FROM profile_evidence WHERE {where} ORDER BY id", (source,)):
         out.setdefault(e["item_id"], []).append(json.dumps(json.loads(e["said"]), sort_keys=True))
     return {i: sorted(s) for i, s in out.items()}
 
@@ -530,6 +540,75 @@ def replace_source(con: sqlite3.Connection, source_rel: str, add: Callable[[], o
             refold(con, item_id)
         conflicts.refresh(con)
     return again
+
+
+def _checked_facts(facts: list[tuple[str, dict, dict]], source_id: int) -> tuple[list, list[str]]:
+    """`facts` as (kind, fields, evidence) checked and in stored form, each skill of a list on its own, with the
+    source's id on the evidence; and why each refused fact was left out."""
+    kept, left_out = [], []
+    for kind, fields, evidence in facts:
+        names = [n for n in SKILL_LIST.split(str(fields.get("name") or "")) if n] if kind == "skill" else []
+        for one in ([{**fields, "name": n} for n in names] if len(names) > 1 else [fields]):
+            try:
+                said = clean(kind, one)
+                _named(kind, said)
+                kept.append((kind, said, _evidence({**evidence, "source_id": source_id})))
+            except ValueError as e:      # one fact a reader misread is left out, not the whole source
+                left_out.append(str(e))
+    return kept, left_out
+
+
+def swap_source(con: sqlite3.Connection, source_id: int, facts: list[tuple[str, dict, dict]]) -> dict:
+    """Replaces every fact one source of the record gave (`jobhunt.sections`) with `facts`, in one transaction.
+
+    `facts` are (kind, fields, evidence) as for `add_found`; each evidence gets `source_id`. Returns {"added":
+    facts filed, "left_out": [why each refused fact was left out], "hidden": [ids of cards Hal found that no
+    source names any more, now hidden], "changed": whether what the source says changed}. A hidden card keeps
+    the state it had (`orphaned_from`) and gets it back when a fact names it again. As in `replace_source`, a
+    confirmed card whose facts from this source changed goes back to be checked. `facts` empty takes the source
+    out of the profile.
+    """
+    kept, left_out = _checked_facts(facts, source_id)
+    before = _said_by(con, source_id, "source_id")
+    hidden, now = [], db.now()
+    try:
+        with con:
+            con.execute("DELETE FROM profile_evidence WHERE source_id = ?", (source_id,))
+            for kind, said, ev in kept:
+                item_id, fields_now = _put(con, kind, said, ev)
+                index.added(con, item_id, kind, said, fields_now)
+            after = _said_by(con, source_id, "source_id")
+            for item_id in sorted(set(before) | set(after)):
+                if _settle(con, item_id, before.get(item_id) != after.get(item_id), now):
+                    hidden.append(item_id)
+            conflicts.refresh(con)
+    except BaseException:
+        index.forget(con)       # the index learnt facts the rollback took back
+        raise
+    return {"added": len(kept), "left_out": left_out, "hidden": hidden, "changed": before != after}
+
+
+def _settle(con: sqlite3.Connection, item_id: int, changed: bool, now: str) -> bool:
+    """After a source's facts were swapped: hides a found card no source names any more (True), brings back one
+    hidden that way that a source names again, sends a confirmed card whose facts changed back to be checked,
+    and works the card's fields out again."""
+    r = con.execute("SELECT state, origin, orphaned_from FROM profile_items WHERE id = ?", (item_id,)).fetchone()
+    if r is None:
+        return False
+    named = con.execute("SELECT 1 FROM profile_evidence WHERE item_id = ? LIMIT 1", (item_id,)).fetchone()
+    if r["origin"] == "found" and not named:
+        if r["state"] == "hidden":
+            return False
+        con.execute("UPDATE profile_items SET state = 'hidden', orphaned_from = ?, updated = ? WHERE id = ?",
+                    (r["state"], now, item_id))
+        return True
+    if r["orphaned_from"]:
+        con.execute("UPDATE profile_items SET state = ?, orphaned_from = '', updated = ? WHERE id = ?",
+                    (r["orphaned_from"], now, item_id))
+    elif r["state"] == "confirmed" and changed:
+        _set_state(con, item_id, "hal")
+    refold(con, item_id)
+    return False
 
 
 def rebuild_found(con: sqlite3.Connection) -> int:
@@ -602,10 +681,12 @@ def _row(con: sqlite3.Connection, item_id) -> sqlite3.Row:
 
 
 def _set_state(con: sqlite3.Connection, item_id: int, state: str, fields: dict | None = None) -> None:
+    # a state set by the person or a check replaces the one a card had when its last source went
     if fields is None:
-        con.execute("UPDATE profile_items SET state = ?, updated = ? WHERE id = ?", (state, db.now(), item_id))
+        con.execute("UPDATE profile_items SET state = ?, orphaned_from = '', updated = ? WHERE id = ?",
+                    (state, db.now(), item_id))
     else:
-        con.execute("UPDATE profile_items SET state = ?, fields = ?, updated = ? WHERE id = ?",
+        con.execute("UPDATE profile_items SET state = ?, fields = ?, orphaned_from = '', updated = ? WHERE id = ?",
                     (state, json.dumps(fields), db.now(), item_id))
 
 

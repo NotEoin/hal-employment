@@ -331,7 +331,9 @@ def _ask_again(row: sqlite3.Row, role: str, doc_type: str, fm: dict) -> bool:
 
 
 def _pointed_at(con: sqlite3.Connection) -> set[str]:
-    return {r[0] for r in con.execute("SELECT DISTINCT note FROM ingest_items WHERE note IS NOT NULL")}
+    """The notes a read still stands behind: the bulk read's, and those of the sources added to each section."""
+    return {r[0] for r in con.execute("SELECT DISTINCT note FROM ingest_items WHERE note IS NOT NULL "
+                                      "UNION SELECT note_rel FROM record_sources WHERE note_rel IS NOT NULL")}
 
 
 def _sweep_sources(con: sqlite3.Connection, vault: Path) -> int:

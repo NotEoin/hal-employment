@@ -649,6 +649,44 @@ class Store(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.add_found(self.con, "project", {"name": "Tide gauge"}, {**ev(CV_A, "cv"), "line": 0})
 
+    def source_facts(self, *names: str) -> list:
+        """Skills as a section's source gives them."""
+        return [("skill", {"name": n}, ev("Sources/Education/BA History/Coursework/Essay.md", "essay", n.lower()))
+                for n in names]
+
+    def test_swapping_a_sources_facts_replaces_them_whole_and_a_failure_leaves_the_old_ones(self):
+        out = store.swap_source(self.con, 7, self.source_facts("Archival research", "Palaeography"))
+        self.assertEqual((out["added"], out["hidden"], out["changed"]), (2, [], True))
+        before = self.con.execute("SELECT item_id, said FROM profile_evidence ORDER BY id").fetchall()
+        real_put, calls = store._put, []
+
+        def failing(*args):
+            calls.append(args)
+            if len(calls) == 2:
+                raise RuntimeError("disk full")
+            return real_put(*args)
+        with mock.patch.object(store, "_put", failing), self.assertRaises(RuntimeError):
+            store.swap_source(self.con, 7, self.source_facts("Oral history", "Census returns"))
+        after = self.con.execute("SELECT item_id, said FROM profile_evidence ORDER BY id").fetchall()
+        self.assertEqual([tuple(r) for r in after], [tuple(r) for r in before])
+        self.assertEqual(store.add_found(self.con, "skill", {"name": "Oral history"}, ev(CV_A, "cv")),
+                         max(r[0] for r in before) + 1, "the index forgot the facts the rollback took back")
+
+    def test_a_fact_a_source_gives_wrongly_is_left_out_and_said_why(self):
+        out = store.swap_source(self.con, 7, [*self.source_facts("Archival research"),
+                                              ("basic", {"key": "shoe size", "value": "9"}, ev(CV_A, "cv"))])
+        self.assertEqual((out["added"], len(out["left_out"])), (1, 1))
+        self.assertIn("shoe size", out["left_out"][0])
+
+    def test_a_card_hidden_by_the_person_stays_hidden_when_its_source_comes_back(self):
+        store.swap_source(self.con, 7, self.source_facts("Archival research"))
+        card = store.items(self.con, "skill")[0]["id"]
+        store.hide(self.con, card)
+        self.assertEqual(store.swap_source(self.con, 7, [])["hidden"], [])
+        store.swap_source(self.con, 7, self.source_facts("Archival research"))
+        self.assertEqual(store.item(self.con, card)["state"], "hidden")
+
+
 DOCUMENTS, FACTS_EACH = 20, 100       # 2,000 facts, as a large ingest gives them
 # Merging them took 5.5 s when every fact read every item and source of its kind, and 0.3 s with the index
 # (measured on the development machine, 2026-11-07); the bound leaves room for a loaded test runner.

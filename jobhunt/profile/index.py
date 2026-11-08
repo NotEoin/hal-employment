@@ -126,6 +126,12 @@ def match(con: sqlite3.Connection, kind: str, fields: dict) -> int | None:
     return None
 
 
+def forget(con: sqlite3.Connection) -> None:
+    """Drops this connection's index, so the next `match` reads it afresh (after a rolled-back write)."""
+    with _lock:
+        _indexes.pop(_token(con), None)
+
+
 def added(con: sqlite3.Connection, item_id: int, kind: str, said: dict, fields: dict) -> None:
     """Tells the index that one source said `said` about the item, whose own fields are now `fields`.
 
