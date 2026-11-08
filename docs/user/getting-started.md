@@ -93,9 +93,8 @@ in it when your files say so. The letter's notes list them under **Evidence**.
 
 Hal then tells each piece of work in a paragraph of its own. Each paragraph in the middle of a letter is
 about one of your projects or jobs, told once, and is written on its own from that work's facts alone:
-what it is, where you did it, your part, its tools and what came of it. It ends with one sentence tying a
-result of that work to a task, system or product the advert or the company brief names, and is written
-once more when its last sentence names nothing of the job. The message to the person hiring
+what it is, where you did it, your part, its tools and what came of it. It ends on why that work
+matters for the job only when one of its facts clearly fits. The message to the person hiring
 tells one piece of work in a sentence or two and asks one question about the employer's own work, something
 the advert or the company brief names, rather than about your project's subject. Each form answer
 tells one piece of work, or two when the question asks for more than one example, and the message and the

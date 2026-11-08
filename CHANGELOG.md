@@ -228,11 +228,6 @@ What changed in each version, in plain words.
 - **Each project is told once in a pack.** The answer to "Why do you want to work here?" told the project
   your reason rests on even when the letter had told it already and other work was left untold. It now
   takes work the letter and the message have not told while there is some, like the other answers.
-- **Each letter paragraph ends on this job.** A paragraph could end on a detail, such as fixing missing
-  brackets, or on a link that made no sense for the employer. Each paragraph about your work now ends with
-  one sentence, in your own words, tying a result of that work to a task, system or product the advert or
-  the company brief names, and is written once more when its last sentence names nothing of the job. It is
-  never left out for this alone.
 - **The message asks about the employer's work.** The question at the end of the message to the person
   hiring asked about your own project's subject, such as "cross-platform window management" asked of a
   consultancy. It now asks about a task, system or product the advert or the company brief names, and may

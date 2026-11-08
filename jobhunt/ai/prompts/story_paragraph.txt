@@ -16,13 +16,10 @@ Rules:
 - "Your part" says what you did: write it as what you did, never as a label ("As the owner, ..."). When the
   work was a team's, say so and say your part; never write the whole as yours alone.
 - Leave out facts that tell an employer nothing, such as where files are kept, file names or versions.
-- At most one sentence links the work to the job, the last when the shape asks for one. It ties a
-  substantial fact of this work (a result, a system built, a measured outcome; never a bug fix or a small
-  detail) to a task, system or product of this employer named in the advert or the company brief, such as
-  "What it can help with", in your own words. Never use the advert's wording, never a link that would be
-  absurd for this employer, and never a stock link such as "this matters for the role", "this demonstrates
-  my ability to", "aligns with", "resonates with", "directly supports", "meets the requirement" or "the
-  role requires".
+- At most one sentence links the work to the job: end with why it matters for this job only when a fact
+  clearly fits, such as "What it can help with", in your own words. Never use the advert's wording, and
+  never a stock link such as "this matters for the role", "this demonstrates my ability to", "aligns with",
+  "resonates with", "directly supports", "meets the requirement" or "the role requires".
 - Facts listed as planned were never done: leave them out, or say they were planned.
 - Today's date and the applicant's stage are given: never write of finishing, completing or graduating from a
   course that has already ended.

@@ -68,7 +68,7 @@ POLL_S = 0.05
 
 def job_word(user: str) -> str:
     """The longest word of a request's advert's first sentence that names a part of the job
-    (`paragraphs.job_terms`' kind of word): what a careful writer ties the work to, or asks about."""
+    (`paragraphs.job_terms`' kind of word): what a careful writer asks about."""
     job = re.search(r"^The job: (.+)$", user, re.M)
     names = set(re.findall(r"[a-z]+", job.group(1).lower())) if job else set()
     advert = user.split("never copy its words):\n", 1)[-1].split(".", 1)[0]
@@ -77,15 +77,8 @@ def job_word(user: str) -> str:
     return max(words, key=len) if words else ""
 
 
-def job_link(user: str) -> str:
-    """A letter paragraph's last sentence as a careful writer ends it: the work tied to a part of the job."""
-    word = job_word(user)
-    return f"It could help with your {word} work." if word else ""
-
-
 def story_paragraph(user: str) -> str:
-    """What a careful writer makes of a paragraph request: its work named, then each fact it was given, in turn,
-    and for a letter a last sentence tying it to the job (`job_link`)."""
+    """What a careful writer makes of a paragraph request: its work named, then each fact it was given, in turn."""
     head = user.split("\n\n")[1].splitlines() if "\n\n" in user else []
     name = next((line.split(": ", 1)[1].split(" (", 1)[0] for line in head
                  if line.startswith(("Project: ", "Job: "))), "")
@@ -93,8 +86,6 @@ def story_paragraph(user: str) -> str:
     said = [f"I worked on {name}." if name else "I did this work myself."]
     leads = ("What I remember best about this work is this:", "Looking back, the part I would show an employer is that")
     said += [f"{lead} {f}." for lead, f in zip(leads, facts[:len(leads)], strict=False)]
-    if "cover letter" in user:
-        said.append(job_link(user))
     if "short message" in user:
         said = [*said[:2], f"How does your team plan its {job_word(user) or 'next'} work?"]
     if "The reason about the employer" in user or "No fact about the employer" in user:
@@ -530,8 +521,7 @@ QUILL_PICKS = [{"source": "S2", "quote": "Built Quill, an offline assistant over
                 "use": "answering staff questions from their own notes"},
                {"source": "S3", "quote": "Wrote Quill Employment, a job-search helper in Preact with a 113-test "
                                          "suite and SQLite storage", "use": "testing internal tools before release"}]
-QUILL_SAID = ("Quill is my offline assistant over personal notes, built in Lua. It answers questions over my notes, "
-              "as internal tools do.")
+QUILL_SAID = "Quill is my offline assistant over personal notes, built in Lua. It answers questions over my notes."
 
 
 class QuillWriter(FakeWriter):
@@ -761,8 +751,7 @@ class Paragraphs(unittest.TestCase):
     def test_a_letter_under_half_its_length_setting_tries_further_stories(self):
         from jobhunt.profile import store
 
-        writer = QuillWriter({"Quill": [QUILL_SAID], "Quill Employment": [
-            "Quill Employment is a job-search helper for graduates. It drafts letters, as internal tools do."]})
+        writer = QuillWriter()
         with quill_world(writer) as a:
             settings.set("cvdocs.letter_words", 400, by="you")
             for name in ("Tide gauge", "Ferry log", "Harbour lights"):

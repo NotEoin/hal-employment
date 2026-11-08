@@ -516,16 +516,11 @@ runs: tests use `tests/support/fake_claude/`.
   another known tool by name, when no fact naming the sentence's tool holds it, fails citing that tool,
   `purpose.doer`, `purpose.CROSSED`: "GPT-SoVITS to transcribe utterances" when faster-whisper transcribed); `taught`'s module
   checks; the work unnamed in the first sentence; too few sentences; and the writing rules' high hits.
-  A letter paragraph (`Shape.link`) must end with its own link to the job: its last sentence names a word
-  of the advert or the company brief (`paragraphs.job_terms`, by its first `paragraphs.LINK_STEM` (5)
-  letters, little words, `motive.GENERIC` and `purpose.GENERAL` words, the title, the employer's name and
-  known tools aside) beyond the work's own name (`paragraphs.linked`). One without is drafted again once
-  with `paragraphs.NO_LINK`, which asks for a result of the work, never a bug fix, tied to a named task,
-  system or product of the employer's; it is never cut or dropped for it, and a redraft that fails another
-  check gives way to the draft that lacked only its link (`paragraphs.unlinked`): graders flagged
-  "resolving missing brackets in the manager class" as a fit (2026-11-08). The request carries
-  `paragraphs.BRIEF_CHARS` (1500) of the company brief beside the advert (`pack.paragraph_scope`), so the
-  link can name the employer's products.
+  A letter paragraph ends on why the work matters for the job only when a fact clearly fits; no check asks
+  for that last sentence, as a check that redrafted paragraphs until their last sentence named a word of the
+  advert left generic ties ("This experience in building precise.") and raised generic sentences from 7 to
+  19 in 15 graded packs (2026-11-08). The request carries `paragraphs.BRIEF_CHARS` (1500) of the company
+  brief beside the advert (`pack.paragraph_scope`), so a message's question can name the employer's work.
   When they find nothing and the paragraph says more than its facts' own words (`paragraphs.restates`),
   one AI call checks it against its story (`verify`, prompt `paragraph_verify`); quoted words its facts or
   the employer's words hold, word for word or by their roots, are dropped. A paragraph with a problem is
@@ -563,7 +558,9 @@ runs: tests use `tests/support/fake_claude/`.
   message and the answers are told the same way (`pack._story_others`, through `pack.write_others`): the
   message is `opening.Opening` and one story in shape `paragraphs.message` (one or two sentences, then one
   question about the employer's own work: `paragraphs.question_problems` requires it to name a word of the
-  advert or the brief, as a letter's link does, and to share no content word with the work's summary and
+  advert or the brief (`paragraphs.job_terms`, by its first `paragraphs.LINK_STEM` (5) letters, little words,
+  `motive.GENERIC` and `purpose.GENERAL` words, the title, the employer's name and known tools aside) beyond
+  the work's own name (`paragraphs.linked`), and to share no content word with the work's summary and
   facts that the advert and the brief do not hold, unless `rank.fits` places the work in the ranking's top
   half (`Shape.fits`); one redraft with `QUESTION_OFF` or `QUESTION_OWN`, as graders saw "cross-platform
   window management" asked of a consultancy, 2026-11-08); an answer is one story, or two when its question asks for more than one
