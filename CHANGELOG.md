@@ -207,7 +207,11 @@ What changed in each version, in plain words.
 - **A letter keeps its true paragraphs.** One letter came out at 56 words: three paragraphs were left out,
   two of them over claims your record supports, because the AI check still doubted them after one rewrite.
   A paragraph that passes every other check is now kept, without the sentence the AI doubted when the rest
-  still reads, or whole and listed under **Check before sending**. When a paragraph is left out, the letter
+  still reads, or whole and listed under **Check before sending**, in the message and the answers as in the
+  letter (a message once kept a doubtful claim while the pack said "Nothing to check"). A paragraph with one
+  wrong clause loses that clause, not the whole paragraph, and a number written in words, such as
+  "twenty-three" or "one hundred and thirteen", is read whole (it was read as 20, and a true paragraph was
+  left out). When a paragraph is left out, the letter
   tells your next best piece of work instead, and a letter under half your length setting tries more of
   your work.
 - **A cleaner fit table.** The fit table held the AI's own thinking ("I will mark this as a gap if strict

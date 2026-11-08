@@ -492,7 +492,9 @@ runs: tests use `tests/support/fake_claude/`.
   by `paragraphs.settle`. The checks with no AI (`paragraphs.problems`, `sentence_problems`) read the
   paragraph against its story only, through `paragraphs.Scope` (`pack.paragraph_scope`: every story and
   card, `pack.known_tools`, the employer's words and the stage line, the person's names and settings
-  wording): a number or a known tool its facts lack, named as another card's when that card holds it
+  wording): a number or a known tool its facts lack (numbers in words read whole by `paragraphs.numbers`:
+  "twenty-three" is 23 and "one hundred and thirteen" is 113, as "twenty-three" read as 20 dropped a true
+  paragraph, 2026-11-08), named as another card's when that card holds it
   (`CROSSED_TOOL`) or as a plan's (`PLANNED_SAID`); another card's name (`CROSSED_NAME`, with
   `drafts.named_cards`, so "Quill Employment" never names "Quill"); `drafts.crossed`; degree or own-time
   words against its context; "I built" of a team's work without the person's part; `stage.ended_course`;
@@ -511,13 +513,21 @@ runs: tests use `tests/support/fake_claude/`.
   When they find nothing and the paragraph says more than its facts' own words (`paragraphs.restates`),
   one AI call checks it against its story (`verify`, prompt `paragraph_verify`); quoted words its facts or
   the employer's words hold, word for word or by their roots, are dropped. A paragraph with a problem is
-  drafted once more with the problems listed; one still failing loses its failing sentences when the rest
-  still reads (`flow.reads_without`, and the shape's least sentences and name kept), else it is dropped and
+  drafted once more with the problems listed; one still failing loses, from each failing sentence, the one
+  clause after the first (`paragraphs.CLAUSE`: parts after a comma, a semicolon, "and", "while", "using",
+  "with" or "which") whose removal leaves the sentence passing and at least `paragraphs.CLAUSE_LEAVES` (4)
+  words (`paragraphs._without_clause`; for `verify`'s findings, the clause holding the quoted words,
+  `Problem.span`), else the whole sentence when the rest still reads (`flow.reads_without`, and the shape's
+  least sentences and name kept); when the redraft cannot be cut this way its first draft is tried, as
+  paragraphs on LoRA for chest X-rays and a BiomedCLIP part were dropped over one clause (2026-11-08). Else
+  it is dropped and
   "Check before sending" says so (`Paragraph.listed`), unless it is a module's or the degree's story dropped
   for having nothing to say (`paragraphs.education`). A sentence fixed or cut is never listed. A paragraph
   that passes every check with no AI and fails only `verify` is never dropped (`paragraphs._doubted`): the
-  sentences the AI flagged are cut when the rest still reads, else it is kept whole and listed
-  (`Paragraph.checks`, `paragraphs.DOUBTED`); a redraft that fails a check with no AI and cannot be cut falls
+  clauses or sentences the AI flagged are cut when the rest still reads, else it is kept whole and listed
+  (`Paragraph.checks`, `paragraphs.DOUBTED`), in a letter, the message and the answers alike
+  (`pack._story_others` lists them too, as a message kept a crossed timing claim while the pack said
+  "Nothing to check", 2026-11-08); a redraft that fails a check with no AI and cannot be cut falls
   back to a first draft that failed `verify` alone. A letter came out at 56 words when three paragraphs were
   dropped, two over claims the record supports (2026-11-08). `pack._letter_bodies` then tries the next
   project or job story with facts of `rank.Told.others`, up to `pack.LETTER_TRIES` (3), while fewer

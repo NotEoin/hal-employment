@@ -44,16 +44,19 @@ Design decisions, each with its reason:
   again. A sentence repeating the opening, or naming a degree with its words, is drafted again as a fact of
   the work.
 - A paragraph that fails is drafted again once with its problems stated (`Paragraph.redrafted`). One still
-  failing loses only its failing sentences when what is left still reads (each cut sentence leaves the next
+  failing loses only the clause of a sentence that fails (`_without_clause`: the rest of the sentence then
+  passes), else only its failing sentences when what is left still reads (each cut sentence leaves the next
   one pointing at something, `flow.reads_without`, and the shape keeps its least number of sentences and its
-  name); else it is dropped and listed with why (`Paragraph.listed`). A sentence that was fixed or cut is
+  name); when the redraft cannot be cut so, its first draft is tried, as paragraphs on LoRA for chest
+  X-rays and a BiomedCLIP part were dropped over one clause (2026-11-08). Else it is dropped and listed with
+  why (`Paragraph.listed`). A sentence that was fixed or cut is
   never listed: only what the person should act on is. Nor is a module's or the degree's story dropped for
   having nothing to say (`education`): "Hal left out the paragraph about First-Class Honours: your facts gave
   nothing" was most of the false check items (2026-11-08), and the opening and the CV give the degree.
 - A paragraph that passes every check with no AI and fails only the AI check is never dropped (`_doubted`,
   2026-11-08): one letter came out at 56 words after three paragraphs were dropped, two of them over claims
-  the record supports, as they failed `paragraph_verify` after their redraft. Only the sentences the AI
-  flagged are cut, and only when the rest still reads as above; else the paragraph is kept whole and listed
+  the record supports, as they failed `paragraph_verify` after their redraft. Only the clauses or sentences
+  the AI flagged are cut, and only when the rest still reads as above; else the paragraph is kept whole and listed
   for the person to check (`Paragraph.checks`). When the redraft fails a check with no AI and its sentences
   cannot be cut, the first draft is kept this way if it failed only the AI check.
 - A letter's paragraphs share the person's letter length (`letter`): what the opening and closing leave
@@ -85,12 +88,14 @@ LIST_TOOLS = 4             # tools named in one sentence that make it a list rat
 PART_SHARE = 0.5           # share of the person's part's own words a sentence must hold to name that part
 ROOT_MIN = 3               # letters a word keeps when its ending is taken off ("uses" is "use", "is" stays)
 ENDINGS = ("ing", "ed", "es", "s")
-WORD_NUMBERS = {w: str(n) for n, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve "
-                                                "thirteen fourteen fifteen sixteen seventeen eighteen nineteen "
-                                                "twenty".split())}
-WORD_NUMBERS.update({"thirty": "30", "forty": "40", "fifty": "50", "sixty": "60", "seventy": "70", "eighty": "80",
-                     "ninety": "90"})
-NUMBER = re.compile(r"\d[\d,.]*\d|\d|\b(?:" + "|".join(WORD_NUMBERS) + r")\b", re.I)
+UNITS = {w: n for n, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve thirteen "
+                                    "fourteen fifteen sixteen seventeen eighteen nineteen".split())}
+TENS = {w: 10 * n for n, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split(), 2)}
+SCALES = {"hundred": 100, "thousand": 1000}
+NUMBER_WORD = "|".join([*UNITS, *TENS, *SCALES])
+# A number in words, its parts joined by spaces, hyphens or "and" ("twenty-three", "one hundred and thirteen"), read
+# whole by `_spelt`: the check once read "twenty-three" as 20 and dropped a true paragraph (2026-11-08).
+NUMBER = re.compile(rf"\d[\d,.]*\d|\d|\b(?:{NUMBER_WORD})(?:(?:\s+and\s+|[\s-]+)(?:{NUMBER_WORD}))*\b", re.I)
 # "I built X" and its kin: the whole of a piece of work claimed by one person.
 SOLO = re.compile(r"\bI (?:have |had )?(?:single-handedly |alone |myself |personally )?(built|designed|led|developed|"
                   r"created|wrote|made|implemented|programmed|coded|engineered|delivered|architected|produced|"
@@ -239,6 +244,7 @@ class Problem:
 
     sentence: str
     reason: str
+    span: str = ""             # the words the AI check quoted as unsupported, for `_cut` to take out
 
     def line(self) -> str:
         """The problem as a request or a log states it."""
@@ -286,11 +292,38 @@ def _called(story: Story) -> str:
     return f'"{first[:60].rsplit(" ", 1)[0] if len(first) > 60 else first}"'
 
 
+def _spelt(phrase: str) -> list[int]:
+    """The numbers a run of number words says: "twenty-three" is [23], "one hundred and thirteen" is [113], and
+    words that do not build one number ("two and three", "seven eight") are each their own."""
+    out: list[int] = []
+    total = part = 0
+    last = ""                  # the kind of the word before: "unit", "teen", "tens", "scale", "and" or ""
+    for word in re.split(r"[\s-]+", phrase.lower()):
+        kind = ("and" if word == "and" else "scale" if word in SCALES else "tens" if word in TENS
+                else "teen" if UNITS.get(word, 0) >= 10 else "unit")
+        joins = (last == "tens" and kind == "unit") or (last in ("scale", "and") and kind in ("unit", "teen", "tens"))
+        joins = joins or (kind == "scale" and last in ("unit", "teen", "tens")) or (kind == "and" and last == "scale")
+        if last and not joins:
+            out.append(total + part)
+            total = part = 0
+        if kind == "scale":
+            part = (part or 1) * SCALES[word]
+            if SCALES[word] >= SCALES["thousand"]:
+                total, part = total + part, 0
+        elif kind != "and":
+            part += UNITS.get(word, TENS.get(word, 0))
+        last = kind
+    return [*out, total + part] if last and last != "and" else out
+
+
 def numbers(text: str) -> set[str]:
-    """The numbers of a text, in figures, with words read as figures ("seven" is "7"); a code's digits
-    (`writing.check.without_codes`) are no number."""
-    found = (m.group(0).lower().rstrip(".,") for m in NUMBER.finditer(writing_check.without_codes(text)))
-    return {WORD_NUMBERS.get(n, n).replace(",", "") for n in found}
+    """The numbers of a text, in figures, with words read as figures ("seven" is "7", "twenty-three" is "23");
+    a code's digits (`writing.check.without_codes`) are no number."""
+    out = set()
+    for m in NUMBER.finditer(writing_check.without_codes(text)):
+        said = m.group(0).lower().rstrip(".,")
+        out |= {str(n) for n in _spelt(said)} if said[0].isalpha() else {said.replace(",", "")}
+    return out
 
 
 def _root(word: str) -> str:
@@ -491,8 +524,8 @@ def verify(text: str, story: Story, scope: Scope) -> list[Problem]:
     if reply.get("supported") is False:
         given = [str(s) for s in reply.get("unsupported") or [] if str(s).strip()]
         spans = [s for s in given if not _dropped(s, where)]
-        out += [Problem(next((x for x in said if _held(s, x)), ""), NOT_SUPPORTED.format(span=s.strip().strip("\"'")))
-                for s in spans]
+        out += [Problem(next((x for x in said if _held(s, x)), ""), NOT_SUPPORTED.format(span=s.strip().strip("\"'")),
+                        s.strip().strip("\"'")) for s in spans]
         if not given:
             out.append(Problem("", NOT_SUPPORTED_ANY))
     if reply.get("context_ok") is False:
@@ -544,25 +577,56 @@ def _judge(text: str, story: Story, scope: Scope, shape: Shape, out: Paragraph) 
     return verify(text, story, scope), True
 
 
+CLAUSE = re.compile(r"(,\s+|;\s+|\s+(?:and|while|using|with|which)\s+)")   # where a sentence's clauses part
+CLAUSE_LEAVES = 4          # words a sentence keeps after a clause is cut, so it still says something
+
+
+def _without_clause(sentence: str, ok) -> str:
+    """`sentence` without one of its clauses after the first (`CLAUSE`), the first such for which `ok(shorter)`
+    holds; "" when none does."""
+    body, end = sentence.rstrip(".!?"), sentence[len(sentence.rstrip(".!?")):] or "."
+    parts = CLAUSE.split(body)          # clause, separator, clause, ...
+    for k in range(2, len(parts), 2):
+        shorter = "".join(parts[:k - 1] + parts[k + 1:]).strip() + end
+        if len(shorter.split()) >= CLAUSE_LEAVES and ok(shorter):
+            return shorter
+    return ""
+
+
 def _cut(text: str, found: list[Problem], story: Story, scope: Scope, shape: Shape) -> str:
-    """`text` without its failing sentences when what is left still reads (see the module notes); "" else."""
+    """`text` without what fails: for each failing sentence, the sentence without the one clause that holds the
+    problem when the rest of it passes (`_without_clause`), else no sentence when what is left still reads (see
+    the module notes); "" when neither works."""
     if any(not p.sentence for p in found):
         return ""
     kept = text
     for sentence in dict.fromkeys(p.sentence for p in found):
         said = writing_check.sentences(kept)
-        if sentence not in said or not flow.reads_without(kept, sentence):
+        if sentence not in said:
+            return ""
+        spans = [p.span for p in found if p.sentence == sentence and p.span]
+        shorter = _without_clause(sentence, lambda s, spans=spans: not any(_held(x, s) for x in spans)
+                                  and not sentence_problems(s, story, scope))
+        if shorter:
+            kept = " ".join(shorter if s == sentence else s for s in said)
+            continue
+        if not flow.reads_without(kept, sentence):
             return ""
         kept = " ".join(s for s in said if s != sentence)
     return "" if problems(kept, story, scope, shape) else kept
 
 
+def _changed(text: str, kept: str) -> int:
+    """How many sentences of `text` were cut or shortened in `kept`."""
+    return len(set(writing_check.sentences(text)) - set(writing_check.sentences(kept)))
+
+
 def _doubted(out: Paragraph, text: str, found: list[Problem], story: Story, scope: Scope, shape: Shape) -> Paragraph:
-    """A paragraph that failed only the AI check, kept: without the sentences the AI flagged when the rest still
-    reads, else whole with what the AI found to check (see the module notes)."""
+    """A paragraph that failed only the AI check, kept: without the clauses or sentences the AI flagged when the
+    rest still reads, else whole with what the AI found to check (see the module notes)."""
     kept = _cut(text, found, story, scope, shape)
     if kept:
-        out.text, out.cut = kept, len(writing_check.sentences(text)) - len(writing_check.sentences(kept))
+        out.text, out.cut = kept, _changed(text, kept)
     else:
         out.text, out.doubts = text, tuple(dict.fromkeys(p.reason for p in found))
     log.info("paragraph about %s kept although the AI check found: %s", _called(story),
@@ -581,7 +645,7 @@ def settle(story: Story, shape: Shape, scope: Scope) -> Paragraph:
         out.dropped = NOTHING
         return out
     found, by_ai = _judge(text, story, scope, shape, out)
-    first = (text, found) if found and by_ai else None
+    first = (text, found, by_ai)
     if found:
         log.info("paragraph about %s: %s", _called(story), "; ".join(p.line() for p in found))
         again = draft(story, shape, scope, text, found)
@@ -595,10 +659,13 @@ def settle(story: Story, shape: Shape, scope: Scope) -> Paragraph:
     if by_ai:
         return _doubted(out, text, found, story, scope, shape)
     kept = _cut(text, found, story, scope, shape)
+    if not kept and out.redrafted and not first[2] and first[0] != text:
+        kept = _cut(*first[:2], story, scope, shape)
+        text = first[0] if kept else text
     if kept:
-        out.text, out.cut = kept, len(writing_check.sentences(text)) - len(writing_check.sentences(kept))
-    elif first is not None:
-        return _doubted(out, *first, story, scope, shape)
+        out.text, out.cut = kept, _changed(text, kept)
+    elif out.redrafted and first[2]:
+        return _doubted(out, *first[:2], story, scope, shape)
     else:
         out.dropped = "; ".join(dict.fromkeys(p.reason for p in found))
     log.info("paragraph about %s after its redraft: %s", _called(story), "; ".join(p.line() for p in found))

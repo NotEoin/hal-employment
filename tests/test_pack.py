@@ -1059,6 +1059,26 @@ class Others(unittest.TestCase):
             md = pack.build(a.con, a.job["id"], use_web=False).read_text()
         self.assertIn(f"- {pack.NO_ANSWER.format(question=question)}", section(md, "Check before sending"))
 
+    def test_a_message_kept_although_the_ai_check_doubted_it_is_listed_to_check(self):
+        # a message kept a crossed timing claim while the pack said "Nothing to check" (2026-11-08)
+        said = "Quill is my offline assistant over personal notes, in Lua. How do your staff search their notes?"
+        writer = QuillWriter()
+        plain = writer.reply
+
+        def reply(system: str, user: str) -> object:
+            if prompt_id(system) == "story" and user.startswith("Shape: The body of a short message"):
+                return {"paragraph": said}
+            if prompt_id(system) == "paragraph_verify" and said in user:
+                return {"supported": True, "unsupported": [], "context_ok": False, "role_ok": True}
+            return plain(system, user)
+
+        writer.reply = reply
+        with quill_world(writer) as a:
+            md = pack.build(a.con, a.job["id"], use_web=False).read_text()
+        self.assertIn(said, section(md, "Message to the hiring manager"))
+        self.assertIn(f"- {paragraphs.DOUBTED.format(card='Quill', why=paragraphs.WRONG_PLACE)}",
+                      section(md, "Check before sending"))
+
     def test_a_message_whose_story_is_dropped_tells_the_next_one(self):
         writer = QuillWriter()
         plain = writer.reply

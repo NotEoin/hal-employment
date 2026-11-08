@@ -1021,7 +1021,10 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
     Nothing is left blank (2026-11-08: 8 of 15 graded packs had an empty answer or a message with nothing after
     its introduction, as a dropped paragraph left nothing): a dropped paragraph's next story is tried
     (`_story_answer`, `_story_message`), and what is still empty is written by the whole-draft path,
-    `whole_message()` for the message and `whole_answers(questions)` ({question: answer}) for the answers."""
+    `whole_message()` for the message and `whole_answers(questions)` ({question: answer}) for the answers.
+
+    A paragraph kept although the AI check doubted it is listed for the person to check (`Paragraph.checks`), as
+    in a letter: a message kept a crossed timing claim while the pack said "Nothing to check" (2026-11-08)."""
     you, cards, calls = eligibility.person(), list(scope.cards), 0
     found = list(ordered)
     used = dict.fromkeys(told, 1)
@@ -1029,7 +1032,7 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
     tried = _story_message(found, scope, paragraphs.message(first.sentence), used)
     body = next((p for p in tried if p.text), tried[-1] if tried else paragraphs.Paragraph(found[0]))
     calls += sum(p.calls for p in tried)
-    flags = [body.listed] if body.dropped else []
+    flags = [body.listed] if body.dropped else list(body.checks)
     if not body.text and whole_message is not None:
         body.text, flags = whole_message(), []
         calls += 1
@@ -1041,6 +1044,7 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
         said = _story_answer(question, found, used, scope, pairing)
         calls += sum(p.calls for p in said)
         text = " ".join(p.text for p in said if p.text)
+        flags += [line for p in said if p.text for line in p.checks]
         answers.append({"question": question, "answer": text, "dropped": [p.listed for p in said if p.dropped]})
     blank = [a["question"] for a in answers if not a["answer"]]
     if blank and whole_answers is not None:

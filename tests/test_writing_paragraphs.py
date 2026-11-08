@@ -131,6 +131,19 @@ FIXTURE_SCOPE = paragraphs.Scope(tuple(FIXTURE_STORIES.values()), tuple(FIXTURE_
                                  tuple(FLAGS["known"]), FLAGS["allowed"], modules=("Databases",))
 
 
+class Numbers(unittest.TestCase):
+    def test_a_number_in_words_is_read_whole(self):
+        # the check read "twenty-three" as 20 and dropped a true paragraph (2026-11-08)
+        self.assertEqual(paragraphs.numbers("It has twenty-three tests."), {"23"})
+        self.assertEqual(paragraphs.numbers("It ran one hundred and thirteen tests."), {"113"})
+        self.assertEqual(paragraphs.numbers("two thousand five hundred readings"), {"2500"})
+        self.assertEqual(paragraphs.numbers("between two and three days, seven of 30"), {"2", "3", "7", "30"})
+
+    def test_a_compound_number_its_facts_give_in_figures_is_no_problem(self):
+        story = replace(EMPLOYMENT_STORY, facts=("Quill Employment has 23 checks",))
+        self.assertEqual(said("Quill Employment has twenty-three checks.", story), [])
+
+
 class Fixture(unittest.TestCase):
     """Five graded packs listed about 20 false alarms for 10 real problems (2026-11-07); each kind is in
     `fixtures/paragraph_flags.json`, scoped to the story its paragraph tells."""
@@ -238,6 +251,19 @@ class Settle(unittest.TestCase):
         worse = "I gave Quill a SQLite store. It answers questions over my notes offline."
         done = self.settle(FakeAI([first, worse], verdict))
         self.assertEqual((done.text, done.dropped), (GOOD, ""))
+
+    def test_one_failing_clause_is_cut_and_the_paragraph_kept(self):
+        # paragraphs on LoRA for chest X-rays and a BiomedCLIP part were dropped over one clause (2026-11-08)
+        text = f"{GOOD[:-1]}, using Rust for speed."
+        done = self.settle(FakeAI([text]))
+        self.assertEqual((done.text, done.dropped, done.cut), (GOOD, "", 1))
+
+    def test_a_clause_the_ai_quotes_is_cut_and_the_paragraph_kept(self):
+        verdict = {"supported": False, "unsupported": ["serves a regional hospital"], "context_ok": True,
+                   "role_ok": True}
+        text = f"{GOOD[:-1]} and serves a regional hospital."
+        done = self.settle(FakeAI([text], verdict))
+        self.assertEqual((done.text, done.dropped, done.checks), (GOOD, "", []))
 
     def test_nothing_to_say_is_dropped_with_no_check(self):
         done = self.settle(FakeAI([""]))
