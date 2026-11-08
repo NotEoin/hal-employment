@@ -228,6 +228,11 @@ What changed in each version, in plain words.
   one sentence, in your own words, tying a result of that work to a task, system or product the advert or
   the company brief names, and is written once more when its last sentence names nothing of the job. It is
   never left out for this alone.
+- **The message asks about the employer's work.** The question at the end of the message to the person
+  hiring asked about your own project's subject, such as "cross-platform window management" asked of a
+  consultancy. It now asks about a task, system or product the advert or the company brief names, and may
+  touch on your project's area only when the job ranks that project among the work that fits it best. A
+  question that does not is written once more.
 - **Answers and messages say which project.** Form answers and messages to the person hiring began "I
   wrote a 113-test suite ..." and named the project later, or never. Like a letter paragraph, each now names
   its project or job in its first sentence, and is written once more when it does not.

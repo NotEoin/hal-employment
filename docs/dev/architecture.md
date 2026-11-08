@@ -561,8 +561,12 @@ runs: tests use `tests/support/fake_claude/`.
   employer aside, or giving one of its numbers). The pair is drafted once more when either fails; an opening still failing is `opening.Opening`'s built sentence and a closing
   still failing is left out. Paragraphs and the frame are drafted at `paragraphs.DRAFT_TEMPERATURE`. The
   message and the answers are told the same way (`pack._story_others`, through `pack.write_others`): the
-  message is `opening.Opening` and one story in shape `paragraphs.MESSAGE` (one or two sentences, then one
-  question about the team's work); an answer is one story, or two when its question asks for more than one
+  message is `opening.Opening` and one story in shape `paragraphs.message` (one or two sentences, then one
+  question about the employer's own work: `paragraphs.question_problems` requires it to name a word of the
+  advert or the brief, as a letter's link does, and to share no content word with the work's summary and
+  facts that the advert and the brief do not hold, unless `rank.fits` places the work in the ranking's top
+  half (`Shape.fits`); one redraft with `QUESTION_OFF` or `QUESTION_OWN`, as graders saw "cross-platform
+  window management" asked of a consultancy, 2026-11-08); an answer is one story, or two when its question asks for more than one
   example (`plan.examples_wanted`), in shape `paragraphs.answer`, and a question asking why this employer
   (`drafts.why_question`) is one story in shape `paragraphs.why`, from the letter's motivation pairing and
   its item's story (`pack._story_of`) while the pack has told that story no more than any other, else the

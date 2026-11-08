@@ -109,6 +109,14 @@ class Ranking(unittest.TestCase):
         self.assertIn("the AI could not rank the work (the AI is busy)", logged.output[0])
 
 
+class Fits(unittest.TestCase):
+    def test_work_fits_the_job_when_the_ranking_places_it_in_its_top_half(self):
+        ranked = [rank.Ranked(n) for n in ("Gullwing", "Tide gauge", "Quill", "Ferry log", "Harbour lights")]
+        self.assertEqual([rank.fits(r.name, ranked) for r in ranked], [True, True, True, False, False])
+        self.assertFalse(rank.fits("Gullwing", []))
+        self.assertFalse(rank.fits("Unranked", ranked))
+
+
 class Order(unittest.TestCase):
     def test_the_letter_tells_the_three_best_with_facts_and_the_rest_follow_in_rank_order(self):
         ranked = [rank.Ranked(n) for n in ("Netferret", "Old blog", "Gullwing", "Quill Employment", "Parrot")]

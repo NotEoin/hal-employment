@@ -6,7 +6,8 @@ archived, with the plan's named project stories that have no card (`candidates`)
 (`Job`: its title, summary, requirements and the company brief), `checked` keeps the names that are among
 them, each with its one-line reason (`Ranked`), and `with_core` adds any core card the reply left out.
 `order(found, cards, ranked, wanted)` turns a ranking into the stories a letter tells and the order the message
-and the answers take the rest in (`Told`).
+and the answers take the rest in (`Told`), and `fits(name, ranked)` says whether a piece of work is in the
+ranking's top half, so it fits the job.
 
 Design decisions, each with its reason:
 
@@ -216,6 +217,13 @@ def order(found: list[Story], cards: list[dict], ranked: list[Ranked], wanted: s
     if len(told) < planning.MIN_PROJECTS:
         told += [s for s in every if s.kind not in (planning.PROJECT, planning.JOB)]
     return Told(tuple(told[:n]), tuple(every), tuple(ranked))
+
+
+def fits(name: str, ranked: list[Ranked]) -> bool:
+    """True when the ranking places the work called `name` in its top half: the work fits this job (see
+    `writing.paragraphs` and `writing.motive`); False with no ranking or for work it does not hold."""
+    places = [r.name for r in ranked]
+    return name in places and places.index(name) < (len(places) + 1) // 2
 
 
 def said(ranked: list[Ranked]) -> str:

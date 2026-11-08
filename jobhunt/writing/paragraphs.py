@@ -39,6 +39,13 @@ Design decisions, each with its reason:
   is the exception (`why`): it leads with the reason about the employer (`Shape.employer`,
   `motive.addresses`, `NOT_EMPLOYER`) and may tie it to its one piece of work in a sentence, as four graded
   answers said only "because I built <project>" (2026-11-08).
+- A message body's question is about the employer's own work (`question_problems`, 2026-11-08): graders saw
+  "segmentation of complex, unstructured data in live trading environments" asked of a trading firm and
+  "cross-platform window management" of a consultancy, each the project's subject. The question must name a
+  word of the advert or the company brief (`job_terms`, as a letter's link), and shares no content word with
+  the work's facts that the advert and the brief do not hold, unless the ranking places the work in its top
+  half (`Shape.fits`, `rank.fits`), when the job is about that work's area. It is drafted again once when it
+  fails.
 - A message body never says the degree again (`message`, `says_again`, 2026-11-08): Hal's built opening says
   "I'm <name>, a first-class <subject> graduate from <university>", and the next sentence said the degree
   again. A sentence repeating the opening, or naming a degree with its words, is drafted again as a fact of
@@ -130,6 +137,10 @@ LABEL_SAID = 'uses your part as a label ("{label}"); say what you did'
 LIST_SAID = "lists tools rather than saying what you did with them"
 NOT_NAMED = "does not name {card} in its first sentence"
 NO_QUESTION = "asks no question about the team's work"
+QUESTION_OFF = ("its question names nothing of the employer's own work; ask about a task, system or product the "
+                "advert or the company brief names")
+QUESTION_OWN = ('its question asks about your own work ("{words}"), not the employer\'s; ask about a task, system or '
+                "product of theirs")
 NO_LINK = ("its last sentence names nothing of this job; end with one sentence, in your own words, tying a "
            "result of this work (never a bug fix or a detail) to a named task, system or product of the "
            "employer's, from the advert or the company brief")
@@ -160,6 +171,7 @@ class Shape:
     employer: bool = False     # its first sentence speaks of the employer (a "why here" answer, `motive.addresses`)
     fact: str = ""             # the employer's fact that first sentence may name its product by
     link: bool = False         # its last sentence names a part of the job (a letter's middle, `linked`)
+    fits: bool = False         # the ranking places its work in its top half, so its question may touch its area
 
 
 LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 sentences, 60 to 90 words, one "
@@ -169,14 +181,18 @@ LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 
                link=True)
 MESSAGE = Shape("answer", "The body of a short message to the person hiring, after Hal's own greeting and opening "
                           "sentence: one or two sentences about this work, naming it in the first, then one specific "
-                          "question about the team's work on what it can help with. At most 60 words in all. No "
+                          "question about the employer's own work: a task, system or product the advert or the "
+                          "company brief names, never this work's own subject. At most 60 words in all. No "
                           "greeting, no introduction and no sign-off.", "first", 2, True)
+FITS_WORDS = " The job fits this work, so the question may touch on its area."
 DEGREE_SHARED = 2          # words of the opening's course a sentence naming a degree shares to say it again
 
 
-def message(after: str) -> Shape:
-    """The message body's shape after Hal's opening sentence `after`, which the body must not say again."""
-    return Shape(MESSAGE.kind, MESSAGE.words, MESSAGE.name, MESSAGE.least, MESSAGE.question, after)
+def message(after: str, fits: bool = False) -> Shape:
+    """The message body's shape after Hal's opening sentence `after`, which the body must not say again; `fits`
+    when the ranking places its work in its top half (`rank.fits`), so its question may touch the work's area."""
+    return Shape(MESSAGE.kind, MESSAGE.words + (FITS_WORDS if fits else ""), MESSAGE.name, MESSAGE.least,
+                 MESSAGE.question, after, fits=fits)
 
 
 def says_again(sentence: str, after: str) -> bool:
@@ -509,6 +525,7 @@ def problems(text: str, story: Story, scope: Scope, shape: Shape) -> list[Proble
         out.append(Problem("", TOO_SHORT))
     if shape.question and "?" not in text:
         out.append(Problem("", NO_QUESTION))
+    out += [Problem("", r) for r in question_problems(text, story, scope, shape)]
     employer = scope.names[1] if len(scope.names) > 1 else ""
     if shape.employer and said and not motive.addresses(said[0], employer, shape.fact):
         out.append(Problem("", NOT_EMPLOYER))
@@ -538,6 +555,28 @@ def linked(sentence: str, story: Story, scope: Scope) -> bool:
     paragraph ends with (see the module notes)."""
     own = {w[:LINK_STEM] for w in writing_check.words_of(f"{story.name} {' '.join(story.aliases)}")}
     return bool(({w[:LINK_STEM] for w in writing_check.words_of(sentence)} - own) & job_terms(scope))
+
+
+def _content_stems(text: str) -> set[str]:
+    """The stems (`LINK_STEM` letters) of a text's words that say something: little words and words any employer
+    or piece of work uses left out."""
+    return {w[:LINK_STEM] for w in writing_check.words_of(text) if len(w) > 2 and w not in drafts.LITTLE_WORDS
+            and w not in motive.GENERIC and w not in purpose.GENERAL}
+
+
+def question_problems(text: str, story: Story, scope: Scope, shape: Shape) -> list[str]:
+    """What is wrong with the question a message body asks (see the module notes): it names nothing of the job
+    (`job_terms`), or, unless the ranking fits its work to the job (`Shape.fits`), it shares a word with the
+    work's own facts that the advert and the brief do not hold."""
+    asked = next((s for s in reversed(writing_check.sentences(text)) if s.rstrip().endswith("?")), "")
+    if not shape.question or not asked or not (scope.advert or scope.brief):
+        return []
+    out = [] if linked(asked, story, scope) else [QUESTION_OFF]
+    own = _content_stems("\n".join([story.summary, *story.facts])) - job_terms(scope)
+    mine = sorted(w for w in writing_check.words_of(asked) if w[:LINK_STEM] in own & _content_stems(asked))
+    if mine and not shape.fits:
+        out.append(QUESTION_OWN.format(words=", ".join(dict.fromkeys(mine))))
+    return out
 
 
 def unlinked(text: str, story: Story, scope: Scope, shape: Shape) -> list[Problem]:

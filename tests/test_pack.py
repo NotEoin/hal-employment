@@ -66,15 +66,21 @@ WAIT_S = 10.0
 POLL_S = 0.05
 
 
-def job_link(user: str) -> str:
-    """A letter paragraph's last sentence as a careful writer ends it: the longest word of the advert's first
-    sentence that names a part of the job (`paragraphs.job_terms`' kind of word), tied to the employer."""
+def job_word(user: str) -> str:
+    """The longest word of a request's advert's first sentence that names a part of the job
+    (`paragraphs.job_terms`' kind of word): what a careful writer ties the work to, or asks about."""
     job = re.search(r"^The job: (.+)$", user, re.M)
     names = set(re.findall(r"[a-z]+", job.group(1).lower())) if job else set()
     advert = user.split("never copy its words):\n", 1)[-1].split(".", 1)[0]
     words = [w for w in re.findall(r"[a-z]+", advert.lower())
              if w not in names and w not in paragraphs.motive.GENERIC and w not in paragraphs.purpose.GENERAL]
-    return f"It could help with your {max(words, key=len)} work." if words else ""
+    return max(words, key=len) if words else ""
+
+
+def job_link(user: str) -> str:
+    """A letter paragraph's last sentence as a careful writer ends it: the work tied to a part of the job."""
+    word = job_word(user)
+    return f"It could help with your {word} work." if word else ""
 
 
 def story_paragraph(user: str) -> str:
@@ -90,7 +96,7 @@ def story_paragraph(user: str) -> str:
     if "cover letter" in user:
         said.append(job_link(user))
     if "short message" in user:
-        said = [*said[:2], "What will the team build next?"]
+        said = [*said[:2], f"How does your team plan its {job_word(user) or 'next'} work?"]
     if "The reason about the employer" in user or "No fact about the employer" in user:
         employer = re.search(r"^The job: .+? at (.+)$", user, re.M)
         said = [f"I want to work at {employer.group(1) if employer else 'your company'}.", *said[:2]]
@@ -934,7 +940,8 @@ class Others(unittest.TestCase):
     another's (2026-11-08)."""
 
     def test_the_message_is_its_opening_one_projects_lines_and_a_question(self):
-        said = "Quill is my offline assistant over personal notes, in Lua. How do your staff search their notes?"
+        said = ("Quill is my offline assistant over personal notes, in Lua. Which internal tools will your team "
+                "build next?")
         writer = QuillWriter()
         plain = writer.reply
         writer.reply = lambda system, user: ({"paragraph": said} if prompt_id(system) == "story"
@@ -1077,7 +1084,8 @@ class Others(unittest.TestCase):
 
     def test_a_message_kept_although_the_ai_check_doubted_it_is_listed_to_check(self):
         # a message kept a crossed timing claim while the pack said "Nothing to check" (2026-11-08)
-        said = "Quill is my offline assistant over personal notes, in Lua. How do your staff search their notes?"
+        said = ("Quill is my offline assistant over personal notes, in Lua. Which internal tools will your team "
+                "build next?")
         writer = QuillWriter()
         plain = writer.reply
 

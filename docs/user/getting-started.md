@@ -96,7 +96,8 @@ about one of your projects or jobs, told once, and is written on its own from th
 what it is, where you did it, your part, its tools and what came of it. It ends with one sentence tying a
 result of that work to a task, system or product the advert or the company brief names, and is written
 once more when its last sentence names nothing of the job. The message to the person hiring
-tells one piece of work in a sentence or two and asks one question about the team's work. Each form answer
+tells one piece of work in a sentence or two and asks one question about the employer's own work, something
+the advert or the company brief names, rather than about your project's subject. Each form answer
 tells one piece of work, or two when the question asks for more than one example, and the message and the
 answers take work the letter, the message and earlier answers have not told first where your record has
 enough, also in the answer to "Why do you want to work here?". An answer to "Why do

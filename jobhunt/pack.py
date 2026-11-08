@@ -997,12 +997,15 @@ def _story_answer(question: str, found: list[planning.Story], used: dict[str, in
     return out
 
 
-def _story_message(found: list[planning.Story], scope: paragraphs.Scope, shape: paragraphs.Shape,
-                   used: dict[str, int]) -> list[paragraphs.Paragraph]:
-    """The message's body: one story in `shape`, the story the pack has told least first (`used`, counted up for
-    the one that stands), the next one tried when it is dropped, up to `STORY_TRIES`."""
+def _story_message(found: list[planning.Story], scope: paragraphs.Scope, after: str, used: dict[str, int],
+                   ranking: list[rank.Ranked] = ()) -> list[paragraphs.Paragraph]:
+    """The message's body after the opening sentence `after`: one story in `paragraphs.message`'s shape, which
+    lets its question touch the work's area when the `ranking` fits the work to the job (`rank.fits`), the story
+    the pack has told least first (`used`, counted up for the one that stands), the next one tried when it is
+    dropped, up to `STORY_TRIES`."""
     out: list[paragraphs.Paragraph] = []
     for story in sorted(found, key=lambda s: used.get(s.key, 0))[:STORY_TRIES]:   # stable: best first at a tie
+        shape = paragraphs.message(after, rank.fits(story.name, list(ranking)))
         out.append(paragraphs.settle(story, shape, scope))
         if out[-1].text:
             used[story.key] = used.get(story.key, 0) + 1
@@ -1013,12 +1016,13 @@ def _story_message(found: list[planning.Story], scope: paragraphs.Scope, shape: 
 def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, facts: str, kept: str,
                   plan: list[planning.Item], questions: list[str], pairing: motive.Pairing | None, paired: bool,
                   told: tuple[str, ...], ordered: list[planning.Story], whole_message=None,
-                  whole_answers=None) -> dict:
+                  whole_answers=None, ranking: list[rank.Ranked] = ()) -> dict:
     """The message and the answers told one piece of work a paragraph (`writing.paragraphs`): the message is its
     built opening and one story's few lines and question; each answer one story, or two when its question asks
     for more than one example. Each prefers work the letter (`told`: its paragraphs' stories),
     the message and earlier answers have not told, in the order of `ordered` (`rank.Told.others`: the ranking's,
-    else the plan's stories and the other cards the job fits).
+    else the plan's stories and the other cards the job fits). The message's question may touch its work's
+    area only when the `ranking` fits that work to the job (`rank.fits`).
 
     Nothing is left blank (2026-11-08: 8 of 15 graded packs had an empty answer or a message with nothing after
     its introduction, as a dropped paragraph left nothing): a dropped paragraph's next story is tried
@@ -1031,7 +1035,7 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
     found = list(ordered)
     used = dict.fromkeys(told, 1)
     first = message_opening(who, job, analysis)
-    tried = _story_message(found, scope, paragraphs.message(first.sentence), used)
+    tried = _story_message(found, scope, first.sentence, used, ranking)
     body = next((p for p in tried if p.text), tried[-1] if tried else paragraphs.Paragraph(found[0]))
     calls += sum(p.calls for p in tried)
     flags = [body.listed] if body.dropped else list(body.checks)
@@ -1112,7 +1116,7 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
         written = _story_others(who, job, analysis, scope, facts=facts, kept=kept, plan=plan,
                                 questions=list(questions) if answers_request else [], pairing=pairing,
                                 paired=paired, told=told, ordered=list(ordered), whole_message=whole_message,
-                                whole_answers=whole_answers)
+                                whole_answers=whole_answers, ranking=ranking)
         return {**written, "calls": written["calls"] + asked}
     first = message_opening(who, job, analysis)
     message_request += f"\n\n{first.note}"

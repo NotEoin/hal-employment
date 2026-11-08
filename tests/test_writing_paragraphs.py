@@ -494,6 +494,31 @@ class MessageBody(unittest.TestCase):
                                                        SCOPE, paragraphs.MESSAGE)]
         self.assertNotIn(paragraphs.NO_QUESTION, asked)
 
+    def test_the_question_is_about_the_employers_own_work_not_the_projects_subject(self):
+        # "segmentation of ... data in live trading environments" was asked of a trading firm and "cross-platform
+        # window management" of a consultancy (2026-11-08)
+        body = "Quill answers questions over my notes offline, in Lua."
+        own = f"{body} How does your team keep notes offline?"
+        self.assertEqual(paragraphs.question_problems(own, QUILL_STORY, SCOPE, paragraphs.message("Hi.")),
+                         [paragraphs.QUESTION_OFF, paragraphs.QUESTION_OWN.format(words="notes, offline")])
+        theirs = f"{body} How does your ticket triage service decide what comes first?"
+        self.assertEqual(paragraphs.question_problems(theirs, QUILL_STORY, SCOPE, paragraphs.message("Hi.")), [])
+
+    def test_a_work_the_ranking_fits_to_the_job_may_be_asked_about_in_its_area(self):
+        said = "Quill answers questions over my notes offline, in Lua. Does your triage service search notes offline?"
+        self.assertTrue(paragraphs.question_problems(said, QUILL_STORY, SCOPE, paragraphs.message("Hi.")))
+        self.assertEqual(paragraphs.question_problems(said, QUILL_STORY, SCOPE, paragraphs.message("Hi.", True)), [])
+        self.assertIn("may touch on its area", paragraphs.message("Hi.", True).words)
+
+    def test_a_question_about_the_projects_subject_is_drafted_again_once(self):
+        own = "Quill answers questions over my notes offline, in Lua. How does your team keep notes offline?"
+        theirs = "Quill answers questions over my notes offline, in Lua. How does your triage service sort tickets?"
+        fake = FakeAI([own, theirs])
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            done = paragraphs.settle(QUILL_STORY, paragraphs.message("Hi."), SCOPE)
+        self.assertIn(paragraphs.QUESTION_OFF, fake.calls("Write")[1])
+        self.assertEqual(done.text, theirs)
+
 
 class DegreeAgain(unittest.TestCase):
     """A message's built opening gave the degree and its next sentence gave it again (2026-11-08)."""
