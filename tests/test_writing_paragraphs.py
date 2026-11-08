@@ -293,6 +293,17 @@ class DegreeAgain(unittest.TestCase):
             "I built Quill in Lua as part of my degree. How does your team search its notes?"))
 
 
+class Listed(unittest.TestCase):
+    def test_a_course_story_with_nothing_to_say_is_never_listed(self):
+        # "Hal left out the paragraph about First-Class Honours: your facts gave nothing" was most of the false
+        # check items (2026-11-08)
+        for story in (Story("cv", "First-Class Honours", "", kind="project"),
+                      Story("Module Oral History", "Oral History", "", kind="module")):
+            self.assertEqual(paragraphs.Paragraph(story, dropped=paragraphs.NOTHING).listed, "", story.name)
+        self.assertTrue(paragraphs.Paragraph(QUILL_STORY, dropped=paragraphs.NOTHING).listed)
+        self.assertTrue(paragraphs.Paragraph(Story("m", "Oral History", "", kind="module"), dropped="x").listed)
+
+
 class Stock(unittest.TestCase):
     def test_plain_finds_a_stock_link_but_never_a_plain_sentence(self):
         self.assertTrue(plain.problems("This aligns with your team's work."))

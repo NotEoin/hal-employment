@@ -205,6 +205,10 @@ What changed in each version, in plain words.
   reason as told, and tell other projects of yours that fit the job first.
 - **Messages say your degree once.** A message opened with who you are, your degree included, and its next
   sentence said the degree again. That sentence is now written again as a fact of your work.
+- **Fewer false items under Check before sending.** Most items were "Hal left out the paragraph about
+  First-Class Honours: your facts gave nothing". Your degree is in the letter's opening and your CV, so a
+  paragraph about it or a module that had nothing to say is no longer listed. A requirement to be in a
+  town no longer shows as an eligibility warning when your settings say you are willing to move.
 - **Each piece of work is told once, in a paragraph of its own.** Letters retold one project in several
   paragraphs, gave one project's tools or test suite to another with a similar name, and read as lists of
   facts. Hal now writes each paragraph of a letter's middle on its own, about one project or job, from that

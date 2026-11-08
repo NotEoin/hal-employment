@@ -987,8 +987,10 @@ def _eligibility_flag(job, who: dict, fit: dict, conditions: list) -> str:
             note, eligibility.person(), reputation.towns(reputation.advert_of(job)), cv.facts_text()) \
             and not eligibility.unfounded_degree(note, _job_text(job)):
         return f"ELIGIBILITY: {fit.get('eligibility_notes', 'may not be eligible')}"
-    if who.get("not_eligible"):
-        return f"ELIGIBILITY: {who.get('eligibility_line') or 'the advert may not be open to you'}"
+    line = str(who.get("eligibility_line") or "")
+    if who.get("not_eligible") and not eligibility.where_you_live_settles(
+            line, eligibility.person(), reputation.towns(reputation.advert_of(job)), cv.facts_text()):
+        return f"ELIGIBILITY: {line or 'the advert may not be open to you'}"
     return ""
 
 

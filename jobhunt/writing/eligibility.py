@@ -26,7 +26,10 @@ Design decisions, each with its reason:
   `find.rules.min_years`.
 - A fit map called office attendance in London unmet for a person who lives in London (2026-11-07), so
   `where_you_live_settles` is checked before a location gap or a location eligibility note is shown, and the
-  fit table shows such a row as met with the reason (`where_you_live_reason`).
+  fit table shows such a row as met with the reason (`where_you_live_reason`). The job's own eligibility
+  reading (the screen's) is checked the same way: it gave "ELIGIBILITY: ... must be in Leeds" to a person
+  whose settings say they will relocate (2026-11-08), and "be in", "be near" or "be close to" a capitalised
+  place name are place words.
 """
 from __future__ import annotations
 
@@ -50,7 +53,9 @@ DEGREE_NAMES = re.compile(r"\b(ph ?d|d ?phil|doctorate|m(sc|a|res|phil|eng|st)|m
                           r"bachelor'?s?|undergraduate|postgraduate|pgce)\b", re.I)
 NO_SPONSOR = re.compile(r"right to work in the uk|(no|not|unable to|cannot|can't|do not|does not|will not|won't) "
                         r"(offer |provide |be able to )?(visa )?sponsor", re.I)
-WHERE = re.compile(r"\b(based in|located in|live in|living in|within commut\w*|commutable|relocat\w*|on[- ]?site|"
+WHERE = re.compile(r"\b(based in|located in|live in|living in|be (?:in|near|close to) (?-i:[A-Z])\w*|"
+                   r"near (?:our|the) office|"
+                   r"within commut\w*|commutable|relocat\w*|on[- ]?site|"
                    r"in[- ]office|office[- ](attendance|based)|in the office|days? (a|per) week|hybrid|in person|"
                    r"attend (the|our) office)\b", re.I)
 PLACE_MIN = 3              # a part of the person's address shorter than this ("UK" aside) names no town

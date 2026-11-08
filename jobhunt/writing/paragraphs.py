@@ -40,7 +40,9 @@ Design decisions, each with its reason:
   failing loses only its failing sentences when what is left still reads (each cut sentence leaves the next
   one pointing at something, `flow.reads_without`, and the shape keeps its least number of sentences and its
   name); else it is dropped and listed with why (`Paragraph.listed`). A sentence that was fixed or cut is
-  never listed: only what the person should act on is.
+  never listed: only what the person should act on is. Nor is a module's or the degree's story dropped for
+  having nothing to say (`education`): "Hal left out the paragraph about First-Class Honours: your facts gave
+  nothing" was most of the false check items (2026-11-08), and the opening and the CV give the degree.
 - A letter's paragraphs share the person's letter length (`letter`): what the opening and closing leave
   (`FRAME_WORDS`) divided among the stories, never under `PARAGRAPH_WORDS`, so three project paragraphs
   reach the length setting (a letter came to 118 words against 250, 2026-11-08).
@@ -56,7 +58,7 @@ from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
 from jobhunt.writing import drafts, flow, plain, planned, repeats, spelling, stage, taught
 from jobhunt.writing.motive import Pairing
-from jobhunt.writing.plan import DEGREE, Story
+from jobhunt.writing.plan import DEGREE, MODULE, Story
 
 log = logging.getLogger(__name__)
 
@@ -232,8 +234,18 @@ class Paragraph:
 
     @property
     def listed(self) -> str:
-        """The check list's line for a dropped paragraph, "" for one that stands."""
-        return DROPPED.format(card=_called(self.story), why=self.dropped) if self.dropped else ""
+        """The check list's line for a dropped paragraph, "" for one that stands and for a course's story that had
+        nothing to say (`education`), which the opening and the CV already give."""
+        if not self.dropped or (self.dropped == NOTHING and education(self.story)):
+            return ""
+        return DROPPED.format(card=_called(self.story), why=self.dropped)
+
+
+def education(story: Story) -> bool:
+    """True for a story about a module or the degree itself (`plan.DEGREE` in its name, or in its facts when it
+    has no name)."""
+    return story.kind == MODULE or bool(DEGREE.search(story.name)) or (
+        not story.name and any(DEGREE.search(f) for f in story.facts))
 
 
 def _called(story: Story) -> str:

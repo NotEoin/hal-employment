@@ -299,6 +299,15 @@ class Named(unittest.TestCase):
                          [("project", "Traffic flow simulation"), ("other", "")])
 
 
+class DegreeCard(unittest.TestCase):
+    def test_a_card_named_as_the_degree_is_never_a_story(self):
+        honours = {**TIDE, "name": "First-Class Honours", "files": []}
+        found = plan.sources("Project, First-Class Honours: awarded for the whole course", "", [honours])
+        items = plan.checked({"evidence": [{"source": "S1", "quote": "awarded for the whole course"}]}, found)
+        self.assertEqual(items[0].card, "First-Class Honours")
+        self.assertEqual(plan.stories(items, [honours]), [])
+
+
 class LetterLength(unittest.TestCase):
     def test_each_paragraph_takes_a_share_of_the_letters_length(self):
         from jobhunt.writing import paragraphs

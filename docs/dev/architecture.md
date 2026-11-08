@@ -447,7 +447,8 @@ runs: tests use `tests/support/fake_claude/`.
   what it is, its tools, its facts as plain lines, what is planned and what it can help with, never an
   evidence id. `plan.choose(stories, n, used)` takes the `n` the pack has told least, best first. Each
   story has a `kind` (`plan.PROJECT`, `JOB`, `MODULE`, `OTHER`): a pick of the degree itself (`plan.DEGREE`) is
-  never a story, as the opening gives it, and a module line (`plan.module_of`) is a module story of its own,
+  never a story (nor a card named as the degree, "First-Class Honours"), as the opening gives it, and a
+  module line (`plan.module_of`) is a module story of its own,
   named after its module. A passage of a project's own file (it has a "(Kind: ...)" line) tied to no card is
   a project story named after its file (`profile.owners.file_name`), and `paragraphs.problems` requires
   every named story, card or not, to be named in its first sentence (`paragraphs._names`).
@@ -482,7 +483,8 @@ runs: tests use `tests/support/fake_claude/`.
   the employer's words hold, word for word or by their roots, are dropped. A paragraph with a problem is
   drafted once more with the problems listed; one still failing loses its failing sentences when the rest
   still reads (`flow.reads_without`, and the shape's least sentences and name kept), else it is dropped and
-  "Check before sending" says so (`Paragraph.listed`). A sentence fixed or cut is never listed. The
+  "Check before sending" says so (`Paragraph.listed`), unless it is a module's or the degree's story dropped
+  for having nothing to say (`paragraphs.education`). A sentence fixed or cut is never listed. The
   opening and closing are one call (`writing/frame.py`, `frame.settle`, prompt `letter_frame`) from `frame.Facts`
   (`pack.letter_frame`: the name, `opening.described`, the role, the motivation pairing, the stories the
   middle tells and today), checked the same way with the role and the institution required, and with a

@@ -611,6 +611,17 @@ class Paragraphs(unittest.TestCase):
         answered = [e["user"] for e in writer.asked("story") if "application question" in e["user"]]
         self.assertIn("Project: Ferry log", answered[0], "untold work first")
 
+    def test_an_eligibility_line_about_where_you_live_reads_your_relocation_setting(self):
+        # "ELIGIBILITY: ... must be in <town>" reached a person whose settings say they will move (2026-11-08)
+        said = {"not_eligible": True, "eligibility_line": "Applicants must be in Wexley"}
+        with as_applicant(people.TECHNICAL) as a:
+            job = add_job(a.con, "technical_grad")
+            self.assertEqual(pack._eligibility_flag(job, said, {}, []), "ELIGIBILITY: Applicants must be in Wexley")
+            settings.set("you.relocate", True, by="you")
+            self.assertEqual(pack._eligibility_flag(job, said, {}, []), "")
+            self.assertEqual(pack._eligibility_flag(job, {"not_eligible": True, "eligibility_line": "Needs a PhD"},
+                                                    {}, []), "ELIGIBILITY: Needs a PhD")
+
     def test_a_paragraph_still_wrong_after_its_redraft_is_left_out_and_listed_with_why(self):
         crossed = "I built Quill with Preact and a 113-test suite. It answers questions over my notes."
         writer = QuillWriter({"Quill": [crossed]})

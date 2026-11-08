@@ -59,9 +59,10 @@ Design decisions, each with its reason:
   another spent a paragraph restating the degree the opening gives. A letter's stories are project and job
   cards, the plan's first, then other cards the job's words fit (`relevance`, at least `RELEVANT_MIN` words)
   until it has `LETTER_STORIES`; a module (`module_of`) or a line tied to no card is a paragraph only when
-  fewer than `MIN_PROJECTS` project or job stories exist. The degree itself (`DEGREE`) is never a story, as
-  the opening says it. The answers may tell those other cards too (`fitting`), so they prefer work the letter
-  did not tell: one project was told in a letter's opening, a letter paragraph and an answer (2026-11-08).
+  fewer than `MIN_PROJECTS` project or job stories exist. The degree itself (`DEGREE`, a line or a card named
+  like "First-Class Honours") is never a story, as the opening says it. The answers may tell those other
+  cards too (`fitting`), so they prefer work the letter did not tell: one project was told in a letter's
+  opening, a letter paragraph and an answer (2026-11-08).
 - Every story names its work (`Story.name`, 2026-11-08): passages tied to no card were drafted as "I designed a
   pure simulation engine ..." and "I implemented config-hashed result caching ..." with nothing saying which
   project. A passage of a project's own file (one with a "(Kind: ...)" line) tied to no card is named after
@@ -397,7 +398,7 @@ def stories(items: list[Item], cards: list[dict]) -> list[Story]:
     groups: dict[str, tuple[str, list[Item]]] = {}
     for i in items:
         module = "" if i.card else module_of(i.text)
-        if i.skills or (not i.card and not module and DEGREE.search(i.text)):
+        if i.skills or (not module and DEGREE.search(i.card or i.text)):
             continue                       # what the person knows, or the degree the opening says
         key = i.card or (f"Module {module}" if module else
                          i.source if i.source not in (CV, PROFILE) else f"{i.source} {i.id}")
