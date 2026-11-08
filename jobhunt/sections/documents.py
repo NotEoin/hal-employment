@@ -11,7 +11,9 @@ and may say which card it is about: an education period, a job or a certificate.
   (`roles.OTHERS`), never as the person's own claim; with no job card named it gives no facts;
 - a reference, a contract or a job description on a job's card (the `job_doc` reader): the title, dates and
   duties it gives, at the rank of documents (`merge.RANKS["letter"]`): below the current CV, above older CVs;
-- anything else (a check, a report, a letter of thanks): its text, a title and a date, and no facts.
+- anything else (a check, a report, a letter of thanks): its text, a title and a date, and no facts;
+- official papers added on an education card (the `official` reader): a transcript's facts as above and a
+  certificate's grade (its labelled grade, else the class of degree it names), both on that card.
 
 Design decisions, each with its reason:
 
@@ -21,6 +23,11 @@ Design decisions, each with its reason:
   by code (`merge.module_code`) and a CV's "Medieval Europe" is the same module.
 - The card a document names fills what the document leaves out of its fields (the institution, the employer),
   so the fact lands on that card; a value the document gives itself is kept, as it is the better source.
+- On an education card's Official papers the person said which course the papers are for, so the card's own
+  qualification, subject and institution name the fact, over what the papers call the course. A degree
+  certificate there gives the card its grade rather than a certificate card of its own, which would only say
+  the degree again; a certificate with no grade (a short course added there) is a certificate card as on
+  Documents.
 - Private documents (medical, bank or ID papers) are kept out before any of this by the pipeline's privacy
   check (`ingest.privacy`).
 """
@@ -55,6 +62,11 @@ MARK_HEADER = re.compile(r"\b(?:mark|grade|result|score|%)", re.I)
 MODULE_HEADER = re.compile(r"\b(?:module|title|name|unit|course)\b", re.I)
 CODE_HEADER = re.compile(r"\bcode\b", re.I)
 TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}")
+# Credits before the mark ("HIS2040 Archival Methods 20 75") are not part of the module's name.
+TRAILING_FIGURES = re.compile(r"(?:\s+\d{1,3}(?:\.\d)?)+$")
+# The class of degree a certificate names ("with Upper Second Class Honours"), when no line labels a grade.
+CLASS_OF_DEGREE = re.compile(r"\b(first[- ]class(?: honours)?|upper second[- ]class(?: honours)?|lower second[- ]"
+                             r"class(?: honours)?|third[- ]class(?: honours)?|2:1|2:2)\b", re.I)
 PLAIN_ROW = re.compile(r"^\W*(?P<name>.*?[A-Za-z].*?)\s+(?P<mark>\d{1,3}(?:\.\d+)?%?)\s*$")
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
 GREETING = re.compile(r"^\s*(?:dear\b|to whom it may concern|re:|subject:)", re.I)
@@ -138,7 +150,7 @@ def _plain_modules(text: str) -> list[dict]:
             continue
         m = PLAIN_ROW.match(line.strip())
         if m and merge.module_code(m.group("name")):
-            out.append({"name": m.group("name").strip(" *_-"), "mark": m.group("mark")})
+            out.append({"name": TRAILING_FIGURES.sub("", m.group("name")).strip(" *_-"), "mark": m.group("mark")})
     return out
 
 
@@ -281,6 +293,28 @@ def reference_facts(text: str, source: readers.Source) -> list[readers.Fact]:
     return job_facts(text, source, roles.OTHERS)
 
 
+def class_of_degree(text: str) -> tuple[str, str]:
+    """The grade a degree certificate gives, and its line: a labelled grade, else the first class of degree the
+    text names ("Upper Second Class Honours"); ("", "") for none."""
+    grade, line = _labelled(GRADE, text)
+    if grade:
+        return grade, line
+    m = CLASS_OF_DEGREE.search(text)
+    if not m:
+        return "", ""
+    start, end = text.rfind("\n", 0, m.start()) + 1, text.find("\n", m.start())
+    return m.group(1), text[start:end if end >= 0 else len(text)].strip()
+
+
+def _on_card(facts: list[readers.Fact], target: dict | None) -> list[readers.Fact]:
+    """Education facts named by the education card `target` itself, as the person put the papers on it."""
+    if not target or target.get("kind") != "education":
+        return facts
+    card = {k: v for k, v in (target.get("fields") or {}).items() if k in EDUCATION_KEYS and v}
+    return [readers.Fact(f.kind, {**f.fields, **card}, f.quote, f.role) if f.kind == "education" else f
+            for f in facts]
+
+
 class DocumentsReader:
     """Reads a document of the Documents section by the kind the person chose for it."""
 
@@ -313,5 +347,28 @@ class JobDocReader:
         return reading
 
 
+class OfficialReader:
+    """Reads the official papers of an education card: a transcript's course, grade and modules with their
+    marks, and a certificate's grade, on that card."""
+
+    name = "official"
+
+    def read(self, source: readers.Source) -> readers.Reading:
+        """The text, title and date of the papers, and their facts on the card they were added to."""
+        reading = readers.DocumentReader().read(source)
+        if source.doc_kind == "transcript":
+            reading.facts = _on_card(transcript_facts(reading.text, source), source.target)
+            return reading
+        grade, line = class_of_degree(reading.text)
+        if grade and source.target and source.target.get("kind") == "education":
+            reading.facts = _on_card([readers.Fact("education", {"grade": grade},
+                                                   _quote(reading.text, "grade", line, _place(source)))],
+                                     source.target)
+        else:
+            reading.facts = certificate_facts(reading.text, reading.title, reading.date, source)
+        return reading
+
+
 readers.register(DocumentsReader())
+readers.register(OfficialReader())
 readers.register(JobDocReader())

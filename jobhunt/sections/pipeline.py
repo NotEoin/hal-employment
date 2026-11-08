@@ -39,12 +39,12 @@ from jobhunt import db, record
 from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import cv as cv_reader  # importing it puts the cv reader in place (`readers.register`)
-from jobhunt.sections import documents as _documents  # noqa: F401 - puts the Documents reader in place
-from jobhunt.sections import letters as _letters  # noqa: F401 - puts the letter reader in place
-from jobhunt.sections import readers, registry, store, wrong_place
+from jobhunt.sections import cv as cv_reader
+from jobhunt.sections import documents, letters, readers, registry, store, wrong_place
 
 log = logging.getLogger(__name__)
+# The sections' own reader modules: each puts its readers in place (`readers.register`) when it is imported.
+READER_MODULES = (cv_reader, documents, letters)
 CHUNK = 1 << 20            # files are hashed 1 MiB at a time
 SKIPPED_PARTS = {"__MACOSX", ".git", ".DS_Store", "Thumbs.db", "desktop.ini"}
 ZIP = ".zip"

@@ -9,10 +9,11 @@ Design decisions, each with its reason:
 
 - A reader never decides what a file is or whose it is: the section said so when the person added it
   (`sections.registry`). Readers only take facts out of it.
-- `document` is the one reader written so far: it keeps the text and finds only a title and a date, so the
-  pipeline runs from upload to note end to end. The others are stubs (`Stub`) that raise `NotReadYet`
-  naming the phase that brings them, and the page shows their choices as coming soon (`ready`).
-- Later phases put their reader in place with `register`; a test can do the same with a made-up one.
+- `document` here is the generic reader: it keeps the text and finds only a title and a date. Each section's
+  own reader lives in its own module (`sections.cv`, `sections.documents`, ...), listed in
+  `pipeline.READER_MODULES`, and puts itself in place with `register` when imported; a test can do the same
+  with a made-up one. A reader still to come is a stub (`Stub`) that raises `NotReadYet` naming the phase
+  that brings it, and the page shows its choices as coming soon (`ready`).
 """
 from __future__ import annotations
 

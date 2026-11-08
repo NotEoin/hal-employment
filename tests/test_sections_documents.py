@@ -1,6 +1,8 @@
 """The Documents reader: a transcript sets an education card's modules, marks and grade above every CV, a
 certificate makes a certificate card, a reference attaches to its job with the referee's words as another
-person's, and anything else keeps only its text, title and date. Private papers are kept out.
+person's, and anything else keeps only its text, title and date. Private papers are kept out. A course's
+Official papers use the same rules on that course's card: a transcript sets its modules, marks and grade, and a
+degree certificate its grade.
 
 The two made-up graduates of `support.graduates` (Avery Quillon, software; Marnie Quillfeather, history) and
 every name, place and file are invented.
@@ -8,6 +10,7 @@ every name, place and file are invented.
 import unittest
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
+from support import graduates
 from support.graduates import AVERY, GRADUATES, MARNIE
 from test_ingest import home
 
@@ -202,6 +205,35 @@ class JobDocuments(unittest.TestCase):
         with home() as (con, _, _), self.assertRaisesRegex(ValueError, "Choose which job"):
             pipeline.add_uploads(con, "job_doc", [Incoming("contract.md", MARNIE.job_document.encode())],
                                  doc_kind="contract")
+
+
+
+class OfficialPapers(unittest.TestCase):
+    def test_a_transcript_on_a_course_card_gives_its_modules_marks_and_grade_on_that_card_alone(self):
+        with home() as (con, _, _):
+            bsc = graduates.education(con, "bsc")
+            access = graduates.education(con, "access")
+            got = add_document(con, "transcript.md", graduates.TRANSCRIPT, "transcript", bsc, section="official")
+            card, other = profile_store.item(con, bsc), profile_store.item(con, access)
+        self.assertEqual(got["state"], "read")
+        self.assertEqual([(m["name"], m["mark"]) for m in card["fields"]["modules"]],
+                         [("COMP1010 Programming Foundations", "71"), ("COMP2040 Data Analysis", "68"),
+                          ("COMP3990 Dissertation", "74")])
+        self.assertEqual((card["fields"]["grade"], card["fields"]["subject"]), ("First Class Honours",
+                                                                            "Made-up Computing"))
+        self.assertNotIn("transcript", [e["doc_type"] for e in other["evidence"]])
+
+    def test_a_degree_certificate_gives_its_course_the_class_of_degree_it_names_and_no_card_of_its_own(self):
+        with home() as (con, _, _):
+            ba = graduates.education(con, "ba")
+            add_document(con, "certificate.md", graduates.CERTIFICATE, "certificate", ba, section="official")
+            card = profile_store.item(con, ba)
+            certificates = profile_store.items(con, "certificate")
+        self.assertEqual((card["fields"]["grade"], certificates), ("Upper Second Class Honours", []))
+
+    def test_credits_before_a_mark_are_not_part_of_the_modules_name(self):
+        text = "HIS2040 Archival Methods 20 75\nYear 2 average 68\n"
+        self.assertEqual(documents.modules_in(text), [{"name": "HIS2040 Archival Methods", "mark": "75"}])
 
 
 if __name__ == "__main__":

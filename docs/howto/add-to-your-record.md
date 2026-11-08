@@ -49,4 +49,5 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | "Add a folder on the computer Hal runs on, or upload it from this one." | A folder's path only works on the computer Hal runs on. From another computer, upload the folder instead. |
 | The wrong CV is marked **Current CV** | Press **Make this my current CV** on the one you use now. Hal works out your cards again from it. |
 | A fact says "from an older CV" | Only an older CV gives it. Add it to your current CV if it is still true, or hide it. |
+| A module or mark is missing after you added a transcript | Hal reads table rows with a module's name and mark, and lines with a module code and a mark at the end ("HIS2040 Archival Methods 75"). Edit the course's card to add what it missed. |
 | A card disappeared after you pressed **Remove** | It came only from that file, so Hal hid it. Add the file again and the card comes back as you left it. |

@@ -3,13 +3,22 @@
 Each has a current CV, an older one, a cover letter or personal statement, a transcript (whose marks differ
 from the CV's), a certificate, a reference, and a contract or job description for one job. The older CV
 lists an extra old job the newer one dropped, gives a detail the newer one leaves out (a job's town, a skill)
-and disagrees with it on others (a grade, a mark), so a test can see that an older CV only fills gaps. Every
-name, employer, place and address is invented; email addresses use the reserved `example.org` domain and
-phone numbers Ofcom's drama range.
+and disagrees with it on others (a grade, a mark), so a test can see that an older CV only fills gaps.
+
+For the education sections, `COURSES` holds their courses as cards (the software graduate's Access to HE
+Diploma and BSc, the history graduate's BA), with their coursework, lecture material and official papers as
+texts below it: a report and code, two dissertations, essays, slides and seminar notes. `education(con, key)`
+adds a course's card as a read of the person's CV would, and returns its id.
+
+Every name, employer, place, module code, mark and address is invented; email addresses use the reserved
+`example.org` domain and phone numbers Ofcom's drama range.
 """
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
+
+from jobhunt.profile import store
 
 
 @dataclass(frozen=True)
@@ -231,3 +240,128 @@ Your duties are delivering papers, collecting payments and keeping the round boo
 """)
 
 GRADUATES = (AVERY, MARNIE)
+
+
+# The education sections' courses and files -----------------------------------------------------------------------
+
+CV_REL = "Sources/CVs/Made-up CV.md"
+
+COURSES = {
+    "access": {"qualification": "Access to HE Diploma", "subject": "Science", "institution": "Fenbridge College",
+               "start": "2020-09", "end": "2021-06"},
+    "bsc": {"qualification": "BSc", "subject": "Made-up Computing", "institution": "University of Nowhere Fen",
+            "start": "2021-09", "end": "2024-06",
+            "modules": [{"name": "Programming Foundations (COMP1010)"}, {"name": "Data Analysis (COMP2040)"},
+                        {"name": "Dissertation (COMP3990)"}]},
+    "ba": {"qualification": "BA", "subject": "History", "institution": "University of Nowhere Fen",
+           "start": "2021-09", "end": "2024-06",
+           "modules": [{"name": "Early Modern Records (HIST2040)"}, {"name": "Rivers and Trade (HIST2110)"},
+                       {"name": "Dissertation (HIST3990)"}]},
+}
+
+TRANSCRIPT = """# University of Nowhere Fen: academic transcript
+
+Student: Avery Quillon
+Programme: BSc Made-up Computing
+Date of issue: 30 June 2024
+
+| Code | Module | Credits | Mark |
+| --- | --- | --- | --- |
+| COMP1010 | Programming Foundations | 20 | 71 |
+| COMP2040 | Data Analysis | 20 | 68 |
+| COMP3990 | Dissertation | 40 | 74 |
+
+Classification: First Class Honours
+"""
+
+CERTIFICATE = """# Degree certificate
+
+The University of Nowhere Fen confers on Marnie Quillfeather the degree of Bachelor of Arts in History
+with Upper Second Class Honours.
+
+Awarded 12 July 2024.
+"""
+
+# The software graduate's report for COMP2040, which states its mark.
+REPORT = """# Rainfall and ferry delays on the Fen
+
+COMP2040 coursework report, March 2024.
+
+## Abstract
+
+This report models how rainfall delays the made-up Fen ferries. I cleaned two years of timetable data and
+fitted a linear regression in R, which explained most of the delays on wet days.
+
+## Method
+
+I used regression in R and plotted residuals with ggplot2.
+
+Mark: 68
+"""
+
+# The software graduate's code, uploaded as a folder: one source of two files.
+CODE = {"tide-model/README.md": "# Tide model\n\nA small program that predicts high tide at Fen harbour from "
+                                "made-up gauge readings, written for COMP1010 in November 2021.\n",
+        "tide-model/tide.py": "def high_tide(readings):\n    return max(readings)\n"}
+
+DISSERTATION = """# Predicting ferry delays with open weather data
+
+Dissertation, BSc Made-up Computing, May 2024.
+
+## Abstract
+
+This dissertation builds a model that predicts ferry delays from open weather data. I collected six months
+of made-up sailings, trained a random forest in Python and compared it with a simple timetable baseline.
+"""
+
+SLIDES = """# COMP2040 Week 3: Linear regression
+
+Dr Ivo Pellingrove, ivo.pellingrove@example.org, room 2.14
+
+## Fitting a line
+
+Least squares finds the line that makes the squared residuals smallest.
+
+## Checking the fit
+
+Plot the residuals against the fitted values.
+"""
+
+ESSAY = """# The parish registers of Harrowgate Vale
+
+HIST2040 essay, submitted 14 March 2023.
+
+Close reading of the baptism registers of Harrowgate Vale, 1750 to 1850, shows how the parish grew after the
+made-up canal opened. I compared the registers with tithe maps through archival research at the county record
+office.
+
+Mark: 72%
+"""
+
+HISTORY_DISSERTATION = """# Bread, rivers and riot: grain prices on the Fen, 1790 to 1801
+
+Dissertation for the BA History, April 2024.
+
+This dissertation reads the made-up Fen corn returns and quarter sessions papers to ask why grain riots
+followed the floods of 1795. Archival research in three record offices and a thematic analysis of
+magistrates' letters show that prices, not the floods themselves, set the riots off.
+"""
+
+SEMINAR_NOTES = """# HIST2110 Seminar 4: Rivers and trade
+
+Notes from the seminar.
+
+## Navigation acts
+
+How the made-up Fen navigation acts changed who could carry grain.
+
+## Reading port books
+
+Port books record cargoes, masters and duties paid.
+"""
+
+
+def education(con: sqlite3.Connection, key: str) -> int:
+    """Adds one course of `COURSES` as a read of the person's CV would; its card's id."""
+    return store.add_found(con, "education", dict(COURSES[key]), {"source_rel": CV_REL, "doc_type": "cv",
+                                                                  "role": "own"})

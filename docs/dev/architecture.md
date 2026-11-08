@@ -1193,7 +1193,8 @@ people). Readers only take facts out of a source, within that frame.
   text, summary, facts`, each `Fact(kind, fields, Quote(field, quote, place, line))`. `document` keeps the
   text and finds a title and date only. The rest are `Stub`s raising `NotReadYet` (a `NotImplementedError`
   naming the phase: cv and letter 2; repo, github_account, project_files, portfolio, page and manual 3;
-  coursework, lecture and official 4; job_doc 5). A phase plugs its reader in with `readers.register`.
+  coursework, lecture and official 4; job_doc 5). A phase plugs its reader in with `readers.register`, from
+  its own module, listed in `pipeline.READER_MODULES`.
 - `store` keeps `record_sources` and `record_source_files` (migration 0028; not `sources`, which 0012 gave to
   job sites). Uploads are copied to `data/record-sources/<id>/`.
 - `pipeline`: `add_uploads(con, section, [Incoming(name, data, relative_path)], doc_kind=, target_id=)` (a
@@ -1248,6 +1249,16 @@ people). Readers only take facts out of a source, within that frame.
   heading, else "duties included ..."), and the card's employer. Its evidence ranks as a letter
   (`merge.DOC_TYPES` maps contract and job_description there): below the current CV, above older CVs. A
   reference's fact carries `role = others`, as on Documents, where a contract about a job reads the same way.
+
+### Education sections
+
+Each education card takes three sections: `coursework`, `lecture` and `official`.
+
+- `official` is `documents.OfficialReader`: the Documents rules for a transcript (`transcript_facts`, modules
+  with their marks, credits before a mark left out of the name) and, for a certificate, the grade
+  (`class_of_degree`: a labelled grade, else the first class of degree named) as an education fact instead of
+  a certificate card. The card the papers were added on names every education fact (`_on_card`), over what
+  the papers call the course.
 
 ## Profile (`jobhunt/profile/`)
 
