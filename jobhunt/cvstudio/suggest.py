@@ -20,6 +20,11 @@ Design decisions:
   are resolved back to ids against the version being changed, so a renamed part is caught by the guard.
 - The store's functions open their own connection, so this module commits its own rows before and after
   each store call and never holds a write transaction across one.
+- A skills list never gives a skill only studied in a course as one the person has (`_studied`, sections plan,
+  2026-11-09): a skill whose every source in the record is lecture material
+  (`profile.writing.studied_skills`) in a list that is not already labelled as knowledge gets one suggestion,
+  to leave it out or to label it "(studied)". The person may keep it: a suggestion they leave never comes
+  back, so a skill they add themselves stays.
 """
 from __future__ import annotations
 
@@ -32,6 +37,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from jobhunt.core import clock, events
+from jobhunt.profile import writing as profile_writing
 from jobhunt.writing import stage
 
 log = logging.getLogger(__name__)
@@ -72,6 +78,10 @@ YEAR = re.compile(r"^(19|20)\d{2}$")
 QUALIFICATION = re.compile(r"\b(First|2:1|2:2|Third|Distinction|Merit|BA|BSc|MA|MSc|MPhil|PhD|LLB|PGCE|"
                            r"A[- ]levels?|GCSEs?|BTEC|HND)\b")
 NUMBER = re.compile(r"\d[\d,.]*")
+ITEMS = "/items"                    # the target of an entry's list of items, such as a skills line
+# A skills line already labelled as knowledge ("Studied in my degree", "Familiar with"): studied skills belong there.
+KNOWLEDGE_HEADING = re.compile(r"\b(?:stud(?:ied|y)|knowledge|coursework|familiar|learn(?:ed|t|ing)|covered)\b", re.I)
+STUDIED_LABEL = " (studied)"
 
 
 @dataclass
@@ -160,6 +170,8 @@ def shown_at(doc, op: str, target: str) -> str:
     if op == "reorder":
         return ", ".join(names_at(doc, target))
     node = _model().find(doc, model_target(target))
+    if isinstance(node, list):
+        return ", ".join(str(x) for x in node)
     if op == "hide":
         if hasattr(node, "visible"):
             return node.title if node.visible else ""
@@ -355,12 +367,45 @@ def _order(doc, type_) -> list[Draft]:
                   ", ".join(s.title for s in shown), [", ".join(s.title for s in wanted)], WHOLE_CV)]
 
 
-def checks_for(doc, sid: str, type_) -> list[Draft]:
-    """The suggestions for one section that need no AI."""
+def skill_key(name: str) -> str:
+    """A skill's name as two lists compare it: case, spaces and punctuation aside."""
+    return " ".join(re.findall(r"[a-z0-9+#]+", name.lower()))
+
+
+def _studied(doc, sid: str, studied: list[str] | tuple[str, ...]) -> list[Draft]:
+    """For each skills line of the section that lists a skill only studied in a course (`studied`, see the module
+    notes): leave those skills out, or label each "(studied)"."""
+    sec = _section(doc, sid)
+    if sec is None or not sec.visible or sec.kind != "skills" or not studied:
+        return []
+    keys = {skill_key(s) for s in studied}
+    out = []
+    for e in sec.entries:
+        if e.hidden or not e.items or KNOWLEDGE_HEADING.search(e.heading or ""):
+            continue
+        found = [i for i in e.items if skill_key(i) in keys]
+        if not found:
+            continue
+        kept = [i for i in e.items if i not in found]
+        labelled = [f"{i}{STUDIED_LABEL}" if i in found else i for i in e.items]
+        names = '", "'.join(found)
+        out.append(Draft(f"s:{sid}/e:{e.id}{ITEMS}", "replace", "Wording",
+                         f'Show "{found[0]}" as studied, not used',
+                         f'Your record shows "{names}" only in lecture material, so an employer would read this list '
+                         "as things you have used. Leave it out, or say you studied it. Keep it if you have used it.",
+                         {"type": "check", "id": "studied_skills", "label": "Your record: skills you studied"},
+                         ", ".join(e.items), [a for a in (", ".join(kept), ", ".join(labelled)) if a], sid,
+                         [{"label": f'Studied only: "{f}"', "ref": f"s:{sid}/e:{e.id}"} for f in found]))
+    return out
+
+
+def checks_for(doc, sid: str, type_, studied: list[str] | tuple[str, ...] = ()) -> list[Draft]:
+    """The suggestions for one section that need no AI; `studied` are the record's skills only studied in a
+    course (`_studied`)."""
     if sid == WHOLE_CV:
         return _order(doc, type_)
     return [*_spelling(doc, sid), *_symbols(doc, sid), *_dates(doc, sid), *_banned(doc, sid, type_),
-            *_limits(doc, sid, type_)]
+            *_limits(doc, sid, type_), *_studied(doc, sid, studied)]
 
 
 def reviewers(doc, type_) -> list[list[str]]:
@@ -672,6 +717,7 @@ def look_again(con: sqlite3.Connection, *, step=None, use_ai: bool | None = None
     type_ = cv_type()
     recheck(con, vid, doc)
     use_ai = ai_ready() if use_ai is None else use_ai
+    studied = profile_writing.studied_skills(con)
     found = 0
     pending = len(_pending(con))
     finished = True
@@ -683,7 +729,7 @@ def look_again(con: sqlite3.Connection, *, step=None, use_ai: bool | None = None
             step(f"Reading {where(doc, 's:' + sids[0]) if sids != [WHOLE_CV] else 'your whole CV'}")
         passages = passages_for(doc, sids) if use_ai and sids != [WHOLE_CV] else []
         ctx = context(con, doc, type_, passages="\n".join(p.get("text", "") for p in passages))
-        failing = [d for sid in sids for d in checks_for(doc, sid, type_)]
+        failing = [d for sid in sids for d in checks_for(doc, sid, type_, studied)]
         for draft in failing:
             if pending >= MAX_PENDING:
                 break
@@ -794,6 +840,8 @@ def change_for(doc, op: str, target: str, text: str):
         return model.Change("reorder", model_target(target), _ids_for(doc, target, text))
     if op == "hide":
         return model.Change("hide" if not text else "show", target)
+    if target.endswith(ITEMS):
+        return model.Change("replace", target, [x.strip() for x in text.split(",") if x.strip()])
     return model.Change("replace" if op != "retitle" else "retitle", target, text)
 
 

@@ -87,6 +87,20 @@ class Strength(unittest.TestCase):
                                "Cataloguing": "cv"})
         self.assertTrue(cv_skill)
 
+    def test_the_profile_block_says_how_each_skill_may_be_told_and_names_the_studied_ones(self):
+        with home() as (con, _, _), fake_ai(REPLIES):
+            ba = graduates.education(con, "ba")
+            add(con, "coursework", ba, "registers.md", graduates.ESSAY, "essay")
+            add(con, "lecture", ba, "seminar4.md", graduates.SEMINAR_NOTES, "notes")
+            store.add_by_hand(con, "skill", {"name": "Bookbinding"})
+            store.confirm_many(con, [s["id"] for s in store.items(con, "skill")])
+            block = profile_writing.context_block(con)
+            studied = profile_writing.studied_skills(con)
+        self.assertIn("- Skill: Archival research. Done in coursework: may be told as experience", block)
+        self.assertIn('- Skill: Port books as sources. Studied only: tell it as knowledge ("I studied", "covered in '
+                      'my degree"), never as done', block)
+        self.assertEqual(studied, ["Port books as sources"], "a skill you added yourself is never only studied")
+
 
 if __name__ == "__main__":
     unittest.main()

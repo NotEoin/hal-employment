@@ -485,6 +485,12 @@ CV and out of your letters. If you have used one in your own work, press **I hav
 Under **From:**, each skill says where it was shown: "Done in your coursework: ..." for a piece of your
 coursework, or "Studied in ..." with the module or course it was taught in.
 
+Letters and answers follow the same line. A skill shown in your own work or done in your coursework can be
+told as something you did ("I used ..."). A skill on your CV can be listed. A skill you only studied is told
+as knowledge ("I studied ...", "covered in my degree"), and Hal drafts a sentence again when it says you
+used one. On **CV**, when a skills line lists a skill you only studied, Hal suggests leaving it out or
+adding "(studied)". If you have used it, leave the line as it is and Hal will not ask again.
+
 Hal only asks about skills you can stand behind: skills on your CV, skills you checked, and the tools of a
 project Hal would tell an employer about (one it would lead with, or one useful when a job asks). Any
 other skill your files name, such as a word in your notes or plans, is folded away under **Mentioned in

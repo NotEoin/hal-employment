@@ -22,8 +22,9 @@ Design decisions, each with its reason:
   has ended spoken of as running (`stage.ended_course`); the wording `writing.plain` finds, the stock links of
   `plain.STOCK` among them; a sentence restating the advert (`drafts.echoes`), one about the person's work
   taking an advert phrase as its fact (`drafts.lifted`, `LIFTED_SAID`), or one already said in the
-  paragraph; the person's part used as a label ("As the owner, I built ...", seen in the prototype); and
-  four or more tools in one sentence, a list rather than a story. As a paragraph holds one piece of work, a
+  paragraph; the person's part used as a label ("As the owner, I built ...", seen in the prototype); a skill
+  only studied in a course said to be used (`writing.strengths`, `Scope.studied`); and four or more tools in
+  one sentence, a list rather than a story. As a paragraph holds one piece of work, a
   tool or the name of another card in it is a crossed project, named with the other card's name.
 - At most one AI check per paragraph (`verify`), with that story's facts only, and none when the checks with
   no AI already found a problem or when every word of the paragraph is in its facts (`restates`). Words the
@@ -87,7 +88,7 @@ from dataclasses import dataclass, field
 from jobhunt import llm
 from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import drafts, flow, motive, plain, planned, purpose, repeats, spelling, stage, taught
+from jobhunt.writing import drafts, flow, motive, plain, planned, purpose, repeats, spelling, stage, strengths, taught
 from jobhunt.writing.motive import Pairing
 from jobhunt.writing.plan import DEGREE, MODULE, Story
 
@@ -266,6 +267,7 @@ class Scope:
     values: dict = field(default_factory=dict)   # the prompt values (`pack.person`)
     context: str = ""                  # the job lines every request carries
     request: str = ""                  # the person's own words, when they asked for a change
+    studied: tuple[str, ...] = ()      # skills only course material shows (`profile.writing.studied_skills`)
 
 
 @dataclass(frozen=True)
@@ -487,6 +489,7 @@ def sentence_problems(sentence: str, story: Story, scope: Scope, before: list[st
     out += purpose.unbacked(sentence, held, list(story.facts), f"{story.name}\n{story.summary}",
                             list(dict.fromkeys([*scope.known, *story.tools])))
     out += _crossed_names(sentence, story, scope)
+    out += strengths.problems(sentence, scope.studied, story.words())
     if story.card is not None:
         out += _reasons(drafts.crossed(sentence, list(scope.cards)))
     out += [p for p in (_context_problem(sentence, story), _alone_problem(sentence, story),

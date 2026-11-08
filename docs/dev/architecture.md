@@ -1301,7 +1301,22 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   <source title>", "Studied in <chosen module>", else "Studied in <course>"), shown under "From:" on the
   skill card. `of_skill` is the strongest; `store.is_studied` is `strength.studied_only`, so the two always
   agree. `profile.writing.skill_strengths(con)` maps each skill the writer may use to its strength, for the
-  writer to tell a studied skill only as knowledge.
+  writer to tell a studied skill only as knowledge. Each skill line of the Profile block says its strength
+  in `strength.PROMPT_WORDS` ("Done in coursework: may be told as experience", "On a CV: may be listed",
+  "Studied only: tell it as knowledge ..."), and `profile.writing.studied_skills(con)` names every skill
+  Hal found whose strongest source is `studied`, checked or not, for the checks below.
+- Skills in drafts (`writing/strengths.py`): `problems(sentence, studied, own)` fails a sentence that names a
+  studied-only skill with a word of use ("I used", "we applied", "using", "carried out") and no word of
+  knowledge ("studied", "covered", "module"), unless its own story's facts name the skill.
+  `paragraphs.sentence_problems` runs it with `Scope.studied`, so a paragraph that fails is drafted again
+  once; `pack.unsupported_claims` runs `studied_claims` on whole drafts, which `fix_claims` rewrites once.
+  The skill names are the record's own, so a research method or a lab technique is held to this as a tool
+  is.
+- CV studio: `cvstudio.suggest._studied` gives one "Wording" suggestion per skills line (target
+  `s:<section>/e:<entry>/items`) that lists a studied-only skill and is not headed as knowledge
+  (`KNOWLEDGE_HEADING`): leave it out, or label it "(studied)". `shown_at` reads an items target as one
+  comma-separated line and `change_for` turns the accepted line back into the list. The person may leave it,
+  and a suggestion left never comes back, so a skill they add stays.
 
 ### Projects (`sections/repo.py`, `sections/stack.py`)
 

@@ -147,6 +147,29 @@ class Reviewers(CvCase):
         self.assertEqual(suggest.listing(self.con)["state"], "ready")
 
 
+class Studied(CvCase):
+    """A skill whose every source in the record is lecture material is never listed as one you used."""
+
+    def test_a_studied_skill_in_a_skills_line_is_offered_left_out_or_labelled(self):
+        doc = store.current()[1]
+        found = suggest.checks_for(doc, "skills", suggest.cv_type(), ["Oral History", "palaeography"])
+        drafts = [d for d in found if d.trigger["id"] == "studied_skills"]
+        self.assertEqual([(d.target, d.before, d.afters) for d in drafts],
+                         [("s:skills/e:sk-research/items", "archival research, oral history",
+                           ["archival research", "archival research, oral history (studied)"])])
+
+    def test_accepting_it_changes_the_skills_line_and_a_labelled_skill_is_not_offered_again(self):
+        with mock.patch.object(suggest.profile_writing, "studied_skills", lambda con: ["oral history"]):
+            suggest.look_again(self.con)
+            offered = [s for s in self.pending() if "as studied" in s["title"]]
+            self.assertEqual(len(offered), 1)
+            suggest.accept(self.con, offered[0]["id"], alt=1)
+            self.assertEqual(store.current()[1].sections[-2].entries[1].items,
+                             ["archival research", "oral history (studied)"])
+            suggest.look_again(self.con)
+        self.assertFalse([s for s in self.pending() if "as studied" in s["title"]])
+
+
 class Accepting(CvCase):
     def test_your_edit_of_a_suggestion_is_kept_as_a_pair_to_learn_from(self):
         suggest.look_again(self.con)

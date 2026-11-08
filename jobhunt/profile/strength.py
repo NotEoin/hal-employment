@@ -19,7 +19,9 @@ Design decisions, each with its reason:
 - `studied` is exactly the evidence `profile.store.is_studied` counts, so a skill is studied when every piece
   of its evidence is: the check page's "Studied in your course" and the writer agree.
 - The writer reads it through `profile.writing.skill_strengths`, so it can tell a studied skill only as
-  knowledge, never as something the person did.
+  knowledge, never as something the person did. A prompt's skill line says it in `PROMPT_WORDS`: shown and
+  coursework skills may be told as experience ("I used", "I applied"), a CV skill may be listed, and a studied
+  one is told only as knowledge ("I studied", "covered in my degree"; sections plan, 2026-11-09).
 """
 from __future__ import annotations
 
@@ -31,6 +33,12 @@ SECTION_STRENGTH = {"coursework": COURSEWORK, "lecture": STUDIED}
 OWN, TAUGHT = "own", "taught"                      # evidence roles (`ingest.roles`)
 OWN_WORK_TYPES = ("repository", "project")
 COURSEWORK_TYPES = ("coursework", "dissertation", "essay", "report")
+EXPERIENCE = (SHOWN, COURSEWORK)                   # strengths a draft may tell as something the person did
+# How a prompt's skill line says each strength (`profile.writing.line`).
+PROMPT_WORDS = {SHOWN: "Shown in own work: may be told as experience",
+                COURSEWORK: "Done in coursework: may be told as experience",
+                ON_CV: "On a CV: may be listed",
+                STUDIED: 'Studied only: tell it as knowledge ("I studied", "covered in my degree"), never as done'}
 
 
 def of_evidence(evidence: dict) -> str:

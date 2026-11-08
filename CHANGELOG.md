@@ -6,6 +6,11 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Skills you studied are told as studied.** Letters and answers tell a skill from your own work or your
+  coursework as something you did, list a skill from your CV, and say a skill you only met in lectures was
+  studied, never used. A sentence that says you used one is drafted again. On **CV**, a skills line that
+  lists a skill you only studied gets a suggestion to leave it out or mark it "(studied)".
+
 - **Hal reads your coursework.** Essays, reports, lab reports, portfolios, code and anything else you add
   under **Coursework** on a course's card get a short summary, their mark when the work states one, and the
   skills and methods they show, each with the words it came from. Hal suggests which module each piece was

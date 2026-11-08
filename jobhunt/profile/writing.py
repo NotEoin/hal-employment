@@ -14,7 +14,9 @@ Design decisions, each with its reason:
   the person studied, not what they can show. The checked-only rule already keeps it out, as a studied
   skill is one nobody checked; once the person confirms it, it is theirs and is used. How strongly each
   usable skill is shown (`skill_strengths`, `profile.strength`: shown, coursework, cv, studied) is there for
-  the writer to tell a skill only studied as knowledge, never as something the person did.
+  the writer to tell a skill only studied as knowledge, never as something the person did: each skill line of
+  the block says it (`strength.PROMPT_WORDS`), and `studied_skills` names the ones a draft's check holds to
+  that (`writing.strengths`).
 - Experiences lead with the best (`tiers`): core jobs, courses, projects, certificates and achievements
   come before supporting ones and those not sorted yet, and an archived one is never used, even when the
   person confirmed it, because they or Hal said it is not worth telling an employer. Within a tier, the
@@ -149,6 +151,15 @@ def entry_lines(kind: str, fields: dict) -> list[str]:
     return out
 
 
+def skill_line(fields: dict, quote: str = "", shown: str = "") -> str:
+    """A skill as a line of plain words for a prompt, saying how strongly it is `shown` (`profile.strength`), so
+    a studied one is told only as knowledge."""
+    level = ", ".join(p for p in (fields.get("level"), fields.get("category")) if p)
+    out = f"Skill: {fields.get('name', '')}" + (f" ({level})" if level else "")
+    out += f". {strength.PROMPT_WORDS[shown]}" if shown in strength.PROMPT_WORDS else ""
+    return out + (f'. Shown by: "{quote[:QUOTE_CHARS]}"' if quote else "")
+
+
 def _plain(kind: str, fields: dict, quote: str, project_kind: str, entries: bool = True) -> str:
     f = fields
     if kind == "job":
@@ -173,9 +184,7 @@ def _plain(kind: str, fields: dict, quote: str, project_kind: str, entries: bool
                                              for m in f["modules"])
         return out
     if kind == "skill":
-        level = ", ".join(p for p in (f.get("level"), f.get("category")) if p)
-        out = f"Skill: {f.get('name', '')}" + (f" ({level})" if level else "")
-        return out + (f'. Shown by: "{quote[:QUOTE_CHARS]}"' if quote else "")
+        return skill_line(f, quote)
     if kind == "project":
         out = f"Project{f' ({project_kind})' if project_kind else ''}: {f.get('name', '')}" + (
             f" ({f['period']})" if f.get("period") else "")
@@ -465,8 +474,9 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
             made = contexts.current(it, worked_for) if kind in contexts.CONTEXT_KINDS else ""
             fields = for_writing(con, it, cvs, view)
-            out.append("- " + line(kind, fields, quote, made, entries=False,
-                                   tag=tags.get(fields.get("name", "")) if kind == "project" else ""))
+            out.append("- " + (skill_line(fields, quote, strength.of_skill(it)) if kind == "skill" else
+                               line(kind, fields, quote, made, entries=False,
+                                    tag=tags.get(fields.get("name", "")) if kind == "project" else "")))
             out += ["- " + x for x in entry_lines(kind, fields)]
     return out
 
@@ -736,6 +746,18 @@ def skill_strengths(con: sqlite3.Connection | None = None) -> dict[str, str]:
             return skill_strengths(own)
     return {it["fields"]["name"]: strength.of_skill(it) for it in store.items(con, "skill", hidden=False)
             if it["state"] in USED_STATES and it["fields"].get("name") and not planned_only(con, it)}
+
+
+def studied_skills(con: sqlite3.Connection | None = None) -> list[str]:
+    """The names of the skills Hal found that only course material shows (`profile.strength.STUDIED`), checked
+    or not and hidden or not: a draft may say the person studied them, never that they used them
+    (`writing.strengths`). A skill the person added themselves is theirs, so never one. Hal's own database
+    unless `con`."""
+    if con is None:
+        with closing(db.connect()) as own:
+            return studied_skills(own)
+    return [it["fields"]["name"] for it in store.items(con, "skill")
+            if it.get("origin") != "you" and it["fields"].get("name") and strength.of_skill(it) == strength.STUDIED]
 
 
 def cards_block(found: list[dict]) -> str:

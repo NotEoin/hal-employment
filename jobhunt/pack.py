@@ -84,6 +84,7 @@ from .writing import (
     repeats,
     spelling,
     stage,
+    strengths,
     taught,
 )
 from .writing import plan as planning
@@ -562,7 +563,8 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     kinds are found with no AI as well: a sentence that speaks of finishing a course that
     has ended (`stage.ended_course`), a tool given to a project whose own facts never name it
     (`drafts.misplaced_tools`), a project placed in a degree or in the person's own time against its
-    card's context (`drafts.wrong_context`), and what a named module covered when no source naming the module
+    card's context (`drafts.wrong_context`), a skill only studied said to be used (`writing.strengths`), and what
+    a named module covered when no source naming the module
     says it (`taught.unsupported`) or which tool a named module used when its own entry never names it
     (`taught.tooled`). Each goes into the one rewrite `fix_claims` asks for. A draft told one piece
     of work a paragraph is checked paragraph by paragraph instead (`writing.paragraphs`); this whole-draft check
@@ -582,7 +584,7 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
     known = known_tools(cards)
     return claims + [f"{s} ({stage.ended_said(now)})" for s in stage.ended_course(written, now)] \
         + drafts.misplaced_tools(written, cards, known) + drafts.wrong_context(written, cards) \
-        + drafts.crossed(written, cards) \
+        + drafts.crossed(written, cards) + strengths.studied_claims(written, profile_writing.studied_skills()) \
         + taught.unsupported(written, profile_writing.module_names(), (facts, kept)) \
         + taught.tooled(written, profile_writing.module_names(), (facts, kept), known)
 
@@ -688,7 +690,8 @@ def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, k
     return paragraphs.Scope(tuple(found), tuple(cards), tuple(known_tools(cards)),
                             f"{advert}\n{about}\n{stage.today_lines(now)}", advert, about,
                             (job["title"], job["company"]), now, tuple(profile_writing.module_names()), (facts, kept),
-                            tuple(applicant_names(who)), tuple(plain.settings_labels()), who, context.strip(), request)
+                            tuple(applicant_names(who)), tuple(plain.settings_labels()), who, context.strip(), request,
+                            tuple(profile_writing.studied_skills()))
 
 
 def letter_frame(who: dict, job, scope: paragraphs.Scope, pairing: motive.Pairing | None,
