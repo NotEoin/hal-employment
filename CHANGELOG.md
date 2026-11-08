@@ -188,6 +188,13 @@ What changed in each version, in plain words.
   only then, asks once for a polished draft, which it keeps only when it reads better and passes every
   check with nothing new added. The letter, message and answers are no longer given the fit table's
   requirement-by-requirement rows.
+- **Fewer quiet mistakes in drafts.** A letter said "I achieved 86 in a module through a team project"
+  when nothing tied the two, said "I used Azure" of work a project plan only said it would use, gave the
+  same fact in two paragraphs, used one CV line word for word in two drafts, and put "I have the right to
+  work in the UK" in a paragraph about teamwork. Hal now catches each: the first two are rewritten like any
+  unsupported sentence, a repeated fact or copied line is rewritten with another fact, and the stray fact
+  moves to the closing paragraph. A fit table row that calls a team project personal is put right, or listed
+  under **Check before sending** when Hal cannot.
 - **A wrong sentence is fixed where it stands.** Hal used to take out a sentence that was still wrong after
   its rewrite, which left paragraphs that jumped from one fact to the next. It now rewrites the sentence
   with its whole paragraph in view, so the paragraph still reads on, and lists it under **Check before

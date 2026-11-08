@@ -11,6 +11,23 @@ from jobhunt.writing import repeats
 PIPELINE = "I built a made-up tide pipeline that cleans sensor logs, stores them in Postgres and charts each week."
 
 
+class Verbatim(unittest.TestCase):
+    CV = "Tide gauge: a sensor logger in Lua that records river levels every ten minutes"
+
+    def test_a_cv_line_copied_word_for_word_by_two_drafts_is_found(self):
+        # one CV line turned up in the letter, the message and both answers (2026-11-07)
+        letter = "Tide gauge is a sensor logger in Lua that records river levels [E2]."
+        said = "Since my first year I keep improving a sensor logger in Lua that records river levels for a club."
+        self.assertFalse(repeats.same(said, letter), "different sentences around the line")
+        self.assertEqual(repeats.verbatim(said, (self.CV,), (letter,)), self.CV)
+
+    def test_a_short_shared_phrase_or_a_line_no_earlier_draft_copies_is_not_found(self):
+        self.assertIsNone(repeats.verbatim("My sensor logger in Lua records levels.", (self.CV,),
+                                           ("A sensor logger in Lua.",)))
+        self.assertIsNone(repeats.verbatim("I wrote a sensor logger in Lua that records river levels.", (self.CV,),
+                                           ("I like rivers.",)))
+
+
 class Repeats(unittest.TestCase):
     def test_a_later_answer_that_repeats_an_earlier_one_is_found(self):
         # two form answers repeated the same pipeline details nearly word for word (2026-11-07)

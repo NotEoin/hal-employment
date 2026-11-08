@@ -28,6 +28,9 @@ Design decisions, each with its reason:
   first person is not enough.
 - A sentence is a stray when at least `STRAY_MIN_OTHERS` other sentences of its paragraph cite items of one
   card, and it cites items, none of them that card's, and does not name the card.
+- A stray is moved, with no AI, to the start of the closing paragraph (`placed`), where a fact about the
+  person that belongs to no project reads as part of the close; one already in the closing paragraph, or in
+  a draft of one paragraph, is left for the polish.
 - A letter ends on a tool list when one of its last `ENDING_SENTENCES` sentences names at least
   `TOOL_LIST_MIN` known tools: a letter should end on the person's interest in the work.
 """
@@ -138,6 +141,23 @@ def strays(text: str, items: dict[str, Item], cards: list[dict]) -> list[tuple[i
             if card not in {items[i].card for i in c.ids if i in items} and card not in _named(c.text, cards):
                 out.append((p, c))
     return out
+
+
+def placed(text: str, items: dict[str, Item], cards: list[dict]) -> tuple[str, list[str]]:
+    """`text` with each stray sentence (`strays`) of a paragraph before the last moved to the start of the last,
+    and the sentences moved, as the person sees them."""
+    paras = flow.paragraphs(text)
+    moved = []
+    for p, c in strays(text, items, cards) if len(paras) > 1 else []:
+        if p == len(paras) - 1:
+            continue
+        found = re.compile(r"\s+".join(map(re.escape, c.raw.split()))).search(paras[p])
+        if not found:
+            continue
+        paras[p] = re.sub(r"[ \t]{2,}", " ", paras[p][:found.start()] + paras[p][found.end():]).strip()
+        paras[-1] = f"{c.raw} {paras[-1]}"
+        moved.append(c.text)
+    return "\n\n".join(p for p in paras if p), moved
 
 
 def tool_list_ending(text: str, known: list[str]) -> list[Finding]:

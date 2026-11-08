@@ -158,6 +158,35 @@ class SkillsList(unittest.TestCase):
         self.assertEqual(grounded.problems(one("I have used NumPy and pandas [E5]."), self.facts), [])
 
 
+class Planned(unittest.TestCase):
+    """"I used Azure" from a plan that said the team would use it (2026-11-08)."""
+
+    AZURE = Item("E9", "We will use Azure to host the Ferry planner API", "CV", "Ferry planner", "team",
+                 planned=True)
+
+    def setUp(self):
+        self.facts = grounded.Facts({**ITEMS, "E9": self.AZURE}, [], [*FLAGS["known"], "Azure"], FLAGS["allowed"])
+
+    def test_planned_work_said_to_be_done_is_a_problem(self):
+        for said in ("I used Azure to host the Ferry planner API [E9].",
+                     "I wrote the statistics features of Ferry planner with a team of 7 and hosted it on Azure "
+                     "[E1,E9]."):
+            with self.subTest(said=said):
+                self.assertIn(grounded.PLANNED, grounded.problems(one(said), self.facts))
+
+    def test_planned_work_said_as_a_plan_is_no_problem(self):
+        self.assertNotIn(grounded.PLANNED, grounded.problems(one("Our team plans to host it on Azure [E9]."),
+                                                             self.facts))
+
+
+class ModuleTies(unittest.TestCase):
+    def test_a_module_and_its_mark_tied_to_a_project_its_evidence_never_names_is_a_problem(self):
+        # "I achieved 86 in <module> through a team project" (2026-11-08)
+        said = one("I scored 72 in the Databases module through a team project [E3].")
+        self.assertIn("nothing in your facts ties Databases to team project", grounded.problems(said, FACTS))
+        self.assertEqual(grounded.problems(one("I scored 72 in the Databases module [E3]."), FACTS), [])
+
+
 class Reason(unittest.TestCase):
     def setUp(self):
         self.facts = grounded.Facts(**{**FACTS.__dict__, "motive": ITEMS["E2"]})
@@ -328,6 +357,21 @@ class Unrepeat(unittest.TestCase):
         done = self.unrepeat(message, ["I scored 72 in the Databases module [E3]."], (letter,))
         self.assertIn("I scored 72 in the Databases module [E3]. Can we talk [M]?", done.text)
         self.assertNotIn("E2:", self.fixes()[0], "evidence an earlier draft cites is not offered again")
+
+    def test_a_fact_an_earlier_paragraph_already_states_is_rewritten_from_other_evidence(self):
+        # facts repeated across paragraphs held graded packs at 2 of 5 (2026-11-08)
+        text = ("I wrote the statistics features of Ferry planner [E1]. I would welcome a call [M].\n\n"
+                "That team project taught me to share code with my classmates [E1].")
+        done = self.unrepeat(text, ["I scored 72 in the Databases module [E3]."])
+        self.assertIn("What is wrong: says again what an earlier paragraph says (E1)", self.fixes()[0])
+        self.assertTrue(done.text.endswith("\n\nI scored 72 in the Databases module [E3]."), done.text)
+
+    def test_a_cv_line_an_earlier_draft_copies_word_for_word_is_rewritten(self):
+        letter = "Tide gauge is a sensor logger in Lua that records river levels every ten minutes [E2]."
+        message = ("Hello,\n\nSince my first year I keep improving a sensor logger in Lua that records river levels "
+                   "for a rowing club [E2]. Can we talk [M]?")
+        self.unrepeat(message, ["I scored 72 in the Databases module [E3]."], (letter,))
+        self.assertIn('word for word, as an earlier draft does', self.fixes()[0])
 
     def test_an_answers_first_sentence_still_repeating_is_kept_and_listed(self):
         earlier = ("I built a sensor logger in Lua that records river levels every ten minutes [E2].",)

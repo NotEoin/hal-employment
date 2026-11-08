@@ -52,6 +52,9 @@ Design notes:
   into the prose (2026-11-08).
   The letter's reason for the employer comes from a pairing of one employer fact with one plan item
   (`writing.motive`), or it gives none, as letters gave generic motivation that echoed the advert.
+- A fit row that places a project card against its context is given the card's words, or listed under
+  "Check before sending" when it cannot be (`checked_fit_contexts`): a fit table called a university team
+  project a personal project (2026-11-08).
 - The pack's checklist names no command: every action is a button on the Documents page.
 """
 import re
@@ -268,7 +271,7 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
 
     fit = complete_fit(ask(_requirements(analysis)), analysis.get("must_have") or [], ask)
     fit = consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
-    fit = checked_fit_tools(fit, cards, known_tools(cards), facts)
+    fit = checked_fit_contexts(checked_fit_tools(fit, cards, known_tools(cards), facts), cards)
     return {**fit, "gaps": repeats.unique_gaps(fit.get("gaps") or [])}
 
 
@@ -364,6 +367,22 @@ def checked_fit_tools(fit: dict, cards: list[dict], known: list[str], facts: str
         else:
             gaps.append(str(m.get("requirement") or ""))
     return {**fit, "matches": matches, "gaps": gaps}
+
+
+FIT_CONTEXT_FLAG = "the fit table places a project where its card does not; correct this row"
+
+
+def checked_fit_contexts(fit: dict, cards: list[dict]) -> dict:
+    """The fit map with each part of a row's evidence that places a project card against its context
+    (`drafts.wrong_context`) given the card's own context words (`drafts.right_context`), and, under
+    "context_flags", a `FIT_CONTEXT_FLAG` line for each part still wrong, so "Check before sending" lists it. A
+    fit table called a university team project a personal project (2026-11-08)."""
+    matches, flags = [], []
+    for m in (dict(m) for m in fit.get("matches") or [] if isinstance(m, dict)):
+        parts = [drafts.right_context(p, cards) for p in re.split(r"(?<=[.;])\s+", str(m.get("evidence") or ""))]
+        flags += [f"{FIT_CONTEXT_FLAG}: {w}" for p in parts for w in drafts.wrong_context(p, cards)]
+        matches.append({**m, "evidence": " ".join(parts)} if m.get("evidence") else m)
+    return {**fit, "matches": matches, "context_flags": flags}
 
 
 def with_card_tools(fit: dict, cards: list[dict]) -> dict:
@@ -613,7 +632,9 @@ def settle(who: dict, draft: str, rewrite, *, plan: list[planning.Item], essenti
         against = grounds(who, plan, facts=facts, kept=kept, employer=employer, pairing=pairing)
         draft = marked(draft, against, rewrite)
         if cites.has_markers(draft):
-            return grounded.lengthen(grounded.ground(draft, against, essential), against, words, essential)
+            done = grounded.ground(draft, against, essential)
+            done.text = readability.placed(done.text, against.items, against.cards)[0]
+            return grounded.lengthen(done, against, words, essential)
     text, claims, again = fix_claims(who, draft, rewrite, facts=facts, kept=kept, employer=employer)
     return grounded.Grounded(text, claims, int(again), marked=False)
 
@@ -1049,7 +1070,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
-    flagged = written["flags"] + others["flags"]
+    flagged = written["flags"] + others["flags"] + list(fit.get("context_flags") or [])
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
     employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]

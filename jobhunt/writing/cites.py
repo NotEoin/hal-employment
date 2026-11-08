@@ -45,9 +45,9 @@ UNSTOPPED = re.compile(rf"(?<=[^.!?\s])((?i:[ \t]*{_ONE})+)(?=\s+[A-Z\"'\d\u2018
 STOPPED = re.compile(rf"{_ONE}[.!?]\s+", re.I)    # a marker run's end with its stop: a sentence ends there
 MOTIVE = "M"
 FIRST_PERSON = re.compile(r"\b(I|I'm|I've|I'd|me|my|mine|we|our|us)\b", re.I)
-# Past tenses with no "-ed" ending that claim something done.
+# Past tenses with no "-ed" ending, or too short for `PAST_ED` ("used"), that claim something done.
 IRREGULAR = frozenset("""built rebuilt led made wrote rewrote ran won taught began became did found gave got grew held
-kept knew met sold spent took brought chose fought went spoke lost paid undertook oversaw drove""".split())
+kept knew met sold spent took brought chose fought went spoke lost paid undertook oversaw drove used""".split())
 # Words before an "-ed" word that make it an adjective: "I am interested", "I feel prepared".
 LINKING = frozenset("am 'm be been being is are was were feel felt very really so most more".split())
 # "-ed" words that say why the person wants the job, or are not verbs at all.
@@ -128,7 +128,8 @@ def cited(text: str) -> list[Cited]:
     return out
 
 
-def _past_tense(sentence: str) -> bool:
+def past_tense(sentence: str) -> bool:
+    """True when a sentence has a verb in the past tense (see the module notes)."""
     words = re.findall(r"[A-Za-z']+", sentence)
     for before, word in zip(["", *words], words, strict=False):
         lower = word.lower()
@@ -148,7 +149,7 @@ def numbers(sentence: str) -> list[str]:
 def about_person(sentence: str, allowed: str = "") -> bool:
     """True when a sentence states something about the person: the first person with a past tense, or a number
     that `allowed` (the employer's words and the stage line) does not hold."""
-    if FIRST_PERSON.search(sentence) and _past_tense(sentence):
+    if FIRST_PERSON.search(sentence) and past_tense(sentence):
         return True
     held = set(numbers(allowed))
     return any(n not in held for n in numbers(sentence))

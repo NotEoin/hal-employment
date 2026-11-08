@@ -14,6 +14,29 @@ PASSAGE = ("[Sources/Writing/Data reflection.md > Week 3]\nIn Foundations of Ima
            "over a made-up harbour database and tagged sailors' logs with language processing.")
 
 
+CARDS = [{"kind": "project (university team project)", "name": "Ferry planner", "aliases": []}]
+LINES = ("Databases module, mark 66.\nFerry planner: a team project with six classmates.",)
+
+
+class Joined(unittest.TestCase):
+    """"I achieved 86 in <module> through a team project" from a CV line of the module and its mark alone
+    (2026-11-08)."""
+
+
+    def test_a_module_and_its_mark_tied_to_an_activity_or_project_its_sources_never_name_is_found(self):
+        for said, tied in (("I achieved 66 in the Databases module through a team project.", "team project"),
+                           ("I scored 66 in the Databases module by building Ferry planner.", "Ferry planner")):
+            with self.subTest(said=said):
+                self.assertEqual(taught.joined(said, MODULES, LINES, CARDS),
+                                 [f"{said} (nothing in your facts ties Databases to {tied})"])
+
+    def test_a_module_and_its_mark_alone_or_tied_as_its_sources_say_are_left_alone(self):
+        self.assertEqual(taught.joined("I scored 66 in the Databases module.", MODULES, LINES, CARDS), [])
+        lines = ("Databases module, mark 66: a team project on a made-up harbour database.",)
+        self.assertEqual(taught.joined("I achieved 66 in the Databases module through a team project.", MODULES,
+                                       lines, CARDS), [])
+
+
 class Taught(unittest.TestCase):
     def test_what_a_module_covered_with_no_source_is_unsupported(self):
         # "the Foundations of Data Science module, which covered core statistical methods", while its notes

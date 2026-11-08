@@ -114,7 +114,12 @@ A sentence that says nearly what an earlier one already said, in the same draft 
 message or an earlier answer, is rewritten once to use a fact the drafts have not used yet, or taken out,
 and listed under **Check before sending** if it has to stay.
 A draft may say what one of your modules covered only when your CV, the facts you checked or your own
-documents say it too, as a module's name alone does not say what it taught.
+documents say it too, as a module's name alone does not say what it taught. In the same way, a mark is tied
+to a project ("86 in Machine Learning through a team project") only when your facts about that module name
+the project, and work your files describe as planned ("we will use ...") is never said to be done. A fact
+already given in an earlier paragraph, or a line of your CV another draft already uses word for word, is
+rewritten to use another fact. A fact about you that has nothing to do with the paragraph it sits in (your
+right to work in a paragraph about a team project) is moved to the closing paragraph.
 The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
 to work here?", should be your own. Before writing a letter, Hal pairs one specific thing about the employer,
 in the advert's or the company's own words (a product, a project, a place; never "innovation" or "a great
@@ -145,7 +150,8 @@ flat. A company with the employer's exact name that Hal cannot tie to the advert
 Every pack has a **Check before sending** section, which says "Nothing to check." when nothing needs
 you. Besides the sentences Hal could not fix, it lists a letter still well under the length you prefer, and
 a paragraph that starts with "This", "It" or "That" pointing at something the paragraph before does not
-say.
+say. It also lists a row of the fit table that calls a project something its card does not (a team
+project called personal) when Hal cannot put the row right itself.
 
 Drafts speak as you, in the first person. A sentence that opens with the advert's wording ("For the
 requirement to ..."), points at your CV ("My CV lists ...") or calls you "the applicant" is rewritten once,

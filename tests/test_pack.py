@@ -861,6 +861,35 @@ class FitWriter(FakeWriter):
         return super().reply(system, user)
 
 
+class ContextWriter(FakeWriter):
+    """A fake writer whose fit map calls a university team project a personal project, once in a way Hal can
+    put right and once in a way it cannot."""
+
+    def reply(self, system: str, user: str) -> object:
+        if prompt_id(system) == "fit":
+            return {"matches": [{"requirement": "Teamwork", "evidence": "Ferry planner, a personal project.",
+                                 "strength": "strong"},
+                                {"requirement": "Python", "evidence": "Ferry planner, a personal project built in my "
+                                                                      "own time.", "strength": "strong"}],
+                    "gaps": [], "eligible": True, "eligibility_notes": ""}
+        return super().reply(system, user)
+
+
+class FitContexts(unittest.TestCase):
+    def test_the_fit_tables_project_contexts_agree_with_the_cards_or_are_listed(self):
+        # a fit table called a university team project a personal project (2026-11-08)
+        ferry = {"kind": "project (university team project)", "name": "Ferry planner", "tools": [], "summary": "",
+                 "context": "team", "aliases": [], "role": "", "files": []}
+        with as_applicant(people.TECHNICAL, ContextWriter()) as a, \
+                mock.patch.object(pack.profile_writing, "cards", lambda: [ferry]):
+            job = add_job(a.con, "technical_grad")
+            md = pack.build(a.con, job["id"], use_web=False).read_text()
+        self.assertIn("| Teamwork | Ferry planner, a university team project. | strong |", section(md, "Fit"))
+        check = section(md, "Check before sending")
+        self.assertNotIn(pack.NOTHING_TO_CHECK, check)
+        self.assertIn(f"- {pack.FIT_CONTEXT_FLAG}: Ferry planner, a personal project built in my own time.", check)
+
+
 class Fit(unittest.TestCase):
     def cards(self, con) -> None:
         """A checked project card listing AWS and Docker, and one nobody checked listing Kafka."""

@@ -450,7 +450,12 @@ runs: tests use `tests/support/fake_claude/`.
   words its cards' contexts disagree with (the rules of `drafts.wrong_context`, through the markers), "I
   built" of a team's card with no word of the team and under `PART_SHARE` of the person's part, and the
   draft-wide checks (`stage.ended_course`, `drafts.misplaced_tools`, `drafts.wrong_context`,
-  `taught.unsupported`) on that sentence. A sentence passing them and not restating its items
+  `taught.unsupported`) on that sentence. Two more (2026-11-08): planned work said to be done
+  (`grounded.PLANNED`: a first-person past tense, `cites.past_tense`, resting only on items whose source
+  sentence is planned wording, `plan.PLANNED` and `Item.planned`, or naming a known tool only those hold;
+  the item's words say "planned, not done"), and a module and its mark tied to a project card or an
+  activity ("through a team project": `taught.ACTIVITY`) that the lines naming the module never name
+  (`taught.joined`). A sentence passing them and not restating its items
   (`drafts.stated_in`) gets one call (prompt `sentence_check`, `grounded.verdict`) with only the sentence
   and its items: {supported, unsupported, context_ok, role_ok}. Quoted words its items or the employer's
   words hold are dropped, and a reply that is not JSON fails nothing. One sentence per call, never a batch:
@@ -544,7 +549,10 @@ runs: tests use `tests/support/fake_claude/`.
   `drafts.misplaced_tools` reads a draft: a tool of `known_tools` that none of the named cards' own facts,
   nor a CV line naming the card, names (`drafts.backed`) is taken out of the row (`drafts.without_tools`),
   and a part left with no tool is dropped. A row that lost evidence is partial at best, and one left with
-  none becomes a gap.
+  none becomes a gap. Then `pack.checked_fit_contexts` gives each part that places a project card against
+  its context (`drafts.wrong_context`) the card's own words (`drafts.right_context`, only when one phrase
+  clashes), and lists each part still wrong under "Check before sending" (`pack.FIT_CONTEXT_FLAG`, through
+  the fit map's `context_flags`), so "Nothing to check." never stands beside it.
 - Checks with no AI on finished drafts (`writing/drafts.py`): a letter or message whose last line is a
   sentence with no closing punctuation is asked for once more with room to finish (`pack.CUT_NOTE`, a
   wider `ROOM_CTX`); if that one stops too it is kept to its last full sentence and listed (`CUT_FLAG`).
@@ -595,7 +603,12 @@ runs: tests use `tests/support/fake_claude/`.
   the drafts before it (`repeats.first_said`, the same `REPEAT_SHARE` rule; `pack._unrepeated`, and
   `pack.write_others`' `letter`): one saying nearly what an earlier one said is rewritten once (prompt
   `sentence_fix`) from the plan items none of them cites, checked again, then taken out and its paragraph
-  smoothed as `grounded.ground` does, or kept and listed as `pack.REPEAT_FLAG`. Packs said one sentence twice
+  smoothed as `grounded.ground` does, or kept and listed as `pack.REPEAT_FLAG`. The same holds for a sentence
+  whose items were all cited in an earlier paragraph of its draft (`grounded.REPEATS_FACT`) and one that
+  copies a CV line word for word, as an earlier draft does (`repeats.verbatim`: a run of `VERBATIM_RUN` (6)
+  words, `grounded.REPEATS_LINE`). After the sentence checks, `pack.settle` moves each stray sentence
+  (`readability.strays`) of a paragraph before the last to the start of the closing paragraph
+  (`readability.placed`). Packs said one sentence twice
   back to back and reused one CV line in the letter, the message and both answers (2026-11-07). The fit
   map's gaps are kept once each (`unique_gaps`: the same words, case, order and "(no evidence found)"
   aside).

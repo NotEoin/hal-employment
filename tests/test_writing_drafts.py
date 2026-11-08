@@ -120,6 +120,20 @@ BRIEF = "Brightloan is a made-up consumer lender that uses open banking data to 
 NAMES = ("Graduate Credit Analyst", "Brightloan")
 
 
+class RightContext(unittest.TestCase):
+    def test_a_team_project_called_personal_is_given_its_own_context(self):
+        # a fit table called a university team project a personal project (2026-11-08)
+        self.assertEqual(drafts.right_context("Ferry planner, a personal project in Python.", PLACED),
+                         "Ferry planner, a university team project in Python.")
+        self.assertEqual(drafts.right_context("Tide gauge, built for my degree.", PLACED),
+                         "Tide gauge, built for a personal project.")
+
+    def test_two_clashing_phrases_are_left_for_the_person(self):
+        said = "Ferry planner, a personal project built in my own time."
+        self.assertEqual(drafts.right_context(said, PLACED), said)
+        self.assertTrue(drafts.wrong_context(said, PLACED))
+
+
 class Echoes(unittest.TestCase):
     def test_a_sentence_that_restates_the_advert_or_brief_echoes(self):
         # "drawn to the challenge of maintaining low default rates", "the role offers full in-house training"

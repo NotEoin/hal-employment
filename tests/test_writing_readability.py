@@ -50,6 +50,17 @@ class Findings(unittest.TestCase):
         self.assertEqual([f.code for f in found(text, readability.LETTER)], [readability.TOOL_LIST])
         self.assertEqual(found(text, readability.ANSWER), [])
 
+    def test_a_stray_fact_is_moved_to_the_closing_paragraph(self):
+        # "I have the right to work in the UK." in a paragraph on teamwork (2026-11-08)
+        case = next(c for c in FIXTURE["cases"] if c["code"] == readability.STRAY)
+        text, moved = readability.placed(case["before"], ITEMS, CARDS)
+        self.assertEqual(text, case["after"])
+        self.assertEqual(moved, ["I have the right to work in the UK."])
+
+    def test_a_stray_in_the_closing_paragraph_or_a_one_paragraph_draft_stays_for_the_polish(self):
+        one_paragraph = [c for c in FIXTURE["cases"] if c["code"] == readability.STRAY][1]["before"]
+        self.assertEqual(readability.placed(one_paragraph, ITEMS, CARDS), (one_paragraph, []))
+
     def test_requirement_framing_anywhere_in_a_sentence_is_a_sentence_problem(self):
         for sentence in ("I scored 72 in Databases, which meets the requirement for SQL.",
                          "The position requires teamwork, which I showed on Ferry planner.",

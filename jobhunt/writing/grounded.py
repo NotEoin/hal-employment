@@ -31,6 +31,10 @@ Design decisions, each with its reason:
 - Wording that shows how a draft was made (an advert's requirement as a lead-in, "my CV lists", the person
   in the third person, a settings label pasted in: `writing.plain`) is a problem of the sentence like any
   other, so it gets the same one rewrite.
+- Planned work is never done: a sentence in the first person and the past tense fails when every item it
+  cites says the work was planned (`plan.Item.planned`), or a known tool it names is held only by its planned
+  items ("I used Azure" from "we will use Azure", 2026-11-08). A module and its mark tied to a project or
+  activity the module's own sources never name fails as `taught.joined` says.
 - A number counts in figures or words ("seven" is "7"), so "a team of seven" meets "team of 7".
 - The AI's "unsupported" words are dropped when the cited items or the employer's words hold them: a reply
   quoting what the evidence says is a false alarm. "supported": false with every quoted word dropped is
@@ -99,6 +103,9 @@ ONLY_SKILLS = "rests only on a skills list, which says nothing about {card}"
 TOO_MUCH = "gives you more of the work than its evidence does"
 REASON = re.compile(r"\(([^()]*)\)$")
 REPEATS = 'already said as "{sentence}"'   # a sentence repeating an earlier one (`unrepeat`)
+REPEATS_FACT = "says again what an earlier paragraph says ({ids})"   # its items all cited in one before it
+REPEATS_LINE = 'uses your CV line "{line}" word for word, as an earlier draft does'
+PLANNED = "says it was done; its evidence says it was only planned"
 Essential = Callable[[str, str], bool]
 
 
@@ -204,6 +211,20 @@ def _tool_problems(text: str, items: list[Item], facts: Facts) -> list[str]:
                   if drafts.names_tool(text, t) and not drafts.names_tool(held, t)]
 
 
+def _planned_problem(text: str, items: list[Item], facts: Facts) -> str:
+    """What is wrong when a sentence says planned work was done (see the module notes)."""
+    planned = [i for i in items if i.planned]
+    if not planned or not (cites.FIRST_PERSON.search(text) and cites.past_tense(text)):
+        return ""
+    done = [i for i in items if not i.planned]
+    if not done:
+        return PLANNED
+    plans, dones = _evidence_text(planned), _evidence_text(done)
+    only_planned = [t for t in dict.fromkeys(facts.known) if drafts.names_tool(text, t)
+                    and drafts.names_tool(plans, t) and not drafts.names_tool(dones, t)]
+    return PLANNED if only_planned else ""
+
+
 def cited_items(c: cites.Cited, facts: Facts) -> list[Item]:
     """The items a sentence rests on: those it cites, or for a reason sentence ([M]) that states something
     about the person, the motivation pairing's item."""
@@ -227,12 +248,14 @@ def problems(c: cites.Cited, facts: Facts) -> list[str]:
         held = numbers(_evidence_text(items))
         out += [f"the number {n} is not in its evidence" for n in sorted(numbers(text) - held)]
         out += _tool_problems(text, items, facts)
-        out += [p for p in (_context_problem(text, items), _alone_problem(text, items)) if p]
+        out += [p for p in (_context_problem(text, items), _alone_problem(text, items),
+                            _planned_problem(text, items, facts)) if p]
     if facts.now is not None and stage.ended_course(text, facts.now):
         out.append(f"the course ended in {facts.now.end or 'the past'}")
     out += _reason(drafts.misplaced_tools(text, facts.cards, facts.known))
     out += _reason(drafts.wrong_context(text, facts.cards))
     out += _reason(taught.unsupported(text, facts.modules, facts.sources))
+    out += _reason(taught.joined(text, facts.modules, facts.sources, facts.cards))
     out += plain.problems(text, list(facts.names), list(facts.labels))
     return list(dict.fromkeys(out))
 
@@ -474,10 +497,17 @@ class _Repeats:
     earlier: tuple[str, ...]
 
     def judge(self, c: cites.Cited, before: str) -> list[str]:
-        """The earlier sentence `c` says again, before it in its draft or in an earlier draft, as a problem."""
+        """What `c` says again, as a problem: an earlier sentence of its draft or an earlier draft, the items of
+        an earlier paragraph of its draft, or a CV line an earlier draft also copies word for word."""
         seen = [cites.strip(x) for e in (*self.earlier, before) for x in cites.sentences(e)]
         hit = repeats.first_said(c.text, seen)
-        return [REPEATS.format(sentence=hit)] if hit else []
+        if hit:
+            return [REPEATS.format(sentence=hit)]
+        paragraphs_before = before.rsplit("\n\n", 1)[0] if "\n\n" in before else ""
+        if c.ids and set(c.ids) <= _ids(paragraphs_before):
+            return [REPEATS_FACT.format(ids=", ".join(c.ids))]
+        line = repeats.verbatim(c.text, self.facts.sources[:1], self.earlier)
+        return [REPEATS_LINE.format(line=line)] if line else []
 
     def recheck(self, m: cites.Cited, before: str) -> list[str]:
         """What is wrong with a rewrite: still a repeat, else its sentence checks (`check`)."""
@@ -491,7 +521,8 @@ class _Repeats:
 
 def unrepeat(draft: str, facts: Facts, essential: Essential, earlier: tuple[str, ...] = ()) -> Grounded:
     """`draft` with each sentence that says nearly what an earlier one says (`repeats.same`: before it in the
-    draft, or in one of the `earlier` drafts of the pack) rewritten once from a plan item none of them cites,
+    draft, or in one of the `earlier` drafts of the pack), cites only items an earlier paragraph cites, or copies
+    a CV line an earlier draft copies (`repeats.verbatim`) rewritten once from a plan item none of them cites,
     and checked (`check`) and compared again; one still repeating is taken out as `ground` takes a sentence
     out, else kept and listed."""
     asks = _Repeats(facts, earlier)
