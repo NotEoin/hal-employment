@@ -11,14 +11,16 @@ repository, not a collection of projects). This module gives each its name, its 
   research workspace gave about 180 project cards, one per ticket and write-up (2026-11-08).
 - A CV, letter or transcript (`LISTS_PROJECTS`) keeps its project facts as they are, as it lists the
   person's projects wherever it is kept.
-- So does a fact whose project is plainly another one of the person's (`Others`): a card a file outside the
-  folder, a CV, letter or transcript, or the person speaks for, a repository or another project folder,
-  matched by a close name or a distinctive word the names share, as a note names a repository's project in
-  its own words. A portfolio folder's dossier gave its card ten other projects' facts (2026-11-08).
+- So does a fact whose project is plainly another one of the person's (`Others`): a card a file in no
+  project folder, a CV, letter or transcript, or the person speaks for, a repository or another project
+  folder, matched by a close name or a distinctive word the names share, as a note names a repository's
+  project in its own words. A portfolio folder's dossier gave its card ten other projects' facts
+  (2026-11-08). A project folder inside this one, given on its own to an older read, holds its own files
+  (`folder_of`) and ties a fact only by a close name.
 - Any other name folds into the folder's project, even in a document that names three or more projects
   (`merge.lists_projects`): a research folder's 150 notes each named a few of its tickets and write-ups and
   gave 150 cards again (2026-11-08). Listing many names says nothing about whether they are projects of
-  their own; being known outside the folder does.
+  their own; being known outside every project folder does.
 - `note_units` names the repository or project folder each note belongs to, so `profile.duplicates` never
   merges two projects that each hold one.
 - Each folder gets one note (`write_notes`) listing its files' notes, which link back to it under "Part of",
@@ -120,21 +122,32 @@ def distinctive_words(name: str) -> set[str]:
     return {w for w, acronym in _words(name).items() if _distinctive(w, acronym)}
 
 
-class Others:
-    """The person's other projects, as seen from one project folder: every project card some file outside the
-    folder, or a CV, letter or transcript, speaks for (or the person checked or added), with the names of the
-    cards Hal merged into it (`profile.duplicates`), each repository and each other project folder. A card
-    only the folder's other files speak for, such as a ticket an older read made a card of, is not one of
-    them, however many projects those files name.
+def folder_of(path: Path, folders: set[Path]) -> Path | None:
+    """The innermost of the project folders `folders` holding `path`, or None. A read finds no project folder
+    inside another (`group.projects`), but the record can hold one when the inner folder was given on its own:
+    its files are its own, wherever a set puts it first (2026-11-08)."""
+    return max((f for f in folders if f in path.parents), key=lambda f: len(f.parts), default=None)
 
-    `names(name, own)` is True when a project fact named `name` read inside the folder whose project is `own`
-    is about one of them: close to one of their names (`merge.same_item`, `merge._name_close`), or sharing a
-    distinctive word with one name alone, such as an acronym ("LIDAR Autonomous Navigation" and the
-    repository "Lidar-Autonavigation-System"), which no rule on whole names ties together (2026-11-08).
+
+class Others:
+    """The person's other projects, as seen from one project folder: every project card the person checked or
+    added, or that a file in no project folder, a repository, or a CV, letter or transcript speaks for, with
+    the names of the cards Hal merged into it (`profile.duplicates`), each repository and each other project
+    folder. A card only notes inside project folders speak for, such as a ticket an older read made a card
+    of, is not one of them, however many projects those notes name: it folds into its own folder's card. A
+    sibling folder's tickets, not yet folded, kept a research folder's literature notes apart (2026-11-08).
+
+    `names(name, own)` names the other project a project fact named `name`, read inside the folder whose
+    project is `own`, is about: one close to the fact's name (`merge.same_item`, `merge._name_close`), or one
+    sharing a distinctive word with it alone, such as an acronym ("LIDAR Autonomous Navigation" and the
+    repository "Lidar-Autonavigation-System"), which no rule on whole names ties together (2026-11-08). A
+    project folder inside this one (`inner`) is part of its work and shares its words, so only a close name
+    ties a fact to it: "architecture" in an inner "Tide architecture" kept a literature note's card apart.
     """
 
-    def __init__(self, groups: list[list[str]]) -> None:
+    def __init__(self, groups: list[list[str]], inner: list[str] | None = None) -> None:
         self.groups = [g for g in groups if any(g)]
+        self.inner = [n for n in inner or [] if n]
         self.counts: dict[str, int] = {}
         for g in self.groups:
             for w in {w for n in g for w in _words(n)}:
@@ -145,51 +158,57 @@ class Others:
         """The other projects as seen from `folder`, one of the project folders `units`."""
         from jobhunt.profile import duplicates, merge
 
-        start = str(folder) + os.sep
+        folders = set(units)
         cards: dict[int, dict] = {}
         for r in con.execute("""SELECT i.id, i.fields, i.state, i.origin, i.merged_into, i.merged_why,
-                                e.source_rel, e.doc_type, r.path FROM profile_items i
+                                e.source_rel, e.doc_type, r.path, r.kind FROM profile_items i
                                 LEFT JOIN profile_evidence e ON e.item_id = i.id
                                 LEFT JOIN ingest_items r ON r.note = e.source_rel AND r.state = 'done'
                                 AND r.kind IN ('file', 'repo') WHERE i.kind = ?""", (KIND,)):
             card = cards.setdefault(r["id"], {"name": json.loads(r["fields"]).get("name", ""), "known": False,
                                               "into": r["merged_into"], "why": r["merged_why"]})
-            # a file outside the folder (or one no read filed, such as a CV given another way), a CV, letter or
-            # transcript, or the person, says the card is a project of its own; a note inside naming many
-            # tickets does not (2026-11-08)
+            # a file in no project folder (or one no read filed, such as a CV given another way), a repository,
+            # a CV, letter or transcript, or the person, says the card is a project of its own; a note inside
+            # a project folder naming many tickets does not (2026-11-08)
             card["known"] = card["known"] or (r["state"] in CHECKED or r["origin"] != "found") or (
-                r["source_rel"] is not None and (r["path"] is None or not r["path"].startswith(start)
+                r["source_rel"] is not None and (r["path"] is None or r["kind"] == "repo"
+                                                 or folder_of(Path(r["path"]), folders) is None
                                                  or merge.doc_group(r["doc_type"]) in LISTS_PROJECTS))
         groups = {i: [c["name"]] for i, c in cards.items() if c["into"] is None and c["known"]}
         for c in cards.values():
             if c["into"] in groups and c["why"].startswith(duplicates.MERGED):
                 groups[c["into"]].append(c["name"])
         found = list(groups.values())
-        for name in [n for f, n in units.items() if f != folder] + _repo_names(con):
+        inner = [n for f, n in units.items() if folder in f.parents]
+        for name in [n for f, n in units.items() if f != folder and folder not in f.parents] + _repo_names(con):
             # a repository is often a card too: one project counted twice would make its words look common
             if not any(merge.same_item(KIND, {"name": name}, {"name": n}) for g in found for n in g):
                 found.append([name])
-        return cls(found)
+        return cls(found, inner)
 
-    def names(self, name: str, own: str) -> bool:
-        """True when a project fact named `name`, read inside the folder whose project is `own`, is plainly
-        about one of the other projects (see the class notes)."""
+    def names(self, name: str, own: str) -> str:
+        """The name of the other project a project fact named `name`, read inside the folder whose project is
+        `own`, is plainly about (see the class notes); "" for none."""
         from jobhunt.profile import merge
 
         if not name or merge.same_item(KIND, {"name": name}, {"name": own}):
-            return False
+            return ""
+
+        # the folder's own card, under one of its names, is not another project
+        def is_own(n: str) -> bool:
+            return merge.same_item(KIND, {"name": n}, {"name": own})
+
+        others = [aka for aka in self.groups if not any(is_own(n) for n in aka if n)]
+        for n in [n for aka in others for n in aka if n] + [n for n in self.inner if not is_own(n)]:
+            if merge.same_item(KIND, {"name": name}, {"name": n}) or merge._name_close(name, n):
+                return n
         mine, own_words = _words(name), _words(own)
-        for aka in self.groups:
-            if any(merge.same_item(KIND, {"name": n}, {"name": own}) for n in aka if n):
-                continue                   # the folder's own card, under one of its names
-            if any(merge.same_item(KIND, {"name": name}, {"name": n}) or merge._name_close(name, n)
-                   for n in aka if n):
-                return True
+        for aka in others:
             theirs = {w: a for n in aka for w, a in _words(n).items()}
             if any(_distinctive(w, mine[w] or theirs[w]) and self.counts.get(w, 0) == 1 and w not in own_words
                    for w in set(mine) & set(theirs)):
-                return True
-        return False
+                return aka[0]
+        return ""
 
 
 def redirect(fields: dict, own: str, others: Others, top: bool) -> dict:
@@ -215,7 +234,7 @@ def facts_in(con: sqlite3.Connection, row: sqlite3.Row | dict, desc: dict) -> li
         return facts
     units = _units(con)
     path = Path(row["path"])
-    folder = group.project_of(path, set(units))
+    folder = folder_of(path, set(units))
     if folder is None:
         return facts
     others = Others.of(con, folder, units)
@@ -234,7 +253,7 @@ def note_units(con: sqlite3.Connection) -> dict[str, tuple[str, str | None]]:
                          "AND state = 'done' AND note IS NOT NULL ORDER BY id"):
         if r["kind"] == "repo":
             out[r["note"]] = (r["path"], None)
-        elif (folder := group.project_of(Path(r["path"]), folders)) is not None:
+        elif (folder := folder_of(Path(r["path"]), folders)) is not None:
             out[r["note"]] = (str(folder), units[folder])
     return out
 
@@ -399,7 +418,7 @@ def fold_cards(con: sqlite3.Connection) -> int:
                             JOIN profile_items i ON i.id = e.item_id WHERE i.kind = ? AND i.state = 'hal'
                             AND i.origin = 'found' ORDER BY e.id""", (KIND,)).fetchall():
         path = paths.get(e["source_rel"])
-        folder = group.project_of(path, set(units)) if path is not None else None
+        folder = folder_of(path, set(units)) if path is not None else None
         if folder is None or merge.doc_group(e["doc_type"]) in LISTS_PROJECTS:
             continue
         said = json.loads(e["said"] or "{}")
@@ -408,6 +427,9 @@ def fold_cards(con: sqlite3.Connection) -> int:
             others[folder] = Others.of(con, folder, units)
         fields = redirect(said, name, others[folder], _is_top(path, folder))
         if fields == said:
+            if other := others[folder].names(str(said.get("name") or ""), name):
+                log.info("kept the project %r from %s on its own card: it names %r", said.get("name"),
+                         e["source_rel"], other)
             continue
         try:
             target = store.refile(con, e["id"], fields)

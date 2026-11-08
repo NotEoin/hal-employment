@@ -271,9 +271,11 @@ note, but what they say about the project goes on one project card, named from t
 or the folder's name, with the tools each note mentions. Skills in the notes are still found. A CV or a
 letter kept in the folder still names each of your projects. A note about another of your projects counts
 for that one, even when it names it in other words than its folder does, as long as Hal knows that project
-from outside the folder: its own folder or repository, a file elsewhere, or your CV. Anything else a note
-in the folder names, such as its tickets and write-ups, is part of the folder's project, however many of
-them one note names. A folder that holds two or more such projects is a set of projects, not one, and a
+from outside the folder: its own folder or repository, a file that is in no project folder, or your CV.
+Anything else a note in the folder names, such as its tickets and write-ups, is part of the folder's
+project, however many of them one note names, and so is a ticket of another project folder: it belongs to
+that folder's project. If you once gave Hal a folder inside a project folder on its own, its files stay
+with it. A folder that holds two or more such projects is a set of projects, not one, and a
 folder of course material is never one project. With **Keep a copy of each file Hal reads in** on, the original is copied to `Attachments`
 beside the notes.
 

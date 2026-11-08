@@ -226,6 +226,10 @@ What changed in each version, in plain words.
   folder kept a card of its own when another of your projects had "system" in its name, because every word
   in capitals counted as an acronym. Only short words in capitals (up to five letters, such as "GPU" or
   "LIDAR") count as acronyms now; the rest are ordinary words.
+- **Notes deep in a project folder fold into it.** After a tidy, cards made from notes deep inside a
+  project folder, such as a folder of reading notes, could stay on their own when they shared a word with a
+  ticket in another project folder, or with a folder inside the project that you once gave Hal on its own.
+  They now fold into the project, and that inner folder keeps its own card and files.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

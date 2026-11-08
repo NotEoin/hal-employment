@@ -15,7 +15,7 @@ from test_ingest import NOTE_REPLY, OWNER, home, put, rows, run
 from test_profile_duplicates import grouping
 
 from jobhunt.core import settings
-from jobhunt.ingest import group, projects
+from jobhunt.ingest import group, projects, rank
 from jobhunt.profile import duplicates, merge, store
 
 WORKSPACE = {
@@ -210,6 +210,26 @@ class ProjectFolders(unittest.TestCase):
 
 
 TICKETS = 100
+# A made-up research project folder shaped like a real one (2026-11-08): literature notes deep inside, an inner
+# folder with a README of its own, and a sibling project folder whose ticket shares words with a note.
+LIT = {"wave_architecture": "the swell and the hull", "frond_sensing": "the kelp bed and the diver",
+       "buoy_drift": "the mooring and the chain", "gull_counts": "the pier and the flock",
+       "reef_mapping": "the sonar and the chart"}
+LAB = {"Harbour lab/README.md": "# Harbour lab\n\nMy research on agents that steer harbour boats.",
+       "Harbour lab/research/plan.md": "# Plan\n\nRead the papers first, then try the steering agent.",
+       "Harbour lab/research/scripts/Run notes.md": "# Run notes\n\nStart the simulator before the agent.",
+       "Harbour lab/catalogue/Index.md": "# Index\n\nEvery dataset kept for the harbour runs.",
+       "Harbour lab/paper-drafts/Draft one.md": "# Draft one\n\nAgents steer boats better with a map.",
+       "Harbour lab/meta/Status.md": "# Status\n\nThe second round of runs is under way.",
+       "Harbour lab/meta/workflows/Weekly.md": "# Weekly\n\nEach Friday, log the runs and back them up.",
+       "Harbour lab/tide-arch/README.md": "# Tide architecture\n\nA model of the tides for the agent.",
+       "Harbour lab/tide-arch/Layers.md": "# Layers\n\nThree layers, one for each tide.",
+       **{f"Harbour lab/research/lit/{stem}.md": f"# {stem}\n\nRead on {words}." for stem, words in LIT.items()}}
+KELP = {"Kelp study/README.md": "# Kelp study\n\nMy study of a kelp forest.",
+        "Kelp study/tickets/KLP-001.md": "# KLP-001\n\nFit the frond sensor to the float."}
+# Each literature note names a project after its topic and after its ticket id, as a real read did.
+LAB_NAMES = {**{stem: [f"{stem.replace('_', ' ').capitalize()} survey", f"LIT-{stem.upper()}-01"] for stem in LIT},
+             "KLP-001": ["KLP-001 Frond sensing"]}
 
 
 class Tidy(unittest.TestCase):
@@ -334,6 +354,38 @@ class Tidy(unittest.TestCase):
             after = shown_projects(con)
         self.assertGreater(len(before), TICKETS, "the older read made a card of each ticket")
         self.assertEqual(sorted(after), ["Probe study"])
+
+    def read_lab(self, con, files) -> None:
+        """Reads `LAB` and `KELP` as older Hals did: the inner folder given on its own first, then everything,
+        with no project folders found and every note read in full, so the literature notes were a course unit
+        and each gave cards of its own."""
+        settings.set("you.name", OWNER)
+        settings.set("record.read_all", True)
+        for rel, text in {**LAB, **KELP}.items():
+            put(files, rel, text)
+        inner = files / "Harbour lab" / "tide-arch"
+        with fake_ai({"ingest_doc": naming(LAB_NAMES)}), mock.patch.object(group, "projects", return_value=set()), \
+                mock.patch.object(rank, "in_unit", lambda rel, rule: rule):
+            run(con, [inner], batch="b0", origins={str(inner): "mine"})
+            run(con, [files], origins={str(files): "mine"})
+
+    def test_tidying_folds_notes_deep_in_a_project_folder_while_an_inner_project_keeps_its_card(self):
+        # about 45 cards from one folder's literature notes stayed after a tidy: each shared a word with the
+        # inner folder's project or with a ticket of another folder not yet folded (2026-11-08)
+        with home() as (con, _vault, files):
+            self.read_lab(con, files)
+            before = project_cards(con)
+            with fake_ai({}):
+                run(con, [], batch="t", tidy=True)
+                duplicates.refresh(con)
+            after = shown_projects(con)
+            courses = [r for r in rows(con).values() if r["kind"] == "course"]
+        self.assertLessEqual({"Wave architecture survey", "LIT-FROND_SENSING-01", "KLP-001 Frond sensing"},
+                             set(before), "the older reads made a card of each note")
+        self.assertTrue(courses and all(r["state"] == "skipped" for r in courses), "the course units go")
+        self.assertEqual(sorted(after), ["Harbour lab", "Kelp study", "Tide architecture"])
+        self.assertEqual(sorted(e["source_rel"].rsplit("/", 1)[-1] for e in after["Tide architecture"]["evidence"]),
+                         ["Layers.md", "README.md"], "the inner folder's notes are its own")
 
     def test_tidying_takes_apart_two_projects_an_older_read_merged_by_the_persons_site(self):
         # CV lines ending "Write-ups at <the person's site>" gave a flagship project the site's front page as its
