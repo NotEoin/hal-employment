@@ -1,5 +1,6 @@
 /* Your record, the profile tabs: one card per item with its fields, its state, the files it came from and the
-   person's choices (Confirm, Edit, Hide, Delete), and the Inconsistencies tab.
+   person's choices (Confirm, Edit, Hide, Delete, and a star on projects and jobs), each education and job
+   card's own "Add" panels (record/sections.js), and the Inconsistencies tab.
 
    Every change is the server's (`jobhunt/profile/routes.py`), which publishes a `profile` event; the event
    makes /profile* stale (core/events.js), so every tab showing the item reads it again. A conflict is shown
@@ -12,6 +13,7 @@ import { useApi, toast, invalidate } from "../core/store.js";
 import { Chip, Empty } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { KIND_FIELDS, KIND_WORDS, ItemForm, basicKey, shown } from "./fields.js";
+import { EducationSources, JobSources, StarButton } from "./sections.js";
 
 const STATE_TONE = { hal: "warn", confirmed: "good", edited: "info", hidden: "line" };
 const FILE_PATH = "/api/v2/record/file/";
@@ -102,10 +104,13 @@ function ItemCard({ item, conflicts, names }) {
     <div class="rec-head"><div class="grow">
         <h3 class="h3">${item.kind === "basic" ? basicKey(item.title) : item.title}</h3>
         ${(item.sub || item.when) && html`<div class="small sub">${[item.kind === "basic" ? "" : item.sub, item.when].filter(Boolean).join(", ")}</div>`}</div>
+      ${item.can_star && !hidden && html`<${StarButton} item=${item} />`}
       <${Chip} tone=${STATE_TONE[item.state]}>${item.state_words}<//></div>
     ${editing ? html`<${ItemForm} kind=${item.kind} item=${item} uid=${"it" + item.id} onSave=${save} onCancel=${() => setEditing(false)} />`
       : html`<${Fields} item=${item} />`}
     <${Sources} evidence=${item.evidence} />
+    ${!hidden && item.kind === "education" && html`<${EducationSources} item=${item} />`}
+    ${!hidden && item.kind === "job" && html`<${JobSources} item=${item} />`}
     ${conflicts.map(c => html`<${Conflict} key=${c.id} c=${c} names=${names} />`)}
     ${!editing && html`<div class="row rec-acts">
       ${(item.state === "hal" || hidden) && html`<button type="button" class="btn good small" aria-label=${(hidden ? "Show again: " : "Confirm: ") + what}

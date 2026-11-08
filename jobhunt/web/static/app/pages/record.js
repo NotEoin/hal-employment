@@ -2,39 +2,33 @@
    reads out of it (jobs, education, skills, projects and the rest), each in its own tab. "Check your record"
    (pages/check.js) asks about what Hal found one card at a time.
 
-   The tab is part of the route ("record-work"), so a link opens the right one. Overview adds files, folders
-   and links and shows how reading them is going; each profile tab lists what Hal found for the person to
-   check, change or hide; Files keeps the folder's groups, whose files download from any computer (so a
-   laptop reaches the desktop's record), and "Ask your record", whose answer names the files it came from. */
+   The tab is part of the route ("record-work"), so a link opens the right one; the old "record-files" opens
+   Documents. Each tab has its own "Add" panel (record/sections.js): Overview the CVs, each job and education
+   card its own documents, Projects its ways to add a project, Documents its upload. Overview keeps the
+   older bulk read under "More ways to add" and shows how reading is going; each profile tab lists what Hal
+   found for the person to check, change or hide; Documents keeps the folder's groups, whose files download
+   from any computer (so a laptop reaches the desktop's record), and "Ask your record", whose answer names
+   the files it came from. */
 import { html, useState, useLayoutEffect } from "../core/html.js";
 import { post, run } from "../core/api.js";
 import { useApi, toast } from "../core/store.js";
 import { go } from "../core/router.js";
-import { plural } from "../core/format.js";
+import { plural, agoWords } from "../core/format.js";
 import { Head, Tabs, Chip, Note, Empty } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { OpenFolderButton } from "../ui/open-buttons.js";
 import { AddCard, IngestCard } from "../record/add.js";
 import { KindSection, ConflictsTab } from "../record/items.js";
 import { basicKey } from "../record/fields.js";
-
-const MINUTE_MS = 60000;
-const HOUR_MIN = 60;
-const DAY_MIN = 1440;
+import { SourcesPanel, ProjectsPanel } from "../record/sections.js";
 // [tab, words, kinds shown in it]
 const TABS = [["overview", "Overview", []], ["work", "Work history", ["job"]], ["education", "Education", ["education"]],
   ["skills", "Skills", ["skill"]], ["projects", "Projects", ["project"]],
   ["certificates", "Certificates and achievements", ["certificate", "achievement"]],
-  ["about", "About you and links", ["basic", "link"]], ["inconsistencies", "Inconsistencies", []], ["files", "Files", []]];
+  ["about", "About you and links", ["basic", "link"]], ["inconsistencies", "Inconsistencies", []], ["documents", "Documents", []]];
+// Tabs that were renamed, so an old link still opens the right one.
+const RENAMED = { files: "documents" };
 const TAB_OF = Object.fromEntries(TABS.flatMap(([t, , kinds]) => kinds.map(k => [k, t])));
-
-function agoWords(iso) {
-  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / MINUTE_MS));
-  if (min < 1) return "just now";
-  if (min < HOUR_MIN) return plural(min, "minute") + " ago";
-  if (min < DAY_MIN) return plural(Math.round(min / HOUR_MIN), "hour") + " ago";
-  return plural(Math.round(min / DAY_MIN), "day") + " ago";
-}
 
 function writeTab(t) {
   try { history.replaceState(null, "", "#" + (t === "overview" ? "record" : "record-" + t)); } catch (err) { /* a sandboxed frame may refuse */ }
@@ -78,11 +72,14 @@ function Group({ g }) {
     </div></div>`;
 }
 
-function FilesTab({ data }) {
-  return html`<div class="grid2"><section class="card"><h2 class="h2">What is in it</h2>
+function DocumentsTab({ data }) {
+  return html`<div class="stack"><${SourcesPanel} uid="rec-docs" heading="Add documents" parts=${[["document", null]]}
+      hint="Certificates, awards, references, checks and anything else that helps. Choose what each one is."
+      empty="Nothing added here yet." />
+    ${data && data.exists && html`<div class="grid2"><section class="card"><h2 class="h2">What is in it</h2>
       ${data.groups.length ? data.groups.map(g => html`<${Group} g=${g} />`) : html`<${Empty}>Nothing yet. Add your first file on the Overview tab.<//>`}
       <p class="small sub" style="margin:10px 0 0">${data.last_read ? "Last read " + agoWords(data.last_read) + ". " : ""}Private files you mark as private are never sent to the AI.</p></section>
-    <${Ask} /></div>`;
+    <${Ask} /></div>`}</div>`;
 }
 
 /** The profile in numbers: each kind with how many Hal found and how many wait to be checked, then the basics. */
@@ -106,9 +103,9 @@ function Summary({ profile, onTab }) {
 
 /** The Your record page. */
 export function Record({ arg }) {
-  const known = TABS.some(t => t[0] === arg);
-  const [t, setTab] = useState(known ? arg : "overview");
-  useLayoutEffect(() => { setTab(TABS.some(x => x[0] === arg) ? arg : "overview"); }, [arg]);
+  const named = RENAMED[arg] || arg;
+  const [t, setTab] = useState(TABS.some(x => x[0] === named) ? named : "overview");
+  useLayoutEffect(() => { setTab(TABS.some(x => x[0] === named) ? named : "overview"); }, [named]);
   const setT = next => { setTab(next); writeTab(next); };
   const { data, error, reload } = useApi("/record", { on: [ev => ev.type === "action" && ev.kind === "record.sync"] });
   const profile = useApi("/profile").data;
@@ -128,10 +125,14 @@ export function Record({ arg }) {
       <button class="btn small" type="button" onClick=${make}>Make the folder</button><//>`}
     <div class="rec-tabs"><${Tabs} label="Your record" value=${t} onChange=${setT} tabs=${tabs} /></div>
     ${t === "overview" && html`<div class="grid2"><div class="stack">
+        <${SourcesPanel} uid="rec-cvs" heading="Your CVs" parts=${[["cv", null], ["letter", null]]}
+          hint="Add every CV you have; Hal uses the newest as your main one. Cover letters and personal statements only teach Hal how you write."
+          empty="No CVs yet." />
         <${IngestCard} />
-        ${data && data.exists && html`<${AddCard} />`}</div>
+        ${data && data.exists && html`<details class="rec-hidden rec-more"><summary>More ways to add</summary><${AddCard} /></details>`}</div>
       ${profile ? html`<${Summary} profile=${profile} onTab=${setT} />` : html`<p class="sub">Loading</p>`}</div>`}
+    ${t === "projects" && html`<div class="stack" style="margin-bottom:16px"><${ProjectsPanel} /></div>`}
     ${kinds.length > 0 && html`<div class="stack">${kinds.map(k => html`<${KindSection} key=${k} kind=${k} heading=${kinds.length > 1} />`)}</div>`}
     ${t === "inconsistencies" && (profile ? html`<${ConflictsTab} profile=${profile} />` : html`<p class="sub">Loading</p>`)}
-    ${t === "files" && data && data.exists && html`<${FilesTab} data=${data} />`}`;
+    ${t === "documents" && html`<${DocumentsTab} data=${data} />`}`;
 }

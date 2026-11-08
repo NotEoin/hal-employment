@@ -327,6 +327,14 @@ MADE_UP_PAGES = {
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
+    # The sections of the record and their sources (`sections/routes.py`); none added yet
+    "/record/sections": [
+        {"id": "cv", "label": "CVs", "hint": "Every CV you have.", "role": "own", "target": "",
+         "target_required": False, "doc_kinds": [{"id": "cv", "label": "CV", "held": "upload", "ready": False}]},
+        {"id": "document", "label": "Documents", "hint": "Certificates and anything else that helps.",
+         "role": "official", "target": "", "target_required": False,
+         "doc_kinds": [{"id": "other", "label": "Something else", "held": "upload", "ready": True}]}],
+    "/record/sources": [],
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
                        "not_downloaded_paths": [], "not_mine": 0, "not_mine_paths": [], "errors": [],

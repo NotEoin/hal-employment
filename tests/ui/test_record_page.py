@@ -144,6 +144,11 @@ class RecordPage(unittest.TestCase):
                       "current": True}, LETTER, "letter", "since October 2023")
         return ids
 
+    def more(self, p: AppPage) -> AppPage:
+        """Opens "More ways to add" on Overview, where the older bulk read of files, folders and links is."""
+        p.page.locator("details.rec-more summary").click()
+        return p
+
     def card(self, p: AppPage, title: str):
         """The card of the item with this title."""
         return p.page.locator("article.rec-item", has=p.page.locator("h3", has_text=title))
@@ -153,7 +158,7 @@ class RecordPage(unittest.TestCase):
         tabs = {"Overview": "Your profile", "Work history": "Collections volunteer", "Education": "Add a qualification",
                 "Skills": "Archival research", "Projects": "Add a project",
                 "Certificates and achievements": "Add a certificate", "About you and links": "Marnie Quillfeather",
-                "Inconsistencies": "different start dates", "Files": "What is in it"}
+                "Inconsistencies": "different start dates", "Documents": "What is in it"}
         for size, scheme in (("wide", "light"), ("narrow", "dark")):
             with self.subTest(size=size):
                 p = self.page("record", size, scheme)
@@ -380,7 +385,7 @@ class RecordPage(unittest.TestCase):
         queued = []
         self.enterContext(mock.patch.object(ingest_actions, "queue",
                                             side_effect=lambda **kw: queued.append(kw) or "ing2"))
-        p = self.page()
+        p = self.more(self.page())
         p.page.get_by_label("Web links").fill("https://example.org/marnie\n\nhttps://github.com/made-up-marnie\n")
         p.page.get_by_role("button", name="Read these links").click()
         p.shows(p.page.get_by_text("Hal is reading the links into your record."), "the toast")
@@ -388,10 +393,10 @@ class RecordPage(unittest.TestCase):
         self.assertEqual(self.errors(p), [])
 
     def test_folders_can_be_read_here_but_not_from_another_computer(self) -> None:
-        here = self.page()
+        here = self.more(self.page())
         p_folders = here.page.get_by_label("Folders on this computer")
         here.shows(p_folders, "the folders box")
-        away = self.page("record", remote=True, remote_host="deskbox")
+        away = self.more(self.page("record", remote=True, remote_host="deskbox"))
         away.shows(away.page.get_by_label("Web links"), "the links box")
         self.assertEqual(away.page.get_by_label("Folders on this computer").count(), 0)
         self.assertEqual(self.errors(away), [])
@@ -402,7 +407,7 @@ class RecordPage(unittest.TestCase):
         queued = []
         self.enterContext(mock.patch.object(ingest_actions, "queue",
                                             side_effect=lambda **kw: queued.append(kw) or "ing2"))
-        p = self.page()
+        p = self.more(self.page())
         choice = p.page.get_by_role("radiogroup", name="What are you adding?")
         p.shows(choice, "the choice of where the files came from")
         self.assertEqual(choice.get_by_role("radio", name="A mix of both").get_attribute("aria-checked"), "true")
@@ -437,7 +442,7 @@ class RecordPage(unittest.TestCase):
         upload = Path(paths.cache_dir()) / "Reference.txt"
         upload.parent.mkdir(parents=True, exist_ok=True)
         upload.write_text("A made-up reference from a made-up archive.", encoding="utf-8")
-        p.page.set_input_files("input[type=file]", str(upload))
+        self.more(p).page.set_input_files("input[aria-label='Add files to your record']", str(upload))
         p.page.wait_for_selector("text=Added Reference.txt")
         self.assertTrue((Path(record._live("VAULT")) / "Inbox" / "Reference.txt").exists())
 

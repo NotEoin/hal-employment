@@ -67,6 +67,19 @@
 .rec-same-keep { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .rec-same-name { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
 .rec-same-name input { width: 20px; height: 20px; margin: 0; flex: none; }
+/* The "Add" panels of each section (record/sections.js) */
+.rec-panel select.input { width: auto; max-width: 100%; }
+.rec-source-list, .rec-ways { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.rec-source { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+.rec-source .grow { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.rec-source .note { margin: 4px 0 0; }
+.rec-ways li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rec-link { align-items: center; gap: 8px; }
+.rec-link .input { flex: 1 1 220px; min-width: 0; }
+.rec-link .lab { font-weight: 700; font-size: 14px; flex: 1 1 100%; }
+.rec-upload { position: relative; cursor: pointer; }
+.rec-card-sources > .stack, .rec-card-sources > .rec-panel { margin-top: 8px; }
+.rec-more summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 @media (max-width: 640px) {
   .rec-check-btns .btn { flex: 1 1 100%; white-space: normal; }
   .rec-form { grid-template-columns: minmax(0, 1fr); }
