@@ -58,7 +58,20 @@ from .core import events, paths
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
-from .writing import cites, drafts, eligibility, fields, grounded, motive, relocation, repeats, spelling, stage, taught
+from .writing import (
+    cites,
+    drafts,
+    eligibility,
+    fields,
+    grounded,
+    motive,
+    plain,
+    relocation,
+    repeats,
+    spelling,
+    stage,
+    taught,
+)
 from .writing import plan as planning
 
 # PACKS, the old application packs, is resolved when used until application folders replace it.
@@ -547,7 +560,8 @@ def grounds(who: dict, plan: list[planning.Item], *, facts: str, kept: str, empl
     words = "\n\n".join(e for e in employer if e)
     return grounded.Facts({i.id: i for i in plan}, cards, known_tools(cards), f"{words}\n{stage.today_lines(now)}",
                           now, profile_writing.module_names(), (facts, kept), who,
-                          pairing.item if pairing else None)
+                          pairing.item if pairing else None, tuple(applicant_names(who)),
+                          tuple(plain.settings_labels()))
 
 
 def settle(who: dict, draft: str, rewrite, *, plan: list[planning.Item], essential: grounded.Essential, facts: str,
@@ -592,6 +606,9 @@ def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, sources: tupl
         claims = unsupported_claims(who, drafts, facts=facts, kept=kept, employer=sources)
     flagged += [f"unsupported claim: {c}" for c in claims]
     flagged += [h.flag for h in writing_check.flagged(hits) if h.rule != "T1"]
+    names, labels = applicant_names(who), plain.settings_labels()
+    flagged += [f"{p}: {s}" for s in writing_check.sentences(drafts) if not any(s in c for c in claims)
+                for p in plain.problems(s, names, labels)]
     lowered = drafts.lower()
     flagged += [f"a phrase you never use: {a}" for a in avoided(who) if a.lower() in lowered]
     return flagged
@@ -676,7 +693,8 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     unique = grounded.unrepeat(best.text, grounds(who, plan, facts=facts, kept=kept, employer=sources,
                                                   pairing=pairing), grounded.only_in_paragraph)
     claims, softened = best.failed, bool(best.rewrites or best.removed or unique.rewrites or unique.removed)
-    letter = relocation.without_own_move(cites.strip(unique.text), eligibility.person(con))
+    letter = plain.tidy(relocation.without_own_move(cites.strip(unique.text), eligibility.person(con)),
+                        profile_writing.cards())
     flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in echoed_in(letter)]
     flags += [f"{REPEAT_FLAG}: {s}" for s in unique.failed]
@@ -808,10 +826,10 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
         names=(job["title"], job["company"]), plan=plan) if answers_request else ([], [], [])
     message, answers, repeated = _unrepeated(grounds(who, plan, facts=facts, kept=kept, employer=their_words),
                                              letter, message, answers)
-    you = eligibility.person()
-    message = relocation.without_own_move(cites.strip(message), you)
-    answers = [{**a, "answer": relocation.without_own_move(cites.strip(str(a.get("answer") or "")), you)}
-               for a in answers]
+    you, cards = eligibility.person(), profile_writing.cards()
+    message = plain.tidy(relocation.without_own_move(cites.strip(message), you), cards)
+    answers = [{**a, "answer": plain.tidy(relocation.without_own_move(cites.strip(str(a.get("answer") or "")), you),
+                                          cards)} for a in answers]
     written = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
     flags = check_drafts(who, written, facts=facts, kept=kept, sources=their_words, kind="answer",
                          claims=message_claims + answer_claims)

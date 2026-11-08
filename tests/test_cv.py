@@ -91,6 +91,15 @@ class StartingCv(unittest.TestCase):
         self.assertEqual(first["contact"], {"location": "York", "linkedin": "linkedin.com/in/zoe-example"})
         self.assertNotIn("github", first["contact"])
 
+    def test_the_right_to_work_reaches_drafts_in_plain_words_never_a_settings_label(self):
+        # a letter said "as a British or Irish citizen", the form wording of the settings, for a person who is a
+        # UK and Irish citizen (2026-11-07)
+        values = {"you.right_to_work": "uk_no_visa", "you.work_status": "British or Irish citizen",
+                  "you.nationality": "UK and Irish"}
+        with mock.patch.object(settings, "get", lambda key: values.get(key, "")):
+            line = cv.status_line()
+        self.assertEqual(line, "Right to work: I have the right to work in the UK. Nationality: UK and Irish.")
+
     def test_the_cv_facts_say_nothing_the_settings_do_not(self):
         text = cv.facts_text_of(cv.printable(SITE))
         self.assertNotIn("Graduated", text)

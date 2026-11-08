@@ -13,4 +13,7 @@ Rules:
 - Never add a detail, tool, number, purpose or result the items do not give.
 - Keep where the work was done as the items say it, and the applicant's part: a team's work stays a team's,
   and only the part the applicant built is theirs.
+- Write in the first person as the applicant ("I"), never "the applicant" or their name; never open with
+  the advert's requirement ("For the requirement to ...") or point at the CV ("My CV lists ..."): say the
+  thing itself.
 - Plain words, one sentence, no long dashes.

@@ -130,6 +130,11 @@ a draft keeps it that way. A sentence that calls a project something else, such 
 for a project you did in your own time, is rewritten once, and listed under **Check before sending** if it
 is still there. This also works when the draft calls the project by a shorter name or its folder's name.
 
+Drafts speak as you, in the first person. A sentence that opens with the advert's wording ("For the
+requirement to ..."), points at your CV ("My CV lists ...") or calls you "the applicant" is rewritten once,
+and your right to work is said in plain words rather than as the choice in Settings. Quotes and
+apostrophes are kept plain, and each project is spelt as it is on Your record.
+
 Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
 English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the
 person hiring, form answers and interview notes. Hal changes a word spelt the other way (organize to

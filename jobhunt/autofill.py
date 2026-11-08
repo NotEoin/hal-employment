@@ -134,8 +134,7 @@ STYLE_LABEL = ("Drafts written for this job earlier, as examples of style only. 
 
 
 START_WORDS = {"now": "Immediately", "1w": "In 1 week", "1m": "In 1 month"}
-WORK_WORDS = {"uk_no_visa": "I have the right to work in the UK", "uk_visa": "I have a UK visa",
-              "need_sponsorship": "I need a visa sponsored to work in the UK"}
+WORK_WORDS = cv.WORK_WORDS
 # What a choice in a form is matched against when the profile's answer is plain yes or no.
 YES_NO_KEYS = ("sponsorship", "right_to_work", "office", "relocate")
 

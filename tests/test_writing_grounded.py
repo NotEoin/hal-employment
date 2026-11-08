@@ -10,7 +10,7 @@ from unittest import mock
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt import llm
-from jobhunt.writing import cites, grounded
+from jobhunt.writing import cites, grounded, plain
 from jobhunt.writing.plan import Item
 
 FLAGS = json.loads((Path(__file__).parent / "fixtures" / "grounded_flags.json").read_text(encoding="utf-8"))
@@ -117,6 +117,19 @@ class WithAI(unittest.TestCase):
                      "I scored 75 in the Databases module [E3].", "I would welcome a call [M]."):
             _, fake = self.check(text, {**FINE, "supported": False})
             self.assertEqual(fake.checks(), [], text)
+
+
+class PlainWords(unittest.TestCase):
+    """Advert lead-ins, "My CV lists" and "The applicant developed" reached graded letters (2026-11-07)."""
+
+    def test_wording_that_shows_how_the_draft_was_made_needs_a_rewrite(self):
+        facts = grounded.Facts(**{**FACTS.__dict__, "names": ("Avery Quillon",), "labels": ("UK, no visa needed",)})
+        cases = {"For the requirement to know SQL, I scored 72 in the Databases module [E3].": plain.LEAD_IN_SAID,
+                 "Avery Quillon wrote the statistics features of Ferry planner [E1].": plain.THIRD_SAID,
+                 "My CV lists a sensor logger in Lua that records river levels every ten minutes [E2].":
+                     plain.CV_SAID}
+        for sentence, said in cases.items():
+            self.assertEqual(grounded.problems(one(sentence), facts), [said], sentence)
 
 
 class SkillsList(unittest.TestCase):

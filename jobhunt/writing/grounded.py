@@ -28,6 +28,9 @@ Design decisions, each with its reason:
   card and not a skills list (`plan.Item.skills`), or the card's own names, summary and tools. "I used NumPy
   and pandas to build" a project passed on the CV's skills line though the project's card never names pandas
   (2026-11-07). A skills list may still support "I know pandas", which names no project.
+- Wording that shows how a draft was made (an advert's requirement as a lead-in, "my CV lists", the person
+  in the third person, a settings label pasted in: `writing.plain`) is a problem of the sentence like any
+  other, so it gets the same one rewrite.
 - A number counts in figures or words ("seven" is "7"), so "a team of seven" meets "team of 7".
 - The AI's "unsupported" words are dropped when the cited items or the employer's words hold them: a reply
   quoting what the evidence says is a false alarm. "supported": false with every quoted word dropped is
@@ -59,7 +62,7 @@ from dataclasses import dataclass, field
 from jobhunt import llm
 from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import cites, drafts, flow, repeats, spelling, stage, taught
+from jobhunt.writing import cites, drafts, flow, plain, repeats, spelling, stage, taught
 from jobhunt.writing.plan import Item
 
 log = logging.getLogger(__name__)
@@ -106,6 +109,8 @@ class Facts:
     sources: tuple[str, ...] = ()      # the CV and the passages, for what a module covered
     values: dict = field(default_factory=dict)            # the person's prompt values (spelling)
     motive: Item | None = None         # the letter's motivation pairing's item (`writing.motive`), if any
+    names: tuple[str, ...] = ()        # the person's names, never a sentence's subject (`writing.plain`)
+    labels: tuple[str, ...] = ()       # the settings wording a draft must never paste (`plain.settings_labels`)
 
 
 @dataclass
@@ -222,6 +227,7 @@ def problems(c: cites.Cited, facts: Facts) -> list[str]:
     out += _reason(drafts.misplaced_tools(text, facts.cards, facts.known))
     out += _reason(drafts.wrong_context(text, facts.cards))
     out += _reason(taught.unsupported(text, facts.modules, facts.sources))
+    out += plain.problems(text, list(facts.names), list(facts.labels))
     return list(dict.fromkeys(out))
 
 

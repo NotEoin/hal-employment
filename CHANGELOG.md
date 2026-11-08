@@ -160,6 +160,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Drafts speak as you.** Letters opened sentences with the advert's wording ("For the requirement to
+  ..."), wrote "My CV lists C++", called you "the applicant", or pasted a settings choice ("as a British or
+  Irish citizen"). Hal now rewrites such a sentence once and lists it if it stays, gives the writer your
+  right to work and nationality in plain words, and saves drafts with plain quotes, no stray space at the
+  start and each project spelt as on Your record.
 - **A tool is only given to the project that used it.** A letter said a project was built with pandas
   because your CV's skills line lists pandas, though the project never used it. A tool you name for a
   project now has to be in that project's own facts; your skills list can still back "I know pandas".

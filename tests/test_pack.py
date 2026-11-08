@@ -576,6 +576,16 @@ class Cited(unittest.TestCase):
                       section(md, "Message to the hiring manager"))
         self.assertNotIn(pack.REPEAT_FLAG, md)
 
+    def test_saved_drafts_have_straight_quotes_and_no_stray_leading_space(self):
+        # curly apostrophes and a stray leading space reached graded packs (2026-11-07)
+        curly = " My dissertation\u2019s subject was river trade in an invented port town [E1]. I would like to " \
+                "talk about the role [M]."
+        writer = MarkedWriter(first=curly)
+        with as_applicant(people.HUMANITIES, writer) as a:
+            job = add_job(a.con, "humanities_grad")
+            written = pack.write_letter(a.con, job)
+        self.assertTrue(written["text"].startswith("My dissertation's subject"), written["text"])
+
     def test_of_two_letters_the_one_with_fewer_sentences_still_failing_is_kept(self):
         writer = MarkedWriter(first=["I led every tour of the heritage centre [E7].", CITED])
         with as_applicant(people.HUMANITIES, writer) as a:
