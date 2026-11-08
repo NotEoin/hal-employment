@@ -11,9 +11,9 @@ What changed in each version, in plain words.
   the work was done and your part in it (a team of seven, the features you built) when your files say so.
   The letter's notes list them under **Evidence**. The letter, the message and the answers are written as
   connected paragraphs from those facts, then Hal notes which fact each sentence rests on (you never see the
-  marks), and Hal checks each sentence about you against only
-  those facts: a detail added to fit the advert, a personal project placed in your degree, or a team's work
-  written as yours alone is rewritten once, then taken out, or listed when the draft needs it. **Check
+  marks) and checks each sentence about you against only those facts: a detail added to fit the advert, a
+  personal project placed in your degree, or a team's work written as yours alone is rewritten once where
+  it stands, and listed if it is still wrong. **Check
   before sending** no longer lists a whole-pack check's guesses, which were mostly false alarms. When the
   first letter needed such a fix, Hal writes a second and keeps the one with fewer problems, and letters
   and messages are written in a steadier style that adds fewer details of its own. The letter's reason for
@@ -181,6 +181,10 @@ What changed in each version, in plain words.
   113-test suite" without saying which project it was. Drafts are now written freely as connected
   paragraphs that name each project when they first mention it, and Hal works out afterwards which fact
   each sentence rests on, so every sentence is still checked against its own facts.
+- **A wrong sentence is fixed where it stands.** Hal used to take out a sentence that was still wrong after
+  its rewrite, which left paragraphs that jumped from one fact to the next. It now rewrites the sentence
+  with its whole paragraph in view, so the paragraph still reads on, and lists it under **Check before
+  sending** if it is still wrong. A sentence is taken out only when none of your facts backs it.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

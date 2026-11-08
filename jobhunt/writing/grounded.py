@@ -3,9 +3,9 @@
 `problems(c, facts)` finds, with no AI, what is wrong with one sentence (`writing.cites.Cited`) given the
 evidence plan's items it cites; `verdict(c, facts)` asks the AI about that sentence and those items alone
 (prompt `sentence_check`); `check(c, facts)` is both. `ground(draft, facts, essential)` checks every sentence
-of a draft, rewrites each that fails once (prompt `sentence_fix`), checks the rewrite, and takes out a
-sentence still failing unless the draft needs it, when it is listed instead; a paragraph that changed is
-smoothed once (`smooth`). `lengthen(done, facts, words, essential)` adds a paragraph to a short letter, and
+of a draft, rewrites each that fails once in place (prompt `sentence_fix`), checks the rewrite, and lists
+one still failing; a sentence is taken out only when no evidence supports it, and a paragraph that changed
+is smoothed once (`smooth`). `lengthen(done, facts, words, essential)` adds a paragraph to a short letter, and
 `unrepeat(draft, facts, essential, earlier)` treats a sentence saying again what an earlier one said (in its
 own draft or in an `earlier` one) as `ground` treats a failing one, its rewrite resting on a plan item none of
 them cites.
@@ -37,10 +37,16 @@ Design decisions, each with its reason:
   read as supported; a reply that is not JSON says nothing, so it fails no sentence.
 - A reason for the employer ([M]) that states something about the person rests on the letter's motivation
   pairing's item (`writing.motive`), and is checked against it as if it cited it.
-- A failing sentence is rewritten once with its own items (or the whole plan when it cited none), then
-  checked again. One still failing is taken out unless the draft needs it (`essential`): a paragraph's only
-  sentence, or an answer's first, which answers the question, or the paragraph does not read without it (the
-  next sentence points back at it, `flow.reads_without`). A needed one is kept and listed.
+- A failing sentence is fixed in place: rewritten once with its own items (or the whole plan when it cited
+  none) and its whole paragraph, numbered, as context ("rewrite only sentence 3 ... keeping the paragraph
+  flowing; you may name the project"), and the reply says which items it rests on, kept only when they are
+  among those given (`attribute.validated`). It is then checked again. Taking failing sentences out left
+  fact lists and paragraphs that jumped (graded packs, 2026-11-08), so a sentence is taken out only when the
+  rewrite says its evidence supports nothing it was there to say, and then only when the draft does not
+  need it (`essential`: a paragraph's only sentence, or an answer's first, which answers the question) and
+  the paragraph reads without it (the next sentence does not point back at it, `flow.reads_without`). A
+  rewrite still failing is kept and listed. A sentence still repeating an earlier one after its rewrite
+  (`unrepeat`) is taken out instead, as it says nothing new.
 - Rewrite, then smooth, never just delete: sentences taken out left "This project allowed me ...", one-sentence
   paragraphs and fragments in 15 graded packs, which graders marked down more than the claims the checks
   caught (2026-11-07). A paragraph that lost or changed a sentence is rewritten once from its kept sentences
@@ -61,8 +67,8 @@ from dataclasses import dataclass, field
 
 from jobhunt import llm
 from jobhunt.ai import prompts
+from jobhunt.writing import attribute, cites, drafts, flow, plain, repeats, spelling, stage, taught
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import cites, drafts, flow, plain, repeats, spelling, stage, taught
 from jobhunt.writing.plan import Item
 
 log = logging.getLogger(__name__)
@@ -310,17 +316,34 @@ def first_of_answer(text: str, sentence: str) -> bool:
     return not said or said[0] == sentence or len(said) == 1
 
 
+def _numbered(paragraph: str, raw: str) -> tuple[int, str]:
+    """`paragraph`'s sentences numbered as the person sees them, and the number of `raw` among them (0 when it
+    is not there)."""
+    said = cites.sentences(paragraph)
+    at = said.index(raw) + 1 if raw in said else 0
+    return at, "\n".join(f"{n}. {cites.strip(s)}" for n, s in enumerate(said, 1))
+
+
 def fix(c: cites.Cited, found: list[str], text: str, facts: Facts, items: list[Item] | None = None) -> str:
-    """One sentence rewritten once by the AI with `items` (by default its own evidence, or the whole plan when it
-    cited none); "" when the reply says its evidence supports nothing it was there to say."""
+    """One sentence rewritten once by the AI in place in its paragraph, with `items` (by default its own
+    evidence, or the whole plan when it cited none), and attributed again (`attribute.validated`: the reply's
+    ids that are among `items`); "" when the reply says its evidence supports nothing it was there to say."""
     items = items if items is not None else cited_items(c, facts) or list(facts.items.values())
-    request = (f"Sentence: {c.raw}\nWhat is wrong: {'; '.join(found)}\n\nEvidence:\n"
-               + "\n".join(i.words() for i in items) + f"\n\nThe paragraph:\n{cites.strip(paragraph_of(text, c.raw))}")
+    at, numbered = _numbered(paragraph_of(text, c.raw), c.raw)
+    ids = ", ".join(i.id for i in items)
+    request = (f"Sentence: {c.text}\nWhat is wrong: {'; '.join(found)}\n"
+               f"Rewrite only sentence {at} of the paragraph so it states only what items {ids} support, keeping "
+               "the paragraph flowing; you may name the project.\n\nEvidence:\n"
+               + "\n".join(i.words() for i in items) + f"\n\nThe paragraph:\n{numbered}")
     reply = llm.chat_json(prompts.text(FIX_PROMPT, spelling=facts.values.get("spelling", "")), request, role="writer")
-    said = str(reply.get("sentence") or "").strip() if isinstance(reply, dict) else ""
+    reply = reply if isinstance(reply, dict) else {}
+    said = str(reply.get("sentence") or "").strip()
     said = cites.normalise(spelling.respell(llm.undash(said), facts.values.get("spelling_code")))
-    if said and not cites.has_markers(said) and c.ids:
-        said = re.sub(r"([.!?]?)$", lambda m: f" [{','.join(c.ids)}]{m.group(1)}", said, count=1)
+    if said and not cites.has_markers(said):
+        given = reply.get("ids") if "ids" in reply else list(c.ids)
+        kind = attribute.FACT if given else attribute.MOTIVATION if c.motive else attribute.COURTESY
+        mark = attribute.validated(given, kind, said, {i.id for i in items} | set(c.ids), facts.allowed)
+        said = attribute.with_marker(said, mark.marker)
     return said
 
 
@@ -361,6 +384,17 @@ Judge = Callable[[cites.Cited, str], list[str]]     # what is wrong with a sente
 Evidence = Callable[[cites.Cited, str], list[Item]]  # the items its rewrite may rest on, given the text before it
 
 
+@dataclass(frozen=True)
+class _Asks:
+    """What `_settle` does with each sentence: how it is judged, how its rewrite is judged, the evidence its
+    rewrite may rest on, and whether a rewrite still failing is taken out (`cut_failing`) or kept and listed."""
+
+    judge: Judge
+    recheck: Judge
+    evidence: Evidence
+    cut_failing: bool = False
+
+
 def _replace_nth(text: str, sentence: str, nth: int, new: str) -> str:
     """`replace` of the `nth` (from 0) time `sentence` stands in `text`: a sentence written twice is two."""
     found = list(_pattern(sentence).finditer(text))
@@ -373,10 +407,11 @@ def _replace_nth(text: str, sentence: str, nth: int, new: str) -> str:
 
 
 def _settle_paragraph(paras: list[str], n: int, facts: Facts, essential: Essential, out: Grounded,
-                      judge: Judge, recheck: Judge, evidence: Evidence) -> str:
-    """Paragraph `n` of `paras` with each sentence `judge` finds wrong rewritten once (`fix` with `evidence`) and
-    `recheck`ed, else taken out or kept and listed (see `ground`), then smoothed once when a sentence was
-    rewritten or taken out and none is kept failing."""
+                      asks: _Asks) -> str:
+    """Paragraph `n` of `paras` with each sentence `asks.judge` finds wrong rewritten once (`fix` with
+    `asks.evidence`) and `asks.recheck`ed, else taken out or kept and listed (see `ground`), then smoothed once
+    when a sentence was rewritten or taken out and none is kept failing."""
+    judge, recheck, evidence = asks.judge, asks.recheck, asks.evidence
     said = cites.sentences(paras[n])
     now = list(said)                   # each sentence as it stands; "" once taken out
     text, changed, failing = paras[n], False, False
@@ -394,7 +429,7 @@ def _settle_paragraph(paras: list[str], n: int, facts: Facts, essential: Essenti
         again = [p for m in cites.cited(new) for p in recheck(m, before)] if new else found
         if new and not again:
             text, now[k], changed = _replace_nth(text, raw, nth, new), new, True
-        elif not essential(whole, raw) and flow.reads_without(text, raw):
+        elif (not new or asks.cut_failing) and not essential(whole, raw) and flow.reads_without(text, raw):
             text, now[k], changed = _replace_nth(text, raw, nth, ""), "", True
             out.removed += 1
         else:
@@ -409,23 +444,26 @@ def _settle_paragraph(paras: list[str], n: int, facts: Facts, essential: Essenti
     return text
 
 
-def _settle(draft: str, facts: Facts, essential: Essential, judge: Judge, recheck: Judge,
-            evidence: Evidence) -> Grounded:
+def _settle(draft: str, facts: Facts, essential: Essential, asks: _Asks) -> Grounded:
     paras = flow.paragraphs(cites.normalise(draft))
     out = Grounded("")
     for n in range(len(paras)):
-        paras[n] = _settle_paragraph(paras, n, facts, essential, out, judge, recheck, evidence)
+        paras[n] = _settle_paragraph(paras, n, facts, essential, out, asks)
     out.text = "\n\n".join(p for p in paras if p)
     return out
 
 
 def ground(draft: str, facts: Facts, essential: Essential) -> Grounded:
-    """`draft` with each sentence checked against its own evidence (`check`): a failing one is rewritten once
-    (`fix`) and checked again, then taken out when `essential(text, sentence)` says the draft does not need it
-    and its paragraph reads without it (`flow.reads_without`), else kept and listed. A paragraph that lost or
+    """`draft` with each sentence checked against its own evidence (`check`): a failing one is rewritten once in
+    place (`fix`) and checked again, and kept and listed when it still fails. One whose evidence supports
+    nothing is taken out when `essential(text, sentence)` says the draft does not need it and its paragraph
+    reads without it (`flow.reads_without`), else kept and listed. A paragraph that lost or
     changed a sentence is smoothed once (`smooth`)."""
-    return _settle(draft, facts, essential, lambda c, before: check(c, facts), lambda c, before: check(c, facts),
-                   lambda c, before: cited_items(c, facts) or list(facts.items.values()))
+    def judge(c: cites.Cited, before: str) -> list[str]:
+        return check(c, facts)
+
+    return _settle(draft, facts, essential,
+                   _Asks(judge, judge, lambda c, before: cited_items(c, facts) or list(facts.items.values())))
 
 
 @dataclass(frozen=True)
@@ -457,7 +495,7 @@ def unrepeat(draft: str, facts: Facts, essential: Essential, earlier: tuple[str,
     and checked (`check`) and compared again; one still repeating is taken out as `ground` takes a sentence
     out, else kept and listed."""
     asks = _Repeats(facts, earlier)
-    return _settle(draft, facts, essential, asks.judge, asks.recheck, asks.evidence)
+    return _settle(draft, facts, essential, _Asks(asks.judge, asks.recheck, asks.evidence, cut_failing=True))
 
 
 def lengthen(done: Grounded, facts: Facts, words: int | None, essential: Essential) -> Grounded:

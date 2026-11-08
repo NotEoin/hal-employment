@@ -202,11 +202,47 @@ class Ground(Grounding):
         self.assertIn('E3: "Databases module: SQL, normalisation and query plans, mark 72"', fix)
         self.assertNotIn("E1:", fix, "the rewrite sees the sentence's own evidence")
 
-    def test_a_sentence_still_failing_is_taken_out_and_the_paragraphs_kept(self):
+    def test_a_sentence_still_failing_after_its_rewrite_stays_in_place_and_is_listed(self):
+        # cutting failing sentences left fact lists and paragraphs that jumped (graded packs, 2026-11-08)
         done = self.ground(LETTER, ["I scored 80 in the Databases module [E3]."])
+        self.assertEqual(done.text, LETTER.replace("I scored 75", "I scored 80"))
+        self.assertEqual((done.failed, done.removed), (["I scored 80 in the Databases module. (the number 80 is "
+                                                        "not in its evidence)"], 0))
+        self.assertEqual(self.fake.paragraph_calls(), [])
+
+    def test_a_sentence_its_evidence_supports_nothing_of_is_taken_out_and_the_paragraphs_kept(self):
+        done = self.ground(LETTER, [""])
         self.assertEqual(done.text, "I wrote the statistics features of Ferry planner [E1]. My logger records river "
                                     "levels every ten minutes [E2].\n\nI would welcome a call [M].")
         self.assertEqual((done.failed, done.removed), ([], 1))
+
+    def test_the_rewrite_is_asked_for_in_place_with_its_paragraph_numbered(self):
+        self.ground(LETTER, ["I scored 72 in the Databases module [E3]."])
+        fix = next(u for s, u in self.fake.asked if s == ["Rewrite", "one", "sentence"])
+        self.assertIn("Rewrite only sentence 2 of the paragraph so it states only what items E3 support, keeping the "
+                      "paragraph flowing; you may name the project.", fix)
+        self.assertIn("The paragraph:\n1. I wrote the statistics features of Ferry planner.\n2. I scored 75 in the "
+                      "Databases module.\n3. My logger", fix)
+        self.assertNotIn("[E", fix.split("The paragraph:", 1)[1], "the writer sees the paragraph as the person does")
+
+    def test_a_free_rewrite_is_attributed_again_from_its_replys_ids(self):
+        fake = FakeChecker()
+        fake.chat_json = lambda system, user, **kw: (
+            {"sentence": "On my Databases module I scored 72.", "ids": ["E3"]} if system.startswith("Rewrite one")
+            else FINE)
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            said = grounded.fix(one("I scored 75 in the Databases module [E3]."), ["the number 75"], LETTER, FACTS)
+        self.assertEqual(said, "On my Databases module I scored 72 [E3].")
+
+    def test_a_rewrite_citing_items_it_was_not_given_cites_nothing(self):
+        fake = FakeChecker()
+        fake.chat_json = lambda system, user, **kw: (
+            {"sentence": "I built the whole Ferry planner.", "ids": ["E1", "E9"]} if system.startswith("Rewrite one")
+            else FINE)
+        with mock.patch.object(llm, "chat_json", fake.chat_json):
+            said = grounded.fix(one("I scored 75 in the Databases module [E3]."), ["the number 75"], LETTER, FACTS)
+        self.assertEqual(said, "I built the whole Ferry planner.", "no marker: its check finds it cites no evidence")
+        self.assertEqual(grounded.problems(one(said), FACTS), [cites.NO_EVIDENCE])
 
     def test_a_sentence_the_draft_needs_is_kept_and_listed(self):
         done = self.ground("I scored 75 in the Databases module [E3].\n\nI would welcome a call [M].", [])
@@ -235,7 +271,7 @@ class Smooth(Grounding):
     def test_a_paragraph_that_lost_a_sentence_is_smoothed_once_keeping_its_evidence(self):
         smoothed = ("I wrote the statistics features of Ferry planner [E1], and in my own time my logger records "
                     "river levels every ten minutes [E2].")
-        done = self.ground(LETTER, ["I scored 80 in the Databases module [E3]."], paragraphs=[smoothed])
+        done = self.ground(LETTER, [""], paragraphs=[smoothed])
         self.assertEqual(done.text, f"{smoothed}\n\nI would welcome a call [M].")
         self.assertEqual((done.removed, done.smoothed), (1, 1))
         asked = self.fake.paragraph_calls()
@@ -247,7 +283,7 @@ class Smooth(Grounding):
         for smoothed in ("I wrote the statistics features of Ferry planner and a logger [E1].",
                          "I wrote the statistics features of Ferry planner [E1], and my logger records river "
                          "levels every five minutes [E2]."):
-            done = self.ground(LETTER, ["I scored 80 in the Databases module [E3]."], paragraphs=[smoothed])
+            done = self.ground(LETTER, [""], paragraphs=[smoothed])
             self.assertEqual(done.text, "I wrote the statistics features of Ferry planner [E1]. My logger records "
                                         "river levels every ten minutes [E2].\n\nI would welcome a call [M].")
             self.assertEqual(done.smoothed, 0)

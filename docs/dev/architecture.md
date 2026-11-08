@@ -455,10 +455,15 @@ runs: tests use `tests/support/fake_claude/`.
   and its items: {supported, unsupported, context_ok, role_ok}. Quoted words its items or the employer's
   words hold are dropped, and a reply that is not JSON fails nothing. One sentence per call, never a batch:
   a batch would put other sentences' evidence beside it, as the single verify call did. A failing sentence
-  is rewritten once with its own items (prompt `sentence_fix`, `grounded.fix`), checked again, then taken out
-  unless the draft needs it (`only_in_paragraph`, an answer's `first_of_answer`) or its paragraph does not
-  read without it (`flow.reads_without`: the next sentence points back at it, "This project", "It"), when it
-  is kept and listed. A paragraph that lost or changed a sentence, and keeps none that is listed, is
+  is fixed in place (prompt `sentence_fix`, `grounded.fix`): the request gives its items and its whole
+  paragraph numbered, and asks to rewrite only that sentence, keeping the paragraph flowing and naming the
+  project if it helps. The reply's `ids` attribute it again (`attribute.validated`, among the items given),
+  and it is checked again; one still failing is kept and listed. Only a sentence whose rewrite comes back
+  empty (its evidence supports nothing it was there to say) is taken out, and then only when the draft does
+  not need it (`only_in_paragraph`, an answer's `first_of_answer`) and its paragraph reads without it
+  (`flow.reads_without`: the next sentence points back at it, "This project", "It"); else it is kept and
+  listed. `grounded.unrepeat` still takes out a sentence that repeats after its rewrite. Cutting failing
+  sentences left fact lists and paragraphs that jumped (2026-11-08). A paragraph that lost or changed a sentence, and keeps none that is listed, is
   rewritten once from its kept sentences (`grounded.smooth`, prompt `paragraph_smooth`); the rewrite is kept
   only when it cites the same ids and every sentence passes the checks with no AI (`grounded.holds`). A
   letter then under `flow.LENGTH_FLOOR` (0.8) of `cvdocs.letter_words` gets one paragraph from the plan
