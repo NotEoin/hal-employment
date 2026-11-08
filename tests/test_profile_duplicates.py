@@ -161,6 +161,42 @@ class Duplicates(unittest.TestCase):
         self.assertEqual(self.project("Lantern beam log", REPORT, "report", link="pages.example.org/~avery/beam/"),
                          page, "a page of the site names one project")
 
+    def test_one_website_under_four_names_is_shown_to_the_ai_with_its_hosts_and_repositories(self):
+        # one portfolio site stayed four cards: "Portfolio", "<name>-portfolio", "<name>.me" and an older
+        # "<User>.github.io" repository (2026-11-08)
+        self.repo("/made/up/quillonworks-portfolio", README)
+        self.repo("/made/up/AQuillon.github.io", BEAM_README)
+        portfolio = self.project("Portfolio", REPORT, "report", link="https://quillonworks.me/")
+        repo = self.project("quillonworks-portfolio", README, "repository")
+        address = self.project("quillonworks.me", DRAFT, "report")
+        older = self.project("AQuillon.github.io", BEAM_README, "repository")
+        self.assertEqual(duplicates.refresh(self.con, judge=False)["merged"], 0, "a site is never a certain merge")
+        sent = []
+
+        def reply(req) -> str:
+            sent.extend(json.loads(line) for line in req.user.splitlines() if line.startswith("{"))
+            return grouping(["Portfolio", "quillonworks-portfolio", "quillonworks.me", "AQuillon.github.io"])(req)
+        with fake_ai({"profile_same": reply}):
+            duplicates.refresh(self.con)
+        cards = {c["name"]: c for c in sent}
+        self.assertEqual(cards["Portfolio"]["host"], "quillonworks.me")
+        self.assertEqual(cards["quillonworks-portfolio"]["repositories"], ["quillonworks-portfolio"])
+        self.assertEqual(cards["AQuillon.github.io"]["repositories"], ["AQuillon.github.io"])
+        into = {i: store.item(self.con, i)["merged_into"] for i in (portfolio, repo, address)}
+        self.assertEqual(len({into[i] or i for i in into}), 1, "the site, its address and its repository are one")
+        self.assertIsNone(store.item(self.con, older)["merged_into"], "two repositories stay two projects")
+
+    def test_a_repository_named_after_a_sites_address_joins_the_card_linking_that_site(self):
+        self.repo("/made/up/AQuillon.github.io", BEAM_README)
+        site = self.project("Personal site", REPORT, "report", link="https://aquillon.github.io")
+        repo = self.project("AQuillon.github.io", BEAM_README, "repository")
+        self.assertEqual(duplicates.refresh(self.con, judge=False)["merged"], 0)
+        with fake_ai({"profile_same": grouping(["Personal site", "AQuillon.github.io"])}):
+            counts = duplicates.refresh(self.con)
+        self.assertEqual(counts["merged"], 1, "the site's own name is the word they share")
+        self.assertIn(store.item(self.con, repo)["merged_into"] or store.item(self.con, site)["merged_into"],
+                      (site, repo))
+
     def test_cards_sharing_a_file_that_lists_three_projects_are_not_one(self):
         for name in ("Tide clock", "Wick sensor", "Beam log"):
             self.project(name, DOSSIER, "report")

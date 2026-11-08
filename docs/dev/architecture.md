@@ -1116,14 +1116,19 @@ available yet.
   Hal found and nobody checked (`candidates`: not hidden, `merged_why` not `apart`). Only pairs with the
   same project link (`merge.project_link`) are one without asking (`certain`); the rest go to the
   `profile_same` prompt (checker role, JSON, `duplicates.BATCH` (60) cards a call, sorted by name so likely
-  twins share a call), which answers `{"groups": [[id, ...]]}`. A shared file is shown to the AI but is
+  twins share a call), which answers `{"groups": [[id, ...]]}`. Each card (`duplicates.card`) carries its
+  link's `host` (none for a profile host such as github.com) and the `repositories` it holds by name
+  (`duplicates.repositories`), and the prompt asks the AI to group the cards of one website: a card named
+  after the site, one named as its address, and the repository it is built from. A shared file is shown to the AI but is
   no proof; a CV, letter, transcript or listing (`duplicates.listing_files`: a file whose project facts
   name three or more projects, counted under the names of the cards a tidy moved them from) is not shown
   and never counts as shared. A pair whose dates are `YEARS_APART` (2) or more years apart with no shared
   file is never joined (`never`), nor two projects whose repositories or project folders differ (`apart`,
   from `duplicates.card_units` over `projects.note_units`: a repository's note counts for each card it
   speaks for, a note inside a project folder only for the folder's own card), nor a card holding such a unit
-  and one holding none whose names, and the unit's folder name, share no distinctive word (`unrelated`,
+  and one holding none whose names, the unit's folder name and the site each card is (`duplicates.site`:
+  its name when that is a web address, else the host of a front-page link, counted by the address's first
+  part in lower case) share no distinctive word (`unrelated`,
   over `projects.distinctive_words`: an acronym, or a word of `projects.DISTINCT_MIN` (5) or more letters
   not in `projects.GENERIC_WORDS`), unless they share a project link. Each group goes into its
   `target` (the card a CV names, then `check.strength`, then the oldest) with `store.merge_into`, as

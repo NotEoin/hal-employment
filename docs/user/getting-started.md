@@ -471,7 +471,10 @@ Hal shows them apart again and never merges them on its own after that. Hal neve
 confirmed or edited, and never two whose dates are years apart unless one file names both, or two projects
 that each have a folder or repository of their own. A project with its own folder or repository joins a
 card without one only when their names share a telling word, such as "sniffer" in "probe_sniffer" and
-"Probe Request Sniffer". Without its AI, Hal merges only cards that share a
+"Probe Request Sniffer". The AI also sees each card's web address and repository, so one website found
+as "Portfolio", as its address and as the repository it is built from can become one card, while two
+repositories stay two. A repository named after a site's address, such as "name.github.io", shares the
+telling word "name" with a card that links to that site. Without its AI, Hal merges only cards that share a
 project link: two cards found in one file can still be two pieces of work. A link to the front page of a
 site, or to the website in your settings, is not a project link, as many projects point to it.
 

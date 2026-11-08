@@ -230,6 +230,11 @@ What changed in each version, in plain words.
   project folder, such as a folder of reading notes, could stay on their own when they shared a word with a
   ticket in another project folder, or with a folder inside the project that you once gave Hal on its own.
   They now fold into the project, and that inner folder keeps its own card and files.
+- **One website is one card.** Your portfolio site could stay several cards: one called "Portfolio", one
+  named as its address, and the repository it is built from. Hal's AI now sees each card's web address and
+  repository when it looks for cards found twice, and a repository named after a site's address, such as
+  "name.github.io", can join the card that links to that site. A link to a site's front page still never
+  merges two cards on its own, and two repositories stay two projects.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

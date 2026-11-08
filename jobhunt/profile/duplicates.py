@@ -10,17 +10,22 @@ navigation project and two for one network sniffer, under names `merge.same_item
    or edited is never merged without their action.
 2. The one rule that is certain (`certain`): two cards with the same project link are one.
 3. The AI (`profile_same` prompt, checker role, JSON, `BATCH` cards a call, each with its name, summary,
-   tools, dates, links and files) groups the rest. A shared file is shown to it, never taken as proof: a
-   shared listing merged a portfolio into a dissertation (2026-11-08). A CV, letter or transcript lists
+   tools, dates, links, link host, repositories and files) groups the rest. The host and the repository's
+   name let it see one website under several names: a portfolio site was four cards, "Portfolio", a
+   repository "<name>-portfolio", the site's own address and an older "<user>.github.io" repository
+   (2026-11-08). A site is never a certain merge, as many projects link to the person's site. A shared file
+   is shown to it, never taken as proof: a shared listing merged a portfolio into a dissertation
+   (2026-11-08). A CV, letter or transcript lists
    every experience, and so does a file whose project facts name three or more projects (`listing_files`),
    such as a dossier of all the person's work: sharing one says nothing, and the AI is not shown it.
 4. Rules that are never broken: cards whose dates are `YEARS_APART` or more years apart and that share no
    file are two experiences (`never`), and so are two projects holding different repositories or project
    folders (`apart`, `card_units`), whatever the AI says. A card holding a repository or project folder of
-   its own and a card holding none are one only when their names (and the unit's folder name) share a
-   distinctive word (`unrelated`, `projects.distinctive_words`) and the AI agrees, or they share a project
-   link: a personal follow-up repository was merged into the dissertation it followed (2026-11-08), while a
-   repository "probe_sniffer" is the CV's "Probe Request Sniffer".
+   its own and a card holding none are one only when their names (and the unit's folder name, and the
+   name of the site each card is, `site`) share a distinctive word (`unrelated`,
+   `projects.distinctive_words`) and the AI agrees, or they share a project link: a personal follow-up
+   repository was merged into the dissertation it followed (2026-11-08), while a repository "probe_sniffer"
+   is the CV's "Probe Request Sniffer".
 
 Each group is merged into its strongest card (`target`: the one the person's CV names, else the best shown,
 `check.strength`), which keeps its name unless a better-ranked source names it otherwise (`store.refold`).
@@ -35,6 +40,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 from pathlib import PurePath
 
@@ -54,6 +60,7 @@ LISTS = ("cv", "letter", "transcript")    # documents that list every experience
 FIELD_CHARS = 300
 LIST_ITEMS = 8
 FILES = 5
+WEB_ADDRESS = re.compile(r"(?:[a-z0-9-]+\.)+[a-z]{2,}")      # a card named as a site: "averyquillon.me"
 
 
 def candidates(con: sqlite3.Connection, kind: str) -> list[dict]:
@@ -98,6 +105,32 @@ def _span(item: dict) -> tuple[int, int] | None:
     return (point, point) if point is not None else None
 
 
+def _host(url: str) -> str:
+    """A link's host as links are compared ("averyquillon.me"); "" for none or a profile host many share."""
+    host = merge._url_key(url).partition("/")[0].partition(":")[0]
+    return "" if host in merge.PROFILE_HOSTS else host
+
+
+def site(item: dict) -> str:
+    """The website a project card is, as its host: its name when the name is a web address ("averyquillon.me",
+    "AQuillon.github.io"), else its link's host when the link is a site's front page; "" for none. Only a
+    hint: a project whose link is the person's front page is not the site (`merge.project_link`)."""
+    name = _name(item).strip().lower()
+    if WEB_ADDRESS.fullmatch(name):
+        return name.removeprefix("www.")
+    link = str(item["fields"].get("link") or "")
+    return _host(link) if link and not merge.project_link(link) else ""
+
+
+def _site_words(names: list[str]) -> set[str]:
+    """The distinctive words of the sites among `names`, each by its own name, its first part in lower case:
+    "aquillon" in "AQuillon.github.io", which splits on case into "quillon" as a name."""
+    from jobhunt.ingest import projects
+
+    return set().union(*(projects.distinctive_words(n.lower().split(".", 1)[0]) for n in names
+                         if WEB_ADDRESS.fullmatch(n.strip().lower())))
+
+
 def certain(a: dict, b: dict) -> bool:
     """True when two cards are surely one: the same project link."""
     link = _link(a)
@@ -134,17 +167,19 @@ def apart(a: dict, b: dict, units: dict) -> bool:
 
 def unrelated(a: dict, b: dict, units: dict) -> bool:
     """True when one card holds a repository or project folder (`card_units`), the other holds none, and the
-    names share no distinctive word (`projects.distinctive_words`), counting the unit's folder name: two
-    projects unless they share a project link (see the module notes)."""
+    names share no distinctive word (`projects.distinctive_words`), counting the unit's folder name and the
+    name of the site each card is (`site`): two projects unless they share a project link (see the module
+    notes). A repository "AQuillon.github.io" and a card whose link is that site's front page share one."""
     from jobhunt.ingest import projects
 
     ua, ub = units.get(a["id"], set()), units.get(b["id"], set())
     if bool(ua) == bool(ub):
         return False
     held, held_units, other = (a, ua, b) if ua else (b, ub, a)
-    names = [_name(held), *(PurePath(u).name for u in held_units)]
-    words = set().union(*(projects.distinctive_words(n) for n in names))
-    return not words & projects.distinctive_words(_name(other))
+    names = [_name(held), *(PurePath(u).name for u in held_units), site(held)]
+    words = set().union(_site_words(names), *(projects.distinctive_words(n) for n in names))
+    theirs = [_name(other), site(other)]
+    return not words & set().union(_site_words(theirs), *(projects.distinctive_words(n) for n in theirs))
 
 
 def _name(item: dict) -> str:
@@ -165,14 +200,16 @@ def _short(value):
     return str(value)[:FIELD_CHARS] if isinstance(value, str) else value
 
 
-def card(item: dict, listings: frozenset[str] = frozenset()) -> dict:
-    """What the AI reads about one card: its name, summary, tools, dates, links and files (not the files that
-    list projects, `listings`, which every card they list shares)."""
+def card(item: dict, listings: frozenset[str] = frozenset(), repositories: list[str] | None = None) -> dict:
+    """What the AI reads about one card: its name, summary, tools, dates, links, its link's host, the
+    `repositories` it holds by name, and files (not the files that list projects, `listings`, which every card
+    they list shares)."""
     f = item["fields"]
     return {"id": item["id"], "kind": item["kind"], "name": _short(item["title"]),
             "summary": _short(f.get("summary") or f.get("detail") or item["sub"] or ""),
             "tools": _short(list(f.get("tools") or [])), "when": item["when"],
-            "links": [v for v in (f.get("link"),) if v],
+            "links": [v for v in (f.get("link"),) if v], "host": _host(str(f.get("link") or "")),
+            "repositories": sorted(repositories or [])[:FILES],
             "files": sorted({e["source_rel"] for e in item["evidence"] if e["source_rel"] not in listings})[:FILES]}
 
 
@@ -278,9 +315,16 @@ def _ready() -> bool:
     return why is None
 
 
-def _said(con: sqlite3.Connection, found: list[dict],
-          listings: frozenset[str] = frozenset()) -> tuple[list[list[int]], int]:
-    """The AI's groups for `found`, `BATCH` cards a call, and how many cards it could not look at."""
+def repositories(con: sqlite3.Connection, units: dict) -> dict[int, list[str]]:
+    """The names of the repositories each card holds (`card_units`): {card id: [name]}."""
+    repos = {r[0] for r in con.execute("SELECT DISTINCT path FROM ingest_items WHERE kind = 'repo' AND state = 'done'")}
+    return {i: [PurePath(u).name for u in held if u in repos] for i, held in units.items()}
+
+
+def _said(con: sqlite3.Connection, found: list[dict], listings: frozenset[str] = frozenset(),
+          repos: dict[int, list[str]] | None = None) -> tuple[list[list[int]], int]:
+    """The AI's groups for `found`, `BATCH` cards a call, and how many cards it could not look at; `repos` are
+    the repositories each card holds (`repositories`)."""
     from jobhunt import ai
     from jobhunt.ai.base import PrivateLeak
 
@@ -289,7 +333,7 @@ def _said(con: sqlite3.Connection, found: list[dict],
     for start in range(0, len(ordered), BATCH):
         batch = ordered[start:start + BATCH]
         try:
-            said += _ask(con, [card(i, listings) for i in batch])
+            said += _ask(con, [card(i, listings, (repos or {}).get(i["id"])) for i in batch])
         except ai.LLMUnavailable as e:
             log.info("stopped looking for duplicate experiences: %s", e)
             missed += len(ordered) - start
@@ -310,9 +354,9 @@ def refresh(con: sqlite3.Connection, *, judge: bool = True) -> dict[str, int]:
         found = candidates(con, kind)
         if len(found) < 2:
             continue
-        said, missed = _said(con, found, listings) if use_ai else ([], 0)
-        counts["unjudged"] += missed
         units = card_units(con, found, listings) if kind == "project" else {}
+        said, missed = _said(con, found, listings, repositories(con, units)) if use_ai else ([], 0)
+        counts["unjudged"] += missed
         for group in groups(found, said, listings, units):
             into = target(group)
             why = MERGED + into["title"]
