@@ -1,9 +1,10 @@
 """Two made-up graduates' files for the sectioned record's tests: a software graduate and a history graduate.
 
-Each has a current CV and an older one. The older CV lists an extra old job the newer one dropped, gives a
-detail the newer one leaves out (a job's town, a skill) and disagrees with it on others (a grade, a mark), so
-a test can see that an older CV only fills gaps. Every name, employer, place and address is invented; email
-addresses use the reserved `example.org` domain and phone numbers Ofcom's drama range.
+Each has a current CV, an older one, and a cover letter or personal statement. The older CV lists an extra
+old job the newer one dropped, gives a detail the newer one leaves out (a job's town, a skill) and disagrees
+with it on others (a grade, a mark), so a test can see that an older CV only fills gaps. Every name,
+employer, place and address is invented; email addresses use the reserved `example.org` domain and phone
+numbers Ofcom's drama range.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ class Graduate:
     name: str
     cv: str
     older_cv: str
+    letter: str = ""
 
 
 AVERY = Graduate(
@@ -71,6 +73,18 @@ Modules: Databases (60)
 ## Skills
 
 Programming: Python, Java
+""",
+    letter="""# Letter to Made-up Harbour Software
+
+12 February 2025
+
+Dear hiring team,
+
+I would like to join Made-up Harbour Software as a graduate developer. At Made-up Tides Ltd I built a tide
+alert service in Python, and I enjoy turning messy readings into something people can trust.
+
+Yours sincerely,
+Avery Quillon
 """)
 
 MARNIE = Graduate(
@@ -122,6 +136,13 @@ Modules: Medieval Europe (55)
 ## Skills
 
 Languages: French, German
+""",
+    letter="""# Personal statement
+
+March 2025
+
+Old letters fascinate me because they keep the voices that official records leave out. Volunteering at the
+Fenwick Lantern Museum Trust, I catalogued 400 of them and learned to read the hands of the 1840s.
 """)
 
 GRADUATES = (AVERY, MARNIE)

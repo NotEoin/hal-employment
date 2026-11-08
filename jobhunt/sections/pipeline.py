@@ -39,6 +39,7 @@ from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import cv as cv_reader  # importing it puts the cv reader in place (`readers.register`)
+from jobhunt.sections import letters as _letters  # noqa: F401 - puts the letter reader in place
 from jobhunt.sections import readers, registry, store, wrong_place
 
 log = logging.getLogger(__name__)

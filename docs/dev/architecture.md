@@ -1228,6 +1228,10 @@ people). Readers only take facts out of a source, within that frame.
   removing or choosing a CV calls `cv.settle`, which refolds every card the CVs give
   (`profile.store.refold_sources`). The profile's `GET /api/v2/profile/{kind}` marks each source
   `from_older_cv` and a project card that only CVs give `cv_only` ("from your CV only" on the page).
+- `letter` (`sections/letters.py`): cover letters and personal statements keep their text, title and date
+  and give no facts. `letters.voice_samples(con, n)` returns the words of the `n` newest letters that were
+  read (by their own date, then when added), from the kept files rather than the notes; no writer reads them
+  yet.
 
 ## Profile (`jobhunt/profile/`)
 

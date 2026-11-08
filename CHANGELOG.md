@@ -25,6 +25,8 @@ What changed in each version, in plain words.
   from them only what your current CV and your documents leave out, such as an old job you dropped, and
   marks those facts "from an older CV". Your letters use the same current CV. A project that only your CVs
   mention shows "from your CV only".
+- **Cover letters and personal statements are kept as samples of how you write.** Hal reads them and lists
+  them under **Your CVs**, but takes no facts from them.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,
