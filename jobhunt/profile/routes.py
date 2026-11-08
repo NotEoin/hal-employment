@@ -94,6 +94,7 @@ from __future__ import annotations
 from jobhunt.core import events, runner
 from jobhunt.evidence.routes import file_id
 from jobhunt.profile import actions, check, conflicts, contexts, duplicates, store, tiers
+from jobhunt.profile import writing as profile_writing
 from jobhunt.web.router import BadRequest, Conflict, NotFound, Request, route
 
 PREFIX = "/api/v2/profile"
@@ -159,13 +160,16 @@ def _cards(cards: list[dict]) -> list[dict]:
 
 @route("GET", PREFIX + "/{kind}")
 def of_kind(req: Request) -> dict:
-    """Every item of one kind with its sources and conflicts."""
+    """Every item of one kind with its sources and conflicts, and for each card what only an older CV of the
+    person's gives it (`older_cv`, {field: [value, ...]}: `profile.writing.older_cv_only`)."""
     kind = req.params["kind"]
     if kind not in store.KINDS:
         raise NotFound("Your profile has no such list.")
     found = _visible_first(store.items(req.con, kind))
     ids = {i["id"] for i in found}
-    return {"kind": kind, "label": LABELS[kind], "items": [with_files(i) for i in found],
+    cvs = profile_writing.CvAuthority.of(req.con)
+    return {"kind": kind, "label": LABELS[kind],
+            "items": [{**with_files(i), "older_cv": profile_writing.older_cv_only(req.con, i, cvs)} for i in found],
             "conflicts": [c for c in conflicts.listing(req.con) if ids & set(c["item_ids"])]}
 
 

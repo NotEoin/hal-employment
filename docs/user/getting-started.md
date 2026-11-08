@@ -380,6 +380,11 @@ Each job, qualification or skill is a card:
 - **Found by Hal**, **Checked by you**, **Edited by you** or **Hidden** says where it stands.
 - **From:** names each file it came from, with the words Hal took from it. Click the name to open the
   file. **Quote not found in the file** means those words are not in the file, so check the fact.
+- **only in an older CV** beside a tool, duty or other detail of a project or job means only an older
+  version of your CV gives it. Your newest CV (the one covering the latest dates, else the newest file)
+  speaks for your CVs, so Hal leaves that detail out of your letters, messages and answers unless your
+  newest CV, a repository or another document of your own gives it too. **Edit** the card and remove it,
+  or add it to your newest CV if it is still true.
 - **Confirm** says it is right. **Edit** lets you change any field, and **Save** keeps your words; Hal never
   changes them when it reads your files again. **Hide** keeps it out of your letters and CVs; hidden cards
   are folded away at the end of the tab, with **Show again**.

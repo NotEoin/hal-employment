@@ -175,6 +175,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Your newest CV speaks for your CVs.** When an older version of your CV gave a project tools your newest
+  CV no longer claims, every letter said you used them. Hal now leaves out of your letters, messages and
+  answers any tool, duty or detail that only an older CV gives, unless a repository or another document of
+  your own gives it too, and your record marks it **only in an older CV**.
 - **One module, one fact.** A CV line listing every module and its mark was one piece of evidence, so a
   letter could say "I achieved 86 in one module, where I contributed to a team project" because another
   module on the same line was called "Team Project". Hal now reads such a line as one fact per module, each

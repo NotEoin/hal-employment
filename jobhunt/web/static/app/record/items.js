@@ -35,11 +35,14 @@ export function Sources({ evidence }) {
       ${e.quote && html`<div class="quote">"${e.quote}"</div>`}</li>`)}</ul></div>`;
 }
 
-function Value({ type, v }) {
+// Beside a value only an older CV of yours gives: Hal leaves it out of your letters (`profile.writing.older_cv_only`).
+const OlderCv = () => html` <${Chip} tone="warn">only in an older CV<//>`;
+
+function Value({ type, v, older = [] }) {
   const s = shown(type, v);
-  if (type === "list") return html`<ul class="rec-list">${s.map((x, i) => html`<li key=${i}>${x}</li>`)}</ul>`;
+  if (type === "list") return html`<ul class="rec-list">${s.map((x, i) => html`<li key=${i}>${x}${older.includes(x) && html`<${OlderCv} />`}</li>`)}</ul>`;
   if (type === "modules") return html`<ul class="rec-list">${s.map((m, i) => html`<li key=${i}>${m.name}${m.mark ? ": " + m.mark : ""}</li>`)}</ul>`;
-  return s;
+  return older.includes(s) ? html`${s}<${OlderCv} />` : s;
 }
 
 /** An item's fields as a list of words and values; nothing when it has none. */
@@ -47,7 +50,8 @@ export function Fields({ item }) {
   const rows = KIND_FIELDS[item.kind].filter(([f, , type]) => shown(type, item.fields[f]) !== "");
   if (!rows.length) return null;
   return html`<dl class="kv rec-kv">${rows.map(([f, words, type]) => html`<dt>${words}</dt><dd>
-    ${item.kind === "basic" && f === "key" ? basicKey(item.fields[f]) : html`<${Value} type=${type} v=${item.fields[f]} />`}</dd>`)}</dl>`;
+    ${item.kind === "basic" && f === "key" ? basicKey(item.fields[f])
+      : html`<${Value} type=${type} v=${item.fields[f]} older=${(item.older_cv || {})[f] || []} />`}</dd>`)}</dl>`;
 }
 
 const keepAllWords = c => (c.kind === "gap" ? "The gap is right" : c.kind === "overlap" ? "Both are right" : "Keep it as it is");

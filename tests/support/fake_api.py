@@ -214,7 +214,8 @@ MADE_UP_PROFILE = {
     "conflicts": [{**PROFILE_CONFLICT, "items": [{"id": 1, "kind": "job", "title": "Collections volunteer",
                                                   "when": "September 2023 to now", "state": "hal"}]}],
     "resolved": []}
-MADE_UP_PROFILE_KINDS = {f"/profile/{k}": {"kind": k, "label": PROFILE_LABELS[k], "items": v,
+MADE_UP_PROFILE_KINDS = {f"/profile/{k}": {"kind": k, "label": PROFILE_LABELS[k],
+                                           "items": [{**i, "older_cv": {}} for i in v],
                                            "conflicts": [PROFILE_CONFLICT] if any(i["conflicts"] for i in v) else []}
                          for k, v in PROFILE_ITEMS.items()}
 _SKILL = PROFILE_ITEMS["skill"][0]

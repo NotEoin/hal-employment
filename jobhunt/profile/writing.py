@@ -33,6 +33,13 @@ Design decisions, each with its reason:
   two cards together.
 - The block is cut at a whole line when it reaches `limit`, kind by kind in `KIND_ORDER`, so the basics and
   jobs are the last to go.
+- The person's newest CV speaks for their CVs (`CvAuthority`): a card's tool, duty or field that only older
+  CV drafts give (not the newest CV, a repository, the person's own project documents, or the person's own
+  typing) is left out of the block and the cards (`for_writing`), and the profile page says "only in an older
+  CV" beside it (`older_cv_only`). An older draft gave a team project tools the newest CV does not claim and
+  its code never used, and every pack said the person used them (2026-11-08). The newest CV is the one whose
+  own period (its note's `period`) ends latest, then the newest file (`ingest_items.mtime`); only CVs whose
+  role is `own` count, and with one CV or none nothing is left out.
 - A course's modules and a job's duties and achievements are one line each (`entry_lines`), under the line of
   the course or job they belong to and naming it, at most `LINE_MAX` characters of them per item: one line of
   every module was one piece of evidence, so a sentence about one module could cite another's words
@@ -40,13 +47,19 @@ Design decisions, each with its reason:
 """
 from __future__ import annotations
 
+import json
+import logging
 import re
 import sqlite3
 from contextlib import closing
+from dataclasses import dataclass, field
 
 from jobhunt import db, record
+from jobhunt.ingest import frontmatter
 from jobhunt.profile import contexts, merge, store, tiers
 from jobhunt.writing import stage
+
+log = logging.getLogger(__name__)
 
 KIND_ORDER = ("basic", "job", "education", "project", "skill", "certificate", "achievement", "link")
 CONTACT_KEYS = {"email", "phone", "mobile", "telephone", "address"}
@@ -162,6 +175,115 @@ def _relevance(item: dict, wanted: set[str]) -> int:
     return len(words & wanted)
 
 
+# The newest CV ------------------------------------------------------------------------------------------------
+
+CV_TYPE, OWN_ROLE = "cv", "own"
+YEAR = re.compile(r"\b(?:19|20)\d\d\b")
+OLDER_CV = "only in an older CV"
+# The fields of a card a CV may give, each a text or a list (`store.KINDS`); never the name, which is the card.
+CV_FIELDS = {"project": ("summary", "role", "period", "link", "tools"), "job": ("duties", "achievements")}
+
+
+def _cv_key(con: sqlite3.Connection, source_rel: str) -> tuple[int, str]:
+    """How new a CV is: the last year of its note's own `period`, else of its file's date, then its file's
+    date (`ingest_items.mtime`)."""
+    row = con.execute("SELECT mtime FROM ingest_items WHERE note = ? AND mtime IS NOT NULL ORDER BY updated DESC",
+                      (source_rel,)).fetchone()
+    mtime = str(row["mtime"]) if row else ""
+    try:
+        fm, _ = frontmatter.parse(record.file_path(source_rel).read_text(encoding="utf-8", errors="replace"))
+    except (LookupError, OSError):
+        fm = {}
+    period = fm.get("period") or ""
+    years = [int(y) for y in YEAR.findall(" ".join(period) if isinstance(period, list) else str(period))]
+    year = max(years) if years else (int(mtime[:4]) if mtime[:4].isdigit() else 0)
+    return year, mtime
+
+
+@dataclass(frozen=True)
+class CvAuthority:
+    """The person's CVs as writing reads them: the newest (`newest`) speaks for them all, so a card's field
+    that only older ones (`older`) give is left out."""
+
+    newest: str = ""
+    older: frozenset[str] = field(default_factory=frozenset)
+
+    @classmethod
+    def of(cls, con: sqlite3.Connection) -> CvAuthority:
+        """The person's own CVs in the record, the newest apart; empty when there are none."""
+        rels = [r[0] for r in con.execute("SELECT DISTINCT source_rel FROM profile_evidence WHERE doc_type = ? "
+                                          "AND role = ? AND source_rel != ''", (CV_TYPE, OWN_ROLE))]
+        if not rels:
+            return cls()
+        ranked = sorted(rels, key=lambda rel: (*_cv_key(con, rel), rel), reverse=True)
+        return cls(ranked[0], frozenset(ranked[1:]))
+
+    def older_only(self, said: list[dict], value) -> bool:
+        """True when the sources that give `value` (`said`: [{source_rel, value}]) are all older CVs: none is
+        the newest CV or another document of the person's own, and at least one is there."""
+        givers = [e for e in said if _gives(e["value"], value)]
+        return bool(givers) and all(e["source_rel"] in self.older for e in givers)
+
+
+def _key(value) -> str:
+    return merge.text_key(str(value or ""))
+
+
+def _gives(given, value) -> bool:
+    """True when a source's value of a field (`given`, a text or a list) holds `value`."""
+    if isinstance(given, list):
+        return any(_key(g) == _key(value) for g in given)
+    return bool(given) and _key(given) == _key(value)
+
+
+def _said(con: sqlite3.Connection, item_id: int, name: str) -> list[dict]:
+    """What each source of an item says of one field: [{source_rel, value}]. A source that is not the person's
+    own (another's document, course material) is left out: it never speaks for a field here."""
+    out = []
+    for e in con.execute("SELECT source_rel, doc_type, role, said FROM profile_evidence WHERE item_id = ?",
+                         (item_id,)):
+        if e["role"] not in (OWN_ROLE, ""):
+            continue
+        try:
+            fields = json.loads(e["said"] or "{}")
+        except ValueError:
+            log.warning("profile writing: a source of item %s holds fields that do not read as JSON", item_id)
+            continue
+        out.append({"source_rel": e["source_rel"], "value": fields.get(name) if isinstance(fields, dict) else None})
+    return out
+
+
+def older_cv_only(con: sqlite3.Connection, item: dict, cvs: CvAuthority | None = None) -> dict[str, list[str]]:
+    """The values of a card's fields that only older CVs give (`CvAuthority`), {field: [value, ...]}; {} for an
+    item the person added themselves, or one no older CV alone gives anything to."""
+    cvs = cvs if cvs is not None else CvAuthority.of(con)
+    if not cvs.older or item.get("origin") == "you":
+        return {}
+    out: dict[str, list[str]] = {}
+    for name in CV_FIELDS.get(item["kind"], ()):
+        value = item["fields"].get(name)
+        values = value if isinstance(value, list) else [value] if value else []
+        said = _said(con, item["id"], name)
+        dropped = [str(v) for v in values if cvs.older_only(said, v)]
+        if dropped:
+            out[name] = dropped
+    return out
+
+
+def for_writing(con: sqlite3.Connection, item: dict, cvs: CvAuthority | None = None) -> dict:
+    """A card's fields as writing uses them: without what only older CVs give (`older_cv_only`)."""
+    dropped = older_cv_only(con, item, cvs)
+    if not dropped:
+        return item["fields"]
+    fields = dict(item["fields"])
+    for name, values in dropped.items():
+        if isinstance(fields.get(name), list):
+            fields[name] = [v for v in fields[name] if str(v) not in values]
+        else:
+            fields.pop(name, None)
+    return fields
+
+
 def employers(con: sqlite3.Connection) -> list[str]:
     """The employers of the jobs the person checked, which make a project that names one work."""
     return [it["fields"]["employer"] for it in store.items(con, "job", hidden=False)
@@ -172,6 +294,7 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
     out = []
     wanted = set(merge.text_key(" ".join(queries or [])).split()) - QUERY_STOP
     worked_for = employers(con)
+    cvs = CvAuthority.of(con)
     for kind in KIND_ORDER:
         found = store.items(con, kind, hidden=False)
         if kind == "basic":
@@ -188,8 +311,9 @@ def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[st
                 continue
             quote = next((e["quote"] for e in it["evidence"] if e["quote"]), "") if kind == "skill" else ""
             made = contexts.current(it, worked_for) if kind in contexts.CONTEXT_KINDS else ""
-            out.append("- " + line(kind, it["fields"], quote, made, entries=False))
-            out += ["- " + x for x in entry_lines(kind, it["fields"])]
+            fields = for_writing(con, it, cvs)
+            out.append("- " + line(kind, fields, quote, made, entries=False))
+            out += ["- " + x for x in entry_lines(kind, fields)]
     return out
 
 
@@ -321,12 +445,13 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
             return cards(own)
     worked_for = employers(con)
     hidden = [it for it in store.items(con, "project") if it["state"] == "hidden"]
+    cvs = CvAuthority.of(con)
     out = []
     for kind in CARD_KINDS:
         for it in store.items(con, kind, hidden=False):
             if it["state"] not in USED_STATES:
                 continue
-            f, context = it["fields"], contexts.current(it, worked_for)
+            f, context = for_writing(con, it, cvs), contexts.current(it, worked_for)
             if kind == "project":
                 said = stage.CONTEXT_WORDS.get(context, "")
                 out.append({"kind": f"project{f' ({said})' if said else ''}", "name": f.get("name", ""),

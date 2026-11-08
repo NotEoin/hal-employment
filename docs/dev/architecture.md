@@ -1033,7 +1033,14 @@ available yet.
   then supporting, then not sorted (`tiers.order`), most relevant to the job first within a tier (the
   word overlap of `RANKED_KINDS`), and an archived one never, even confirmed. No email or phone is included. The pages that write (My CV, an application's
   Documents step) show `ui/unchecked-note.js`, which reads `to_check` from `GET /api/v2/profile` and says
-  how many facts wait. Each item is one line of at most
+  how many facts wait. The person's newest CV speaks for their CVs (`writing.CvAuthority`: among
+  evidence of `doc_type` cv and `role` own, the one whose note's `period` ends latest, then the newest
+  `ingest_items.mtime`): a project's summary, role, period, link or tool, or a job's duty or achievement,
+  that only older CVs give (each source's `said` fields, the person's own sources only) is left out of the
+  block and of `cards` (`writing.for_writing`), and `GET /api/v2/profile/{kind}` gives each item's
+  `older_cv` ({field: [value]}, `writing.older_cv_only`), shown as "only in an older CV". A card the person
+  added, and a value no source gives (typed in an edit), are theirs. An older draft gave a team project
+  tools the newest CV does not claim and its code never used (2026-11-08). Each item is one line of at most
   `LINE_MAX` characters, cut at a whole list item, and one location is named. A course's modules and a
   job's duties and achievements are one line each under it, naming the course or job (`entry_lines`:
   "Module (BA History): Oral History (68)", "Job duty (Guide at Fenwick Museum): Ran tours"), at most

@@ -194,5 +194,78 @@ class Writing(unittest.TestCase):
         self.assertEqual(cv_context.build()["profile"], profile.context_block(self.con))
 
 
+OLD_CV, NEW_CV = "Sources/CVs and letters/CV draft.md", "Sources/CVs and letters/CV.md"
+REPO = "Sources/Code/ferry-planner/README.md"
+
+
+class NewestCv(unittest.TestCase):
+    """An older CV draft gave a team project tools the newest CV does not claim and its code never used, and every
+    pack then said the person used them (2026-11-08)."""
+
+    def setUp(self):
+        self.home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(paths.set_override(self.home))
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+        self.vault = self.home / "made-up record"
+        self.enterContext(mock.patch.object(record, "VAULT", self.vault, create=True))
+        self.con = db.connect()
+        self.addCleanup(self.con.close)
+
+    def note(self, rel: str, period: str) -> None:
+        path = self.vault / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"---\ntype: source\ndoc_type: cv\nperiod: {period}\nrole: own\n---\n# CV\n")
+
+    def ferry(self, rel: str, tools: list[str], doc_type: str = "cv", role: str = "own", **more) -> int:
+        return store.add_found(self.con, "project", {"name": "Ferry planner", "tools": tools, **more},
+                               {"source_rel": rel, "quote": "Ferry planner", "field": "name", "doc_type": doc_type,
+                                "role": role})
+
+    def seed(self) -> int:
+        self.note(OLD_CV, "2021..2024")
+        self.note(NEW_CV, "2022..2026")
+        self.ferry(OLD_CV, ["React", "Flask", "Azure", "Docker"], summary="A timetable app hosted on a cloud")
+        self.ferry(NEW_CV, ["React", "Flask"])
+        item_id = self.ferry(REPO, ["Docker"], doc_type="repository")
+        check_everything(self.con)
+        return item_id
+
+    def test_a_tool_only_an_older_cv_gives_is_left_out_of_writing(self):
+        self.seed()
+        cards = writing.cards(self.con)
+        self.assertEqual(cards[0]["tools"], ["React", "Flask", "Docker"], "Docker is in the repository")
+        block = profile.context_block(self.con)
+        self.assertIn("Tools: React, Flask, Docker", block)
+        self.assertNotIn("Azure", block)
+        self.assertNotIn("hosted on a cloud", block)
+
+    def test_the_profile_says_which_values_only_an_older_cv_gives(self):
+        item = store.item(self.con, self.seed())
+        self.assertEqual(writing.older_cv_only(self.con, item),
+                         {"summary": ["A timetable app hosted on a cloud"], "tools": ["Azure"]})
+
+    def test_the_newest_cv_is_the_one_whose_own_period_ends_latest(self):
+        self.note(OLD_CV, "2021..2026")
+        self.note(NEW_CV, "2022..2024")
+        self.ferry(OLD_CV, ["React", "Azure"])
+        self.ferry(NEW_CV, ["React", "Lua"])
+        check_everything(self.con)
+        self.assertEqual(writing.CvAuthority.of(self.con).newest, OLD_CV)
+        self.assertEqual(writing.cards(self.con)[0]["tools"], ["React", "Azure"])
+
+    def test_with_one_cv_or_a_card_you_added_nothing_is_left_out(self):
+        self.note(OLD_CV, "2021..2024")
+        self.ferry(OLD_CV, ["React", "Azure"])
+        check_everything(self.con)
+        self.assertEqual(writing.cards(self.con)[0]["tools"], ["React", "Azure"])
+        self.note(NEW_CV, "2022..2026")
+        store.add_found(self.con, "skill", {"name": "Lua"},
+                        {"source_rel": NEW_CV, "quote": "Lua", "doc_type": "cv", "role": "own"})
+        mine = store.add_by_hand(self.con, "project", {"name": "Tide gauge", "tools": ["Azure"]})
+        self.assertEqual(writing.older_cv_only(self.con, mine), {}, "a card you added is all yours")
+        self.assertEqual([c["tools"] for c in writing.cards(self.con)], [[], ["Azure"]],
+                         "the newest CV no longer names Ferry planner's tools")
+
+
 if __name__ == "__main__":
     unittest.main()
