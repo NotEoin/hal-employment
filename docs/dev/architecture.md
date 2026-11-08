@@ -524,18 +524,13 @@ runs: tests use `tests/support/fake_claude/`.
   When they find nothing and the paragraph says more than its facts' own words (`paragraphs.restates`),
   one AI call checks it against its story (`verify`, prompt `paragraph_verify`); quoted words its facts or
   the employer's words hold, word for word or by their roots, are dropped. A paragraph with a problem is
-  drafted once more with the problems listed; one still failing loses, from each failing sentence, the one
-  clause after the first (`paragraphs.CLAUSE`: parts after a comma, a semicolon, "and", "while", "using",
-  "with" or "which") whose removal leaves the sentence passing and at least `paragraphs.CLAUSE_LEAVES` (4)
-  words (`paragraphs._without_clause`; for `verify`'s findings, the clause holding the quoted words,
-  `Problem.span`), else the whole sentence when the rest still reads (`flow.reads_without`, and the shape's
-  least sentences and name kept); when the redraft cannot be cut this way its first draft is tried, as
-  paragraphs on LoRA for chest X-rays and a BiomedCLIP part were dropped over one clause (2026-11-08). Else
-  it is dropped and
-  "Check before sending" says so (`Paragraph.listed`), unless it is a module's or the degree's story dropped
-  for having nothing to say (`paragraphs.education`). A sentence fixed or cut is never listed. A paragraph
+  drafted once more with the problems listed; one still failing loses its failing sentences, each whole,
+  when the rest still reads (`flow.reads_without`, and the shape's least sentences and name kept). A
+  sentence is never cut in part: cutting one clause left sentences such as "That experience in building
+  precise." in 11 of 15 graded packs (2026-11-08). Else it is dropped and "Check before sending" says so
+  (`Paragraph.listed`), unless it is a module's or the degree's story dropped for having nothing to say (`paragraphs.education`). A sentence fixed or cut is never listed. A paragraph
   that passes every check with no AI and fails only `verify` is never dropped (`paragraphs._doubted`): the
-  clauses or sentences the AI flagged are cut when the rest still reads, else it is kept whole and listed
+  sentences the AI flagged are cut when the rest still reads, else it is kept whole and listed
   (`Paragraph.checks`, `paragraphs.DOUBTED`), in a letter, the message and the answers alike
   (`pack._story_others` lists them too, as a message kept a crossed timing claim while the pack said
   "Nothing to check", 2026-11-08); a redraft that fails a check with no AI and cannot be cut falls

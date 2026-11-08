@@ -56,19 +56,18 @@ Design decisions, each with its reason:
   again. A sentence repeating the opening, or naming a degree with its words, is drafted again as a fact of
   the work.
 - A paragraph that fails is drafted again once with its problems stated (`Paragraph.redrafted`). One still
-  failing loses only the clause of a sentence that fails (`_without_clause`: the rest of the sentence then
-  passes), else only its failing sentences when what is left still reads (each cut sentence leaves the next
-  one pointing at something, `flow.reads_without`, and the shape keeps its least number of sentences and its
-  name); when the redraft cannot be cut so, its first draft is tried, as paragraphs on LoRA for chest
-  X-rays and a BiomedCLIP part were dropped over one clause (2026-11-08). Else it is dropped and listed with
-  why (`Paragraph.listed`). A sentence that was fixed or cut is
-  never listed: only what the person should act on is. Nor is a module's or the degree's story dropped for
+  failing loses only its failing sentences, whole, when what is left still reads (each cut sentence leaves the
+  next one pointing at something, `flow.reads_without`, and the shape keeps its least number of sentences and
+  its name); else it is dropped and listed with why (`Paragraph.listed`). A sentence is never cut in part: a
+  cut at a comma or "and", "while", "using", "with" or "which" left sentences such as "That experience in
+  building precise." in 11 of 15 graded packs (2026-11-08). A sentence that was fixed or cut is never
+  listed: only what the person should act on is. Nor is a module's or the degree's story dropped for
   having nothing to say (`education`): "Hal left out the paragraph about First-Class Honours: your facts gave
   nothing" was most of the false check items (2026-11-08), and the opening and the CV give the degree.
 - A paragraph that passes every check with no AI and fails only the AI check is never dropped (`_doubted`,
   2026-11-08): one letter came out at 56 words after three paragraphs were dropped, two of them over claims
-  the record supports, as they failed `paragraph_verify` after their redraft. Only the clauses or sentences
-  the AI flagged are cut, and only when the rest still reads as above; else the paragraph is kept whole and listed
+  the record supports, as they failed `paragraph_verify` after their redraft. Only the sentences the AI
+  flagged are cut, and only when the rest still reads as above; else the paragraph is kept whole and listed
   for the person to check (`Paragraph.checks`). When the redraft fails a check with no AI and its sentences
   cannot be cut, the first draft is kept this way if it failed only the AI check.
 - A letter paragraph ends on why the work matters for this job only when a fact clearly fits: no check
@@ -275,7 +274,6 @@ class Problem:
 
     sentence: str
     reason: str
-    span: str = ""             # the words the AI check quoted as unsupported, for `_cut` to take out
 
     def line(self) -> str:
         """The problem as a request or a log states it."""
@@ -611,8 +609,8 @@ def verify(text: str, story: Story, scope: Scope) -> list[Problem]:
     if reply.get("supported") is False:
         given = [str(s) for s in reply.get("unsupported") or [] if str(s).strip()]
         spans = [s for s in given if not _dropped(s, where)]
-        out += [Problem(next((x for x in said if _held(s, x)), ""), NOT_SUPPORTED.format(span=s.strip().strip("\"'")),
-                        s.strip().strip("\"'")) for s in spans]
+        out += [Problem(next((x for x in said if _held(s, x)), ""), NOT_SUPPORTED.format(span=s.strip().strip("\"'")))
+                for s in spans]
         if not given:
             out.append(Problem("", NOT_SUPPORTED_ANY))
     if reply.get("context_ok") is False:
@@ -664,53 +662,28 @@ def _judge(text: str, story: Story, scope: Scope, shape: Shape, out: Paragraph) 
     return verify(text, story, scope), True
 
 
-CLAUSE = re.compile(r"(,\s+|;\s+|\s+(?:and|while|using|with|which)\s+)")   # where a sentence's clauses part
-CLAUSE_LEAVES = 4          # words a sentence keeps after a clause is cut, so it still says something
-
-
-def _without_clause(sentence: str, ok) -> str:
-    """`sentence` without one of its clauses after the first (`CLAUSE`), the first such for which `ok(shorter)`
-    holds; "" when none does."""
-    body, end = sentence.rstrip(".!?"), sentence[len(sentence.rstrip(".!?")):] or "."
-    parts = CLAUSE.split(body)          # clause, separator, clause, ...
-    for k in range(2, len(parts), 2):
-        shorter = "".join(parts[:k - 1] + parts[k + 1:]).strip() + end
-        if len(shorter.split()) >= CLAUSE_LEAVES and ok(shorter):
-            return shorter
-    return ""
-
-
 def _cut(text: str, found: list[Problem], story: Story, scope: Scope, shape: Shape) -> str:
-    """`text` without what fails: for each failing sentence, the sentence without the one clause that holds the
-    problem when the rest of it passes (`_without_clause`), else no sentence when what is left still reads (see
-    the module notes); "" when neither works."""
+    """`text` without its failing sentences, each cut whole, when what is left still reads (see the module
+    notes); "" else."""
     if any(not p.sentence for p in found):
         return ""
     kept = text
     for sentence in dict.fromkeys(p.sentence for p in found):
         said = writing_check.sentences(kept)
-        if sentence not in said:
-            return ""
-        spans = [p.span for p in found if p.sentence == sentence and p.span]
-        shorter = _without_clause(sentence, lambda s, spans=spans: not any(_held(x, s) for x in spans)
-                                  and not sentence_problems(s, story, scope))
-        if shorter:
-            kept = " ".join(shorter if s == sentence else s for s in said)
-            continue
-        if not flow.reads_without(kept, sentence):
+        if sentence not in said or not flow.reads_without(kept, sentence):
             return ""
         kept = " ".join(s for s in said if s != sentence)
     return "" if problems(kept, story, scope, shape) else kept
 
 
 def _changed(text: str, kept: str) -> int:
-    """How many sentences of `text` were cut or shortened in `kept`."""
-    return len(set(writing_check.sentences(text)) - set(writing_check.sentences(kept)))
+    """How many sentences of `text` were cut in `kept`."""
+    return len(writing_check.sentences(text)) - len(writing_check.sentences(kept))
 
 
 def _doubted(out: Paragraph, text: str, found: list[Problem], story: Story, scope: Scope, shape: Shape) -> Paragraph:
-    """A paragraph that failed only the AI check, kept: without the clauses or sentences the AI flagged when the
-    rest still reads, else whole with what the AI found to check (see the module notes)."""
+    """A paragraph that failed only the AI check, kept: without the sentences the AI flagged when the rest still
+    reads, else whole with what the AI found to check (see the module notes)."""
     kept = _cut(text, found, story, scope, shape)
     if kept:
         out.text, out.cut = kept, _changed(text, kept)
@@ -749,9 +722,6 @@ def settle(story: Story, shape: Shape, scope: Scope) -> Paragraph:
     if by_ai:
         return _doubted(out, text, found, story, scope, shape)
     kept = _cut(text, found, story, scope, shape)
-    if not kept and out.redrafted and not first[2] and first[0] != text:
-        kept = _cut(*first[:2], story, scope, shape)
-        text = first[0] if kept else text
     if kept:
         out.text, out.cut = kept, _changed(text, kept)
     elif out.redrafted and first[2]:

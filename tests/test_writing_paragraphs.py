@@ -252,18 +252,26 @@ class Settle(unittest.TestCase):
         done = self.settle(FakeAI([first, worse], verdict))
         self.assertEqual((done.text, done.dropped), (GOOD, ""))
 
-    def test_one_failing_clause_is_cut_and_the_paragraph_kept(self):
-        # paragraphs on LoRA for chest X-rays and a BiomedCLIP part were dropped over one clause (2026-11-08)
-        text = f"{GOOD[:-1]}, using Rust for speed."
-        done = self.settle(FakeAI([text]))
+    def test_a_sentence_failing_in_one_clause_is_cut_whole(self):
+        # cut-off sentence left after a clause was cut ("That experience in building precise.", 2026-11-08)
+        done = self.settle(FakeAI([f"{GOOD} It keeps every note, using Rust for speed."]))
         self.assertEqual((done.text, done.dropped, done.cut), (GOOD, "", 1))
 
-    def test_a_clause_the_ai_quotes_is_cut_and_the_paragraph_kept(self):
+    def test_a_sentence_holding_words_the_ai_quotes_is_cut_whole(self):
+        # cut-off sentence left after a clause was cut ("handling noisy, a skill that ...", 2026-11-08)
+        verdict = {"supported": False, "unsupported": ["serves a regional hospital"], "context_ok": True,
+                   "role_ok": True}
+        done = self.settle(FakeAI([f"{GOOD} It ranks my notes and serves a regional hospital."], verdict))
+        self.assertEqual((done.text, done.dropped, done.checks), (GOOD, "", []))
+
+    def test_a_doubted_sentence_the_paragraph_cannot_lose_is_kept_whole_and_listed(self):
+        # cut-off sentence left after a clause was cut, where the sentence itself could not go (2026-11-08)
         verdict = {"supported": False, "unsupported": ["serves a regional hospital"], "context_ok": True,
                    "role_ok": True}
         text = f"{GOOD[:-1]} and serves a regional hospital."
         done = self.settle(FakeAI([text], verdict))
-        self.assertEqual((done.text, done.dropped, done.checks), (GOOD, "", []))
+        self.assertEqual((done.text, done.dropped), (text, ""))
+        self.assertEqual(len(done.checks), 1)
 
     def test_nothing_to_say_is_dropped_with_no_check(self):
         done = self.settle(FakeAI([""]))
