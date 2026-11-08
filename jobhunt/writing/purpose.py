@@ -25,6 +25,11 @@ Design decisions, each with its reason:
   Python" and "aircrack-ng to count devices" and dropped true paragraphs (2026-11-08). A part of a system
   (`LAYER`) is the claim that went wrong, frontend work called backend and a sandbox called deployment, so
   those words need a fact naming the tool.
+- A purpose the facts give to another tool by name fails, citing that tool (`doer`, `CROSSED`): a voice
+  assistant was drafted "GPT-SoVITS to transcribe utterances" when faster-whisper did the transcribing and
+  GPT-SoVITS the voice, and an Electron app "the simulation logic in Python" when its Python was a sidecar
+  (2026-11-08). The mapping is read from the facts with no AI: a fact holding `PURPOSE_SHARE` of the
+  purpose's words that names another known tool, while no fact naming the sentence's tool holds them.
 """
 from __future__ import annotations
 
@@ -50,6 +55,7 @@ deploying deployment deployments production infrastructure container containers 
 package packaging packaged hosting hosted cloud""".split())
 AFTER = re.compile(rf"^(?P<gap>(?:\s+[\w'-]+){{0,{GAP_WORDS}}}?)\s+(?:to|for)\s+(?P<what>[^,.;:!?()]+)", re.I)
 SAID = 'says {tool} was for "{purpose}", which no fact naming {tool} says; say only what its facts say it did'
+CROSSED = 'says {tool} did "{purpose}", which its facts say {other} did; name {other}, or say only what {tool} did'
 
 
 def _tool(tool: str) -> re.Pattern:
@@ -86,9 +92,28 @@ def _purposes(sentence: str, tool: str) -> list[str]:
     return out
 
 
+def _holds(fact: str, wanted: set[str]) -> bool:
+    """True when a fact holds at least `PURPOSE_SHARE` of a purpose's word stems."""
+    return bool(wanted) and len(wanted & _stems(fact)) >= PURPOSE_SHARE * len(wanted)
+
+
+def doer(tool: str, wanted: set[str], facts: list[str], known: list[str]) -> str:
+    """Another tool the facts name as doing the purpose `wanted` (its word stems), when no fact naming `tool`
+    holds that purpose; "" else (see the module notes)."""
+    if any(_holds(f, wanted) for f in facts if drafts.names_tool(f, tool)):
+        return ""
+    for fact in (f for f in facts if _holds(f, wanted)):
+        other = next((t for t in known if t.strip() and t != tool and drafts.names_tool(fact, t)
+                      and not drafts.names_tool(t, tool)), "")
+        if other:
+            return other
+    return ""
+
+
 def unbacked(sentence: str, tools: list[str], facts: list[str], about: str, known: list[str]) -> list[str]:
-    """What is wrong with each tool of `tools` that `sentence` gives a purpose its facts do not (see the module
-    notes): `facts` are the story's facts, `about` its name and what it is, `known` every tool name."""
+    """What is wrong with each tool of `tools` that `sentence` gives a purpose its facts do not, or give to
+    another tool by name (see the module notes): `facts` are the story's facts, `about` its name and what it
+    is, `known` every tool name."""
     out = []
     anywhere = _stems("\n".join([about, *facts]))
     for tool in dict.fromkeys(t for t in tools if t.strip()):
@@ -97,6 +122,10 @@ def unbacked(sentence: str, tools: list[str], facts: list[str], about: str, know
             words = purpose_words(phrase, known, about)
             wanted = {w[:STEM] for w in words}
             layers = {w[:STEM] for w in words if w in LAYER}
+            other = doer(tool, wanted, facts, known)
+            if other:
+                out.append(CROSSED.format(tool=tool, purpose=phrase, other=other))
+                break
             if (wanted and len(wanted & anywhere) < PURPOSE_SHARE * len(wanted)) or layers - own:
                 out.append(SAID.format(tool=tool, purpose=phrase))
                 break

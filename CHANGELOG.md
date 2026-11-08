@@ -231,7 +231,11 @@ What changed in each version, in plain words.
   C++ knowledge when the module never names C++. A sentence that says what a tool was for now needs that
   purpose in your facts about the work, and a part of a system (backend, deployment, database) in a fact
   naming the tool; a module named with a tool needs the module's own entry to
-  name it, in letters, answers and messages. Either is written once more when it does not.
+  name it, in letters, answers and messages. Either is written once more when it does not. A sentence that
+  gives one tool a job your facts give another tool ("GPT-SoVITS to transcribe" when faster-whisper did the
+  transcribing) is written once more naming the right one, and a project's paragraph names only the tools
+  its facts name, unless they name none (a LIDAR project was said to use Python because Python was on its
+  tool list).
 - **The advert's words stay the advert's.** Phrases such as "low-latency systems" or "help clients bring
   their ideas to life" went from the advert into sentences about your own work, as if you had done them. A
   sentence about your work that takes three or more of the advert's words in a row, words your facts do

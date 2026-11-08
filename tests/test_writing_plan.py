@@ -214,6 +214,15 @@ class Stories(unittest.TestCase):
                                       "Tide gauge has logged since 2024"), "its items first, then its own quotes")
         self.assertEqual((tide.where, tide.use, tide.tools), ("personal project", "sensor data", ("Lua",)))
 
+    def test_a_story_keeps_only_the_tools_its_facts_name_unless_they_name_none(self):
+        # a LIDAR project was drafted "using Lua and Python" when no fact of it named Python (2026-11-08)
+        lidar = {**TIDE, "name": "LIDAR mapper", "tools": ["Lua", "Python"], "summary": "Maps rooms with a LIDAR."}
+        story = plan.card_story({**lidar, "quotes": ["LIDAR mapper reads each sweep in Lua"]})
+        self.assertEqual(story.tools, ("Lua",))
+        self.assertNotIn("Python", story.words())
+        self.assertEqual(plan.card_story({**lidar, "quotes": ["LIDAR mapper reads each sweep"]}).tools,
+                         ("Lua", "Python"), "with no tool named, the card's list is all there is")
+
     def test_a_story_reads_as_plain_sentences_under_its_name(self):
         ferry = self.stories[0].block()
         self.assertEqual(ferry, "Project: Ferry planner\nWhere it was done: university team project\nYour part: built "

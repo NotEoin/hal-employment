@@ -48,6 +48,10 @@ Design decisions, each with its reason:
   plan items first, then its own quotes, `STORY_FACTS` in all, its tools, part and where it was done), so a
   paragraph drafted from it has no other project's facts to borrow. An item tied to no card is a story of
   its own (a passage's items one story per file), and a skills list is never one, as it tells no work.
+- A story's tools are the card's tools its facts, name or summary name (`own_tools`), or all of them when they
+  name none, as a card's tool list may be the only place its language is given: a LIDAR project was drafted
+  "using Lua and Python" when no fact of it named Python, which came from the card's tool list, such as a
+  repository's count of file types that includes one helper script (2026-11-08).
 - The plan says what each piece of evidence can help with in this job (`Item.use`), in the model's own
   words, so a paragraph's one link to the job names a task or a system rather than the advert's
   requirement: graders marked down "satisfies the requirement for" and the like in every pack (2026-11-08).
@@ -374,9 +378,18 @@ def _story(key: str, items: list[Item], card: dict | None, module: str = "") -> 
                      planned=plans, use=use, kind=MODULE if module else PROJECT if project else OTHER)
     context = card.get("context", "") or first.context
     return Story(key, card["name"], _where(card, context), context, card.get("role", "") or first.role,
-                 card.get("summary", ""), tuple(card.get("tools") or ()), facts, plans,
+                 card.get("summary", ""), own_tools(card, facts), facts, plans,
                  tuple(card.get("planned") or ()), use, card.get("tag", ""), tuple(card.get("aliases") or ()), card,
                  JOB if card.get("kind") == JOB else PROJECT)
+
+
+def own_tools(card: dict, facts: tuple[str, ...] = ()) -> tuple[str, ...]:
+    """A card's tools a story about it may say: those its facts, name or summary name, or every one of them when
+    they name none (see the module notes)."""
+    tools = tuple(str(t) for t in card.get("tools") or () if str(t).strip())
+    said = "\n".join([card.get("name", ""), card.get("summary", ""), *facts])
+    named = tuple(t for t in tools if drafts.names_tool(said, t))
+    return named or tools
 
 
 def _file_project(item: Item) -> str:

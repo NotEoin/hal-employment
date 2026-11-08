@@ -10,7 +10,8 @@ import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt.writing import purpose
 
-KNOWN = ["Docker", "React", "FastAPI", "Flask", "Python", "C++", "Lua"]
+KNOWN = ["Docker", "React", "FastAPI", "Flask", "Python", "C++", "Lua", "faster-whisper", "GPT-SoVITS", "TypeScript",
+         "Electron"]
 SANDBOX = ["Wrenbot runs each agent's code in a Docker sandbox", "Wrenbot has a React dashboard for the frontend"]
 ABOUT = "Wrenbot\nA helper that runs coding agents safely"
 
@@ -55,6 +56,31 @@ class Purposes(unittest.TestCase):
     def test_a_purpose_word_counts_by_its_stem(self):
         facts = ["Gullwing packages its route planner in Docker images"]
         self.assertEqual(found("I used Docker for packaging the planner.", ["Docker"], facts, "Gullwing"), [])
+
+
+
+class Crossed(unittest.TestCase):
+    """A voice assistant was drafted "GPT-SoVITS to transcribe utterances" when faster-whisper transcribed, and an
+    Electron app "the simulation logic in Python" when its Python was a sidecar (2026-11-08)."""
+
+    VOICE = ("Parrot transcribes each utterance with faster-whisper", "Parrot speaks its replies with GPT-SoVITS")
+    SIM = ("Shoal runs its simulation engine in TypeScript inside Electron",
+           "A small Python sidecar exports the results to CSV")
+
+    def test_a_purpose_the_facts_give_another_tool_is_found_citing_that_tool(self):
+        said = "I used GPT-SoVITS to transcribe utterances in Parrot."
+        self.assertEqual(found(said, ["GPT-SoVITS"], list(self.VOICE), "Parrot"),
+                         [purpose.CROSSED.format(tool="GPT-SoVITS", purpose="transcribe utterances",
+                                                 other="faster-whisper")])
+        self.assertEqual(found("I wrote the simulation logic in Python.", ["Python"], list(self.SIM), "Shoal"),
+                         [purpose.CROSSED.format(tool="Python", purpose="simulation logic", other="TypeScript")])
+
+    def test_the_tool_its_facts_tie_to_the_purpose_is_fine(self):
+        for said, tool in (("I used faster-whisper to transcribe utterances in Parrot.", "faster-whisper"),
+                           ("I used GPT-SoVITS to speak the replies.", "GPT-SoVITS"),
+                           ("I used Python to export the results.", "Python")):
+            with self.subTest(said):
+                self.assertEqual(found(said, [tool], [*self.VOICE, *self.SIM], "Parrot"), [])
 
 
 if __name__ == "__main__":

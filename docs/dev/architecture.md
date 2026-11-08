@@ -484,6 +484,10 @@ runs: tests use `tests/support/fake_claude/`.
   the job's requirements name and no paragraph shows, best mark first (`plan.relevant_modules`, at most
   `plan.MODULE_CLAUSE` (2), from `profile.writing.marked_modules`), go to the opening's request
   (`frame.Facts.modules`) for one clause.
+- A story's tools (`plan.own_tools`) are its card's tools that its facts, name or summary name, or all of
+  them when they name none: a LIDAR project was drafted "using Lua and Python" when only the card's tool
+  list gave Python (2026-11-08), so a tool no fact names is not the story's and a paragraph naming it is
+  drafted again.
 - Paragraphs (`writing/paragraphs.py`): a letter whose plan tells any story is `pack._story_letter`: up to
   `plan.LETTER_STORIES` (3) stories, each drafted in its own call from its own story alone (prompt
   `story_paragraph`, shape `paragraphs.letter(cvdocs.letter_words, n)`: 3 to 4 sentences, a share of the
@@ -508,7 +512,9 @@ runs: tests use `tests/support/fake_claude/`.
   `purpose.GENERAL` words, tool names and the work's name aside, compared by their first `purpose.STEM` (6)
   letters, must be at least `purpose.PURPOSE_SHARE` (half) in the story's facts or in its name and summary,
   and a part of a system (`purpose.LAYER`: backend, deployment, database ...) must be in a fact naming the
-  tool: Docker "to package the application" was an agent sandbox, 2026-11-08); `taught`'s module
+  tool: Docker "to package the application" was an agent sandbox, 2026-11-08; and a purpose a fact gives to
+  another known tool by name, when no fact naming the sentence's tool holds it, fails citing that tool,
+  `purpose.doer`, `purpose.CROSSED`: "GPT-SoVITS to transcribe utterances" when faster-whisper transcribed); `taught`'s module
   checks; the work unnamed in the first sentence; too few sentences; and the writing rules' high hits.
   When they find nothing and the paragraph says more than its facts' own words (`paragraphs.restates`),
   one AI call checks it against its story (`verify`, prompt `paragraph_verify`); quoted words its facts or
