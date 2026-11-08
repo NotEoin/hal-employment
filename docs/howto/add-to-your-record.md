@@ -63,6 +63,17 @@ it that is a code project, or that has files of its own (a design brief, drawing
 own project. Folders that only hold more folders are left out. If the folder you give is one code project
 itself, Hal reads it as that one project.
 
+## Portfolios, web pages and online documents
+
+**Portfolio site** takes the page that lists your work: a Behance, Dribbble or ArtStation profile, or your
+own site's projects page. Hal lists the pieces it finds there. Open **Pick pieces to add** under the site,
+tick the pieces you want, and press **Add the ticked pieces**. Each one becomes its own project.
+
+**Web page or online document** takes one page: a published article, a blog post, a project page, or a
+Google Doc or Slides shared with anyone who has the link. Hal takes the title, the date, the tools and
+materials the page names (such as Figma, Excel or screen printing) and your role when the page says it in a
+line like "Role: Lead designer". The AI writes the summary from the page's own words only.
+
 How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-record-jobhuntsections).
 
 | Symptom | Fix |
@@ -83,4 +94,6 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | A code project says "None of the changes are yours" | Hal found none of its changes under your name or email. If you made it, press **This is mine**, and add the name or email you used to **Other names you go by**. |
 | "GitHub has no project at this link that Hal can see." | Check the link. For a private project, add a GitHub token under **Settings**, **CV and documents**, then press **Read again**. |
 | A project you removed from your GitHub account does not come back | Hal remembers you removed it. Add its link with **Link to one code project** to bring it back. |
+| A portfolio shows no **Pick pieces to add** | Hal found no links to pieces on that page. Add the page that lists your work, or add each piece with **Web page or online document**. |
+| A project from a web page has no role | The page does not say your role in a line like "Role: ...". Add it on the project's card with **Edit**. |
 | A code project has no "sole author" or "contributor" line | It has no history Hal can read (an uploaded copy often has none), so Hal shows its file dates instead. |

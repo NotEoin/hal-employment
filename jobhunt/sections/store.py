@@ -189,7 +189,8 @@ def _project_shape(r: sqlite3.Row, found: dict) -> dict:
         m = {}
     m = m if isinstance(m, dict) else {}
     return {"parent_id": r["parent_id"], "what_changed": r["what_changed"],
-            "not_yours": bool(found.get("not_yours")), "theirs": bool(m.get("theirs"))}
+            "not_yours": bool(found.get("not_yours")), "theirs": bool(m.get("theirs")),
+            "pieces": list(found.get("pieces") or []), "picked": list(m.get("picked") or [])}
 
 
 def listing(con: sqlite3.Connection, section: str | None = None, target: int | None = None) -> list[dict]:
@@ -245,9 +246,15 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
     """
     r = row(con, source_id)
     unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "current", "section", "module",
-                                     "dissertation", "theirs"})
+                                     "dissertation", "theirs", "picked"})
     if unknown:
         raise ValueError(f"A source has no {', '.join(unknown)} to change.")
+    if "picked" in changes:
+        picked = changes["picked"]
+        if r["doc_kind"] != "portfolio_site" or not isinstance(picked, list) or not all(
+                isinstance(u, str) and u.startswith(("http://", "https://")) for u in picked):
+            raise ValueError("Pick pieces of a portfolio site by their web addresses.")
+        set_meta(con, r["id"], picked=sorted(set(picked)))
     if "theirs" in changes:
         if not isinstance(changes["theirs"], bool) or r["section"] != "project":
             raise ValueError("Only a project can be marked as yours: true or false.")

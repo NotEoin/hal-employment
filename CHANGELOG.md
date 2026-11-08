@@ -67,6 +67,10 @@ What changed in each version, in plain words.
   a copy of each, so it still reads them when GitHub is down. Private projects need a GitHub token.
 - **Add a folder of projects.** Give Hal the folder on this computer where you keep your projects, and each
   project folder inside becomes its own project, code or not.
+- **Add a portfolio, a web page or an online document.** A portfolio site (Behance, Dribbble, ArtStation
+  or your own) lists its pieces, and each one you tick becomes a project. A single page, article or shared
+  Google Doc becomes a project with its title, date, the tools and materials it names, and your role when it
+  states it.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

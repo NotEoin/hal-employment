@@ -73,7 +73,7 @@ from jobhunt.web.router import BadRequest, NotFound, NotHere, Request, route
 
 PREFIX = "/api/v2/record/sources"
 FILE_FIELD, PATH_FIELD = "file", "path"
-REREAD_ON = ("section", "doc_kind", "target_id", "module", "starred", "dissertation", "theirs")
+REREAD_ON = ("section", "doc_kind", "target_id", "module", "starred", "dissertation", "theirs", "picked")
 
 
 def _session(req: Request) -> str | None:

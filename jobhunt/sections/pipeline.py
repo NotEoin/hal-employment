@@ -47,6 +47,7 @@ from jobhunt.sections import (
     github,
     lecture,
     letters,
+    pages,
     readers,
     registry,
     repo,
@@ -57,7 +58,7 @@ from jobhunt.sections import cv as cv_reader
 
 log = logging.getLogger(__name__)
 # The sections' own reader modules: each puts its readers in place (`readers.register`) when it is imported.
-READER_MODULES = (cv_reader, coursework, documents, folders, github, lecture, letters, repo)
+READER_MODULES = (cv_reader, coursework, documents, folders, github, lecture, letters, pages, repo)
 CHUNK = 1 << 20            # files are hashed 1 MiB at a time
 SKIPPED_PARTS = {"__MACOSX", ".git", ".DS_Store", "Thumbs.db", "desktop.ini"}
 ZIP = ".zip"

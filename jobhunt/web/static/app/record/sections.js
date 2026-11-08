@@ -112,7 +112,8 @@ function SourceRow({ s }) {
           "Marked as a " + s.suggestion_kind_label.toLowerCase() + ". Hal is reading it again.")}>Mark it as a ${s.suggestion_kind_label.toLowerCase()}</button><//>`}
       ${s.not_yours && !s.theirs && html`<${Note} tone="info">None of the changes are yours, so Hal made no card from it.
         <button type="button" class="btn small" aria-label=${"This is mine: " + s.title} onClick=${() => act(() => put(path, { theirs: true }),
-          "Hal is reading it again as yours.")}>This is mine</button><//>`}</div>
+          "Hal is reading it again as yours.")}>This is mine</button><//>`}
+      ${s.pieces && s.pieces.length > 0 && html`<${PiecePicker} s=${s} path=${path} />`}</div>
     <div class="row wrap rec-acts">
       ${s.can_star && html`<button type="button" class="btn small" aria-pressed=${s.starred ? "true" : "false"}
         aria-label=${(s.starred ? "Take out of your showcase: " : "Showcase: ") + s.title}
@@ -130,6 +131,20 @@ function SourceRow({ s }) {
         onClick=${() => act(() => post(path + "/reread"), "Hal is reading it again.")}><${Icon} n="refresh" c="s" />Read again</button>
       <button type="button" class="btn danger small" aria-label=${"Remove: " + s.title}
         onClick=${() => act(() => del(path), "Removed, with what Hal took from it.")}><${Icon} n="trash" c="s" />Remove</button></div></li>`;
+}
+
+/** The pieces a portfolio lists, to tick the ones to add as projects; each ticked piece becomes its own project. */
+function PiecePicker({ s, path }) {
+  const [ticked, setTicked] = useState(() => new Set(s.picked || []));
+  const flip = url => setTicked(old => { const next = new Set(old); next.has(url) ? next.delete(url) : next.add(url); return next; });
+  const uid = "rec-pieces-" + s.id;
+  return html`<details class="rec-pieces"><summary>Pick pieces to add (${plural(s.pieces.length, "piece")} found)</summary>
+    <fieldset class="stack s"><legend class="small sub">Each piece you tick becomes its own project.</legend>
+      ${s.pieces.map((p, i) => html`<label class="row" for=${uid + "-" + i}>
+        <input type="checkbox" id=${uid + "-" + i} checked=${ticked.has(p.url)} onChange=${() => flip(p.url)} />
+        <span>${p.title || p.url}</span></label>`)}
+      <div><button type="button" class="btn small primary" onClick=${() => act(() => put(path, { picked: [...ticked] }),
+        "Hal is adding the pieces you ticked.")}>Add the ticked pieces</button></div></fieldset></details>`;
 }
 
 /** The sources of one section (for one card when `target` is given). */

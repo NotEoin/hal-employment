@@ -1355,6 +1355,16 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   `PROJECTS_MAX`; hidden and junk folders and shelves of only folders are skipped, nothing deeper is
   searched). A folder that is itself a code project is read as that one project. The `repo` reader reads a
   child that is not code as its files' text (`repo.files_reading`, up to `FOLDER_FILES_MAX` files).
+- Pages (`sections/pages.py`): `page` (`PageReader`) fetches one page by itself with `ingest.web._open` (a
+  Google Doc or Slides link through `web.fetch`'s export address) and reads it as a project: the title, a
+  date (`article:published_time`, `<time datetime>`, else the first date in the words), the person's role as
+  a "Role:" or "My role:" line states it, the tools and media of `NAMED` (code tools of `stack.TOOLS` and the
+  programs and media of other fields in `MEDIA`) that the words name, pictures' alt text, and a summary and
+  quoted facts by `repo.ai_reading` from the page's words only. `portfolio` (`PortfolioReader`) lists an
+  index's candidate pieces (`pieces`: same-site links deeper than the index or shaped like a piece,
+  `PIECE_PATHS`, never `NOT_PIECES`) in `details.pieces`; `PUT .../sources/{id}` with `{"picked": [urls]}`
+  keeps the person's picks in `meta.picked` and reads it again, and each picked piece becomes a `web_page`
+  child. Details keep the page's `etag` and a `hash` of its words for `pages.check`.
 
 ## Profile (`jobhunt/profile/`)
 

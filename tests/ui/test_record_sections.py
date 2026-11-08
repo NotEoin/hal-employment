@@ -15,6 +15,7 @@ from unittest import mock
 from support import repos
 from support.api import HalServer
 from support.fake_github import FakeGitHub
+from support.fake_site import FakeSite
 from support.ui import AppPage, chromium, skip_unless_browser
 
 from jobhunt import db, record
@@ -189,11 +190,11 @@ class RecordSections(unittest.TestCase):
         p = self.page("record-projects")
         panel = self.panel(p, "Add projects")
         for words in ("Upload a folder", "Your GitHub account", "Link to one code project",
-                      "A folder on this computer"):
+                      "A folder on this computer", "Portfolio site", "Web page or online document"):
             self.assertTrue(panel.get_by_role("button", name=words).is_enabled(), words)
-        for words in ("Portfolio site", "Web page or online document", "Add one by hand"):
+        for words in ("Add one by hand",):
             self.assertTrue(panel.get_by_role("button", name=words).is_disabled(), words)
-        self.assertEqual(panel.get_by_text("Coming soon").count(), 3)
+        self.assertEqual(panel.get_by_text("Coming soon").count(), 1)
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Tide gauge"))
         p.shows(card.get_by_text("from your CV only"), "the mark on a project only a CV gives")
         card.get_by_role("button", name="Showcase: Tide gauge").click()
@@ -234,6 +235,23 @@ class RecordSections(unittest.TestCase):
             p.shows(panel.locator("li.rec-source.rec-child", has_text=name), name)
             p.page.locator("article.rec-item", has=p.page.locator("h3", has_text=name)).wait_for()
         self.clean(p)
+
+    def test_a_portfolio_offers_its_pieces_and_a_ticked_piece_becomes_a_project(self) -> None:
+        site = self.enterContext(FakeSite())
+        index = site.saved("/work/", "portfolio.html")
+        site.saved("/work/harbour-posters/", "harbour-posters.html")
+        p = self.page("record-projects")
+        panel = self.panel(p, "Add projects")
+        panel.get_by_role("button", name="Portfolio site").click()
+        panel.get_by_label("Portfolio site").fill(index)
+        panel.get_by_role("button", name="Add", exact=True).click()
+        picker = panel.locator("details.rec-pieces")
+        picker.locator("summary").click()
+        picker.get_by_label("Three screen-printed harbour posters").check()
+        self.clean(p)
+        picker.get_by_role("button", name="Add the ticked pieces").click()
+        p.shows(panel.locator("li.rec-source.rec-child", has_text="Harbour posters"), "the piece")
+        p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Harbour posters")).wait_for()
 
 
 if __name__ == "__main__":

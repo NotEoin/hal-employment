@@ -18,6 +18,7 @@ from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
 from jobhunt.profile import store as profile_store
+from jobhunt.sections import readers
 from jobhunt.web import router
 
 WAIT_S = 10
@@ -84,7 +85,7 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual((got["coursework"]["target"], got["coursework"]["target_required"]), ("education", True))
         self.assertTrue(all(k["ready"] for k in got["document"]["doc_kinds"]))
         self.assertEqual({k["id"] for k in got["project"]["doc_kinds"] if k["ready"]},
-                         {"repo", "upload", "repo_url", "github_account", "local_folder"})
+                         {"repo", "upload", "repo_url", "github_account", "local_folder", "portfolio_site", "web_page"})
         held = {k["id"]: k["held"] for k in got["project"]["doc_kinds"]}
         self.assertEqual((held["github_account"], held["local_folder"], held["web_page"], held["upload"]),
                          ("account", "folder", "link", "files"))
@@ -117,6 +118,8 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual(status, 404)
 
     def test_a_link_whose_reader_is_still_to_come_waits_and_says_why(self):
+        before = readers.register(readers.Stub("page", readers.PROJECT_PHASE))
+        self.addCleanup(readers.register, before)
         r = self.c.post("/api/v2/record/sources/project/link", {"locator": "https://example.org/avery/tide-gauge",
                                                                 "doc_kind": "web_page"})
         self.assertEqual(r.status, 200, r.text)
