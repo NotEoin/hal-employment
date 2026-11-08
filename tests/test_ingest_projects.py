@@ -161,6 +161,21 @@ class ProjectFolders(unittest.TestCase):
         self.assertEqual(sorted(e["source_rel"].rsplit("/", 1)[-1] for e in cards["Sensor bench"]["evidence"]),
                          ["Mount plan.md", "README.md"], "a plan with no other project's name is the bench's")
 
+    def test_a_ticket_id_in_capitals_is_not_an_acronym_tying_it_to_another_project(self):
+        # "LIT-MEMORY_EXPERIENCE-01" made "memory" and "experience" acronyms, so tickets naming a word of
+        # another project kept cards of their own (2026-11-08)
+        reply = naming({"Tide note": ["Tide system"], "LCT-001 Tide clock": ["LIT-SYSTEM_DESIGN-01"]})
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": reply}):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            put(files, "Elsewhere/Tide note.md", "# Tide note\n\nMy tide system logs the harbour's tides each hour.")
+            run(con, [files / "Elsewhere"], batch="b0", origins={str(files / "Elsewhere"): "mine"})
+            self.read(con, files)
+            cards = project_cards(con)
+        self.assertIn("Tide system", cards)
+        self.assertNotIn("LIT-SYSTEM_DESIGN-01", cards, "a ticket sharing only a common word is the folder's")
+        self.assertEqual(projects.distinctive_words("LIT-SYSTEM_DESIGN-01 GPU LIDAR"), {"lit", "gpu", "lidar"})
+
     def test_a_module_folder_of_course_material_still_holds_two_coursework_projects(self):
         module = {"GEO101/README.md": "# GEO101\n\nModule handbook.",
                   "GEO101/Week 1 notes.md": "# Week 1\n\nRivers.", "GEO101/Week 2 notes.md": "# Week 2\n\nTides.",

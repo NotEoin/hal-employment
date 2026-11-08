@@ -797,7 +797,8 @@ runner starts the action again with the same batch and only pending items are re
    another of the person's projects (`projects.Others`): a card a file outside the folder, a CV, letter or
    transcript, or the person speaks for (with the names of cards merged into it), a repository or another
    project folder, matched by `merge.same_item`,
-   `merge._name_close` or a distinctive word only that one name shares (an acronym, or a word of
+   `merge._name_close` or a distinctive word only that one name shares (an acronym of at most
+   `projects.ACRONYM_MAX` (5) capitals, so "SYSTEM" in a ticket id is the word "system", or a word of
    `projects.DISTINCT_MIN` (5) or more letters not in `projects.GENERIC_WORDS`). A document naming
    `merge.LISTING_NAMES` (3) or more projects inside the folder follows the same rule, so a dossier keeps
    the projects that have their own repositories while a research note naming three of the folder's tickets

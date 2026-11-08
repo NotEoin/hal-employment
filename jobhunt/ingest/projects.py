@@ -59,6 +59,9 @@ ORIGINAL = "\n## Original\n"
 WHY = "Part of {name}"
 # A name's words: "LIDAR", "GPU" in "GPUScheduler", "Lidar" and "Autonavigation" in "Lidar-Autonavigation-System"
 WORD = re.compile(r"[A-Z]{2,}(?![a-z])|[A-Z]?[a-z]+")
+# An acronym is short ("GPU", "RAG", "LIDAR"); a longer word in capitals is an ordinary word written loud, as in
+# a ticket id: "LIT-MEMORY_EXPERIENCE-01" made "memory" and "experience" acronyms (2026-11-08).
+ACRONYM_MAX = 5
 # A shared word this long ties two names unless it is common in project names; "voice" in "Voice interface"
 # and the repository "hal-voice" does, "tool" or "data" never (2026-11-08).
 DISTINCT_MIN = 5
@@ -101,8 +104,9 @@ def _repo_names(con: sqlite3.Connection) -> list[str]:
 
 
 def _words(name: str) -> dict[str, bool]:
-    """A name's words, lower case, each with whether it is written as an acronym ("LIDAR", "GPU")."""
-    return {w.lower(): w.isupper() for w in WORD.findall(name or "")}
+    """A name's words, lower case, each with whether it is written as an acronym: in capitals and at most
+    `ACRONYM_MAX` letters ("LIDAR", "GPU"), so "SYSTEM" in a ticket id is the ordinary word "system"."""
+    return {w.lower(): w.isupper() and len(w) <= ACRONYM_MAX for w in WORD.findall(name or "")}
 
 
 def _distinctive(word: str, acronym: bool) -> bool:
@@ -110,8 +114,9 @@ def _distinctive(word: str, acronym: bool) -> bool:
 
 
 def distinctive_words(name: str) -> set[str]:
-    """The words of a name that can tie it to another, lower case: acronyms, and words of `DISTINCT_MIN` or
-    more letters not in `GENERIC_WORDS`. A repository's name splits on "-", "_" and case ("probe_sniffer")."""
+    """The words of a name that can tie it to another, lower case: acronyms (`_words`), and words of
+    `DISTINCT_MIN` or more letters not in `GENERIC_WORDS`. A repository's name splits on "-", "_" and case
+    ("probe_sniffer")."""
     return {w for w, acronym in _words(name).items() if _distinctive(w, acronym)}
 
 
