@@ -1,9 +1,10 @@
 """Migration 0027: cards of the profile folded into another card that is the same experience, with the way back.
 
 `profile_items.merged_into` is the card this one was folded into (NULL when none); such a card is hidden.
-`profile_items.merged_why` is Hal's few plain words on why ("Part of Lantern workspace").
-`profile_evidence.moved_from` is the card a piece of evidence was on before it was moved to the card it was
-folded into (NULL when it never moved), so where it came from is never lost (`profile.store`).
+`profile_items.merged_why` is Hal's few plain words on why ("Part of Lantern workspace"), or `apart` when the
+person undid a merge, so Hal never merges that card again on its own. `profile_evidence.moved_from` is the card
+a piece of evidence was on before it was moved to the card it was folded into (NULL when it never moved), so
+a merge can be undone (`profile.store`).
 """
 
 from jobhunt.core.db.migrate import add_column

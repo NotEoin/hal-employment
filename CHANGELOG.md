@@ -70,6 +70,11 @@ What changed in each version, in plain words.
   quotes to one project card instead of each becoming a project of its own. A CV kept in the folder, and a
   note about another of your projects, still count as they are. **Tidy my record** folds the cards an
   older Hal made of such a folder's notes into its one card, unless you checked them.
+- **One card for an experience found under several names.** After reading your files, Hal merges the
+  projects, courses and achievements it found more than once under different names (a working title and a
+  final title, a folder's name and the name on your CV) into one card with all their files, keeping your
+  CV's name. Check your record lists them under **Hal merged these** with **Undo**, which shows them apart
+  again for good. Cards you confirmed or edited are never merged.
 - **Private files stay out of your record.** When Hal reads a folder or zip, files that look like bank
   details, a passport or ID card, a payslip or tax form, medical information, a date of birth with a
   passport or licence number, or passwords and keys are not filed, not sent to the AI and give no facts.

@@ -67,12 +67,17 @@ Routes:
   returns CONFLICT, now resolved.
 - `GET /api/v2/profile/check`: the best experiences (`check.best`) and the Check your record queue
   (`check.queue`): {"best": [ITEM], "archived": [ITEM], "conflicts": [NAMED_CONFLICT],
-  "cards": [CARD], "more": [CARD], "studied": [ITEM], "done": n, "total": n}. A card (`CARD`) is
+  "cards": [CARD], "more": [CARD], "studied": [ITEM], "merged": [{"item": ITEM, "merged": [ITEM]}],
+  "done": n, "total": n}. A card (`CARD`) is
   {"type": "item" | "skills", "key", "source_rel", "file_id", "items": [ITEM], "best": [evidence id]}: an item
   card holds one item and no file (`source_rel` "", `file_id` null); a skills card holds the skills that rest
   most on one file. `best` gives, for each item, the id of the source whose quote to show.
   `more` is what the page keeps under "Show more"; `studied` the skills only course material names
-  (`store.is_studied`), shown apart; `done` of `total` is the progress bar.
+  (`store.is_studied`), shown apart; `merged` each card Hal merged others into after a read
+  (`duplicates.listing`), with the cards hidden into it; `done` of `total` is the progress bar.
+- `POST /api/v2/profile/items/{id}/unmerge`: takes the cards Hal merged into this one back out, as they were,
+  and Hal never merges them on its own again (`duplicates.undo`); ITEM. A card Hal merged nothing into is
+  400.
 - `PUT /api/v2/profile/items/{id}/tier` {"tier": "archive"}: the person's tier for an experience, which Hal
   never changes; ITEM. A tier that is not core, supporting or archive, or an item with no tier, is 400.
 - `PUT /api/v2/profile/items/{id}/context` {"context": "personal"}: where the person says an experience was
@@ -86,7 +91,7 @@ from __future__ import annotations
 
 from jobhunt.core import events, runner
 from jobhunt.evidence.routes import file_id
-from jobhunt.profile import actions, check, conflicts, contexts, store, tiers
+from jobhunt.profile import actions, check, conflicts, contexts, duplicates, store, tiers
 from jobhunt.web.router import BadRequest, Conflict, NotFound, Request, route
 
 PREFIX = "/api/v2/profile"
@@ -139,6 +144,8 @@ def check_queue(req: Request) -> dict:
     return {"best": [with_files(i) for i in top["best"]], "archived": [with_files(i) for i in top["archived"]],
             "conflicts": named(req.con, found["conflicts"]), "cards": _cards(found["cards"]),
             "more": _cards(found["more"]), "studied": [with_files(i) for i in found["studied"]],
+            "merged": [{"item": with_files(m["item"]), "merged": [with_files(i) for i in m["merged"]]}
+                       for m in duplicates.listing(req.con)],
             "done": found["done"], "total": found["total"]}
 
 
@@ -184,6 +191,15 @@ def edit(req: Request) -> dict:
 def confirm(req: Request) -> dict:
     """The person checked this item and it is right."""
     return _changed(store.confirm(req.con, req.params["item_id"]))
+
+
+@route("POST", PREFIX + "/items/{item_id}/unmerge")
+def unmerge(req: Request) -> dict:
+    """Takes the cards Hal merged into this one back out; Hal never merges them on its own again."""
+    try:
+        return _changed(duplicates.undo(req.con, req.params["item_id"]))
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
 
 
 @route("PUT", PREFIX + "/items/{item_id}/tier")

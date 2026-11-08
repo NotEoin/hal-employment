@@ -124,6 +124,24 @@ export function StudiedSkills({ items }) {
   </details>`;
 }
 
+/** The cards Hal merged after reading the person's files because they were one experience under different
+    names, each with Undo, which puts them back as they were and keeps them apart. */
+export function MergedCards({ groups }) {
+  const [busy, setBusy] = useState(false);
+  const undo = async g => {
+    setBusy(true);
+    await act(() => post("/profile/items/" + encodeURIComponent(g.item.id) + "/unmerge"), "Undone. Hal shows them apart again.");
+    setBusy(false);
+  };
+  return html`<details class="rec-hidden rec-check-merged">
+    <summary>Hal merged these (${groups.length} ${groups.length === 1 ? "experience" : "experiences"})</summary>
+    <p class="small sub rec-line">Hal found each of these more than once under different names, so it keeps one card with all their files. If they are really different, press <b>Undo</b> and Hal shows them apart and leaves them apart.</p>
+    <ul class="rec-check-merged-list">${groups.map(g => html`<li key=${g.item.id}>
+      <span><b>${g.item.title}</b><span class="small sub"> also found as ${g.merged.map(i => i.title).join(", ")}</span></span>
+      <button type="button" class="btn small" disabled=${busy} aria-label=${"Undo: " + g.item.title} onClick=${() => undo(g)}>Undo</button></li>`)}</ul>
+  </details>`;
+}
+
 /** One open conflict, asked as "Which is right?" with the choices it takes. */
 export function ConflictCheck({ c }) {
   const about = (c.items || []).map(i => i.title).join(" and ");

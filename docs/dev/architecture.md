@@ -1036,6 +1036,23 @@ available yet.
   (`tiers.shown`), with the rules applied again on read, so a card the person confirms leaves the archive
   at once. The ingest action runs the pass after each read (`profile.actions.sort`), and
   `POST /api/v2/profile/tiers` starts it as the action `profile.tiers`.
+- Duplicates (`duplicates.py`, migration 0027): after each read, before sorting, the ingest action runs
+  `profile.actions.dedupe`, one pass of `duplicates.refresh(con)` over the projects, courses and achievements
+  Hal found and nobody checked (`candidates`: not hidden, `merged_why` not `apart`). Pairs with the same
+  project link (`merge.project_link`) or a shared file that is not a CV, letter or transcript are one
+  (`certain`); the rest go to the `profile_same` prompt (checker role, JSON, `duplicates.BATCH` (60) cards a
+  call, sorted by name so likely twins share a call), which answers `{"groups": [[id, ...]]}`; a pair whose
+  dates are `YEARS_APART` (2) or more years apart with no shared file is never joined (`never`), and a
+  chain of the AI's pairs that would join one is split. Each group goes into its `target` (the card a CV
+  names, then `check.strength`, then the oldest) with `store.merge_into`, as "Merged into <name>"; `refold`
+  puts a card's own sources before moved ones of the same rank, so the target keeps its name unless a
+  better-ranked file, such as the CV, names it otherwise. Without an AI only `certain` merges.
+  `duplicates.listing` gives each target with its merged cards to `GET /api/v2/profile/check` (`merged`),
+  shown as "Hal merged these" (`record/check.js`, `MergedCards`), and
+  `POST /api/v2/profile/items/{id}/unmerge` (`duplicates.undo`) takes them back out with `store.unfold`
+  and marks every card of the group `apart`, so Hal never merges them again on its own. Folded cards are
+  left out of the check queue's `done` and `total`, and a merged card's name is one of its target's
+  `writing.aliases`.
 - Contexts (`contexts.py`, migration 0026): each card of the tiered kinds has a `context` (`degree`,
   `team`, `work`, `personal`, or '' when nothing shows it) and `context_by` (`hal` or `person`). A job is
   work and a course degree work by their kind; a project, achievement or certificate is read from its fields

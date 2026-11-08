@@ -21,6 +21,9 @@ Design decisions, each with its reason:
 - Skills are ranked by their evidence (the person's own documents, how many files name them, how much the
   best file is trusted) before the groups are made, so the first ones asked about are the likeliest true.
 - Items added by hand are never queued: the person typed them, so they are already checked.
+- A card Hal folded into another (`store.fold_away`: a duplicate, or a note's card inside a project folder)
+  is neither checked nor waiting, so it is left out of `done` and `total`; the page lists the duplicates
+  apart (`duplicates.listing`).
 
 `best(con)` gives "Your best experiences", which the page shows above the queue: the jobs, courses,
 projects, achievements and certificates in the core tier, then supporting, then not yet sorted
@@ -88,7 +91,9 @@ def queue(con: sqlite3.Connection) -> dict:
     item card holds one item and a `source_rel` of "", a skills card the file its skills rest on most. `best`
     names, for each item, the source whose quote the page shows.
     """
-    found = {kind: [i for i in store.items(con, kind) if i["origin"] == "found"] for kind in store.KINDS}
+    # a card Hal folded into another (`store.fold_away`) was not checked by the person, nor is it left to check
+    found = {kind: [i for i in store.items(con, kind) if i["origin"] == "found" and i["merged_into"] is None]
+             for kind in store.KINDS}
     done = sum(i["state"] != "hal" for kind in found.values() for i in kind)
     waiting = {kind: [i for i in items if i["state"] == "hal"] for kind, items in found.items()}
     cards = []

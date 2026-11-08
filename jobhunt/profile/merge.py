@@ -539,7 +539,7 @@ def project_key(name: str) -> str:
     return " ".join(w for w in words if w not in PROJECT_WORDS) or " ".join(words)
 
 
-def _project_link(url: str) -> str:
+def project_link(url: str) -> str:
     """A link that names one project; "" for none or a profile page ("github.com/alexdoe") many share."""
     key = _url_key(url)
     host, _, path = key.partition("/")
@@ -547,7 +547,7 @@ def _project_link(url: str) -> str:
 
 
 def _same_project(a: dict, b: dict) -> bool:
-    la, lb = _project_link(a.get("link", "")), _project_link(b.get("link", ""))
+    la, lb = project_link(a.get("link", "")), project_link(b.get("link", ""))
     if la and la == lb:
         return True
     if (lb and _url_key(a.get("name", "")) == lb) or (la and _url_key(b.get("name", "")) == la):

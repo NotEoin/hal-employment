@@ -20,7 +20,8 @@ Design decisions, each with its reason:
   folded into the card it belongs to (`refile`, `fold_away`, migration 0027): its evidence moves there and
   remembers where it was (`moved_from`), and the card is hidden with `merged_into` and a few words on why
   (`merged_why`). A new fact that matches a folded card goes to the card it was folded into. Only cards
-  nobody checked are folded.
+  nobody checked are folded. A duplicate merged whole (`merge_into`) can be taken out again (`unfold`): its
+  evidence comes back and Hal never merges it on its own again (`APART`).
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
@@ -238,13 +239,17 @@ def _row_fields(row: sqlite3.Row) -> dict:
 
 
 def refold(con: sqlite3.Connection, item_id: int) -> None:
-    """Works out a found item's fields again from its sources; an item the person checked is left alone."""
+    """Works out a found item's fields again from its sources; an item the person checked is left alone.
+
+    Among sources of one rank its own come before those moved from cards merged into it, so a merged card
+    keeps its own name unless a better source, such as the person's CV, names it otherwise.
+    """
     row = con.execute("SELECT kind, state FROM profile_items WHERE id = ?", (item_id,)).fetchone()
     if row is None or row["state"] != "hal":
         return
     sources = [(merge.rank(e["doc_type"]), json.loads(e["said"]))
-               for e in con.execute("SELECT doc_type, said FROM profile_evidence WHERE item_id = ? ORDER BY id",
-                                    (item_id,))]
+               for e in con.execute("SELECT doc_type, said FROM profile_evidence WHERE item_id = ? "
+                                    "ORDER BY moved_from IS NOT NULL, id", (item_id,))]
     if not sources:
         return
     fields = merge.fold(sources)
@@ -349,6 +354,48 @@ def fold_away(con: sqlite3.Connection, item_id: int, into: int, why: str) -> Non
                     "WHERE id = ?", (into, why, db.now(), item_id))
         # a card folded into this one before goes with it, so every fold names a card that is shown
         con.execute("UPDATE profile_items SET merged_into = ? WHERE merged_into = ?", (into, item_id))
+
+
+APART = "apart"            # `merged_why` of a card the person took back out of a merge (`unfold`)
+
+
+def merge_into(con: sqlite3.Connection, item_id: int, into: int, why: str) -> None:
+    """Merges a card Hal found and nobody checked into the card `into`: its evidence moves there, remembering
+    where it was, and it is hidden as folded, saying `why`. ValueError as `fold_away`, and for a card the
+    person took out of a merge before."""
+    row = _row(con, item_id)
+    if row["merged_why"] == APART:
+        raise ValueError("You took this card out of a merge, so Hal leaves it on its own.")
+    fold_away(con, item_id, into, why)
+    with con:
+        con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = coalesce(moved_from, ?) "
+                    "WHERE item_id = ?", (into, item_id, item_id))
+        refold(con, into)
+        conflicts.refresh(con)
+
+
+def unfold(con: sqlite3.Connection, item_id: int) -> None:
+    """Takes a merged card back out of the card it was merged into: its evidence returns, it is found by Hal
+    again, and Hal never merges it again on its own (`APART`). LookupError for an unknown card, ValueError for
+    one that was not merged."""
+    row = _row(con, item_id)
+    if row["merged_into"] is None:
+        raise ValueError("That card was not merged into another.")
+    with con:
+        con.execute("UPDATE profile_evidence SET item_id = ?, moved_from = NULL WHERE moved_from = ?",
+                    (item_id, item_id))
+        con.execute("UPDATE profile_items SET state = 'hal', merged_into = NULL, merged_why = ?, updated = ? "
+                    "WHERE id = ?", (APART, db.now(), item_id))
+        refold(con, item_id)
+        refold(con, row["merged_into"])
+        conflicts.refresh(con)
+
+
+def keep_apart(con: sqlite3.Connection, item_id: int) -> None:
+    """Marks a shown card as one the person keeps apart, so Hal never merges it on its own."""
+    with con:
+        con.execute("UPDATE profile_items SET merged_why = ? WHERE id = ? AND merged_into IS NULL",
+                    (APART, _row(con, item_id)["id"]))
 
 
 def _said_by(con: sqlite3.Connection, source_rel: str) -> dict[int, list[str]]:

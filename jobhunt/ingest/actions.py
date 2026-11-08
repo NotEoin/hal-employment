@@ -1,7 +1,8 @@
 """The `record.ingest` action: one bulk read of folders, zips, the drop folder and web links into the record.
 
-After the read, the experiences in the profile are sorted into tiers (`profile.actions.sort`), so the
-Check your record page can show the best ones first.
+After the read, the experiences found twice under different names are merged (`profile.actions.dedupe`), then
+the experiences in the profile are sorted into tiers (`profile.actions.sort`), so the Check your record page
+can show the best ones first.
 
 Background work (priority 2), one at a time (`exclusive="kind"`), and resumable: after a restart the runner
 starts it again with the same params, and the batch's `ingest_items` rows say what is left. `queue` is how
@@ -18,7 +19,7 @@ from jobhunt.core import runner
 from jobhunt.ingest import engine, items, privacy, roles
 from jobhunt.profile import actions as profile_actions
 
-STEPS = engine.STEPS + 1     # the engine's steps, then sorting the experiences it found
+STEPS = engine.STEPS + 2     # the engine's steps, merging the experiences found twice, then sorting them
 
 EXAMPLE_CV = """# Robin Testwell
 
@@ -62,6 +63,8 @@ def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = 
 
     out = engine.run(ctx.con, batch, folders=folders or [], uploads=uploads or [], drop=drop, urls=urls or [],
                      again=again, tidy=tidy, step=step, progress=ctx.progress, origins=origins or {})
+    step("Merging experiences found twice")
+    profile_actions.dedupe(ctx)
     step("Sorting your experiences")
     profile_actions.sort(ctx)
     states = out["states"]

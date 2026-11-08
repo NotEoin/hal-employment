@@ -4,7 +4,8 @@
    The queue is the server's (`GET /profile/check`) and is worked out from what is checked, so leaving half
    way and coming back starts where the person stopped. Conflicts come first as "Which is right?", then the
    facts most worth checking, then skills in groups; the skills Hal is least sure of wait under "Show more",
-   and the skills only course material names are listed apart as "Studied in your course".
+   the cards Hal merged as one experience found under different names are listed with Undo under "Hal merged
+   these", and the skills only course material names are listed apart as "Studied in your course".
    Above the queue, "Your best experiences" (`record/best.js`) lists what Hal would lead with, to check first.
    When a card is answered, focus moves to the next card's heading, so the page works from the keyboard. */
 import { html, useEffect, useRef } from "../core/html.js";
@@ -14,7 +15,7 @@ import { plural } from "../core/format.js";
 import { Head, Note, Bar } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { BestExperiences } from "../record/best.js";
-import { ItemCheck, SkillsCheck, ConflictCheck, StudiedSkills } from "../record/check.js";
+import { ItemCheck, SkillsCheck, ConflictCheck, StudiedSkills, MergedCards } from "../record/check.js";
 
 const PERCENT = 100;
 
@@ -65,6 +66,7 @@ export function Check() {
       ${data.more.length > 0 && html`<details class="rec-hidden rec-check-more"><summary>Show more (${plural(data.more.reduce((n, c) => n + c.items.length, 0), "skill")} Hal is less sure of)</summary>
         <p class="small sub rec-line">Hal is less sure of these: most come from only one file, such as course notes. Keep the ones that are yours; Hal never uses the rest.</p>
         <div class="stack s">${data.more.map(c => html`<${SkillsCheck} key=${c.key} card=${c} sub=${true} />`)}</div></details>`}
+      ${(data.merged || []).length > 0 && html`<${MergedCards} groups=${data.merged} />`}
       ${(data.studied || []).length > 0 && html`<${StudiedSkills} items=${data.studied} />`}
     </div>`}`;
 }

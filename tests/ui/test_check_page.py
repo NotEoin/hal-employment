@@ -156,6 +156,22 @@ class CheckPage(unittest.TestCase):
         p.page.get_by_text("Studied in your course (1 skill)").wait_for()
         self.assertEqual(state(stream), "confirmed")
 
+    def test_cards_hal_merged_are_listed_and_undo_shows_them_apart_again(self) -> None:
+        kept = found("project", {"name": "Mill town letters"}, CV, "cv", "Mill town letters", "own")
+        twin = found("project", {"name": "Letters from the mill"}, PROJECT, "project", "Letters from the mill", "own")
+        with closing(db.connect()) as con:
+            store.merge_into(con, twin, kept, "Merged into Mill town letters")
+        p = self.page()
+        merged = p.page.locator("details.rec-check-merged")
+        p.shows(merged, "the merges, apart from the queue")
+        self.assertIn("Hal merged these (1 experience)", merged.inner_text())
+        merged.locator("summary").click()
+        self.assertIn("also found as Letters from the mill", merged.inner_text())
+        self.clean(p)
+        merged.get_by_role("button", name="Undo: Mill town letters").click()
+        merged.wait_for(state="detached")
+        self.assertEqual(state(twin), "hal")
+
     def test_the_best_experiences_come_first_and_each_can_be_confirmed_archived_or_moved_up(self) -> None:
         job = found("job", {"title": "Collections volunteer", "employer": EMPLOYER, "start": "2023-09",
                             "current": True}, quote="Collections volunteer", role="own")

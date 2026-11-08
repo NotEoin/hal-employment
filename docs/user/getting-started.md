@@ -437,6 +437,13 @@ Skills that only your course material names, such as the topics of a lecture, ar
 CV and out of your letters. If you have used one in your own work, press **I have used this** beside it.
 One skill written several ways ("python-scripting", "Python scripting") is one entry, shown in normal case.
 
+After reading your files, Hal looks for a project, course or achievement it found more than once under
+different names, such as a project's working title and its final title, or the name on your CV and the
+name of its folder. It keeps one card with all their files, named as your CV names it when your CV has it,
+and lists what it merged under **Hal merged these**. If two of them are really different, press **Undo**:
+Hal shows them apart again and never merges them on its own after that. Hal never merges a card you
+confirmed or edited, and never two whose dates are years apart unless one file names both.
+
 ## What Hal remembers
 
 - **Waiting for you**: suggestions from your choices, for example a smaller travel distance after you hide

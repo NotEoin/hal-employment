@@ -257,7 +257,8 @@ def _file_name(source_rel: str) -> str:
 
 def aliases(item: dict, hidden: list[dict]) -> list[str]:
     """The other names a project card goes by: the names of hidden project cards (`hidden`) resting on one of
-    its project files, the name of its repository or project file, and the last part of its link.
+    its project files or merged into it (`profile.duplicates`), the name of its repository or project file, and
+    the last part of its link.
 
     Only a file of one project (`PROJECT_FILES`) ties two cards together: a CV names every project.
     """
@@ -265,7 +266,7 @@ def aliases(item: dict, hidden: list[dict]) -> list[str]:
         return {e["source_rel"] for e in it["evidence"] if e["doc_type"] in PROJECT_FILES}
 
     own = files(item)
-    found = [h["fields"].get("name", "") for h in hidden if own & files(h)]
+    found = [h["fields"].get("name", "") for h in hidden if own & files(h) or h.get("merged_into") == item["id"]]
     found += [_file_name(e["source_rel"]) for e in item["evidence"] if e["doc_type"] in stage.PERSONAL_TYPES]
     link = str(item["fields"].get("link") or "").rstrip("/")
     if link:
