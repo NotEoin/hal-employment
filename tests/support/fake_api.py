@@ -125,7 +125,8 @@ def profile_source(rel: str, quote: str, field: str, doc_type: str, n: int) -> d
     """One made-up source of a profile item, with the file id the real server gives it."""
     fid = base64.urlsafe_b64encode(rel.encode("utf-8")).decode("ascii").rstrip("=")
     return {"id": n, "source_rel": rel, "quote": quote, "field": field, "doc_type": doc_type,
-            "verified": True, "role": "own", "found_at": "2026-11-05T09:00:00Z", "file_id": fid}
+            "verified": True, "role": "own", "found_at": "2026-11-05T09:00:00Z", "file_id": fid,
+            "source_id": None, "place": "", "line": None}
 
 
 # Where a made-up experience was done, by kind: (context, the page's words for it).
@@ -148,7 +149,8 @@ def profile_item(n: int, kind: str, fields: dict, title: str, sub: str = "", whe
             "tier": tier[0], "tier_by": "hal" if tier[0] else "", "tier_why": tier[1],
             "tier_words": tier_words[tier[0]] if tiered else "",
             "context": CONTEXTS.get(kind, ("", ""))[0], "context_by": "hal" if kind in CONTEXTS else "",
-            "context_words": CONTEXTS.get(kind, ("", ""))[1], "merged_into": None, "merged_why": ""}
+            "context_words": CONTEXTS.get(kind, ("", ""))[1], "merged_into": None, "merged_why": "",
+            "star": False, "star_by": "", "can_star": kind in ("project", "job")}
 
 
 PROFILE_CONFLICT = {

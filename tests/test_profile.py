@@ -621,6 +621,34 @@ class Store(unittest.TestCase):
         self.assertEqual(store.item(self.con, note)["merged_into"], rebuilt[0]["id"])
         self.assertEqual(len(rebuilt[0]["evidence"]), 1)
 
+    def test_a_star_is_the_persons_and_only_projects_and_jobs_take_one(self):
+        project = store.add_found(self.con, "project", {"name": "Parish register index"}, ev(CV_A, "cv"))
+        skill = store.add_found(self.con, "skill", {"name": "Archival research"}, ev(CV_A, "cv"))
+        self.assertEqual({k: store.item(self.con, project)[k] for k in ("star", "star_by", "can_star")},
+                         {"star": False, "star_by": "", "can_star": True})
+        got = store.set_star(self.con, project, True)
+        self.assertEqual((got["star"], got["star_by"]), (True, "you"))
+        store.add_found(self.con, "project", {"name": "Parish register index", "role": "Sole author"},
+                        ev(CV_B, "cv"))
+        self.assertTrue(store.item(self.con, project)["star"], "a later read keeps the person's star")
+        self.assertFalse(store.set_star(self.con, project, False)["star"])
+        with self.assertRaises(ValueError):
+            store.set_star(self.con, skill, True)
+        with self.assertRaises(ValueError):
+            store.set_star(self.con, project, "yes")
+        with self.assertRaises(LookupError):
+            store.set_star(self.con, 999, True)
+
+    def test_evidence_keeps_its_source_and_place_through_a_rebuild(self):
+        store.add_found(self.con, "project", {"name": "Parish register index"},
+                                  {**ev(CV_A, "cv", "Parish register index"), "source_id": 4,
+                                   "place": "README.md", "line": 3})
+        store.rebuild_found(self.con)
+        got = store.items(self.con, "project")[0]["evidence"][0]
+        self.assertEqual((got["source_id"], got["place"], got["line"]), (4, "README.md", 3))
+        with self.assertRaises(ValueError):
+            store.add_found(self.con, "project", {"name": "Tide gauge"}, {**ev(CV_A, "cv"), "line": 0})
+
 DOCUMENTS, FACTS_EACH = 20, 100       # 2,000 facts, as a large ingest gives them
 # Merging them took 5.5 s when every fact read every item and source of its kind, and 0.3 s with the index
 # (measured on the development machine, 2026-11-07); the bound leaves room for a loaded test runner.

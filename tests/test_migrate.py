@@ -169,6 +169,29 @@ class OldDatabases(Folder):
         unread_alerts = {r[0] for r in con.execute("SELECT title FROM alerts WHERE read = 0")}
         self.assertEqual(unread_alerts, {"Alert 0", "Alert 1"})
 
+    def test_record_sources_and_stars_arrive_at_version_28_with_the_profile_kept(self):
+        """A profile from version 27 keeps its cards and evidence; each card gets no star and each piece of
+        evidence no source, and removing a source's card clears the source's link to it."""
+        con = self.open()
+        up_to_27 = migrate.discover()[:27]
+        with mock.patch.object(migrate, "LATEST", 27), mock.patch.object(migrate, "discover", return_value=up_to_27):
+            self.run_migrate(con)
+        con.execute("INSERT INTO profile_items (id, kind, fields, created, updated) "
+                    "VALUES (1, 'project', '{\"name\": \"Tide gauge\"}', 'x', 'x')")
+        con.execute("INSERT INTO profile_evidence (item_id, source_rel, found_at) VALUES (1, 'Sources/CV.md', 'x')")
+        con.commit()
+        self.assertEqual(self.run_migrate(con), [28])
+        self.assertEqual(con.execute("SELECT star, star_by, orphaned_from FROM profile_items").fetchone(), (0, "", ""))
+        self.assertEqual(con.execute("SELECT source_id, place, line FROM profile_evidence").fetchone(),
+                         (None, "", None))
+        self.assertTrue({"record_sources", "record_source_files"} <= tables(con))
+        con.execute("PRAGMA foreign_keys = ON")
+        con.execute("INSERT INTO record_sources (section, target_id, kind, doc_kind, added) "
+                    "VALUES ('coursework', 1, 'upload', 'essay', 'x')")
+        con.execute("DELETE FROM profile_items WHERE id = 1")
+        self.assertEqual(con.execute("SELECT target_id, state, revision FROM record_sources").fetchone(),
+                         (None, "new", 0))
+
     def test_settings_revision_starts_at_zero(self):
         con = self.open()
         self.run_migrate(con)
@@ -180,8 +203,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 28)))
-        self.assertEqual(migrate.LATEST, 27)
+        self.assertEqual(numbers, list(range(1, 29)))
+        self.assertEqual(migrate.LATEST, 28)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

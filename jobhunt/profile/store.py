@@ -32,6 +32,10 @@ Design decisions, each with its reason:
   did it and which state it had (`SAME_AS`), so taking it back out (`unfold`) gives that state back and
   never works out again what they checked or typed. Hal's own merges (`merge_into`) still never take a card
   the person checked.
+- A project or job card can carry the person's star (`set_star`, migration 0028): a starred project is one to
+  tell an employer about, a starred job one to lead with. Only the person sets it, so no read changes it.
+- Evidence may name the source of the record it came from (`source_id`, with `place` and `line` inside it),
+  for facts read from a section's sources (`jobhunt.sections`), so removing a source removes exactly its facts.
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
@@ -83,7 +87,7 @@ STATE_WORDS = {"hal": "Found by Hal", "confirmed": "Checked by you", "edited": "
                "hidden": "Hidden"}
 HOURS = {"full time": "full_time", "fulltime": "full_time", "full_time": "full_time",
          "part time": "part_time", "parttime": "part_time", "part_time": "part_time"}
-EVIDENCE_KEYS = {"source_rel", "quote", "field", "doc_type", "verified", "role"}
+EVIDENCE_KEYS = {"source_rel", "quote", "field", "doc_type", "verified", "role", "source_id", "place", "line"}
 QUOTE_MAX = 600            # a quote is a sentence or two; a longer one is cut, never refused
 
 
@@ -240,11 +244,18 @@ def _evidence(evidence: dict) -> dict:
     if unknown:
         raise ValueError(f"Evidence has no field {', '.join(unknown)}; "
                          f"its fields are {', '.join(sorted(EVIDENCE_KEYS))}.")
+    line = evidence.get("line")
+    if line is not None and (isinstance(line, bool) or not isinstance(line, int) or line < 1):
+        raise ValueError("Evidence's line is a line number from 1.")
+    source_id = evidence.get("source_id")
+    if source_id is not None and (isinstance(source_id, bool) or not isinstance(source_id, int)):
+        raise ValueError("Evidence's source_id is the id of a source of the record.")
     return {"source_rel": str(evidence["source_rel"]).strip(),
             "quote": " ".join(str(evidence.get("quote") or "").split())[:QUOTE_MAX],
             "field": str(evidence.get("field") or "").strip(),
             "doc_type": merge.doc_group(str(evidence.get("doc_type") or "")),
-            "verified": bool(evidence.get("verified", True)), "role": str(evidence.get("role") or "")}
+            "verified": bool(evidence.get("verified", True)), "role": str(evidence.get("role") or ""),
+            "source_id": source_id, "place": str(evidence.get("place") or "").strip(), "line": line}
 
 
 def _row_fields(row: sqlite3.Row) -> dict:
@@ -302,9 +313,10 @@ def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, 
                                   "VALUES (?, ?, 'hal', 'found', ?, ?)",
                                   (kind, json.dumps(said), now, now)).lastrowid
         con.execute("INSERT INTO profile_evidence (item_id, source_rel, quote, field, doc_type, said, verified, "
-                    "role, found_at, moved_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "role, found_at, moved_from, source_id, place, line) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (item_id, ev["source_rel"], ev["quote"], ev["field"], ev["doc_type"], json.dumps(said),
-                     int(ev["verified"]), ev["role"], now, moved_from))
+                     int(ev["verified"]), ev["role"], now, moved_from, ev["source_id"], ev["place"], ev["line"]))
         refold(con, item_id)
         if refresh:
             conflicts.refresh(con)
@@ -532,7 +544,8 @@ def rebuild_found(con: sqlite3.Connection) -> int:
         """SELECT i.id, t.kind, t.fields FROM profile_items i JOIN profile_items t ON t.id = i.merged_into
            WHERE t.state = 'hal' AND t.origin = 'found'""")}
     rows = con.execute("""SELECT i.kind, e.source_rel, e.quote, e.field, e.doc_type, e.said, e.verified, e.role,
-                          e.moved_from FROM profile_evidence e JOIN profile_items i ON i.id = e.item_id
+                          e.moved_from, e.source_id, e.place, e.line FROM profile_evidence e
+                          JOIN profile_items i ON i.id = e.item_id
                           WHERE i.state = 'hal' AND i.origin = 'found' ORDER BY e.id""").fetchall()
     with con:
         con.execute("DELETE FROM profile_items WHERE state = 'hal' AND origin = 'found'")
@@ -542,7 +555,8 @@ def rebuild_found(con: sqlite3.Connection) -> int:
         try:
             add_found(con, r["kind"], json.loads(r["said"]),
                       {"source_rel": r["source_rel"], "quote": r["quote"], "field": r["field"],
-                       "doc_type": r["doc_type"], "verified": bool(r["verified"]), "role": r["role"]},
+                       "doc_type": r["doc_type"], "verified": bool(r["verified"]), "role": r["role"],
+                       "source_id": r["source_id"], "place": r["place"], "line": r["line"]},
                       refresh=False)
         except ValueError:  # a fact the rules now refuse, such as a module filed as a qualification, stays out
             continue
@@ -679,6 +693,28 @@ def delete(con: sqlite3.Connection, item_id) -> None:
         conflicts.refresh(con)
 
 
+# The kinds a star means something for: a showcase project, a job to lead with (sections plan, 2026-11-09).
+STAR_KINDS = ("project", "job")
+STAR_BY_YOU = "you"
+
+
+def set_star(con: sqlite3.Connection, item_id, on: bool) -> dict:
+    """Stars a project or job card for the person, or takes the star off; returns the item.
+
+    A star is the person's choice and no read changes it. LookupError for an unknown card, ValueError for a
+    kind that takes no star or `on` that is not true or false.
+    """
+    if not isinstance(on, bool):
+        raise ValueError("Say whether the card is starred: true or false.")
+    row = _row(con, item_id)
+    if row["kind"] not in STAR_KINDS:
+        raise ValueError("Only projects and jobs can be starred.")
+    with con:
+        con.execute("UPDATE profile_items SET star = ?, star_by = ?, updated = ? WHERE id = ?",
+                    (int(on), STAR_BY_YOU, db.now(), row["id"]))
+    return item(con, row["id"])
+
+
 OWN_ROLE = "own"           # evidence `role`: "own" for the person's own document, "taught" for course material
 TAUGHT_ROLE = "taught"
 STRONG_FILES = 2           # two files naming a skill is a pattern, not one lecture's list of topics
@@ -724,17 +760,18 @@ def is_weak(item: dict) -> bool:
 
 def evidence_of(con: sqlite3.Connection, item_ids: list[int]) -> dict[int, list[dict]]:
     """Each item's sources, oldest first: {item_id: [{id, source_rel, quote, field, doc_type, verified, role,
-    found_at}]}."""
+    found_at, source_id, place, line}]}."""
     out: dict[int, list[dict]] = {i: [] for i in item_ids}
     if not item_ids:
         return out
     marks = ",".join("?" * len(item_ids))
-    for e in con.execute(f"SELECT id, item_id, source_rel, quote, field, doc_type, verified, role, found_at "
-                         f"FROM profile_evidence "
+    for e in con.execute(f"SELECT id, item_id, source_rel, quote, field, doc_type, verified, role, found_at, "
+                         f"source_id, place, line FROM profile_evidence "
                          f"WHERE item_id IN ({marks}) ORDER BY id", item_ids):
         out[e["item_id"]].append({"id": e["id"], "source_rel": e["source_rel"], "quote": e["quote"],
                                   "field": e["field"], "doc_type": e["doc_type"], "verified": bool(e["verified"]),
-                                  "role": e["role"], "found_at": e["found_at"]})
+                                  "role": e["role"], "found_at": e["found_at"], "source_id": e["source_id"],
+                                  "place": e["place"], "line": e["line"]})
     return out
 
 
@@ -748,7 +785,8 @@ def _shape(row: sqlite3.Row, evidence: list[dict], open_conflicts: list[dict]) -
            "sub": subtitle(row["kind"], fields), "when": when(fields), "evidence": evidence,
            "conflicts": [c for c in open_conflicts if row["id"] in c["item_ids"]],
            "can_delete": row["origin"] == "you", "created": row["created"], "updated": row["updated"],
-           "merged_into": row["merged_into"], "merged_why": row["merged_why"]}
+           "merged_into": row["merged_into"], "merged_why": row["merged_why"],
+           "star": bool(row["star"]), "star_by": row["star_by"], "can_star": row["kind"] in STAR_KINDS}
     return {**out, **tiers.shown(out, row), **contexts.shown(out, row)}
 
 
