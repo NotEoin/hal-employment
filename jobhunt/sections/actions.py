@@ -2,11 +2,13 @@
 
 The person waits for it on the page, so it runs at priority 1, and two of them may run at once (two quick
 uploads); each source is read in its own transactions (`pipeline.read`), so they never cross. It is resumable:
-after a restart it reads the same sources again, which gives the same result.
+after a restart it reads the same sources again, which gives the same result. When it has read any (or kept one
+out), it publishes a `profile` event naming them, as a read changes the cards: the profile tabs follow those
+events, not the action's, and kept showing the cards from before a read (2026-11-09).
 """
 from __future__ import annotations
 
-from jobhunt.core import runner
+from jobhunt.core import events, runner
 from jobhunt.sections import pipeline, store
 
 KIND = "record.sources"
@@ -46,6 +48,8 @@ def read_sources(ctx, ids: list, allow: list | None = None) -> dict:
         out[state] += 1
         out["facts"] += done["facts"]
         ctx.progress(n + 1, len(ids))
+    if out["read"] or out["kept_out"]:
+        events.publish("profile", sources=[int(i) for i in ids])
     if out["read"]:
         ctx.changed(f"Read {out['read']} of what you added, with {out['facts']} facts for your profile.")
     if out["waiting"]:

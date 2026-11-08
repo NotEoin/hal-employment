@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from test_ingest import home
 
-from jobhunt.core import runner
+from jobhunt.core import events, runner
 from jobhunt.ingest import engine, frontmatter
 from jobhunt.ingest import tidy as ingest_tidy
 from jobhunt.profile import store as profile_store
@@ -262,6 +262,17 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(done["state"], "done")
         self.assertEqual((done["result"]["read"], done["result"]["missing"]), (2, 1))
         self.assertEqual(states, ["read", "read"])
+
+    def test_the_action_tells_open_pages_the_profile_changed_once_it_has_read(self):
+        """A starred piece of coursework became a project card only after its read, and the Projects tab, which
+        follows `profile` events, kept showing the cards from before it (2026-11-09)."""
+        with home() as (con, _, _):
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])["added"]
+            sub = events.subscribe()
+            self.addCleanup(sub.close)
+            runner.run(actions.KIND, params={"ids": ids})
+            seen = [e for e in iter(lambda: sub.get(timeout=0.2), None) if e.type == "profile"]
+        self.assertEqual([e.data for e in seen], [{"sources": ids}])
 
 
 if __name__ == "__main__":

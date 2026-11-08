@@ -1211,7 +1211,8 @@ people). Readers only take facts out of a source, within that frame.
   keeps the notes `record_sources.note_rel` points at.
 - `wrong_place.suggest(section, name, text)` is the bulk read's first-glance rules (`ingest.rank`) for a CV,
   a transcript and a letter; the source's `suggestion` is shown, never acted on.
-- `actions`: `record.sources` reads a list of source ids at priority 1, resumable. `routes`: under
+- `actions`: `record.sources` reads a list of source ids at priority 1, resumable, and then publishes a
+  `profile` event naming them, so the profile tabs read their cards again. `routes`: under
   `/api/v2/record/sources` (the shapes are in its header), with `GET /api/v2/record/sections`, and
   `PUT /api/v2/profile/items/{id}/star` for a project or job card's star (`profile_items.star`, `star_by`).
 - The page (`static/app/record/sections.js`): `SourcesPanel` (one or more sections, a target card),

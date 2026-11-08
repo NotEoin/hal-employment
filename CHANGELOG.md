@@ -227,6 +227,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Your record's tabs update once Hal has read what you added.** A card Hal found in a file you just
+  added, such as the project from a piece of coursework in your showcase, appeared only after you
+  reloaded the page.
+
 - **Letters tell the work that fits the job best.** Hal chose a letter's projects by a couple of words in
   common with the advert, so a letter for a networking role led with a voice assistant while a packet
   sniffer waited in the fit table. The AI now ranks all your projects and jobs against the job once per
