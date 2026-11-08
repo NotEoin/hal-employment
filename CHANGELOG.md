@@ -196,6 +196,10 @@ What changed in each version, in plain words.
   was taken as a list of projects. Now a name in such a folder stays a project of its own only when Hal
   knows that project from outside the folder (its own folder or repository, another file, or your CV);
   the rest are part of the folder's project, at reading and when you tidy your record.
+- **A follow-up project keeps its own card.** A repository you made after your dissertation was merged
+  into the dissertation's card because the AI judged them one. A project with its own folder or repository
+  now joins a card without one only when their names share a telling word and the AI agrees, and Tidy my
+  record takes apart merges this rule refuses.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

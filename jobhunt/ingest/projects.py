@@ -109,6 +109,12 @@ def _distinctive(word: str, acronym: bool) -> bool:
     return acronym or (len(word) >= DISTINCT_MIN and word not in GENERIC_WORDS)
 
 
+def distinctive_words(name: str) -> set[str]:
+    """The words of a name that can tie it to another, lower case: acronyms, and words of `DISTINCT_MIN` or
+    more letters not in `GENERIC_WORDS`. A repository's name splits on "-", "_" and case ("probe_sniffer")."""
+    return {w for w, acronym in _words(name).items() if _distinctive(w, acronym)}
+
+
 class Others:
     """The person's other projects, as seen from one project folder: every project card some file outside the
     folder, or a CV, letter or transcript, speaks for (or the person checked or added), with the names of the

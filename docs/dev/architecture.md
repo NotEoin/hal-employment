@@ -1077,7 +1077,10 @@ available yet.
   and never counts as shared. A pair whose dates are `YEARS_APART` (2) or more years apart with no shared
   file is never joined (`never`), nor two projects whose repositories or project folders differ (`apart`,
   from `duplicates.card_units` over `projects.note_units`: a repository's note counts for each card it
-  speaks for, a note inside a project folder only for the folder's own card). Each group goes into its
+  speaks for, a note inside a project folder only for the folder's own card), nor a card holding such a unit
+  and one holding none whose names, and the unit's folder name, share no distinctive word (`unrelated`,
+  over `projects.distinctive_words`: an acronym, or a word of `projects.DISTINCT_MIN` (5) or more letters
+  not in `projects.GENERIC_WORDS`), unless they share a project link. Each group goes into its
   `target` (the card a CV names, then `check.strength`, then the oldest) with `store.merge_into`, as
   "Merged into <name>", and holds only cards that share the target's link or that the AI put with the
   target itself, so pairs never chain; `store.merge_into` refuses a target that was merged away. `refold`

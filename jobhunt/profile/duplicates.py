@@ -16,7 +16,11 @@ navigation project and two for one network sniffer, under names `merge.same_item
    such as a dossier of all the person's work: sharing one says nothing, and the AI is not shown it.
 4. Rules that are never broken: cards whose dates are `YEARS_APART` or more years apart and that share no
    file are two experiences (`never`), and so are two projects holding different repositories or project
-   folders (`apart`, `card_units`), whatever the AI says.
+   folders (`apart`, `card_units`), whatever the AI says. A card holding a repository or project folder of
+   its own and a card holding none are one only when their names (and the unit's folder name) share a
+   distinctive word (`unrelated`, `projects.distinctive_words`) and the AI agrees, or they share a project
+   link: a personal follow-up repository was merged into the dissertation it followed (2026-11-08), while a
+   repository "probe_sniffer" is the CV's "Probe Request Sniffer".
 
 Each group is merged into its strongest card (`target`: the one the person's CV names, else the best shown,
 `check.strength`), which keeps its name unless a better-ranked source names it otherwise (`store.refold`).
@@ -32,6 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from pathlib import PurePath
 
 from jobhunt.profile import check, merge, store
 
@@ -127,6 +132,25 @@ def apart(a: dict, b: dict, units: dict) -> bool:
     return bool(ua and ub and not ua & ub)
 
 
+def unrelated(a: dict, b: dict, units: dict) -> bool:
+    """True when one card holds a repository or project folder (`card_units`), the other holds none, and the
+    names share no distinctive word (`projects.distinctive_words`), counting the unit's folder name: two
+    projects unless they share a project link (see the module notes)."""
+    from jobhunt.ingest import projects
+
+    ua, ub = units.get(a["id"], set()), units.get(b["id"], set())
+    if bool(ua) == bool(ub):
+        return False
+    held, held_units, other = (a, ua, b) if ua else (b, ub, a)
+    names = [_name(held), *(PurePath(u).name for u in held_units)]
+    words = set().union(*(projects.distinctive_words(n) for n in names))
+    return not words & projects.distinctive_words(_name(other))
+
+
+def _name(item: dict) -> str:
+    return str(item["fields"].get("name") or item["title"] or "")
+
+
 def never(a: dict, b: dict, listings: frozenset[str] = frozenset()) -> bool:
     """True when two cards are surely two: dates `YEARS_APART` or more years apart and no file shared."""
     sa, sb = _span(a), _span(b)
@@ -177,16 +201,16 @@ def _ask(con: sqlite3.Connection, cards: list[dict]) -> list[list[int]]:
 def groups(found: list[dict], said: list[list[int]], listings: frozenset[str] = frozenset(),
            units: dict | None = None) -> list[list[dict]]:
     """The groups of cards to merge: the certain pairs and the AI's groups (`said`), without the pairs that
-    are never one (`never`) or hold two units (`apart`). Each card in a group is one its target (`target`) is
-    certainly one with or the AI put with it, so a chain of pairs never joins two cards nothing tied; and no
-    two cards in a group are never one or apart."""
+    are never one (`never`), hold two units (`apart`) or are a unit's card and an `unrelated` one. Each card
+    in a group is one its target (`target`) is certainly one with or the AI put with it, so a chain of pairs
+    never joins two cards nothing tied; and no two cards in a group are refused that way."""
     by_id = {i["id"]: i for i in found}
     root = {i: i for i in by_id}
     units = units or {}
     agreed: set[frozenset[int]] = set()
 
     def refused(a: dict, b: dict) -> bool:
-        return never(a, b, listings) or apart(a, b, units)
+        return never(a, b, listings) or apart(a, b, units) or (unrelated(a, b, units) and not certain(a, b))
 
     def top(i: int) -> int:
         while root[i] != i:

@@ -112,6 +112,31 @@ class Duplicates(unittest.TestCase):
             counts = duplicates.refresh(self.con)
         self.assertEqual(counts["merged"], 0, "a tool pack merged into a scheduler's card (2026-11-08)")
 
+    def repo(self, path: str, note: str) -> None:
+        """A made-up repository the record read, whose note is `note`."""
+        unit = items.add(self.con, "b0", path=path, rel=path.rsplit("/", 1)[-1], kind="repo", state="done")
+        items.update(self.con, unit, note=note)
+
+    def test_a_repositorys_card_merges_into_one_without_a_repository_only_when_a_distinctive_word_is_shared(self):
+        # a personal follow-up repository was merged into the dissertation it followed, as the AI judged them
+        # one (2026-11-08)
+        self.repo("/made/up/tidewatch-extended", README)
+        self.repo("/made/up/wifi_sniffer", BEAM_README)
+        follow_up = self.project("tidewatch-extended", README, "repository", summary="Where I took it next.")
+        thesis = self.project("Coastal Flood Forecasting", DRAFT, "dissertation")
+        sniffer = self.project("wifi_sniffer", BEAM_README, "repository")
+        cv = self.project("Probe Request Sniffer", CV, "cv")
+        with fake_ai({"profile_same": grouping(["Coastal Flood Forecasting", "tidewatch-extended"],
+                                               ["Probe Request Sniffer", "wifi_sniffer"])}):
+            counts = duplicates.refresh(self.con)
+        self.assertIsNone(store.item(self.con, follow_up)["merged_into"])
+        self.assertIsNone(store.item(self.con, thesis)["merged_into"])
+        self.assertEqual((counts["merged"], store.item(self.con, sniffer)["merged_into"]), (1, cv),
+                         "a shared word and the AI's word tie a repository to the CV's name for it")
+        repo, named = ({"id": n, "title": t, "fields": {"name": t}} for n, t in ((1, "probe_sniffer"),
+                                                                              (2, "Probe Request Sniffer")))
+        self.assertFalse(duplicates.unrelated(repo, named, {1: {"/made/up/probe_sniffer"}}))
+
     def test_a_card_merged_away_is_never_a_merge_target(self):
         cv, readme = self.twins()
         other = self.project("Moon dial", REPORT, "report")

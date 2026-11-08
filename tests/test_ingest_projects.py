@@ -12,6 +12,7 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.fake_ai import fake_ai
 from test_ingest import NOTE_REPLY, OWNER, home, put, rows, run
+from test_profile_duplicates import grouping
 
 from jobhunt.core import settings
 from jobhunt.ingest import group, projects
@@ -341,6 +342,30 @@ class Tidy(unittest.TestCase):
             after = shown_projects(con)
         self.assertEqual(len(before), 1, "the older rule merged the two")
         self.assertEqual({n: c["fields"]["tools"] for n, c in after.items()}, {n: [t] for n, t in said.items()})
+
+    def test_tidying_takes_a_follow_up_repository_back_out_of_the_dissertation_it_followed(self):
+        # the AI judged a personal follow-up repository one with the dissertation, which has no repository, and
+        # they were merged (2026-11-08)
+        files_in = {"tidewatch-extended/pyproject.toml": "[project]\nname = \"tidewatch-extended\"\n",
+                    "tidewatch-extended/README.md": "# tidewatch-extended\n\nWhere I took my forecasts next.",
+                    "Dissertation/Final dissertation.md": "# Final dissertation\n\nForecasting tidal energy."}
+        with home() as (con, _vault, files):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            for rel, text in files_in.items():
+                put(files, rel, text)
+            with fake_ai({"ingest_doc": naming({"Final dissertation": [THESIS]})}):
+                run(con, [files], origins={str(files): "mine"})
+            cards = project_cards(con)
+            store.merge_into(con, cards["tidewatch-extended"]["id"], cards[THESIS]["id"], duplicates.MERGED + THESIS)
+            before = shown_projects(con)
+            with fake_ai({"profile_same": grouping([THESIS, "tidewatch-extended"])}):
+                run(con, [], batch="t", tidy=True)
+                duplicates.refresh(con)
+            after = shown_projects(con)
+        self.assertNotIn("tidewatch-extended", before)
+        self.assertEqual(sorted(after), sorted([THESIS, "tidewatch-extended"]),
+                         "no word ties them, so the AI's word is not enough")
 
 
 if __name__ == "__main__":
