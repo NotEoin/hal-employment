@@ -24,6 +24,9 @@ Design decisions, each with its reason:
   ("write and improve ...", "experience of ...", "you will ...") is no pairing. The letter's opening says the
   fact alone and names no project (`writing.frame`); the item is for the "why here" answers, which may tie
   the reason to that one piece of work.
+- A "why here" answer leads with the employer (`addresses`, 2026-11-08): four graded answers said only
+  "because I built <project>". Its first sentence must say "you" or "your", name the employer, or name its
+  product with a specific word of the pairing's fact (`STEM` letters of it, as "sensors" and "sensor" are one).
 """
 from __future__ import annotations
 
@@ -57,6 +60,8 @@ organization business industry sector best great support supportive supporting d
 career careers progression training benefits benefit community friendly fun reward rewarding work working workplace
 employer staff colleagues future purpose driven forward thinking cutting edge award winning global
 national local new modern brand role roles join offer offers offering full""".split())
+YOU = re.compile(r"\b(?:you|your|yours)\b", re.I)
+STEM = 5                   # letters two words share to be one word ("sensors" and "sensor", "triage" and "triaging")
 NONE_SAID = ("Motivation: no specific reason to choose this employer was found in the applicant's facts. Name the "
              "role and give no reason beyond it; never invent one.")
 
@@ -81,6 +86,20 @@ def duty(fact: str) -> bool:
     """True when an employer's fact reads as a duty of the job or a requirement (`DUTY`), not a fact about the
     employer."""
     return bool(DUTY.match(fact))
+
+
+def _stems(text: str, leave: set[str] = frozenset()) -> set[str]:
+    return {w[:STEM] for w in check.words_of(text) if w not in drafts.LITTLE_WORDS and w not in GENERIC
+            and w not in leave}
+
+
+def addresses(sentence: str, employer: str, fact: str = "") -> bool:
+    """True when a sentence speaks to or of the employer: "you" or "your", the employer's name, or a specific word
+    of the employer's `fact` (its product, its mission), not only of the person's own work."""
+    if YOU.search(sentence or "") or (employer.strip() and drafts.names_tool(sentence, employer.strip())):
+        return True
+    leave = set(check.words_of(employer))
+    return bool(_stems(fact, leave) & _stems(sentence, leave))
 
 
 def checked(reply: dict, advert: str, brief: str, plan: list[Item], names: tuple[str, ...] = ()) -> Pairing | None:

@@ -63,6 +63,16 @@ class Pairings(unittest.TestCase):
         for fact in ("We build flood sensors for river trusts", "river data dashboards used by three made-up councils"):
             self.assertFalse(motive.duty(fact), fact)
 
+    def test_a_sentence_addresses_the_employer_by_you_its_name_or_its_product(self):
+        fact = "river data dashboards used by three made-up councils"
+        self.assertTrue(motive.addresses("Your councils rely on it.", "Brightwater Tools", fact))
+        self.assertTrue(motive.addresses("Brightwater Tools is where I want to work.", "Brightwater Tools", fact))
+        self.assertTrue(motive.addresses("River dashboards for councils are what I want to build.",
+                                         "Brightwater Tools", fact))
+        self.assertFalse(motive.addresses("I built a sensor logger in Lua.", "Brightwater Tools", fact))
+        self.assertFalse(motive.addresses("I enjoy work with real impact.", "Brightwater Tools", fact),
+                         "a word any employer uses is no product")
+
     def test_no_plan_means_no_call(self):
         with mock.patch.object(llm, "chat_json", side_effect=AssertionError("no call")):
             self.assertIsNone(motive.make(NAMES, ADVERT, BRIEF, []))

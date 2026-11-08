@@ -350,7 +350,7 @@ class Named(unittest.TestCase):
                  "team test its tools?")
         missing = paragraphs.NOT_NAMED.format(card="Quill Employment")
         for shape in (paragraphs.answer("Tell us about testing."), paragraphs.answer("Give two examples.", 1, 2),
-                      paragraphs.why("Why do you want to work here?", None), paragraphs.message("I'm Avery.")):
+                      paragraphs.message("I'm Avery.")):
             found = [p.reason for p in paragraphs.problems(unnamed, EMPLOYMENT_STORY, SCOPE, shape)]
             self.assertIn(missing, found, shape.words[:40])
             found = [p.reason for p in paragraphs.problems(named, EMPLOYMENT_STORY, SCOPE, shape)]
@@ -363,6 +363,41 @@ class Named(unittest.TestCase):
             done = paragraphs.settle(EMPLOYMENT_STORY, paragraphs.answer("Tell us about testing."), SCOPE)
         self.assertIn("does not name Quill Employment in its first sentence", fake.calls("Write")[1])
         self.assertEqual((done.text, done.redrafted), ("Quill Employment has a 113-test suite.", True))
+
+
+class WhyHere(unittest.TestCase):
+    """Four graded "why here" answers said only "because I built <project>" (2026-11-08)."""
+
+    PAIRING = Pairing("ticket triage service for river trusts", Item("E2", "Quill Employment drafts letters", "CV",
+                                                                     card="Quill Employment"), "both sort requests")
+
+    def reasons(self, text: str, pairing: Pairing | None = PAIRING) -> list[str]:
+        shape = paragraphs.why("Why do you want to work here?", pairing)
+        return [p.reason for p in paragraphs.problems(text, EMPLOYMENT_STORY, SCOPE, shape)]
+
+    def test_an_answer_whose_first_sentence_is_only_about_the_work_is_a_problem(self):
+        self.assertIn(paragraphs.NOT_EMPLOYER, self.reasons(
+            "I want this job because I built Quill Employment. It has a 113-test suite."))
+
+    def test_the_first_sentence_may_say_you_name_the_employer_or_its_product(self):
+        for first in ("Your triage service sorts what river trusts ask, and that is the work I want.",
+                      "Brightwater Tools is where I want to start my career.",
+                      "A triage service for river trusts is the kind of product I want to build."):
+            said = f"{first} Quill Employment, with its 113-test suite, sorted requests too."
+            self.assertNotIn(paragraphs.NOT_EMPLOYER, self.reasons(said), first)
+
+    def test_with_no_fact_the_first_sentence_still_speaks_of_the_employer(self):
+        self.assertNotIn(paragraphs.NOT_EMPLOYER, self.reasons("Your Graduate Developer role is the work I want. "
+                                                               "Quill Employment taught me to test.", None))
+        self.assertIn(paragraphs.NOT_EMPLOYER, self.reasons("Quill Employment taught me to test. It drafts letters.",
+                                                            None))
+
+    def test_the_shape_asks_for_the_employer_first_and_one_sentence_of_work_at_most(self):
+        shape = paragraphs.why("Why do you want to work here?", self.PAIRING)
+        self.assertIn('The reason about the employer: "ticket triage service for river trusts". Say in the first '
+                      "sentence one concrete thing about the employer", shape.words)
+        self.assertIn("in one sentence at most, naming the work", shape.words)
+        self.assertEqual((shape.name, shape.employer), ("", True))
 
 
 class MessageBody(unittest.TestCase):

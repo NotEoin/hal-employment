@@ -200,6 +200,10 @@ What changed in each version, in plain words.
   your projects, which the paragraphs tell, and a duty of the job is never the reason. An opening that
   names a project, repeats a paragraph's details or numbers, or begins "Your requirement", "Your need" or
   "Your work on" is written once more.
+- **"Why do you want to work here?" is about the employer.** Four answers said only "because I built"
+  a project. The answer now opens with what draws you to the employer, such as its product or its mission,
+  in your own words, and may then tie it to one piece of your work in a sentence. An answer whose first
+  sentence does not speak of the employer is written once more.
 - **Answers and messages say which project.** Form answers and messages to the person hiring began "I
   wrote a 113-test suite ..." and named the project later, or never. Like a letter paragraph, each now names
   its project or job in its first sentence, and is written once more when it does not.

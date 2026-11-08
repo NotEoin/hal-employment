@@ -35,7 +35,10 @@ Design decisions, each with its reason:
   a project file's story must name its module or file's project, and is drafted again once when it does not.
   Answers and the message's body name their work in their first sentence too, as a letter paragraph does:
   12 of 15 graded packs had an answer or a message opening "I wrote a 113-test suite ..." or "a
-  reproducible PyTorch pipeline ..." with the project named later or never (2026-11-08).
+  reproducible PyTorch pipeline ..." with the project named later or never (2026-11-08). A "why here" answer
+  is the exception (`why`): it leads with the reason about the employer (`Shape.employer`,
+  `motive.addresses`, `NOT_EMPLOYER`) and may tie it to its one piece of work in a sentence, as four graded
+  answers said only "because I built <project>" (2026-11-08).
 - A message body never says the degree again (`message`, `says_again`, 2026-11-08): Hal's built opening says
   "I'm <name>, a first-class <subject> graduate from <university>", and the next sentence said the degree
   again. A sentence repeating the opening, or naming a degree with its words, is drafted again as a fact of
@@ -60,7 +63,7 @@ from dataclasses import dataclass, field
 from jobhunt import llm
 from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
-from jobhunt.writing import drafts, flow, plain, planned, purpose, repeats, spelling, stage, taught
+from jobhunt.writing import drafts, flow, motive, plain, planned, purpose, repeats, spelling, stage, taught
 from jobhunt.writing.motive import Pairing
 from jobhunt.writing.plan import DEGREE, MODULE, Story
 
@@ -107,6 +110,8 @@ LABEL_SAID = 'uses your part as a label ("{label}"); say what you did'
 LIST_SAID = "lists tools rather than saying what you did with them"
 NOT_NAMED = "does not name {card} in its first sentence"
 NO_QUESTION = "asks no question about the team's work"
+NOT_EMPLOYER = ("does not give the reason about the employer in its first sentence; say what of the employer "
+                "draws you, its product or its mission, then tie it to the work in one sentence at most")
 SAID_AGAIN = "says your degree again, which Hal's opening already says; tell a fact of the work instead"
 TOO_SHORT = "is too short to tell what the work was, what you did and what came of it"
 NOT_SUPPORTED = 'its facts do not say: "{span}"'
@@ -128,6 +133,8 @@ class Shape:
     least: int = 1
     question: bool = False     # it must ask one question (a message's body)
     after: str = ""            # what Hal puts before it (the message's opening sentence), never to say again
+    employer: bool = False     # its first sentence speaks of the employer (a "why here" answer, `motive.addresses`)
+    fact: str = ""             # the employer's fact that first sentence may name its product by
 
 
 LETTER = Shape("letter", "One paragraph of the middle of a cover letter: 3 to 4 sentences, 60 to 90 words, one "
@@ -184,14 +191,18 @@ def answer(question: str, nth: int = 0, of: int = 1) -> Shape:
 
 
 def why(question: str, pairing: Pairing | None) -> Shape:
-    """The shape of an answer to a question asking why this job or employer, from the motivation `pairing`."""
-    reason = (f"The reason: the employer's \"{pairing.fact}\" and this work, because {pairing.reason}. Tie the "
-              "two in your own words; never restate the advert." if pairing else
-              "No reason for this employer was found in the applicant's facts: say what in this role draws you "
-              "to it from this work alone, and give no reason about the employer.")
+    """The shape of an answer to a question asking why this job or employer: the reason about the employer
+    first, from the motivation `pairing`'s fact, then at most one sentence tying it to this work."""
+    reason = (f"The reason about the employer: \"{pairing.fact}\". Say in the first sentence one concrete thing "
+              f"about the employer from it (its product, its mission or this fact), in your own words; never "
+              f"restate the advert. Then you may tie it to this work, because {pairing.reason}, in one sentence "
+              f"at most, naming the work." if pairing else
+              "No fact about the employer was found: say in the first sentence what of this role or this employer "
+              "draws you, in your own words, without a fact about the employer you were not given; then you may "
+              "tie it to this work in one sentence at most, naming the work.")
     return Shape("answer", f'The answer to the application question "{question}", in 2 to 3 sentences and at most '
-                           f"80 words, answering it in the first sentence and naming the work there. {reason}",
-                 "first", 1)
+                           f"80 words, answering it in the first sentence. {reason}", "", 1,
+                 employer=True, fact=pairing.fact if pairing else "")
 
 
 @dataclass(frozen=True)
@@ -436,6 +447,9 @@ def problems(text: str, story: Story, scope: Scope, shape: Shape) -> list[Proble
         out.append(Problem("", TOO_SHORT))
     if shape.question and "?" not in text:
         out.append(Problem("", NO_QUESTION))
+    employer = scope.names[1] if len(scope.names) > 1 else ""
+    if shape.employer and said and not motive.addresses(said[0], employer, shape.fact):
+        out.append(Problem("", NOT_EMPLOYER))
     hits = writing_check.check(text, shape.kind, spelling=scope.values.get("spelling_code", ""),
                                allowed=scope.values.get("own_words") or ())
     for hit in writing_check.high(hits):

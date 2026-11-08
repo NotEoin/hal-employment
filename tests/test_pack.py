@@ -28,7 +28,7 @@ from support.world import World
 
 from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
 from jobhunt.core import runner, settings
-from jobhunt.writing import flow
+from jobhunt.writing import flow, paragraphs
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.
 ADVERTS = {
@@ -77,6 +77,9 @@ def story_paragraph(user: str) -> str:
     said += [f"{lead} {f}." for lead, f in zip(leads, facts[:len(leads)], strict=False)]
     if "short message" in user:
         said = [*said[:2], "What will the team build next?"]
+    if "The reason about the employer" in user or "No fact about the employer" in user:
+        employer = re.search(r"^The job: .+? at (.+)$", user, re.M)
+        said = [f"I want to work at {employer.group(1) if employer else 'your company'}.", *said[:2]]
     return " ".join(s for s in said if s) or "I did made-up work."
 
 
@@ -928,10 +931,31 @@ class Others(unittest.TestCase):
         with quill_world(writer) as a:
             pack.build(a.con, a.job["id"], use_web=False)
         why = next(e["user"] for e in writer.asked("story") if "Why do you want to work here?" in e["user"])
-        self.assertIn('The reason: the employer\'s "internal tools in Python" and this work, because a '
-                      "job-search helper is an internal tool for graduates", why)
+        self.assertIn('The reason about the employer: "internal tools in Python". Say in the first sentence one '
+                      "concrete thing about the employer", why)
+        self.assertIn("Then you may tie it to this work, because a job-search helper is an internal tool for "
+                      "graduates, in one sentence at most", why)
         self.assertIn("Project: Quill Employment", why)
         self.assertEqual(len(writer.asked("pairing")), 1, "the letter's pairing serves the answers too")
+
+    def test_a_why_here_answer_giving_no_reason_about_the_employer_is_drafted_again_once(self):
+        # four graded "why here" answers said only "because I built <project>" (2026-11-08)
+        built = ("I built Quill Employment, a job-search helper in Preact with a 113-test suite and SQLite storage. "
+                 "It drafts letters for graduates.")
+        better = ("Brightwater Tools builds internal tools, which is the work I want to do. Quill Employment, a "
+                  "job-search helper in Preact with a 113-test suite and SQLite storage, was such a tool.")
+        writer = QuillWriter()
+        plain = writer.reply
+        tries = [built, better]
+        writer.reply = lambda system, user: ({"paragraph": tries.pop(0) if len(tries) > 1 else tries[0]}
+                                             if prompt_id(system) == "story" and "Why do you want" in user
+                                             else plain(system, user))
+        with quill_world(writer) as a:
+            md = pack.build(a.con, a.job["id"], use_web=False).read_text()
+        asked = [e["user"] for e in writer.asked("story") if "Why do you want" in e["user"]]
+        self.assertEqual(len(asked), 2, "one redraft, never a loop")
+        self.assertIn(paragraphs.NOT_EMPLOYER, asked[1])
+        self.assertIn(f"**Why do you want to work here?** {better.split('. ')[0]}.", " ".join(md.split()))
 
     def test_a_question_no_story_answers_is_written_whole_and_never_left_blank(self):
         # 8 of 15 graded packs had an empty answer or an empty message body (2026-11-08)

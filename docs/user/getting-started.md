@@ -97,7 +97,8 @@ what it is, where you did it, your part, its tools and what came of it. The mess
 tells one piece of work in a sentence or two and asks one question about the team's work. Each form answer
 tells one piece of work, or two when the question asks for more than one example, and the answers take
 work the letter and earlier answers have not told first where your record has enough. An answer to "Why do
-you want to work here?" ties your reason for this employer to the work it comes from. Each paragraph is
+you want to work here?" opens with what draws you to the employer, then may tie it to one piece of your
+work in a sentence. Each paragraph is
 checked against its own work's facts: a number or tool they do not give (a tool you used on a project must
 be in that project's own facts, as a list of your skills says what you know, not where you used it), a tool
 or name that belongs to another of your projects, the project placed somewhere else (your degree instead of
