@@ -57,6 +57,11 @@ What changed in each version, in plain words.
   looks like another kind ("This looks like a transcript"), Hal suggests it, and you decide.
 - **A job's documents fill in the job.** A reference, contract or job description added to a job's card
   gives its title, dates and duties. Your current CV still comes first; these come before an older CV.
+- **Code projects are read from the project itself.** On **Projects**, add a code project's folder or
+  upload it as a folder or zip. Hal works out its languages, the tools its own files name, its tests and,
+  from its history, its dates and whether you made it alone or with others (and what share of the changes
+  were yours). The AI writes only a short summary from the README, and every fact says which file and line
+  it came from. A project with none of your changes makes no card until you say it is yours.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

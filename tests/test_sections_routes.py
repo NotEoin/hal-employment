@@ -83,7 +83,7 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual(next(iter(got)), "cv")
         self.assertEqual((got["coursework"]["target"], got["coursework"]["target_required"]), ("education", True))
         self.assertTrue(all(k["ready"] for k in got["document"]["doc_kinds"]))
-        self.assertFalse(any(k["ready"] for k in got["project"]["doc_kinds"]))
+        self.assertEqual({k["id"] for k in got["project"]["doc_kinds"] if k["ready"]}, {"repo", "upload"})
         held = {k["id"]: k["held"] for k in got["project"]["doc_kinds"]}
         self.assertEqual((held["github_account"], held["local_folder"], held["web_page"], held["upload"]),
                          ("account", "folder", "link", "files"))

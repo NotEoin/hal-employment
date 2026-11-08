@@ -42,6 +42,16 @@ the same for any subject: history essays, design portfolios, lab reports, busine
 
 The older way to add many files at once is still on **Overview**, under **More ways to add**.
 
+## Code projects
+
+For a code project, Hal works out the facts itself: the languages, the tools named in the project's own
+files (such as `requirements.txt` or `package.json`), the tests, and from the project's history when you
+started and stopped and how many of the changes were yours. The AI only writes the short summary, from the
+project's README. Hal never reads `.env` files, keys or anything that looks private.
+
+For Hal to know which changes are yours, give your name and email under **Settings**, **You**. Add any
+usernames you commit under to **Other names you go by**.
+
 How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-record-jobhuntsections).
 
 | Symptom | Fix |
@@ -59,3 +69,5 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | A module or mark is missing after you added a transcript | Hal reads table rows with a module's name and mark, and lines with a module code and a mark at the end ("HIS2040 Archival Methods 75"). Edit the course's card to add what it missed. |
 | "... is already this course's dissertation." | Press **My dissertation** on the piece marked now to undo it, then mark the right one. |
 | A card disappeared after you pressed **Remove** | It came only from that file, so Hal hid it. Add the file again and the card comes back as you left it. |
+| A code project says "None of the changes are yours" | Hal found none of its changes under your name or email. If you made it, press **This is mine**, and add the name or email you used to **Other names you go by**. |
+| A code project has no "sole author" or "contributor" line | It has no history Hal can read (an uploaded copy often has none), so Hal shows its file dates instead. |

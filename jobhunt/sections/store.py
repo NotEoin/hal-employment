@@ -129,6 +129,30 @@ def _module_shape(con: sqlite3.Connection, r: sqlite3.Row, found: dict) -> dict:
             "module_suggested": suggested if suggested in choices else "", "module_choices": choices}
 
 
+def meta(con: sqlite3.Connection, source_id: int) -> dict:
+    """The source's `meta` object (migration 0030): what the person said of it (that a project is theirs, the
+    pieces they picked, a hand-made project's form); {} when it has none or it does not parse."""
+    r = con.execute("SELECT meta FROM record_sources WHERE id = ?", (source_id,)).fetchone()
+    try:
+        out = json.loads(r["meta"] or "{}") if r is not None else {}
+    except ValueError:
+        out = {}
+    return out if isinstance(out, dict) else {}
+
+
+def set_meta(con: sqlite3.Connection, source_id: int, **values) -> dict:
+    """Merges `values` into the source's `meta` (None takes a key out) and commits; returns the new meta."""
+    now = meta(con, source_id)
+    for key, value in values.items():
+        if value is None:
+            now.pop(key, None)
+        else:
+            now[key] = value
+    with con:
+        con.execute("UPDATE record_sources SET meta = ? WHERE id = ?", (json.dumps(now), source_id))
+    return now
+
+
 def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
     """A source as the page shows it."""
     section = registry.get(r["section"])
@@ -154,7 +178,18 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
             "mark": str(found.get("mark") or ""), "summary": str(found.get("summary") or ""),
             **_module_shape(con, r, found),
             "dissertation": r["section"] == DISSERTATION_SECTION and r["doc_kind"] == DISSERTATION,
-            "can_be_dissertation": r["section"] == DISSERTATION_SECTION}
+            "can_be_dissertation": r["section"] == DISSERTATION_SECTION, **_project_shape(r, found)}
+
+
+def _project_shape(r: sqlite3.Row, found: dict) -> dict:
+    """What a project source adds to its shape (migration 0030): its parent, what changed, and whose it is."""
+    try:
+        m = json.loads(r["meta"] or "{}")
+    except ValueError:
+        m = {}
+    m = m if isinstance(m, dict) else {}
+    return {"parent_id": r["parent_id"], "what_changed": r["what_changed"],
+            "not_yours": bool(found.get("not_yours")), "theirs": bool(m.get("theirs"))}
 
 
 def listing(con: sqlite3.Connection, section: str | None = None, target: int | None = None) -> list[dict]:
@@ -210,9 +245,13 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
     """
     r = row(con, source_id)
     unknown = sorted(set(changes) - {"title", "doc_kind", "target_id", "starred", "current", "section", "module",
-                                     "dissertation"})
+                                     "dissertation", "theirs"})
     if unknown:
         raise ValueError(f"A source has no {', '.join(unknown)} to change.")
+    if "theirs" in changes:
+        if not isinstance(changes["theirs"], bool) or r["section"] != "project":
+            raise ValueError("Only a project can be marked as yours: true or false.")
+        set_meta(con, r["id"], theirs=changes["theirs"] or None)
     section = registry.get(str(changes.get("section") or r["section"]))
     moved = section.id != r["section"]
     sets: dict = {}

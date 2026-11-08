@@ -125,8 +125,9 @@ class Section:
 
 
 EVERY_FACT = ("job", "education", "skill", "project", "achievement", "certificate", "basic", "link")
-PROJECT_READERS = {"repo": "repo", "local_folder": "repo", "repo_url": "repo", "github_account": "github_account",
-                   "upload": "project_files", "portfolio_site": "portfolio", "web_page": "page", "manual": "manual"}
+PROJECT_READERS = {"repo": "repo", "local_folder": "local_folder", "repo_url": "repo_url",
+                   "github_account": "github_account", "upload": "project_files", "portfolio_site": "portfolio",
+                   "web_page": "page", "manual": "manual"}
 
 SECTIONS: dict[str, Section] = {s.id: s for s in (
     Section("cv", "CVs", "CVs", ("cv",), OWN, EVERY_FACT, {ALL_FIELDS: CV_RANK}, "cv",

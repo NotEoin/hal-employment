@@ -86,6 +86,7 @@ class Source:
     starred: bool = False                      # in the person's showcase (coursework)
     module: str | None = None                  # the card's module the person chose; None until they choose
     details: dict = field(default_factory=dict)    # what the last read found about the source (`Reading.details`)
+    meta: dict | None = None                   # what the person said of it (`theirs`, a hand-made project's form)
 
 
 @dataclass
@@ -97,7 +98,20 @@ class Reading:
     text: str = ""                             # what the record's note keeps
     summary: str = ""
     facts: list[Fact] = field(default_factory=list)
-    details: dict = field(default_factory=dict)    # about the source itself, not the person: a mark, a module
+    # about the source itself, not the person: a mark, a module, or what a later check compares (tools, a hash)
+    details: dict = field(default_factory=dict)
+    children: list[Child] = field(default_factory=list)   # sources found inside this one (an account's repos)
+
+
+@dataclass(frozen=True)
+class Child:
+    """A source found inside another (a repo of a GitHub account, a project in a folder of projects): its kind
+    of document, how it is held and its locator; the pipeline adds it under its parent and reads it."""
+
+    doc_kind: str
+    held: str
+    locator: str
+    title: str = ""
 
 
 class Reader(Protocol):
@@ -190,6 +204,7 @@ READERS: dict[str, Reader] = {
     "document": DocumentReader(),
     "cv": Stub("cv", CV_PHASE), "letter": Stub("letter", CV_PHASE),
     "repo": Stub("repo", PROJECT_PHASE), "github_account": Stub("github_account", PROJECT_PHASE),
+    "repo_url": Stub("repo_url", PROJECT_PHASE), "local_folder": Stub("local_folder", PROJECT_PHASE),
     "project_files": Stub("project_files", PROJECT_PHASE), "portfolio": Stub("portfolio", PROJECT_PHASE),
     "page": Stub("page", PROJECT_PHASE), "manual": Stub("manual", PROJECT_PHASE),
     "coursework": Stub("coursework", EDUCATION_PHASE), "lecture": Stub("lecture", EDUCATION_PHASE),

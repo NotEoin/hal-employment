@@ -12,13 +12,15 @@ from contextlib import closing
 from pathlib import Path
 from unittest import mock
 
+from support import repos
 from support.api import HalServer
 from support.ui import AppPage, chromium, skip_unless_browser
 
 from jobhunt import db, record
-from jobhunt.core import paths
+from jobhunt.core import paths, settings
 from jobhunt.evidence import routes
 from jobhunt.profile import store
+from jobhunt.sections import pipeline
 from jobhunt.sections import store as sources
 
 # The shell asks for Home's summary, which this test does not serve; its 404 is not this page's fault.
@@ -185,10 +187,11 @@ class RecordSections(unittest.TestCase):
         project = found("project", {"name": "Tide gauge"})
         p = self.page("record-projects")
         panel = self.panel(p, "Add projects")
-        for words in ("Your GitHub account", "Link to one code project", "A folder on this computer", "Upload a folder",
+        self.assertTrue(panel.get_by_role("button", name="Upload a folder").is_enabled())
+        for words in ("Your GitHub account", "Link to one code project", "A folder on this computer",
                       "Portfolio site", "Web page or online document", "Add one by hand"):
             self.assertTrue(panel.get_by_role("button", name=words).is_disabled(), words)
-        self.assertEqual(panel.get_by_text("Coming soon").count(), 7)
+        self.assertEqual(panel.get_by_text("Coming soon").count(), 6)
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Tide gauge"))
         p.shows(card.get_by_text("from your CV only"), "the mark on a project only a CV gives")
         card.get_by_role("button", name="Showcase: Tide gauge").click()
@@ -196,6 +199,22 @@ class RecordSections(unittest.TestCase):
         with closing(db.connect()) as con:
             self.assertTrue(store.item(con, project)["star"])
         self.clean(p)
+
+    def test_a_code_project_with_none_of_your_changes_is_marked_yours_with_this_is_mine(self) -> None:
+        settings.set("you.name", repos.AVERY[0])
+        settings.set("you.email", repos.AVERY[1])
+        folder = repos.make(self.files / "lent", {"README.md": "# Lent\n", "a.py": "1\n"},
+                            [(repos.ROBIN, "2023-02-01T00:00:00Z", {})])
+        with closing(db.connect()) as con:
+            source_id = pipeline.add_link(con, "project", str(folder), doc_kind="repo")["added"][0]
+            pipeline.read(con, source_id)
+        p = self.page("record-projects")
+        row = self.panel(p, "Add projects").locator("li.rec-source", has_text="lent")
+        p.shows(row.get_by_text("None of the changes are yours"), "the note")
+        self.clean(p)
+        row.get_by_role("button", name="This is mine: lent").click()
+        p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="lent")).wait_for()
+        self.assertTrue(self.listed("project")[0]["theirs"])
 
 
 if __name__ == "__main__":

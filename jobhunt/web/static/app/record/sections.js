@@ -109,7 +109,10 @@ function SourceRow({ s }) {
           "Moved to " + s.suggestion_label + ". Hal is reading it again.")}>Move it to ${s.suggestion_label}</button><//>`}
       ${s.suggestion_kind && html`<${Note} tone="info">This looks like a ${s.suggestion_kind_label.toLowerCase()}.
         <button type="button" class="btn small" onClick=${() => act(() => put(path, { doc_kind: s.suggestion_kind }),
-          "Marked as a " + s.suggestion_kind_label.toLowerCase() + ". Hal is reading it again.")}>Mark it as a ${s.suggestion_kind_label.toLowerCase()}</button><//>`}</div>
+          "Marked as a " + s.suggestion_kind_label.toLowerCase() + ". Hal is reading it again.")}>Mark it as a ${s.suggestion_kind_label.toLowerCase()}</button><//>`}
+      ${s.not_yours && !s.theirs && html`<${Note} tone="info">None of the changes are yours, so Hal made no card from it.
+        <button type="button" class="btn small" aria-label=${"This is mine: " + s.title} onClick=${() => act(() => put(path, { theirs: true }),
+          "Hal is reading it again as yours.")}>This is mine</button><//>`}</div>
     <div class="row wrap rec-acts">
       ${s.can_star && html`<button type="button" class="btn small" aria-pressed=${s.starred ? "true" : "false"}
         aria-label=${(s.starred ? "Take out of your showcase: " : "Showcase: ") + s.title}

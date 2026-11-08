@@ -1303,6 +1303,39 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   agree. `profile.writing.skill_strengths(con)` maps each skill the writer may use to its strength, for the
   writer to tell a studied skill only as knowledge.
 
+### Projects (`sections/repo.py`, `sections/stack.py`)
+
+- `repo.read_folder(folder, name=, meta=, theirs=)` reads one code project with no AI for the facts that can
+  be computed: name, description, topics and licence (GitHub's `meta`, else `pyproject.toml`, `Cargo.toml`
+  or `package.json`); languages by size in bytes (`languages`, without `VENDORED_DIRS`, the generated names
+  in `GENERATED`, `ingest.discover`'s junk and tool files, and Git LFS pointers); `stack.read`; test files
+  (`tests`) and the CI provider (`ci`); and `git_history`, which runs `git log HEAD` as a subprocess with
+  `GIT_TIMEOUT_S`, never the reflog, with `core.fsmonitor` and hooks off. `share(history, person())` gives
+  the role: "sole author" or "contributor (N% of commits, M contributors)"; `person()` is the names, emails
+  and handles of the You settings and `ingest.roles.identity`, and a GitHub noreply address counts by its
+  handle. No history means file dates and no role.
+- The AI (`ai_reading`, prompt `project_read`) sees only the README and up to `DOC_FILES` files of `docs/`,
+  numbered by line, and returns a summary of at most three sentences and "what", "how" and "result" facts.
+  A fact whose quote is not on one line of the file it names is dropped, and the line is Hal's, not the
+  AI's. Tools come only from manifests and languages. Without the AI the summary is the description.
+- Facts: one `project` fact per field (name and summary, tools, role, period, link, each AI fact as a quote
+  on the card) and a `skill` per tool and language, each quoted from the note's text. A project with history
+  and none of the person's commits gives no facts (`details.not_yours`) until the person says it is theirs
+  (`PUT .../sources/{id}` with `{"theirs": true}`, kept in `meta.theirs`, which reads it again).
+- Never read: `SECRET_NAMES` and `SECRET_SUFFIXES` (`.env` files, keys, certificates), any README or doc the
+  privacy check flags, and files over `TEXT_MAX`.
+- `stack.read(folder)` reads the manifests at the top and one folder down (`MANIFESTS`: pyproject,
+  requirements*.txt, setup.cfg, package.json, Cargo.toml, go.mod without `// indirect`, pom.xml, build.gradle,
+  Gemfile, composer.json, *.csproj, environment.yml, R `DESCRIPTION`, Julia `Project.toml`) and the files
+  that are tools themselves (`FILE_TOOLS`, `FILE_SUFFIX_TOOLS`, Unity's `ProjectSettings`). Each `Dep` is
+  `tool, said, file, line`; `TOOLS` maps common packages to the names people write, and any other package
+  keeps its own name.
+- Readers: `repo` (a folder on this computer, or a repository link once cloned) and `project_files` (an
+  uploaded folder or zip: `repo` when its top looks like code, `ingest.discover.is_repo`, else its files' text
+  as a project named after the folder). `Reading.details` (tools, commits, mine, first, last, role, head,
+  link, not_yours) is kept in `record_sources.details` (migration 0029) for later checks. `repo` is in
+  `pipeline.READER_MODULES`, and `record_sources.meta` (migration 0030) keeps what the person said.
+
 ## Profile (`jobhunt/profile/`)
 
 - The profile is the facts about the person that Hal finds in their record: jobs, education (with modules

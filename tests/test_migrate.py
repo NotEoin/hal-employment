@@ -180,7 +180,7 @@ class OldDatabases(Folder):
                     "VALUES (1, 'project', '{\"name\": \"Tide gauge\"}', 'x', 'x')")
         con.execute("INSERT INTO profile_evidence (item_id, source_rel, found_at) VALUES (1, 'Sources/CV.md', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [28, 29])
+        self.assertEqual(self.run_migrate(con), [28, 29, 30])
         self.assertEqual(con.execute("SELECT star, star_by, orphaned_from FROM profile_items").fetchone(), (0, "", ""))
         self.assertEqual(con.execute("SELECT source_id, place, line FROM profile_evidence").fetchone(),
                          (None, "", None))
@@ -200,8 +200,29 @@ class OldDatabases(Folder):
         con.execute("INSERT INTO record_sources (section, kind, doc_kind, added) VALUES ('coursework', 'upload', "
                     "'essay', 'x')")
         con.commit()
-        self.assertEqual(self.run_migrate(con), [29])
+        self.assertEqual(self.run_migrate(con), [29, 30])
         self.assertEqual(con.execute("SELECT module, details FROM record_sources").fetchone(), (None, "{}"))
+
+    def test_project_sources_get_a_parent_and_revisions_at_version_30(self):
+        """A source from version 29 keeps its row with nothing said of it; removing a parent removes the sources
+        found inside it and their kept reads."""
+        con = self.open()
+        up_to_29 = migrate.discover()[:29]
+        with mock.patch.object(migrate, "LATEST", 29), mock.patch.object(migrate, "discover", return_value=up_to_29):
+            self.run_migrate(con)
+        con.execute("INSERT INTO record_sources (id, section, kind, doc_kind, locator, added) "
+                    "VALUES (1, 'project', 'account', 'github_account', 'averyq', 'x')")
+        con.commit()
+        self.assertEqual(self.run_migrate(con), [30])
+        self.assertEqual(con.execute("SELECT parent_id, meta, what_changed FROM record_sources").fetchone(),
+                         (None, "{}", ""))
+        con.execute("PRAGMA foreign_keys = ON")
+        con.execute("INSERT INTO record_sources (id, section, kind, doc_kind, locator, added, parent_id) "
+                    "VALUES (2, 'project', 'link', 'repo_url', 'https://github.com/averyq/tide', 'x', 1)")
+        con.execute("INSERT INTO record_source_revisions (source_id, revision, read_at) VALUES (2, 1, 'x')")
+        con.execute("DELETE FROM record_sources WHERE id = 1")
+        self.assertEqual(con.execute("SELECT count(*) FROM record_sources").fetchone()[0], 0)
+        self.assertEqual(con.execute("SELECT count(*) FROM record_source_revisions").fetchone()[0], 0)
 
     def test_settings_revision_starts_at_zero(self):
         con = self.open()
@@ -214,8 +235,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 30)))
-        self.assertEqual(migrate.LATEST, 29)
+        self.assertEqual(numbers, list(range(1, 31)))
+        self.assertEqual(migrate.LATEST, 30)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

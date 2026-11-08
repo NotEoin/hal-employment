@@ -40,12 +40,12 @@ from jobhunt import db, record
 from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import coursework, documents, lecture, letters, readers, registry, store, wrong_place
+from jobhunt.sections import coursework, documents, lecture, letters, readers, registry, repo, store, wrong_place
 from jobhunt.sections import cv as cv_reader
 
 log = logging.getLogger(__name__)
 # The sections' own reader modules: each puts its readers in place (`readers.register`) when it is imported.
-READER_MODULES = (cv_reader, coursework, documents, lecture, letters)
+READER_MODULES = (cv_reader, coursework, documents, lecture, letters, repo)
 CHUNK = 1 << 20            # files are hashed 1 MiB at a time
 SKIPPED_PARTS = {"__MACOSX", ".git", ".DS_Store", "Thumbs.db", "desktop.ini"}
 ZIP = ".zip"
@@ -216,7 +216,8 @@ def _source(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
             target = None
     return readers.Source(id=r["id"], section=r["section"], doc_kind=r["doc_kind"], title=r["title"],
                           held=r["kind"], locator=r["locator"], files=files, target=target,
-                          starred=bool(r["starred"]), module=r["module"], details=store.details(r))
+                          starred=bool(r["starred"]), module=r["module"], details=store.details(r),
+                          meta=store.meta(con, r["id"]))
 
 
 def vault() -> Path:
