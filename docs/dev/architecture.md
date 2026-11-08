@@ -597,7 +597,10 @@ runs: tests use `tests/support/fake_claude/`.
   `pack.write_others`' `letter`): one saying nearly what an earlier one said is rewritten once (prompt
   `sentence_fix`) from the plan items none of them cites, checked again, then taken out and its paragraph
   smoothed as `grounded.ground` does, or kept and listed as `pack.REPEAT_FLAG`. Packs said one sentence twice
-  back to back and reused one CV line in the letter, the message and both answers (2026-11-07). The fit
+  back to back and reused one CV line in the letter, the message and both answers (2026-11-07). Within one
+  draft, a sentence citing a project card's item that a paragraph two or more before its own already cites
+  (`repeats.card_again`) tells that project again and gets the same one rewrite (`grounded.REPEATS_CARD`); the
+  paragraph just before is left alone. A letter told one pipeline three times in other words (2026-11-08). The fit
   map's gaps are kept once each (`unique_gaps`: the same words, case, order and "(no evidence found)"
   aside).
 - `writing/eligibility.py`: `blockers(must_haves, person())` finds, with no AI, a degree level above the

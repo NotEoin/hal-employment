@@ -175,6 +175,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **One project, told once.** A letter told the same project three times, in other words each time, so no
+  sentence repeated another word for word. A letter or an answer that comes back to a project with the same
+  facts, after a paragraph about something else, now uses another of your facts there or leaves it out.
 - **Each sentence says which project.** "I wrote a 113-test suite that ..." left the reader guessing which
   project it meant. A sentence about one of your projects that nothing before it in its paragraph names
   now starts with the project's name ("For <project>, I wrote ..."), or is rewritten once to name it.

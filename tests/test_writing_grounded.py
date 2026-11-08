@@ -414,6 +414,23 @@ class Unrepeat(unittest.TestCase):
         self.assertIn("I scored 72 in the Databases module [E3]. Can we talk [M]?", done.text)
         self.assertNotIn("E2:", self.fixes()[0], "evidence an earlier draft cites is not offered again")
 
+    def test_a_project_told_again_two_paragraphs_on_is_rewritten_from_other_evidence(self):
+        # a letter told the same pipeline three times, each time in other words (2026-11-08)
+        letter = ("I wrote the statistics features of Ferry planner [E1].\n\nI built a sensor logger in Lua [E2]."
+                  "\n\nOn Ferry planner, a team of 7 shipped a timetable app [E1]. I would welcome a call [M].")
+        done = self.unrepeat(letter, ["I scored 72 in the Databases module [E3]."])
+        self.assertTrue(done.text.endswith("I scored 72 in the Databases module [E3]. I would welcome a call [M]."),
+                        done.text)
+        asked = self.fixes()[0]
+        self.assertIn("What is wrong: tells again what an earlier paragraph says of Ferry planner", asked)
+        self.assertNotIn("E1:", asked)
+
+    def test_a_project_told_on_in_the_next_paragraph_is_left_alone(self):
+        letter = ("I wrote the statistics features of Ferry planner [E1].\n\nOn Ferry planner, a team of 7 shipped "
+                  "a timetable app [E1].")
+        done = self.unrepeat(letter, [])
+        self.assertEqual((done.text, self.fixes()), (letter, []))
+
     def test_an_answers_first_sentence_still_repeating_is_kept_and_listed(self):
         earlier = ("I built a sensor logger in Lua that records river levels every ten minutes [E2].",)
         answer = "My sensor logger in Lua records river levels every ten minutes [E2]."

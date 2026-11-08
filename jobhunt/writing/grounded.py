@@ -105,6 +105,8 @@ ONLY_SKILLS = "rests only on a skills list, which says nothing about {card}"
 TOO_MUCH = "gives you more of the work than its evidence does"
 REASON = re.compile(r"\(([^()]*)\)$")
 REPEATS = 'already said as "{sentence}"'   # a sentence repeating an earlier one (`unrepeat`)
+# A sentence telling again of a project an earlier paragraph told with the same evidence (`unrepeat`).
+REPEATS_CARD = "tells again what an earlier paragraph says of {card}; use other evidence or leave it out"
 UNNAMED = "does not say which project it is about; name {card}"   # (`unnamed`)
 # "I wrote", "I also built": a sentence that can open "For <project>, " as it stands. Words of wanting or feeling
 # ("I hope", "I would") are left to the rewrite.
@@ -585,10 +587,16 @@ class _Repeats:
     earlier: tuple[str, ...]
 
     def judge(self, c: cites.Cited, before: str) -> list[str]:
-        """The earlier sentence `c` says again, before it in its draft or in an earlier draft, as a problem."""
+        """The earlier sentence `c` says again, before it in its draft or in an earlier draft, or the project it
+        tells again with evidence a paragraph two or more before it cites (`repeats.card_again`), as a
+        problem."""
         seen = [cites.strip(x) for e in (*self.earlier, before) for x in cites.sentences(e)]
         hit = repeats.first_said(c.text, seen)
-        return [REPEATS.format(sentence=hit)] if hit else []
+        if hit:
+            return [REPEATS.format(sentence=hit)]
+        card_of = {i.id: i.card for i in self.facts.items.values()}
+        card = repeats.card_again(c.ids, before.split("\n\n")[:-2], card_of)
+        return [REPEATS_CARD.format(card=card)] if card else []
 
     def recheck(self, m: cites.Cited, before: str) -> list[str]:
         """What is wrong with a rewrite: still a repeat, else its sentence checks (`check`)."""

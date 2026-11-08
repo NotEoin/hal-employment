@@ -4,7 +4,9 @@
 earlier one says; `pack._answers` has the answers rewritten once so the later one uses other evidence.
 `first_said(sentence, earlier)` is the earlier sentence one repeats, which `writing.grounded.unrepeat` uses for
 every sentence of the letter, the message and the answers, against the sentences before it in its own draft
-and in the drafts before it. `unique_gaps(gaps)` keeps the first of the fit map's gaps that say the same thing.
+and in the drafts before it, and `card_again(ids, far, card_of)` the project a sentence tells again with an
+item a paragraph two or more before it already cites. `unique_gaps(gaps)` keeps the first of the fit map's
+gaps that say the same thing.
 
 Design decisions, each with its reason:
 
@@ -16,6 +18,10 @@ Design decisions, each with its reason:
 - Sentences are near duplicates when the shorter one's own words (little words aside, `drafts.LITTLE_WORDS`)
   number at least `REPEAT_MIN_WORDS` and at least `REPEAT_SHARE` of them are in the other: a shared project
   name in two different sentences is not a repeat, the same three claims in the same order are.
+- One project, once per draft: a letter told the same pipeline three times, each time in other words, so no
+  sentence repeated another (2026-11-08). A sentence citing an item of a project card that a paragraph two or
+  more before it already cites (`card_again`) says that project's story again; the paragraph just before is
+  left alone, as a letter goes on about one project from one paragraph to the next.
 - Gaps are the same when their words are, case, punctuation, order and the "(no evidence found)" note
   aside (`pack.MISSING_GAP`), as the second ask for a missing must-have can list a gap the first gave.
 """
@@ -23,7 +29,7 @@ from __future__ import annotations
 
 import re
 
-from jobhunt.writing import check
+from jobhunt.writing import check, cites
 from jobhunt.writing.drafts import LITTLE_WORDS
 
 REPEAT_SHARE = 0.7         # share of the shorter sentence's own words the other must hold to repeat it
@@ -45,6 +51,13 @@ def same(a: str, b: str) -> bool:
 def first_said(sentence: str, earlier: list[str]) -> str | None:
     """The first of the `earlier` sentences that `sentence` says nearly again (`same`), or None."""
     return next((e for e in earlier if same(sentence, e)), None)
+
+
+def card_again(ids: tuple[str, ...], far: list[str], card_of: dict[str, str]) -> str:
+    """The card a sentence (citing `ids`) speaks of again: one whose item it cites is also cited in one of the
+    `far` paragraphs of its draft (those before the paragraph just before its own); "" when none is."""
+    said = {i for para in far for c in cites.cited(para) for i in c.ids}
+    return next((card_of[i] for i in ids if i in said and card_of.get(i)), "")
 
 
 def repeated(answers: list[str]) -> list[tuple[int, str, int]]:

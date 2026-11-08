@@ -107,7 +107,8 @@ you checked and your own documents. A claim it cannot find there is taken out or
 what is left is listed. What the draft says about the employer, taken from the advert, is not listed.
 A sentence that says nearly what an earlier one already said, in the same draft or in the letter, the
 message or an earlier answer, is rewritten once to use a fact the drafts have not used yet, or taken out,
-and listed under **Check before sending** if it has to stay.
+and listed under **Check before sending** if it has to stay. The same goes for a letter or an answer that
+comes back to a project with the same facts after a paragraph about something else.
 A draft may say what one of your modules covered only when your CV, the facts you checked or your own
 documents say it too, as a module's name alone does not say what it taught.
 Each module and its mark is a fact of its own, even when your CV lists them all on one line, so a draft
