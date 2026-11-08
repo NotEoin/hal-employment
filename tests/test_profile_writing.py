@@ -478,6 +478,19 @@ class OwnFiles(unittest.TestCase):
         self.assertEqual(quotes, ["A 40-test suite checks every answer against its note.", "Quill answers offline",
                                   "Quill answers questions over a folder of notes with no network."])
 
+    def test_a_repository_note_named_with_an_imports_suffix_gives_this_card_nothing(self):
+        # ingest names a repository's note "<repo> repository"; that note's tools, name and quotes stayed on
+        # an earlier card with a shorter name, and letters said it had the later one's front end (2026-11-08)
+        store.add_found(self.con, "project", {"name": "Quill", "tools": ["Preact"]},
+                        own("Sources/Code/quill-employment repository.md", "repository", "Drafts letters in Preact"))
+        store.add_found(self.con, "project", {"name": "Quill Employment",
+                                              "link": "https://example.org/avery/quill-employment"},
+                        own("Sources/Code/quill-employment/README.md", "repository", ""))
+        check_everything(self.con)
+        quill = {c["name"]: c for c in writing.cards(self.con)}["Quill"]
+        self.assertEqual((quill["tools"], quill["quotes"]), (["Lua"], ["Quill answers offline"]))
+        self.assertEqual((quill["files"], quill["aliases"]), (["Sources/Code/quill/README.md"], []))
+
     def test_the_record_keeps_the_evidence_as_it_was_stored(self):
         self.assertIn("SQLite", store.item(self.con, self.quill)["fields"]["tools"])
         self.assertEqual(writing.elsewhere_only(self.con, store.item(self.con, self.quill)), {"tools": ["SQLite"]})

@@ -21,6 +21,12 @@ Design decisions, each with its reason:
   end, its aliases took the repository's name, and letters said the earlier project used them. Only a whole
   name counts (`key`), never one name inside another, as a dossier named "Portfolio ..." would otherwise
   belong to a card named "Portfolio".
+- An import's suffixes are no part of a file's name (2026-11-08): ingest names notes "<repo> repository",
+  "<repo> (2)", "<Project> v2.0.0 Release Notes" and "<repo>-main", so "hal-employment repository" was not
+  the "Hal Employment" card's own file, and an earlier card named "Hal" kept that repository's tools, its
+  name as an alias and its quotes; letters said Hal had the later project's front end. `bare` drops a copy
+  marker, a version and trailing words such as "repository" or "release notes" before names are compared,
+  and the comparison is still of whole names.
 - This is a view for writing, never a change: the record and the review page keep every piece of evidence
   as it was stored.
 """
@@ -39,15 +45,27 @@ PROJECT_FILES = ("repository", "project", "coursework", "dissertation")
 GENERIC_FILES = {"readme", "index", "notes", "main", "untitled", "project", "code", "src", "app", "cv"}
 NAME_MIN = 3               # a file name this short ("ui", "v2") names no project
 FOLDER_DEPTH = 4           # "Sources/<category>/<folder>/<file>": a file inside a project's own folder
+# What ingest and code hosts add to a project's name in a file's name (see the module notes).
+COPY_MARK = re.compile(r"\s*\(\d+\)")
+VERSION = re.compile(r"[\s_-]*\bv?\d+(?:\.\d+)+\b|[\s_-]*\bv\d+\b", re.I)
+SUFFIX = re.compile(r"(?:[\s_.-]+(?:release[\s_-]+notes|repository|repo|readme|notes|main|master))+\s*$", re.I)
+
+
+def bare(name: str) -> str:
+    """A file's name without what an import adds to it: a copy marker ("(2)"), a version ("v2.0.0") and
+    trailing words such as "repository", "release notes" or "-main"; the name itself when nothing is left."""
+    out = VERSION.sub("", COPY_MARK.sub("", name or ""))
+    out = SUFFIX.sub("", out).strip(" _.-")
+    return out or (name or "").strip()
 
 
 def file_name(source_rel: str) -> str:
-    """The name a project's file goes by: its note's name, or its folder's when the note is a README inside
-    one ("Sources/Code/<repository>/README.md"); "" when it names no project."""
+    """The name a project's file goes by (`bare`): its note's name, or its folder's when the note is a README
+    inside one ("Sources/Code/<repository>/README.md"); "" when it names no project."""
     parts = [p for p in source_rel.replace("\\", "/").split("/") if p]
-    stems = [p.rsplit(".", 1)[0] if "." in p else p for p in parts[-1:]]
+    stems = [bare(p.rsplit(".", 1)[0] if "." in p else p) for p in parts[-1:]]
     if len(parts) >= FOLDER_DEPTH:
-        stems.append(parts[-2])
+        stems.append(bare(parts[-2]))
     return next((s for s in stems if s.lower() not in GENERIC_FILES and len(s) >= NAME_MIN), "")
 
 
@@ -57,11 +75,12 @@ def key(name: str) -> str:
 
 
 def _names(item: dict, merged: list[dict]) -> set[str]:
-    """The keys of every name a card goes by for owning a file: its own, its link's end, its merged cards'."""
+    """The keys of every name a card goes by for owning a file: its own, its link's end, its merged cards',
+    each also without what an import adds (`bare`)."""
     link = str(item["fields"].get("link") or "").rstrip("/")
     said = [item["fields"].get("name", ""), link.rsplit("/", 1)[-1] if link else "",
             *(m["fields"].get("name", "") for m in merged if m.get("merged_into") == item["id"])]
-    return {key(s) for s in said if key(s)}
+    return {k for s in said for k in (key(s), key(bare(s))) if k}
 
 
 @dataclass(frozen=True)

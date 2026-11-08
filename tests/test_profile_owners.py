@@ -60,6 +60,37 @@ class Owners(unittest.TestCase):
         self.assertNotIn("Sources/Projects/Portfolio overview.md", view.owners)
         self.assertIn("Sources/Projects/Portfolio overview.md", view.listings)
 
+    def test_an_imports_suffixes_are_no_part_of_a_files_name(self):
+        for stem in ("quill-employment repository", "quill-employment (2)", "Quill Employment v2.0.0 Release Notes",
+                     "quill-employment-main", "quill_employment-master", "Quill Employment repo"):
+            self.assertEqual(owners.key(owners.bare(stem)), "quill employment", stem)
+        self.assertEqual(owners.file_name("Sources/Code/quill-employment repository.md"), "quill-employment")
+        self.assertEqual(owners.bare("Portfolio overview"), "Portfolio overview")
+        self.assertEqual(owners.bare("repository"), "repository", "a name that is all suffix is kept")
+
+    def test_a_repository_note_with_an_imports_suffix_is_its_projects_own(self):
+        # "hal-employment repository" was not the "Hal Employment" card's, so the "Hal" card kept its tools,
+        # alias and quotes (2026-11-08); the projects here are made up
+        quill = self.add("Quill", "Sources/Code/quill/README.md")
+        later = self.add("Quill Employment", "Sources/Code/later/README.md",
+                         link="https://example.org/avery/quill-employment")
+        files = ("Sources/Code/quill-employment repository.md", "Sources/Code/quill-employment (2).md",
+                 "Sources/Code/Quill Employment v2.0.0 Release Notes.md", "Sources/Code/quill-employment-main.md")
+        for rel in files:
+            self.add("Quill", rel)
+        view = owners.Files.of(self.con)
+        for rel in files:
+            self.assertEqual(view.owners.get(rel), later, rel)
+            self.assertFalse(view.belongs(quill, rel), rel)
+        self.assertTrue(view.belongs(quill, "Sources/Code/quill/README.md"))
+
+    def test_a_dossier_named_after_a_card_with_more_words_is_still_no_cards_own(self):
+        self.add("Portfolio", "Sources/Code/site/README.md")
+        self.add("Tide gauge", "Sources/Code/tide/README.md")
+        for name in ("Portfolio", "Tide gauge"):
+            self.add(name, "Sources/Projects/Portfolio overview (2).md", "project")
+        self.assertNotIn("Sources/Projects/Portfolio overview (2).md", owners.Files.of(self.con).owners)
+
 
 if __name__ == "__main__":
     unittest.main()

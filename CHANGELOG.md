@@ -181,7 +181,8 @@ What changed in each version, in plain words.
 - **A project's own repository speaks only for that project.** An earlier project picked up facts from the
   repository of a later project with a longer name, and letters said it used the later one's database. A
   repository or project file named after one of your projects now gives its tools and quotes to that
-  project alone. Your record still shows every file as Hal found it.
+  project alone, also when the file's name carries what an import adds to it, such as "repository", "(2)",
+  a version number or "-main". Your record still shows every file as Hal found it.
 - **Paragraphs rest on sentences about your work.** The facts a paragraph about a project was written from
   held table rows, links, credit lines and ratings, and missed what the project's own README says. Hal now
   keeps only sentences about the work, adds the sentences of the project's own README, and gives the ones

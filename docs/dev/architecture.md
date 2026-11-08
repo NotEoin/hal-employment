@@ -599,7 +599,9 @@ runs: tests use `tests/support/fake_claude/`.
   visible project cards or naming several projects, which is in no card's `files`, gives no passage context
   and gives a card no quote naming another card and not it; nor through another card's own file,
   `owners.Files.owners`: a repository or project file whose name is a visible card's name, link end or merged
-  card's name, case and separators aside, which gives every other card no tool, quote, file, alias or
+  card's name, case and separators aside and without what an import adds (`owners.bare`: a copy marker such
+  as "(2)", a version such as "v2.0.0", and trailing words such as "repository", "release notes" or "-main"),
+  a whole name and never a part of one, which gives every other card no tool, quote, file, alias or
   passage context, `profile.writing.elsewhere_only`; the record keeps the evidence as stored), or by an acronym or inner-capitals word of its name that no other card holds, used as a name
   ("the LIDAR Autonavigation project" for "LIDAR Autonomous Navigation"). In evidence words (a fit row, the
   letter's Evidence line) a kind of project ("personal projects", `drafts.CONTEXT_PHRASE`) that does not fit a
