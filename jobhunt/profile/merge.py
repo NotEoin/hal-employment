@@ -23,6 +23,7 @@ Design decisions, each with its reason:
   "Hatch", "Hatch - AI desktop companion" and "Hatch - desktop companion and wellbeing app" were three
   cards (2026-11-06). So is a name of two or more words whose words are all in the other's ("Recovery
   drone", "Autonomous Recovery Drone"). "Hal" and "Hal Employment" stay two: one word is too little.
+  A document whose project facts name `LISTING_NAMES` (3) or more projects lists them (`lists_projects`).
 - Skills are compared without case, spaces or punctuation other than "+" and "#" (so "C++" and "C#" stay
   apart), and through a small table of other names for the same skill ("MS Excel" is "Excel"), covering
   office, research and writing skills as well as code. "python-scripting" and "Python scripting" were two
@@ -440,6 +441,10 @@ TAGLINE = re.compile(r"\s+[-\u2013\u2014]\s+.*$|:\s.*$")
 PROFILE_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "huggingface.co", "kaggle.com", "linkedin.com"}
 PROJECT_WORDS_MIN = 2      # words a shorter project name needs to match a longer one by its words
 PROJECT_WORDS = {"app", "application", "system", "project", "tool", "program", "programme", "website", "site"}
+# A document naming this many projects lists them: a dossier describing all of a person's projects gave one
+# folder's card ten other projects' facts (2026-11-08). One project's own write-up names itself and at most
+# one other (the larger project it is part of, or one it builds on), so two names are still one project's.
+LISTING_NAMES = 3
 
 
 def level(qualification: str) -> str:
@@ -555,6 +560,16 @@ def _same_project(a: dict, b: dict) -> bool:
     ka, kb = project_key(a.get("name", "")), project_key(b.get("name", ""))
     small, big = sorted((set(ka.split()), set(kb.split())), key=len)
     return _name_close(ka, kb) or (len(small) >= PROJECT_WORDS_MIN and small <= big)
+
+
+def lists_projects(names: list[str]) -> bool:
+    """True when the project names one document gives are `LISTING_NAMES` or more projects (`same_item`): the
+    document lists projects, as a CV does, and is not one project's own."""
+    kept: list[str] = []
+    for name in names:
+        if name and not any(_same_project({"name": name}, {"name": k}) for k in kept):
+            kept.append(name)
+    return len(kept) >= LISTING_NAMES
 
 
 SINGLE_BASICS = {"name"}      # basics a person has one of; others (emails, phones, links) can be several

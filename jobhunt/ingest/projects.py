@@ -9,9 +9,13 @@ repository, not a collection of projects). This module gives each its name, its 
   write-up is evidence of the one project card, never a card of its own. The README keeps its summary, role
   and dates too, as it says what the whole project is. Notes inside still give skills and quotes. A real
   research workspace gave about 180 project cards, one per ticket and write-up (2026-11-08).
-- Two kinds of document keep their project facts as they are: a CV, letter or transcript (`LISTS_PROJECTS`),
-  which lists all the person's projects wherever it is kept, and a document whose project is plainly another
-  one with a unit of its own (another project folder, or a repository).
+- A document that lists projects keeps its project facts as they are: a CV, letter or transcript
+  (`LISTS_PROJECTS`), and any document whose project facts name three or more projects
+  (`merge.lists_projects`), such as a dossier or plan describing all the person's work. A portfolio folder's
+  dossier gave its card ten other projects' facts (2026-11-08).
+- So does a fact whose project is plainly another one of the person's (`Others`): a card a file outside the
+  folder speaks for, a repository or another project folder, matched by a close name or a distinctive word
+  the names share, as a note names a repository's project in its own words.
 - Each folder gets one note (`write_notes`) listing its files' notes, which link back to it under "Part of",
   as a course's do; its data files and figures are listed in it (`attach`).
 - A tidy (`find_in_record`, `fold_cards`) holds a record an older read filed to the same rules: it finds the
@@ -47,6 +51,15 @@ KEPT_TOP = ("summary", "role", "period", *KEPT)                # what the README
 PART_OF = "\n## Part of\n"
 ORIGINAL = "\n## Original\n"
 WHY = "Part of {name}"
+# A name's words: "LIDAR", "GPU" in "GPUScheduler", "Lidar" and "Autonavigation" in "Lidar-Autonavigation-System"
+WORD = re.compile(r"[A-Z]{2,}(?![a-z])|[A-Z]?[a-z]+")
+# A shared word this long ties two names unless it is common in project names; "voice" in "Voice interface"
+# and the repository "hal-voice" does, "tool" or "data" never (2026-11-08).
+DISTINCT_MIN = 5
+GENERIC_WORDS = {"about", "analysis", "application", "based", "basic", "build", "design", "draft", "final",
+                 "first", "notes", "personal", "programme", "project", "projects", "report", "research", "simple",
+                 "small", "study", "system", "using", "version", "website", "write"}
+CHECKED = ("confirmed", "edited", "hidden")    # states only the person gives a card that is not merged
 
 
 @functools.lru_cache(maxsize=256)
@@ -81,20 +94,91 @@ def _repo_names(con: sqlite3.Connection) -> list[str]:
                                                  "AND state = 'done'")]
 
 
-def _other(name: str, own: str, others: list[str]) -> bool:
-    """True when a project named `name` is plainly one of `others`, not the folder's own project `own`."""
-    from jobhunt.profile import merge
-
-    def same(a: str, b: str) -> bool:
-        return merge.same_item(KIND, {"name": a}, {"name": b})
-
-    return bool(name) and not same(name, own) and any(same(name, o) for o in others if o)
+def _words(name: str) -> dict[str, bool]:
+    """A name's words, lower case, each with whether it is written as an acronym ("LIDAR", "GPU")."""
+    return {w.lower(): w.isupper() for w in WORD.findall(name or "")}
 
 
-def redirect(fields: dict, own: str, others: list[str], top: bool) -> dict:
+def _distinctive(word: str, acronym: bool) -> bool:
+    return acronym or (len(word) >= DISTINCT_MIN and word not in GENERIC_WORDS)
+
+
+class Others:
+    """The person's other projects, as seen from one project folder: every project card some file outside the
+    folder speaks for (or the person checked or added), with the names of the cards Hal merged into it
+    (`profile.duplicates`), each repository and each other project folder. A card only the folder's own files
+    speak for, such as a ticket an older read made a card of, is not one of them.
+
+    `names(name, own)` is True when a project fact named `name` read inside the folder whose project is `own`
+    is about one of them: close to one of their names (`merge.same_item`, `merge._name_close`), or sharing a
+    distinctive word with one name alone, such as an acronym ("LIDAR Autonomous Navigation" and the
+    repository "Lidar-Autonavigation-System"), which no rule on whole names ties together (2026-11-08).
+    """
+
+    def __init__(self, groups: list[list[str]]) -> None:
+        self.groups = [g for g in groups if any(g)]
+        self.counts: dict[str, int] = {}
+        for g in self.groups:
+            for w in {w for n in g for w in _words(n)}:
+                self.counts[w] = self.counts.get(w, 0) + 1
+
+    @classmethod
+    def of(cls, con: sqlite3.Connection, folder: Path, units: dict[Path, str]) -> Others:
+        """The other projects as seen from `folder`, one of the project folders `units`."""
+        from jobhunt.profile import duplicates, merge
+
+        start = str(folder) + os.sep
+        listings = duplicates.listing_files(con)
+        cards: dict[int, dict] = {}
+        for r in con.execute("""SELECT i.id, i.fields, i.state, i.origin, i.merged_into, i.merged_why,
+                                e.source_rel, e.doc_type, r.path FROM profile_items i
+                                LEFT JOIN profile_evidence e ON e.item_id = i.id
+                                LEFT JOIN ingest_items r ON r.note = e.source_rel AND r.state = 'done'
+                                AND r.kind IN ('file', 'repo') WHERE i.kind = ?""", (KIND,)):
+            card = cards.setdefault(r["id"], {"name": json.loads(r["fields"]).get("name", ""), "known": False,
+                                              "into": r["merged_into"], "why": r["merged_why"]})
+            # a file outside the folder (or one no read filed, such as a CV given another way), a file listing
+            # projects, or the person, says the card is a project of its own
+            card["known"] = card["known"] or (r["state"] in CHECKED or r["origin"] != "found") or (
+                r["source_rel"] is not None and (r["path"] is None or not r["path"].startswith(start)
+                                                 or r["source_rel"] in listings
+                                                 or merge.doc_group(r["doc_type"]) in LISTS_PROJECTS))
+        groups = {i: [c["name"]] for i, c in cards.items() if c["into"] is None and c["known"]}
+        for c in cards.values():
+            if c["into"] in groups and c["why"].startswith(duplicates.MERGED):
+                groups[c["into"]].append(c["name"])
+        found = list(groups.values())
+        for name in [n for f, n in units.items() if f != folder] + _repo_names(con):
+            # a repository is often a card too: one project counted twice would make its words look common
+            if not any(merge.same_item(KIND, {"name": name}, {"name": n}) for g in found for n in g):
+                found.append([name])
+        return cls(found)
+
+    def names(self, name: str, own: str) -> bool:
+        """True when a project fact named `name`, read inside the folder whose project is `own`, is plainly
+        about one of the other projects (see the class notes)."""
+        from jobhunt.profile import merge
+
+        if not name or merge.same_item(KIND, {"name": name}, {"name": own}):
+            return False
+        mine, own_words = _words(name), _words(own)
+        for aka in self.groups:
+            if any(merge.same_item(KIND, {"name": n}, {"name": own}) for n in aka if n):
+                continue                   # the folder's own card, under one of its names
+            if any(merge.same_item(KIND, {"name": name}, {"name": n}) or merge._name_close(name, n)
+                   for n in aka if n):
+                return True
+            theirs = {w: a for n in aka for w, a in _words(n).items()}
+            if any(_distinctive(w, mine[w] or theirs[w]) and self.counts.get(w, 0) == 1 and w not in own_words
+                   for w in set(mine) & set(theirs)):
+                return True
+        return False
+
+
+def redirect(fields: dict, own: str, others: Others, top: bool) -> dict:
     """A project fact read inside the project folder named `own`, as a fact about that project (see the module
-    notes); `fields` as they are when they plainly name one of `others`."""
-    if _other(str(fields.get("name") or ""), own, others):
+    notes); `fields` as they are when they plainly name one of the `others`."""
+    if others.names(str(fields.get("name") or ""), own):
         return fields
     return {"name": own, **{k: v for k, v in fields.items() if k in (KEPT_TOP if top else KEPT) and v}}
 
@@ -103,20 +187,25 @@ def _is_top(path: Path, folder: Path) -> bool:
     return path.parent == folder and discover.has_readme([path.name])
 
 
+def _names(facts: list[dict]) -> list[str]:
+    return [str(f["fields"].get("name") or "") for f in facts if f["kind"] == KIND]
+
+
 def facts_in(con: sqlite3.Connection, row: sqlite3.Row | dict, desc: dict) -> list[dict]:
-    """The document's facts, its project facts as facts about the project folder it is in (`redirect`)."""
+    """The document's facts, its project facts as facts about the project folder it is in (`redirect`), unless
+    the document lists projects (`LISTS_PROJECTS`, or `merge.lists_projects`)."""
     from jobhunt.profile import merge
 
     facts = desc["facts"]
     if row["kind"] != "file" or merge.doc_group(desc["doc_type"]) in LISTS_PROJECTS \
-            or not any(f["kind"] == KIND for f in facts):
+            or not any(f["kind"] == KIND for f in facts) or merge.lists_projects(_names(facts)):
         return facts
     units = _units(con)
     path = Path(row["path"])
     folder = group.project_of(path, set(units))
     if folder is None:
         return facts
-    others = [n for f, n in units.items() if f != folder] + _repo_names(con)
+    others = Others.of(con, folder, units)
     top = _is_top(path, folder)
     return [{**f, "fields": redirect(f["fields"], units[folder], others, top)} if f["kind"] == KIND else f
             for f in facts]
@@ -245,12 +334,13 @@ def fold_cards(con: sqlite3.Connection) -> int:
     """Files each project fact an older read took from a document inside a project folder again on the
     folder's project card (`facts_in`), and hides each card Hal found that is left with nothing, as part of
     that project. Returns how many cards were folded."""
-    from jobhunt.profile import merge, store
+    from jobhunt.profile import duplicates, merge, store
 
     units = _units(con)
     if not units:
         return 0
-    others = _repo_names(con)
+    listings = duplicates.listing_files(con)
+    others: dict[Path, Others] = {}
     paths = {r["note"]: Path(r["path"]) for r in con.execute(
         "SELECT note, path FROM ingest_items WHERE kind = 'file' AND state = 'done' AND note IS NOT NULL")}
     moved: dict[int, tuple[int, str]] = {}
@@ -259,11 +349,13 @@ def fold_cards(con: sqlite3.Connection) -> int:
                             AND i.origin = 'found' ORDER BY e.id""", (KIND,)).fetchall():
         path = paths.get(e["source_rel"])
         folder = group.project_of(path, set(units)) if path is not None else None
-        if folder is None or merge.doc_group(e["doc_type"]) in LISTS_PROJECTS:
+        if folder is None or merge.doc_group(e["doc_type"]) in LISTS_PROJECTS or e["source_rel"] in listings:
             continue
         said = json.loads(e["said"] or "{}")
         name = units[folder]
-        fields = redirect(said, name, [n for f, n in units.items() if f != folder] + others, _is_top(path, folder))
+        if folder not in others:          # as the cards were before this pass moved any
+            others[folder] = Others.of(con, folder, units)
+        fields = redirect(said, name, others[folder], _is_top(path, folder))
         if fields == said:
             continue
         try:

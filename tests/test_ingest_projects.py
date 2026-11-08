@@ -41,6 +41,19 @@ def names_a_project(req) -> str:
                        "facts": facts})
 
 
+def naming(projects: dict[str, list[str]]):
+    """A made-up AI reply that gives each file named in `projects` (by its name without ".md") a project fact
+    for each name listed, and every other file one project named after it, as `names_a_project` does."""
+    def reply(req) -> str:
+        rel = re.search(r"^File: (.+)$", req.user, re.M).group(1)
+        stem = rel.rsplit("/", 1)[-1].removesuffix(".md")
+        facts = [{"kind": "project", "fields": {"name": n, "summary": f"{n}, as {stem} tells it."}, "field": "name",
+                  "quote": ""} for n in projects.get(stem, [stem])]
+        return json.dumps({**NOTE_REPLY, "doc_type": "report", "category": "Coursework", "title": stem,
+                           "role": "own", "facts": facts})
+    return reply
+
+
 def project_cards(con) -> dict[str, dict]:
     """The project cards by name: {name: shaped item}."""
     return {i["fields"]["name"]: i for i in store.items(con, "project")}
@@ -92,6 +105,41 @@ class ProjectFolders(unittest.TestCase):
         self.assertTrue(any("Harbour note" in e["source_rel"] for e in cards["Harbour bot"]["evidence"]),
                         "a note about a project with its own unit speaks for that one")
         self.assertIn("Lantern counter", cards)
+
+    def test_a_document_listing_three_or_more_projects_keeps_each_projects_own_card(self):
+        listed = ["Tide clock", "Wick sensor", "Beam log", "Harbour lights survey"]
+        portfolio = {"Portfolio/README.md": "# Portfolio\n\nMy portfolio.",
+                     "Portfolio/Project dossier.md": "# Project dossier\n\nEvery project I have made.",
+                     "Portfolio/Next steps.md": "# Next steps\n\nPolish the portfolio."}
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": naming({"Project dossier": listed})}):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            for rel, text in portfolio.items():
+                put(files, rel, text)
+            run(con, [files / "Portfolio"], origins={str(files / "Portfolio"): "mine"})
+            cards = project_cards(con)
+        self.assertEqual(sorted(cards), sorted([*listed, "Portfolio"]),
+                         "a dossier lists projects, as a CV does; a note about the folder's own work is its card")
+
+    def test_a_note_naming_a_repositorys_project_in_other_words_keeps_its_own_name(self):
+        repo = {"Lidar-Autonavigation-System/pyproject.toml": "[project]\nname = \"lidar-autonav\"\n",
+                "Lidar-Autonavigation-System/README.md": "# Lidar autonavigation\n\nA made-up rover."}
+        notes = {"Sensor bench/README.md": "# Sensor bench\n\nMy bench for testing sensors.",
+                 "Sensor bench/Rover note.md": "# Rover note\n\nThe rover's scanner needs a new mount.",
+                 "Sensor bench/Mount plan.md": "# Mount plan\n\nPrint a new bracket."}
+        reply = naming({"Rover note": ["LIDAR Autonomous Navigation"]})
+        with home() as (con, _vault, files), fake_ai({"ingest_doc": reply}):
+            settings.set("you.name", OWNER)
+            settings.set("record.read_all", True)
+            for rel, text in {**repo, **notes}.items():
+                put(files, rel, text)
+            run(con, [files / "Lidar-Autonavigation-System"], batch="b0",
+                origins={str(files / "Lidar-Autonavigation-System"): "mine"})
+            run(con, [files / "Sensor bench"], origins={str(files / "Sensor bench"): "mine"})
+            cards = project_cards(con)
+        self.assertIn("LIDAR Autonomous Navigation", cards, "an acronym both names share ties it to the repository")
+        self.assertEqual(sorted(e["source_rel"].rsplit("/", 1)[-1] for e in cards["Sensor bench"]["evidence"]),
+                         ["Mount plan.md", "README.md"], "a plan with no other project's name is the bench's")
 
     def test_a_module_folder_of_course_material_still_holds_two_coursework_projects(self):
         module = {"GEO101/README.md": "# GEO101\n\nModule handbook.",

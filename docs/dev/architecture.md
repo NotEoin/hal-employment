@@ -820,8 +820,13 @@ runner starts the action again with the same batch and only pending items are re
    one by one, but `projects.facts_in` (called by `engine._judge`) turns each project fact read in one
    into a fact about the folder's project: named from the README's first heading or the folder
    (`projects.name_of`), keeping only tools and links (and the README's summary, role and dates). A CV,
-   letter or transcript keeps its project facts, and so does a fact that names another project folder's
-   or repository's project. `projects.write_notes` writes the folder's note listing its files' notes, which
+   letter or transcript keeps its project facts, and so does a document whose project facts name
+   `merge.LISTING_NAMES` (3) or more projects (`merge.lists_projects`), such as a dossier of all the
+   person's work. A fact also keeps its name when it is about another of the person's projects
+   (`projects.Others`): a card a file outside the folder, a listing or the person speaks for (with the names
+   of cards merged into it), a repository or another project folder, matched by `merge.same_item`,
+   `merge._name_close` or a distinctive word only that one name shares (an acronym, or a word of
+   `projects.DISTINCT_MIN` (5) or more letters not in `projects.GENERIC_WORDS`). `projects.write_notes` writes the folder's note listing its files' notes, which
    link back under "Part of", and supporting files attach to it. A `course` origin never makes one. A
    folder outside any project folder whose own files are mostly notes or slides (three or more) is a
    `course` unit: a note per file
@@ -1109,8 +1114,9 @@ available yet.
 - Duplicates (`duplicates.py`, migration 0027): after each read, before sorting, the ingest action runs
   `profile.actions.dedupe`, one pass of `duplicates.refresh(con)` over the projects, courses and achievements
   Hal found and nobody checked (`candidates`: not hidden, `merged_why` not `apart`). Pairs with the same
-  project link (`merge.project_link`) or a shared file that is not a CV, letter or transcript are one
-  (`certain`); the rest go to the `profile_same` prompt (checker role, JSON, `duplicates.BATCH` (60) cards a
+  project link (`merge.project_link`) or a shared file that is not a CV, letter, transcript or listing
+  (`duplicates.listing_files`: a file whose project facts name three or more projects, counted under the
+  names of the cards a tidy moved them from) are one (`certain`); the rest go to the `profile_same` prompt (checker role, JSON, `duplicates.BATCH` (60) cards a
   call, sorted by name so likely twins share a call), which answers `{"groups": [[id, ...]]}`; a pair whose
   dates are `YEARS_APART` (2) or more years apart with no shared file is never joined (`never`), and a
   chain of the AI's pairs that would join one is split. Each group goes into its `target` (the card a CV

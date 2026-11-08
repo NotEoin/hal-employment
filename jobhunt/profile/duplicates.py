@@ -9,7 +9,9 @@ navigation project and two for one network sniffer, under names `merge.same_item
    not hidden, and not taken out of a merge by the person before (`store.APART`). A card the person confirmed
    or edited is never merged without their action.
 2. Rules that are certain (`certain`): two cards with the same project link, or found in the same file of
-   one piece of work (not a CV, letter or transcript, which list every experience), are one.
+   one piece of work, are one. A CV, letter or transcript lists every experience, and so does a file whose
+   project facts name three or more projects (`listing_files`), such as a dossier of all the person's
+   work: sharing one says nothing, and the AI is not shown it.
 3. The AI (`profile_same` prompt, checker role, JSON, `BATCH` cards a call, each with its name, summary,
    tools, dates, links and files) groups the rest.
 4. A rule that is never broken (`never`): cards whose dates are `YEARS_APART` or more years apart and that
@@ -51,9 +53,24 @@ def candidates(con: sqlite3.Connection, kind: str) -> list[dict]:
             and i["merged_why"] != store.APART]
 
 
-def _files(item: dict) -> set[str]:
-    """The files of one piece of work the card was found in: not a CV, letter or transcript."""
-    return {e["source_rel"] for e in item["evidence"] if merge.doc_group(e["doc_type"]) not in LISTS}
+def listing_files(con: sqlite3.Connection) -> set[str]:
+    """The files that list projects (`merge.lists_projects`): their project facts name `merge.LISTING_NAMES` or
+    more projects. A fact a tidy filed again on its folder's card (`store.refile`) counts under the name of the
+    card it came from (`moved_from`)."""
+    names: dict[str, list[str]] = {}
+    for r in con.execute("""SELECT e.source_rel, e.said, f.fields AS was FROM profile_evidence e
+                            JOIN profile_items i ON i.id = e.item_id LEFT JOIN profile_items f ON f.id = e.moved_from
+                            WHERE i.kind = 'project'"""):
+        said = json.loads(r["was"] or r["said"] or "{}")
+        names.setdefault(r["source_rel"], []).append(str(said.get("name") or ""))
+    return {source for source, said in names.items() if merge.lists_projects(said)}
+
+
+def _files(item: dict, listings: frozenset[str] = frozenset()) -> set[str]:
+    """The files of one piece of work the card was found in: not a CV, letter or transcript, nor a file that
+    lists projects (`listings`)."""
+    return {e["source_rel"] for e in item["evidence"]
+            if merge.doc_group(e["doc_type"]) not in LISTS and e["source_rel"] not in listings}
 
 
 def _link(item: dict) -> str:
@@ -72,16 +89,16 @@ def _span(item: dict) -> tuple[int, int] | None:
     return (point, point) if point is not None else None
 
 
-def certain(a: dict, b: dict) -> bool:
+def certain(a: dict, b: dict, listings: frozenset[str] = frozenset()) -> bool:
     """True when two cards are surely one: the same project link, or a shared file of one piece of work."""
     link = _link(a)
-    return bool(link and link == _link(b)) or bool(_files(a) & _files(b))
+    return bool(link and link == _link(b)) or bool(_files(a, listings) & _files(b, listings))
 
 
-def never(a: dict, b: dict) -> bool:
+def never(a: dict, b: dict, listings: frozenset[str] = frozenset()) -> bool:
     """True when two cards are surely two: dates `YEARS_APART` or more years apart and no file shared."""
     sa, sb = _span(a), _span(b)
-    if sa is None or sb is None or _files(a) & _files(b):
+    if sa is None or sb is None or _files(a, listings) & _files(b, listings):
         return False
     return max(sa[0], sb[0]) - min(sa[1], sb[1]) >= YEARS_APART * MONTHS
 
@@ -92,14 +109,15 @@ def _short(value):
     return str(value)[:FIELD_CHARS] if isinstance(value, str) else value
 
 
-def card(item: dict) -> dict:
-    """What the AI reads about one card: its name, summary, tools, dates, links and files."""
+def card(item: dict, listings: frozenset[str] = frozenset()) -> dict:
+    """What the AI reads about one card: its name, summary, tools, dates, links and files (not the files that
+    list projects, `listings`, which every card they list shares)."""
     f = item["fields"]
     return {"id": item["id"], "kind": item["kind"], "name": _short(item["title"]),
             "summary": _short(f.get("summary") or f.get("detail") or item["sub"] or ""),
             "tools": _short(list(f.get("tools") or [])), "when": item["when"],
             "links": [v for v in (f.get("link"),) if v],
-            "files": sorted({e["source_rel"] for e in item["evidence"]})[:FILES]}
+            "files": sorted({e["source_rel"] for e in item["evidence"] if e["source_rel"] not in listings})[:FILES]}
 
 
 def _ask(con: sqlite3.Connection, cards: list[dict]) -> list[list[int]]:
@@ -124,7 +142,7 @@ def _ask(con: sqlite3.Connection, cards: list[dict]) -> list[list[int]]:
     return out
 
 
-def groups(found: list[dict], said: list[list[int]]) -> list[list[dict]]:
+def groups(found: list[dict], said: list[list[int]], listings: frozenset[str] = frozenset()) -> list[list[dict]]:
     """The groups of cards to merge: the certain pairs, and the AI's groups (`said`) without the pairs that
     are never one; each group holds no two cards that are never one."""
     by_id = {i["id"]: i for i in found}
@@ -141,12 +159,12 @@ def groups(found: list[dict], said: list[list[int]]) -> list[list[dict]]:
 
     for n, a in enumerate(found):
         for b in found[n + 1:]:
-            if certain(a, b):
+            if certain(a, b, listings):
                 join(a["id"], b["id"])
     for ids in said:
         for n, a in enumerate(ids):
             for b in ids[n + 1:]:
-                if a in by_id and b in by_id and not never(by_id[a], by_id[b]):
+                if a in by_id and b in by_id and not never(by_id[a], by_id[b], listings):
                     join(a, b)
     parts: dict[int, list[dict]] = {}
     for i in by_id:
@@ -157,7 +175,7 @@ def groups(found: list[dict], said: list[list[int]]) -> list[list[dict]]:
         while len(left) > 1:          # a chain of AI pairs may join two cards that are never one: split them
             kept = [left[0]]
             for c in left[1:]:
-                if not any(never(c, k) for k in kept):
+                if not any(never(c, k, listings) for k in kept):
                     kept.append(c)
             if len(kept) > 1:
                 out.append(kept)
@@ -194,7 +212,8 @@ def _ready() -> bool:
     return why is None
 
 
-def _said(con: sqlite3.Connection, found: list[dict]) -> tuple[list[list[int]], int]:
+def _said(con: sqlite3.Connection, found: list[dict],
+          listings: frozenset[str] = frozenset()) -> tuple[list[list[int]], int]:
     """The AI's groups for `found`, `BATCH` cards a call, and how many cards it could not look at."""
     from jobhunt import ai
     from jobhunt.ai.base import PrivateLeak
@@ -204,7 +223,7 @@ def _said(con: sqlite3.Connection, found: list[dict]) -> tuple[list[list[int]], 
     for start in range(0, len(ordered), BATCH):
         batch = ordered[start:start + BATCH]
         try:
-            said += _ask(con, [card(i) for i in batch])
+            said += _ask(con, [card(i, listings) for i in batch])
         except ai.LLMUnavailable as e:
             log.info("stopped looking for duplicate experiences: %s", e)
             missed += len(ordered) - start
@@ -220,13 +239,14 @@ def refresh(con: sqlite3.Connection, *, judge: bool = True) -> dict[str, int]:
     groups merged, the cards hidden into them, and the cards the AI could not look at."""
     counts = {"groups": 0, "merged": 0, "unjudged": 0}
     use_ai = judge and _ready()
+    listings = frozenset(listing_files(con))
     for kind in KINDS:
         found = candidates(con, kind)
         if len(found) < 2:
             continue
-        said, missed = _said(con, found) if use_ai else ([], 0)
+        said, missed = _said(con, found, listings) if use_ai else ([], 0)
         counts["unjudged"] += missed
-        for group in groups(found, said):
+        for group in groups(found, said, listings):
             into = target(group)
             why = MERGED + into["title"]
             for other in group:

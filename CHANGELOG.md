@@ -201,6 +201,10 @@ What changed in each version, in plain words.
   its rewrite, which left paragraphs that jumped from one fact to the next. It now rewrites the sentence
   with its whole paragraph in view, so the paragraph still reads on, and lists it under **Check before
   sending** if it is still wrong. A sentence is taken out only when none of your facts backs it.
+- **A list of your projects is not one project.** A portfolio folder holding a plan that described all
+  your projects turned every one of them into the portfolio, and cards that shared such a plan were merged.
+  A document that describes three or more projects now lists them, as a CV does, and a note about another
+  of your projects keeps its own name, even when it words the name differently from the project's folder.
 - **The company check says when it is unsure.** A large trading firm's pack named a small IT consultancy of
   the same name, registered at a flat, as the employer. A registered company is now named as the employer
   only when the advert's own website is on its record, or it is in the advert's town and trade at an

@@ -26,6 +26,7 @@ CV = "Sources/CVs and letters/Avery Quillon CV.md"
 README = "Sources/Code/gauge_bot.md"
 REPORT = "Sources/Coursework/Tide gauge report.md"
 DRAFT = "Sources/Coursework/Harbour lights draft.md"
+DOSSIER = "Sources/Coursework/Project dossier.md"
 
 
 def own(source: str, doc_type: str, quote: str = "") -> dict:
@@ -86,6 +87,13 @@ class Duplicates(unittest.TestCase):
         self.assertIsNone(store.item(self.con, c)["merged_into"])
         linked = {"kind": "project", "fields": {"link": "https://example.org/code/wick"}, "evidence": []}
         self.assertTrue(duplicates.certain(linked, {**linked, "fields": {"link": "example.org/code/wick/"}}))
+
+    def test_cards_sharing_a_file_that_lists_three_projects_are_not_one(self):
+        for name in ("Tide clock", "Wick sensor", "Beam log"):
+            self.project(name, DOSSIER, "report")
+        counts = duplicates.refresh(self.con, judge=False)
+        self.assertEqual(counts["merged"], 0, "a dossier of every project lists them, as a CV does")
+        self.assertEqual(duplicates.listing_files(self.con), {DOSSIER})
 
     def test_cards_years_apart_with_no_file_in_common_are_never_merged_whatever_the_ai_says(self):
         self.project("Tide clock", CV, "cv", period="2017")
