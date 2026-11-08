@@ -1,6 +1,7 @@
 """The CV reader: a CV added to CVs is read into jobs, education, skills, projects, basics and links, each
 fact quoting its line, by the AI with a CV-only prompt or by the CV studio's rules when the AI is away, and the
-CV's own date is kept on its source.
+CV's own date is kept on its source. The newest-dated CV leads, or the one the person chose; an older CV only
+fills gaps, and folding, writing and the page agree on which one leads.
 
 The two made-up graduates of `support.graduates` (Avery Quillon, software; Marnie Quillfeather, history) and
 every name, place and file are invented.
@@ -11,13 +12,17 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.fake_ai import fake_ai
 from support.graduates import AVERY, MARNIE
 from test_ingest import home
 
+from jobhunt.profile import conflicts, cvs
+from jobhunt.profile import routes as profile_routes
 from jobhunt.profile import store as profile_store
+from jobhunt.profile import writing as profile_writing
 from jobhunt.sections import cv, pipeline, readers, store
 from jobhunt.sections.pipeline import Incoming
 
@@ -122,6 +127,104 @@ class CvSection(unittest.TestCase):
         self.assertEqual({j["fields"]["title"] for j in jobs}, {"Junior developer", "Lab helper"})
         ev = jobs[0]["evidence"][0]
         self.assertEqual((ev["doc_type"], ev["role"], ev["source_id"], ev["verified"]), ("cv", "own", source_id, True))
+
+
+def add_cv(con, name: str, text: str) -> int:
+    """`text` added to CVs as the file `name` and read; its source's id."""
+    source_id = pipeline.add_uploads(con, "cv", [Incoming(name, text.encode())])["added"][0]
+    pipeline.read(con, source_id)
+    return source_id
+
+
+def card(con, kind: str, **match) -> dict:
+    """The one shown card of `kind` whose fields hold `match`."""
+    (found,) = [i for i in profile_store.items(con, kind, hidden=False)
+                if all(i["fields"].get(k) == v for k, v in match.items())]
+    return found
+
+
+class CurrentAndOlderCvs(unittest.TestCase):
+    def test_the_newest_dated_cv_leads_and_an_older_cv_only_fills_gaps(self):
+        with home() as (con, _, _):
+            older = add_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            current = add_cv(con, "Marnie CV.md", MARNIE.cv)
+            lead = cvs.current_source(con)
+            shop = card(con, "job", employer="Made-up Books Ltd")
+            paper = card(con, "job", employer="Harrowgate Gazette")
+            degree = card(con, "education", institution="University of Nowhere Fen")
+            german = card(con, "skill", name="German")
+            grade_conflicts = [c for c in conflicts.listing(con) if c.get("field") in ("grade", "end", "location")]
+            shown = [store.get(con, i) for i in (current, older)]
+        self.assertEqual(lead, current)
+        self.assertEqual([(s["current"], s["dated"]) for s in shown], [(True, "2025-03"), (False, "2022-05")])
+        self.assertEqual((shop["fields"]["title"], shop["fields"]["end"], shop["fields"]["location"]),
+                         ("Shop assistant", "2023-08", "Harrowgate"), "the town only the older CV gives fills a gap")
+        self.assertEqual(shop["fields"]["duties"], ["Advised customers on local history titles"],
+                         "the older CV's duties stay out while the current CV lists some")
+        self.assertNotIn("current", shop["fields"])
+        self.assertEqual(paper["fields"]["title"], "Paper round", "the extra old job comes from the older CV")
+        self.assertEqual(degree["fields"]["modules"], [{"name": "Medieval Europe", "mark": "68"},
+                                                       {"name": "Archival Methods", "mark": "72"}])
+        self.assertEqual({e["source_id"] for e in german["evidence"]}, {older})
+        self.assertEqual(grade_conflicts, [], "an older CV's word is no conflict with the current CV's")
+
+    def test_the_older_cvs_grade_never_beats_the_current_cvs(self):
+        with home() as (con, _, _):
+            add_cv(con, "Avery CV.md", AVERY.cv)
+            add_cv(con, "Avery CV 2023.md", AVERY.older_cv)
+            degree = card(con, "education", institution="University of Nowhere Fen")
+            lab = card(con, "job", title="Lab helper")
+        self.assertEqual((degree["fields"]["grade"], degree["fields"]["end"]), ("First", "2024"))
+        self.assertEqual(degree["fields"]["modules"], [{"name": "Databases", "mark": "70"},
+                                                       {"name": "Algorithms", "mark": "65"}])
+        self.assertEqual((lab["fields"]["location"], lab["fields"]["end"]), ("Fenmouth", "2024-06"))
+
+    def test_choosing_another_cv_as_current_folds_the_cards_again_and_clearing_it_gives_back_the_newest(self):
+        with home() as (con, _, _):
+            current = add_cv(con, "Avery CV.md", AVERY.cv)
+            older = add_cv(con, "Avery CV 2023.md", AVERY.older_cv)
+            store.change(con, older, {"current": True})
+            chosen = (cvs.current_source(con), card(con, "education", institution="University of Nowhere Fen"))
+            store.change(con, older, {"current": False})
+            back = (cvs.current_source(con), card(con, "education", institution="University of Nowhere Fen"))
+        self.assertEqual(chosen[0], older)
+        self.assertEqual(chosen[1]["fields"]["grade"], "2:1")
+        self.assertEqual(chosen[1]["fields"]["modules"], [{"name": "Databases", "mark": "60"}])
+        self.assertEqual(back[0], current)
+        self.assertEqual(back[1]["fields"]["grade"], "First")
+
+    def test_removing_the_current_cv_makes_the_next_newest_lead(self):
+        with home() as (con, _, _):
+            current = add_cv(con, "Marnie CV.md", MARNIE.cv)
+            older = add_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            pipeline.remove(con, current)
+            lead = cvs.current_source(con)
+            shop = card(con, "job", employer="Made-up Books Ltd")
+        self.assertEqual(lead, older)
+        self.assertEqual(shop["fields"]["duties"], ["Ran the till on Saturdays"])
+        self.assertTrue(shop["fields"]["current"])
+
+    def test_writing_and_the_page_take_the_same_cv_as_current(self):
+        with home() as (con, _, _):
+            current = add_cv(con, "Marnie CV.md", MARNIE.cv)
+            older = add_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            authority = profile_writing.CvAuthority.of(con)
+            notes = (store.get(con, current)["note_rel"], store.get(con, older)["note_rel"])
+            paper = card(con, "job", employer="Harrowgate Gazette")
+            left_out = profile_writing.older_cv_only(con, paper, authority)
+            page = profile_routes.of_kind(SimpleNamespace(con=con, params={"kind": "job"}))
+        self.assertEqual((authority.newest, authority.older), (notes[0], frozenset({notes[1]})))
+        self.assertEqual(left_out, {"duties": ["Delivered papers before school"]})
+        marks = {e["source_id"]: e["from_older_cv"] for i in page["items"] for e in i["evidence"]}
+        self.assertEqual(marks, {current: False, older: True})
+
+    def test_a_project_only_cvs_give_is_marked_from_your_cv_only(self):
+        with home() as (con, _, _):
+            add_cv(con, "Avery CV.md", AVERY.cv)
+            page = profile_routes.of_kind(SimpleNamespace(con=con, params={"kind": "project"}))
+            jobs = profile_routes.of_kind(SimpleNamespace(con=con, params={"kind": "job"}))
+        self.assertEqual([(i["title"], i["cv_only"]) for i in page["items"]], [("Tide gauge", True)])
+        self.assertFalse(any(i["cv_only"] for i in jobs["items"]), "only a project is marked")
 
 
 if __name__ == "__main__":

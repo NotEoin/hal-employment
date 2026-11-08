@@ -36,7 +36,9 @@ Design decisions, each with its reason:
   each field takes the value of the best-ranked source that gives one, so a transcript's grade beats a CV's.
   An end date before this month makes the item not current, even when another source said "present"; a
   "present" with no end date anywhere stays current.
-  Lists (duties, tools) are joined across sources.
+  Lists (duties, tools) are joined across sources. A CV the person added that is not their current one
+  (`profile.cvs`) ranks at `OLDER_CV_RANK`, below the current CV and documents, and its lists join only when
+  no source above it gives one, so an older CV only fills gaps.
 - An education item's modules come from its transcripts and certificates when any lists modules, else from
   its CVs, and never from notes, slides or coursework, which name lectures and practicals as well as
   modules. They are one per module code ("CSC1032", "1032 Computer Systems Design" and "Computer Systems
@@ -61,6 +63,10 @@ DOC_TYPES = {  # other names the ingest may give a document type
     "note": "notes", "study_notes": "notes", "slides": "notes",
 }
 UNKNOWN_RANK = 0           # a document type Hal has no rank for is below notes
+# A CV the person added to Your record that is not their current one (`profile.cvs`): below the current CV
+# and below documents (a reference, a contract), above notes, so it only fills what nothing above it gives
+# (sections plan, 2026-11-09). It sits between notes (1) and letters (2), so it is the one rank not a whole number.
+OLDER_CV_RANK = 1.5
 MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
           "november", "december")
 MONTH_MIN = 3              # "Sep" and "Sept" are months; "ma" is not
@@ -656,10 +662,12 @@ def _module_words(name: str) -> str:
 
 
 def _module_sources(sources: list[tuple[int, dict]]) -> list[dict]:
-    """The sources whose modules count: official papers when any lists modules, else CVs, never notes."""
+    """The sources whose modules count: official papers when any lists modules, else the current CV, else older
+    CVs, never notes."""
     listing = [(r, said) for r, said in sources if said.get("modules")]
     official = [said for r, said in listing if r >= OFFICIAL_RANK]
-    return official or [said for r, said in listing if r == CV_RANK]
+    return official or [said for r, said in listing if r == CV_RANK] or \
+        [said for r, said in listing if r == OLDER_CV_RANK]
 
 
 def _modules(sources: list[dict]) -> list[dict]:
@@ -709,7 +717,10 @@ def fold(sources: list[tuple[int, dict]]) -> dict:
                 continue
             out.setdefault(field, value)
     for field in LIST_FIELDS:
-        joined = _modules(_module_sources(ranked)) if field == "modules" else _join([s.get(field) for s in ordered])
+        # an older CV's list joins only when nothing above it gives one (`OLDER_CV_RANK`)
+        above = any(r > OLDER_CV_RANK and said.get(field) for r, said in ranked)
+        lists = [said.get(field) for r, said in ranked if not (above and r == OLDER_CV_RANK)]
+        joined = _modules(_module_sources(ranked)) if field == "modules" else _join(lists)
         if joined:
             out[field] = joined
     if out.get("current") and ended(out):

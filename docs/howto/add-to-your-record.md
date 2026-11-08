@@ -10,6 +10,8 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    statements only to learn how you write, never as facts about you.
    Hal reads each CV into your jobs, education, skills and projects, and dates it by the date at its top
    (such as "CV, March 2025"), else by its latest entry.
+   The newest is your **Current CV**; the others show **Older CV, fills gaps**. To lead with another, press
+   **Make this my current CV** on it.
 2. Open **Work history**. On a job's card, open **Add a document for this job** and add a reference, a
    contract or the job description.
 3. Open **Education**. On a course's card, open **Coursework, lecture material and official papers**:
@@ -40,4 +42,6 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | "Kept out: it looks private" | The file looks like it holds bank, ID or medical details. If it is fine to keep, press **Add it anyway**. |
 | "Choose which education Coursework belongs to." | Add coursework from the course's own card on **Education**, not from another tab. |
 | "Add a folder on the computer Hal runs on, or upload it from this one." | A folder's path only works on the computer Hal runs on. From another computer, upload the folder instead. |
+| The wrong CV is marked **Current CV** | Press **Make this my current CV** on the one you use now. Hal works out your cards again from it. |
+| A fact says "from an older CV" | Only an older CV gives it. Add it to your current CV if it is still true, or hide it. |
 | A card disappeared after you pressed **Remove** | It came only from that file, so Hal hid it. Add the file again and the card comes back as you left it. |

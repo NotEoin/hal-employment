@@ -19,6 +19,8 @@ Design decisions, each with its reason:
   and the place and line it came from; a fact of a kind the section may not create is left out.
 - The privacy check of the bulk read applies (`ingest.privacy.held_back`): a source that looks private gets no
   note and no facts until the person lets it in (`read(..., allow_private=True)`).
+- Reading or removing a CV may change which CV is current (`profile.cvs`), so every card the CVs give is
+  worked out again (`cv.settle`).
 - A reader not written yet (`readers.NotReadYet`) leaves the source waiting, state `new`, with the words saying
   so; it is not a failure.
 """
@@ -36,7 +38,7 @@ from jobhunt import db, record
 from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import cv as _cv  # noqa: F401 - puts the cv reader in place (`readers.register`)
+from jobhunt.sections import cv as cv_reader  # importing it puts the cv reader in place (`readers.register`)
 from jobhunt.sections import readers, registry, store, wrong_place
 
 log = logging.getLogger(__name__)
@@ -318,6 +320,8 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
                        state = 'read', error = '', suggestion = ? WHERE id = ?""",
                     (reading.title or readers.title_in(reading.text, name), reading.date, note_rel, now,
                      int(swapped["changed"]), now, suggestion, r["id"]))
+    if section.id == cv_reader.SECTION:
+        cv_reader.settle(con)
     return {**out, "state": "read", "facts": swapped["added"], "left_out": len(reading.facts) - len(facts)
             + len(swapped["left_out"]), "hidden": swapped["hidden"], "suggestion": suggestion}
 
@@ -331,4 +335,6 @@ def remove(con: sqlite3.Connection, source_id) -> dict:
     shutil.rmtree(store.files_dir(r["id"]), ignore_errors=True)
     with con:
         con.execute("DELETE FROM record_sources WHERE id = ?", (r["id"],))
+    if r["section"] == cv_reader.SECTION:
+        cv_reader.settle(con)
     return {"hidden": gone["hidden"]}

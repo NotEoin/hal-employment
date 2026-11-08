@@ -29,6 +29,7 @@ AWARD = "# Volunteer of the year\n\nAwarded to Marnie Quillfeather on 5 March 20
 ESSAY = "# The parish registers of Harrowgate Vale\n\nAn essay on baptisms, 1750 to 1850.\n"
 CV = ("# Marnie Quillfeather\n\nCurriculum vitae\n\n## Work experience\n\nCollections volunteer.\n\n"
       "## Education\n\nBA History.\n")
+OLDER_CV = "# Marnie Quillfeather\n\nCV, May 2019\n\n## Work experience\n\nPaper round, Harrowgate Gazette, 2018\n"
 
 
 def found(kind: str, fields: dict) -> int:
@@ -105,8 +106,13 @@ class RecordSections(unittest.TestCase):
         row = cvs.locator("li.rec-source", has_text="Marnie CV")
         p.shows(row.get_by_text("Read", exact=True), "the read chip")
         self.assertEqual([s["section"] for s in self.listed("cv")], ["cv"])
-        row.get_by_role("button", name="Make this my current CV").click()
-        p.shows(row.get_by_text("Current CV"), "the current chip")
+        p.shows(row.get_by_text("Current CV"), "the current chip: the only CV is the newest")
+        cvs.locator("input[type=file]").first.set_input_files(self.file("Marnie CV 2019.md", OLDER_CV))
+        older = cvs.locator("li.rec-source", has_text="Marnie CV 2019")
+        p.shows(older.get_by_text("Older CV, fills gaps"), "the older CV's chip")
+        older.get_by_role("button", name="Make this my current CV").click()
+        p.shows(older.get_by_text("Current CV"), "the current chip on the CV the person chose")
+        p.shows(row.get_by_text("Older CV, fills gaps"), "the other CV is older now")
 
     def test_a_document_is_read_listed_and_removed_on_the_documents_tab(self) -> None:
         p = self.page("record-documents")
@@ -162,6 +168,7 @@ class RecordSections(unittest.TestCase):
             self.assertTrue(panel.get_by_role("button", name=words).is_disabled(), words)
         self.assertEqual(panel.get_by_text("Coming soon").count(), 7)
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Tide gauge"))
+        p.shows(card.get_by_text("from your CV only"), "the mark on a project only a CV gives")
         card.get_by_role("button", name="Showcase: Tide gauge").click()
         p.shows(card.get_by_role("button", name="Take out of your showcase: Tide gauge"), "the showcase button")
         with closing(db.connect()) as con:

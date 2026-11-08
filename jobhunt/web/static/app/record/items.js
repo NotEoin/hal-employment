@@ -27,12 +27,14 @@ async function act(fn, said) {
 
 const fileName = rel => rel.split("/").pop().replace(/\.md$/, "");
 
-/** "From:" the files an item came from, each with its quote and a mark when the quote is not in the file. */
+/** "From:" the files an item came from, each with its quote, a mark when the quote is not in the file, and one
+    on a CV that is not your current one (it only fills gaps, `jobhunt/profile/cvs.py`). */
 export function Sources({ evidence }) {
   if (!evidence.length) return null;
   return html`<div class="rec-from"><div class="small sub"><b>From:</b></div><ul class="rec-sources">
     ${evidence.map(e => html`<li key=${e.id}>
       <a href=${FILE_PATH + e.file_id} target="_blank" rel="noopener">${fileName(e.source_rel)}</a>
+      ${e.from_older_cv && html` <${Chip} tone="line">from an older CV<//>`}
       ${!e.verified && html` <${Chip} tone="warn">Quote not found in the file<//>`}
       ${e.quote && html`<div class="quote">"${e.quote}"</div>`}</li>`)}</ul></div>`;
 }
@@ -104,6 +106,7 @@ function ItemCard({ item, conflicts, names }) {
     <div class="rec-head"><div class="grow">
         <h3 class="h3">${item.kind === "basic" ? basicKey(item.title) : item.title}</h3>
         ${(item.sub || item.when) && html`<div class="small sub">${[item.kind === "basic" ? "" : item.sub, item.when].filter(Boolean).join(", ")}</div>`}</div>
+      ${item.cv_only && html`<${Chip} tone="line">from your CV only<//>`}
       ${item.can_star && !hidden && html`<${StarButton} item=${item} />`}
       <${Chip} tone=${STATE_TONE[item.state]}>${item.state_words}<//></div>
     ${editing ? html`<${ItemForm} kind=${item.kind} item=${item} uid=${"it" + item.id} onSave=${save} onCancel=${() => setEditing(false)} />`

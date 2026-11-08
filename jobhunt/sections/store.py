@@ -12,7 +12,9 @@ Design decisions, each with its reason:
 - `title` stays "" until the reader finds one or the person types one, so a name the person gave is never
   replaced by a later read; the page shows the file's name until then (`shape`).
 - Only coursework takes a star on the source itself (a showcase piece of the degree), and only CVs are marked
-  current; a project's star is on its card (`profile.store.set_star`).
+  current; a project's star is on its card (`profile.store.set_star`). The `current` column keeps only the
+  person's choice; the current CV shown is `profile.cvs.current_source` (their choice, else the newest-dated),
+  and choosing another works out again every card the CVs give.
 """
 from __future__ import annotations
 
@@ -21,6 +23,8 @@ from pathlib import Path
 
 from jobhunt import db
 from jobhunt.core import paths
+from jobhunt.profile import cvs
+from jobhunt.profile import store as profile_store
 from jobhunt.sections import registry
 
 STATES = ("new", "reading", "read", "failed", "kept_out")
@@ -96,8 +100,10 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
     return {"id": r["id"], "section": r["section"], "section_label": section.label, "target_id": r["target_id"],
             "held": r["kind"], "doc_kind": r["doc_kind"], "doc_kind_label": kind.label if kind else r["doc_kind"],
             "title": r["title"] or name, "name": name, "files": len(rels), "locator": r["locator"],
-            "starred": bool(r["starred"]), "can_star": r["section"] in STAR_SECTIONS, "current": bool(r["current"]),
-            "can_be_current": r["section"] in CURRENT_SECTIONS, "dated": r["dated"], "note_rel": r["note_rel"],
+            "starred": bool(r["starred"]), "can_star": r["section"] in STAR_SECTIONS,
+            "current": r["section"] in CURRENT_SECTIONS and r["id"] == cvs.current_source(con),
+            "can_be_current": r["section"] in CURRENT_SECTIONS, "current_chosen": bool(r["current"]),
+            "dated": r["dated"], "note_rel": r["note_rel"],
             "added": r["added"], "last_checked": r["last_checked"], "last_changed": r["last_changed"],
             "revision": r["revision"], "state": r["state"], "state_words": STATE_WORDS.get(r["state"], r["state"]),
             "error": r["error"], "suggestion": r["suggestion"],
@@ -185,6 +191,8 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
         if sets:
             con.execute(f"UPDATE record_sources SET {', '.join(f'{k} = ?' for k in sets)} WHERE id = ?",
                         (*sets.values(), r["id"]))
+    if "current" in sets or (moved and r["section"] in CURRENT_SECTIONS):
+        profile_store.refold_sources(con, [*cvs.cv_sources(con), r["id"]])
     return get(con, r["id"])
 
 

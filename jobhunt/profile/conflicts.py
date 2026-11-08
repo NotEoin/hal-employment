@@ -7,8 +7,9 @@
   with the files that gave it; the item shows the best-ranked source's value (see `merge.RANKS`). Values
   are compared by `merge.value_key`, so wording alone ("Thirty units", "30 units"; "GCSE", "GCSEs") is no
   conflict, nor a value that says the same with less detail (`merge.says_less`: "1st" beside "Year 2:
-  73.3% (1st)"), and only fields that are facts (`CHECKED_FIELDS`) are compared. The text says what
-  differs; the card lists each value with the files that give it.
+  73.3% (1st)"), and only fields that are facts (`CHECKED_FIELDS`) are compared. An older CV of the
+  person's (`profile.cvs`) only fills gaps, so its value of a field another source gives is no conflict.
+  The text says what differs; the card lists each value with the files that give it.
 - `dates`: an item ends before it starts.
 - `overlap`: two jobs that are not marked part-time share more than a month.
 - `gap`: more than `GAP_MONTHS` months between one job or course ending and the next starting.
@@ -23,7 +24,7 @@ import json
 import sqlite3
 
 from jobhunt import db
-from jobhunt.profile import merge
+from jobhunt.profile import cvs, merge
 
 GAP_MONTHS = 6             # employers ask about a gap longer than six months
 OVERLAP_MIN_MONTHS = 2     # one shared month is a job change, not two jobs at once
@@ -58,19 +59,22 @@ def _items(con: sqlite3.Connection) -> list[dict]:
 def _field_conflicts(con: sqlite3.Connection, item: dict) -> list[dict]:
     if item["state"] == "edited" or item["kind"] not in CHECKED_FIELDS:
         return []
-    sources = con.execute("SELECT source_rel, quote, doc_type, said FROM profile_evidence WHERE item_id = ? "
-                          "ORDER BY id", (item["id"],)).fetchall()
+    sources = con.execute("SELECT source_rel, quote, doc_type, said, source_id FROM profile_evidence "
+                          "WHERE item_id = ? ORDER BY id", (item["id"],)).fetchall()
+    older = cvs.older_sources(con)
     out = []
     for field in CHECKED_FIELDS[item["kind"]]:
         groups: dict[str, dict] = {}
-        for s in sources:
+        givers = [s for s in sources if json.loads(s["said"]).get(field) not in (None, "")]
+        if any(s["source_id"] not in older for s in givers):
+            givers = [s for s in givers if s["source_id"] not in older]    # an older CV only fills gaps
+        for s in givers:
             value = json.loads(s["said"]).get(field)
-            if value in (None, ""):
-                continue
             key = merge.value_key(field, value)
+            rank = cvs.rank(s["doc_type"], s["source_id"], older)
             group = groups.setdefault(key, {"value": value, "words": _words(field, value), "sources": [],
-                                            "rank": merge.rank(s["doc_type"])})
-            group["rank"] = max(group["rank"], merge.rank(s["doc_type"]))
+                                            "rank": rank})
+            group["rank"] = max(group["rank"], rank)
             if s["source_rel"] not in [x["source_rel"] for x in group["sources"]]:
                 group["sources"].append({"source_rel": s["source_rel"], "doc_type": s["doc_type"],
                                          "quote": s["quote"]})

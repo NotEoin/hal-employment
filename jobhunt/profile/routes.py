@@ -107,6 +107,7 @@ from __future__ import annotations
 from jobhunt.core import events, runner
 from jobhunt.evidence.routes import file_id
 from jobhunt.profile import actions, check, conflicts, contexts, duplicates, store, tiers
+from jobhunt.profile import cvs as section_cvs
 from jobhunt.profile import writing as profile_writing
 from jobhunt.web.router import BadRequest, Conflict, NotFound, Request, route
 
@@ -176,17 +177,22 @@ def _cards(cards: list[dict]) -> list[dict]:
 @route("GET", PREFIX + "/{kind}")
 def of_kind(req: Request) -> dict:
     """Every item of one kind with its sources and conflicts, and for each card what only an older CV of the
-    person's gives it (`older_cv`, {field: [value, ...]}: `profile.writing.older_cv_only`) and what only a plan
-    gives it (`planned`, {field: {value: document}}: `profile.writing.planned_only`)."""
+    person's gives it (`older_cv`, {field: [value, ...]}: `profile.writing.older_cv_only`), what only a plan
+    gives it (`planned`, {field: {value: document}}: `profile.writing.planned_only`), whether only CVs give a
+    project (`cv_only`) and, on each source, whether it is an older CV of the CVs section (`from_older_cv`)."""
     kind = req.params["kind"]
     if kind not in store.KINDS:
         raise NotFound("Your profile has no such list.")
     found = _visible_first(store.items(req.con, kind))
     ids = {i["id"] for i in found}
     cvs = profile_writing.CvAuthority.of(req.con)
+    older = section_cvs.older_sources(req.con)
+    shown = [with_files(i) for i in found]
     return {"kind": kind, "label": LABELS[kind],
-            "items": [{**with_files(i), "older_cv": profile_writing.older_cv_only(req.con, i, cvs),
-                       "planned": profile_writing.planned_only(req.con, i)} for i in found],
+            "items": [{**i, "older_cv": profile_writing.older_cv_only(req.con, i, cvs),
+                       "planned": profile_writing.planned_only(req.con, i), "cv_only": section_cvs.cv_only(i),
+                       "evidence": [{**e, "from_older_cv": e["source_id"] in older} for e in i["evidence"]]}
+                      for i in shown],
             "conflicts": [c for c in conflicts.listing(req.con) if ids & set(c["item_ids"])]}
 
 

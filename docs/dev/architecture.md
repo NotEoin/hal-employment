@@ -1219,6 +1219,15 @@ people). Readers only take facts out of a source, within that frame.
   the CV studio's rules (`cvstudio.parse.read_rules`) when the AI does not answer or gives no facts. Each
   fact's `Quote` names the file and line. The CV's date (`Reading.date`, kept in `record_sources.dated`) is a
   date in its first lines, else its latest dated entry, else its file's date.
+- `profile/cvs.py` says which CV leads: the one the person marked (`record_sources.current`, kept only for
+  their choice), else the newest-dated CV read (`current_source`); every other CV of the section is older
+  (`older_sources`). `profile.store.refold` ranks an older CV's evidence at `merge.OLDER_CV_RANK` (1.5:
+  below the current CV's 3 and documents' 2, above notes), and `merge.fold` joins its lists only when no
+  source above gives one, so it only fills gaps. `conflicts` leaves out an older CV's value of a field another
+  source gives, and `writing.CvAuthority` takes the same current CV, so folding and writing agree. Reading,
+  removing or choosing a CV calls `cv.settle`, which refolds every card the CVs give
+  (`profile.store.refold_sources`). The profile's `GET /api/v2/profile/{kind}` marks each source
+  `from_older_cv` and a project card that only CVs give `cv_only` ("from your CV only" on the page).
 
 ## Profile (`jobhunt/profile/`)
 

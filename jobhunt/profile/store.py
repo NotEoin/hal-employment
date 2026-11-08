@@ -39,6 +39,9 @@ Design decisions, each with its reason:
   one transaction (`swap_source`), so a failed read leaves the old ones whole. A card Hal found that no
   source names any more is hidden, not deleted, remembering its state (`orphaned_from`): adding the source
   again brings it back as the person left it.
+- A card's sources rank by document type (`merge.RANKS`), except a CV of the CVs section that is not the
+  current one (`profile.cvs`), which ranks below the current CV and documents. When the current CV changes,
+  `refold_sources` works out again every card the CVs give.
 - A skill is weak (`is_weak`) when only one file names it and that file is not the person's own: a list of
   topics in course material is not a claim the person made, so the check page asks about it last.
 - A skill is studied (`is_studied`) when every file naming it is course material: the check page shows it
@@ -64,7 +67,7 @@ import sqlite3
 from collections.abc import Callable
 
 from jobhunt import db
-from jobhunt.profile import conflicts, index, merge
+from jobhunt.profile import conflicts, cvs, index, merge
 
 TEXT, DATE, FLAG, LIST, MODULES = "text", "date", "bool", "list", "modules"
 # Each kind's fields and their types. `period` is also accepted for jobs and education, and split into
@@ -274,8 +277,9 @@ def refold(con: sqlite3.Connection, item_id: int) -> None:
     row = con.execute("SELECT kind, state FROM profile_items WHERE id = ?", (item_id,)).fetchone()
     if row is None or row["state"] != "hal":
         return
-    sources = [(merge.rank(e["doc_type"]), json.loads(e["said"]))
-               for e in con.execute("SELECT doc_type, said FROM profile_evidence WHERE item_id = ? "
+    older = cvs.older_sources(con)
+    sources = [(cvs.rank(e["doc_type"], e["source_id"], older), json.loads(e["said"]))
+               for e in con.execute("SELECT doc_type, said, source_id FROM profile_evidence WHERE item_id = ? "
                                     "ORDER BY moved_from IS NOT NULL, id", (item_id,))]
     if not sources:
         return
@@ -285,6 +289,23 @@ def refold(con: sqlite3.Connection, item_id: int) -> None:
         fields["name"] = merge.skill_name([said.get("name", "") for _, (_, said) in ranked])
     con.execute("UPDATE profile_items SET fields = ?, updated = ? WHERE id = ?",
                 (json.dumps(fields), db.now(), item_id))
+
+
+def refold_sources(con: sqlite3.Connection, source_ids: list[int]) -> list[int]:
+    """Works out again every card these sources of the record give, and the conflicts, in one transaction: after
+    the current CV changed, an older CV's facts rank lower and the current one's higher (`profile.cvs`).
+    Returns the ids of the cards."""
+    if not source_ids:
+        return []
+    marks = ",".join("?" * len(source_ids))
+    with con:
+        ids = [r[0] for r in con.execute(f"SELECT DISTINCT item_id FROM profile_evidence WHERE source_id IN ({marks}) "
+                                         "ORDER BY item_id", [int(i) for i in source_ids])]
+        for item_id in ids:
+            refold(con, item_id)
+        conflicts.refresh(con)
+    index.forget(con)       # the index keeps each card's fields, which may have changed
+    return ids
 
 
 def add_found(con: sqlite3.Connection, kind: str, fields: dict, evidence: dict, *, refresh: bool = True) -> int:

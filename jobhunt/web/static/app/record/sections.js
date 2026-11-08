@@ -4,7 +4,8 @@
 
    A panel lists its section's sources with their kind, state and when they were last read, and the person's
    choices: "Showcase" (coursework; the app's word for a star, as "STAR" names a way to tell examples),
-   "Make this my current CV", "Read again", "Remove", and a hint to move one
+   "Make this my current CV" (the newest-dated CV is current until the person picks another; the others show
+   "Older CV, fills gaps"), "Read again", "Remove", and a hint to move one
    that looks like it belongs elsewhere (Hal never moves it on its own). Reading runs as the
    `record.sources` action; its events and `profile` events reload the lists. A kind of document whose reader
    is still to come can still be uploaded: Hal keeps the file and reads it once it can. A link, folder or
@@ -76,7 +77,8 @@ function SourceRow({ s }) {
   return html`<li class="rec-source" data-source=${s.id}>
     <div class="grow"><div><b>${s.title}</b> <span class="small sub">${s.doc_kind_label}</span></div>
       <div class="chips"><${Chip} tone=${STATE_TONE[s.state] || "line"}>${s.state_words}<//>
-        ${s.current && html`<${Chip} tone="info">Current CV<//>`}</div>
+        ${s.current && html`<${Chip} tone="info">Current CV<//>`}
+        ${s.can_be_current && !s.current && s.state === "read" && html`<${Chip} tone="line">Older CV, fills gaps<//>`}</div>
       <div class="small sub">${s.last_checked ? "Last read " + agoWords(s.last_checked) : "Not read yet"}${s.dated ? ", dated " + s.dated : ""}</div>
       ${s.error && html`<p class="small sub rec-line">${s.error}</p>`}
       ${s.suggestion && html`<${Note} tone="info">This looks like it belongs in ${s.suggestion_label}.

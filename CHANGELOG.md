@@ -20,6 +20,11 @@ What changed in each version, in plain words.
   education with its modules and marks, skills, projects, awards, contact details and links, each with the
   line of the CV it came from. Hal dates each CV by the date at its top, else its latest entry, and shows
   that date beside it.
+- **Your newest CV leads; older ones fill gaps.** The CV with the newest date is your **Current CV**, unless
+  you press **Make this my current CV** on another. Your other CVs show **Older CV, fills gaps**: Hal takes
+  from them only what your current CV and your documents leave out, such as an old job you dropped, and
+  marks those facts "from an older CV". Your letters use the same current CV. A project that only your CVs
+  mention shows "from your CV only".
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

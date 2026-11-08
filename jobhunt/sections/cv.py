@@ -14,21 +14,26 @@ Design decisions, each with its reason:
 - A CV's date (`Reading.date`, kept as `record_sources.dated`) is the one in its heading ("CV, March 2025"),
   else the latest date of its entries, else the date of its file: the newest CV leads the others
   (`profile.cvs`), and a CV is newest by what it covers, not by when it was copied to Hal.
+- Which CV is current is `profile.cvs`'s answer, so the card, the letters and the list of CVs agree; reading,
+  removing or choosing a CV works out again every card the CVs give (`settle`).
 """
 from __future__ import annotations
 
 import logging
 import re
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from jobhunt.ingest import convert, rank, understand
-from jobhunt.profile import merge
+from jobhunt.profile import cvs, merge
+from jobhunt.profile import store as profile_store
 from jobhunt.sections import readers
 
 log = logging.getLogger(__name__)
 
+SECTION = cvs.SECTION
 PURPOSE = "record_cv"
 PRIORITY = 1               # the person waits on the page, as for the `record.sources` action
 HEADING_LINES = 3          # a CV's own date ("CV, March 2025") is in its first lines
@@ -225,6 +230,11 @@ def cv_date(text: str, facts: list[readers.Fact], files: tuple[readers.SourceFil
         return latest
     stamps = [f.path.stat().st_mtime for f in files if f.path.exists()]
     return datetime.fromtimestamp(max(stamps), UTC).strftime("%Y-%m") if stamps else ""
+
+
+def settle(con: sqlite3.Connection) -> list[int]:
+    """Works out again every card the CVs give, after the current CV may have changed; returns their ids."""
+    return profile_store.refold_sources(con, cvs.cv_sources(con))
 
 
 class CvReader:

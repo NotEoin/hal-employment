@@ -40,9 +40,10 @@ Design decisions, each with its reason:
   CV drafts give (not the newest CV, a repository, the person's own project documents, or the person's own
   typing) is left out of the block and the cards (`for_writing`), and the profile page says "only in an older
   CV" beside it (`older_cv_only`). An older draft gave a team project tools the newest CV does not claim and
-  its code never used, and every pack said the person used them (2026-11-08). The newest CV is the one whose
-  own period (its note's `period`) ends latest, then the newest file (`ingest_items.mtime`); only CVs whose
-  role is `own` count, and with one CV or none nothing is left out.
+  its code never used, and every pack said the person used them (2026-11-08). The newest CV is the current CV
+  of the CVs section when the person added any there (`profile.cvs`, which folding uses too), else the one
+  whose own period (its note's `period`) ends latest, then the newest file (`ingest_items.mtime`); only CVs
+  whose role is `own` count, and with one CV or none nothing is left out.
 - Planned is not done (`planned_only`, `writing.planned`): a project's tool, or a skill, that only plans
   give (plan words, or a design document, specification or proposal saying nothing was done) is left out
   of the block, the cards' tools and the skill names, kept as the card's `planned`, and the profile page
@@ -80,6 +81,7 @@ from dataclasses import dataclass, field
 from jobhunt import db, record
 from jobhunt.ingest import frontmatter
 from jobhunt.profile import contexts, merge, owners, store, tiers
+from jobhunt.profile import cvs as section_cvs
 from jobhunt.writing import planned, stage
 from jobhunt.writing import quotes as writing_quotes
 
@@ -287,9 +289,13 @@ class CvAuthority:
 
     @classmethod
     def of(cls, con: sqlite3.Connection) -> CvAuthority:
-        """The person's own CVs in the record, the newest apart; empty when there are none."""
+        """The person's own CVs in the record, the newest apart; empty when there are none. With CVs in the CVs
+        section of Your record, the current one (`profile.cvs`) is the newest and every other CV is older."""
         rels = [r[0] for r in con.execute("SELECT DISTINCT source_rel FROM profile_evidence WHERE doc_type = ? "
                                           "AND role = ? AND source_rel != ''", (CV_TYPE, OWN_ROLE))]
+        lead, others = section_cvs.notes(con)
+        if lead:
+            return cls(lead, frozenset((set(rels) | others) - {lead}))
         if not rels:
             return cls()
         ranked = sorted(rels, key=lambda rel: (*_cv_key(con, rel), rel), reverse=True)
