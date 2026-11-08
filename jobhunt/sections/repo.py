@@ -52,6 +52,7 @@ log = logging.getLogger(__name__)
 GIT_TIMEOUT_S = 30             # a git log of a large project takes a second or two; past this git is stuck
 TEXT_MAX = 1_000_000           # a README or doc past 1 MB is generated, not written
 FILES_MAX = 20_000             # a folder with more files than this is not one project
+FOLDER_FILES_MAX = 50          # files read from a project folder that is not code; more is an archive, not a project
 DOCS_CHARS = 12_000            # README and docs sent to the AI; its first part says what the project is
 DOC_FILES = 6                  # docs files read besides the README
 SUMMARY_SENTENCES = 3
@@ -537,6 +538,8 @@ class RepoReader:
     def read(self, source: readers.Source) -> readers.Reading:
         """The project's reading (`read_folder`), with GitHub's details for a clone."""
         root = root_of(source)              # a clone is made or brought up to date first, with GitHub's details
+        if source.held == "folder" and root.is_dir() and not is_code(root):
+            return files_reading(source.title or root.name, folder_files(root))
         meta: dict = {}
         if source.held == "link":
             from jobhunt.sections import github
@@ -567,10 +570,19 @@ class ProjectFilesReader:
         root = root_of(source)
         if is_code(root):
             return RepoReader().read(source)
-        title = source.title or source.locator or root.name
-        text = f"# {title}\n\n{readers.text_of(source.files)}".strip() + "\n"
-        return readers.Reading(title=title, date=readers.date_in(text), text=text, facts=[
-            readers.Fact("project", {"name": title}, readers.Quote("name", f"# {title}", source.locator or title))])
+        return files_reading(source.title or source.locator or root.name, list(source.files))
+
+
+def files_reading(title: str, kept: list[readers.SourceFile]) -> readers.Reading:
+    """A project that is not code: its files' text under its name, and the name as its one fact."""
+    text = f"# {title}\n\n{readers.text_of(kept)}".strip() + "\n"
+    return readers.Reading(title=title, date=readers.date_in(text), text=text, facts=[
+        readers.Fact("project", {"name": title}, readers.Quote("name", f"# {title}", title))])
+
+
+def folder_files(root: Path) -> list[readers.SourceFile]:
+    """The files of a project folder on this computer that is not code, up to `FOLDER_FILES_MAX`, no keys."""
+    return [readers.SourceFile(p.relative_to(root).as_posix(), p) for p in files(root)[:FOLDER_FILES_MAX]]
 
 
 readers.register(RepoReader())

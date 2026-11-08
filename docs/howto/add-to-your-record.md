@@ -58,6 +58,11 @@ are left out unless you changed them. **Link to one code project** takes the add
 GitHub. Hal keeps its own copy of each project, so it can still read them when GitHub cannot be reached.
 Private projects need a GitHub token, under **Settings**, **CV and documents**.
 
+**A folder on this computer** takes a folder that holds your projects, one folder each. Each folder inside
+it that is a code project, or that has files of its own (a design brief, drawings, a report), becomes its
+own project. Folders that only hold more folders are left out. If the folder you give is one code project
+itself, Hal reads it as that one project.
+
 How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-record-jobhuntsections).
 
 | Symptom | Fix |

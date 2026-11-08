@@ -65,6 +65,8 @@ What changed in each version, in plain words.
 - **Add your GitHub account or one project's link.** Hal lists your own projects, each on its own so you
   can remove or showcase one, and leaves out copies of other people's projects you never changed. Hal keeps
   a copy of each, so it still reads them when GitHub is down. Private projects need a GitHub token.
+- **Add a folder of projects.** Give Hal the folder on this computer where you keep your projects, and each
+  project folder inside becomes its own project, code or not.
 
 - **Say two cards are the same.** When one project or job shows up as two cards, press **Same as...** on
   Check your record, pick the other card and the name to keep. Hal keeps one card with the files of both,

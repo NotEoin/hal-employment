@@ -1350,6 +1350,11 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   them in the same run. One already in the record, or one the person removed from that parent (kept in the
   parent's `meta.dropped`), is not added again. `pipeline.remove` removes the children first, and calls the
   reader's `forget(source)` when it has one (a clone is deleted with its source).
+- A folder of projects (`sections/folders.py`, `local_folder`): each folder inside that is code
+  (`discover.is_repo`) or has files of its own at its top becomes a `repo` child held as a folder (at most
+  `PROJECTS_MAX`; hidden and junk folders and shelves of only folders are skipped, nothing deeper is
+  searched). A folder that is itself a code project is read as that one project. The `repo` reader reads a
+  child that is not code as its files' text (`repo.files_reading`, up to `FOLDER_FILES_MAX` files).
 
 ## Profile (`jobhunt/profile/`)
 

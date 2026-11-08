@@ -188,11 +188,12 @@ class RecordSections(unittest.TestCase):
         project = found("project", {"name": "Tide gauge"})
         p = self.page("record-projects")
         panel = self.panel(p, "Add projects")
-        for words in ("Upload a folder", "Your GitHub account", "Link to one code project"):
+        for words in ("Upload a folder", "Your GitHub account", "Link to one code project",
+                      "A folder on this computer"):
             self.assertTrue(panel.get_by_role("button", name=words).is_enabled(), words)
-        for words in ("A folder on this computer", "Portfolio site", "Web page or online document", "Add one by hand"):
+        for words in ("Portfolio site", "Web page or online document", "Add one by hand"):
             self.assertTrue(panel.get_by_role("button", name=words).is_disabled(), words)
-        self.assertEqual(panel.get_by_text("Coming soon").count(), 4)
+        self.assertEqual(panel.get_by_text("Coming soon").count(), 3)
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Tide gauge"))
         p.shows(card.get_by_text("from your CV only"), "the mark on a project only a CV gives")
         card.get_by_role("button", name="Showcase: Tide gauge").click()
