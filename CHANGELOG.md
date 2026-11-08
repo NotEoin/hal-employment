@@ -175,6 +175,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Every message says who is writing.** Messages to the person hiring opened with a bare question, "I also
+  ...", or "I am available to start immediately", never saying who you are. Hal now writes the opening
+  itself from your settings and the course you checked: "Hello <your contact>, I'm <your name>, a
+  first-class <subject> graduate from <university> (2026), applying for the <role> role." The AI writes
+  only what follows, and a greeting or introduction of its own is taken out.
 - **Planned is not done.** A team project listed tools its design document only planned, and every letter
   said you used them. A tool or skill that only a plan gives (a design document, a specification, a
   proposal, or words such as "we will use") is now left out of your letters, messages and answers, and Your

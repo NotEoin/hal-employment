@@ -956,29 +956,40 @@ def replying(pid: str, *replies: str, writer: FakeWriter | None = None) -> FakeW
 
 
 class Drafts(unittest.TestCase):
-    def test_a_message_that_greets_the_applicant_is_rewritten_to_greet_the_recipient(self):
-        # a message opened "Hi <the applicant's first name>," (2026-11-07)
-        writer = replying("message", "Hi Marnie,\n\nI applied for the Collections Assistant role. Who leads it?",
-                          "Hello,\n\nI applied for the Collections Assistant role. Who leads it?")
+    def test_every_message_opens_with_who_is_writing_from_the_settings_and_stage(self):
+        # all 15 graded messages lacked an introduction: a bare question, a dangling "I also ...", or "I am
+        # available to start immediately" (2026-11-08)
+        writer = replying("message", "I also catalogued letters at a made-up museum. Who leads the team?")
         with as_applicant(people.HUMANITIES, writer) as a:
+            settings.set("goal.study_end", "2026-06", by="you")
+            settings.set("you.education.subject", "History", by="you")
+            settings.set("you.education.university", "Made-up University", by="you")
+            settings.set("you.education.grade", "First Class Honours", by="you")
             job = add_job(a.con, "humanities_grad")
             md = pack.build(a.con, job["id"], use_web=False).read_text()
-        asked = writer.asked("message")
-        self.assertEqual(len(asked), 2)
-        self.assertIn('starting with "Hello,"', asked[1]["user"])
         message = section(md, "Message to the hiring manager")
-        self.assertIn("\n\nHello,\n\nI applied for the Collections Assistant role.", message)
-        self.assertNotIn("Marnie", message)
+        self.assertIn("\n\nHello Hiring Manager,\n\nI'm Marnie Quillfeather, a first-class History graduate from "
+                      "Made-up University (2026), applying for the Collections Assistant role. I also catalogued "
+                      "letters at a made-up museum. Who leads the team?", message)
+        asked = writer.asked("message")[0]["user"]
+        self.assertIn("Hal starts the message with these words, which you must not write again:\nHello Hiring "
+                      "Manager, I'm Marnie Quillfeather, a first-class History graduate", asked)
 
-    def test_a_greeting_to_the_applicant_that_survives_the_rewrite_is_replaced(self):
-        writer = replying("message", "Hi Marnie Quillfeather,\n\nI applied for the role. Who leads the team?",
-                          writer=reading(contacts=[{"name": "Ada Penhallow"}]))
+    def test_a_greeting_or_introduction_the_writer_adds_gives_way_to_the_opening(self):
+        # a message opened "Hi <the applicant's first name>," (2026-11-07), and the writer still introduces the
+        # person when told not to
+        writer = replying("message", "Hi Marnie Quillfeather,\n\nI am a recent History graduate. I catalogued "
+                                     "letters. Who leads the team?",
+                          writer=reading(contacts=["Ada Penhallow, Head of Collections"]))
         with as_applicant(people.HUMANITIES, writer) as a:
             job = add_job(a.con, "humanities_grad")
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         message = section(md, "Message to the hiring manager")
-        self.assertIn("Dear Ada Penhallow,\n\nI applied for the role.", message)
-        self.assertNotIn("Hi Marnie", message)
+        self.assertIn("\n\nHello Ada Penhallow,\n\nI'm Marnie Quillfeather, ", message)
+        self.assertIn(" role. I catalogued letters. Who leads the team?", message)
+        for gone in ("Hi Marnie", "recent History graduate"):
+            self.assertNotIn(gone, message)
+        self.assertEqual(len(writer.asked("message")), 1, "no rewrite for the greeting")
 
     def test_a_letter_cut_off_mid_word_is_asked_for_again_with_room_to_finish(self):
         # a letter ended mid-word, "distingu", when the reply ran out of room (2026-11-07)
@@ -1349,16 +1360,13 @@ class Advert(unittest.TestCase):
         # Claude greeted the advert's "Ada Penhallow, Head of Collections" as "Dear Ms Penhallow," (2026-10-23)
         writer = reading(contacts=["Ada Penhallow, Head of Collections"])
         plain = writer.reply
-        writer.reply = lambda system, user: ("Dear Ms Penhallow,\n\nI am applying.\n\nKind regards,\nMarnie"
+        writer.reply = lambda system, user: ("Dear Ms Penhallow,\n\nI catalogued letters.\n\nKind regards,\nMarnie"
                                              if prompt_id(system) == "message" else plain(system, user))
         with as_applicant(people.HUMANITIES, writer) as a:
             job = add_job(a.con, "humanities_grad")
             md = pack.build(a.con, job["id"], use_web=False).read_text()
-        self.assertIn("\nDear Ada Penhallow,\n\nI am applying.", section(md, "Message to the hiring manager"))
+        self.assertIn("\nHello Ada Penhallow,\n\nI'm Marnie", section(md, "Message to the hiring manager"))
         self.assertNotIn("Ms Penhallow", md)
-        given = "Contact Dr Penhallow, Head of Collections."
-        self.assertEqual(pack.untitled("Dear Dr Penhallow,\n\nHello.", {"contacts": ["Ada Penhallow"]}, given),
-                         "Dear Dr Penhallow,\n\nHello.", "a title the advert gives is kept")
 
 
 class CommandLine(unittest.TestCase):
@@ -1500,7 +1508,7 @@ class Requests(unittest.TestCase):
         plain = self.a.writer.reply
 
         def reply(system: str, user: str) -> object:
-            pid, rewrite = prompt_id(system), "not in their facts" in user or "Greet the person" in user
+            pid, rewrite = prompt_id(system), "not in their facts" in user
             if pid == "message":
                 return "Hello,\n\nI guided visitors. Who leads the team?" if rewrite else \
                     f"Hi Marnie,\n\nI {CLAIM}. Who leads the team?"
@@ -1515,7 +1523,10 @@ class Requests(unittest.TestCase):
         r = self.c.post(self.url("/documents/change"), {"words": "Mention my guiding work"})
         self.assertEqual(self.wait(r.json()["action_id"])["state"], "done")
         docs = documents.load(self.a.con, self.job)
-        self.assertEqual(docs["message"], "Hello,\n\nI guided visitors. Who leads the team?")
+        self.assertTrue(docs["message"].startswith("Hello Hiring Manager,\n\nI'm Marnie Quillfeather, "),
+                        docs["message"])
+        self.assertTrue(docs["message"].endswith(" role. I guided visitors. Who leads the team?"), docs["message"])
+        self.assertNotIn("Hi Marnie", docs["message"])
         self.assertNotIn(CLAIM, json.dumps(docs["answers"]))
         changed = [e for e in self.a.writer.log if "Mention my guiding work" in e["user"]]
         self.assertEqual([e["id"] for e in changed].count("message"), 2, "one rewrite, never a loop")
@@ -1530,7 +1541,8 @@ class Requests(unittest.TestCase):
         r = self.c.post(self.url("/documents/change"), {"words": "Mention my catalogue work"})
         self.assertEqual(self.wait(r.json()["action_id"])["state"], "done")
         docs = documents.load(self.a.con, self.job)
-        self.assertEqual(docs["message"], "I organised the made-up catalogue.")
+        self.assertTrue(docs["message"].endswith(" applying for the Collections Assistant role. I organised the "
+                                                 "made-up catalogue."), docs["message"])
         self.assertEqual([a["answer"] for a in docs["answers"] if a["question"] == "Why this role?"],
                          ["I analysed the centre's records."])
 

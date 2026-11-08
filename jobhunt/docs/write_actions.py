@@ -12,8 +12,8 @@ Design decisions, each with its reason:
   draft, and its record passages are noted under the Activity row's "Used".
 - A changed message and changed answers go through the pack's own path (`pack.write_others`), with the
   same advert reading, record passages and fit map as the letter, so a change is checked for claims,
-  project contexts, the greeting, a cut-off reply and restating the advert: the change used to save the
-  AI's words with none of these checks (2026-11-07).
+  project contexts, a cut-off reply and restating the advert, and the message keeps its opening: the
+  change used to save the AI's words with none of these checks (2026-11-07).
 - Results are saved through `apply.actions.save_documents`, the rule every edit follows: a form already
   filled with the old documents is marked out of date.
 - G9 runs every kind from its example without an AI or a search engine: the examples stand a recording

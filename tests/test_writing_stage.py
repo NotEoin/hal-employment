@@ -52,6 +52,14 @@ class Stage(unittest.TestCase):
         self.assertEqual(stage.today_lines(now), "Today: 2026-11-07\nStage: Finished BSc Imaginary Studies in 2026-06; "
                                            "available now.")
 
+    def test_the_course_says_its_subject_institution_and_grade_for_the_messages_opening(self):
+        self.degree("2026-06")
+        settings.set("you.education.grade", "2:1", by="you")
+        settings.set("you.education.university", "Another Made-up College", by="you")
+        now = stage.current(self.con, TODAY)
+        self.assertEqual((now.subject, now.institution, now.grade),
+                         ("Imaginary Studies", "Made-up University", "2:1"), "the checked course first")
+
     def test_a_degree_ending_within_a_year_is_the_final_year(self):
         self.degree("2027-06")
         settings.set("you.start", "date", by="you")

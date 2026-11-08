@@ -66,6 +66,7 @@ from .writing import (
     flow,
     grounded,
     motive,
+    opening,
     plain,
     relocation,
     repeats,
@@ -151,14 +152,9 @@ SHORT_FLAG = ("the letter is {n} words, well under the {words} you prefer; add a
               "before you send it")
 DANGLING_FLAG = "opens a paragraph by pointing back at something the paragraph before does not say"
 REPEAT_FLAG = "says what an earlier sentence or draft already says"   # still repeating after its rewrite
-# The recipient's greeting when the message greeted the applicant: the advert's named person, else this.
-HELLO = "Hello,"
-GREETING_NOTE = ("Your draft greets the applicant, who is the one writing it. Greet the person it goes to "
-                 "instead, starting with \"{greeting}\", and change nothing else.")
 EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence line
 PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
 QUESTION_SHARE = 0.8      # share of a question's words the advert must hold for it to count as written out
-TITLED = re.compile(r"^Dear (Mr|Mrs|Ms|Miss|Mx|Dr)\.? ([^\s,]+),", re.M)   # a greeting with a title
 NOTE_PARA = re.compile(r"\(.*\)\Z|(notes?|word count)\b", re.S | re.I)   # a closing paragraph about the draft
 
 def slug(text: str) -> str:
@@ -778,9 +774,23 @@ def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[s
     return answers, claims, echoed_answers(answers, sources, names)
 
 
-def _message(who: dict, context: str, analysis: dict, job_text: str, trimmed: set[str]) -> str:
-    """The message to the person hiring, cleaned of the model's notes and of a title the advert never gives."""
-    return untitled(_draft(who, "message", context, trimmed), analysis, job_text)
+def _message(who: dict, context: str, trimmed: set[str]) -> str:
+    """The body of the message to the person hiring, cleaned of the model's notes and of a greeting or an
+    introduction it wrote, which the opening says (`writing.opening.body_of`)."""
+    draft = _draft(who, "message", context, trimmed)
+    body = opening.body_of(draft)
+    if draft in trimmed:
+        trimmed.add(body)
+    return body
+
+
+def message_opening(who: dict, job, analysis: dict) -> opening.Opening:
+    """The message's greeting and first sentence (`writing.opening`): the person's name and stage, the role, and
+    the advert's first hiring contact (`hiring_contacts`)."""
+    contacts = hiring_contacts(analysis, _job_text(job))
+    name = str(who.get("name") or "")
+    return opening.Opening.of("" if name == SOMEONE else name, stage.current(), job["title"],
+                              contacts[0]["name"] if contacts else "")
 
 
 def answers_request(job, who: dict, analysis: dict, questions: list[str], context: str) -> str:
@@ -808,10 +818,12 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     """The message to the person hiring and the form answers, written from their requests and checked as a
     pack checks them: {message, answers, flags}. `answers_request` "" writes no answers.
 
-    The message is asked for again when it stops mid-sentence, rewritten once without claims the facts do not
-    support (project contexts and misplaced tools included) and once to greet the person it goes to; the
-    answers are revised for the writing rules, for restating the advert and for claims (`_answers`). The pack
-    and a change the person asks for (`docs.change`) both write them here, so neither skips a check. Both
+    The message is written after its opening (`message_opening`: the greeting and who is writing, with no AI),
+    asked for again when it stops mid-sentence and rewritten once without claims the facts do not support
+    (project contexts and misplaced tools included); a greeting or introduction the writer adds is taken out
+    (`writing.opening.body_of`), and the message returned starts with the opening. The answers are revised
+    for the writing rules, for restating the advert and for claims (`_answers`). The pack and a change the
+    person asks for (`docs.change`) both write them here, so neither skips a check. Both
     cite the evidence `plan` (the pack's, else one picked here for the advert's and the common questions);
     their markers are taken out before they are returned. A sentence saying what the `letter`, the message or
     an earlier answer already says is rewritten once from other evidence, else taken out or listed
@@ -820,17 +832,17 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     job_text = _job_text(job)
     their_words, trimmed = (job_text, about), set()
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
-    message_request += _plan_part(plan)
+    first = message_opening(who, job, analysis)
+    message_request += f"\n\n{first.note}" + _plan_part(plan)
     answers_request += _plan_part(plan) if answers_request else ""
 
     def rewrite_message(note: str) -> str:
-        return _message(who, f"{message_request}\n\nYour draft:\n{message}\n\n{note}", analysis, job_text, trimmed)
+        return _message(who, f"{message_request}\n\nYour draft:\n{message}\n\n{note}", trimmed)
 
-    message = _message(who, message_request, analysis, job_text, trimmed)
+    message = _message(who, message_request, trimmed)
     settled = settle(who, message, rewrite_message, plan=plan, essential=grounded.only_in_paragraph, facts=facts,
                      kept=kept, employer=their_words)
     message, message_claims = settled.text, settled.failed
-    message = to_recipient(who, message, analysis, rewrite_message, job_text)
     cut = message in trimmed
     answers, answer_claims, answer_echoes = _answers(
         who, answers_request, facts=facts, kept=kept, sources=their_words,
@@ -849,7 +861,7 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     flags += [f"{DANGLING_FLAG}: {s}" for s in flow.dangling(message)]
     if cut:
         flags.append(CUT_FLAG.format(what=CUT_WHAT["message"]))
-    return {"message": message, "answers": answers, "flags": flags}
+    return {"message": first.put(message), "answers": answers, "flags": flags}
 
 
 def applicant_names(who: dict) -> list[str]:
@@ -857,19 +869,6 @@ def applicant_names(who: dict) -> list[str]:
     full = str(who.get("name") or "")
     return [n for n in dict.fromkeys((full, str(who.get("first_name") or ""), full.split()[0] if full else ""))
             if n and n != SOMEONE]
-
-
-def to_recipient(who: dict, message: str, analysis: dict, rewrite, advert: str = "") -> str:
-    """The message greeting the person it goes to, never the applicant: rewritten once by `rewrite(note)` when
-    its greeting names the applicant, and given the recipient's greeting (the advert's hiring contact, else
-    "Hello,") if it still does."""
-    names = applicant_names(who)
-    if not drafts.greets_applicant(message, names):
-        return message
-    contacts = [c["name"] for c in hiring_contacts(analysis, advert)]
-    greeting = f"Dear {contacts[0]}," if contacts else HELLO
-    again = rewrite(GREETING_NOTE.format(greeting=greeting)) or message
-    return drafts.regreet(again, greeting) if drafts.greets_applicant(again, names) else again
 
 
 def _eligibility_flag(job, who: dict, fit: dict, conditions: list) -> str:
@@ -941,18 +940,6 @@ def salutation(analysis: dict) -> str:
     # (made-up humanities advert, 2026-10-23)
     names = contact_names(analysis)
     return f"Dear {names[0]}," if names else "Dear Hiring Team,"
-
-
-def untitled(message: str, analysis: dict, advert: str) -> str:
-    """The message greeting the named person by full name, without a title (Ms, Mr) the advert never gives."""
-    # Claude greeted the advert's "Ada Penhallow" as "Dear Ms Penhallow," (2026-10-23), a guess at her title
-    m = TITLED.search(message)
-    if not m or re.search(rf"\b{m.group(1)}\.? {re.escape(m.group(2))}\b", advert):
-        return message
-    for name in contact_names(analysis):
-        if name.split()[-1] == m.group(2):
-            return message[:m.start()] + f"Dear {name}," + message[m.end():]
-    return message
 
 
 def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:

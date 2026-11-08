@@ -1,5 +1,5 @@
-"""Checks on finished drafts with no AI: a reply cut off, a greeting to the applicant, a tool on the wrong project,
-a project placed where it was not done, a sentence that restates the advert.
+"""Checks on finished drafts with no AI: a reply cut off, a tool on the wrong project, a project placed where
+it was not done, a sentence that restates the advert.
 
 The drafts, names and projects are made up.
 """
@@ -24,14 +24,6 @@ class CutOff(unittest.TestCase):
     def test_a_cut_draft_keeps_its_last_full_sentence(self):
         self.assertEqual(drafts.last_full_sentence("I catalogued letters. Who leads it? I would bring the dist"),
                          "I catalogued letters. Who leads it?")
-
-
-class Greeting(unittest.TestCase):
-    def test_a_greeting_naming_the_applicant_is_found_and_replaced(self):
-        message = "Hi Avery,\n\nI applied for the role."
-        self.assertTrue(drafts.greets_applicant(message, ["Avery Quillon", "Avery"]))
-        self.assertFalse(drafts.greets_applicant("Dear Ada Penhallow,\n\nAvery here.", ["Avery"]))
-        self.assertEqual(drafts.regreet(message, "Hello,"), "Hello,\n\nI applied for the role.")
 
 
 class Tools(unittest.TestCase):

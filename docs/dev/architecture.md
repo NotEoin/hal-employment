@@ -545,10 +545,8 @@ runs: tests use `tests/support/fake_claude/`.
 - Checks with no AI on finished drafts (`writing/drafts.py`): a letter or message whose last line is a
   sentence with no closing punctuation is asked for once more with room to finish (`pack.CUT_NOTE`, a
   wider `ROOM_CTX`); if that one stops too it is kept to its last full sentence and listed (`CUT_FLAG`).
-  The AI layer does not say why a reply stopped, so the text is the only sign. A message whose greeting
-  names the applicant is rewritten once (`pack.to_recipient`), then given "Dear <the advert's contact>,"
-  or "Hello," if it still does. `misplaced_tools` turns a sentence that gives one project card a tool its
-  own tools, name and summary never name (but another card or a checked skill does) into an unsupported
+  The AI layer does not say why a reply stopped, so the text is the only sign. `misplaced_tools` turns a
+  sentence that gives one project card a tool its own tools, name and summary never name (but another card or a checked skill does) into an unsupported
   claim, and the verify request lists every card with its tools so the AI checks claims per project.
   `wrong_context` does the same for a sentence that names one project card with degree words ("degree",
   "university", "coursework", "dissertation", "my studies", "my research", module work) or own-time words
@@ -662,7 +660,17 @@ runs: tests use `tests/support/fake_claude/`.
   is never answered. When the advert states no requirement, its main duties stand in, so the fit map is
   never empty. The letter greets the first person the advert names, else "Hiring Team", and never adds a
   title the advert does not give.
-- The message's "To:" line (`pack.message_to`) and its fallback greeting name only the advert's hiring
+- The message opens with a greeting and a first sentence built with no AI (`writing/opening.py`,
+  `pack.message_opening`): "Hello <the advert's first hiring contact, else Hiring Manager>," and "I'm <name>,
+  <`opening.described`: a first-class, 2:1 or 2:2 subject graduate from the institution (year), or a
+  final-year subject student at it>, applying for the <title> role.", from `you.name` and the stage
+  (`stage.Stage.subject`, `institution` and `grade`: the checked course's, else `you.education.subject`,
+  `university` and `grade`). The message request carries `Opening.note` (the opening, and to write only what
+  follows it); a greeting or an introduction the writer still adds is taken out (`opening.body_of`) before
+  the sentence checks, and `write_others` returns `Opening.put(body)`, which starts with the opening
+  (`Opening.starts`). All 15 graded messages lacked an introduction (2026-11-08). The writer's greeting is
+  never kept, so no rewrite for a greeting is asked.
+- The message's "To:" line (`pack.message_to`) and its greeting name only the advert's hiring
   contacts (`pack.hiring_contacts`): a named person whose role or sentence in the advert is not about the
   application process (`PROCESS_WORDS`), with a careers or recruitment mailbox address (`PROCESS_MAILBOX`)
   left off. With none, the line is the LinkedIn search hint.

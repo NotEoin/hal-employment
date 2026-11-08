@@ -123,13 +123,17 @@ CONTEXT_WORDS = {DEGREE: "degree work", TEAM: "university team project", WORK: "
 
 @dataclass(frozen=True)
 class Stage:
-    """The person's course and availability today; `finished` is None when no course is known."""
+    """The person's course and availability today; `finished` is None when no course is known. `subject`,
+    `institution` and `grade` are the course's own, "" when unknown (the message's opening, `writing.opening`)."""
 
     today: date
     course: str
     end: str
     finished: bool | None
     available: str
+    subject: str = ""
+    institution: str = ""
+    grade: str = ""
 
     @property
     def words(self) -> str:
@@ -139,11 +143,16 @@ class Stage:
             where = "Not studying"
         elif self.finished:
             where = f"Finished {course}" + (f" in {self.end}" if self.end else "")
-        elif self.end and _months(self.end) - _index(self.today) < FINAL_YEAR_MONTHS:
+        elif final_year(self):
             where = f"Final year of {course}, finishing {self.end}"
         else:
             where = f"Studying {course}" + (f", finishing {self.end}" if self.end else "")
         return f"{where}; {self.available}"
+
+
+def final_year(stage: Stage) -> bool:
+    """True when a course has an end date less than `FINAL_YEAR_MONTHS` away."""
+    return bool(stage.end) and _months(stage.end) - _index(stage.today) < FINAL_YEAR_MONTHS
 
 
 def _index(day: date) -> int:
@@ -201,7 +210,11 @@ def current(con: sqlite3.Connection | None = None, today: date | None = None) ->
         finished = (get("goal.study_status") or "") != "at_uni"
     else:   # no course and no date: only a student says anything
         finished = False if get("goal.study_status") == "at_uni" else None
-    return Stage(today, course.strip(), end, finished, _available(get, today))
+    def own(key: str, setting: str) -> str:
+        return str(education.get(key) or get(setting) or "").strip()
+
+    return Stage(today, course.strip(), end, finished, _available(get, today), own("subject", "you.education.subject"),
+                 own("institution", "you.education.university"), own("grade", "you.education.grade"))
 
 
 def today_lines(stage: Stage | None = None) -> str:

@@ -125,7 +125,12 @@ ask Hal for changes, the new letter, message and answers get the same checks as 
 
 The message to the person hiring goes to the person the advert names as your contact for the job. An
 address the advert gives only for questions about applying, or a careers or recruitment mailbox, is never
-used; with no named contact, Hal suggests a LinkedIn search for the person hiring instead.
+used; with no named contact, Hal suggests a LinkedIn search for the person hiring instead. Every message
+opens the same way, written by Hal from **Settings** and the course you checked on Your record, never by the
+AI: "Hello <your contact, or Hiring Manager>, I'm <your name>, a <grade> <subject> graduate from <university>
+(<year>), applying for the <role> role." A grade is given only as a class (first-class, 2:1, 2:2, or with
+Distinction), and a course still running says "final-year ... student" in its last year. The AI writes only
+what follows.
 
 Hal tells the writer today's date and where you are: still studying or finished, from **When your course
 ends or ended** and the course you checked on Your record, and when you can start, from **When you can
