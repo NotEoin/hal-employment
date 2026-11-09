@@ -23,7 +23,8 @@ code.
    **Projects**, **Documents** and the rest. Press one to see its files, 50 at a time.
 4. Check each row. Under **Where it goes**, **What it is** and **Course or job**, change anything Hal got
    wrong. Untick a file to keep it out. For a project, tick **Showcase** if you want employers to hear about
-   it. Your changes are kept, so you can stop and come back later.
+   it. Hal ticks it for you only on a few of your own code projects (at most 8): ones outside your course
+   folders, with your own commits and a README that says what they do. Your changes are kept, so you can stop and come back later.
 5. Add your CVs first: press **CVs**, then **Add the ticked CVs**. Hal reads them and finds your courses and
    jobs, and the coursework and lecture notes that were waiting for their course find it.
 6. Press **Add everything ticked**, or **Add the ticked ...** one part at a time. Each file is read by its

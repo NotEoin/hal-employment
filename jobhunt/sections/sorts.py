@@ -134,6 +134,7 @@ def run(con: sqlite3.Connection, sort_id: int, progress=None) -> dict:
             found.proposals += one.proposals
             for why, n in one.skipped.items():
                 found.skipped[why] = found.skipped.get(why, 0) + n
+        sorter.cap_stars(found.proposals)
         save(con, s["id"], found)
     except (OSError, ValueError) as e:
         log.warning("could not sort %s: %s", s["id"], e)

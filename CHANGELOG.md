@@ -12,7 +12,8 @@ What changed in each version, in plain words.
   reports named after someone else, are left out with the reason. What your course gave out (a brief, a
   handbook, a project list, a folder of course materials) is lecture material, never your coursework.
   Folders of notes on one subject are one row, practice exercises are one unstarred project, and 3D-print
-  downloads and a notes app's templates are left out.
+  downloads and a notes app's templates are left out. Hal ticks **Showcase** only on up to 8 of your own
+  code projects, outside your course, with your commits and a README of about 150 words or more.
 
 - **Letters tell your showcase from its own sources.** A project's story now comes from the project's own
   code, pages, files or form and your edits; a detail only your CV gives is marked as such for the writer.

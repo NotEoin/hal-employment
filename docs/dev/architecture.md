@@ -1494,7 +1494,9 @@ proposals to sources, and a record the bulk read built through a move and its un
   handbook or a project list) is `lecture`, never coursework or a project, and never goes to the AI.
 - Code projects (repositories) and README folders are one proposal each for Projects: a repository on this
   computer as `repo` held as a folder (its history stays readable), anything else as `upload` (its files).
-  `star` is guessed when the README has `SHOWCASE_README_CHARS` or more. Copies of one code project
+  `star` is guessed only for a project in no course or year folder, with the person's own commits
+  (`repo.share` with `repo.person()`) and a README of `SHOWCASE_README_WORDS` (150) words or more; `cap_stars`
+  keeps the newest `STARS_MAX` (8) a sort, also across a sort's folders (`sorts.run`). Copies of one code project
   (`versions.project_key`, and `versions.shared` files for name keys) keep only the newest by last commit,
   else newest file.
 - A loose document is placed by rules: `rank.rule_for` on its path, then `wrong_place.looks_like` on the

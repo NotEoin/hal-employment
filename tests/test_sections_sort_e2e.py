@@ -11,11 +11,12 @@ import unittest
 from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
+from support import repos
 from support.fake_ai import fake_ai
 from test_ingest import CV_TEXT, OWNER, REPLY, home, put, run
 from test_record import tiny_pdf
 from test_sections_sort import add_and_read, sections_of, sorted_folder
-from test_sections_sorter import history_dump, notes_folders, paper, software_dump, with_libraries
+from test_sections_sorter import README, committed, history_dump, notes_folders, paper, software_dump, with_libraries
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
@@ -45,7 +46,8 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "CLIP-Dissect probing.pdf": ("left_out", "", ""), "CheXpert Plus.pdf": ("left_out", "", ""),
          "known-cyber-attacks": ("proposed", "project", "upload"), "hackerrank": ("proposed", "project", "upload"),
          "Harbour Crane - 4417852": ("left_out", "", ""), "Daily note.md": ("left_out", "", ""),
-         "README.md": ("left_out", "", "")}
+         "README.md": ("left_out", "", ""), "practical-1": ("proposed", "project", "repo"),
+         "practical-2": ("proposed", "project", "repo"), "fogbell": ("proposed", "project", "repo")}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -62,7 +64,10 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Dissertation guidance.md": ("proposed", "lecture", "notes"),
           "Essay brief.md": ("proposed", "lecture", "notes"), "HIS2040_Talia_Wren_Poster.pdf": ("left_out", "", ""),
           "archive-visits": ("proposed", "project", "upload"), "Lantern stand - 5512093": ("left_out", "", ""),
-          "Seminar template.md": ("left_out", "", ""), "README.md": ("left_out", "", "")}
+          "Seminar template.md": ("left_out", "", ""), "README.md": ("left_out", "", ""),
+          "Walking tour": ("proposed", "project", "upload")}
+# The showcase guesses: only a project of the person's own, with their commits and a README that says what it is.
+STARRED = {"software": ["tidewatch"], "history": []}
 
 
 def download(d: Path, folder: str) -> None:
@@ -99,6 +104,14 @@ def messy_software_dump(root: Path) -> Path:
     download(d, "Downloads/Harbour Crane - 4417852")
     put(d, "Vault/Templates/README.md", "# Templates\n\nMade-up note templates.\n")
     put(d, "Vault/Templates/Daily note.md", "# {{date}}\n\n## Today\n")
+    for n in (1, 2):
+        practical = f"Uni/BSc Computing/Year 1/CSC1021 Programming/practical-{n}"
+        put(d, f"{practical}/README.md", README)
+        put(d, f"{practical}/main.py", "print(1)\n")
+        committed(d / practical, repos.AVERY, "2022-11-01T10:00:00Z")
+    put(d, "Projects/fogbell/README.md", README)
+    put(d, "Projects/fogbell/bell.py", "print(1)\n")
+    put(d, "Projects/fogbell/horn.py", "print(2)\n")
     return d
 
 
@@ -122,6 +135,8 @@ def messy_history_dump(root: Path) -> Path:
     download(d, "Downloads/Lantern stand - 5512093")
     put(d, "Notes vault/Templates/README.md", "# Templates\n\nMade-up templates.\n")
     put(d, "Notes vault/Templates/Seminar template.md", "# Seminar\n\n## Reading\n")
+    put(d, "Portfolio/Walking tour/README.md", "# Walking tour\n\n" + README)
+    put(d, "Portfolio/Walking tour/route.md", "# Route\n\nTwelve made-up stops.\n")
     return d
 
 
@@ -150,6 +165,8 @@ class FromADumpToTheRecord(unittest.TestCase):
             before = facts(con)
             sort_id = sorted_folder(con, dump(files))
             self.assertEqual(proposals(con, sort_id), expected)
+            self.assertEqual(sorted(r["name"] for r in sorts.rows(con, sort_id, limit=sorts.PAGE_MAX)["rows"]
+                                    if r["star"]), STARRED["software" if "Avery" in owner else "history"])
             self.assertEqual((facts(con), sections_of(con)), (before, []), "a proposal is never a fact")
             self.assertEqual(sorts.accept(con, sort_id)["need_card"], 0)
             add_and_read(con, sort_id)

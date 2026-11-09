@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
+from support import repos
 from support.fake_ai import fake_ai
 from test_ingest import home, put
 from test_record import tiny_pdf
@@ -24,7 +25,7 @@ NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600
 WORDS = "This made-up essay weighs the sources and the evidence on each side of the question. " * 12
 OLD, NEW = 1_700_000_000, 1_730_000_000      # November 2023 and October 2024
-README = "# Tidewatch\n\nA tide-gauge dashboard for a harbour club. " + "It reads gauge data and draws charts. " * 20
+README = "# Tidewatch\n\nA tide-gauge dashboard for a harbour club. " + "It reads gauge data and draws charts. " * 22
 CV = ("# {name}\n\nCurriculum vitae\n\n## Work experience\n\n{job}\n\n## Education\n\n{degree}, University of Nowhere "
       "Fen, 2021 to 2024.\n\n## Skills\n\n{skills}\n")
 AVERY_CV = CV.format(name="Avery Quillon", job="Junior developer, Made-up Tides Ltd, 2024.",
@@ -40,6 +41,14 @@ TRANSCRIPT = ("# Transcript of study\n\nMarnie Quillfeather, BA History.\n\n| Mo
 REFERENCE = ("# Reference for Marnie Quillfeather\n\nTo whom it may concern,\n\nI have known Marnie for two years "
              "at the Fenwick Lantern Museum Trust and recommend her without hesitation.\n")
 CERTIFICATE = "# First aid\n\nThis is to certify that Avery Quillon has completed a made-up first aid course.\n"
+
+
+def committed(folder: Path, author: tuple[str, str], date: str) -> Path:
+    """Makes a folder of made-up files a code project with one commit by `author` at `date`."""
+    repos.git(folder, "init", "-q")
+    repos.git(folder, "add", "-A", author=author, date=date)
+    repos.git(folder, "commit", "-q", "-m", "work", author=author, date=date)
+    return folder
 
 
 def dated(path: Path, when: float) -> Path:
@@ -92,6 +101,7 @@ def software_dump(root: Path) -> Path:
         put(d, f"Projects/{name}/src/charts.py", "def draw():\n    return 2\n")
         for f in (d / "Projects" / name).rglob("*"):
             dated(f, when)
+    committed(d / "Projects/tidewatch", repos.AVERY, "2024-10-27T10:00:00Z")
     put(d, "Certificates/First aid certificate.md", CERTIFICATE)
     put(d, "Medical/GP letter.md", GP_LETTER)
     put(d, "Downloads/beach.jpg", b"\xff\xd8\xff\xe0made-up picture bytes")
@@ -144,6 +154,7 @@ class Sorter(unittest.TestCase):
 
     def test_a_software_graduates_dump_is_proposed_section_by_section(self):
         with home() as (con, vault, files), fake_ai({"sort_pick": json.dumps({"choice": "none"})}) as backend:
+            settings.set("you.name", "Avery Quillon")
             degree = self.education(con, "BSc", "Computing")
             before = self.facts(con)
             found = by_rel(sorter.propose(con, software_dump(files), local=True))
@@ -313,6 +324,34 @@ class Sorter(unittest.TestCase):
             self.assertFalse([p.rel for p in found.proposals if p.section == "project" and "Vault" in p.rel],
                              "a notes app's own folders are never projects")
             self.assertEqual(rels["Dump/Vault/Templates/Daily note.md"].state, "left_out")
+
+    def test_only_the_persons_own_documented_projects_outside_a_course_are_starred_at_most_eight(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            for n in range(sorter.STARS_MAX + 2):
+                put(d, f"Projects/p{n}/README.md", README)
+                put(d, f"Projects/p{n}/main.py", "print(1)\n")
+                committed(d / f"Projects/p{n}", repos.AVERY, f"2024-0{n % 9 + 1}-01T10:00:00Z")
+            for n in (1, 2):
+                put(d, f"Uni/Year 1/practical-{n}/README.md", README)
+                put(d, f"Uni/Year 1/practical-{n}/main.py", "print(1)\n")
+                committed(d / f"Uni/Year 1/practical-{n}", repos.AVERY, "2023-01-01T10:00:00Z")
+            put(d, "Projects/shared/README.md", README)
+            put(d, "Projects/shared/main.py", "print(1)\n")
+            committed(d / "Projects/shared", repos.ROBIN, "2024-01-01T10:00:00Z")
+            put(d, "Projects/short/README.md", "# Short\n\nA made-up tool.\n")
+            put(d, "Projects/short/main.py", "print(1)\n")
+            committed(d / "Projects/short", repos.AVERY, "2024-01-01T10:00:00Z")
+            put(d, "Projects/copied/README.md", README)
+            put(d, "Projects/copied/pyproject.toml", "[project]\nname = \"copied\"\n")
+            found = by_rel(sorter.propose(con, d, local=True))
+            self.assertEqual([r for r, p in found.items() if p.star], [], "with no name Hal knows no commits")
+            settings.set("you.name", "Avery Quillon")
+            found = by_rel(sorter.propose(con, d, local=True))
+            starred = sorted(r for r, p in found.items() if p.star)
+            self.assertEqual(len(starred), sorter.STARS_MAX)
+            self.assertTrue(all(r.startswith("Dump/Projects/p") for r in starred),
+                            "never a practical, a classmate's project, a short README or one with no commits")
 
     def test_coursework_with_no_course_on_the_record_waits_for_one(self):
         with home() as (con, _vault, files), fake_ai({"sort_pick": json.dumps({"choice": "none"})}):

@@ -32,8 +32,11 @@ Design decisions, each with its reason:
   institution, subject or qualification its folders name, else the one whose dates hold the file's date,
   else the only one; with none the proposal waits for the person to choose (`needs_card`).
 - A code project on this computer is proposed as a folder (`repo`), so its history stays readable; one from a
-  zip is proposed as its files (`upload`). A project with a README of `SHOWCASE_README_CHARS` or more is
-  guessed a showcase piece, as a README that long says what the project is and how to use it.
+  zip is proposed as its files (`upload`). A project is guessed a showcase piece only when it is the
+  person's own (in no course or year folder), holds their own commits (`repo.share`), and its README has
+  `SHOWCASE_README_WORDS` or more, as a README that long says what the project is and how to use it; at most
+  `STARS_MAX` a sort (`cap_stars`, newest first). Ten first-year practicals were pre-starred when a long
+  README was enough (2026-11-09); the person stars the rest.
 - The AI is asked about at most `AI_ASKS_MAX` files a sort, so a dump of ten thousand unnamed files costs a
   bounded number of calls; the rest are left out saying so.
 """
@@ -51,6 +54,7 @@ from pathlib import Path, PurePosixPath
 from jobhunt.ingest import convert, discover, group, privacy, rank, versions
 from jobhunt.profile import merge
 from jobhunt.sections import registry, sort_rules, sort_units, store, wrong_place
+from jobhunt.sections import repo as repo_reader
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +62,8 @@ PURPOSE = "sort_pick"
 TIMEOUT_S = 60                 # one short choice; a model that takes longer is busy, and the file is left out
 AI_ASKS_MAX = 200              # files a sort asks the AI about (see the module notes)
 PROMPT_CHARS = 1500            # the start of a document says what it is
-SHOWCASE_README_CHARS = 600    # a README past a title and a line (see the module notes)
+SHOWCASE_README_WORDS = 150    # a README past a title and a line (see the module notes)
+STARS_MAX = 8                  # showcase guesses a sort; a CV tells a handful of projects, not dozens
 NONE = "none"
 PROPOSED, LEFT_OUT, COPY = "proposed", "left_out", "copy"
 # The choices the AI may pick from, each "section/kind of document" with its words.
@@ -300,20 +305,30 @@ def _ask_ai(p: Proposal, text: str) -> bool:
 
 # The walk -------------------------------------------------------------------------------------------------
 
-def _unit(path: Path, rel: str, files: list[Path], *, local: bool, repo: bool) -> Proposal:
-    """A code project or a project folder, as one proposal for Projects."""
+def _unit(path: Path, rel: str, files: list[Path], *, local: bool, repo: bool,
+          who: repo_reader.Person) -> Proposal:
+    """A code project or a project folder, as one proposal for Projects, guessed a showcase piece as the module
+    notes say."""
     stamp = versions.stamp(path)
     readme = next((f for f in files if f.parent == path and discover.has_readme([f.name])), None)
     try:
-        readme_chars = len(readme.read_text(encoding="utf-8", errors="replace")) if readme else 0
+        readme_words = len(readme.read_text(encoding="utf-8", errors="replace").split()) if readme else 0
     except OSError:
-        readme_chars = 0
+        readme_words = 0
     held, kind = (registry.FOLDER, "repo") if local and repo else (registry.FILES, "upload")
     p = Proposal(path, rel, held, size=sum(f.stat().st_size for f in files if f.exists()),
                  mtime=stamp.commit or stamp.newest_file, files=files)
     p.place("project", kind, "A code project." if repo else "A project folder with a README.")
-    p.star = readme_chars >= SHOWCASE_README_CHARS
+    p.star = (readme_words >= SHOWCASE_README_WORDS and not _course_folder(rel, set()) and bool(who)
+              and repo_reader.share(repo_reader.git_history(path), who)["mine"] > 0)
     return p
+
+
+def cap_stars(proposals: list[Proposal]) -> None:
+    """Keeps at most `STARS_MAX` showcase guesses, the newest projects'."""
+    starred = sorted((p for p in proposals if p.star and p.state == PROPOSED), key=lambda p: -p.mtime)
+    for p in starred[STARS_MAX:]:
+        p.star = False
 
 
 def _group_unit(con: sqlite3.Connection, path: Path, rel: str, files: list[Path], kind: str, *, local: bool,
@@ -438,6 +453,7 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
     grouped = {g: kind for g, kind in sort_units.groups(base, kept, repos, folders).items()
                if group.repo_of(g, repos) is None}
     units: list[Proposal] = []
+    who = repo_reader.person()
     unit_files: dict[Path, list[Path]] = {u: [] for u in (*grouped, *repos, *folders)
                                           if u in grouped or sort_units.holder(u, grouped) is None}
     loose: list[discover.Found] = []
@@ -458,7 +474,7 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
         if folder in grouped:
             units.append(_group_unit(con, folder, rel, files, grouped[folder], local=local, repo=folder in repos))
         else:
-            units.append(_unit(folder, rel, files, local=local, repo=folder in repos))
+            units.append(_unit(folder, rel, files, local=local, repo=folder in repos, who=who))
     _repo_copies([u for u in units if u.section == "project"])
     courses = {str(PurePosixPath(members[0][1]).parent)
                for members in group.courses([(f.path, f.rel) for f in loose]).values()}
@@ -517,6 +533,7 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
                 continue
         fill_card(con, p, text)
     mark_copies(con, docs)
+    cap_stars(units)
     out.proposals = units + docs
     return out
 
