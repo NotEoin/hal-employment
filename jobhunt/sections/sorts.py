@@ -106,7 +106,7 @@ def save(con: sqlite3.Connection, sort_id: int, found: sorter.Sorted) -> int:
                     (json.dumps(found.skipped), db.now(), sort_id))
     rows = [(sort_id, str(p.path), p.rel, p.held, p.size, p.sha256, _iso(p.mtime), p.section, p.doc_kind,
              p.target_id, int(p.star), p.by, p.why, int(p.state == sorter.PROPOSED), p.state, p.copy_of,
-             getattr(p, "note_rel", None)) for p in found.proposals]
+             p.note_rel) for p in found.proposals]
     for start in range(0, len(rows), INSERT_CHUNK):
         with con:
             con.executemany("""INSERT OR IGNORE INTO record_sort_rows (sort_id, path, rel, held, size, sha256, mtime,
@@ -117,14 +117,18 @@ def save(con: sqlite3.Connection, sort_id: int, found: sorter.Sorted) -> int:
 
 
 def run(con: sqlite3.Connection, sort_id: int, progress=None) -> dict:
-    """Proposes where everything in the sort's folders goes (`sorter.propose`) and keeps the proposals; returns
-    the sort's counts."""
+    """Proposes where everything in the sort's folders goes (`sorter.propose`, or `move.propose` for a move) and
+    keeps the proposals; returns the sort's counts."""
     s = row_of(con, sort_id)
     set_state(con, s["id"], "sorting")
     try:
         found = sorter.Sorted()
+        if s["kind"] == "move":
+            from jobhunt.sections import move
+
+            found = move.propose(con)
         known = inbox_known(con, but=s["id"]) if s["kind"] == "inbox" else set()
-        for root in json.loads(s["roots"]):
+        for root in json.loads(s["roots"]) if s["kind"] != "move" else []:
             one = sorter.propose(con, Path(root), local=s["kind"] in LOCAL_KINDS,
                                  prefix="" if s["kind"] == "upload" else None, known=known, progress=progress)
             found.proposals += one.proposals
@@ -358,7 +362,7 @@ def _make_source(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
 def add_accepted(con: sqlite3.Connection, sort_id: int) -> list[int]:
     """Makes each accepted row of a sort a source of its section, with its kind and card; returns the ids of
     the new sources, to be read. A row that cannot be added is `failed` with the reason; one whose file is in
-    the record already is linked to that source."""
+    the record already is left out, linked to that source."""
     new = []
     for r in con.execute("SELECT * FROM record_sort_rows WHERE sort_id = ? AND state = 'accepted' ORDER BY id",
                          (sort_id,)).fetchall():
@@ -369,10 +373,17 @@ def add_accepted(con: sqlite3.Connection, sort_id: int) -> list[int]:
                 con.execute("UPDATE record_sort_rows SET state = 'failed', why = ? WHERE id = ?",
                             (f"Hal could not add it: {e}", r["id"]))
             continue
-        source_id = (out["added"] or [d["id"] for d in out.get("duplicates", [])] or [None])[0]
         with con:
-            con.execute("UPDATE record_sort_rows SET state = ?, source_id = ? WHERE id = ?",
-                        ("added" if source_id is not None else "failed", source_id, r["id"]))
+            if out["added"]:
+                con.execute("UPDATE record_sort_rows SET state = 'added', source_id = ? WHERE id = ?",
+                            (out["added"][0], r["id"]))
+            elif out.get("duplicates"):    # in the record already: linked, never counted as this sort's own
+                same = out["duplicates"][0]
+                con.execute("UPDATE record_sort_rows SET state = 'left_out', source_id = ?, why = ? WHERE id = ?",
+                            (same["id"], f"Already in your record, under {same['section_label']}.", r["id"]))
+            else:
+                con.execute("UPDATE record_sort_rows SET state = 'failed', why = ? WHERE id = ?",
+                            ("Hal found nothing in it to keep.", r["id"]))
         new += out["added"]
     return new
 
@@ -420,6 +431,9 @@ def _ts(iso: str | None) -> float:
 def remove(con: sqlite3.Connection, sort_id) -> None:
     """Forgets a sort and its proposals, and the files Hal kept for it; the sources it added stay."""
     s = row_of(con, sort_id)
+    if s["kind"] == "move" and s["state"] != "undone" and con.execute(
+            "SELECT 1 FROM record_sort_kept_out WHERE sort_id = ? LIMIT 1", (s["id"],)).fetchone():
+        raise ValueError("Undo the move first, or keep it: forgetting it would lose the way back.")
     with con:
         con.execute("DELETE FROM record_sorts WHERE id = ?", (s["id"],))
     shutil.rmtree(work_dir(s["id"]), ignore_errors=True)

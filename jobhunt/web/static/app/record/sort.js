@@ -9,7 +9,11 @@
    "Left out" lists what Hal would not guess in, each with why, and "Copies" the older copies it set aside;
    either can be given a section by hand. Sorting runs as `record.sort` and adding as `record.sort_accept`;
    their events and a `sort` event reload the table. The folder box is left out in a window from another
-   computer, where a zip is uploaded instead. */
+   computer, where a zip is uploaded instead.
+
+   A record an older Hal read in whole gets "Move my record to sections" (jobhunt/sections/move.py): the same
+   table proposes a section for each of its notes. "Finish the move" sets aside what the notes nobody
+   accepted gave, and "Undo the move" puts everything back as it was. */
 import { html, useState } from "../core/html.js";
 import { api, post, put, del } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
@@ -117,6 +121,11 @@ export function SortReview({ id, onClose }) {
     + (out.need_card ? " " + plural(out.need_card, "file waits", "files wait") + " for its course or job." : ""));
   const tickAll = ticked => act(() => post(SORT + "/" + id + "/tick", view.section ? { ticked, section: view.section } : { ticked }));
   const running = data.state === "new" || data.state === "sorting";
+  const moving = data.kind === "move";
+  const finish = () => act(() => post(SORT + "/" + id + "/finish"), out =>
+    "Done. What " + plural(out.set_aside, "older note", "older notes") + " gave is set aside; Undo the move puts it back.");
+  const undo = () => act(() => post(SORT + "/" + id + "/undo"), out =>
+    "Undone. " + plural(out.removed, "file was", "files were") + " taken out and your record is as it was.");
   const label = view.state === "proposed" ? (view.section ? (c.sections.find(s => s.id === view.section) || {}).label : "Everything Hal proposes")
     : (OTHER_VIEWS.find(v => v[0] === view.state) || [, ""])[1];
   return html`<section class="card stack s rec-sort" aria-labelledby="rec-sort-h" data-sort=${id}>
@@ -136,6 +145,10 @@ export function SortReview({ id, onClose }) {
       <button type="button" class="btn small" onClick=${() => tickAll(false)}>Untick all</button>
       ${view.section && html`<button type="button" class="btn small primary" onClick=${() => accept(view.section)}>Add the ticked ${label}</button>`}
       <button type="button" class="btn small primary" onClick=${() => accept(null)}>Add everything ticked</button></div>`}
+    ${moving && !data.undone && html`<div class="row wrap">
+      <p class="small sub grow rec-line">When you have added what you want, finish the move: what the other older notes gave is set aside, never deleted.</p>
+      <button type="button" class="btn small" onClick=${finish}>Finish the move</button>
+      ${data.can_undo && html`<button type="button" class="btn small" onClick=${undo}>Undo the move</button>`}</div>`}
     <h3 class="h3">${label}: ${data.total}</h3>
     ${data.rows.length ? html`<div style="overflow-x:auto"><table class="rec-sort-table"><thead><tr><th>Add</th><th>File</th><th>Where it goes</th>
       <th>What it is</th><th>Course or job</th><th>Showcase</th></tr></thead>
@@ -157,12 +170,19 @@ export function SortCard() {
   const [open, setOpen] = useState(null);
   const forget = s => act(() => del(SORT + "/" + s.id), "Hal forgot that sort. What you added stays.");
   const sorts = data ? data.sorts : [];
+  const moveRecord = async () => {
+    const out = await act(() => post("/record/move"), "Hal is looking through your older record. Nothing changes until you say so.");
+    if (out) setOpen(out.sort.id);
+  };
   return html`<div class="stack">
     <section class="card stack s" aria-labelledby="rec-sort-start-h"><h2 class="h2" id="rec-sort-start-h">Sort a big folder for me</h2>
       <p class="small sub rec-line">Have a folder of everything from your studies and jobs? Hal looks through it and suggests where each file goes:
         your CVs, your coursework and lecture notes by course, your projects, your certificates. You check the list and add what is right.
         Hal leaves out anything it is unsure about, private papers such as medical letters, and older copies.</p>
       <${SortStart} onStarted=${setOpen} />
+      ${data && data.can_move && html`<div class="row wrap"><p class="small sub grow rec-line">An older Hal read files into your record
+        all at once. Move them into the parts of your record they belong in: you check each one first, and one click undoes it.</p>
+        <button type="button" class="btn" onClick=${moveRecord}>Move my record to sections</button></div>`}
       ${sorts.length > 0 && html`<ul class="rec-paths">${sorts.map(s => html`<li class="row wrap" key=${s.id}>
         <span class="grow"><b>${s.label || "Your files"}</b>: ${STATE_WORDS[s.state] || s.state}.
           ${s.counts.proposed} to check, ${s.counts.added} added, ${s.counts.left_out} left out.</span>

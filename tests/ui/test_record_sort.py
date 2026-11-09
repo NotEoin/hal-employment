@@ -20,11 +20,12 @@ from support.ui import AppPage, chromium, skip_unless_browser
 from test_sections_sorter import history_dump
 
 from jobhunt import db, record
-from jobhunt.core import paths
+from jobhunt.core import paths, runner
 from jobhunt.evidence import routes
 from jobhunt.sections import store as sources
 
 NOT_YET = ("/api/v2/home",)
+WAIT_S = 30
 FAILED_LOAD = "Failed to load resource"
 
 
@@ -88,6 +89,26 @@ class SortAFolder(unittest.TestCase):
         for size, scheme in (("narrow", "dark"),):
             with self.subTest(size=size):
                 self.clean(self.page(size, scheme))
+
+    def test_an_older_record_is_moved_to_sections_and_one_click_undoes_it(self) -> None:
+        from test_sections_move import old_record
+
+        with closing(db.connect()) as con:
+            old_record(con, Path(paths.record_default()), Path(self.hal.home) / "Files")
+        p = self.page()
+        p.page.get_by_role("button", name="Move my record to sections").click()
+        review = p.page.locator("section.rec-sort")
+        p.shows(review.get_by_text("Ready for you to check"), "the proposals for the older notes")
+        review.get_by_role("button", name="Add everything ticked").click()
+        p.shows(review.get_by_role("button", name=re.compile(r"^Added: \d+$")), "the added count")
+        self.assertTrue(runner.idle(WAIT_S), "the accepted notes are read before the move is finished")
+        review.get_by_role("button", name="Finish the move").click()
+        p.shows(p.page.get_by_text(re.compile("gave is set aside")), "the finished move")
+        self.assertTrue(self.listed("cv"))
+        review.get_by_role("button", name="Undo the move").click()
+        p.shows(p.page.get_by_text(re.compile("your record is as it was")), "the undone move")
+        self.assertEqual(self.listed("cv"), [])
+        self.clean(p)
 
 
 if __name__ == "__main__":

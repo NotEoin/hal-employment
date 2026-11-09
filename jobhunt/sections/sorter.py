@@ -131,6 +131,7 @@ class Proposal:
     state: str = PROPOSED          # proposed | left_out | copy
     copy_of: str = ""              # the rel of the copy proposed instead
     files: list[Path] = field(default_factory=list)   # a project folder's files
+    note_rel: str | None = None    # the older Hal's note a move proposal came from (`sections.move`)
 
     def place(self, section: str, kind: str, why: str, by: str = "rules") -> Proposal:
         """Proposes this for `section` as a `kind`, saying why; returns itself."""
@@ -226,8 +227,9 @@ def _work_kind(stem: str, suffix: str) -> str:
     return "report"
 
 
-def _by_rules(p: Proposal, rule: rank.Rule, text: str, in_course: bool) -> bool:
-    """Places a document by its kind and folders; False when the rules cannot."""
+def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool) -> bool:
+    """Places a document of `rule`'s kind by its folders and the start of its text; False when the rules cannot.
+    Also how a move places an older note by the kind an older Hal gave it (`sections.move`)."""
     stem, suffix = PurePosixPath(p.rel).stem, PurePosixPath(p.rel).suffix.lower()
     looks = wrong_place.looks_like(PurePosixPath(p.rel).name, text)
     kind = rule.doc_type
@@ -454,7 +456,7 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
         if why := privacy.held_back({"allowed": False, "rel": f.rel}, text):
             p.leave_out(f"Looks private ({why}), so Hal kept it out.")
             continue
-        if not _by_rules(p, rule, text, _course_folder(f.rel, courses)):
+        if not place_kind(p, rule, text, _course_folder(f.rel, courses)):
             if asks >= AI_ASKS_MAX:
                 p.leave_out(LEFT_OUT_WORDS["ai_cap"])
                 continue
@@ -463,7 +465,12 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
                 p.leave_out(LEFT_OUT_WORDS["unplaced"])
                 continue
         fill_card(con, p, text)
-    _doc_copies(docs)
-    _one_dissertation(con, docs)
+    mark_copies(con, docs)
     out.proposals = units + docs
     return out
+
+
+def mark_copies(con: sqlite3.Connection, docs: list[Proposal]) -> None:
+    """Marks all but the newest copy of each document, and keeps one dissertation a course."""
+    _doc_copies(docs)
+    _one_dissertation(con, docs)

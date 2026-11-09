@@ -1495,9 +1495,9 @@ you, `source_id` once added).
   section=)`, which only marks ticked rows `accepted`, never one that still needs a card.
 - `add_accepted` makes each accepted row a source with `pipeline.add_uploads` (a file, or a project folder's
   files under its name, up to `FOLDER_BYTES_MAX`) or `pipeline.add_link` (a code project on this computer);
-  a duplicate is linked to the source already there, a failure keeps its reason. `star_projects` stars the
-  project cards a guessed showcase row gave once read; `rematch` finds cards again for rows still waiting
-  (the cards an accepted CV gave).
+  a file in the record already is `left_out` linked to that source, a failure keeps its reason.
+  `star_projects` stars the project cards a guessed showcase row gave once read; `rematch` finds cards
+  again for rows still waiting (the cards an accepted CV gave).
 - Upload sorts keep their files in `data/record-sort/<id>/` (zips unpacked with `ingest.sources.unpack`'s
   guards) until `remove`.
 - Actions (`sections/sort_actions.py`): `record.sort` (priority 2, one at a time, resumable) runs `sorts.run`;
@@ -1518,6 +1518,30 @@ you, `source_id` once added).
   with counts, a page of rows with tick, section, kind, card and showcase, "Add the ticked ...", "Add
   everything ticked", and the left out, copies, added and failed rows). The setup guide's record step
   (`setup/steps/record.js`) offers `SortStart` too.
+
+Moving an older record (`sections/move.py`): a record the bulk read built has evidence with `source_rel` a
+note under `Sources/` and no `source_id`. `can_move` is true while any is left; `GET /api/v2/record/sort`
+says so as `can_move`, and the page offers "Move my record to sections" (`POST /api/v2/record/move`, a sort
+of kind `move`).
+
+- `propose` makes one row per such note (`record_sort_rows.note_rel`): the file to add is the original at
+  the note's `source` when it is still there (a folder there is a `repo` or `local_folder` held as a folder),
+  else the record's copy named under "## Original", else the note itself. It is placed by the note's
+  `doc_type` (mapped to the sorter's rule of that kind, `RULE_OF`, `SAME_AS`), `category` and `role` with
+  `sorter.place_kind`; role `others`, and kinds no section takes (`LEFT_OUT_KINDS`), are left out. Its card
+  comes from the original's path (`sorter.fill_card`), and `sorter.mark_copies` sets copies aside.
+- Accepting runs the same `record.sort_accept` (subject `sort:<id>`), wrapped by `before_accept` (notes each
+  card's state once per move in `record_sort_kept_out` as `card`, and returns the states now) and
+  `after_accept` (sets aside the older evidence of every added note, `_set_aside`, and gives back the states
+  `confirmed` and `edited` that the reads changed, `_keep_states`). `_set_aside` copies each evidence row
+  into `record_sort_kept_out` as `evidence`, deletes it, hides a found `hal` card nothing names any more
+  with `orphaned_from = 'hal'`, refolds the rest and refreshes conflicts.
+- `finish` (`POST .../sort/{id}/finish`) sets aside the evidence of every note not added. `undo` (`POST
+  .../sort/{id}/undo`) removes every source the move added (`pipeline.remove`; a row whose file was in the
+  record already is `left_out` with that `source_id`, and is not removed), inserts the kept evidence back
+  (with its old id when free), gives each noted card its old state unless the person has confirmed or
+  edited it since, refolds, and marks the sort `undone`. Both refuse while the accept action of the sort is
+  running (`sort_actions.adding`). A move that can be undone cannot be forgotten (`sorts.remove`).
 
 ## Profile (`jobhunt/profile/`)
 

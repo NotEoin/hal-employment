@@ -6,7 +6,9 @@ Sorting walks thousands of files, so it runs in the background (priority 2), one
 is what the person waits for, so it runs at priority 1; its sources are read as an upload would be
 (`actions.read_all`), then the project cards they gave that were guessed showcase pieces are starred, and the
 proposals still waiting for a card are matched again, as an accepted CV may have given their courses.
-Both publish a `sort` event with the sort's id, which the review table follows.
+For a move of an older record (`sections.move`), the cards' states are noted before the reads and the older
+notes' evidence is set aside after them. Both publish a `sort` event with the sort's id, which the review
+table follows.
 """
 from __future__ import annotations
 
@@ -69,10 +71,17 @@ def sort_folder(ctx, sort_id: int) -> dict:
 def accept_sort(ctx, sort_id: int) -> dict:
     """Makes the accepted proposals sources of their sections and reads them."""
     ctx.step("Adding what you accepted")
+    moving = sorts.row_of(ctx.con, sort_id)["kind"] == "move"
+    if moving:
+        from jobhunt.sections import move
+
+        states = move.before_accept(ctx.con, int(sort_id))
     ids = sorts.add_accepted(ctx.con, int(sort_id))
     out = actions.read_all(ctx, ids, set())
     out["starred"] = len(sorts.star_projects(ctx.con, int(sort_id)))
     out["matched"] = sorts.rematch(ctx.con, int(sort_id))
+    if moving:
+        out["set_aside"] = move.after_accept(ctx.con, int(sort_id), states)
     events.publish("sort", sort_id=int(sort_id))
     if out["matched"]:
         ctx.changed(f"{out['matched']} more files found their course or job; accept them too.")
@@ -121,6 +130,17 @@ def queue_inbox() -> int | None:
 
 
 def queue_accept(sort_id: int, *, session_id: str | None = None, remote: bool = False) -> str:
-    """Starts making a sort's accepted proposals sources; the action's id."""
-    return runner.start(ACCEPT, params={"sort_id": int(sort_id)}, session_id=session_id, remote=remote,
-                        why="You accepted where Hal proposed your files go")
+    """Starts making a sort's accepted proposals sources; the action's id. Its subject names the sort
+    (`subject`), so a move is not finished or undone while it adds."""
+    return runner.start(ACCEPT, subject=subject(sort_id), params={"sort_id": int(sort_id)}, session_id=session_id,
+                        remote=remote, why="You accepted where Hal proposed your files go")
+
+
+def subject(sort_id: int) -> str:
+    """The subject of the action adding a sort's accepted proposals."""
+    return f"sort:{int(sort_id)}"
+
+
+def adding(sort_id: int) -> bool:
+    """True while Hal is adding what was accepted in this sort."""
+    return runner.running_for(subject(sort_id)) is not None

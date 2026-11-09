@@ -285,6 +285,13 @@ Overview shows how it went. **Read them with the AI** reads the notes it filed b
 **Tidy my record** holds them to today's rules (below). From a terminal, `python -m jobhunt ingest --again`
 and `python -m jobhunt ingest --tidy` do the same.
 
+To bring such a record into the parts of Your record, press **Move my record to sections** on Overview,
+under **Sort a big folder for me**. Hal proposes a part for each file the older Hal read, in the same list
+as a sorted folder, using what the older Hal noted about it and where the file came from. Nothing changes
+until you add what is right. Each file you add is read again by its part of your record, and cards you
+checked or edited keep what you said. When you are done, press **Finish the move**: what the other files
+gave is set aside, not deleted. **Undo the move** puts everything back as it was before the move.
+
 ### Tidying your record
 
 Press **Tidy my record** on the Overview (or run `jobhunt ingest --tidy`). Hal first saves a copy of your record and its database in Hal's backups folder.

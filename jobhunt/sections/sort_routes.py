@@ -27,7 +27,7 @@ A row (`ROW`, `sorts.shape_row`):
 Routes:
 
 - `GET /api/v2/record/sort`: {"sorts": [SORT], newest first, "cards": {"education": [{"id", "title"}], "job":
-  [...]}}.
+  [...]}, "can_move": true when facts come from an older Hal's notes that no move has set aside}.
 - `POST /api/v2/record/sort` {"folders": [paths]}: sorts folders on this computer (local only); {"sort",
   "action_id"}.
 - `POST /api/v2/record/sort/upload`: a multipart form of files `file0`, `file1`, ... with `path0`, ... (a
@@ -41,7 +41,13 @@ Routes:
 - `POST /api/v2/record/sort/{id}/accept` {"section"}: accepts the ticked proposals (of one section);
   {"accepted", "need_card", "action_id"}.
 - `POST /api/v2/record/sort/{id}/again`: proposes again, keeping what was accepted; {"action_id"}.
-- `DELETE /api/v2/record/sort/{id}`: forgets the sort and the files Hal kept for it; what it added stays.
+- `DELETE /api/v2/record/sort/{id}`: forgets the sort and the files Hal kept for it; what it added stays. A
+  move that can still be undone is refused (400).
+- `POST /api/v2/record/move`: "Move my record to sections" (`sections.move`): a sort of kind `move` proposing
+  a section for each older note; {"sort", "action_id"}.
+- `POST /api/v2/record/sort/{id}/finish`: sets aside the older evidence of every note of a move nobody
+  accepted; {"set_aside"}.
+- `POST /api/v2/record/sort/{id}/undo`: undoes a whole move; {"removed", "restored"}.
 
 A change that does not fit is 400 with plain words; a sort, row or card that is not there is 404; a second
 sort while one runs is 409.
@@ -144,7 +150,9 @@ def start_upload(req: Request, why: str, *, kind: str = "upload") -> dict:
 @route("GET", PREFIX, auth="session_or_local")
 def listing(req: Request) -> dict:
     """The latest sorts, and the cards a proposal may be for."""
-    return {"sorts": sorts.listing(req.con), "cards": sorts.cards(req.con)}
+    from jobhunt.sections import move
+
+    return {"sorts": sorts.listing(req.con), "cards": sorts.cards(req.con), "can_move": move.can_move(req.con)}
 
 
 @route("POST", PREFIX, auth="session_or_local", local_only=True)
@@ -212,6 +220,46 @@ def again(req: Request) -> dict:
     s = sorts.row_of(req.con, req.params["sort_id"])
     return {"action_id": sort_actions.begin(req.con, s["id"], session_id=_session(req), remote=req.remote,
                                             why="You asked Hal to sort a folder again")}
+
+
+@route("POST", "/api/v2/record/move", auth="session_or_local")
+def move_record(req: Request) -> dict:
+    """Starts "Move my record to sections": a proposal for each note an older Hal wrote."""
+    from jobhunt.sections import move
+
+    if not move.can_move(req.con):
+        raise BadRequest("Your record has nothing from an older Hal to move.")
+    sort_id, action_id = sort_actions.start(req.con, "move", [], "Your record from an older Hal",
+                                            session_id=_session(req), remote=req.remote,
+                                            why="You asked Hal to move your record to sections")
+    return {"sort": sorts.shape(req.con, sort_id), "action_id": action_id}
+
+
+@route("POST", PREFIX + "/{sort_id}/finish", auth="session_or_local")
+def finish_move(req: Request) -> dict:
+    """Sets aside what the older notes nobody accepted gave, so the record is all sections."""
+    from jobhunt.sections import move
+
+    try:
+        out = {"set_aside": move.finish(req.con, req.params["sort_id"])}
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    events.publish("profile", sort_id=int(req.params["sort_id"]))
+    return out
+
+
+@route("POST", PREFIX + "/{sort_id}/undo", auth="session_or_local")
+def undo_move(req: Request) -> dict:
+    """Undoes a whole move of an older record."""
+    from jobhunt.sections import move
+
+    try:
+        out = move.undo(req.con, req.params["sort_id"])
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    events.publish("profile", sort_id=int(req.params["sort_id"]))
+    events.publish("sort", sort_id=int(req.params["sort_id"]))
+    return out
 
 
 @route("DELETE", PREFIX + "/{sort_id}", auth="session_or_local")
