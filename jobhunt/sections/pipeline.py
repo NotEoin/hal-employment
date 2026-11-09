@@ -24,6 +24,9 @@ Design decisions, each with its reason:
   worked out again (`cv.settle`).
 - A reader not written yet (`readers.NotReadYet`) leaves the source waiting, state `new`, with the words saying
   so; it is not a failure.
+- Adding a source makes the record folder when it is missing (`ensure_record`), as setup makes it: on a fresh
+  install where setup was skipped, accepting a sort failed when the folder was read, with "no employment
+  record at ..." (2026-11-09).
 """
 from __future__ import annotations
 
@@ -37,6 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from jobhunt import db, record
+from jobhunt.evidence.routes import make_default
 from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.profile import store as profile_store
@@ -153,6 +157,7 @@ def add_uploads(con: sqlite3.Connection, section_id: str, uploads: list[Incoming
     target = store.target_card(con, section, target_id)
     if not uploads:
         raise ValueError("Choose one or more files to add.")
+    ensure_record()
     store.check_dissertation(con, section.id, kind.id, target, adding=len(_groups(uploads)))
     out: dict = {"added": [], "duplicates": [], "problems": []}
     work = store.files_root()
@@ -212,6 +217,7 @@ def add_link(con: sqlite3.Connection, section_id: str, locator: str, *, doc_kind
     if kind.held == registry.ACCOUNT:
         words = words.rstrip("/").rsplit("/", 1)[-1].lstrip("@")
     target = store.target_card(con, section, target_id)
+    ensure_record()
     if kind.held != registry.MANUAL and (same := store.by_locator(con, kind.held, words)) is not None:
         return {"added": [], "duplicates": [{"name": words, "id": same["id"],
                                              "section_label": registry.get(same["section"]).label}]}
@@ -270,6 +276,14 @@ def _source(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
 def vault() -> Path:
     """The record folder the notes go in."""
     return Path(record._live("VAULT"))
+
+
+def ensure_record() -> Path:
+    """The record folder, made with its starter folders (`evidence.routes.make_default`) when it is missing."""
+    folder = vault()
+    if not folder.is_dir():
+        make_default()
+    return folder
 
 
 def note_folder(section: registry.Section, target: dict | None) -> str:

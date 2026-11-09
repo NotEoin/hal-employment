@@ -4,6 +4,7 @@ accepted ones made sources, each read by its own section's reader.
 The made-up dumps are `test_sections_sorter`'s: Avery Quillon (software) and Marnie Quillfeather (history).
 """
 import json
+import shutil
 import time
 import unittest
 from contextlib import closing
@@ -88,6 +89,17 @@ class Review(unittest.TestCase):
             self.assertEqual(sorts.counts(con, sort_id)["proposed"], 1, "only the unticked letter is left")
             left = sorts.rows(con, sort_id, state="left_out")["rows"]
             self.assertTrue(any("private" in r["why"] for r in left))
+
+    def test_accepting_a_sort_makes_a_missing_record_folder(self):
+        # regression: accepting a sort on a fresh install where setup was skipped failed in `record.sync` with
+        # "no employment record at ..." (2026-11-09)
+        with home() as (con, vault, files), fake_ai(NONE):
+            sort_id = sorted_folder(con, software_dump(files))
+            shutil.rmtree(vault)
+            self.assertEqual(sorts.accept(con, sort_id, "cv")["accepted"], 2)
+            self.assertTrue((vault / "Start Here.md").is_file())
+            add_and_read(con, sort_id)
+            record.sync()
 
     def test_a_row_waits_for_its_course_and_finds_it_once_a_cv_gives_one(self):
         with home() as (con, _vault, files), fake_ai(NONE):

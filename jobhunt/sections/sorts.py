@@ -379,6 +379,8 @@ def accept(con: sqlite3.Connection, sort_id, section: str | None = None) -> dict
             waiting += 1
         else:
             ready.append((r["id"],))
+    if ready:
+        pipeline.ensure_record()
     with con:
         con.executemany("UPDATE record_sort_rows SET state = 'accepted' WHERE id = ?", ready)
     return {"accepted": len(ready), "need_card": waiting}

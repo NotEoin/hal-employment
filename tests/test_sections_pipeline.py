@@ -6,6 +6,7 @@ Marnie Quillfeather (history); every name, place and file is invented. Readers t
 stood in for by `Scripted`, a made-up reader that returns the facts it is given.
 """
 import io
+import shutil
 import unittest
 import zipfile
 from contextlib import contextmanager
@@ -14,6 +15,7 @@ from dataclasses import dataclass, field
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from test_ingest import home
 
+from jobhunt import record
 from jobhunt.core import events, runner
 from jobhunt.ingest import engine, frontmatter
 from jobhunt.ingest import tidy as ingest_tidy
@@ -252,6 +254,18 @@ class Pipeline(unittest.TestCase):
             engine.run(con, "t", tidy=True, step=lambda text: None, progress=lambda done, total, text: None)
             kept = note.exists()
         self.assertTrue(kept)
+
+    def test_adding_a_source_makes_a_missing_record_folder(self):
+        # regression: on a fresh install where setup was skipped, the record folder was never made, and the read
+        # after an accepted sort failed with "no employment record at ..." (2026-11-09)
+        with home() as (con, vault, _files):
+            shutil.rmtree(vault)
+            pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])
+            self.assertTrue((vault / "Start Here.md").is_file(), "the record folder is made as setup makes it")
+            record.sync()
+            shutil.rmtree(vault)
+            pipeline.add_link(con, "project", "Made-up harbour clean-up day", doc_kind="manual")
+            self.assertTrue(vault.is_dir())
 
     def test_the_action_reads_what_was_added_and_says_so(self):
         with home() as (con, _, _):

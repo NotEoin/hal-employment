@@ -340,6 +340,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Adding to your record works before setup is done.** If you skipped setup, Hal had never made your record
+  folder, and adding what you accepted from **Sort a big folder for me** failed with "no employment record
+  at ...". Adding files or a sort now makes the folder first, as setup does.
+
 - **Your record's tabs update once Hal has read what you added.** A card Hal found in a file you just
   added, such as the project from a piece of coursework in your showcase, appeared only after you
   reloaded the page.

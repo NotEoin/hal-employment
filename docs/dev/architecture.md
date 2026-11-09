@@ -1228,7 +1228,8 @@ people). Readers only take facts out of a source, within that frame.
   `profile.store.swap_source(con, id, facts)`, which replaces the source's evidence in one transaction
   (evidence carries `source_id`, `place` and `line`). A found card no source names any more is hidden with
   its state kept in `orphaned_from`, and comes back in that state when a source names it again. The tidy
-  keeps the notes `record_sources.note_rel` points at.
+  keeps the notes `record_sources.note_rel` points at. `add_uploads`, `add_link` and `sorts.accept` call
+  `ensure_record`, which makes a missing record folder with `evidence.routes.make_default`, as setup does.
 - `wrong_place.suggest(section, name, text)` is the bulk read's first-glance rules (`ingest.rank`) for a CV,
   a transcript and a letter; the source's `suggestion` is shown, never acted on.
 - `actions`: `record.sources` reads a list of source ids at priority 1, resumable, and then publishes a
