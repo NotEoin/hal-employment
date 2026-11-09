@@ -275,7 +275,8 @@ Hal leaves out what it is not sure about, with the reason: pictures and recordin
 files only stored online, files that look private (such as a medical letter or a bank statement), and
 anything neither Hal's rules nor the AI could place. Older copies of a file or project are set aside, and
 only the newest is proposed. You can still give any of them a place by hand. Coursework and lecture notes
-wait for their course until your CV, once added, gives Hal your courses, or until you choose one.
+wait for their course until your CV, once added, gives Hal your courses, or until you choose one. The steps
+are in [Sort a big folder into your record](../howto/sort-a-big-folder.md).
 
 ## A record from an older Hal
 

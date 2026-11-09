@@ -1,0 +1,65 @@
+# Sort a big folder into your record
+
+Use this when you have a folder of everything from your studies and jobs, such as an old laptop's Documents
+or a university account downloaded as a zip. Hal suggests where each file goes in Your record, and adds only
+what you accept. It works the same for any subject: essays and seminar notes, lab reports, design files or
+code.
+
+1. Open **Your record**. On **Overview**, find **Sort a big folder for me**.
+2. Give Hal the folder:
+   - On the computer Hal runs on, type or paste where the folder is under **A folder on this computer** and
+     press **Sort this folder**.
+   - From any computer, press **Upload a zip or files to sort** and choose a zip or some files (up to 256 MB
+     at a time).
+
+   From a terminal on the computer Hal runs on:
+
+   ```sh
+   python -m jobhunt sort ~/Documents/Uni    # prints what Hal proposes for each part of your record
+   ```
+
+3. Wait for **Ready for you to check**, then press **Check the list**. The buttons at the top show how many
+   files Hal proposes for each part of your record: **CVs**, **Coursework**, **Lecture material**,
+   **Projects**, **Documents** and the rest. Press one to see its files, 50 at a time.
+4. Check each row. Under **Where it goes**, **What it is** and **Course or job**, change anything Hal got
+   wrong. Untick a file to keep it out. For a project, tick **Showcase** if you want employers to hear about
+   it. Your changes are kept, so you can stop and come back later.
+5. Add your CVs first: press **CVs**, then **Add the ticked CVs**. Hal reads them and finds your courses and
+   jobs, and the coursework and lecture notes that were waiting for their course find it.
+6. Press **Add everything ticked**, or **Add the ticked ...** one part at a time. Each file is read by its
+   part of your record, as if you had added it there yourself.
+
+   From a terminal:
+
+   ```sh
+   python -m jobhunt sort --accept-all    # adds everything ticked in the latest sort
+   python -m jobhunt sources list         # lists what each part of your record now holds
+   ```
+
+7. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
+   or project. To add one anyway, choose a place for it under **Where it goes**, then add it.
+
+## Moving a record an older Hal read in
+
+If an older Hal read files into your record all at once, **Overview** shows **Move my record to sections**.
+
+1. Press **Move my record to sections**. Hal proposes a part of your record for each file the older Hal
+   read, in the same list.
+2. Check the rows and add what is right, as above. Cards you checked or edited keep what you said.
+3. Press **Finish the move**. What the files you did not add gave is set aside, not deleted.
+4. Changed your mind? Press **Undo the move**. Everything goes back as it was before the move.
+
+How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-folder-sectionssorterpy).
+
+| Symptom | Fix |
+| --- | --- |
+| There is no box for a folder | You are using Hal from another computer. Upload a zip of the folder instead. |
+| "Hal is still sorting another folder." | Wait for the first sort to finish, then sort the next folder. |
+| A file says "Choose one, or add your CV first" | Add your CVs first, or choose its course under **Course or job**. |
+| "Looks private (medical information), so Hal kept it out." | Hal keeps medical, bank, ID and pay papers out. If it is fine to keep, give it a place under **Where it goes**. |
+| "Hal could not tell where it goes." | Choose a place under **Where it goes**, or leave it out. |
+| "Only online: this computer has an empty copy." | Download the file first (in OneDrive, choose "Always keep on this device"), then sort the folder again. |
+| A file says "Already in your record, under ..." | It is in your record already. Nothing to do. |
+| "Undo the move first, or keep it" when you press **Forget** | A move can be forgotten only once it is undone, so you never lose the way back. |
+| "Hal is still adding what you accepted." | Wait until Hal has read what you added, then finish or undo the move. |
+| A project you wanted is under **Copies** | Hal kept the newest copy. Give the copy you want a place under **Where it goes**, and untick the other. |

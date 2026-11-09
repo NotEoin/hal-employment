@@ -29,6 +29,18 @@ What changed in each version, in plain words.
   studied, never used. A sentence that says you used one is drafted again. On **CV**, a skills line that
   lists a skill you only studied gets a suggestion to leave it out or mark it "(studied)".
 
+- **Sort a big folder for me.** On Your record's Overview, in the setup guide, or with `jobhunt sort
+  FOLDER`, give Hal a folder or a zip of everything from your studies and jobs. Hal suggests where each file
+  goes: your CVs, your coursework and lecture notes by course, your projects, your certificates and other
+  papers. You check the list one part at a time, change or untick anything, and add what is right; nothing
+  is added before that. Hal leaves out what it is not sure about, private papers such as a medical letter,
+  and older copies, each with the reason. Files you put in the drop folder are sorted the same way and wait
+  for you to check. See [Sort a big folder into your record](docs/howto/sort-a-big-folder.md).
+
+- **Move a record an older Hal read in.** **Move my record to sections** proposes a part of your record for
+  each file an older Hal read all at once. Cards you checked or edited keep what you said, what you do not
+  move is set aside rather than deleted, and **Undo the move** puts everything back in one click.
+
 - **Hal reads your coursework.** Essays, reports, lab reports, portfolios, code and anything else you add
   under **Coursework** on a course's card get a short summary, their mark when the work states one, and the
   skills and methods they show, each with the words it came from. Hal suggests which module each piece was

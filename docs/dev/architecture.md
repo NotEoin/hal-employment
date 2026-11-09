@@ -1457,7 +1457,9 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
 (`discover.walk`, `group.outermost`, `group.projects`, `group.courses`) and returns a `Sorted`: one
 `Proposal(path, rel, held, section, doc_kind, target_id, star, by, why, state, copy_of)` per file or project
 folder, and the walk's own counts of what it skipped (junk folders, programs). It reads no facts and writes
-nothing.
+nothing. The person's steps are in [Sort a big folder into your record](../howto/sort-a-big-folder.md).
+`tests/test_sections_sort_e2e.py` runs a software graduate's and a history graduate's made-up dumps from
+proposals to sources, and a record the bulk read built through a move and its undo.
 
 - Code projects (repositories) and README folders are one proposal each for Projects: a repository on this
   computer as `repo` held as a folder (its history stays readable), anything else as `upload` (its files).
