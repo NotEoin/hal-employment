@@ -37,7 +37,8 @@ code.
    ```
 
 7. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
-   or project. To add one anyway, choose a place for it under **Where it goes**, then add it.
+   or project. It never looks inside a project's libraries or build output (folders such as `node_modules`,
+   `build` or `dist`); the line at the bottom of the list counts those files. To add one anyway, choose a place for it under **Where it goes**, then add it.
 
 ## Moving a record an older Hal read in
 

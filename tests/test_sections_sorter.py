@@ -16,8 +16,9 @@ from support.fake_ai import fake_ai
 from test_ingest import home, put
 
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sorter
+from jobhunt.sections import sort_rules, sorter
 
+NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600
 OLD, NEW = 1_700_000_000, 1_730_000_000      # November 2023 and October 2024
 README = "# Tidewatch\n\nA tide-gauge dashboard for a harbour club. " + "It reads gauge data and draws charts. " * 20
@@ -42,6 +43,15 @@ def dated(path: Path, when: float) -> Path:
     """Sets a file's time, so which copy is newest is known."""
     os.utime(path, (when, when))
     return path
+
+
+def with_libraries(d: Path, project: str, readme: str, libraries: tuple[str, ...]) -> None:
+    """A project folder of the person's own with a README, holding made-up third-party libraries in its build
+    folder."""
+    put(d, f"{project}/README.md", readme)
+    for name in libraries:
+        put(d, f"{project}/_build/libs/{name}/README.md", f"# {name}\n\nA made-up library.\n")
+        put(d, f"{project}/_build/libs/{name}/package.json", f'{{"name": "{name.lower()}"}}\n')
 
 
 def software_dump(root: Path) -> Path:
@@ -179,6 +189,22 @@ class Sorter(unittest.TestCase):
             self.assertEqual((*where(exhibition), exhibition.held), ("proposed", "project", "upload", "files"))
             self.assertEqual(found[d + "Health/Fit note.md"].state, "left_out")
             self.assertEqual(self.facts(con), before, "a proposal is never a fact")
+
+    def test_nothing_in_a_library_or_build_folder_is_proposed_and_its_project_is_one_row(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            with_libraries(d, "site", "# Site\n\nA made-up site.\n", ("Leafline", "Chartwell"))
+            put(d, "dist/notes.md", "# Notes\n\nMade-up build output.\n")
+            put(d, "Code/lib/pyparse/README.md", "# pyparse\n\nA made-up library.\n")
+            put(d, "Code/lib/pyparse/setup.py", "from setuptools import setup\n")
+            put(d, "Code/lib/helpers.md", "# Helpers\n\nMy own notes on helpers.\n")
+            found = sorter.propose(con, d, local=True)
+            rels = by_rel(found)
+            self.assertEqual(where(rels["Dump/site"]), ("proposed", "project", "upload"),
+                             "a project is proposed whole, its libraries inside it")
+            self.assertEqual(sorted(r for r in rels if "_build" in r or "dist" in r or "pyparse" in r), [])
+            self.assertIn("Dump/Code/lib/helpers.md", rels, "a lib folder of the person's own files is looked at")
+            self.assertEqual(found.skipped[sort_rules.VENDORED_SKIP], 3, "dist/notes.md and the package's files")
 
     def test_coursework_with_no_course_on_the_record_waits_for_one(self):
         with home() as (con, _vault, files), fake_ai({"sort_pick": json.dumps({"choice": "none"})}):

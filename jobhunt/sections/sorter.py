@@ -14,6 +14,8 @@ Design decisions, each with its reason:
   of a document's text through the wrong-place hints (`wrong_place.looks_like`). The AI is asked only about
   a document the rules cannot place, and only to pick one of the sections' kinds of document (`CHOICES`,
   prompt `sort_pick`); it never reads a fact, and "none" leaves the file out.
+- Nothing in a library or build folder is proposed, and a project inside one is part of the project around it
+  (`sort_rules`): a real dump's "_build/libs" folders gave about 20 wrong project rows (2026-11-09).
 - A file Hal cannot place is "Left out" with the reason in plain words, never guessed in: a picture with no
   words, a recording, code outside a project, a file that looks private (`privacy.reason`, checked before the
   AI sees a word), one only online, or one the AI did not recognise either.
@@ -44,7 +46,7 @@ from pathlib import Path, PurePosixPath
 
 from jobhunt.ingest import convert, discover, group, privacy, rank, versions
 from jobhunt.profile import merge
-from jobhunt.sections import registry, store, wrong_place
+from jobhunt.sections import registry, sort_rules, store, wrong_place
 
 log = logging.getLogger(__name__)
 
@@ -397,10 +399,14 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
     history), False for an unpacked zip. `prefix` starts each `rel` (the folder's own name when None). Files
     at paths in `known` (proposed by an earlier sort of the drop folder) are passed over.
     """
-    walk = discover.walk(Path(root), prefix)
+    base = Path(root)
+    walk = discover.walk(base, prefix)
     out = Sorted(skipped=dict(walk.left_out))
-    repos = group.outermost(walk.repos)
-    folders = group.projects(walk.readmes, walk.repos)
+    found_repos = {r for r in walk.repos if not sort_rules.vendored_project(r, base)}
+    found_readmes = {r for r in walk.readmes if not sort_rules.vendored_project(r, base)}
+    libraries = (walk.repos | walk.readmes) - found_repos - found_readmes
+    repos = group.outermost(found_repos)
+    folders = group.projects(found_readmes, found_repos)
     units: list[Proposal] = []
     unit_files: dict[Path, list[Path]] = {u: [] for u in (*repos, *folders)}
     loose: list[discover.Found] = []
@@ -408,9 +414,10 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
         holder = group.repo_of(f.path, repos) or group.project_of(f.path, folders)
         if holder is not None:
             unit_files[holder].append(f.path)
+        elif sort_rules.in_vendored(f.path, base) or any(lib in f.path.parents for lib in libraries):
+            out.skipped[sort_rules.VENDORED_SKIP] = out.skipped.get(sort_rules.VENDORED_SKIP, 0) + 1
         elif str(f.path) not in known:
             loose.append(f)
-    base = Path(root)
     for folder, files in sorted(unit_files.items()):
         if str(folder) in known or not files:
             continue

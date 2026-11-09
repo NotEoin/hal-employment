@@ -8,12 +8,13 @@ reference, a medical letter that must be left out, and duplicate copies. The AI 
 """
 import json
 import unittest
+from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.fake_ai import fake_ai
 from test_ingest import CV_TEXT, OWNER, REPLY, home, put, run
 from test_sections_sort import add_and_read, sections_of, sorted_folder
-from test_sections_sorter import history_dump, software_dump
+from test_sections_sorter import history_dump, software_dump, with_libraries
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
@@ -33,7 +34,8 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "Dissertation.md": ("copy", "coursework", "dissertation"),
          "tidewatch": ("proposed", "project", "repo"), "tidewatch (2)": ("copy", "project", "repo"),
          "First aid certificate.md": ("proposed", "document", "certificate"),
-         "GP letter.md": ("left_out", "", ""), "beach.jpg": ("left_out", "", ""), "thoughts.md": ("left_out", "", "")}
+         "GP letter.md": ("left_out", "", ""), "beach.jpg": ("left_out", "", ""), "thoughts.md": ("left_out", "", ""),
+         "harbour-site": ("proposed", "project", "upload")}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -42,7 +44,29 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Parish registers essay (1).md": ("copy", "coursework", "essay"),
           "Transcript of study.md": ("proposed", "official", "transcript"),
           "Reference from the museum.md": ("proposed", "document", "reference"),
-          "Lantern exhibition": ("proposed", "project", "upload"), "Fit note.md": ("left_out", "", "")}
+          "Lantern exhibition": ("proposed", "project", "upload"), "Fit note.md": ("left_out", "", ""),
+          "Digital edition": ("proposed", "project", "upload")}
+
+
+def messy_software_dump(root: Path) -> Path:
+    """Avery Quillon's folder of everything, with each kind of file a real dump misplaced."""
+    d = software_dump(root)
+    with_libraries(d, "Projects/harbour-site", "# Harbour site\n\nA made-up website I built for a sailing club.\n",
+                   ("Leafline", "Chartwell", "Tidekit"))
+    put(d, "Projects/harbour-site/index.html", "<h1>Harbour club</h1>\n")
+    put(d, "Old laptop/dist/release notes.md", "# Release notes\n\nMade-up build output.\n")
+    put(d, "Code/lib/pyparse/README.md", "# pyparse\n\nA made-up parsing library.\n")
+    put(d, "Code/lib/pyparse/setup.py", "from setuptools import setup\n")
+    return d
+
+
+def messy_history_dump(root: Path) -> Path:
+    """Marnie Quillfeather's folder of everything, with each kind of file a real dump misplaced."""
+    d = history_dump(root)
+    with_libraries(d, "Digital edition", "# Digital edition\n\nA made-up online edition of parish letters I "
+                   "transcribed.\n", ("Pagefind", "Lunrish"))
+    put(d, "Digital edition/letters.md", "# Letters\n\nTwelve made-up letters from 1820.\n")
+    return d
 
 
 def proposals(con, sort_id: int) -> dict[str, tuple]:
@@ -79,10 +103,10 @@ class FromADumpToTheRecord(unittest.TestCase):
             self.assertNotIn("diagnosed", sent, "the medical letter never reaches the AI")
 
     def test_a_software_graduates_dump_goes_where_proposed_and_only_once_accepted(self):
-        self.check(software_dump, AVERY, ("BSc", "Computing"))
+        self.check(messy_software_dump, AVERY, ("BSc", "Computing"))
 
     def test_a_history_graduates_dump_goes_where_proposed_and_only_once_accepted(self):
-        self.check(history_dump, MARNIE, ("BA", "History"))
+        self.check(messy_history_dump, MARNIE, ("BA", "History"))
 
     def test_a_record_the_bulk_read_built_is_moved_and_one_undo_puts_it_back(self):
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY), **NONE}):

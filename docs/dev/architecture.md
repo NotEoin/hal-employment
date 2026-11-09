@@ -1471,6 +1471,11 @@ nothing. The person's steps are in [Sort a big folder into your record](../howto
 `tests/test_sections_sort_e2e.py` runs a software graduate's and a history graduate's made-up dumps from
 proposals to sources, and a record the bulk read built through a move and its undo.
 
+- `sections/sort_rules.py` keeps out what is not the person's own work. Nothing in a library or build folder
+  (`VENDORED`: `_build`, `build`, `dist`, `vendor`, `node_modules`, `site-packages`, `venv`, `target`, `out`,
+  `bin`, `obj`, `Pods` and the like) is proposed, nor a project found inside `lib` or `libs`
+  (`vendored_project`); such files are counted in `skipped` as `VENDORED_SKIP`. A project is proposed at its
+  top, so the libraries in its build folder stay part of it.
 - Code projects (repositories) and README folders are one proposal each for Projects: a repository on this
   computer as `repo` held as a folder (its history stays readable), anything else as `upload` (its files).
   `star` is guessed when the README has `SHOWCASE_README_CHARS` or more. Copies of one code project
