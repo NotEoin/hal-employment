@@ -1555,9 +1555,15 @@ you, `source_id` once added).
   from the file months; modules from the module folders), gives it to every waiting row under the course's
   folders, then runs `sorts.rematch`. The review shows these first, with "Add your CVs and papers first, so
   your courses exist." while rows wait.
+- Module groups (`sort_review.rows`, `change_group`): the review's proposed rows come with lecture material
+  and coursework one GROUP a module (`sort_courses.group_key`: the course's module folder, else the file's
+  own folder; keyed by section, card and folder), with its file count; a group of one is its file.
+  `change_group` ticks, moves or gives a card to every file of a group through `sorts.change_row`. Grouping
+  is done in Python from the sort's rows on each request; `sorts.rows` stays file by file (the command line
+  and `flat=1`).
 - Routes (`sections/sort_routes.py`, shapes in its header): `GET/POST /api/v2/record/sort`, `POST
   .../sort/upload`, `GET .../sort/{id}` (with `courses`), `PUT /api/v2/record/sort-rows/{id}`, `POST
-  .../sort/{id}/tick`, `.../accept`, `.../courses`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
+  .../sort/{id}/tick`, `.../accept`, `.../courses`, `.../groups`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
   path is local only.
 - Command line (`cli/sort.py`, through the running Hal with the local API key, as `jobhunt ingest` does):
   `jobhunt sort FOLDER...` starts a sort and prints its counts once it is ready (`summary`); `jobhunt sort

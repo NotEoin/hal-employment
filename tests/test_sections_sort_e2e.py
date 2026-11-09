@@ -60,7 +60,9 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "smart contract.md": ("proposed", "lecture", "notes"),
          "UMLActivityAnswer.md": ("proposed", "coursework", "notes"),
          "Lecture 9 Project Planning.md": ("proposed", "lecture", "notes"),
-         "Agile project management.md": ("proposed", "lecture", "notes")}
+         "Agile project management.md": ("proposed", "lecture", "notes"),
+         **{f"week {n} notes.md": ("proposed", "lecture", "notes") for n in range(4, 13)},
+         **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)}}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -81,7 +83,12 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Walking tour": ("proposed", "project", "upload"), "marriage contract.md": ("proposed", "lecture", "notes"),
           "Palaeography answer sheet.md": ("proposed", "lecture", "notes"),
           "Lecture 4 Writing an essay.md": ("proposed", "lecture", "notes"),
-          "Writing history essays.md": ("proposed", "lecture", "notes")}
+          "Writing history essays.md": ("proposed", "lecture", "notes"),
+          **{f"Seminar notes week {n}.md": ("proposed", "lecture", "notes") for n in range(4, 13)},
+          **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)}}
+# The review's rows for a module's lecture material: one each, with its file count.
+MODULES = {"software": {"CS2041 Databases": 13, "CSC1022 Software Design": 4, "CSC3095 Project": 4},
+           "history": {"HIS2040 Archival Methods": 16, "HIS2051 Early Modern Europe": 4}}
 # The showcase guesses: only a project of the person's own, with their commits and a README that says what it is.
 STARRED = {"software": ["tidewatch"], "history": []}
 
@@ -134,6 +141,11 @@ def messy_software_dump(root: Path) -> Path:
     put(d, "Uni/BSc Computing/Year 2/CS2041 Databases/Coursework/Lecture 9 Project Planning.md",
         "# Lecture 9\n\nProject planning: milestones and risks.\n")
     put(d, "Uni/BSc Computing/Year 2/Topics/Agile project management.md", "# Agile\n\n" + WORDS)
+    for week in range(4, 13):
+        put(d, f"Uni/BSc Computing/Year 2/CS2041 Databases/Lectures/week {week} notes.md", f"# Week {week}\n\nJoins.\n")
+    for week in range(1, 5):
+        put(d, f"Uni/BSc Computing/Year 1/Software Design - CSC1022/Lectures/week {week}.md",
+            f"# Week {week}\n\nUML.\n")
     return d
 
 
@@ -165,6 +177,10 @@ def messy_history_dump(root: Path) -> Path:
                                                       "marks.\n")
     put(d, f"{module}/Essays/Lecture 4 Writing an essay.md", "# Lecture 4\n\nHow to write a made-up essay.\n")
     put(d, f"{module}/Topics/Writing history essays.md", "# Writing history essays\n\n" + WORDS)
+    for week in range(4, 13):
+        put(d, f"{module}/Seminar notes week {week}.md", f"# Seminar {week}\n\nReading registers.\n")
+    for week in range(1, 5):
+        put(d, f"BA History/Early Modern Europe - HIS2051/Seminars/week {week}.md", f"# Week {week}\n\nCourts.\n")
     return d
 
 
@@ -193,6 +209,9 @@ class FromADumpToTheRecord(unittest.TestCase):
             before = facts(con)
             sort_id = sorted_folder(con, dump(files))
             self.assertEqual(proposals(con, sort_id), expected)
+            shown = sort_review.rows(con, sort_id, section="lecture", limit=sorts.PAGE_MAX)["rows"]
+            self.assertEqual({r["name"]: r["count"] for r in shown if r.get("group")},
+                             MODULES["software" if "Avery" in owner else "history"], "one row a module")
             self.assertEqual(sorted(r["name"] for r in sorts.rows(con, sort_id, limit=sorts.PAGE_MAX)["rows"]
                                     if r["star"]), STARRED["software" if "Avery" in owner else "history"])
             self.assertEqual((facts(con), sections_of(con)), (before, []), "a proposal is never a fact")

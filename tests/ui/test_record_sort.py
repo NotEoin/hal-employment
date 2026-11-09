@@ -83,6 +83,11 @@ class SortAFolder(unittest.TestCase):
         p.shows(p.page.get_by_text(re.compile(r"^Added BA History\.")), "the course added")
         with closing(db.connect()) as con:
             self.assertEqual([c["title"] for c in profile_store.items(con, "education")], ["BA History"])
+        review.get_by_role("button", name=re.compile(r"^Lecture material: \d+$")).click()
+        review.get_by_role("button", name="Show the files of HIS2040 Archival Methods").click()
+        p.shows(review.get_by_text("Seminar notes week 2.md", exact=True), "a module's own files")
+        review.get_by_role("button", name="Back to the list").click()
+        p.shows(review.get_by_text("(3 files)"), "the module as one row")
         review.get_by_role("button", name="CVs: 1").click()
         p.shows(review.get_by_text("Marnie Quillfeather CV.md", exact=True), "the CV's row")
         self.assertEqual(self.listed("cv"), [], "nothing is added before the person says so")

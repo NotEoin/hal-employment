@@ -13,7 +13,8 @@
 
    "Courses Hal found" lists the courses the folders name (jobhunt/sections/sort_review.py), first, as
    coursework and lecture notes wait for their course: adding one makes its education card, and its files
-   find it.
+   find it. Lecture material and coursework come one row a module, with its file count: ticking, moving or
+   giving a card to that row changes all its files, and "Show the files" lists them one by one.
 
    A record an older Hal read in whole gets "Move my record to sections" (jobhunt/sections/move.py): the same
    table proposes a section for each of its notes. "Finish the move" sets aside what the notes nobody
@@ -82,24 +83,29 @@ function kindOptions(sections, section) {
   return s ? s.doc_kinds.filter(k => k.held === "upload" || k.held === "files" || k.held === "folder") : [];
 }
 
-/** One proposal: tick, file, section, kind, card, showcase, and why. */
-function Row({ row, sections, cards }) {
-  const change = body => act(() => put("/record/sort-rows/" + row.id, body));
+/** One proposal, or one module's group of files: tick, file, section, kind, card, showcase, and why. A group
+    is changed as a whole, and "Show the files" lists its own rows. */
+function Row({ row, sections, cards, sortId, onOpen }) {
+  const change = body => act(() => row.group ? post(SORT + "/" + sortId + "/groups", { group: row.group, ...body })
+    : put("/record/sort-rows/" + row.id, body));
   const kinds = kindOptions(sections, row.section);
   const choices = row.target_kind ? (cards[row.target_kind] || []) : [];
-  const uid = "rec-sort-" + row.id;
+  const uid = "rec-sort-" + (row.id == null ? row.group : row.id);
   const open = row.state === "proposed" || row.state === "left_out" || row.state === "copy" || row.state === "failed";
-  return html`<tr data-row=${row.id}>
+  return html`<tr data-row=${row.id == null ? row.group : row.id}>
     <td>${row.state === "proposed" && html`<input type="checkbox" checked=${row.ticked} aria-label=${"Add " + row.name}
       onChange=${e => change({ ticked: e.target.checked })} />`}</td>
-    <td><b>${row.name}</b><div class="small sub" style="overflow-wrap:anywhere">${row.rel}</div>
-      <div class="small sub">${row.why}${row.by === "ai" ? " (the AI's guess)" : ""}</div></td>
+    <td><b>${row.name}</b>${row.group && html` <span class="small sub">(${plural(row.count, "file")})</span>`}
+      <div class="small sub" style="overflow-wrap:anywhere">${row.rel}</div>
+      <div class="small sub">${row.why}${row.by === "ai" ? " (the AI's guess)" : ""}</div>
+      ${row.group && html`<button type="button" class="btn quiet small" aria-label=${"Show the files of " + row.name}
+        onClick=${() => onOpen(row.group)}>Show the files</button>`}</td>
     <td>${open ? html`<select class="input" aria-label=${"Where " + row.name + " goes"} value=${row.section}
         onChange=${e => change({ section: e.target.value })}>
         <option value="">Leave it out</option>
         ${Object.values(sections || {}).map(s => html`<option value=${s.id}>${s.label}</option>`)}</select>`
       : row.section_label}</td>
-    <td>${open && row.section ? html`<select class="input" aria-label=${"What " + row.name + " is"} value=${row.doc_kind}
+    <td>${open && row.section && !row.group ? html`<select class="input" aria-label=${"What " + row.name + " is"} value=${row.doc_kind}
         onChange=${e => change({ doc_kind: e.target.value })}>
         ${kinds.map(k => html`<option value=${k.id}>${k.label}</option>`)}</select>` : row.doc_kind_label}</td>
     <td>${open && row.target_kind ? html`<select class="input" id=${uid + "-card"} aria-label=${"Which card " + row.name + " is for"}
@@ -139,12 +145,14 @@ function CoursesFound({ id, courses }) {
 /** The review table of one sort. */
 export function SortReview({ id, onClose }) {
   const sections = useSections();
-  const [view, setView] = useState({ section: "", state: "proposed", offset: 0 });
-  const q = "?state=" + view.state + "&offset=" + view.offset + "&limit=" + PAGE + (view.section ? "&section=" + view.section : "");
+  const [view, setView] = useState({ section: "", state: "proposed", offset: 0, group: "" });
+  const q = "?state=" + view.state + "&offset=" + view.offset + "&limit=" + PAGE + (view.section ? "&section=" + view.section : "")
+    + (view.group ? "&group=" + encodeURIComponent(view.group) : "");
   const { data } = useApi(SORT + "/" + id + q, { on: reloadOn(id) });
   if (!data) return html`<p class="sub">Loading</p>`;
   const c = data.counts;
-  const show = (section, state = "proposed") => setView({ section, state, offset: 0 });
+  const show = (section, state = "proposed") => setView({ section, state, offset: 0, group: "" });
+  const openGroup = group => setView({ ...view, group, offset: 0 });
   const accept = section => act(() => post(SORT + "/" + id + "/accept", section ? { section } : {}), out =>
     (out.accepted ? "Adding " + plural(out.accepted, "file") + " to your record. Hal reads each in its place." : "Nothing ticked to add.")
     + (out.need_card ? " " + plural(out.need_card, "file waits", "files wait") + " for its course or job." : ""));
@@ -180,10 +188,12 @@ export function SortReview({ id, onClose }) {
       <p class="small sub grow rec-line">When you have added what you want, finish the move: what the other older notes gave is set aside, never deleted.</p>
       <button type="button" class="btn small" onClick=${finish}>Finish the move</button>
       ${data.can_undo && html`<button type="button" class="btn small" onClick=${undo}>Undo the move</button>`}</div>`}
-    <h3 class="h3">${label}: ${data.total}</h3>
+    <div class="row wrap"><h3 class="h3 grow">${view.group ? "Files in this group" : label}: ${data.total}</h3>
+      ${view.group && html`<button type="button" class="btn small" onClick=${() => setView({ ...view, group: "", offset: 0 })}>Back to the list</button>`}</div>
     ${data.rows.length ? html`<div style="overflow-x:auto"><table class="rec-sort-table"><thead><tr><th>Add</th><th>File</th><th>Where it goes</th>
       <th>What it is</th><th>Course or job</th><th>Showcase</th></tr></thead>
-      <tbody>${data.rows.map(row => html`<${Row} key=${row.id} row=${row} sections=${sections} cards=${data.cards} />`)}</tbody></table></div>`
+      <tbody>${data.rows.map(row => html`<${Row} key=${row.id == null ? row.group : row.id} row=${row} sections=${sections}
+        cards=${data.cards} sortId=${id} onOpen=${openGroup} />`)}</tbody></table></div>`
       : html`<p class="small sub">Nothing here.</p>`}
     ${data.total > PAGE && html`<div class="row"><button type="button" class="btn small" disabled=${view.offset === 0}
         onClick=${() => setView({ ...view, offset: Math.max(0, view.offset - PAGE) })}>Previous</button>

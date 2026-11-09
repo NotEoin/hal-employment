@@ -159,7 +159,8 @@ def inbox_has_new(con: sqlite3.Connection, folder: Path) -> bool:
     return False
 
 
-def _card_titles(con: sqlite3.Connection, ids: set[int]) -> dict[int, str]:
+def card_titles(con: sqlite3.Connection, ids: set[int]) -> dict[int, str]:
+    """The titles of the cards `ids`, by id, for the rows that name them."""
     if not ids:
         return {}
     marks = ",".join("?" * len(ids))
@@ -242,7 +243,7 @@ def rows(con: sqlite3.Connection, sort_id: int, *, section: str | None = None, s
     total = con.execute("SELECT count(*) " + sql, args).fetchone()[0]
     found = con.execute("SELECT * " + sql + " ORDER BY rel LIMIT ? OFFSET ?",
                         [*args, max(1, min(int(limit), PAGE_MAX)), max(0, int(offset))]).fetchall()
-    titles = _card_titles(con, {r["target_id"] for r in found if r["target_id"] is not None})
+    titles = card_titles(con, {r["target_id"] for r in found if r["target_id"] is not None})
     return {"rows": [shape_row(r, titles) for r in found], "total": total}
 
 
@@ -302,7 +303,7 @@ def change_row(con: sqlite3.Connection, row_id, changes: dict) -> dict:
             con.execute(f"UPDATE record_sort_rows SET {', '.join(f'{k} = ?' for k in sets)} WHERE id = ?",
                         (*sets.values(), r["id"]))
     found = _row(con, r["id"])
-    return shape_row(found, _card_titles(con, {found["target_id"]} - {None}))
+    return shape_row(found, card_titles(con, {found["target_id"]} - {None}))
 
 
 def tick(con: sqlite3.Connection, sort_id, ticked: bool, section: str | None = None) -> int:

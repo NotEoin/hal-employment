@@ -20,7 +20,9 @@ code.
 
 3. Wait for **Ready for you to check**, then press **Check the list**. The buttons at the top show how many
    files Hal proposes for each part of your record: **CVs**, **Coursework**, **Lecture material**,
-   **Projects**, **Documents** and the rest. Press one to see its files, 50 at a time.
+   **Projects**, **Documents** and the rest. Press one to see its files, 50 at a time. Lecture material and
+   coursework show one row a module, with how many files it holds: ticking it, or changing its course,
+   changes them all. Press **Show the files** to see them one by one, and **Back to the list** to return.
 4. Under **Courses Hal found**, check each course your folders name, such as a "BSc Computing" folder with
    its year and module folders. Change its qualification, subject or where you studied if Hal got them
    wrong, then press **Add this course**. Its coursework and lecture notes find it at once.

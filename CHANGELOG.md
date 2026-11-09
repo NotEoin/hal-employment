@@ -20,7 +20,9 @@ What changed in each version, in plain words.
 
 - **Courses Hal found.** When you sort a big folder, the courses your folders name (a degree folder, its
   years and its modules) show first in the list. Add each one, renaming it if you like, and its coursework
-  and lecture notes find their course at once instead of waiting.
+  and lecture notes find their course at once instead of waiting. Lecture material and coursework show one
+  row a module, with its file count, added together, so a folder of thousands of notes is a list of
+  modules you can read.
 
 - **Letters tell your showcase from its own sources.** A project's story now comes from the project's own
   code, pages, files or form and your edits; a detail only your CV gives is marked as such for the writer.

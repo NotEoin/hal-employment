@@ -24,6 +24,10 @@ A row (`ROW`, `sorts.shape_row`):
      "star": false, "can_star": false, "by": "rules", "why": "Named or set out like a CV.", "ticked": true,
      "state": "proposed", "copy_of": "", "source_id": null, "note_rel": null}
 
+A group of a module's lecture material or coursework (`GROUP`, `sort_review.rows`): a ROW's fields with
+"id": null, "held": "group", the files' "count", the module's "name" and folder ("rel"), and its "group"
+key ("lecture|12|Avery stuff/Uni/BSc Computing/Year 2/CS2041 Databases").
+
 A course Hal found in the folders (`COURSE`, `sort_courses.courses_found`), not yet a card:
 
     {"key": "Avery stuff/Uni/BSc Computing", "keys": ["Avery stuff/Uni/BSc Computing"], "title": "BSc Computing",
@@ -38,8 +42,11 @@ Routes:
   "action_id"}.
 - `POST /api/v2/record/sort/upload`: a multipart form of files `file0`, `file1`, ... with `path0`, ... (a
   path inside a folder the person chose); zips are unpacked. Kept in Hal's data folder; {"sort", "action_id"}.
-- `GET /api/v2/record/sort/{id}?section=&state=proposed&offset=0&limit=50`: {SORT, "rows": [ROW], "total",
-  "cards", "courses": [COURSE]}.
+- `GET /api/v2/record/sort/{id}?section=&state=proposed&offset=0&limit=50&group=&flat=`: {SORT, "rows":
+  [ROW or GROUP], "total", "cards", "courses": [COURSE]}. Proposed lecture material and coursework come one
+  GROUP a module (`sort_review.rows`) unless `flat=1`; `group` lists one group's own rows.
+- `POST /api/v2/record/sort/{id}/groups` {"group", "ticked", "section", "target_id"}: changes every file of a
+  group at once; {"changed"}.
 - `POST /api/v2/record/sort/{id}/courses` {"key", "qualification", "subject", "institution"}: makes the
   education card for a course Hal found, with the words given (else Hal's); {"card", "matched"}.
 - `PUT /api/v2/record/sort-rows/{id}` {"section", "doc_kind", "target_id", "ticked", "star"}: ROW. A section
@@ -177,12 +184,18 @@ def sort_upload(req: Request) -> dict:
 
 @route("GET", PREFIX + "/{sort_id}", auth="session_or_local")
 def one(req: Request) -> dict:
-    """A sort with one page of its proposals."""
+    """A sort with one page of its proposals: lecture material and coursework one row a module group, unless
+    `flat=1` or another state is asked for."""
     q = req.query
+    state = q.get("state") or "proposed"
     try:
-        page = sorts.rows(req.con, req.params["sort_id"], section=q.get("section") or None,
-                          state=q.get("state") or "proposed", offset=int(q.get("offset") or 0),
-                          limit=int(q.get("limit") or sorts.PAGE))
+        offset, limit = int(q.get("offset") or 0), int(q.get("limit") or sorts.PAGE)
+        if state == "proposed" and q.get("flat") != "1":
+            page = sort_review.rows(req.con, req.params["sort_id"], section=q.get("section") or None,
+                                    group=q.get("group") or None, offset=offset, limit=limit)
+        else:
+            page = sorts.rows(req.con, req.params["sort_id"], section=q.get("section") or None, state=state,
+                              offset=offset, limit=limit)
     except ValueError as e:
         raise BadRequest(str(e)) from e
     return {**sorts.shape(req.con, req.params["sort_id"]), **page, "cards": sorts.cards(req.con),
@@ -198,6 +211,21 @@ def accept_course(req: Request) -> dict:
     try:
         out = sort_review.accept_course(req.con, req.params["sort_id"], body["key"],
                                         {k: body[k] for k in sort_review.COURSE_WORDS if k in body})
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    events.publish("sort", sort_id=int(req.params["sort_id"]))
+    return out
+
+
+@route("POST", PREFIX + "/{sort_id}/groups", auth="session_or_local")
+def change_group(req: Request) -> dict:
+    """Ticks, moves or gives a card to every file of a module group at once."""
+    body = _body(req)
+    if not isinstance(body.get("group"), str) or not body["group"]:
+        raise BadRequest("Say which group of files: its group from the list.", field="group")
+    try:
+        out = sort_review.change_group(req.con, req.params["sort_id"], body["group"],
+                                       {k: v for k, v in body.items() if k != "group"})
     except ValueError as e:
         raise BadRequest(str(e)) from e
     events.publish("sort", sort_id=int(req.params["sort_id"]))

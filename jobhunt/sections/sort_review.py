@@ -1,4 +1,5 @@
-"""The review of a sort beyond its rows: the courses its folders name, proposed as education cards.
+"""The review of a sort beyond its rows: the courses its folders name, proposed as education cards, and the
+module groups that show a course's many files as one row each.
 
 Coursework and lecture material wait for their course's card (`sorter.needs_card`). The folders already name
 the courses (`sort_courses`), so the review shows them first as "Courses Hal found": the person accepts one,
@@ -13,15 +14,25 @@ Design decisions, each with its reason:
 - The card is the person's own (`profile.store.add_by_hand`): they accepted its name, so it is not a guess
   waiting for a source. Its dates are the months of the course's oldest and newest files, and its modules the
   module folders found.
+- Lecture material and coursework are shown one row a module (`rows`, by `sort_courses.group_key`, the
+  section and the card), with a file count, ticked and moved together (`change_group`): a real dump's 6,417
+  lecture rows were too many to read (2026-11-09). A group of one is shown as its file. The rows are grouped
+  from the sort's proposed rows each time, as a sort holds thousands of rows, not millions, and a stored
+  group would go stale when the person moves a file.
 """
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter, defaultdict
+from pathlib import PurePosixPath
 
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sort_courses, sorts
+from jobhunt.sections import registry, sort_courses, sorter, sorts
 
 COURSE_WORDS = ("qualification", "subject", "institution")
+GROUPED = ("lecture", "coursework")
+GROUP_MIN = 2              # one file is shown as itself
+GROUP_CHANGES = {"ticked", "section", "target_id"}
 
 
 def courses_found(con: sqlite3.Connection, sort_id: int) -> list[dict]:
@@ -59,3 +70,89 @@ def accept_course(con: sqlite3.Connection, sort_id, key: str, words: dict | None
                                  "substr(rel, 1, ?) = ?", (card["id"], s["id"], len(folder) + 1,
                                                           folder + "/")).rowcount
     return {"card": card, "matched": given + sorts.rematch(con, s["id"])}
+
+
+# Module groups --------------------------------------------------------------------------------------------
+
+def _group_of(r: sqlite3.Row) -> str:
+    """A row's group in the review: its section, card and module folder."""
+    card = "" if r["target_id"] is None else r["target_id"]
+    return f"{r['section']}|{card}|{sort_courses.group_key(r['rel'])}"
+
+
+def _shape_group(key: str, members: list[sqlite3.Row], titles: dict[int, str]) -> dict:
+    """A module group as the page shows a row: its name, file count and what most of its files are."""
+    first = members[0]
+    folder = key.split("|", 2)[2]
+    course = sort_courses.course_of(first["rel"])
+    name = course.module if course and course.module_key == folder else PurePosixPath(folder).name
+    section = registry.SECTIONS.get(first["section"])
+    kind = Counter(m["doc_kind"] for m in members).most_common(1)[0][0]
+    return {"id": None, "group": key, "count": len(members), "rel": folder, "name": name, "held": "group",
+            "size": sum(m["size"] for m in members), "mtime": max(m["mtime"] or "" for m in members),
+            "section": first["section"], "section_label": section.label if section else "", "doc_kind": kind,
+            "doc_kind_label": registry.DOC_KINDS[kind].label if kind in registry.DOC_KINDS else "",
+            "target_id": first["target_id"], "target_title": titles.get(first["target_id"], ""),
+            "target_kind": section.target if section else "",
+            "needs_card": sorter.needs_card(first["section"], first["target_id"]), "star": False, "can_star": False,
+            "by": "rules", "why": f"{len(members)} files from one module or folder, added together.",
+            "ticked": all(m["ticked"] for m in members), "state": "proposed", "copy_of": "", "source_id": None,
+            "note_rel": None}
+
+
+def _proposed(con: sqlite3.Connection, sort_id: int, section: str | None) -> list[sqlite3.Row]:
+    sql, args = "SELECT * FROM record_sort_rows WHERE sort_id = ? AND state = 'proposed'", [int(sort_id)]
+    if section:
+        registry.get(section)
+        sql += " AND section = ?"
+        args.append(section)
+    return con.execute(sql + " ORDER BY rel", args).fetchall()
+
+
+def _groups(found: list[sqlite3.Row]) -> dict[str, list[sqlite3.Row]]:
+    members: dict[str, list[sqlite3.Row]] = defaultdict(list)
+    for r in found:
+        if r["section"] in GROUPED:
+            members[_group_of(r)].append(r)
+    return members
+
+
+def rows(con: sqlite3.Connection, sort_id, *, section: str | None = None, group: str | None = None,
+         offset: int = 0, limit: int = sorts.PAGE) -> dict:
+    """One page of a sort's proposals in path order, lecture material and coursework one row a module group;
+    with `group`, that group's own files. {"rows", "total"}, as `sorts.rows`."""
+    s = sorts.row_of(con, sort_id)
+    found = _proposed(con, s["id"], section)
+    members = _groups(found)
+    shown: list = list(members.get(group, [])) if group is not None else []
+    if group is None:
+        seen: set[str] = set()
+        for r in found:
+            key = _group_of(r) if r["section"] in GROUPED else ""
+            if not key or len(members[key]) < GROUP_MIN:
+                shown.append(r)
+            elif key not in seen:
+                seen.add(key)
+                shown.append(key)
+    start = max(0, int(offset))
+    page = shown[start:start + max(1, min(int(limit), sorts.PAGE_MAX))]
+    titles = sorts.card_titles(con, {r["target_id"] for item in page
+                                     for r in (members[item] if isinstance(item, str) else [item])
+                                     if r["target_id"] is not None})
+    return {"rows": [_shape_group(item, members[item], titles) if isinstance(item, str) else
+                     sorts.shape_row(item, titles) for item in page], "total": len(shown)}
+
+
+def change_group(con: sqlite3.Connection, sort_id, group: str, changes: dict) -> dict:
+    """Ticks, moves or gives a card to every file of a module group at once (`sorts.change_row` for each);
+    {"changed": n}. ValueError for a change a group does not take; LookupError for a group not in the sort."""
+    s = sorts.row_of(con, sort_id)
+    unknown = sorted(set(changes) - GROUP_CHANGES)
+    if unknown:
+        raise ValueError(f"A group of files has no {', '.join(unknown)} to change.")
+    found = _groups(_proposed(con, s["id"], None)).get(group, [])
+    if not found:
+        raise LookupError("Those files are not waiting in this sort any more.")
+    for r in found:
+        sorts.change_row(con, r["id"], changes)
+    return {"changed": len(found)}
