@@ -55,9 +55,14 @@ code.
    ```
 
 8. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
-   or project. Copies of a project count as one even in different folders and with no git history, such as
-   "Projects/tidewatch" and "old/tidewatch-final": Hal keeps the one with the newest file, and never one in
-   an old, archive, backup or unversioned folder when there is another. A single file that names three or
+   or project. Copies of a project count as one even in different folders, with no git history and with
+   different files, such as "Projects/tidewatch", "old/tidewatch-final" and "Desktop/Tidewatch-12gb": the
+   names match once case, separators and endings such as "-v3", "-final", "-main" or "(2)" are ignored.
+   A folder with another name, such as "AQ-Tidewatch", counts as a copy only when its README starts with
+   the same heading. Common names such as "website" or "app" need the same files too, and numbered folders
+   such as lab1 and lab2 are never copies. Hal keeps the one with the newest file, and never one in an old,
+   archive, backup, unversioned or copies folder when there is another. The row it keeps shows **Older
+   copies**: press **Keep this one instead** on another copy to keep that one. A single file that names three or
    more of your projects, such as a portfolio plan, is left out: Hal reads each project from its own files. It never looks inside a project's libraries or build output (folders such as `node_modules`,
    `build` or `dist`); the line at the bottom of the list counts those files. Hal also leaves out other
    people's work: published papers you kept as reading, and posters or reports named after someone else.
@@ -100,4 +105,4 @@ How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-fo
 | A file says "Already in your record, under ..." | It is in your record already. Nothing to do. |
 | "Undo the move first, or keep it" when you press **Forget** | A move can be forgotten only once it is undone, so you never lose the way back. |
 | "Hal is still adding what you accepted." | Wait until Hal has read what you added, then finish or undo the move. |
-| A project you wanted is under **Copies** | Hal kept the newest copy. Give the copy you want a place under **Where it goes**, and untick the other. |
+| Hal kept the wrong copy of a project | Open **Older copies** on the row Hal kept, and press **Keep this one instead** on the one you want. |

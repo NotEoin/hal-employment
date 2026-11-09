@@ -7,7 +7,8 @@
    card, be unticked, or (a project) be marked a showcase piece. "Add the ticked ones" accepts a section,
    "Add everything ticked" all of them; files that still need their course or job wait until one is chosen.
    "Left out" lists what Hal would not guess in, each with why, and "Copies" the older copies it set aside;
-   either can be given a section by hand. Sorting runs as `record.sort` and adding as `record.sort_accept`;
+   either can be given a section by hand. A row Hal kept lists its "Older copies", each with "Keep this one
+   instead", which swaps which copy is proposed. Sorting runs as `record.sort` and adding as `record.sort_accept`;
    their events and a `sort` event reload the table. The folder box is left out in a window from another
    computer, where a zip is uploaded instead.
 
@@ -102,7 +103,12 @@ function Row({ row, sections, cards, sortId, onOpen }) {
       <div class="small sub" style="overflow-wrap:anywhere">${row.rel}</div>
       <div class="small sub">${row.why}${row.by === "ai" ? " (the AI's guess)" : ""}</div>
       ${row.group && html`<button type="button" class="btn quiet small" aria-label=${"Show the files of " + row.name}
-        onClick=${() => onOpen(row.group)}>Show the files</button>`}</td>
+        onClick=${() => onOpen(row.group)}>Show the files</button>`}
+      ${row.copies && row.copies.length > 0 && html`<details class="small rec-copies"><summary>Older copies (${row.copies.length})</summary>
+        <ul class="rec-paths">${row.copies.map(c => html`<li class="row wrap" key=${c.id}>
+          <span class="grow sub" style="overflow-wrap:anywhere">${c.rel}</span>
+          <button type="button" class="btn quiet small" aria-label=${"Keep " + c.rel + " instead"}
+            onClick=${() => act(() => post("/record/sort-rows/" + c.id + "/keep"), "Hal keeps " + c.rel + " now.")}>Keep this one instead</button></li>`)}</ul></details>`}</td>
     <td>${open ? html`<select class="input" aria-label=${"Where " + row.name + " goes"} value=${row.section}
         onChange=${e => change({ section: e.target.value })}>
         <option value="">Leave it out</option>

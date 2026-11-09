@@ -1509,11 +1509,16 @@ proposals to sources, and a record the bulk read built through a move and its un
   `star` is guessed only for a project in no course or year folder, with the person's own commits
   (`repo.share` with `repo.person()`) and a README of `SHOWCASE_README_WORDS` (150) words or more; `cap_stars`
   keeps the newest `STARS_MAX` (8) a sort, also across a sort's folders (`sorts.run`). Copies of one project
-  (`sections/sort_copies.py`, `mark`) are found with or without git: the same remote, or the same name once
-  `copy_name` drops case, separators and copy marks ("-main", "-v3", "-final", "-12gb", never a bare
-  number) plus overlapping content hashes (`same_content`), shared paths (`versions.shared`) or, failing
-  those, READMEs that say the same (`README_SAME`). The copy kept is outside an "old", "archive", "backup"
-  or "unversioned" folder (`ARCHIVED`) where one is, then has the newest file. A document placed in Projects
+  (`sections/sort_copies.py`, `mark`) are found with or without git and whatever their content: the same
+  remote; the same name once `copy_name` drops case, separators and copy marks ("-main", "-v3", "-final",
+  "-12gb", "(2)", never a bare number); or README first headings (`heading`) that are one and whose words
+  are all in each folder's name ("BOIN-Lidar-System" and "Lidar-System"). A generic name (`GENERIC`, or
+  under `NAME_MIN` letters) also needs overlapping content hashes (`same_content`), shared paths
+  (`versions.shared`) or READMEs that say the same (`README_SAME`); two different remotes are never one
+  project, and no group holds two names that differ only by numbers (`numbered_apart`). The copy kept is
+  outside an "old", "archive", "backup", "unversioned" or "copies" folder (`ARCHIVED`) where one is, then
+  has the newest file. A proposed ROW lists its `copies` (`sorts.older_copies`), and `sorts.keep_copy`
+  swaps which copy is proposed, carrying over the tick and showcase guess. A document placed in Projects
   that names `LISTING_MIN` (3) or more of the project folders proposed (`sort_rules.lists_projects`, without
   case or punctuation) is left out as a listing (`LISTING_WORDS`).
 - A loose document is placed by rules: `rank.rule_for` on its path, then `wrong_place.looks_like` on the
@@ -1590,7 +1595,7 @@ you, `source_id` once added).
   proposed project folder has no `.git`, so no commits showed whose it is and no showcase was guessed; and
   `github` when `you.links.github` is set and no `github_account` source is on Projects yet.
 - Routes (`sections/sort_routes.py`, shapes in its header): `GET/POST /api/v2/record/sort`, `POST
-  .../sort/upload`, `GET .../sort/{id}` (with `courses` and `notes`), `PUT /api/v2/record/sort-rows/{id}`, `POST
+  .../sort/upload`, `GET .../sort/{id}` (with `courses` and `notes`), `PUT /api/v2/record/sort-rows/{id}`, `POST .../sort-rows/{id}/keep`, `POST
   .../sort/{id}/tick`, `.../accept`, `.../courses`, `.../groups`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
   path is local only.
 - Command line (`cli/sort.py`, through the running Hal with the local API key, as `jobhunt ingest` does):

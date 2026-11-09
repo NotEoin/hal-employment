@@ -168,8 +168,19 @@ def card_titles(con: sqlite3.Connection, ids: set[int]) -> dict[int, str]:
         f"SELECT id, kind, fields FROM profile_items WHERE id IN ({marks})", sorted(ids))}
 
 
-def shape_row(r: sqlite3.Row, titles: dict[int, str]) -> dict:
-    """One proposal as the page shows it."""
+def older_copies(con: sqlite3.Connection, sort_id: int, rels: list[str]) -> dict[str, list[dict]]:
+    """The copies set aside for each row kept at `rels` (a page, at most `PAGE_MAX`), as {rel: [{"id", "rel"}]},
+    by path."""
+    out: dict[str, list[dict]] = {}
+    marks = ",".join("?" * len(rels))      # placeholders only; the values are bound
+    for r in con.execute(f"SELECT id, rel, copy_of FROM record_sort_rows WHERE sort_id = ? AND state = 'copy' AND "
+                         f"copy_of IN ({marks}) ORDER BY rel", (sort_id, *rels)):
+        out.setdefault(r["copy_of"], []).append({"id": r["id"], "rel": r["rel"]})
+    return out
+
+
+def shape_row(r: sqlite3.Row, titles: dict[int, str], copies: dict[str, list[dict]] | None = None) -> dict:
+    """One proposal as the page shows it, with the older copies set aside for it (`older_copies`)."""
     section = registry.SECTIONS.get(r["section"])
     kind = registry.DOC_KINDS.get(r["doc_kind"])
     return {"id": r["id"], "rel": r["rel"], "name": PurePosixPath(r["rel"]).name or r["rel"], "held": r["held"],
@@ -179,7 +190,8 @@ def shape_row(r: sqlite3.Row, titles: dict[int, str]) -> dict:
             "target_title": titles.get(r["target_id"], ""), "target_kind": section.target if section else "",
             "needs_card": sorter.needs_card(r["section"], r["target_id"]), "star": bool(r["star"]),
             "can_star": r["section"] == "project", "by": r["by"], "why": r["why"], "ticked": bool(r["ticked"]),
-            "state": r["state"], "copy_of": r["copy_of"], "source_id": r["source_id"], "note_rel": r["note_rel"]}
+            "state": r["state"], "copy_of": r["copy_of"], "source_id": r["source_id"], "note_rel": r["note_rel"],
+            "copies": (copies or {}).get(r["rel"], []) if r["state"] == "proposed" else []}
 
 
 def counts(con: sqlite3.Connection, sort_id: int) -> dict:
@@ -244,7 +256,8 @@ def rows(con: sqlite3.Connection, sort_id: int, *, section: str | None = None, s
     found = con.execute("SELECT * " + sql + " ORDER BY rel LIMIT ? OFFSET ?",
                         [*args, max(1, min(int(limit), PAGE_MAX)), max(0, int(offset))]).fetchall()
     titles = card_titles(con, {r["target_id"] for r in found if r["target_id"] is not None})
-    return {"rows": [shape_row(r, titles) for r in found], "total": total}
+    copies = older_copies(con, int(sort_id), [r["rel"] for r in found]) if state == "proposed" else {}
+    return {"rows": [shape_row(r, titles, copies) for r in found], "total": total}
 
 
 def _row(con: sqlite3.Connection, row_id) -> sqlite3.Row:
@@ -304,6 +317,32 @@ def change_row(con: sqlite3.Connection, row_id, changes: dict) -> dict:
                         (*sets.values(), r["id"]))
     found = _row(con, r["id"])
     return shape_row(found, card_titles(con, {found["target_id"]} - {None}))
+
+
+def keep_copy(con: sqlite3.Connection, row_id) -> dict:
+    """Keeps the copy at `row_id` instead of the one Hal kept: it is proposed in that row's place, with its
+    tick and showcase guess, and the other copies name it. Returns the row now kept.
+
+    ValueError when the row is no copy, or the copy kept is in the record already; LookupError for a row not
+    in the sort."""
+    r = _row(con, row_id)
+    if r["state"] != "copy":
+        raise ValueError("Hal already keeps that one.")
+    kept = con.execute("SELECT * FROM record_sort_rows WHERE sort_id = ? AND rel = ?",
+                       (r["sort_id"], r["copy_of"])).fetchone()
+    if kept is None or kept["state"] != "proposed":
+        raise ValueError("The copy Hal kept is in your record already. Change it there.")
+    why = f"Another copy of {r['rel']}, which you keep."
+    with con:
+        con.execute("UPDATE record_sort_rows SET state = 'proposed', copy_of = '', ticked = ?, star = ?, by = 'you', "
+                    "why = 'You chose to keep this copy.' WHERE id = ?", (kept["ticked"], kept["star"], r["id"]))
+        con.execute("UPDATE record_sort_rows SET state = 'copy', copy_of = ?, ticked = 0, star = 0, why = ? "
+                    "WHERE sort_id = ? AND state = 'copy' AND copy_of = ?", (r["rel"], why, r["sort_id"], kept["rel"]))
+        con.execute("UPDATE record_sort_rows SET state = 'copy', copy_of = ?, ticked = 0, star = 0, why = ? "
+                    "WHERE id = ?", (r["rel"], why, kept["id"]))
+    found = _row(con, r["id"])
+    return shape_row(found, card_titles(con, {found["target_id"]} - {None}),
+                     older_copies(con, found["sort_id"], [found["rel"]]))
 
 
 def tick(con: sqlite3.Connection, sort_id, ticked: bool, section: str | None = None) -> int:

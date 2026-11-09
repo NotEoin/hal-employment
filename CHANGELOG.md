@@ -40,6 +40,12 @@ What changed in each version, in plain words.
   join your degree. Folders that name one degree in different ways ("Computer Science BSc" and "Computer
   Science BsC Newcastle") are one course, named as your settings or transcript name it.
 
+- **Sort a big folder finds copies of a project that changed.** Copies of a project with different files
+  are one row when their names match once case, separators and endings such as "-v3", "-final" or "(2)"
+  are ignored, or when their READMEs start with the same heading naming both folders. Common names such
+  as "website" still need the same files, and numbered folders such as lab1 and lab2 are never copies.
+  The row Hal keeps lists its **Older copies**, and **Keep this one instead** keeps another.
+
 - **Letters tell your showcase from its own sources.** A project's story now comes from the project's own
   code, pages, files or form and your edits; a detail only your CV gives is marked as such for the writer.
   Showcase coursework is told like a showcase project, your dissertation by its title, and a job you put in

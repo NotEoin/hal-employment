@@ -174,6 +174,9 @@ class Routes(unittest.TestCase):
         first = page["rows"][0]
         changed = self.c.request("PUT", f"/api/v2/record/sort-rows/{first['id']}", {"ticked": False})
         self.assertEqual((changed.status, changed.json()["ticked"]), (200, False))
+        self.assertEqual(self.c.post(f"/api/v2/record/sort-rows/{first['id']}/keep", {}).status, 400,
+                         "a row Hal keeps is no older copy")
+        self.assertEqual(self.c.post("/api/v2/record/sort-rows/999999/keep", {}).status, 404)
         accepted = self.c.post(f"/api/v2/record/sort/{sort_id}/accept", {"section": "cv"}).json()
         self.assertEqual(accepted["accepted"], 1)
         self.assertEqual(ended(accepted["action_id"])["state"], "done")

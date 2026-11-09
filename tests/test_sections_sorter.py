@@ -509,6 +509,69 @@ class Sorter(unittest.TestCase):
             self.assertEqual(sort_copies.copy_name("Hal-v3-final (2)"), "hal")
             self.assertEqual(sort_copies.copy_name("lab2"), "lab2")
 
+    def test_copies_that_differ_in_content_are_one_row_by_name_or_readme_heading(self):
+        # Regression: versions of "Hal", "Lidar-Autonavigation-System", "sprite_game" and others, each with
+        # other files, were one row each in a real dump, as their content did not overlap (2026-11-09).
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            n = iter(range(1000))
+
+            def project(folder: str, title: str, when: float) -> None:
+                dated(put(d, f"{folder}/README.md", f"# {title}\n\nA made-up project, this copy {next(n)}.\n"), when)
+                dated(put(d, f"{folder}/main{next(n)}.py", f"print({next(n)})\n"), when)
+
+            for folder, when in (("repos/portfolio-repos/Harbourhelp", NEW), ("personal projects/Harbourhelp", OLD),
+                                 ("repos/unversioned/Harbourhelp-12gb", NEW + DAY_S)):
+                project(folder, "Harbourhelp", when)
+            for folder, when in (("Code/Tide-Autopilot-System", NEW), ("Uni stuff/Tide-Autopilot-System", OLD),
+                                 ("backup/Tide-Autopilot-System", NEW + DAY_S), ("Code/AQ-TIDE-Autopilot-System", OLD)):
+                project(folder, "Tide Autopilot System", when)
+            project("Code/AQ-Harbourhelp", "AQ Harbour helper bot", NEW)       # a prefix alone is no copy
+            for folder, when in (("games/sprite_game", NEW), ("Desktop/sprite-game", OLD), ("copies/Sprite Game", OLD)):
+                project(folder, "Sprite game", when)
+            for folder, when in (("Code/canvas downloader", NEW), ("Desktop/canvas-downloader", OLD),
+                                 ("Code/tts-alerts", NEW), ("old/notebook_tts/tts-alerts", OLD)):
+                project(folder, folder.rsplit("/", 1)[1], when)
+            for name in ("lab1", "lab2"):
+                project(f"Exercises/{name}", "Lab", NEW)
+            for name in ("practical-1", "practical-2"):
+                project(f"Exercises/{name}", "Practical", NEW)
+            for folder in ("Projects/website", "Clients/website"):
+                project(folder, "Website", NEW)
+            found = by_rel(sorter.propose(con, d, local=True))
+            kept = {r for r, p in found.items() if p.section == "project" and p.state == "proposed"}
+            self.assertEqual(kept, {f"Dump/{r}" for r in (
+                "repos/portfolio-repos/Harbourhelp", "Code/Tide-Autopilot-System", "Code/AQ-Harbourhelp",
+                "games/sprite_game", "Code/canvas downloader", "Code/tts-alerts", "Exercises/lab1", "Exercises/lab2",
+                "Exercises/practical-1", "Exercises/practical-2", "Projects/website",
+                "Clients/website")}, "one row a project; never two numbered folders or two generic names")
+            for copy, of in (("personal projects/Harbourhelp", "repos/portfolio-repos/Harbourhelp"),
+                             ("repos/unversioned/Harbourhelp-12gb", "repos/portfolio-repos/Harbourhelp"),
+                             ("backup/Tide-Autopilot-System", "Code/Tide-Autopilot-System"),
+                             ("Code/AQ-TIDE-Autopilot-System", "Code/Tide-Autopilot-System"),
+                             ("copies/Sprite Game", "games/sprite_game"), ("Desktop/sprite-game", "games/sprite_game"),
+                             ("Desktop/canvas-downloader", "Code/canvas downloader"),
+                             ("old/notebook_tts/tts-alerts", "Code/tts-alerts")):
+                self.assertEqual((found["Dump/" + copy].state, found["Dump/" + copy].copy_of), ("copy", "Dump/" + of))
+
+    def test_the_person_can_keep_an_older_copy_instead(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            for folder, when in (("Code/Harbourhelp", NEW), ("Desktop/Harbourhelp", OLD), ("old/Harbourhelp", OLD)):
+                dated(put(d, f"{folder}/README.md", f"# Harbourhelp\n\nA made-up helper, in {folder}.\n"), when)
+            sort_id = sorts.create(con, "folder", [str(d)], "Dump")
+            sorts.run(con, sort_id)
+            row = next(r for r in sort_review.rows(con, sort_id, section="project")["rows"]
+                       if r["name"] == "Harbourhelp")
+            self.assertEqual((row["rel"], [c["rel"] for c in row["copies"]]),
+                             ("Dump/Code/Harbourhelp", ["Dump/Desktop/Harbourhelp", "Dump/old/Harbourhelp"]))
+            kept = sorts.keep_copy(con, row["copies"][0]["id"])
+            self.assertEqual((kept["rel"], kept["state"], [c["rel"] for c in kept["copies"]]),
+                             ("Dump/Desktop/Harbourhelp", "proposed",
+                              ["Dump/Code/Harbourhelp", "Dump/old/Harbourhelp"]))
+            with self.assertRaises(ValueError):
+                sorts.keep_copy(con, kept["id"])
+
     def test_a_document_naming_three_of_the_projects_is_a_listing_not_a_project(self):
         # Regression: "PORTFOLIO-PLAN.md" and "PROJECT-DOSSIER.md", about many projects, were project rows
         # (2026-11-09).

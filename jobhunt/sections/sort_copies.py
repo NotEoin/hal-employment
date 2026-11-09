@@ -8,20 +8,31 @@ not tell them apart and each was proposed. `mark` marks all copies but one.
 Design decisions, each with its reason:
 
 - Two folders are one project when their names are one once normalised (`copy_name`: case, separators, and
-  copy marks such as "-main", "-v3", "-final", "-fixed", "(2)" or a size like "-12gb"), and either their
-  files' content overlaps (`same_content`: `SAME_SHARE` of the smaller copy's files by SHA-256, boilerplate
-  left out), their file paths overlap (`versions.shared`), or, when the file sets differ, their READMEs say
-  the same (`README_SAME` of their words, each README with `README_WORDS_MIN` or more). A name alone is
-  never enough, so two unrelated "website" folders stay two.
-- A bare number is not a copy mark, unlike in the bulk read (`versions.base_name`): "lab1" and "lab2" are
-  two exercises (`sort_units.series`), not one project saved twice.
+  copy marks such as "-main", "-v3", "-final", "-fixed", "(2)" or a size like "-12gb"). Copies kept for
+  years differ in content, so a real dump's "Hal", "Hal-12gb", "sprite_game" and "sprite-game" copies were
+  not grouped when their content had to overlap (2026-11-09); the name is enough.
+- A generic name (`GENERIC`: "website", "app", "project", "notes" and the like) is not: such folders are one
+  project only when their files' content overlaps (`same_content`: `SAME_SHARE` of the smaller copy's files
+  by SHA-256, boilerplate left out), their file paths overlap (`versions.shared`), or their READMEs say the
+  same (`README_SAME` of their words, each README with `README_WORDS_MIN` or more). So two unrelated
+  "website" folders stay two.
+- Folders of different names are one project when their READMEs' first headings are one once normalised
+  (`heading`), that heading is not generic, and its words are all in each folder's name:
+  "BOIN-LIDAR-Autonavigation-System" is a copy of "Lidar-Autonavigation-System" only when its README says
+  so, and a template's heading ("Getting Started with Create React App") names no folder. A prefix alone
+  never makes a copy.
+- A bare number is not a copy mark, unlike in the bulk read (`versions.base_name`), and two folders whose
+  names differ only by numbers are never one project, nor in one group (`numbered_apart`): "lab1" and "lab2"
+  are two exercises (`sort_units.series`), not one project saved twice.
 - The same git remote makes two folders one project whatever their names; two different remotes are two
   projects, as a fork is the person's own work.
-- The copy kept is one outside an "old", "archive", "backup" or "unversioned" folder (`ARCHIVED`) when there
-  is one, then the one with the newest file (`versions.stamp`), then the one with more files: a copy put
-  away was put away on purpose, and copying a folder keeps its files' times.
-- Files are hashed only for folders that share a name with another, each up to `HASH_BYTES_MAX`, so a dump
-  of thousands of projects reads only the few that may be copies.
+- The copy kept is one outside an "old", "archive", "backup", "unversioned" or "copies" folder (`ARCHIVED`)
+  when there is one, then the one with the newest file (`versions.stamp`), then the one with more files: a
+  copy put away was put away on purpose, and copying a folder keeps its files' times. The review shows the
+  others as "Older copies" on the row kept, where the person can keep another (`sorts.keep_copy`).
+- Files are hashed only for folders that share a generic name with another, each up to `HASH_BYTES_MAX`,
+  and only a README's first `HEADING_BYTES` are read for its heading, so a dump of thousands of projects
+  reads little.
 """
 from __future__ import annotations
 
@@ -41,7 +52,18 @@ LEADING = re.compile(r"^(?:copy of|old|new|backup of)\s+")
 # Marks people add to a project's folder when they copy it; never a bare number (see the module notes).
 MARK = re.compile(r"(?:\s+|^)(?:\(\d+\)|copy|v\d+|version\s*\d*|final|fixed|old|backup|bak|new|latest|main|master|"
                   r"orig|original|working|refactored|\d+\s*[kmgt]b)$")
-ARCHIVED = re.compile(r"^(?:old|archived?|archives|backups?|unversioned)(?![a-z])", re.I)
+ARCHIVED = re.compile(r"^(?:old|archived?|archives|backups?|unversioned|copies)(?![a-z])", re.I)
+# Names many unrelated projects share, normalised by `copy_name`: a name like these says nothing on its own.
+GENERIC = {"website", "web", "site", "web site", "my website", "personal website", "homepage", "blog", "app",
+           "apps", "my app", "project", "projects", "my project", "final project", "group project", "code", "src",
+           "source", "test", "tests", "testing", "demo", "example", "examples", "sample", "notes", "homework",
+           "assignment", "coursework", "portfolio", "frontend", "backend", "api", "server", "client", "game",
+           "bot", "scripts", "script", "tools", "utils", "misc", "untitled", "new folder", "temp", "tmp",
+           "practice", "playground", "sandbox", "lab", "labs", "docs", "documentation", "data", "hello world",
+           "readme", "template", "starter"}
+NAME_MIN = 3                   # a name of one or two letters ("ai", "js") names no one project
+HEADING = re.compile(r"^\s{0,3}#\s+(.+?)\s*#*\s*$|^(.+)\n=+\s*$", re.M)
+HEADING_BYTES = 4096           # a README's first heading is at its top
 SAME_SHARE = versions.SAME_SHARE        # half the smaller copy's files, as the bulk read asks
 README_SAME = 0.6              # a README rewritten a little keeps most of its words; another project's does not
 README_WORDS_MIN = 8           # words of 3 letters or more; a title and a line ("# Website ...") name no project
@@ -69,8 +91,32 @@ def copy_name(name: str) -> str:
     return name
 
 
+def generic(name: str) -> bool:
+    """True when a `copy_name` is shared by many unrelated projects ("website") or too short to name one."""
+    return name in GENERIC or len(name.replace(" ", "")) < NAME_MIN
+
+
+def numbered_apart(a: str, b: str) -> bool:
+    """True when two names differ only by their numbers: "lab1" and "lab2", "practical-1" and "practical-2"."""
+    return a != b and re.sub(r"\d+", "#", a) == re.sub(r"\d+", "#", b)
+
+
+def heading(u: Unit) -> str:
+    """A project folder's README's first heading as `copy_name` gives it; "" with no README or heading."""
+    readme = next((f for f in u.files if f.parent == u.path and discover.has_readme([f.name])), None)
+    if readme is None:
+        return ""
+    try:
+        with readme.open("rb") as f:
+            text = f.read(HEADING_BYTES).decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    m = HEADING.search(text)
+    return copy_name((m.group(1) or m.group(2)).strip()) if m else ""
+
+
 def archived(rel: str) -> bool:
-    """True when a folder at `rel` sits in an old, archive, backup or unversioned folder."""
+    """True when a folder at `rel` sits in an old, archive, backup, unversioned or copies folder."""
     return any(ARCHIVED.match(part.strip()) for part in PurePosixPath(rel).parts[1:-1])
 
 
@@ -118,11 +164,14 @@ def _facts(u: Unit, seen: dict) -> tuple[set[str], set[str], set[str]]:
     return seen[u.rel]
 
 
-def _same(a: Unit, b: Unit, seen: dict) -> bool:
-    """True when `a` and `b`, of one normalised name, are one project (see the module notes)."""
+def _same(a: Unit, b: Unit, seen: dict, by: str) -> bool:
+    """True when `a` and `b`, of one normalised name or (`by` "heading") README heading, are one project (see
+    the module notes)."""
     ra, rb = versions.remote(a.path), versions.remote(b.path)
     if ra and rb:
         return ra == rb
+    if by == "heading" or not generic(copy_name(a.path.name)):
+        return True
     (ha, pa, wa), (hb, pb, wb) = _facts(a, seen), _facts(b, seen)
     return same_content(ha, hb) or versions.shared(pa, pb) or _readmes_same(wa, wb)
 
@@ -145,17 +194,28 @@ def mark(units: list[Unit], copy_state: str) -> None:
             rel = parent[rel]
         return rel
 
+    names = {u.rel: copy_name(u.path.name) for u in units}
+    joined = {u.rel: [names[u.rel]] for u in units}       # each group's names, so no group joins lab1 and lab2
+
+    def apart(x: str, y: str) -> bool:
+        return any(numbered_apart(m, n) for m in joined[x] for n in joined[y])
+
     buckets: dict[str, list[Unit]] = defaultdict(list)
     for u in units:
-        buckets[f"name:{copy_name(u.path.name)}"].append(u)
+        buckets[f"name:{names[u.rel]}"].append(u)
         if found := versions.remote(u.path):
             buckets[f"remote:{found}"].append(u)
+        if (title := heading(u)) and not generic(title) and set(title.split()) <= set(names[u.rel].split()):
+            buckets[f"heading:{title}"].append(u)
     seen: dict = {}
     for key, members in buckets.items():
+        by = key.split(":", 1)[0]
         for i, a in enumerate(members):
             for b in members[i + 1:]:
-                if root(a.rel) != root(b.rel) and (key.startswith("remote:") or _same(a, b, seen)):
-                    parent[root(a.rel)] = root(b.rel)
+                ra, rb = root(a.rel), root(b.rel)
+                if ra != rb and not apart(ra, rb) and (by == "remote" or _same(a, b, seen, by)):
+                    parent[ra] = rb
+                    joined[rb] += joined.pop(ra)
     groups: dict[str, list[Unit]] = defaultdict(list)
     for u in units:
         groups[root(u.rel)].append(u)

@@ -22,7 +22,9 @@ A row (`ROW`, `sorts.shape_row`):
      "mtime": "2024-10-27T10:00:00Z", "section": "cv", "section_label": "CVs", "doc_kind": "cv",
      "doc_kind_label": "CV", "target_id": null, "target_title": "", "target_kind": "", "needs_card": false,
      "star": false, "can_star": false, "by": "rules", "why": "Named or set out like a CV.", "ticked": true,
-     "state": "proposed", "copy_of": "", "source_id": null, "note_rel": null}
+     "state": "proposed", "copy_of": "", "source_id": null, "note_rel": null, "copies": []}
+
+`copies` lists the older copies Hal set aside for a proposed row ("Older copies"), each {"id", "rel"}.
 
 A group of a module's lecture material or coursework (`GROUP`, `sort_review.rows`): a ROW's fields with
 "id": null, "held": "group", the files' "count", the module's "name" and folder ("rel"), and its "group"
@@ -53,6 +55,8 @@ Routes:
   education card for a course Hal found, with the words given (else Hal's); {"card", "matched"}.
 - `PUT /api/v2/record/sort-rows/{id}` {"section", "doc_kind", "target_id", "ticked", "star"}: ROW. A section
   of "" leaves it out.
+- `POST /api/v2/record/sort-rows/{id}/keep`: keeps that older copy instead of the one Hal kept
+  (`sorts.keep_copy`); the ROW now kept. 400 when it is no copy or the kept one is added already.
 - `POST /api/v2/record/sort/{id}/tick` {"ticked", "section"}: ticks or unticks every proposal (of one
   section); {"changed"}.
 - `POST /api/v2/record/sort/{id}/accept` {"section"}: accepts the ticked proposals (of one section);
@@ -240,6 +244,15 @@ def change_row(req: Request) -> dict:
     """Changes one proposal's section, kind, card, tick or showcase guess."""
     try:
         return sorts.change_row(req.con, req.params["row_id"], _body(req))
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+
+
+@route("POST", "/api/v2/record/sort-rows/{row_id}/keep", auth="session_or_local")
+def keep_copy(req: Request) -> dict:
+    """Keeps an older copy instead of the one Hal kept."""
+    try:
+        return sorts.keep_copy(req.con, req.params["row_id"])
     except ValueError as e:
         raise BadRequest(str(e)) from e
 

@@ -188,7 +188,7 @@ def _shape_group(key: str, members: list[sqlite3.Row], titles: dict[int, str]) -
             "needs_card": sorter.needs_card(first["section"], first["target_id"]), "star": False, "can_star": False,
             "by": "rules", "why": why,
             "ticked": all(m["ticked"] for m in members), "state": "proposed", "copy_of": "", "source_id": None,
-            "note_rel": None}
+            "note_rel": None, "copies": []}
 
 
 def _proposed(con: sqlite3.Connection, sort_id: int, section: str | None) -> list[sqlite3.Row]:
@@ -236,8 +236,9 @@ def rows(con: sqlite3.Connection, sort_id, *, section: str | None = None, group:
     titles = sorts.card_titles(con, {r["target_id"] for item in page
                                      for r in (members[item] if isinstance(item, str) else [item])
                                      if r["target_id"] is not None})
+    copies = sorts.older_copies(con, s["id"], [item["rel"] for item in page if not isinstance(item, str)])
     return {"rows": [_shape_group(item, members[item], titles) if isinstance(item, str) else
-                     sorts.shape_row(item, titles) for item in page], "total": len(shown)}
+                     sorts.shape_row(item, titles, copies) for item in page], "total": len(shown)}
 
 
 def change_group(con: sqlite3.Connection, sort_id, group: str, changes: dict) -> dict:

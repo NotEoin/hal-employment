@@ -19,6 +19,7 @@ from test_sections_sort import add_and_read, sections_of, sorted_folder
 from test_sections_sorter import (
     DAY_S,
     NEW,
+    OLD,
     README,
     WORDS,
     committed,
@@ -74,7 +75,9 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "Subnetting.md": ("proposed", "lecture", "notes"), "fogbell-v2": ("copy", "project", "repo"),
          "PORTFOLIO-PLAN.md": ("left_out", "", ""),
          **{f"{n}.md": ("proposed", "lecture", "notes") for n in ("Threat models", "Attack trees", "Tide tables",
-                                                                 "Harmonics")}}
+                                                                 "Harmonics")},
+         "harbour_scanner": ("proposed", "project", "upload"), "harbour-scanner": ("copy", "project", "upload"),
+         "AQ-Harbour-Scanner": ("copy", "project", "upload")}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -104,7 +107,9 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Readme.md": ("proposed", "lecture", "notes"), "walking-tour-final": ("copy", "project", "upload"),
           "Portfolio overview.md": ("left_out", "", ""),
           **{f"{n}.md": ("proposed", "lecture", "notes") for n in ("Oral sources", "Interviewing", "Heritage sites",
-                                                                  "Museum labels")}}
+                                                                  "Museum labels")},
+          "Parish map": ("proposed", "project", "upload"), "parish-map": ("copy", "project", "upload"),
+          "Parish Map (2)": ("copy", "project", "upload")}
 # The review's rows for a module's lecture material: one each, with its file count.
 MODULES = {"software": {"CS2041 Databases": 13, "CSC1022 Software Design": 6, "CSC3095 Project": 4,
                         "CSC3021 Security": 2, "CSC3011 Tide Models": 2},
@@ -182,6 +187,10 @@ def messy_software_dump(root: Path) -> Path:
         put(d, f"Uni/2023-24/Semester 2/CSC3021 Security/Lectures/{name}.md", f"# {name}\n\nMade-up notes.\n")
     for name in ("Tide tables", "Harmonics"):          # the degree's folder named another way
         put(d, f"Uni/Computing B.Sc. (Hons)/CSC3011 Tide Models/Lectures/{name}.md", f"# {name}\n\nMade-up notes.\n")
+    for n, (folder, when) in enumerate((("Code/harbour_scanner", NEW), ("Desktop/harbour-scanner", OLD),
+                                        ("Code/AQ-Harbour-Scanner", OLD))):    # versions with other files
+        dated(put(d, f"{folder}/README.md", f"# Harbour Scanner\n\nA made-up scanner, version {n}.\n"), when)
+        dated(put(d, f"{folder}/scan{n}.py", f"print({n})\n"), when)
     return d
 
 
@@ -232,6 +241,10 @@ def messy_history_dump(root: Path) -> Path:
         put(d, f"2023-24/Term 1/HIS2077 Oral History/Seminars/{name}.md", f"# {name}\n\nMade-up seminar notes.\n")
     for name in ("Heritage sites", "Museum labels"):   # the degree's folder named another way
         put(d, f"History B.A. Fenwick/HIS3010 Public History/Seminars/{name}.md", f"# {name}\n\nMade-up notes.\n")
+    for n, (folder, when) in enumerate((("Maps/Parish map", NEW), ("old/parish-map", OLD),
+                                        ("Desktop/Parish Map (2)", OLD))):     # versions with other files
+        dated(put(d, f"{folder}/README.md", f"# Parish map\n\nA made-up map of the parish, draft {n}.\n"), when)
+        dated(put(d, f"{folder}/stops{n}.md", f"# Stops\n\n{n + 3} made-up stops.\n"), when)
     return d
 
 
