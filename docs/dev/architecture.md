@@ -1508,9 +1508,12 @@ proposals to sources, and a record the bulk read built through a move and its un
   (`sort_units.series`: "lab1" to "lab8") as one row, `project|<card>|<parent>/<name without number>`.
   `star` is guessed only for a project in no course or year folder, with the person's own commits
   (`repo.share` with `repo.person()`) and a README of `SHOWCASE_README_WORDS` (150) words or more; `cap_stars`
-  keeps the newest `STARS_MAX` (8) a sort, also across a sort's folders (`sorts.run`). Copies of one code project
-  (`versions.project_key`, and `versions.shared` files for name keys) keep only the newest by last commit,
-  else newest file.
+  keeps the newest `STARS_MAX` (8) a sort, also across a sort's folders (`sorts.run`). Copies of one project
+  (`sections/sort_copies.py`, `mark`) are found with or without git: the same remote, or the same name once
+  `copy_name` drops case, separators and copy marks ("-main", "-v3", "-final", "-12gb", never a bare
+  number) plus overlapping content hashes (`same_content`), shared paths (`versions.shared`) or, failing
+  those, READMEs that say the same (`README_SAME`). The copy kept is outside an "old", "archive", "backup"
+  or "unversioned" folder (`ARCHIVED`) where one is, then has the newest file.
 - A loose document is placed by rules: `rank.rule_for` on its path, then `wrong_place.looks_like` on the
   start of its text (converted with `convert.text_of`, a PDF's first pages only). A course folder (one of
   `group.courses`, or a folder named like `COURSE_NAME`) makes notes and slides `lecture` and named work

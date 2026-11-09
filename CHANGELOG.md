@@ -12,7 +12,9 @@ What changed in each version, in plain words.
   vault (Obsidian, Logseq, Foam, Zettlr or a Notion export) are never proposed as projects: their files go
   one by one, most of them to Lecture material. Code in a course, year or module folder (practicals,
   labs, assignments, a team project) is coursework for that course, in its module's row, and numbered
-  folders such as lab1 to lab8 are one row.
+  folders such as lab1 to lab8 are one row. Copies of a project in different folders, with or without git
+  history ("Projects/Hal", "old/Hal-final"), are one row: Hal keeps the newest, and never one in an old,
+  archive, backup or unversioned folder when there is another.
 
 - **Sort a big folder proposes less, and more of it right.** Hal never proposes anything inside a
   project's libraries or build output (`node_modules`, `build`, `dist`, `_build/libs` and the like): the

@@ -19,7 +19,7 @@ from test_record import tiny_pdf
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sort_kinds, sort_review, sort_rules, sort_units, sorter, sorts
+from jobhunt.sections import sort_copies, sort_kinds, sort_review, sort_rules, sort_units, sorter, sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600
@@ -464,6 +464,50 @@ class Sorter(unittest.TestCase):
             labs = sort_review.rows(con, sort_id, section="project", limit=sorts.PAGE_MAX)["rows"]
             self.assertEqual([(r["name"], r["count"], r["rel"]) for r in labs], [("lab1 to lab3", 3, "Dump/Code")],
                              "numbered folders outside a course are one project row")
+
+    def test_copies_of_a_project_in_other_trees_are_one_row_even_with_no_history(self):
+        # Regression: "repos/portfolio-repos/Hal", "personal projects/Hal" and "repos/unversioned/Hal-12gb", most
+        # with no .git, were three project rows (2026-11-09).
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            helper = {"README.md": "# Harbourhelp\n\nA made-up helper that drafts letters to a harbour club.\n",
+                      "help/app.py": "def main():\n    return 'help'\n", "help/db.py": "TABLES = ['letters']\n"}
+            for folder, when in (("repos/portfolio-repos/Harbourhelp", NEW), ("personal projects/Harbourhelp", OLD),
+                                 ("repos/unversioned/Harbourhelp-12gb", NEW + DAY_S)):
+                for name, text in helper.items():
+                    dated(put(d, f"{folder}/{name}", text), when)
+            repos.git(d / "repos/portfolio-repos/Harbourhelp", "init", "-q")
+            repos.git(d / "repos/portfolio-repos/Harbourhelp", "remote", "add", "origin",
+                      "https://example.org/avery/harbourhelp.git")
+            about = "# Course fetcher\n\nSaves made-up course files from a learning platform, one module at a time."
+            dated(put(d, "Code/course fetcher/README.md", about + "\n"), NEW)
+            dated(put(d, "Code/course fetcher/fetch.py", "def fetch():\n    return 2\n"), NEW)
+            dated(put(d, "old/course-fetcher-main/README.md", about + " It logs in first.\n"), OLD)
+            dated(put(d, "old/course-fetcher-main/src/get.py", "def get():\n    return 1\n"), OLD)
+            for folder, when in (("games/sprite_game", OLD), ("old/sprite_game", NEW),
+                                 ("backup/Sprite-Game-final", NEW)):
+                dated(put(d, f"{folder}/README.md", f"# Sprite game\n\nA made-up game, copy in {folder}.\n"), when)
+                dated(put(d, f"{folder}/sprite.py", "SPEED = 3\n"), when)
+            for folder in ("Projects/website", "Clients/website"):
+                put(d, f"{folder}/README.md", f"# Website\n\nA made-up site for {folder.split('/')[0]}.\n")
+                put(d, f"{folder}/index.md", f"# Home of {folder}\n")
+            for n in (1, 2):
+                put(d, f"Code/lab{n}/README.md", "# Lab\n\nA made-up exercise.\n")
+                put(d, f"Code/lab{n}/lab.py", f"print({n})\n")
+            found = by_rel(sorter.propose(con, d, local=True))
+            kept = {r for r, p in found.items() if p.section == "project" and p.state == "proposed"}
+            self.assertEqual(kept, {"Dump/repos/portfolio-repos/Harbourhelp", "Dump/Code/course fetcher",
+                                    "Dump/games/sprite_game", "Dump/Projects/website", "Dump/Clients/website",
+                                    "Dump/Code/lab1", "Dump/Code/lab2"},
+                             "one of each project; a name alone, or a number, never makes a copy")
+            for copy, of in (("repos/unversioned/Harbourhelp-12gb", "repos/portfolio-repos/Harbourhelp"),
+                             ("personal projects/Harbourhelp", "repos/portfolio-repos/Harbourhelp"),
+                             ("old/course-fetcher-main", "Code/course fetcher"),
+                             ("old/sprite_game", "games/sprite_game"),
+                             ("backup/Sprite-Game-final", "games/sprite_game")):
+                self.assertEqual((found["Dump/" + copy].state, found["Dump/" + copy].copy_of), ("copy", "Dump/" + of))
+            self.assertEqual(sort_copies.copy_name("Hal-v3-final (2)"), "hal")
+            self.assertEqual(sort_copies.copy_name("lab2"), "lab2")
 
     def test_a_word_in_a_name_is_not_enough_for_a_transcript_or_a_contract(self):
         with home() as (con, _vault, files), fake_ai(NONE):

@@ -49,7 +49,9 @@ code.
    ```
 
 8. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
-   or project. It never looks inside a project's libraries or build output (folders such as `node_modules`,
+   or project. Copies of a project count as one even in different folders and with no git history, such as
+   "Projects/tidewatch" and "old/tidewatch-final": Hal keeps the one with the newest file, and never one in
+   an old, archive, backup or unversioned folder when there is another. It never looks inside a project's libraries or build output (folders such as `node_modules`,
    `build` or `dist`); the line at the bottom of the list counts those files. Hal also leaves out other
    people's work: published papers you kept as reading, and posters or reports named after someone else.
    A PDF in a folder of reading, such as one named papers, readings, references or literature, counts as

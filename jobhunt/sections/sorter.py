@@ -28,9 +28,9 @@ Design decisions, each with its reason:
   words, a recording, code outside a project, a file that looks private (`privacy.reason`, checked before the
   AI sees a word), one only online, or one the AI did not recognise either.
 - Copies are grouped and only the newest is proposed: the same bytes anywhere in the folder, a document saved
-  again beside itself ("Essay final (2).docx", by `saved_as`), and copies of one code project
-  (`versions.project_key`, confirmed by shared files as the bulk read does). A file already in the record is
-  left out, naming where it is.
+  again beside itself ("Essay final (2).docx", by `saved_as`), and copies of one project anywhere in the
+  folder, with or without git history (`sort_copies`). A file already in the record is left out, naming
+  where it is.
 - A course folder (a folder of notes and slides, or one named like a module, a year or a course) makes its
   notes and slides lecture material and its named work coursework. Its card is the education card whose
   institution, subject or qualification its folders name, else the one whose dates hold the file's date,
@@ -64,6 +64,7 @@ from jobhunt.ingest import convert, discover, group, privacy, rank, versions
 from jobhunt.profile import merge
 from jobhunt.sections import (
     registry,
+    sort_copies,
     sort_courses,
     sort_folders,
     sort_kinds,
@@ -390,27 +391,6 @@ def _group_unit(con: sqlite3.Connection, path: Path, rel: str, files: list[Path]
     return p.place("project", "upload", why)
 
 
-def _repo_copies(units: list[Proposal]) -> None:
-    """Marks every copy of a code project but the newest (see the module notes)."""
-    groups: list[list[Proposal]] = []
-    for u in units:
-        key, names = versions.project_key(u.path), {f.relative_to(u.path).as_posix() for f in u.files}
-        for g in groups:
-            first = g[0]
-            same_key = versions.project_key(first.path) == key
-            if (same_key and key.startswith("remote:")) or (same_key and versions.shared(
-                    names, {f.relative_to(first.path).as_posix() for f in first.files})):
-                g.append(u)
-                break
-        else:
-            groups.append([u])
-    for g in groups:
-        newest = max(g, key=lambda u: u.mtime)
-        for u in g:
-            if u is not newest:
-                u.state, u.copy_of, u.why = COPY, newest.rel, f"An older copy of {newest.rel}."
-
-
 def saved_as(stem: str) -> str:
     """A document's name without the marks of a save again: "Essay final (2)" is "essay"."""
     name = stem.strip().lower()
@@ -516,7 +496,7 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
             units.append(_group_unit(con, folder, rel, files, grouped[folder], local=local, repo=folder in repos))
         else:
             units.append(_unit(con, folder, rel, files, local=local, repo=folder in repos, who=who))
-    _repo_copies([u for u in units if u.section == "project"])
+    sort_copies.mark([u for u in units if u.section == "project"], COPY)
     courses = {str(PurePosixPath(members[0][1]).parent)
                for members in group.courses([(f.path, f.rel) for f in loose]).values()}
     docs, asks, own = [], 0, sort_rules.own_words(con)
