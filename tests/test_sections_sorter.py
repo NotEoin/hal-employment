@@ -14,12 +14,15 @@ from pathlib import Path
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.fake_ai import fake_ai
 from test_ingest import home, put
+from test_record import tiny_pdf
 
+from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import sort_rules, sorter
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600
+WORDS = "This made-up essay weighs the sources and the evidence on each side of the question. " * 12
 OLD, NEW = 1_700_000_000, 1_730_000_000      # November 2023 and October 2024
 README = "# Tidewatch\n\nA tide-gauge dashboard for a harbour club. " + "It reads gauge data and draws charts. " * 20
 CV = ("# {name}\n\nCurriculum vitae\n\n## Work experience\n\n{job}\n\n## Education\n\n{degree}, University of Nowhere "
@@ -43,6 +46,13 @@ def dated(path: Path, when: float) -> Path:
     """Sets a file's time, so which copy is newest is known."""
     os.utime(path, (when, when))
     return path
+
+
+def paper(title: str, venue: str) -> bytes:
+    """The first page of a made-up published paper, as a PDF."""
+    return tiny_pdf([title, "Ada Brindle, Cole Fenwick and Dana Hollis", venue, "Abstract",
+                     "We study a made-up question with a made-up method.", "As Smith et al. and Jones et al. show,",
+                     "the results hold.", "References", "Smith, A. et al. (2019). A made-up paper."])
 
 
 def with_libraries(d: Path, project: str, readme: str, libraries: tuple[str, ...]) -> None:
@@ -205,6 +215,56 @@ class Sorter(unittest.TestCase):
             self.assertEqual(sorted(r for r in rels if "_build" in r or "dist" in r or "pyparse" in r), [])
             self.assertIn("Dump/Code/lib/helpers.md", rels, "a lib folder of the person's own files is looked at")
             self.assertEqual(found.skipped[sort_rules.VENDORED_SKIP], 3, "dist/notes.md and the package's files")
+
+    def test_a_published_paper_is_left_out_as_reading_and_an_essay_citing_papers_is_not(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            settings.set("you.name", "Avery Quillon")
+            course = files / "Uni/BSc Computing/Year 3/Dissertation"
+            put(course, "papers/Probing vision models.pdf", paper("Probing made-up vision models",
+                                                                  "arXiv:2301.01234v2"))
+            put(course, "papers/Parish records.pdf", paper("Parish records and the poor",
+                                                           "Journal of Made-up Local History, Vol. 12"))
+            essay = "# Tide prediction essay\n\n" + WORDS + "\n\nAs Smith et al. and Jones et al. show.\n\n" \
+                    "## References\n\nSmith, A. et al. (2019). Journal of Made-up Tides. doi:10.5555/jmt.1\n"
+            put(course, "Tide prediction essay.md", essay)
+            found = by_rel(sorter.propose(con, files / "Uni", local=True))
+            d = "Uni/BSc Computing/Year 3/Dissertation/"
+            for name in ("papers/Probing vision models.pdf", "papers/Parish records.pdf"):
+                self.assertEqual((found[d + name].state, found[d + name].why),
+                                 ("left_out", "A published paper. Hal keeps your own work, not your reading."))
+            self.assertEqual(where(found[d + "Tide prediction essay.md"]), ("proposed", "coursework", "essay"))
+
+    def test_a_poster_named_after_someone_else_is_left_out_and_ones_own_is_not(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            module = files / "Uni/BA History/HIS2040 Archival Methods"
+            put(module, "CSC3095_Jordan_Pellow_Project_Poster.pdf", tiny_pdf(["Harbour fog", "Jordan Pellow"]))
+            put(module, "Vestry Poster.pdf", tiny_pdf(["Women in the parish vestry", "Talia Wren"]))
+            put(module, "HIS2040_Marnie_Quillfeather_Poster.pdf", tiny_pdf(["Parish registers", "Marnie Quillfeather"]))
+            found = by_rel(sorter.propose(con, files / "Uni", local=True))
+            m = "Uni/BA History/HIS2040 Archival Methods/"
+            self.assertEqual(found[m + "CSC3095_Jordan_Pellow_Project_Poster.pdf"].state, "proposed",
+                             "with no name in the settings nothing is taken for someone else's")
+            settings.set("you.name", "Marnie Quillfeather")
+            found = by_rel(sorter.propose(con, files / "Uni", local=True))
+            self.assertEqual(found[m + "CSC3095_Jordan_Pellow_Project_Poster.pdf"].why,
+                             "Someone else's work: it is named after Jordan Pellow, not you.")
+            self.assertEqual(found[m + "Vestry Poster.pdf"].state, "left_out", "an author line names its maker")
+            self.assertNotIn("Someone else", found[m + "HIS2040_Marnie_Quillfeather_Poster.pdf"].why,
+                             "the person's own poster is never someone else's")
+
+    def test_what_a_course_gave_out_is_lecture_material_at_most(self):
+        with home() as (con, _vault, files), fake_ai(NONE) as backend:
+            course = files / "Uni/BSc Computing/Year 3/CSC3095 Project"
+            put(course, "Linked materials/Project Posters and Demonstrations.pdf",
+                tiny_pdf(["Project posters and demonstrations", "Guidance for every student."]))
+            put(course, "Potential_Projects_for_2022-2023.pdf", tiny_pdf(["Potential projects", "1. A tide model."]))
+            put(course, "Project List 2024.md", "# Project list 2024\n\n- A made-up fog model.\n")
+            put(course, "Research Methods in Computing Projects.pdf", tiny_pdf(["Research methods", "Planning."]))
+            put(course, "Essays/Essay brief.md", "# Essay brief\n\nWrite 2,000 words on a made-up question.\n")
+            put(course, "Marking scheme.md", "# Marking scheme\n\nA made-up rubric.\n")
+            found = sorter.propose(con, files / "Uni", local=True)
+            self.assertEqual({where(p) for p in found.proposals}, {("proposed", "lecture", "notes")})
+            self.assertEqual(backend.requests("sort_pick"), [], "a course document never needs the AI")
 
     def test_coursework_with_no_course_on_the_record_waits_for_one(self):
         with home() as (con, _vault, files), fake_ai({"sort_pick": json.dumps({"choice": "none"})}):

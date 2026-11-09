@@ -38,7 +38,10 @@ code.
 
 7. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
    or project. It never looks inside a project's libraries or build output (folders such as `node_modules`,
-   `build` or `dist`); the line at the bottom of the list counts those files. To add one anyway, choose a place for it under **Where it goes**, then add it.
+   `build` or `dist`); the line at the bottom of the list counts those files. Hal also leaves out other
+   people's work: published papers you kept as reading, and posters or reports named after someone else.
+   What your course gave out, such as a brief, a handbook or a folder of course materials, is proposed as
+   lecture material, never as your coursework. To add one anyway, choose a place for it under **Where it goes**, then add it.
 
 ## Moving a record an older Hal read in
 
@@ -58,6 +61,8 @@ How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-fo
 | "Hal is still sorting another folder." | Wait for the first sort to finish, then sort the next folder. |
 | A file says "Choose one, or add your CV first" | Add your CVs first, or choose its course under **Course or job**. |
 | "Looks private (medical information), so Hal kept it out." | Hal keeps medical, bank, ID and pay papers out. If it is fine to keep, give it a place under **Where it goes**. |
+| "A published paper. Hal keeps your own work, not your reading." | If you wrote it, give it a place under **Where it goes**. |
+| "Someone else's work: it is named after ..." | If it is yours, check your name under **Settings**, **You**, then give it a place under **Where it goes**. |
 | "Hal could not tell where it goes." | Choose a place under **Where it goes**, or leave it out. |
 | "Only online: this computer has an empty copy." | Download the file first (in OneDrive, choose "Always keep on this device"), then sort the folder again. |
 | A file says "Already in your record, under ..." | It is in your record already. Nothing to do. |

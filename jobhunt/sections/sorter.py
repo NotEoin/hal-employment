@@ -16,6 +16,8 @@ Design decisions, each with its reason:
   prompt `sort_pick`); it never reads a fact, and "none" leaves the file out.
 - Nothing in a library or build folder is proposed, and a project inside one is part of the project around it
   (`sort_rules`): a real dump's "_build/libs" folders gave about 20 wrong project rows (2026-11-09).
+- Someone else's work is left out: a published paper, or a poster or report named after another person; and
+  what a course gave out (a materials folder, a brief, a handbook) is lecture material at most (`sort_rules`).
 - A file Hal cannot place is "Left out" with the reason in plain words, never guessed in: a picture with no
   words, a recording, code outside a project, a file that looks private (`privacy.reason`, checked before the
   AI sees a word), one only online, or one the AI did not recognise either.
@@ -255,6 +257,8 @@ def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool) -> bool
             p.place("document", "contract", "A contract.")
         else:
             p.leave_out(LEFT_OUT_WORDS["jd"])
+    elif taught := sort_rules.course_material(p.rel, in_course):
+        p.place("lecture", "slides" if suffix in rank.SLIDE_SUFFIXES else "notes", taught)
     elif in_course and (kind in ("report", "writing", "project") or _nearest(p.rel, WORK_FOLDER)) \
             and not (kind in ("notes", "slides") and _nearest(p.rel, TAUGHT_FOLDER)):
         p.place("coursework", _work_kind(stem, suffix) if kind != "notes" else "notes",
@@ -427,7 +431,7 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
     _repo_copies(units)
     courses = {str(PurePosixPath(members[0][1]).parent)
                for members in group.courses([(f.path, f.rel) for f in loose]).values()}
-    docs, asks = [], 0
+    docs, asks, own = [], 0, sort_rules.own_words(con)
     for n, f in enumerate(loose):
         if progress:
             progress(n, len(loose))
@@ -462,6 +466,12 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
             continue
         if why := privacy.held_back({"allowed": False, "rel": f.rel}, text):
             p.leave_out(f"Looks private ({why}), so Hal kept it out.")
+            continue
+        if sort_rules.published_paper(text, own):
+            p.leave_out(sort_rules.PAPER_WORDS)
+            continue
+        if why := sort_rules.someone_elses(f.rel, text, own):
+            p.leave_out(why)
             continue
         if not place_kind(p, rule, text, _course_folder(f.rel, courses)):
             if asks >= AI_ASKS_MAX:

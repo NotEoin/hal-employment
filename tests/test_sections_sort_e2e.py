@@ -13,8 +13,9 @@ from pathlib import Path
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.fake_ai import fake_ai
 from test_ingest import CV_TEXT, OWNER, REPLY, home, put, run
+from test_record import tiny_pdf
 from test_sections_sort import add_and_read, sections_of, sorted_folder
-from test_sections_sorter import history_dump, software_dump, with_libraries
+from test_sections_sorter import history_dump, paper, software_dump, with_libraries
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
@@ -35,7 +36,13 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "tidewatch": ("proposed", "project", "repo"), "tidewatch (2)": ("copy", "project", "repo"),
          "First aid certificate.md": ("proposed", "document", "certificate"),
          "GP letter.md": ("left_out", "", ""), "beach.jpg": ("left_out", "", ""), "thoughts.md": ("left_out", "", ""),
-         "harbour-site": ("proposed", "project", "upload")}
+         "harbour-site": ("proposed", "project", "upload"),
+         "Project Posters and Demonstrations.pdf": ("proposed", "lecture", "notes"),
+         "Potential_Projects_for_2022-2023.pdf": ("proposed", "lecture", "notes"),
+         "Project List 2024.md": ("proposed", "lecture", "notes"),
+         "Research Methods in Computing Projects.pdf": ("proposed", "lecture", "notes"),
+         "CSC3095_Jordan_Pellow_Project_Poster.pdf": ("left_out", "", ""),
+         "CLIP-Dissect probing.pdf": ("left_out", "", ""), "CheXpert Plus.pdf": ("left_out", "", "")}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -45,7 +52,12 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Transcript of study.md": ("proposed", "official", "transcript"),
           "Reference from the museum.md": ("proposed", "document", "reference"),
           "Lantern exhibition": ("proposed", "project", "upload"), "Fit note.md": ("left_out", "", ""),
-          "Digital edition": ("proposed", "project", "upload")}
+          "Digital edition": ("proposed", "project", "upload"),
+          "Brindle 2019 Parish records and the poor.pdf": ("left_out", "", ""),
+          "Fenwick 2021 Baptism registers.pdf": ("left_out", "", ""),
+          "Module handbook 2023.md": ("proposed", "lecture", "notes"),
+          "Dissertation guidance.md": ("proposed", "lecture", "notes"),
+          "Essay brief.md": ("proposed", "lecture", "notes"), "HIS2040_Talia_Wren_Poster.pdf": ("left_out", "", "")}
 
 
 def messy_software_dump(root: Path) -> Path:
@@ -57,6 +69,16 @@ def messy_software_dump(root: Path) -> Path:
     put(d, "Old laptop/dist/release notes.md", "# Release notes\n\nMade-up build output.\n")
     put(d, "Code/lib/pyparse/README.md", "# pyparse\n\nA made-up parsing library.\n")
     put(d, "Code/lib/pyparse/setup.py", "from setuptools import setup\n")
+    project = "Uni/BSc Computing/Year 3/CSC3095 Project"
+    put(d, f"{project}/Linked materials/Project Posters and Demonstrations.pdf",
+        tiny_pdf(["Project posters and demonstrations", "Guidance for every student on the poster session."]))
+    put(d, f"{project}/Potential_Projects_for_2022-2023.pdf", tiny_pdf(["Potential projects", "1. A tide model."]))
+    put(d, f"{project}/Project List 2024.md", "# Project list 2024\n\n- A made-up fog model.\n")
+    put(d, f"{project}/Research Methods in Computing Projects.pdf", tiny_pdf(["Research methods", "Planning."]))
+    put(d, f"{project}/CSC3095_Jordan_Pellow_Project_Poster.pdf", tiny_pdf(["Harbour fog", "Jordan Pellow"]))
+    papers = "Uni/BSc Computing/Year 3/Dissertation/papers"
+    put(d, f"{papers}/CLIP-Dissect probing.pdf", paper("Probing made-up vision models", "arXiv:2301.01234v2"))
+    put(d, f"{papers}/CheXpert Plus.pdf", paper("A made-up chest X-ray dataset", "Journal of Made-up Imaging, Vol. 4"))
     return d
 
 
@@ -66,6 +88,16 @@ def messy_history_dump(root: Path) -> Path:
     with_libraries(d, "Digital edition", "# Digital edition\n\nA made-up online edition of parish letters I "
                    "transcribed.\n", ("Pagefind", "Lunrish"))
     put(d, "Digital edition/letters.md", "# Letters\n\nTwelve made-up letters from 1820.\n")
+    module = "BA History/HIS2040 Archival Methods"
+    put(d, f"{module}/Readings/Brindle 2019 Parish records and the poor.pdf",
+        paper("Parish records and the poor", "Journal of Made-up Local History, Vol. 12, No. 3"))
+    put(d, f"{module}/Readings/Fenwick 2021 Baptism registers.pdf",
+        paper("Baptism registers revisited", "doi:10.5555/jmsh.2021.9"))
+    put(d, "BA History/Course materials/Module handbook 2023.md", "# Module handbook\n\nHow the modules run.\n")
+    put(d, "BA History/HIS3001 Dissertation/Dissertation guidance.md", "# Dissertation guidance\n\nMade-up advice.\n")
+    put(d, f"{module}/Essays/Essay brief.md", "# Essay brief\n\nWrite 2,000 words on a made-up question.\n")
+    put(d, f"{module}/Seminar posters/HIS2040_Talia_Wren_Poster.pdf",
+        tiny_pdf(["Women in the parish vestry", "Talia Wren", "HIS2040 poster"]))
     return d
 
 
@@ -87,8 +119,9 @@ class FromADumpToTheRecord(unittest.TestCase):
                                                           "institution": "University of Nowhere Fen"},
                                        {"source_rel": "Sources/CVs/CV.md", "doc_type": "cv"})
 
-    def check(self, dump, expected: dict, degree: tuple[str, str]) -> None:
+    def check(self, dump, expected: dict, degree: tuple[str, str], owner: str) -> None:
         with home() as (con, _vault, files), fake_ai(NONE) as backend:
+            settings.set("you.name", owner)
             self.education(con, *degree)
             before = facts(con)
             sort_id = sorted_folder(con, dump(files))
@@ -103,10 +136,10 @@ class FromADumpToTheRecord(unittest.TestCase):
             self.assertNotIn("diagnosed", sent, "the medical letter never reaches the AI")
 
     def test_a_software_graduates_dump_goes_where_proposed_and_only_once_accepted(self):
-        self.check(messy_software_dump, AVERY, ("BSc", "Computing"))
+        self.check(messy_software_dump, AVERY, ("BSc", "Computing"), "Avery Quillon")
 
     def test_a_history_graduates_dump_goes_where_proposed_and_only_once_accepted(self):
-        self.check(messy_history_dump, MARNIE, ("BA", "History"))
+        self.check(messy_history_dump, MARNIE, ("BA", "History"), "Marnie Quillfeather")
 
     def test_a_record_the_bulk_read_built_is_moved_and_one_undo_puts_it_back(self):
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY), **NONE}):

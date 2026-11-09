@@ -1476,6 +1476,15 @@ proposals to sources, and a record the bulk read built through a move and its un
   `bin`, `obj`, `Pods` and the like) is proposed, nor a project found inside `lib` or `libs`
   (`vendored_project`); such files are counted in `skipped` as `VENDORED_SKIP`. A project is proposed at its
   top, so the libraries in its build folder stay part of it.
+- Someone else's work is left out before the rules place a document: a published paper (`published_paper`:
+  an abstract or an arXiv or DOI line on the first page, before any references heading, with
+  `PAPER_SIGNS_MIN` of abstract, identifier, venue, "et al." citations and a references heading, and no
+  submission sign or the person's name), and a poster or report named after another person
+  (`someone_elses`: a run of capitalised words not in `TITLE_WORDS`, after a module code or as an author
+  line at the start of the text, never the person's own name from `roles.identity`; nothing is taken for
+  someone else's when the settings give no name). What a course gave out (`course_material`: a file in a
+  materials, resources, readings or handouts folder, or a course document by name such as a brief, a
+  handbook or a project list) is `lecture`, never coursework or a project, and never goes to the AI.
 - Code projects (repositories) and README folders are one proposal each for Projects: a repository on this
   computer as `repo` held as a folder (its history stays readable), anything else as `upload` (its files).
   `star` is guessed when the README has `SHOWCASE_README_CHARS` or more. Copies of one code project
