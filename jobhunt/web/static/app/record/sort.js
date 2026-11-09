@@ -14,7 +14,8 @@
    "Courses Hal found" lists the courses the folders name (jobhunt/sections/sort_review.py), first, as
    coursework and lecture notes wait for their course: adding one makes its education card, and its files
    find it. Lecture material and coursework come one row a module, with its file count: ticking, moving or
-   giving a card to that row changes all its files, and "Show the files" lists them one by one.
+   giving a card to that row changes all its files, and "Show the files" lists them one by one. A project's
+   numbered folders ("lab1" to "lab8") come as one row the same way.
 
    A record an older Hal read in whole gets "Move my record to sections" (jobhunt/sections/move.py): the same
    table proposes a section for each of its notes. "Finish the move" sets aside what the notes nobody
@@ -92,10 +93,11 @@ function Row({ row, sections, cards, sortId, onOpen }) {
   const choices = row.target_kind ? (cards[row.target_kind] || []) : [];
   const uid = "rec-sort-" + (row.id == null ? row.group : row.id);
   const open = row.state === "proposed" || row.state === "left_out" || row.state === "copy" || row.state === "failed";
+  const unit = row.section === "project" ? "folder" : "file";     // a project's group is its numbered folders
   return html`<tr data-row=${row.id == null ? row.group : row.id}>
     <td>${row.state === "proposed" && html`<input type="checkbox" checked=${row.ticked} aria-label=${"Add " + row.name}
       onChange=${e => change({ ticked: e.target.checked })} />`}</td>
-    <td><b>${row.name}</b>${row.group && html` <span class="small sub">(${plural(row.count, "file")})</span>`}
+    <td><b>${row.name}</b>${row.group && html` <span class="small sub">(${plural(row.count, unit)})</span>`}
       <div class="small sub" style="overflow-wrap:anywhere">${row.rel}</div>
       <div class="small sub">${row.why}${row.by === "ai" ? " (the AI's guess)" : ""}</div>
       ${row.group && html`<button type="button" class="btn quiet small" aria-label=${"Show the files of " + row.name}

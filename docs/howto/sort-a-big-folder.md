@@ -23,14 +23,18 @@ code.
    **Projects**, **Documents** and the rest. Press one to see its files, 50 at a time. Lecture material and
    coursework show one row a module, with how many files it holds: ticking it, or changing its course,
    changes them all. Press **Show the files** to see them one by one, and **Back to the list** to return.
+   Code in a course, year or module folder (practicals, labs, assignments, a team project) goes to
+   **Coursework** for that course, in its module's row. Numbered folders such as lab1 to lab8 are one row
+   too, wherever they are.
 4. Under **Courses Hal found**, check each course your folders name, such as a "BSc Computing" folder with
    its year and module folders. Change its qualification, subject or where you studied if Hal got them
    wrong, then press **Add this course**. Its coursework and lecture notes find it at once.
 5. Check each row. Under **Where it goes**, **What it is** and **Course or job**, change anything Hal got
    wrong. Untick a file to keep it out. For a project, tick **Showcase** if you want employers to hear about
    it. Hal ticks it for you only on a few of your own code projects (at most 8): ones outside your course
-   folders, with your own commits and a README that says what they do. Your changes are kept, so you can
-   stop and come back later.
+   folders, with your own commits and a README that says what they do. To show coursework, such as a
+   module's code, star it on its course once it is added. Your changes are kept, so you can stop and come
+   back later.
 6. Add your CVs and papers next: press **CVs**, then **Add the ticked CVs**, and the same for **Official
    papers**. Hal reads them and finds your courses and jobs, and the files still waiting for their course
    or job find it.

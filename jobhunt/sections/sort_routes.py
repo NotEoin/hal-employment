@@ -26,7 +26,8 @@ A row (`ROW`, `sorts.shape_row`):
 
 A group of a module's lecture material or coursework (`GROUP`, `sort_review.rows`): a ROW's fields with
 "id": null, "held": "group", the files' "count", the module's "name" and folder ("rel"), and its "group"
-key ("lecture|12|Avery stuff/Uni/BSc Computing/Year 2/CS2041 Databases").
+key ("lecture|12|Avery stuff/Uni/BSc Computing/Year 2/CS2041 Databases"). A project's numbered folders come
+the same way, named by the first and last ("lab1 to lab8"), keyed "project||Avery stuff/Code/lab".
 
 A course Hal found in the folders (`COURSE`, `sort_courses.courses_found`), not yet a card:
 

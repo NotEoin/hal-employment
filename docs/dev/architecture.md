@@ -1502,6 +1502,10 @@ proposals to sources, and a record the bulk read built through a move and its un
   handbook or a project list) is `lecture`, never coursework or a project, and never goes to the AI.
 - Code projects (repositories) and README folders are one proposal each for Projects: a repository on this
   computer as `repo` held as a folder (its history stays readable), anything else as `upload` (its files).
+  One in a course, year or module folder (`_course_folder` or `sort_courses.course_of` on its parents) is
+  `coursework` (`other`, held as its files, never starred) for the card `fill_card` finds, so the review
+  shows it in its module's row. The review also shows a project's sibling folders numbered in one series
+  (`sort_units.series`: "lab1" to "lab8") as one row, `project|<card>|<parent>/<name without number>`.
   `star` is guessed only for a project in no course or year folder, with the person's own commits
   (`repo.share` with `repo.person()`) and a README of `SHOWCASE_README_WORDS` (150) words or more; `cap_stars`
   keeps the newest `STARS_MAX` (8) a sort, also across a sort's folders (`sorts.run`). Copies of one code project

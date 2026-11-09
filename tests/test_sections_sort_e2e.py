@@ -58,8 +58,8 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "Learning Transferable Harbour Models From Made-up Tide Supervision.pdf": ("left_out", "", ""),
          "known-cyber-attacks": ("proposed", "project", "upload"), "hackerrank": ("proposed", "project", "upload"),
          "Harbour Crane - 4417852": ("left_out", "", ""), "Daily note.md": ("left_out", "", ""),
-         "README.md": ("left_out", "", ""), "practical-1": ("proposed", "project", "repo"),
-         "practical-2": ("proposed", "project", "repo"), "fogbell": ("proposed", "project", "repo"),
+         "README.md": ("left_out", "", ""), "practical-1": ("proposed", "coursework", "other"),
+         "practical-2": ("proposed", "coursework", "other"), "fogbell": ("proposed", "project", "repo"),
          "smart contract.md": ("proposed", "lecture", "notes"),
          "UMLActivityAnswer.md": ("proposed", "coursework", "notes"),
          "Lecture 9 Project Planning.md": ("proposed", "lecture", "notes"),
@@ -141,7 +141,7 @@ def messy_software_dump(root: Path) -> Path:
     for n in (1, 2):
         practical = f"Uni/BSc Computing/Year 1/CSC1021 Programming/practical-{n}"
         put(d, f"{practical}/README.md", README)
-        put(d, f"{practical}/main.py", "print(1)\n")
+        put(d, f"{practical}/main.py", f"print({n})\n")
         committed(d / practical, repos.AVERY, "2022-11-01T10:00:00Z")
     put(d, "Projects/fogbell/README.md", README)
     put(d, "Projects/fogbell/bell.py", "print(1)\n")

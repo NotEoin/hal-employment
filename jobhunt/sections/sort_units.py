@@ -20,6 +20,9 @@ Design decisions, each with its reason:
 - A notes app's own folders (`APP_FOLDER`: "+Inbox", "_Session-Logs", "Templates", "Attachments", and any
   name starting "+" or "_") are never projects, whatever README they hold; templates and attachments are
   never documents of the person's either (`app_file`).
+- Sibling folders numbered in one series ("practical-1" to "practical-10", "lab1" to "lab8", "week-01" on,
+  `series`) are one row in the review (`sort_review`): a real dump gave nine project rows for one module's
+  practicals (2026-11-09). They stay one proposal each underneath, as each is a folder of its own.
 """
 from __future__ import annotations
 
@@ -38,9 +41,18 @@ PRACTICE_SITE = re.compile(r"(?<![a-z])(?:hacker[ _-]?rank|leet[ _-]?code|projec
 DOWNLOAD_ID = re.compile(r"\S\s+-\s+\d{6,7}$")
 APP_FOLDER = re.compile(r"^(?:[+_].*|templates?|attachments?)$", re.I)
 APP_STORE = re.compile(r"^(?:templates?|attachments?)$", re.I)
+SERIES = re.compile(r"^(?P<stem>.*?[a-z])[ _-]?0*\d{1,3}$", re.I)    # "practical-1", "lab1", "week-01"
 WORDS = {NOTES: "Folders of your notes on one subject, as one.",
          PRACTICE: "Practice: exercises from a practice site. Hal keeps them out of your showcase.",
          DOWNLOAD: "A download from a sharing site, such as a 3D-print design: someone else's work."}
+
+
+def series(rel: str) -> str:
+    """The numbered series a folder at `rel` belongs to, as its parent and the name without its number
+    ("Code/lab" for "Code/lab3"); "" for a name with no number at its end."""
+    path = PurePosixPath(rel)
+    found = SERIES.match(path.name.strip())
+    return f"{path.parent}/{found['stem'].lower()}" if found else ""
 
 
 def app_folder(folder: Path) -> bool:

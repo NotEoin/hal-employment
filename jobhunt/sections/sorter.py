@@ -35,6 +35,11 @@ Design decisions, each with its reason:
   notes and slides lecture material and its named work coursework. Its card is the education card whose
   institution, subject or qualification its folders name, else the one whose dates hold the file's date,
   else the only one; with none the proposal waits for the person to choose (`needs_card`).
+- A code project or README folder in a course, year or module folder (`_course_folder`,
+  `sort_courses.course_of`) is coursework for that course, held as its files: a real dump's ten
+  "practical-1" to "practical-10" folders and "assignment-3" repositories were proposed as projects
+  (2026-11-09). The review shows a module's code folders as one row (`sort_review`), and the person can
+  star coursework on its course to make it a degree project.
 - A code project on this computer is proposed as a folder (`repo`), so its history stays readable; one from a
   zip is proposed as its files (`upload`). A project is guessed a showcase piece only when it is the
   person's own (in no course or year folder), holds their own commits (`repo.share`), and its README has
@@ -57,7 +62,16 @@ from pathlib import Path, PurePosixPath
 
 from jobhunt.ingest import convert, discover, group, privacy, rank, versions
 from jobhunt.profile import merge
-from jobhunt.sections import registry, sort_folders, sort_kinds, sort_rules, sort_units, store, wrong_place
+from jobhunt.sections import (
+    registry,
+    sort_courses,
+    sort_folders,
+    sort_kinds,
+    sort_rules,
+    sort_units,
+    store,
+    wrong_place,
+)
 from jobhunt.sections import repo as repo_reader
 
 log = logging.getLogger(__name__)
@@ -69,6 +83,7 @@ PROMPT_CHARS = 1500            # the start of a document says what it is
 SHOWCASE_README_WORDS = 150    # a README past a title and a line (see the module notes)
 STARS_MAX = 8                  # showcase guesses a sort; a CV tells a handful of projects, not dozens
 NONE = "none"
+COURSE_CODE_WORDS = "Code you wrote for a course: coursework. Star it on its course to make it a degree project."
 PROPOSED, LEFT_OUT, COPY = "proposed", "left_out", "copy"
 # The choices the AI may pick from, each "section/kind of document" with its words.
 CHOICES = {
@@ -323,11 +338,17 @@ def _ask_ai(p: Proposal, text: str) -> bool:
 
 # The walk -------------------------------------------------------------------------------------------------
 
-def _unit(path: Path, rel: str, files: list[Path], *, local: bool, repo: bool,
+def _unit(con: sqlite3.Connection, path: Path, rel: str, files: list[Path], *, local: bool, repo: bool,
           who: repo_reader.Person) -> Proposal:
     """A code project or a project folder, as one proposal for Projects, guessed a showcase piece as the module
-    notes say."""
+    notes say; in a course, year or module folder, coursework for that course."""
     stamp = versions.stamp(path)
+    if _course_folder(rel, set()) or sort_courses.course_of(rel) is not None:
+        p = Proposal(path, rel, registry.FILES, size=sum(f.stat().st_size for f in files if f.exists()),
+                     mtime=stamp.commit or stamp.newest_file, files=files)
+        p.place("coursework", "other", COURSE_CODE_WORDS)
+        fill_card(con, p)
+        return p
     readme = next((f for f in files if f.parent == path and discover.has_readme([f.name])), None)
     try:
         readme_words = len(readme.read_text(encoding="utf-8", errors="replace").split()) if readme else 0
@@ -337,7 +358,7 @@ def _unit(path: Path, rel: str, files: list[Path], *, local: bool, repo: bool,
     p = Proposal(path, rel, held, size=sum(f.stat().st_size for f in files if f.exists()),
                  mtime=stamp.commit or stamp.newest_file, files=files)
     p.place("project", kind, "A code project." if repo else "A project folder with a README.")
-    p.star = (readme_words >= SHOWCASE_README_WORDS and not _course_folder(rel, set()) and bool(who)
+    p.star = (readme_words >= SHOWCASE_README_WORDS and bool(who)
               and repo_reader.share(repo_reader.git_history(path), who)["mine"] > 0)
     return p
 
@@ -494,7 +515,7 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
         if folder in grouped:
             units.append(_group_unit(con, folder, rel, files, grouped[folder], local=local, repo=folder in repos))
         else:
-            units.append(_unit(folder, rel, files, local=local, repo=folder in repos, who=who))
+            units.append(_unit(con, folder, rel, files, local=local, repo=folder in repos, who=who))
     _repo_copies([u for u in units if u.section == "project"])
     courses = {str(PurePosixPath(members[0][1]).parent)
                for members in group.courses([(f.path, f.rel) for f in loose]).values()}

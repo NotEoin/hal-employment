@@ -19,7 +19,7 @@ from test_record import tiny_pdf
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sort_kinds, sort_rules, sort_units, sorter
+from jobhunt.sections import sort_kinds, sort_review, sort_rules, sort_units, sorter, sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600
@@ -431,6 +431,39 @@ class Sorter(unittest.TestCase):
             self.assertEqual(len(starred), sorter.STARS_MAX)
             self.assertTrue(all(r.startswith("Dump/Projects/p") for r in starred),
                             "never a practical, a classmate's project, a short README or one with no commits")
+
+    def test_code_in_a_course_folder_is_coursework_and_numbered_folders_are_one_row(self):
+        # Regression: ten "practical-N" folders and an "assignment-3" repo under a degree's year folder were
+        # project rows, one each (2026-11-09).
+        with home() as (con, _vault, files), fake_ai(NONE):
+            settings.set("you.name", "Avery Quillon")
+            degree = self.education(con, "BSc", "Computing")
+            d = files / "Dump"
+            practicals = "BSc Computing/year 1/Programming portfolio/part 1/2301234_practicals/part1"
+            for n in range(1, 11):
+                put(d, f"{practicals}/practical-{n}/README.md", f"# Practical {n}\n\n{README}")
+                put(d, f"{practicals}/practical-{n}/main.py", f"print({n})\n")
+            put(d, "BSc Computing/Year 2/CS2041 Databases/assignment-3/README.md", README)
+            put(d, "BSc Computing/Year 2/CS2041 Databases/assignment-3/schema.py", "TABLES = 3\n")
+            committed(d / "BSc Computing/Year 2/CS2041 Databases/assignment-3", repos.AVERY, "2023-03-01T10:00:00Z")
+            put(d, "BSc Computing/Year 2/CSC2033 Team project/README.md", README)
+            put(d, "BSc Computing/Year 2/CSC2033 Team project/app.js", "console.log(1);\n")
+            for n in (1, 2, 3):
+                put(d, f"Code/lab{n}/README.md", f"# Lab {n}\n\nA made-up exercise.\n")
+                put(d, f"Code/lab{n}/lab.py", f"print({n})\n")
+            from test_sections_sort import sorted_folder  # imported here: that module imports this one
+            sort_id = sorted_folder(con, d)
+            rows = {r["rel"]: r for r in sorts.rows(con, sort_id, limit=sorts.PAGE_MAX)["rows"]}
+            course = [r for r in rows.values() if "BSc Computing" in r["rel"]]
+            self.assertEqual(len(course), 12)
+            self.assertEqual({(r["section"], r["doc_kind"], r["held"], r["target_id"], r["star"]) for r in course},
+                             {("coursework", "other", "files", degree, False)}, "never a project, never starred")
+            shown = sort_review.rows(con, sort_id, section="coursework", limit=sorts.PAGE_MAX)["rows"]
+            self.assertIn(("part1", 10), [(r["name"], r.get("count")) for r in shown], "one row for the practicals")
+            self.assertEqual(len(shown), 3, "the practicals, assignment-3 and the team project")
+            labs = sort_review.rows(con, sort_id, section="project", limit=sorts.PAGE_MAX)["rows"]
+            self.assertEqual([(r["name"], r["count"], r["rel"]) for r in labs], [("lab1 to lab3", 3, "Dump/Code")],
+                             "numbered folders outside a course are one project row")
 
     def test_a_word_in_a_name_is_not_enough_for_a_transcript_or_a_contract(self):
         with home() as (con, _vault, files), fake_ai(NONE):

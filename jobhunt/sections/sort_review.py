@@ -19,15 +19,19 @@ Design decisions, each with its reason:
   lecture rows were too many to read (2026-11-09). A group of one is shown as its file. The rows are grouped
   from the sort's proposed rows each time, as a sort holds thousands of rows, not millions, and a stored
   group would go stale when the person moves a file.
+- A project's sibling folders numbered in one series ("lab1" to "lab8", `sort_units.series`) are one row the
+  same way, named by its first and last folder: a real dump gave nine rows for one module's practicals
+  (2026-11-09).
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections import Counter, defaultdict
 from pathlib import PurePosixPath
 
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import registry, sort_courses, sorter, sorts
+from jobhunt.sections import registry, sort_courses, sort_units, sorter, sorts
 
 COURSE_WORDS = ("qualification", "subject", "institution")
 GROUPED = ("lecture", "coursework")
@@ -75,17 +79,28 @@ def accept_course(con: sqlite3.Connection, sort_id, key: str, words: dict | None
 # Module groups --------------------------------------------------------------------------------------------
 
 def _group_of(r: sqlite3.Row) -> str:
-    """A row's group in the review: its section, card and module folder."""
+    """A row's group in the review: its section, card and module folder; a project's numbered series
+    (`sort_units.series`); "" for a row shown on its own."""
     card = "" if r["target_id"] is None else r["target_id"]
-    return f"{r['section']}|{card}|{sort_courses.group_key(r['rel'])}"
+    if r["section"] in GROUPED:
+        return f"{r['section']}|{card}|{sort_courses.group_key(r['rel'])}"
+    if r["section"] == "project" and (numbered := sort_units.series(r["rel"])):
+        return f"project|{card}|{numbered}"
+    return ""
 
 
 def _shape_group(key: str, members: list[sqlite3.Row], titles: dict[int, str]) -> dict:
-    """A module group as the page shows a row: its name, file count and what most of its files are."""
+    """A module group or numbered series as the page shows a row: its name, file count and what most of its
+    files are."""
     first = members[0]
     folder = key.split("|", 2)[2]
     course = sort_courses.course_of(first["rel"])
     name = course.module if course and course.module_key == folder else PurePosixPath(folder).name
+    why = f"{len(members)} files from one module or folder, added together."
+    if first["section"] == "project":
+        names = sorted((PurePosixPath(m["rel"]).name for m in members), key=_numbered)
+        folder, name = str(PurePosixPath(first["rel"]).parent), f"{names[0]} to {names[-1]}"
+        why = f"{len(members)} numbered folders of one series, added together."
     section = registry.SECTIONS.get(first["section"])
     kind = Counter(m["doc_kind"] for m in members).most_common(1)[0][0]
     return {"id": None, "group": key, "count": len(members), "rel": folder, "name": name, "held": "group",
@@ -95,7 +110,7 @@ def _shape_group(key: str, members: list[sqlite3.Row], titles: dict[int, str]) -
             "target_id": first["target_id"], "target_title": titles.get(first["target_id"], ""),
             "target_kind": section.target if section else "",
             "needs_card": sorter.needs_card(first["section"], first["target_id"]), "star": False, "can_star": False,
-            "by": "rules", "why": f"{len(members)} files from one module or folder, added together.",
+            "by": "rules", "why": why,
             "ticked": all(m["ticked"] for m in members), "state": "proposed", "copy_of": "", "source_id": None,
             "note_rel": None}
 
@@ -109,11 +124,17 @@ def _proposed(con: sqlite3.Connection, sort_id: int, section: str | None) -> lis
     return con.execute(sql + " ORDER BY rel", args).fetchall()
 
 
+def _numbered(name: str) -> tuple[int, str]:
+    """Sorts "lab2" before "lab10"."""
+    digits = re.search(r"\d+$", name)
+    return (int(digits.group()) if digits else 0, name)
+
+
 def _groups(found: list[sqlite3.Row]) -> dict[str, list[sqlite3.Row]]:
     members: dict[str, list[sqlite3.Row]] = defaultdict(list)
     for r in found:
-        if r["section"] in GROUPED:
-            members[_group_of(r)].append(r)
+        if key := _group_of(r):
+            members[key].append(r)
     return members
 
 
@@ -128,7 +149,7 @@ def rows(con: sqlite3.Connection, sort_id, *, section: str | None = None, group:
     if group is None:
         seen: set[str] = set()
         for r in found:
-            key = _group_of(r) if r["section"] in GROUPED else ""
+            key = _group_of(r)
             if not key or len(members[key]) < GROUP_MIN:
                 shown.append(r)
             elif key not in seen:
