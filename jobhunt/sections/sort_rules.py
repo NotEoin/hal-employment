@@ -21,6 +21,13 @@ Design decisions, each with its reason:
   before any references heading, counts for the header signs, as an essay's bibliography holds DOIs and
   journal names too; a document that names the person or shows a submission (a declaration, a student
   number) is never a paper.
+- A reading-list folder ("papers", "readings", "references", "literature", `READING_FOLDER`) is a strong
+  sign on its own: a PDF in one is a paper, and so is any other document there with a paper's sign or a
+  title for a name (`paper_title`: a long title-case phrase with no student number or module code). Real
+  papers kept in "Dissertation/papers" were proposed as coursework, as their first pages gave too few
+  signs and the "Dissertation" folder made them handed-in work (2026-11-09). A file named as the person's
+  notes on a reading (`OWN_ON_READING`) is never one, and the sorter asks only for files not named as a
+  CV, a reference or another strong kind.
 - A poster or report named after someone else is theirs (`someone_elses`): a classmate's
   "CSC3095_<Name>_Project_Poster.pdf" was proposed as the person's coursework. Hal has no list of names, so
   a run of capitalised words counts as a name only when it is not a usual title word (`TITLE_WORDS`) and
@@ -83,6 +90,20 @@ PAPER_SIGNS_MIN = 3            # an abstract or an identifier, and two more of t
 SUBMITTED = re.compile(r"submitted (?:by|for|to|in partial)|in partial fulfil+ment|student (?:number|no\b|id)|"
                        r"candidate number|word count|declaration|i (?:hereby )?declare|supervis(?:or|ed by)", re.I)
 PAPER_WORDS = "A published paper. Hal keeps your own work, not your reading."
+# Folders people keep their reading in; "references" only in the plural, as "Reference letters" are about them.
+READING_FOLDER = re.compile(r"(?<![a-z])(?:papers|readings?|reading[ _-]?lists?|references|literature|"
+                            r"bibliography)(?![a-z])", re.I)
+READING_NAME_WORDS = 3         # "Dissertation papers", "Week 3 readings"; a longer name is about something else
+READING_DEPTH = 2              # the file's own folder or the one above it ("papers/2021/x.pdf")
+TITLE_WORDS_MIN = 5            # "Learning Transferable Visual Models From ..." against "Essay final"
+TITLE_CAPS_SHARE = 0.8         # a title capitalises its main words; a sentence-case name of notes does not
+# Words a title leaves in lower case.
+TITLE_SMALL = {"a", "an", "the", "of", "for", "from", "and", "or", "in", "on", "to", "with", "via", "by", "at",
+               "as", "vs", "into", "over", "under", "without", "is", "are"}
+STUDENT_ID = re.compile(r"\d{6,}")
+# A file's own words that make it the person's notes or work on a reading, never the reading itself.
+OWN_ON_READING = re.compile(r"(?<![a-z])(?:notes?|summary|summaries|answers?|response|my|essay|report|draft|"
+                            r"annotat\w*|critique)(?![a-z])", re.I)
 
 
 def own_words(con) -> list[str]:
@@ -96,8 +117,30 @@ def own_words(con) -> list[str]:
     return roles.identity(name, str(settings.get("you.other_names") or ""), con, roles.own_links())
 
 
-def published_paper(text: str, own: list[str]) -> bool:
-    """True when `text` reads like a published paper's first page (see the module notes)."""
+def reading_folder(rel: str) -> bool:
+    """True when a file at `rel` sits in a folder of reading (`READING_FOLDER`), its own or the one above."""
+    parts = PurePosixPath(rel).parent.parts[1:][-READING_DEPTH:]
+    return any(READING_FOLDER.search(part) and len(SPLIT.split(part.strip())) <= READING_NAME_WORDS
+               for part in parts)
+
+
+def paper_title(stem: str) -> bool:
+    """True when a file's name `stem` is a published work's title: `TITLE_WORDS_MIN` or more words, the main
+    ones capitalised, with no student number, module code or word of the person's own notes."""
+    words = [w for w in re.split(r"[\s_]+", stem.strip(" ._-")) if w.strip(".")]
+    if len(words) < TITLE_WORDS_MIN or STUDENT_ID.search(stem) or OWN_ON_READING.search(stem.replace("_", " ")) \
+            or any(MODULE_CODE.match(w) for w in words):
+        return False
+    main = [w for w in words if w.lower() not in TITLE_SMALL]
+    capitalised = [w for w in main if w[0].isupper() or w[0].isdigit()]
+    return bool(main) and len(capitalised) >= TITLE_CAPS_SHARE * len(main)
+
+
+def published_paper(text: str, own: list[str], *, name: str = "", reading: bool = False,
+                    pdf: bool = False) -> bool:
+    """True when `text` reads like a published paper's first page, or when a document in a reading folder
+    (`reading`) is a PDF (`pdf`), has a title for a name (`name`, the file's stem) or shows a paper's sign
+    (see the module notes)."""
     refs = REFERENCES.search(text)
     head = text[:min(PAPER_HEAD_CHARS, refs.start() if refs else len(text))]
     if SUBMITTED.search(head) or (own and roles.names_person(head, own)):
@@ -105,6 +148,8 @@ def published_paper(text: str, own: list[str]) -> bool:
     first = bool(ABSTRACT.search(head)) or bool(ARXIV_OR_DOI.search(head))
     signs = [ABSTRACT.search(head), ARXIV_OR_DOI.search(head), VENUE.search(head),
              len(ET_AL.findall(text)) >= ET_AL_MIN, refs]
+    if reading and not OWN_ON_READING.search(name.replace("_", " ")) and (pdf or paper_title(name) or any(signs)):
+        return True
     return first and sum(bool(s) for s in signs) >= PAPER_SIGNS_MIN
 
 

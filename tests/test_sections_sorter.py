@@ -253,6 +253,38 @@ class Sorter(unittest.TestCase):
                                  ("left_out", "A published paper. Hal keeps your own work, not your reading."))
             self.assertEqual(where(found[d + "Tide prediction essay.md"]), ("proposed", "coursework", "essay"))
 
+    def test_a_reading_folder_makes_its_papers_reading_even_with_too_few_signs_for_a_paper(self):
+        # Regression: real papers in "Dissertation/papers/" gave too few first-page signs, and the "Dissertation"
+        # folder made them coursework (2026-11-09).
+        with home() as (con, _vault, files), fake_ai(NONE):
+            settings.set("you.name", "Avery Quillon")
+            thesis = files / "Uni/BSc Computing/Year 3/Dissertation"
+            bare = ["Introduction", "We study a made-up question at length. " * 30]
+            put(thesis, "papers/Learning Transferable Harbour Models From Made-up Tide Supervision.pdf",
+                tiny_pdf(["Learning transferable harbour models", *bare]))
+            put(thesis, "papers/Tide3DVLM_An_Efficient_Vision-Language_Model_for_Made-up_Tides.pdf",
+                tiny_pdf(["Tide3DVLM", *bare]))
+            history = files / "Uni/BA History/HIS2040 Archival Methods"
+            put(history, "Readings/Brindle Parish Relief.pdf", tiny_pdf(["Parish relief", *bare]))
+            put(history, "Readings/Week 3 reading notes.md", "# Week 3 reading\n\nMy made-up notes on Brindle.\n")
+            put(history, "Literature/The Poor Law and the Vestry in a Made-up Parish.md",
+                "# The Poor Law and the vestry\n\n" + WORDS)
+            put(thesis, "Dissertation report.pdf", tiny_pdf(["Tide prediction", "Introduction", *bare]))
+            found = by_rel(sorter.propose(con, files / "Uni", local=True))
+            d, h = "Uni/BSc Computing/Year 3/Dissertation/", "Uni/BA History/HIS2040 Archival Methods/"
+            for rel in (d + "papers/Learning Transferable Harbour Models From Made-up Tide Supervision.pdf",
+                        d + "papers/Tide3DVLM_An_Efficient_Vision-Language_Model_for_Made-up_Tides.pdf",
+                        h + "Readings/Brindle Parish Relief.pdf",
+                        h + "Literature/The Poor Law and the Vestry in a Made-up Parish.md"):
+                self.assertEqual((found[rel].state, found[rel].why), ("left_out", sort_rules.PAPER_WORDS), rel)
+            self.assertEqual(where(found[h + "Readings/Week 3 reading notes.md"]), ("proposed", "lecture", "notes"),
+                             "the person's notes on a reading are what they studied")
+            self.assertEqual(found[d + "Dissertation report.pdf"].section, "coursework",
+                             "outside a reading folder a document needs a paper's signs")
+            self.assertTrue(sort_rules.paper_title("Learning_Transferable_Visual_Models_From_Natural_Language"))
+            self.assertFalse(sort_rules.paper_title("CSC3095 Final Report On Made-up Tide Prediction"))
+            self.assertFalse(sort_rules.paper_title("Essay on the made-up parish registers of the vale"))
+
     def test_a_poster_named_after_someone_else_is_left_out_and_ones_own_is_not(self):
         with home() as (con, _vault, files), fake_ai(NONE):
             module = files / "Uni/BA History/HIS2040 Archival Methods"

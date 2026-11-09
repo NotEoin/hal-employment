@@ -6,6 +6,10 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Sort a big folder keeps your reading out of your work.** A PDF in a folder of reading (named papers,
+  readings, references or literature) is left out as a published paper, even inside your dissertation
+  folder, unless its name says it is your notes on it.
+
 - **Sort a big folder proposes less, and more of it right.** Hal never proposes anything inside a
   project's libraries or build output (`node_modules`, `build`, `dist`, `_build/libs` and the like): the
   project is one row, with its libraries part of it. Published papers you kept as reading, and posters or

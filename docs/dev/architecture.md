@@ -1486,7 +1486,9 @@ proposals to sources, and a record the bulk read built through a move and its un
 - Someone else's work is left out before the rules place a document: a published paper (`published_paper`:
   an abstract or an arXiv or DOI line on the first page, before any references heading, with
   `PAPER_SIGNS_MIN` of abstract, identifier, venue, "et al." citations and a references heading, and no
-  submission sign or the person's name), and a poster or report named after another person
+  submission sign or the person's name; in a reading folder, `reading_folder`, a PDF, a file with a title
+  for a name, `paper_title`, or one with any paper sign is enough, unless its name marks the person's notes
+  or the file is named as a strong kind such as a CV), and a poster or report named after another person
   (`someone_elses`: a run of capitalised words not in `TITLE_WORDS`, after a module code or as an author
   line at the start of the text, never the person's own name from `roles.identity`; nothing is taken for
   someone else's when the settings give no name). What a course gave out (`course_material`: a file in a

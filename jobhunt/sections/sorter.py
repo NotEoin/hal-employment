@@ -531,7 +531,8 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
         if why := privacy.held_back({"allowed": False, "rel": f.rel}, text):
             p.leave_out(f"Looks private ({why}), so Hal kept it out.")
             continue
-        if sort_rules.published_paper(text, own):
+        if sort_rules.published_paper(text, own, name=f.path.stem, pdf=suffix == ".pdf",
+                                      reading=rule.doc_type not in rank.STRONG and sort_rules.reading_folder(f.rel)):
             p.leave_out(sort_rules.PAPER_WORDS)
             continue
         if why := sort_rules.someone_elses(f.rel, text, own):

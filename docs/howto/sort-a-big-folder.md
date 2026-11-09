@@ -48,6 +48,8 @@ code.
    or project. It never looks inside a project's libraries or build output (folders such as `node_modules`,
    `build` or `dist`); the line at the bottom of the list counts those files. Hal also leaves out other
    people's work: published papers you kept as reading, and posters or reports named after someone else.
+   A PDF in a folder of reading, such as one named papers, readings, references or literature, counts as
+   a paper unless its name says it is your notes on it.
    What your course gave out, such as a brief, a handbook or a folder of course materials, is proposed as
    lecture material, never as your coursework. A folder of note folders on one subject is one row, and so
    is a folder of practice exercises (such as HackerRank or LeetCode), which Hal never stars. Downloads

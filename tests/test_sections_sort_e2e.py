@@ -33,6 +33,8 @@ from jobhunt.sections import move, pipeline, sort_review, sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 STATES = ("proposed", "left_out", "copy")
+# A paper's first page with too few of a paper's signs, as real PDFs often give: only a reading folder tells.
+BARE = ["Introduction", "We study a made-up question at length. " * 30]
 
 # Where each file of each dump is proposed: (state, section, kind of document), by its name.
 AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("proposed", "cv", "cv"),
@@ -53,6 +55,7 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "Research Methods in Computing Projects.pdf": ("proposed", "lecture", "notes"),
          "CSC3095_Jordan_Pellow_Project_Poster.pdf": ("left_out", "", ""),
          "CLIP-Dissect probing.pdf": ("left_out", "", ""), "CheXpert Plus.pdf": ("left_out", "", ""),
+         "Learning Transferable Harbour Models From Made-up Tide Supervision.pdf": ("left_out", "", ""),
          "known-cyber-attacks": ("proposed", "project", "upload"), "hackerrank": ("proposed", "project", "upload"),
          "Harbour Crane - 4417852": ("left_out", "", ""), "Daily note.md": ("left_out", "", ""),
          "README.md": ("left_out", "", ""), "practical-1": ("proposed", "project", "repo"),
@@ -75,6 +78,8 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Digital edition": ("proposed", "project", "upload"),
           "Brindle 2019 Parish records and the poor.pdf": ("left_out", "", ""),
           "Fenwick 2021 Baptism registers.pdf": ("left_out", "", ""),
+          "Wren Vestry Women and Parish Power.pdf": ("left_out", "", ""),
+          "Week 2 reading notes.md": ("proposed", "lecture", "notes"),
           "Module handbook 2023.md": ("proposed", "lecture", "notes"),
           "Dissertation guidance.md": ("proposed", "lecture", "notes"),
           "Essay brief.md": ("proposed", "lecture", "notes"), "HIS2040_Talia_Wren_Poster.pdf": ("left_out", "", ""),
@@ -88,7 +93,7 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)}}
 # The review's rows for a module's lecture material: one each, with its file count.
 MODULES = {"software": {"CS2041 Databases": 13, "CSC1022 Software Design": 4, "CSC3095 Project": 4},
-           "history": {"HIS2040 Archival Methods": 16, "HIS2051 Early Modern Europe": 4}}
+           "history": {"HIS2040 Archival Methods": 17, "HIS2051 Early Modern Europe": 4}}
 # The showcase guesses: only a project of the person's own, with their commits and a README that says what it is.
 STARRED = {"software": ["tidewatch"], "history": []}
 
@@ -118,6 +123,7 @@ def messy_software_dump(root: Path) -> Path:
     papers = "Uni/BSc Computing/Year 3/Dissertation/papers"
     put(d, f"{papers}/CLIP-Dissect probing.pdf", paper("Probing made-up vision models", "arXiv:2301.01234v2"))
     put(d, f"{papers}/CheXpert Plus.pdf", paper("A made-up chest X-ray dataset", "Journal of Made-up Imaging, Vol. 4"))
+    put(d, f"{papers}/Learning Transferable Harbour Models From Made-up Tide Supervision.pdf", tiny_pdf(BARE))
     notes_folders(d, "Notes/known-cyber-attacks", ("2017 WannaCry", "2014 Heartbleed", "2020 SolarWinds",
                                                    "2021 Log4Shell"))
     for task in ("two-sum", "anagrams"):
@@ -160,6 +166,8 @@ def messy_history_dump(root: Path) -> Path:
         paper("Parish records and the poor", "Journal of Made-up Local History, Vol. 12, No. 3"))
     put(d, f"{module}/Readings/Fenwick 2021 Baptism registers.pdf",
         paper("Baptism registers revisited", "doi:10.5555/jmsh.2021.9"))
+    put(d, f"{module}/Readings/Wren Vestry Women and Parish Power.pdf", tiny_pdf(BARE))
+    put(d, f"{module}/Readings/Week 2 reading notes.md", "# Week 2 reading\n\nMy made-up notes on Wren.\n")
     put(d, "BA History/Course materials/Module handbook 2023.md", "# Module handbook\n\nHow the modules run.\n")
     put(d, "BA History/HIS3001 Dissertation/Dissertation guidance.md", "# Dissertation guidance\n\nMade-up advice.\n")
     put(d, f"{module}/Essays/Essay brief.md", "# Essay brief\n\nWrite 2,000 words on a made-up question.\n")
