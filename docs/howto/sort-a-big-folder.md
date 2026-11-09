@@ -59,6 +59,11 @@ code.
    files it read lately, or a first guess of 20 seconds a file before it has read any. Press **Add them**
    to go on, or **Not now** to change your ticks.
 
+   While Hal reads what you added, the top of the list shows how many files it has read, with **Stop
+   reading**. Stopping keeps the files already read in your record and puts the rest back in the list,
+   ticked, so you can add them later. Each add then shows **Undo this add**: it takes every file that add
+   put in your record back out, with everything Hal found in them, and puts them back in the list.
+
    From a terminal:
 
    ```sh
@@ -108,6 +113,9 @@ How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-fo
 | --- | --- |
 | You cannot find the list Hal sorted | Open **Your record**, **Overview**, and press **Check the list** in the banner at the top. |
 | "Add ... files?" says it takes hours | Press **Not now** and untick what Hal does not need, such as lecture notes for modules you do not want to mention. |
+| You added far more than you meant to | Press **Stop reading** at the top of the list, then **Undo this add**. |
+| "Hal is still reading what you added. Stop reading first, then undo it." | Press **Stop reading**, then **Undo this add**. |
+| "Use Undo the move" when you undo an add | In a move from an older Hal, press **Undo the move** instead: it puts back what your older notes gave too. |
 | There is no **Add everything ticked** | It is in the last step. Press **Done** at the top of the list. |
 | There is no box for a folder | You are using Hal from another computer. Upload a zip of the folder instead. |
 | "Hal is still sorting another folder." | Wait for the first sort to finish, then sort the next folder. |

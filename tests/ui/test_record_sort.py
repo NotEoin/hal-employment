@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import time
 import unittest
 from contextlib import closing
 from pathlib import Path
@@ -24,7 +25,8 @@ from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.evidence import routes
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sort_review, sorts
+from jobhunt.sections import actions as source_actions
+from jobhunt.sections import sort_actions, sort_review, sorts
 from jobhunt.sections import store as sources
 
 NOT_YET = ("/api/v2/home",)
@@ -36,6 +38,7 @@ LONG_REL = ("Volunteering/2023 to 2024 placements at the Fenwick Lantern Museum 
 WIDE_MIN = 1000      # the review's width in the 1400-pixel window, less the menu (252) and the page's margins
 RESIZED = 1000       # the window's width after it is made narrower
 RAIL = 252           # the menu's width beside the page (app.css `.app`)
+POLL_S = 0.1         # how often the held-up read looks for Stop
 MANY = 60            # lecture notes in one made-up module: more than the page adds without asking (50)
 
 
@@ -277,6 +280,54 @@ class SortAFolder(unittest.TestCase):
         p.shows(p.page.get_by_text(re.compile(rf"^Adding {MANY} files to your record")), "the files added")
         self.assertTrue(runner.idle(WAIT_S))
         self.assertEqual(len(self.listed("lecture")), MANY)
+
+    def test_reading_can_be_stopped_and_the_add_undone(self) -> None:
+        read_all = source_actions.read_all
+
+        def read_one_then_wait(ctx, ids, allowed):
+            """Reads the first file, then waits as a slow AI would, until the person stops it."""
+            out = read_all(ctx, ids[:1], allowed)
+            ctx.progress(1, len(ids))
+            ctx.step(f"Reading 2 of {len(ids)}")     # a step tells the page to look again, as each read does
+            deadline = time.monotonic() + WAIT_S
+            while time.monotonic() < deadline:
+                ctx.checkpoint()
+                time.sleep(POLL_S)
+            return out
+
+        self.enterContext(mock.patch.object(sort_actions.actions, "read_all", read_one_then_wait))
+        sort_id = self.sorted_dump()
+        p = self.page()
+        p.go(f"sort-{sort_id}")
+        review = p.page.locator("section.rec-sort")
+        p.shows(review.get_by_text("Ready for you to check"), "the review")
+        self.step(review, 2)
+        review.get_by_role("button", name="Add the ticked CVs and papers").click()
+        adds = review.get_by_role("list", name="What you added")
+        p.shows(adds.get_by_text(re.compile(r"^Reading \d+ files you added: 1 of \d+ read\.")), "the add's progress")
+        added = len(self.listed("cv") + self.listed("official") + self.listed("document"))
+        self.assertGreater(added, 1)
+        adds.get_by_role("button", name="Stop reading").click()
+        p.shows(adds.get_by_text(re.compile(r"^You stopped reading: Added 1 file of \d+ to your record\.$")),
+                "the stopped add")
+        self.assertTrue(runner.idle(WAIT_S))
+        kept = self.listed("cv") + self.listed("official") + self.listed("document")
+        self.assertEqual(len(kept), 1, "the file read stays; those not read yet are taken out")
+        with closing(db.connect()) as con:
+            self.assertEqual(sum(s["proposed"] for s in sorts.counts(con, sort_id)["sections"]
+                                 if s["id"] in ("cv", "official", "document")), added - 1,
+                             "the rest are back in the list")
+        p.page.set_viewport_size({"width": 400, "height": 860})
+        self.assertEqual(p.sideways(), 0)
+        p.page.set_viewport_size({"width": 1400, "height": 900})
+        adds.get_by_role("button", name="Undo this add").click()
+        dialog = p.page.get_by_role("dialog")
+        p.shows(dialog.get_by_role("heading", name="Undo this add?"), "the question first")
+        dialog.get_by_role("button", name="Undo it").click()
+        p.shows(p.page.get_by_text(re.compile(r"^Undone\. 1 file was taken out")), "the add undone")
+        self.assertEqual(self.listed("cv") + self.listed("official") + self.listed("document"), [])
+        adds.wait_for(state="detached")     # an undone add is no longer listed
+        self.clean(p)
 
     def test_an_older_record_is_moved_to_sections_and_one_click_undoes_it(self) -> None:
         from test_sections_move import old_record

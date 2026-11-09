@@ -24,6 +24,11 @@ What changed in each version, in plain words.
   asks in the page and says how long reading them should take on your computer, from the files it read
   lately, or a first guess until it has read some.
 
+- **Stop reading, and undo an add.** While Hal reads files you added from a sorted folder, the list shows
+  how far it is with a **Stop reading** button: the files already read stay in your record and the rest go
+  back in the list. **Undo this add** takes everything one add put in your record back out, with what Hal
+  found in those files, and puts them back in the list.
+
 - **Sort a big folder keeps your reading out of your work.** A PDF in a folder of reading (named papers,
   readings, references or literature) is left out as a published paper, even inside your dissertation
   folder, unless its name says it is your notes on it. A course's downloaded materials folder and a notes

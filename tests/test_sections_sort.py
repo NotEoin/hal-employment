@@ -21,7 +21,7 @@ from test_sections_sorter import AVERY_CV, CERTIFICATE, history_dump, software_d
 from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import pipeline, sorter, sorts
+from jobhunt.sections import actions, pipeline, sort_actions, sorter, sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 WAIT_S = 30
@@ -74,7 +74,7 @@ class Review(unittest.TestCase):
             counted = {s["id"]: s["proposed"] for s in sorts.counts(con, sort_id)["sections"]}
             self.assertEqual((counted["cv"], counted["lecture"], counted["project"]), (2, 3, 1))
             self.assertEqual(sections_of(con), [], "nothing is in the record before the person accepts")
-            self.assertEqual(sorts.accept(con, sort_id, "cv"), {"accepted": 2, "need_card": 0})
+            self.assertEqual(sorts.accept(con, sort_id, "cv")["accepted"], 2)
             add_and_read(con, sort_id)
             self.assertEqual(sections_of(con), [("cv", "cv"), ("cv", "cv")])
             self.assertTrue(con.execute("SELECT 1 FROM profile_evidence WHERE source_id IS NOT NULL").fetchone())
@@ -120,6 +120,55 @@ class Review(unittest.TestCase):
                                                                                     done))
             self.assertEqual(sorts.read_estimate(con), {"seconds": 9.0, "measured": True}, "90 s for 10 files")
 
+    def test_undoing_an_add_removes_its_sources_and_facts_and_proposes_its_rows_again(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            sort_id = sorted_folder(con, software_dump(files))
+            add_id = sorts.accept(con, sort_id, "cv")["add_id"]
+            add_and_read(con, sort_id)
+            self.assertEqual(sections_of(con), [("cv", "cv"), ("cv", "cv")])
+            self.assertEqual([(a["id"], a["added"]) for a in sorts.adds(con, sort_id)], [(add_id, 2)])
+            self.assertEqual(sorts.undo_add(con, sort_id, add_id), {"removed": 2, "back": 2})
+            self.assertEqual(sections_of(con), [], "every source the add made is gone")
+            self.assertFalse(con.execute("SELECT 1 FROM profile_evidence WHERE source_id IS NOT NULL").fetchone(),
+                             "with the facts it gave")
+            cvs = sorts.rows(con, sort_id, section="cv")["rows"]
+            self.assertEqual([(r["state"], r["ticked"]) for r in cvs], [("proposed", True)] * 2)
+            self.assertEqual(sorts.adds(con, sort_id)[0]["state"], "undone")
+            with self.assertRaises(ValueError):
+                sorts.undo_add(con, sort_id, add_id)
+
+    def test_a_stopped_add_keeps_what_it_read_and_proposes_the_rest_again(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            sort_id = sorted_folder(con, software_dump(files))
+            add_id = sorts.accept(con, sort_id, "cv")["add_id"]
+            first, second = sorts.add_accepted(con, sort_id, add_id)
+            pipeline.read(con, first)
+            self.assertEqual(sorts.stop_add(con, add_id), {"kept": 1, "back": 1})
+            self.assertEqual([r[0] for r in con.execute("SELECT id FROM record_sources")], [first],
+                             "the file read stays; the one not read yet is taken out")
+            back = sorts.rows(con, sort_id, section="cv")["rows"]
+            self.assertEqual([(r["state"], r["source_id"]) for r in back], [("proposed", None)])
+            self.assertNotEqual(second, first)
+
+    def test_stop_reading_stops_the_add_action_cleanly(self):
+        read_all = actions.read_all
+
+        def read_one_then_stop(ctx, ids, allowed):
+            out = read_all(ctx, ids[:1], allowed)
+            runner.stop(ctx.action_id)
+            ctx.checkpoint()
+            return out
+
+        with home() as (con, _vault, files), fake_ai(NONE), \
+                mock.patch.object(sort_actions.actions, "read_all", read_one_then_stop):
+            sort_id = sorted_folder(con, software_dump(files))
+            add_id = sorts.accept(con, sort_id, "cv")["add_id"]
+            action_id = sort_actions.queue_accept(sort_id, add_id)
+            self.assertEqual(ended(action_id)["state"], "stopped")
+            self.assertEqual(len(sections_of(con)), 1, "the file read before the stop stays")
+            self.assertEqual(sorts.counts(con, sort_id)["sections"][0]["proposed"], 1, "the other is proposed again")
+            self.assertEqual(sorts.adds(con, sort_id)[0]["state"], "stopped")
+
     def test_a_step_of_several_sections_is_listed_ticked_and_accepted_together(self):
         with home() as (con, _vault, files), fake_ai(NONE):
             sort_id = sorted_folder(con, software_dump(files))
@@ -127,7 +176,7 @@ class Review(unittest.TestCase):
             listed = {r["section"] for r in sorts.rows(con, sort_id, section=papers)["rows"]}
             self.assertEqual(listed, {"cv", "letter"})
             self.assertEqual(sorts.tick(con, sort_id, False, ["letter"]), 1)
-            self.assertEqual(sorts.accept(con, sort_id, ["cv", "letter"]), {"accepted": 2, "need_card": 0})
+            self.assertEqual(sorts.accept(con, sort_id, ["cv", "letter"])["accepted"], 2)
             with self.assertRaises(LookupError):
                 sorts.rows(con, sort_id, section="cv,nowhere")
 
@@ -214,7 +263,7 @@ class Review(unittest.TestCase):
             page = sorts.rows(con, sort_id, section="document", offset=sorts.PAGE)
             self.assertEqual((len(page["rows"]), page["total"]), (sorts.PAGE, BIG // 2))
             self.assertEqual(sorts.tick(con, sort_id, False, "lecture"), BIG // 2)
-            self.assertEqual(sorts.accept(con, sort_id), {"accepted": BIG // 2, "need_card": 0})
+            self.assertEqual(sorts.accept(con, sort_id)["accepted"], BIG // 2)
 
 
 class Routes(unittest.TestCase):

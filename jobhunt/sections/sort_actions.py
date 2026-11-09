@@ -5,7 +5,8 @@ Sorting walks thousands of files, so it runs in the background (priority 2), one
 (`exclusive="kind"`), and is resumable: run again it proposes afresh and keeps what was accepted. Accepting
 is what the person waits for, so it runs at priority 1; its sources are read as an upload would be
 (`actions.read_all`), then the project cards they gave that were guessed showcase pieces are starred, and the
-proposals still waiting for a card are matched again, as an accepted CV may have given their courses.
+proposals still waiting for a card are matched again, as an accepted CV may have given their courses. It adds
+one add (`add_id`, from `sorts.accept`); stopped, it keeps what it read and puts the rest back (`sorts.stop_add`).
 For a move of an older record (`sections.move`), the cards' states are noted before the reads and the older
 notes' evidence is set aside after them. Both publish a `sort` event with the sort's id, which the review
 table follows.
@@ -68,16 +69,23 @@ def sort_folder(ctx, sort_id: int) -> dict:
 @runner.action(ACCEPT, area="documents", label="Adding what you accepted to your record",
                why="You accepted where Hal proposed your files go", priority=1, exclusive="none", resumable=True,
                example=_accept_example)
-def accept_sort(ctx, sort_id: int) -> dict:
-    """Makes the accepted proposals sources of their sections and reads them."""
+def accept_sort(ctx, sort_id: int, add_id: int | None = None) -> dict:
+    """Makes the accepted proposals (of one add) sources of their sections and reads them."""
     ctx.step("Adding what you accepted")
     moving = sorts.row_of(ctx.con, sort_id)["kind"] == "move"
     if moving:
         from jobhunt.sections import move
 
         states = move.before_accept(ctx.con, int(sort_id))
-    ids = sorts.add_accepted(ctx.con, int(sort_id))
-    out = actions.read_all(ctx, ids, set())
+    try:
+        ids = sorts.add_accepted(ctx.con, int(sort_id), add_id, checkpoint=ctx.checkpoint)
+        out = actions.read_all(ctx, ids, set())
+    except runner.Stopped:
+        if add_id is not None:
+            sorts.stop_add(ctx.con, int(add_id))
+        events.publish("sort", sort_id=int(sort_id))
+        events.publish("profile", sort_id=int(sort_id))
+        raise
     out["starred"] = len(sorts.star_projects(ctx.con, int(sort_id)))
     out["matched"] = sorts.rematch(ctx.con, int(sort_id))
     if moving:
@@ -129,11 +137,22 @@ def queue_inbox() -> int | None:
         con.close()
 
 
-def queue_accept(sort_id: int, *, session_id: str | None = None, remote: bool = False) -> str:
-    """Starts making a sort's accepted proposals sources; the action's id. Its subject names the sort
-    (`subject`), so a move is not finished or undone while it adds."""
-    return runner.start(ACCEPT, subject=subject(sort_id), params={"sort_id": int(sort_id)}, session_id=session_id,
-                        remote=remote, why="You accepted where Hal proposed your files go")
+def queue_accept(sort_id: int, add_id: int | None = None, *, session_id: str | None = None,
+                 remote: bool = False) -> str:
+    """Starts making a sort's accepted proposals (of one add) sources; the action's id, kept on the add. Its subject
+    names the sort (`subject`), so a move is not finished or undone while it adds."""
+    params = {"sort_id": int(sort_id)} if add_id is None else {"sort_id": int(sort_id), "add_id": int(add_id)}
+    action_id = runner.start(ACCEPT, subject=subject(sort_id), params=params, session_id=session_id, remote=remote,
+                             why="You accepted where Hal proposed your files go")
+    if add_id is not None:
+        from jobhunt import db
+
+        con = db.connect()
+        try:
+            sorts.set_add_action(con, int(add_id), action_id)
+        finally:
+            con.close()
+    return action_id
 
 
 def subject(sort_id: int) -> str:

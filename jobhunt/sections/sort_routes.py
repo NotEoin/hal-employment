@@ -50,8 +50,9 @@ Routes:
   [ROW or GROUP], "total", "cards", "courses": [COURSE], "notes": [{"id", "words"}]}, the notes said once
   for the whole sort (`sort_review.notes`: `no_history`, `github`), and "read": {"seconds", "measured"}, how
   long one file takes to read on this computer (`sorts.read_estimate`), for the page's warning before a big
-  add. Proposed lecture material and coursework come one GROUP a module (`sort_review.rows`) unless
-  `flat=1`; `group` lists one group's own rows.
+  add, and "adds": [ADD] (`sorts.adds`): {"id", "files", "added", "state" reading | done | stopped | undone,
+  "action_id", "created", "done", "total"}. Proposed lecture material and coursework come one GROUP a module
+  (`sort_review.rows`) unless `flat=1`; `group` lists one group's own rows.
 - `POST /api/v2/record/sort/{id}/groups` {"group", "ticked", "section", "target_id"}: changes every file of a
   group at once; {"changed"}.
 - `POST /api/v2/record/sort/{id}/courses` {"key", "qualification", "subject", "institution"}: makes the
@@ -62,8 +63,11 @@ Routes:
   (`sorts.keep_copy`); the ROW now kept. 400 when it is no copy or the kept one is added already.
 - `POST /api/v2/record/sort/{id}/tick` {"ticked", "section"}: ticks or unticks every proposal (of one
   section, or a list of them); {"changed"}.
-- `POST /api/v2/record/sort/{id}/accept` {"section"}: accepts the ticked proposals (of one section, or a list);
-  {"accepted", "need_card", "action_id"}.
+- `POST /api/v2/record/sort/{id}/accept` {"section"}: accepts the ticked proposals (of one section, or a list)
+  as one add; {"accepted", "need_card", "add_id", "action_id"}. `POST /api/v2/actions/{action_id}/stop` stops
+  its reading: what was read stays, the rest is proposed again (`sorts.stop_add`).
+- `POST /api/v2/record/sort/{id}/adds/{add_id}/undo`: removes every source the add made and proposes its rows
+  again (`sorts.undo_add`); {"removed", "back"}. 400 while it reads, once undone, or in a move.
 - `POST /api/v2/record/sort/{id}/again`: proposes again, keeping what was accepted; {"action_id"}.
 - `DELETE /api/v2/record/sort/{id}`: forgets the sort and the files Hal kept for it; what it added stays. A
   move that can still be undone is refused (400).
@@ -209,7 +213,8 @@ def one(req: Request) -> dict:
         raise BadRequest(str(e)) from e
     return {**sorts.shape(req.con, req.params["sort_id"]), **page, "cards": sorts.cards(req.con),
             "courses": sort_review.courses_found(req.con, req.params["sort_id"]),
-            "notes": sort_review.notes(req.con, req.params["sort_id"]), "read": sorts.read_estimate(req.con)}
+            "notes": sort_review.notes(req.con, req.params["sort_id"]), "read": sorts.read_estimate(req.con),
+            "adds": sorts.adds(req.con, req.params["sort_id"])}
 
 
 @route("POST", PREFIX + "/{sort_id}/courses", auth="session_or_local")
@@ -281,8 +286,20 @@ def accept(req: Request) -> dict:
         raise BadRequest(str(e)) from e
     sort_id = int(req.params["sort_id"])
     events.publish("sort", sort_id=sort_id)
-    return {**out, "action_id": sort_actions.queue_accept(sort_id, session_id=_session(req), remote=req.remote)
-            if out["accepted"] else None}
+    return {**out, "action_id": sort_actions.queue_accept(sort_id, out["add_id"], session_id=_session(req),
+                                                          remote=req.remote) if out["accepted"] else None}
+
+
+@route("POST", PREFIX + "/{sort_id}/adds/{add_id}/undo", auth="session_or_local")
+def undo_add(req: Request) -> dict:
+    """Undoes one add: the sources it made are removed and its rows proposed again."""
+    try:
+        out = sorts.undo_add(req.con, req.params["sort_id"], req.params["add_id"])
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    events.publish("sort", sort_id=int(req.params["sort_id"]))
+    events.publish("profile", sort_id=int(req.params["sort_id"]))
+    return out
 
 
 @route("POST", PREFIX + "/{sort_id}/again", auth="session_or_local")

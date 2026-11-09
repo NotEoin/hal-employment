@@ -100,6 +100,11 @@
 .rec-step-next { justify-content: flex-end; }
 .rec-step-next .btn { min-height: 44px; }
 .rec-sort-banner { margin-bottom: 14px; }
+/* Each add from the list: reading with its bar and Stop, or done with Undo */
+.rec-adds { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rec-add { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.rec-add.row { flex-direction: row; align-items: center; }
+.rec-add .btn { min-height: 44px; }
 .rec-sort-banner .btn { min-height: 44px; }
 .rec-sort-table th { text-align: left; font-weight: 700; padding: 6px; border-bottom: 1px solid var(--line); }
 .rec-sort-table td { vertical-align: top; padding: 6px; border-bottom: 1px solid var(--line); }

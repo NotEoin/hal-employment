@@ -1550,16 +1550,28 @@ proposals to sources, and a record the bulk read built through a move and its un
   a job by its employer in the folders or the text. `needs_card(section, target_id)` is true for a
   coursework, lecture or job_doc proposal with no card yet.
 
-The review (`sections/sorts.py`, migration 0031): `record_sorts` (one per sort: `kind` folder, upload, inbox
-or move; `roots`, `label`, `state` new | sorting | ready | failed | undone, `skipped`) and `record_sort_rows`
-(one per proposal, `state` proposed | left_out | copy | accepted | added | failed, `ticked`, `by` rules | ai |
-you, `source_id` once added).
+The review (`sections/sorts.py`, migrations 0031 and 0032): `record_sorts` (one per sort: `kind` folder,
+upload, inbox or move; `roots`, `label`, `state` new | sorting | ready | failed | undone, `skipped`),
+`record_sort_rows` (one per proposal, `state` proposed | left_out | copy | accepted | added | failed,
+`ticked`, `by` rules | ai | you, `source_id` once added, `add_id` the add that took it) and
+`record_sort_adds` (one per press of an add button: `action_id` of the `record.sort_accept` reading it,
+`files`, `undone`; its reading, done or stopped state is the action's, `sorts.adds`).
 
 - `create`, `run(con, id)` (calls `propose` for each root and `save`s, keeping rows already accepted or
   added), `counts` (per section: proposed, ticked, needing a card; and each other state), `rows(con, id,
   section=, state=, offset=, limit=)` (`PAGE` 50), `change_row` (section, kind, card, tick, star; checked
   with `registry.doc_kind` and `store.target_card`; marks the row `by = "you"`), `tick`, and `accept(con, id,
-  section=)`, which only marks ticked rows `accepted`, never one that still needs a card.
+  section=)`, which only marks ticked rows `accepted`, never one that still needs a card, as one add
+  (`add_id`).
+- Stop and undo: **Stop reading** is the runner's own stop (`POST /api/v2/actions/{id}/stop`). `add_accepted`
+  calls `ctx.checkpoint` before each row and `read_all` checks at each step, so the action raises
+  `runner.Stopped`; `accept_sort` catches it, runs `stop_add` (sources of the add still `new` or `reading`
+  are removed with `pipeline.remove`; their rows, and rows not yet made sources, are proposed again;
+  sources read stay) and re-raises, so the action ends `stopped`. `undo_add` (`POST
+  .../sort/{id}/adds/{add_id}/undo`) removes every source the add made (`pipeline.remove`, which takes its
+  evidence, note and files and hides cards no source names any more), proposes all its rows again, ticked,
+  and marks it `undone`. It refuses while the add reads, and in a move, whose own undo restores the older
+  evidence.
 - `add_accepted` makes each accepted row a source with `pipeline.add_uploads` (a file, or a project folder's
   files under its name, up to `FOLDER_BYTES_MAX`) or `pipeline.add_link` (a code project on this computer);
   a file in the record already is `left_out` linked to that source, a failure keeps its reason.
@@ -1626,8 +1638,10 @@ you, `source_id` once added).
   dialog (`ui/dialog.js` `ask`) with the reading time: the review's `read` is `sorts.read_estimate`, the
   seconds per file of the latest `READ_SAMPLE` (10) finished `record.sources` and `record.sort_accept`
   actions (their run time over `done_n`), else `READ_S_DEFAULT` (20 s, a cautious first guess) with
-  `measured` false. The setup guide's record step
-  (`setup/steps/record.js`) offers `SortStart` too.
+  `measured` false. The adds are listed above the steps: a reading one shows the action's `done_n` of
+  `done_total` (asked again every `PROGRESS_POLL_MS`, 2 s, since `ctx.progress` sends no event) with **Stop
+  reading**, and a finished or stopped one **Undo this add** behind the confirm dialog. The setup guide's
+  record step (`setup/steps/record.js`) offers `SortStart` too.
 
 Moving an older record (`sections/move.py`): a record the bulk read built has evidence with `source_rel` a
 note under `Sources/` and no `source_id`. `can_move` is true while any is left; `GET /api/v2/record/sort`

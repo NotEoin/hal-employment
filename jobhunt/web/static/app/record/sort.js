@@ -12,6 +12,9 @@
    Lecture material starts unticked, and its step says once why. Any add of more than `CONFIRM_OVER` files
    asks first in an in-page dialog (`ask`), with the count and the reading time from the seconds a file
    that the review reports for this computer (`read`, jobhunt/sections/sorts.py `read_estimate`).
+   Each add is listed above the steps (`Adds`): while it reads, its progress and "Stop reading" (the action's
+   stop: what was read stays, the rest goes back in the list); after, "Undo this add", which takes out every
+   file it added with what Hal found in them and puts its rows back in the list.
 
    The review table shows the proposals, a page of rows at once, with how many each step has, so a dump of
    thousands of files stays quick. Each row can go to another section, kind or card, be unticked, or (a
@@ -41,6 +44,7 @@ import { useApi, toast, invalidate } from "../core/store.js";
 import { plural } from "../core/format.js";
 import { isRemote } from "../core/remote.js";
 import { Bar, Note } from "../ui/controls.js";
+import { etaWords } from "./add.js";
 import { ask } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
 import { useSections } from "./sections.js";
@@ -54,6 +58,7 @@ const STATE_WORDS = { new: "Waiting to start", sorting: "Sorting", ready: "Ready
 const PATH_SHOWN = 90;      // characters of a path shown in full; a longer one keeps its start and its end
 const CONFIRM_OVER = 50;    // an add of more files than this asks first: a few minutes' reading at most
 const MINUTE_S = 60, HOUR_S = 3600;
+const PROGRESS_POLL_MS = 2000;   // how often a reading add's bar asks how far Hal is
 const SORTING = new Set(["new", "sorting"]);
 const OTHER_VIEWS = [["left_out", "Left out"], ["copy", "Copies"], ["added", "Added"], ["failed", "Could not be added"]];
 const reloadOn = id => [ev => (ev.type === "action" && KINDS.has(ev.kind)) || (ev.type === "sort" && (id == null || ev.sort_id === id))
@@ -218,12 +223,55 @@ async function sureToAdd(n, read) {
     + (read.measured ? "from the files Hal read lately" : "a first guess, until Hal has read some files") + "), so these take "
     + durationWords(n * per) + "." : "";
   return ask({ title: "Add " + plural(n, "file") + "?", icon: "clock", yes: "Add them", no: "Not now",
-    text: "Hal reads each file you add with its AI. " + how + " Fewer files are quicker: untick what Hal does not need." });
+    text: "Hal reads each file you add with its AI. " + how + " Fewer files are quicker: untick what Hal does not need. You can stop reading at any time." });
 }
 
 /** How many ticked files the sections given hold (all of them for none). */
 function tickedIn(sectionList, data) {
   return data.counts.sections.filter(s => !sectionList || sectionList.includes(s.id)).reduce((n, s) => n + s.ticked, 0);
+}
+
+/** One add while Hal reads it: how far it is, with "Stop reading". */
+function ReadingAdd({ add }) {
+  const path = "/actions/" + encodeURIComponent(add.action_id);
+  const { data, reload } = useApi(add.action_id ? path : null, { on: [ev => (ev.type === "step" && ev.action_id === add.action_id)
+    || (ev.type === "action" && ev.id === add.action_id)] });
+  // the count of files read moves without an event of its own (`ctx.progress`), so the bar asks again now and then
+  useEffect(() => {
+    if (!add.action_id) return undefined;
+    const t = setInterval(() => { reload().catch(() => {}); }, PROGRESS_POLL_MS);
+    return () => clearInterval(t);
+  }, [add.action_id]);
+  const done = data ? data.done_n || 0 : add.done;
+  const total = (data && data.done_total) || add.total || add.files;
+  const stop = () => act(() => post(path + "/stop"),
+    "Hal stopped reading. What it read stays in your record; the rest is back in the list.");
+  return html`<li class="rec-add" data-add=${add.id}>
+    <p class="rec-line grow"><b>Reading ${plural(add.files, "file")} you added: ${done} of ${total} read.</b>
+      ${data && data.eta_s != null ? " " + etaWords(data.eta_s) + "." : ""}</p>
+    <${Bar} pct=${total ? (100 * done) / total : 0} label=${"Reading the files you added"} />
+    <div><button type="button" class="btn small danger" disabled=${!add.action_id} onClick=${stop}>
+      <${Icon} n="stop" c="s" />Stop reading</button></div></li>`;
+}
+
+/** The adds of a sort: those reading, with Stop, and those done or stopped, with "Undo this add". */
+function Adds({ id, data }) {
+  const shown = (data.adds || []).filter(a => a.state !== "undone");
+  if (!shown.length) return null;
+  const undo = async add => {
+    const yes = await ask({ title: "Undo this add?", icon: "undo", yes: "Undo it", no: "Keep it", danger: true,
+      text: "Hal takes the " + plural(add.added, "file") + " this add put in your record back out, with everything it found in "
+        + "them, and puts them back in the list, ticked." });
+    if (yes) await act(() => post(SORT + "/" + id + "/adds/" + add.id + "/undo"), out =>
+      "Undone. " + plural(out.removed, "file was", "files were") + " taken out of your record and put back in the list.");
+  };
+  return html`<ul class="rec-adds" aria-label="What you added">${shown.map(a => a.state === "reading"
+    ? html`<${ReadingAdd} key=${a.id} add=${a} />`
+    : html`<li class="rec-add row wrap" key=${a.id} data-add=${a.id}>
+        <p class="rec-line grow">${a.state === "stopped" ? "You stopped reading: " : ""}Added ${plural(a.added, "file")}${
+          a.added !== a.files ? " of " + a.files : ""} to your record.</p>
+        ${data.kind !== "move" && a.added > 0 && html`<button type="button" class="btn small" onClick=${() => undo(a)}>
+          <${Icon} n="undo" c="s" />Undo this add</button>`}</li>`)}</ul>`;
 }
 
 /** How much a step holds: the courses found, or the proposals in its sections. */
@@ -291,6 +339,7 @@ export function SortReview({ id }) {
     <p class="small sub rec-line">${STATE_WORDS[data.state] || data.state}. Nothing goes into your record until you add it.
       ${data.error && " " + data.error}</p>
     ${running && html`<${Bar} pct=${0} label="Sorting" />`}
+    <${Adds} id=${id} data=${data} />
     ${!running && html`<${StepList} step=${step == null ? LAST : step} data=${data} onStep=${goStep} />
     <div class="rec-step-box stack s" data-step=${current.id}>
       <h3 class="h3">Step ${(step == null ? LAST : step) + 1}: ${current.words}</h3>

@@ -273,7 +273,8 @@ courses, CVs and official papers, coursework, lecture material, projects, and do
 goes, what it is or which course or job it is for, or untick it, then press **Add the ticked ...** in each
 step, or **Add everything ticked** in the last. Lecture notes start unticked, as they only teach Hal what you
 studied and take a long time to read. Before adding more than 50 files, Hal asks and says how long reading
-them should take. Each file you add is
+them should take. While Hal reads, **Stop reading** keeps what it has read and puts the rest back in the
+list, and **Undo this add** takes everything one add put in your record back out. Each file you add is
 read by that part of your record, as if you had added it there yourself.
 
 Hal leaves out what it is not sure about, with the reason: pictures and recordings, code outside a project,

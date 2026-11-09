@@ -21,6 +21,11 @@ Design decisions, each with its reason:
   held 6,808 lecture files of 7,032, hours of AI reading added by one press (2026-11-09).
 - The page warns before adding many files with an estimate of the reading time (`read_estimate`): the
   measured seconds per file of the latest reads on this computer, else `READ_S_DEFAULT`.
+- Each press of an add button is an add (`record_sort_adds`, migration 0032), named on the rows it took
+  (`add_id`), so its reading can be stopped (`stop_add`: the files not read yet are taken out again and their
+  rows proposed) and the whole add undone (`undo_add`: every source it made removed, with its facts and
+  notes, and its rows proposed again). A graduate pressed "Add everything ticked" by mistake and had no way
+  to stop hours of reading (2026-11-09).
 - The review goes through the sort in steps, each of one or more sections (CVs and papers together), so
   `rows`, `tick` and `accept` take a section, a comma-separated list of them or a list (`section_filter`).
 """
@@ -54,6 +59,8 @@ INSERT_CHUNK = 500         # rows written per statement batch, so a big sort com
 FOLDER_BYTES_MAX = UPLOAD_MAX_BODY
 CHANGEABLE = {"section", "doc_kind", "target_id", "ticked", "star"}
 UNTICKED = ("lecture",)    # sections whose proposals start unticked: the person ticks the modules they want
+UNREAD = ("new", "reading")  # source states of a file not read yet: a stopped add takes it out again
+ACTIVE_ACTIONS = ("queued", "running", "waiting_for_you")    # `core.runner.ACTIVE`
 READ_KINDS = ("record.sources", "record.sort_accept")   # the actions that read sources, timed for the estimate
 READ_SAMPLE = 10           # the latest reads averaged: recent enough to follow a change of AI or computer
 # Seconds to read one file when this computer has read none yet: a cautious first guess for an AI on a home
@@ -409,8 +416,9 @@ def tick(con: sqlite3.Connection, sort_id, ticked: bool, section=None) -> int:
 
 
 def accept(con: sqlite3.Connection, sort_id, section=None) -> dict:
-    """Marks the ticked proposals (of the sections given, `section_ids`) accepted, all but those still needing a card;
-    returns {"accepted": n, "need_card": n}. The `record.sort_accept` action makes them sources."""
+    """Marks the ticked proposals (of the sections given, `section_ids`) accepted, all but those still needing a card,
+    as one add; returns {"accepted": n, "need_card": n, "add_id": the add, or None when nothing was accepted}. The
+    `record.sort_accept` action makes them sources."""
     s = row_of(con, sort_id)
     if s["state"] != "ready":
         raise ValueError("Wait until Hal has finished sorting, then accept." if s["state"] in ("new", "sorting")
@@ -425,11 +433,113 @@ def accept(con: sqlite3.Connection, sort_id, section=None) -> dict:
             waiting += 1
         else:
             ready.append((r["id"],))
-    if ready:
-        pipeline.ensure_record()
+    if not ready:
+        return {"accepted": 0, "need_card": waiting, "add_id": None}
+    pipeline.ensure_record()
     with con:
-        con.executemany("UPDATE record_sort_rows SET state = 'accepted' WHERE id = ?", ready)
-    return {"accepted": len(ready), "need_card": waiting}
+        add_id = con.execute("INSERT INTO record_sort_adds (sort_id, files, created) VALUES (?, ?, ?)",
+                             (s["id"], len(ready), db.now())).lastrowid
+        con.executemany("UPDATE record_sort_rows SET state = 'accepted', add_id = ? WHERE id = ?",
+                        [(add_id, row_id) for (row_id,) in ready])
+    return {"accepted": len(ready), "need_card": waiting, "add_id": add_id}
+
+
+def set_add_action(con: sqlite3.Connection, add_id: int, action_id: str) -> None:
+    """Names the action reading an add; commits."""
+    with con:
+        con.execute("UPDATE record_sort_adds SET action_id = ? WHERE id = ?", (action_id, int(add_id)))
+
+
+def _add_state(r: sqlite3.Row) -> str:
+    """An add's state from its action's: reading, done or stopped (an action that failed or was cut short by a
+    restart stopped too), or undone."""
+    if r["undone"]:
+        return "undone"
+    if r["action_state"] in ACTIVE_ACTIONS or r["action_state"] is None:
+        return "reading"
+    return "done" if r["action_state"] == "done" else "stopped"
+
+
+def adds(con: sqlite3.Connection, sort_id) -> list[dict]:
+    """A sort's adds, newest first: {"id", "files", "added", "state", "action_id", "created", "done", "total"},
+    with `added` the sources it made that are still there, and the files read so far of the action's total."""
+    s = row_of(con, sort_id)
+    found = con.execute("""SELECT a.*, x.state AS action_state, x.done_n, x.done_total,
+                           (SELECT count(*) FROM record_sort_rows r WHERE r.add_id = a.id AND r.state = 'added'
+                            AND r.source_id IS NOT NULL) AS added
+                           FROM record_sort_adds a LEFT JOIN actions x ON x.id = a.action_id
+                           WHERE a.sort_id = ? ORDER BY a.id DESC""", (s["id"],)).fetchall()
+    return [{"id": r["id"], "files": r["files"], "added": r["added"], "state": _add_state(r),
+             "action_id": r["action_id"], "created": r["created"], "done": r["done_n"] or 0,
+             "total": r["done_total"] or r["files"]} for r in found]
+
+
+def _add_of(con: sqlite3.Connection, sort_id, add_id) -> sqlite3.Row:
+    """One add of a sort; LookupError when the sort has no such add."""
+    s = row_of(con, sort_id)
+    try:
+        key = int(add_id)
+    except (TypeError, ValueError):
+        raise LookupError("That add is not in this sort.") from None
+    found = con.execute("SELECT * FROM record_sort_adds WHERE id = ? AND sort_id = ?", (key, s["id"])).fetchone()
+    if found is None:
+        raise LookupError("That add is not in this sort.")
+    return found
+
+
+def _propose_again(con: sqlite3.Connection, row_ids: list[int], why: str) -> None:
+    """Puts rows back as proposals, ticked, with no source or add; commits."""
+    with con:
+        con.executemany("UPDATE record_sort_rows SET state = 'proposed', ticked = 1, source_id = NULL, add_id = NULL, "
+                        "why = ? WHERE id = ?", [(why, row_id) for row_id in row_ids])
+
+
+def stop_add(con: sqlite3.Connection, add_id: int) -> dict:
+    """What a stopped add leaves: the sources it made that were read stay; those not read yet are taken out
+    (`pipeline.remove`) and their rows, with the rows not made sources yet, are proposed again. Returns
+    {"kept": n, "back": n}."""
+    rows = con.execute("SELECT r.id, r.state, r.source_id, x.state AS source_state FROM record_sort_rows r "
+                       "LEFT JOIN record_sources x ON x.id = r.source_id WHERE r.add_id = ?", (int(add_id),)).fetchall()
+    back, kept = [], 0
+    for r in rows:
+        if r["state"] == "accepted":
+            back.append(r["id"])
+        elif r["state"] == "added" and r["source_state"] in UNREAD:
+            pipeline.remove(con, r["source_id"])
+            back.append(r["id"])
+        elif r["state"] == "added":
+            kept += 1
+    _propose_again(con, back, "Not read yet: you stopped reading. Add it again to read it.")
+    return {"kept": kept, "back": len(back)}
+
+
+def undo_add(con: sqlite3.Connection, sort_id, add_id) -> dict:
+    """Undoes one add: every source it made is removed with its facts and notes (`pipeline.remove`), and every
+    row it took is proposed again. Returns {"removed": sources, "back": rows}.
+
+    ValueError while the add is still reading, for an add already undone, or in a move (whose own undo puts the
+    older notes back too); LookupError for an add not in the sort."""
+    a = _add_of(con, sort_id, add_id)
+    if row_of(con, sort_id)["kind"] == "move":
+        raise ValueError("Use Undo the move: it puts back what your older notes gave too.")
+    if a["undone"]:
+        raise ValueError("That add is undone already.")
+    if a["action_id"] and con.execute("SELECT 1 FROM actions WHERE id = ? AND state IN (?, ?, ?)",
+                                      (a["action_id"], *ACTIVE_ACTIONS)).fetchone():
+        raise ValueError("Hal is still reading what you added. Stop reading first, then undo it.")
+    removed = 0
+    rows = con.execute("SELECT id, state, source_id FROM record_sort_rows WHERE add_id = ?", (a["id"],)).fetchall()
+    for r in rows:
+        if r["state"] == "added" and r["source_id"] is not None:
+            try:
+                pipeline.remove(con, r["source_id"])
+                removed += 1
+            except LookupError:     # the person removed it from its section already
+                pass
+    _propose_again(con, [r["id"] for r in rows], "Back from an add you undid.")
+    with con:
+        con.execute("UPDATE record_sort_adds SET undone = 1 WHERE id = ?", (a["id"],))
+    return {"removed": removed, "back": len(rows)}
 
 
 def _incoming(r: sqlite3.Row) -> list[pipeline.Incoming]:
@@ -450,13 +560,19 @@ def _make_source(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
     return pipeline.add_uploads(con, r["section"], _incoming(r), doc_kind=r["doc_kind"], target_id=r["target_id"])
 
 
-def add_accepted(con: sqlite3.Connection, sort_id: int) -> list[int]:
-    """Makes each accepted row of a sort a source of its section, with its kind and card; returns the ids of
-    the new sources, to be read. A row that cannot be added is `failed` with the reason; one whose file is in
-    the record already is left out, linked to that source."""
+def add_accepted(con: sqlite3.Connection, sort_id: int, add_id: int | None = None, checkpoint=None) -> list[int]:
+    """Makes each accepted row of a sort (of one add when given) a source of its section, with its kind and card;
+    returns the ids of the new sources, to be read. A row that cannot be added is `failed` with the reason; one
+    whose file is in the record already is left out, linked to that source. `checkpoint()` runs before each row,
+    so a stop is seen while thousands of files are copied."""
     new = []
-    for r in con.execute("SELECT * FROM record_sort_rows WHERE sort_id = ? AND state = 'accepted' ORDER BY id",
-                         (sort_id,)).fetchall():
+    sql, args = "SELECT * FROM record_sort_rows WHERE sort_id = ? AND state = 'accepted'", [sort_id]
+    if add_id is not None:
+        sql += " AND add_id = ?"
+        args.append(int(add_id))
+    for r in con.execute(sql + " ORDER BY id", args).fetchall():
+        if checkpoint is not None:
+            checkpoint()
         try:
             out = _make_source(con, r)
         except (OSError, ValueError, LookupError) as e:
