@@ -18,7 +18,8 @@ What changed in each version, in plain words.
 
 - **Jobs only an older CV lists come last.** A job that only an older CV gives, with nothing on your
   current CV or in your documents, is now told only when a letter has room after your other work, and
-  then only as the CV gives it: the title, employer, dates and duties.
+  then only as the CV gives it: the title, employer, dates and duties. If you put it in your showcase, it
+  leads with the rest of your showcase, still told only as the CV gives it.
 
 - **Tested for every kind of graduate.** Whole application packs are now tested on two made-up records
   built through Your record, one for a software graduate and one for a history graduate, each within 30

@@ -1422,9 +1422,10 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   older CVs (`cvs.older`, or `profile.cvs.older_sources`), with no current CV and no document behind it.
   `cards()` marks it `older_cv_job` and gives it only its plain facts (`plain_job_facts`: title, employer,
   dates, duties) as its summary and quotes. `plan.Story.older_cv` tells its story from those facts alone,
-  never the plan's quotes, and its block says to add nothing. `plan.older_last` puts it after every other
-  project and job, starred or not, in `rank.order`, `plan.letter_stories` and `plan.fitting`, so it is told
-  only when a draft has room after the work with current evidence.
+  never the plan's quotes, and its block says to add nothing. Unless it is starred, `plan.older_last` puts it
+  after every other project and job in `rank.order`, `plan.letter_stories` and `plan.fitting`, so it is told
+  only when a draft has room after the work with current evidence. A starred one leads with the other
+  starred work (`plan.starred_first`), still from its plain facts alone.
 - Stories from the sections: `profile.store.evidence_of` gives each piece of evidence its source's `section`
   and `doc_kind`. A project card with evidence from `profile.writing.OWN_SECTIONS` (project, coursework) is
   `sectioned`: its `cards()` quotes are those sources' own quotes (`_section_quotes`; a showcase piece adds

@@ -87,7 +87,8 @@ Design decisions, each with its reason:
 - A job only older CVs give (`Story.older_cv`, `profile.writing.older_cv_job`) is told after every project and
   job with current evidence (`older_last`), so only when the draft has room after them, and from its plain
   facts alone (title, employer, dates, duties), its story saying to add nothing: such a job was told as a full
-  story beside the person's current work (2026-11-09).
+  story beside the person's current work (2026-11-09). A starred one leads with the other starred work, as
+  the person showcased it on purpose, and is still told from its plain facts alone (2026-11-09).
 - Every starred card is a story (`with_showcase`), built from the card's own facts when the plan picked
   nothing of it: a pack whose plan picked nothing was drafted whole and told none of the person's starred
   projects, coursework or jobs (2026-11-09).
@@ -519,10 +520,15 @@ def starred_first(found: list[Story]) -> list[Story]:
     return [s for s in found if lead(s)] + [s for s in found if not lead(s)]
 
 
+def _older_unstarred(s: Story) -> bool:
+    return s.older_cv and not (s.card is not None and s.card.get("star"))
+
+
 def older_last(found: list[Story]) -> list[Story]:
-    """`found` with the stories of jobs only older CVs give (`Story.older_cv`) after every other, each part in its
-    order: work with current evidence is told first, and an older CV's job only when there is room after it."""
-    return [s for s in found if not s.older_cv] + [s for s in found if s.older_cv]
+    """`found` with the stories of unstarred jobs only older CVs give (`Story.older_cv`) after every other, each
+    part in its order: work with current evidence is told first, and such a job only when there is room after it.
+    A starred one keeps its place with the other starred work, as the person chose it."""
+    return [s for s in found if not _older_unstarred(s)] + [s for s in found if _older_unstarred(s)]
 
 
 def card_story(card: dict) -> Story:
@@ -547,7 +553,8 @@ def fitting(found: list[Story], cards: list[dict], wanted: str) -> list[Story]:
     cards = story_cards(cards)
     fits = sorted(((relevance(c, wanted), k) for k, c in enumerate(cards)
                    if c.get("name") and c["name"] not in names and (c.get("quotes") or c.get("summary"))),
-                  key=lambda r: (bool(cards[r[1]].get("cv_only") or cards[r[1]].get("older_cv_job")), -r[0],
+                  key=lambda r: (bool(cards[r[1]].get("cv_only") or (cards[r[1]].get("older_cv_job")
+                                                                     and not cards[r[1]].get("star"))), -r[0],
                                  cards[r[1]].get("tier") != tiers.CORE, r[1]))
     return [card_story(cards[k]) for r, k in fits if r >= RELEVANT_MIN]
 
@@ -555,8 +562,8 @@ def fitting(found: list[Story], cards: list[dict], wanted: str) -> list[Story]:
 def letter_stories(found: list[Story], cards: list[dict], wanted: str, n: int = LETTER_STORIES) -> list[Story]:
     """The `n` stories a letter tells (see the module notes): the plan's project and job stories, then the cards
     the job's requirements (`wanted`) fit best that no story tells, then, only below `MIN_PROJECTS` of those,
-    modules and other lines in the plan's order; a job only older CVs give comes after every other project and
-    job (`older_last`)."""
+    modules and other lines in the plan's order; an unstarred job only older CVs give comes after every other
+    project and job (`older_last`)."""
     found = offered(found, cards)
     named = {s.name for s in found}
     found = starred_first([*found, *(card_story(c) for c in cards

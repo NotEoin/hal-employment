@@ -225,7 +225,6 @@ class CurrentAndOlderCvs(unittest.TestCase):
             add_cv(con, "Marnie CV.md", MARNIE.cv)
             jobs = [card(con, "job", employer=e) for e in ("Harrowgate Gazette", "Made-up Books Ltd")]
             profile_store.confirm_many(con, [j["id"] for j in jobs])
-            profile_store.set_star(con, jobs[0]["id"], True)
             found = {c["name"]: c for c in profile_writing.cards(con) if c["kind"] == "job"}
         paper, shop = found["Paper round at Harrowgate Gazette"], found["Shop assistant at Made-up Books Ltd"]
         self.assertEqual((paper["older_cv_job"], shop["older_cv_job"]), (True, False))
@@ -235,12 +234,31 @@ class CurrentAndOlderCvs(unittest.TestCase):
         ranked = [rank.Ranked(paper["name"]), rank.Ranked(shop["name"])]
         cards = [paper, shop]
         self.assertEqual([s.name for s in rank.order(stories, cards, ranked, "history", n=1).letter], [shop["name"]],
-                         "starred and ranked first, it is still told after the job the current CV gives")
+                         "ranked first, it is still told after the job the current CV gives")
         self.assertEqual([s.name for s in rank.order(stories, cards, ranked, "history", n=2).letter],
                          [shop["name"], paper["name"]], "and told when the letter has room")
         self.assertEqual(plan.letter_stories(stories, cards, "history", n=1)[0].name, shop["name"])
         self.assertIn(f"Where its facts come from: {plan.OLDER_CV_JOB_WORDS}", stories[0].block())
         self.assertNotIn(plan.OLDER_CV_JOB_WORDS, stories[1].block())
+
+    def test_a_showcased_job_from_an_older_cv_still_leads_and_keeps_to_its_plain_facts(self):
+        with home() as (con, _, _):
+            add_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            add_cv(con, "Marnie CV.md", MARNIE.cv)
+            jobs = [card(con, "job", employer=e) for e in ("Harrowgate Gazette", "Made-up Books Ltd")]
+            profile_store.confirm_many(con, [j["id"] for j in jobs])
+            profile_store.set_star(con, jobs[0]["id"], True)
+            found = {c["name"]: c for c in profile_writing.cards(con) if c["kind"] == "job"}
+        paper, shop = found["Paper round at Harrowgate Gazette"], found["Shop assistant at Made-up Books Ltd"]
+        stories = [plan.card_story(shop), plan.card_story(paper)]
+        ranked = [rank.Ranked(shop["name"]), rank.Ranked(paper["name"])]
+        cards = [shop, paper]
+        self.assertEqual([s.name for s in rank.order(stories, cards, ranked, "history", n=1).letter], [paper["name"]],
+                         "the person's star wins over the older CV")
+        self.assertEqual(plan.letter_stories(stories, cards, "history", n=1)[0].name, paper["name"])
+        self.assertEqual(stories[1].facts, ("Paper round at Harrowgate Gazette, 2018 to 2020",
+                                            "Delivered papers before school"), "still only its plain facts")
+        self.assertIn(plan.OLDER_CV_JOB_WORDS, stories[1].block())
 
     def test_a_project_only_cvs_give_is_marked_from_your_cv_only(self):
         with home() as (con, _, _):
