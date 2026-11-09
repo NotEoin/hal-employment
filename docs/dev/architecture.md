@@ -1482,7 +1482,13 @@ proposals to sources, and a record the bulk read built through a move and its un
   (`PRACTICE_SITE`, an unstarred project said to be practice); and a download named "<Thing> - <6 or 7
   digits>" (`DOWNLOAD_ID`, left out). A notes app's own folders (`APP_FOLDER`: "+Inbox", "_Session-Logs",
   "Templates", "Attachments") are never projects, and files in its templates or attachments are left out
-  (`app_file`).
+  (`app_file`). `sections/sort_folders.py` (`not_a_unit`) also keeps a course's materials folder (`MATERIALS_NAME`, such as "Linked
+  materials" or "Resources", at any depth) and a notes vault (`vaults`: a folder holding `.obsidian`,
+  `.logseq`, `.foam`, `.zettlr`, `.ztr-directory` or `logseq/config.edn`, or a Notion export whose notes
+  mostly end in a 32-hex id) from being a project, with every README folder inside a vault; their files go
+  by their own signals. A materials folder's code is `lecture` (`other`), and a vault's note that nothing
+  else places is `lecture` notes (`place_kind(..., vault=True)`). A folder named "Master" alone is no
+  qualification (`sort_courses.NOT_QUALIFICATION`).
 - Someone else's work is left out before the rules place a document: a published paper (`published_paper`:
   an abstract or an arXiv or DOI line on the first page, before any references heading, with
   `PAPER_SIGNS_MIN` of abstract, identifier, venue, "et al." citations and a references heading, and no

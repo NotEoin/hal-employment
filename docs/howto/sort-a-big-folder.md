@@ -51,8 +51,11 @@ code.
    A PDF in a folder of reading, such as one named papers, readings, references or literature, counts as
    a paper unless its name says it is your notes on it.
    What your course gave out, such as a brief, a handbook or a folder of course materials, is proposed as
-   lecture material, never as your coursework. A folder of note folders on one subject is one row, and so
-   is a folder of practice exercises (such as HackerRank or LeetCode), which Hal never stars. Downloads
+   lecture material, never as your coursework. A course's downloaded materials folder (such as "Linked
+   materials" or "Resources") is never a project, whatever it holds: its files are lecture material. A notes
+   vault (the folder an app such as Obsidian, Logseq, Foam, Zettlr or Notion keeps your notes in) is never a
+   project either: each note goes on its own, most of them to **Lecture material**. A folder of note
+   folders on one subject is one row, and so is a folder of practice exercises (such as HackerRank or LeetCode), which Hal never stars. Downloads
    from a 3D-print sharing site and a notes app's templates are left out. A file goes to **Coursework** only
    when it looks handed in: a word such as coursework, assignment, report or essay in its name or folder,
    and more than a few lines. Lecture slides, notes named by week, and your notes on a topic go to

@@ -18,6 +18,7 @@ Design decisions, each with its reason:
   (`sort_rules`): a real dump's "_build/libs" folders gave about 20 wrong project rows (2026-11-09).
 - Folders of notes on one subject, a practice site's exercises and a download are one row each, and a notes
   app's own folders are never projects (`sort_units`): one folder of notes gave 20 project rows (2026-11-09).
+  Nor is a course's materials folder or a notes vault (`sort_folders`); their files go one by one.
 - A word in a name is not enough (`sort_kinds`): a transcript shows marks, a contract its terms, coursework
   a sign of a submission and more than a stub; a file named as a lecture or week, or a note in a topics
   folder, is what the person studied. When in doubt a course folder's file is lecture material.
@@ -56,7 +57,7 @@ from pathlib import Path, PurePosixPath
 
 from jobhunt.ingest import convert, discover, group, privacy, rank, versions
 from jobhunt.profile import merge
-from jobhunt.sections import registry, sort_kinds, sort_rules, sort_units, store, wrong_place
+from jobhunt.sections import registry, sort_folders, sort_kinds, sort_rules, sort_units, store, wrong_place
 from jobhunt.sections import repo as repo_reader
 
 log = logging.getLogger(__name__)
@@ -243,9 +244,10 @@ def _work_kind(stem: str, suffix: str) -> str:
     return "report"
 
 
-def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool) -> bool:
-    """Places a document of `rule`'s kind by its folders and the start of its text; False when the rules cannot.
-    Also how a move places an older note by the kind an older Hal gave it (`sections.move`)."""
+def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool, *, vault: bool = False) -> bool:
+    """Places a document of `rule`'s kind by its folders and the start of its text, a note in a notes vault
+    (`vault`) as what the person studied when nothing else places it; False when the rules cannot. Also how
+    a move places an older note by the kind an older Hal gave it (`sections.move`)."""
     stem, suffix = PurePosixPath(p.rel).stem, PurePosixPath(p.rel).suffix.lower()
     looks = wrong_place.looks_like(PurePosixPath(p.rel).name, text)
     kind = rule.doc_type
@@ -287,6 +289,8 @@ def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool) -> bool
                 "Your own work in a course folder.")
     elif in_course and (kind in STUDIED_KINDS or _nearest(p.rel, WORK_FOLDER)):
         p.place("lecture", taught, "Notes or slides in a course folder: what you studied.")
+    elif vault and kind in ("notes", "slides"):
+        p.place("lecture", taught, "A note in your notes app: what you studied.")
     elif kind == "project":
         p.place("project", "upload", "Named as a project or portfolio piece.")
     else:
@@ -460,7 +464,9 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
     found_repos = {r for r in walk.repos if not sort_rules.vendored_project(r, base)}
     found_readmes = {r for r in walk.readmes if not sort_rules.vendored_project(r, base)}
     libraries = (walk.repos | walk.readmes) - found_repos - found_readmes
-    apps = {f for f in found_repos | found_readmes if sort_units.app_folder(f)}
+    notes_vaults = sort_folders.vaults(base, [f.path for f in walk.files])
+    apps = {f for f in found_repos | found_readmes
+            if sort_folders.not_a_unit(f, base, notes_vaults, repo=f in found_repos)}
     repos = group.outermost(found_repos - apps)
     folders = group.projects(found_readmes - apps, found_repos - apps)
     kept = [f.path for f in walk.files if not sort_rules.in_vendored(f.path, base)]
@@ -516,6 +522,10 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
             else:
                 p.leave_out(LEFT_OUT_WORDS["picture"])
             continue
+        if suffix in rank.CODE_SUFFIXES and sort_folders.materials_folder(f.path.parent, base):
+            p.place("lecture", "other", "Code in a folder of course materials: what the course gave you.")
+            fill_card(con, p)
+            continue
         if suffix not in rank.DOC_SUFFIXES and suffix not in rank.SLIDE_SUFFIXES:
             p.leave_out(LEFT_OUT_WORDS[{"media": "media", "code": "code", "email": "email"}.get(rule.doc_type,
                                                                                               "other")])
@@ -538,7 +548,8 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
         if why := sort_rules.someone_elses(f.rel, text, own):
             p.leave_out(why)
             continue
-        if not place_kind(p, rule, text, _course_folder(f.rel, courses)):
+        if not place_kind(p, rule, text, _course_folder(f.rel, courses),
+                          vault=sort_folders.in_vault(f.path, notes_vaults)):
             if asks >= AI_ASKS_MAX:
                 p.leave_out(LEFT_OUT_WORDS["ai_cap"])
                 continue

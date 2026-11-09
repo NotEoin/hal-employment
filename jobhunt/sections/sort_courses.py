@@ -32,6 +32,9 @@ from jobhunt.profile import merge
 
 QUALIFICATION = re.compile(r"^(?:access|foundation|pg ?dip|pg ?cert|hn[cd]|btec|diploma|certificate|degree)\b",
                            re.I)
+# "Master" alone names a main copy or a notes vault ("obsidian/Master" in a real dump, 2026-11-09); a master's
+# degree's folder says "Masters", "MSc" or "MA".
+NOT_QUALIFICATION = re.compile(r"^master$", re.I)
 YEAR_FOLDER = re.compile(r"^(?:year|stage|level|semester|term)[ _-]?\d", re.I)
 MODULE_DASH = re.compile(r"^(?P<name>.+?)\s+-\s+(?P<code>[A-Za-z]{2,5}\s?\d{3,5}[A-Za-z]?)$")
 UNI = re.compile(r"(?<![a-z])(?:uni|universit(?:y|ies)|college|school|academy|polytechnic|conservatoire)"
@@ -55,7 +58,8 @@ class Course:
 
 
 def _qualification(name: str) -> bool:
-    return bool(merge.level(name) or QUALIFICATION.match(name.strip())) and not merge.module_code(name)
+    return bool(merge.level(name) or QUALIFICATION.match(name.strip())) and not merge.module_code(name) \
+        and not NOT_QUALIFICATION.match(name.strip())
 
 
 def _module(name: str) -> str:

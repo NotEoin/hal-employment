@@ -317,6 +317,52 @@ class Sorter(unittest.TestCase):
             self.assertEqual({where(p) for p in found.proposals}, {("proposed", "lecture", "notes")})
             self.assertEqual(backend.requests("sort_pick"), [], "a course document never needs the AI")
 
+    def test_a_downloaded_materials_folder_is_never_a_project_and_its_files_are_lecture_material(self):
+        # Regression: "<Module> - <CODE>/Linked materials" with a README and code was a code project (2026-11-09).
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            linked = "learning platform/2023/Databases - CS2041/Linked materials"
+            put(d, f"{linked}/README.md", "# Practical 3\n\nRun the starter code, then answer the questions.\n")
+            put(d, f"{linked}/package.json", '{"name": "practical-3"}\n')
+            put(d, f"{linked}/starter.js", "console.log(1);\n")
+            module = "Downloads/HIS2040 Archival Methods/Resources"
+            put(d, f"{module}/README.md", "# Archival Methods\n\nThe module page, saved.\n")
+            put(d, f"{module}/Seminar guide.md", "# Seminar guide\n\nHow each seminar runs, made up.\n")
+            found = sorter.propose(con, d, local=True)
+            rels = by_rel(found)
+            self.assertEqual([p.rel for p in found.proposals if p.section == "project"], [])
+            for name in ("README.md", "starter.js"):
+                self.assertEqual(rels[f"Dump/{linked}/{name}"].section, "lecture", name)
+            self.assertEqual(where(rels[f"Dump/{module}/Seminar guide.md"]), ("proposed", "lecture", "notes"))
+
+    def test_a_notes_vault_is_never_a_project_and_its_notes_go_by_their_own_signals(self):
+        # Regression: a whole Obsidian vault with a README at its root was one project (2026-11-09).
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            put(d, "obsidian/Master/.obsidian/app.json", "{}\n")
+            put(d, "obsidian/Master/README.md", "# Master\n\nMy made-up notes.\n" + README)
+            put(d, "obsidian/Master/Databases/README.md", "# Databases\n\nMade-up notes.\n")
+            put(d, "obsidian/Master/Databases/Normal forms.md", "# Normal forms\n\nFirst normal form, made up.\n")
+            put(d, "obsidian/Master/Avery Quillon CV.md", AVERY_CV)
+            put(d, "obsidian/Master/tool/pyproject.toml", "[project]\nname = \"tool\"\n")
+            put(d, "obsidian/Master/tool/main.py", "print(1)\n")
+            put(d, "Exports/Notion/README.md", "# Workspace\n\nA made-up export.\n")
+            for n, page in enumerate(("Archive visits", "Census returns")):
+                put(d, f"Exports/Notion/{page} {n:032x}.md", f"# {page}\n\nMade-up notes on {page}.\n")
+            put(d, "Logseq graph/logseq/config.edn", "{}\n")
+            put(d, "Logseq graph/README.md", "# Graph\n\nMade-up.\n")
+            put(d, "Logseq graph/pages/Tithe maps.md", "# Tithe maps\n\nMade-up notes.\n")
+            found = sorter.propose(con, d, local=True)
+            rels = by_rel(found)
+            self.assertEqual([p.rel for p in found.proposals if p.section == "project"], ["Dump/obsidian/Master/tool"],
+                             "only a code project inside a vault is a project")
+            self.assertEqual(where(rels["Dump/obsidian/Master/Databases/Normal forms.md"]),
+                             ("proposed", "lecture", "notes"))
+            self.assertEqual(where(rels["Dump/obsidian/Master/Avery Quillon CV.md"]), ("proposed", "cv", "cv"))
+            self.assertEqual(where(rels[f"Dump/Exports/Notion/Census returns {1:032x}.md"]),
+                             ("proposed", "lecture", "notes"))
+            self.assertEqual(where(rels["Dump/Logseq graph/pages/Tithe maps.md"]), ("proposed", "lecture", "notes"))
+
     def test_sibling_folders_of_notes_are_one_proposal_at_their_parent(self):
         with home() as (con, _vault, files), fake_ai(NONE):
             notes_folders(files / "Dump", "Notes/known-cyber-attacks", ("2017 WannaCry", "2014 Heartbleed",

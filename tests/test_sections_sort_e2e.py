@@ -65,7 +65,10 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "Lecture 9 Project Planning.md": ("proposed", "lecture", "notes"),
          "Agile project management.md": ("proposed", "lecture", "notes"),
          **{f"week {n} notes.md": ("proposed", "lecture", "notes") for n in range(4, 13)},
-         **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)}}
+         **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)},
+         "Practical sheet 3.md": ("proposed", "lecture", "notes"), "starter.py": ("proposed", "lecture", "other"),
+         "pyproject.toml": ("left_out", "", ""), "Readme.md": ("proposed", "lecture", "notes"),
+         "Subnetting.md": ("proposed", "lecture", "notes")}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -90,10 +93,12 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Lecture 4 Writing an essay.md": ("proposed", "lecture", "notes"),
           "Writing history essays.md": ("proposed", "lecture", "notes"),
           **{f"Seminar notes week {n}.md": ("proposed", "lecture", "notes") for n in range(4, 13)},
-          **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)}}
+          **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)},
+          "README.txt": ("proposed", "lecture", "notes"), "Module page.md": ("proposed", "lecture", "notes"),
+          "Readme.md": ("proposed", "lecture", "notes")}
 # The review's rows for a module's lecture material: one each, with its file count.
-MODULES = {"software": {"CS2041 Databases": 13, "CSC1022 Software Design": 4, "CSC3095 Project": 4},
-           "history": {"HIS2040 Archival Methods": 17, "HIS2051 Early Modern Europe": 4}}
+MODULES = {"software": {"CS2041 Databases": 13, "CSC1022 Software Design": 6, "CSC3095 Project": 4},
+           "history": {"HIS2040 Archival Methods": 17, "HIS2051 Early Modern Europe": 6, "Notes vault": 2}}
 # The showcase guesses: only a project of the person's own, with their commits and a README that says what it is.
 STARRED = {"software": ["tidewatch"], "history": []}
 
@@ -152,6 +157,13 @@ def messy_software_dump(root: Path) -> Path:
     for week in range(1, 5):
         put(d, f"Uni/BSc Computing/Year 1/Software Design - CSC1022/Lectures/week {week}.md",
             f"# Week {week}\n\nUML.\n")
+    linked = "Uni/BSc Computing/Year 1/Software Design - CSC1022/Linked materials"
+    put(d, f"{linked}/Practical sheet 3.md", "# Practical 3\n\nRun the starter code, then draw its classes.\n")
+    put(d, f"{linked}/pyproject.toml", "[project]\nname = \"practical-3\"\n")
+    put(d, f"{linked}/starter.py", "print(1)\n")
+    put(d, "obsidian/Master/.obsidian/app.json", "{}\n")
+    put(d, "obsidian/Master/Readme.md", "# Master\n\nMy made-up notes.\n" + README)
+    put(d, "obsidian/Master/Networks/Subnetting.md", "# Subnetting\n\nMade-up notes on masks.\n")
     return d
 
 
@@ -189,6 +201,11 @@ def messy_history_dump(root: Path) -> Path:
         put(d, f"{module}/Seminar notes week {week}.md", f"# Seminar {week}\n\nReading registers.\n")
     for week in range(1, 5):
         put(d, f"BA History/Early Modern Europe - HIS2051/Seminars/week {week}.md", f"# Week {week}\n\nCourts.\n")
+    put(d, "BA History/Early Modern Europe - HIS2051/Linked materials/README.txt", "The module page, saved.\n")
+    put(d, "BA History/Early Modern Europe - HIS2051/Linked materials/Module page.md",
+        "# Early Modern Europe\n\nWhat each made-up week covers.\n")
+    put(d, "Notes vault/.obsidian/app.json", "{}\n")
+    put(d, "Notes vault/Readme.md", "# Notes vault\n\nMy made-up notes.\n")
     return d
 
 

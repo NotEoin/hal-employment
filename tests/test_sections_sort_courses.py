@@ -26,6 +26,11 @@ class CoursesFromFolders(unittest.TestCase):
                          "a folder that only holds the modules names no course")
         self.assertIsNone(sort_courses.course_of("Dump/Notes/smart contract.md"))
 
+    def test_a_folder_named_master_alone_is_no_masters_degree(self):
+        # Regression: a notes vault at "obsidian/Master" was proposed as a course (2026-11-09).
+        self.assertIsNone(sort_courses.course_of("Dump/obsidian/Master/Networks/Subnetting.md"))
+        self.assertEqual(sort_courses.course_of("Dump/Masters/Year 1/notes.md").key, "Dump/Masters")
+
     def test_rows_are_grouped_by_module_else_by_their_folder(self):
         self.assertEqual(sort_courses.group_key("D/BA History/HIS2040 Archival Methods/Seminars/week 3.md"),
                          "D/BA History/HIS2040 Archival Methods")
