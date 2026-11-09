@@ -271,7 +271,9 @@ by itself if you are on Your record; otherwise Overview shows a banner and **You
 small number. Press **Check the list** to see the proposals on a page of their own, in six steps: your
 courses, CVs and official papers, coursework, lecture material, projects, and done. Change where a file
 goes, what it is or which course or job it is for, or untick it, then press **Add the ticked ...** in each
-step, or **Add everything ticked** in the last. Each file you add is
+step, or **Add everything ticked** in the last. Lecture notes start unticked, as they only teach Hal what you
+studied and take a long time to read. Before adding more than 50 files, Hal asks and says how long reading
+them should take. Each file you add is
 read by that part of your record, as if you had added it there yourself.
 
 Hal leaves out what it is not sure about, with the reason: pictures and recordings, code outside a project,

@@ -17,6 +17,10 @@ Design decisions, each with its reason:
   accepted or added, so nothing they did is undone by it.
 - Files from the page or a zip are kept in Hal's data folder (`work_dir`) until the sort is removed, as the
   rows point at them; a folder on this computer and the drop folder are read where they are.
+- Lecture material starts unticked (`UNTICKED`): it only teaches Hal what the person studied, and a real dump
+  held 6,808 lecture files of 7,032, hours of AI reading added by one press (2026-11-09).
+- The page warns before adding many files with an estimate of the reading time (`read_estimate`): the
+  measured seconds per file of the latest reads on this computer, else `READ_S_DEFAULT`.
 - The review goes through the sort in steps, each of one or more sections (CVs and papers together), so
   `rows`, `tick` and `accept` take a section, a comma-separated list of them or a list (`section_filter`).
 """
@@ -30,7 +34,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from jobhunt import db
-from jobhunt.core import paths
+from jobhunt.core import clock, paths
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
 from jobhunt.ingest import discover
 from jobhunt.profile import store as profile_store
@@ -49,6 +53,12 @@ INSERT_CHUNK = 500         # rows written per statement batch, so a big sort com
 # A project folder copied into Hal's data folder is held in memory once, like an upload from the page.
 FOLDER_BYTES_MAX = UPLOAD_MAX_BODY
 CHANGEABLE = {"section", "doc_kind", "target_id", "ticked", "star"}
+UNTICKED = ("lecture",)    # sections whose proposals start unticked: the person ticks the modules they want
+READ_KINDS = ("record.sources", "record.sort_accept")   # the actions that read sources, timed for the estimate
+READ_SAMPLE = 10           # the latest reads averaged: recent enough to follow a change of AI or computer
+# Seconds to read one file when this computer has read none yet: a cautious first guess for an AI on a home
+# computer writing a file's summary and facts. It is replaced by the measured figure after the first reads.
+READ_S_DEFAULT = 20
 
 
 def work_dir(sort_id: int) -> Path:
@@ -107,7 +117,8 @@ def save(con: sqlite3.Connection, sort_id: int, found: sorter.Sorted) -> int:
         con.execute("UPDATE record_sorts SET skipped = ?, updated = ? WHERE id = ?",
                     (json.dumps(found.skipped), db.now(), sort_id))
     rows = [(sort_id, str(p.path), p.rel, p.held, p.size, p.sha256, _iso(p.mtime), p.section, p.doc_kind,
-             p.target_id, int(p.star), p.by, p.why, int(p.state == sorter.PROPOSED), p.state, p.copy_of,
+             p.target_id, int(p.star), p.by, p.why, int(p.state == sorter.PROPOSED and p.section not in UNTICKED),
+             p.state, p.copy_of,
              p.note_rel) for p in found.proposals]
     for start in range(0, len(rows), INSERT_CHUNK):
         with con:
@@ -228,6 +239,20 @@ def shape(con: sqlite3.Connection, sort_id) -> dict:
                 con.execute("SELECT 1 FROM record_sort_kept_out WHERE sort_id = ? LIMIT 1", (s["id"],)).fetchone()
                 or con.execute("SELECT 1 FROM record_sort_rows WHERE sort_id = ? AND source_id IS NOT NULL LIMIT 1",
                                (s["id"],)).fetchone())}
+
+
+def read_estimate(con: sqlite3.Connection) -> dict:
+    """How long reading one added file takes on this computer: {"seconds", "measured"}, the average of the latest
+    `READ_SAMPLE` finished reads (`READ_KINDS`), else `READ_S_DEFAULT` with "measured" false."""
+    marks = ",".join("?" * len(READ_KINDS))     # placeholders only; the kinds are bound
+    found = con.execute(f"SELECT started, ended, done_n FROM actions WHERE kind IN ({marks}) AND started IS NOT "
+                        f"NULL AND ended IS NOT NULL AND done_n > 0 ORDER BY ended DESC LIMIT ?",
+                        (*READ_KINDS, READ_SAMPLE)).fetchall()
+    seconds = sum(max(0.0, (clock.parse(r["ended"]) - clock.parse(r["started"])).total_seconds()) for r in found)
+    files = sum(r["done_n"] for r in found)
+    if not files or seconds <= 0:
+        return {"seconds": READ_S_DEFAULT, "measured": False}
+    return {"seconds": round(seconds / files, 1), "measured": True}
 
 
 def waiting(con: sqlite3.Connection) -> list[int]:

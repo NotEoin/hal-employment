@@ -80,6 +80,7 @@ class Review(unittest.TestCase):
             self.assertTrue(con.execute("SELECT 1 FROM profile_evidence WHERE source_id IS NOT NULL").fetchone())
             letter = sorts.rows(con, sort_id, section="letter")["rows"][0]
             sorts.change_row(con, letter["id"], {"ticked": False})
+            sorts.tick(con, sort_id, True, "lecture")
             sorts.accept(con, sort_id)
             add_and_read(con, sort_id)
             got = sections_of(con)
@@ -100,6 +101,24 @@ class Review(unittest.TestCase):
             self.assertTrue((vault / "Start Here.md").is_file())
             add_and_read(con, sort_id)
             record.sync()
+
+    def test_lecture_material_starts_unticked_and_the_rest_ticked(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            sort_id = sorted_folder(con, software_dump(files))
+            ticked = {s["id"]: (s["ticked"], s["proposed"]) for s in sorts.counts(con, sort_id)["sections"]}
+            self.assertEqual(ticked["lecture"], (0, 3), "lecture notes only teach Hal what was studied")
+            self.assertEqual(ticked["cv"], (2, 2))
+
+    def test_the_read_time_is_measured_from_recent_reads_else_a_stated_default(self):
+        with home() as (con, _vault, _files):
+            self.assertEqual(sorts.read_estimate(con), {"seconds": sorts.READ_S_DEFAULT, "measured": False})
+            with con:
+                for n, (started, ended, done) in enumerate((("2026-11-09T09:00:00Z", "2026-11-09T09:01:00Z", 6),
+                                                            ("2026-11-09T10:00:00Z", "2026-11-09T10:00:30Z", 4))):
+                    con.execute("INSERT INTO actions (id, kind, state, created, started, ended, done_n) VALUES "
+                                "(?, 'record.sort_accept', 'done', ?, ?, ?, ?)", (f"a{n}", started, started, ended,
+                                                                                    done))
+            self.assertEqual(sorts.read_estimate(con), {"seconds": 9.0, "measured": True}, "90 s for 10 files")
 
     def test_a_step_of_several_sections_is_listed_ticked_and_accepted_together(self):
         with home() as (con, _vault, files), fake_ai(NONE):

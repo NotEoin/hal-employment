@@ -9,6 +9,9 @@
    itself when a sort finishes on the page (`useSortsOpenWhenReady`), and the review goes in numbered `STEPS`:
    courses, CVs and papers, coursework, lecture material, projects, done. Each step shows only its rows, says
    in one line what to do and has its own add button; "Add everything ticked" is only on the last.
+   Lecture material starts unticked, and its step says once why. Any add of more than `CONFIRM_OVER` files
+   asks first in an in-page dialog (`ask`), with the count and the reading time from the seconds a file
+   that the review reports for this computer (`read`, jobhunt/sections/sorts.py `read_estimate`).
 
    The review table shows the proposals, a page of rows at once, with how many each step has, so a dump of
    thousands of files stays quick. Each row can go to another section, kind or card, be unticked, or (a
@@ -33,11 +36,12 @@
    accepted gave, and "Undo the move" puts everything back as it was. */
 import { html, cx, useState, useRef, useEffect, useLayoutEffect } from "../core/html.js";
 import { go, route } from "../core/router.js";
-import { api, post, put, del } from "../core/api.js";
+import { api, get, post, put, del } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
 import { plural } from "../core/format.js";
 import { isRemote } from "../core/remote.js";
-import { Bar } from "../ui/controls.js";
+import { Bar, Note } from "../ui/controls.js";
+import { ask } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
 import { useSections } from "./sections.js";
 
@@ -48,6 +52,8 @@ const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden
 const STATE_WORDS = { new: "Waiting to start", sorting: "Sorting", ready: "Ready for you to check", failed: "Could not be sorted",
   undone: "Undone" };
 const PATH_SHOWN = 90;      // characters of a path shown in full; a longer one keeps its start and its end
+const CONFIRM_OVER = 50;    // an add of more files than this asks first: a few minutes' reading at most
+const MINUTE_S = 60, HOUR_S = 3600;
 const SORTING = new Set(["new", "sorting"]);
 const OTHER_VIEWS = [["left_out", "Left out"], ["copy", "Copies"], ["added", "Added"], ["failed", "Could not be added"]];
 const reloadOn = id => [ev => (ev.type === "action" && KINDS.has(ev.kind)) || (ev.type === "sort" && (id == null || ev.sort_id === id))
@@ -196,6 +202,30 @@ const STEPS = [
 ];
 const LAST = STEPS.length - 1;
 
+/** A length of time in plain words: "less than a minute", "about 20 minutes", "about 3 hours". */
+export function durationWords(s) {
+  if (s < MINUTE_S) return "less than a minute";
+  if (s < HOUR_S) return "about " + plural(Math.round(s / MINUTE_S), "minute");
+  const h = Math.floor(s / HOUR_S), m = Math.round((s % HOUR_S) / MINUTE_S);
+  return "about " + plural(h, "hour") + (m && h < 10 ? " and " + plural(m, "minute") : "");
+}
+
+/** True when the person agrees to add `n` files, asked in a dialog only when there are many. */
+async function sureToAdd(n, read) {
+  if (n <= CONFIRM_OVER) return true;
+  const per = read && read.seconds > 0 ? read.seconds : 0;
+  const how = per ? "On this computer one file takes about " + Math.round(per) + " seconds ("
+    + (read.measured ? "from the files Hal read lately" : "a first guess, until Hal has read some files") + "), so these take "
+    + durationWords(n * per) + "." : "";
+  return ask({ title: "Add " + plural(n, "file") + "?", icon: "clock", yes: "Add them", no: "Not now",
+    text: "Hal reads each file you add with its AI. " + how + " Fewer files are quicker: untick what Hal does not need." });
+}
+
+/** How many ticked files the sections given hold (all of them for none). */
+function tickedIn(sectionList, data) {
+  return data.counts.sections.filter(s => !sectionList || sectionList.includes(s.id)).reduce((n, s) => n + s.ticked, 0);
+}
+
 /** How much a step holds: the courses found, or the proposals in its sections. */
 function stepCount(step, data) {
   if (step.id === "courses") return (data.courses || []).length;
@@ -236,9 +266,15 @@ export function SortReview({ id }) {
   const goStep = i => { setStep(i); setView({ state: "proposed", offset: 0, group: "" }); };
   const show = state => setView({ state, offset: 0, group: "" });
   const openGroup = group => setView({ ...view, group, offset: 0 });
-  const accept = sectionList => act(() => post(SORT + "/" + id + "/accept", sectionList ? { section: sectionList } : {}), out =>
+  const accept = async sectionList => {
+    // counted afresh: a tick just made may not have reached the table's copy yet
+    let fresh;
+    try { fresh = await get(SORT + "/" + id + "?limit=1"); } catch (err) { toast(err.message); return; }
+    if (!(await sureToAdd(tickedIn(sectionList, fresh), fresh.read))) return;
+    await act(() => post(SORT + "/" + id + "/accept", sectionList ? { section: sectionList } : {}), out =>
     (out.accepted ? "Adding " + plural(out.accepted, "file") + " to your record. Hal reads each in its place." : "Nothing ticked to add.")
     + (out.need_card ? " " + plural(out.need_card, "file waits", "files wait") + " for its course or job." : ""));
+  };
   const tickAll = ticked => act(() => post(SORT + "/" + id + "/tick", only ? { ticked, section: current.sections } : { ticked }));
   const running = data.state === "new" || data.state === "sorting";
   const moving = data.kind === "move";
@@ -259,6 +295,8 @@ export function SortReview({ id }) {
     <div class="rec-step-box stack s" data-step=${current.id}>
       <h3 class="h3">Step ${(step == null ? LAST : step) + 1}: ${current.words}</h3>
       <p class="rec-line rec-step-how">${current.how}</p>
+      ${current.id === "lecture" && html`<${Note}>Lecture notes only teach Hal what you studied. Adding many takes a long time to read,
+        so Hal leaves them unticked: tick the modules you want.<//>`}
       ${current.id === "courses" && html`${(data.courses || []).length ? html`<${CoursesFound} id=${id} courses=${data.courses} />`
           : html`<p class="small sub rec-line">Hal found no course names in your folders. Your CV and papers in the next step can give them.</p>`}`}
       ${(current.id === "courses" || current.id === "papers") && c.sections.some(s => s.needs_card)

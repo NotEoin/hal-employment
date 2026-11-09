@@ -53,6 +53,12 @@ code.
    ticked projects**. In the last step, **Done**, **Add everything ticked** adds what is still ticked in
    every part. Each file is read by its part of your record, as if you had added it there yourself.
 
+   Lecture material starts unticked. Lecture notes only teach Hal what you studied, and reading many takes
+   a long time, so tick only the modules you want Hal to know about. When you add more than 50 files at
+   once, Hal asks first and says how long reading them should take on your computer: the average of the
+   files it read lately, or a first guess of 20 seconds a file before it has read any. Press **Add them**
+   to go on, or **Not now** to change your ticks.
+
    From a terminal:
 
    ```sh
@@ -101,6 +107,7 @@ How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-fo
 | Symptom | Fix |
 | --- | --- |
 | You cannot find the list Hal sorted | Open **Your record**, **Overview**, and press **Check the list** in the banner at the top. |
+| "Add ... files?" says it takes hours | Press **Not now** and untick what Hal does not need, such as lecture notes for modules you do not want to mention. |
 | There is no **Add everything ticked** | It is in the last step. Press **Done** at the top of the list. |
 | There is no box for a folder | You are using Hal from another computer. Upload a zip of the folder instead. |
 | "Hal is still sorting another folder." | Wait for the first sort to finish, then sort the next folder. |

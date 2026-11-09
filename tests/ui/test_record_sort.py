@@ -24,7 +24,7 @@ from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.evidence import routes
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sorts
+from jobhunt.sections import sort_review, sorts
 from jobhunt.sections import store as sources
 
 NOT_YET = ("/api/v2/home",)
@@ -36,6 +36,7 @@ LONG_REL = ("Volunteering/2023 to 2024 placements at the Fenwick Lantern Museum 
 WIDE_MIN = 1000      # the review's width in the 1400-pixel window, less the menu (252) and the page's margins
 RESIZED = 1000       # the window's width after it is made narrower
 RAIL = 252           # the menu's width beside the page (app.css `.app`)
+MANY = 60            # lecture notes in one made-up module: more than the page adds without asking (50)
 
 
 @skip_unless_browser
@@ -79,6 +80,20 @@ class SortAFolder(unittest.TestCase):
         with closing(db.connect()) as con:
             sort_id = sorts.create(con, "folder", [str(dump)], dump.name)
             sorts.run(con, sort_id)
+        return sort_id
+
+    def many_notes(self) -> int:
+        """The history graduate's folder with `MANY` lecture notes in one module, sorted, with her degree added
+        from the courses Hal found; the sort's id."""
+        dump = history_dump(Path(self.hal.home) / "Files")
+        for week in range(1, MANY + 1):
+            put(dump, f"BA History/HIS2050 Museum Studies/Lecture week {week}.md",
+                f"# Lecture {week}\n\nCollections care, part {week}.\n")
+        with closing(db.connect()) as con:
+            sort_id = sorts.create(con, "folder", [str(dump)], dump.name)
+            sorts.run(con, sort_id)
+            for course in sort_review.courses_found(con, sort_id):
+                sort_review.accept_course(con, sort_id, course["key"])
         return sort_id
 
     def width(self, p: AppPage, selector: str) -> float:
@@ -220,6 +235,48 @@ class SortAFolder(unittest.TestCase):
         self.assertTrue(p.page.url.endswith(f"#sort-{sort_id}"))
         p.page.get_by_role("button", name="Back to your record").click()
         p.shows(p.page.get_by_role("heading", name="Your record", level=1), "back on Your record")
+
+    def test_lecture_notes_start_unticked_and_adding_many_asks_first_with_the_time_it_takes(self) -> None:
+        sort_id = self.many_notes()
+        for size in ("narrow", "wide"):
+            with self.subTest(size=size):
+                p = self.page(size)
+                alerts: list[str] = []
+                p.page.on("dialog", lambda d, seen=alerts: (seen.append(d.message), d.dismiss()))
+                p.go(f"sort-{sort_id}")
+                review = p.page.locator("section.rec-sort")
+                p.shows(review.get_by_text("Ready for you to check"), "the review")
+                self.step(review, 4)
+                p.shows(review.get_by_text(re.compile("Lecture notes only teach Hal what you studied. Adding many "
+                                                      "takes a long time to read")), "why they start unticked")
+                module = review.get_by_role("checkbox", name="Add HIS2050 Museum Studies")
+                self.assertFalse(module.is_checked(), "lecture material starts unticked")
+                with p.page.expect_response(lambda r: r.url.endswith("/groups")):
+                    module.check()
+                review.get_by_role("button", name="Add the ticked lecture material").click()
+                dialog = p.page.get_by_role("dialog")
+                p.shows(dialog.get_by_role("heading", name=re.compile(r"^Add \d+ files\?$")), "the in-page question")
+                text = dialog.inner_text()
+                self.assertIn("a first guess, until Hal has read some files", text)
+                self.assertRegex(text, r"these take about \d+ (minutes|hours?)")
+                self.assertEqual(p.serious_axe(), [])
+                dialog.get_by_role("button", name="Not now").click()
+                self.assertEqual(self.listed("lecture"), [], "nothing is added when the person says not now")
+                self.assertEqual(alerts, [], "never a browser alert")
+                with p.page.expect_response(lambda r: r.url.endswith("/groups")):
+                    module.uncheck()
+                self.clean(p)
+        p.page.reload()
+        p.settle()
+        review = p.page.locator("section.rec-sort")
+        self.step(review, 4)
+        with p.page.expect_response(lambda r: r.url.endswith("/groups")):
+            review.get_by_role("checkbox", name="Add HIS2050 Museum Studies").check()
+        review.get_by_role("button", name="Add the ticked lecture material").click()
+        p.page.get_by_role("dialog").get_by_role("button", name="Add them").click()
+        p.shows(p.page.get_by_text(re.compile(rf"^Adding {MANY} files to your record")), "the files added")
+        self.assertTrue(runner.idle(WAIT_S))
+        self.assertEqual(len(self.listed("lecture")), MANY)
 
     def test_an_older_record_is_moved_to_sections_and_one_click_undoes_it(self) -> None:
         from test_sections_move import old_record

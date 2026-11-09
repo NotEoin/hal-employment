@@ -1620,7 +1620,13 @@ you, `source_id` once added).
   on the last. The review first opens on the first step with something in it. Overview shows `SortBanner`
   while a sort sorts or waits (`sorts.waiting`: ready, with rows still proposed), the rail counts those
   sorts on Your record (`sections/home.py`, Home's `counts.record`; a `sort` event reloads `/home`), and
-  `useSortsOpenWhenReady` opens the review when a sort the page saw sorting turns ready. The setup guide's record step
+  `useSortsOpenWhenReady` opens the review when a sort the page saw sorting turns ready. Lecture rows are
+  saved unticked (`sorts.UNTICKED`), and the lecture step says why once. An add of more than
+  `CONFIRM_OVER` (50) ticked files, counted afresh from the server, asks first in the in-page confirm
+  dialog (`ui/dialog.js` `ask`) with the reading time: the review's `read` is `sorts.read_estimate`, the
+  seconds per file of the latest `READ_SAMPLE` (10) finished `record.sources` and `record.sort_accept`
+  actions (their run time over `done_n`), else `READ_S_DEFAULT` (20 s, a cautious first guess) with
+  `measured` false. The setup guide's record step
   (`setup/steps/record.js`) offers `SortStart` too.
 
 Moving an older record (`sections/move.py`): a record the bulk read built has evidence with `source_rel` a

@@ -281,6 +281,7 @@ class FromADumpToTheRecord(unittest.TestCase):
             self.assertEqual([n["id"] for n in sort_review.notes(con, sort_id)], ["no_history"],
                              "project folders with no history are named once")
             self.assertEqual((facts(con), sections_of(con)), (before, []), "a proposal is never a fact")
+            sorts.tick(con, sort_id, True, "lecture")     # lecture material starts unticked: the person ticks it
             self.assertEqual(sorts.accept(con, sort_id)["need_card"], 0)
             add_and_read(con, sort_id)
             wanted = sorted((s, k) for state, s, k in expected.values() if state == "proposed")

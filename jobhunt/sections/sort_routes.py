@@ -48,8 +48,10 @@ Routes:
 - `GET /api/v2/record/sort/{id}?section=&state=proposed&offset=0&limit=50&group=&flat=` (`section` one id
   or several, comma-separated: the review's step "CVs and official papers" is `cv,letter,official,...`): {SORT, "rows":
   [ROW or GROUP], "total", "cards", "courses": [COURSE], "notes": [{"id", "words"}]}, the notes said once
-  for the whole sort (`sort_review.notes`: `no_history`, `github`). Proposed lecture material and coursework come one
-  GROUP a module (`sort_review.rows`) unless `flat=1`; `group` lists one group's own rows.
+  for the whole sort (`sort_review.notes`: `no_history`, `github`), and "read": {"seconds", "measured"}, how
+  long one file takes to read on this computer (`sorts.read_estimate`), for the page's warning before a big
+  add. Proposed lecture material and coursework come one GROUP a module (`sort_review.rows`) unless
+  `flat=1`; `group` lists one group's own rows.
 - `POST /api/v2/record/sort/{id}/groups` {"group", "ticked", "section", "target_id"}: changes every file of a
   group at once; {"changed"}.
 - `POST /api/v2/record/sort/{id}/courses` {"key", "qualification", "subject", "institution"}: makes the
@@ -207,7 +209,7 @@ def one(req: Request) -> dict:
         raise BadRequest(str(e)) from e
     return {**sorts.shape(req.con, req.params["sort_id"]), **page, "cards": sorts.cards(req.con),
             "courses": sort_review.courses_found(req.con, req.params["sort_id"]),
-            "notes": sort_review.notes(req.con, req.params["sort_id"])}
+            "notes": sort_review.notes(req.con, req.params["sort_id"]), "read": sorts.read_estimate(req.con)}
 
 
 @route("POST", PREFIX + "/{sort_id}/courses", auth="session_or_local")

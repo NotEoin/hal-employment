@@ -247,7 +247,7 @@ MADE_UP_SORT = {
     "counts": {"sections": [{"id": "cv", "label": "CVs", "proposed": 1, "ticked": 1, "needs_card": 0}],
                "proposed": 1, "left_out": 0, "copy": 0, "accepted": 0, "added": 0, "failed": 0, "total": 1},
     "undone": False, "can_undo": False, "rows": [MADE_UP_SORT_ROW], "total": 1,
-    "cards": {"education": [], "job": []}, "courses": [], "notes": []}
+    "cards": {"education": [], "job": []}, "courses": [], "notes": [], "read": {"seconds": 20, "measured": False}}
 
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.

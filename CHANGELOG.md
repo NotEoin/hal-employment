@@ -19,6 +19,11 @@ What changed in each version, in plain words.
   and has its own add button, and **Next** takes you on. **Add everything ticked** is only in the last
   step, so it is not pressed by mistake.
 
+- **Adding many files asks first.** Lecture notes from a sorted folder start unticked: they only teach Hal
+  what you studied, and a folder can hold thousands of them. Before adding more than 50 files at once, Hal
+  asks in the page and says how long reading them should take on your computer, from the files it read
+  lately, or a first guess until it has read some.
+
 - **Sort a big folder keeps your reading out of your work.** A PDF in a folder of reading (named papers,
   readings, references or literature) is left out as a published paper, even inside your dissertation
   folder, unless its name says it is your notes on it. A course's downloaded materials folder and a notes
