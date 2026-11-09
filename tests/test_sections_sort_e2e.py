@@ -72,7 +72,9 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "Practical sheet 3.md": ("proposed", "lecture", "notes"), "starter.py": ("proposed", "lecture", "other"),
          "pyproject.toml": ("left_out", "", ""), "Readme.md": ("proposed", "lecture", "notes"),
          "Subnetting.md": ("proposed", "lecture", "notes"), "fogbell-v2": ("copy", "project", "repo"),
-         "PORTFOLIO-PLAN.md": ("left_out", "", "")}
+         "PORTFOLIO-PLAN.md": ("left_out", "", ""),
+         **{f"{n}.md": ("proposed", "lecture", "notes") for n in ("Threat models", "Attack trees", "Tide tables",
+                                                                 "Harmonics")}}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -100,10 +102,14 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)},
           "README.txt": ("proposed", "lecture", "notes"), "Module page.md": ("proposed", "lecture", "notes"),
           "Readme.md": ("proposed", "lecture", "notes"), "walking-tour-final": ("copy", "project", "upload"),
-          "Portfolio overview.md": ("left_out", "", "")}
+          "Portfolio overview.md": ("left_out", "", ""),
+          **{f"{n}.md": ("proposed", "lecture", "notes") for n in ("Oral sources", "Interviewing", "Heritage sites",
+                                                                  "Museum labels")}}
 # The review's rows for a module's lecture material: one each, with its file count.
-MODULES = {"software": {"CS2041 Databases": 13, "CSC1022 Software Design": 6, "CSC3095 Project": 4},
-           "history": {"HIS2040 Archival Methods": 17, "HIS2051 Early Modern Europe": 6, "Notes vault": 2}}
+MODULES = {"software": {"CS2041 Databases": 13, "CSC1022 Software Design": 6, "CSC3095 Project": 4,
+                        "CSC3021 Security": 2, "CSC3011 Tide Models": 2},
+           "history": {"HIS2040 Archival Methods": 17, "HIS2051 Early Modern Europe": 6, "Notes vault": 2,
+                       "HIS2077 Oral History": 2, "HIS3010 Public History": 2}}
 # The showcase guesses: only a project of the person's own, with their commits and a README that says what it is.
 STARRED = {"software": ["tidewatch"], "history": []}
 
@@ -172,6 +178,10 @@ def messy_software_dump(root: Path) -> Path:
     put(d, "obsidian/Master/.obsidian/app.json", "{}\n")
     put(d, "obsidian/Master/Readme.md", "# Master\n\nMy made-up notes.\n" + README)
     put(d, "obsidian/Master/Networks/Subnetting.md", "# Subnetting\n\nMade-up notes on masks.\n")
+    for name in ("Threat models", "Attack trees"):     # an academic year's module, under no degree folder
+        put(d, f"Uni/2023-24/Semester 2/CSC3021 Security/Lectures/{name}.md", f"# {name}\n\nMade-up notes.\n")
+    for name in ("Tide tables", "Harmonics"):          # the degree's folder named another way
+        put(d, f"Uni/Computing B.Sc. (Hons)/CSC3011 Tide Models/Lectures/{name}.md", f"# {name}\n\nMade-up notes.\n")
     return d
 
 
@@ -218,6 +228,10 @@ def messy_history_dump(root: Path) -> Path:
                                               "Digital edition, in that order.\n")
     put(d, "Notes vault/.obsidian/app.json", "{}\n")
     put(d, "Notes vault/Readme.md", "# Notes vault\n\nMy made-up notes.\n")
+    for name in ("Oral sources", "Interviewing"):      # an academic year's module, under no degree folder
+        put(d, f"2023-24/Term 1/HIS2077 Oral History/Seminars/{name}.md", f"# {name}\n\nMade-up seminar notes.\n")
+    for name in ("Heritage sites", "Museum labels"):   # the degree's folder named another way
+        put(d, f"History B.A. Fenwick/HIS3010 Public History/Seminars/{name}.md", f"# {name}\n\nMade-up notes.\n")
     return d
 
 
@@ -275,9 +289,19 @@ class FromADumpToTheRecord(unittest.TestCase):
                 settings.set("you.name", owner)
                 sort_id = sorted_folder(con, dump(files))
                 found = sort_review.courses_found(con, sort_id)
-                self.assertEqual([c["title"] for c in found], [title])
+                self.assertEqual([c["title"] for c in found], [title], "a year's folder or a name written another "
+                                 "way is the same course")
                 sort_review.accept_course(con, sort_id, found[0]["key"])
                 self.assertEqual(sorts.accept(con, sort_id)["need_card"], 0, "every waiting file found its course")
+
+    def test_the_degree_in_the_settings_names_the_course_the_folders_found(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            settings.set("you.name", "Avery Quillon")
+            settings.set("you.education.degree", "BSc (Hons) Computing")
+            settings.set("you.education.university", "University of Nowhere Fen")
+            found = sort_review.courses_found(con, sorted_folder(con, messy_software_dump(files)))
+            self.assertEqual([c["title"] for c in found], ["BSc (Hons) Computing, University of Nowhere Fen"])
+            self.assertIn("CSC3021 Security", found[0]["modules"], "the academic year's module joins it")
 
     def test_a_record_the_bulk_read_built_is_moved_and_one_undo_puts_it_back(self):
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY), **NONE}):

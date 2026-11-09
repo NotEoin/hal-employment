@@ -36,7 +36,9 @@ What changed in each version, in plain words.
   years and its modules) show first in the list. Add each one, renaming it if you like, and its coursework
   and lecture notes find their course at once instead of waiting. Lecture material and coursework show one
   row a module, with its file count, added together, so a folder of thousands of notes is a list of
-  modules you can read.
+  modules you can read. A year folder such as "2023-24" or "Semester 2" is never a course: its modules
+  join your degree. Folders that name one degree in different ways ("Computer Science BSc" and "Computer
+  Science BsC Newcastle") are one course, named as your settings or transcript name it.
 
 - **Letters tell your showcase from its own sources.** A project's story now comes from the project's own
   code, pages, files or form and your edits; a detail only your CV gives is marked as such for the writer.

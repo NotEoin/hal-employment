@@ -29,27 +29,70 @@ Design decisions, each with its reason:
 """
 from __future__ import annotations
 
+import logging
 import re
 import sqlite3
 from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
 
 from jobhunt.core import settings
+from jobhunt.ingest import convert, rank
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import registry, sort_courses, sort_units, sorter, sorts
 
-COURSE_WORDS = ("qualification", "subject", "institution")
+log = logging.getLogger(__name__)
+
+COURSE_WORDS = sort_courses.WORDS
+PAPERS_READ_MAX = 4        # a dump holds a transcript or two and a few CVs; the newest name the degree
+PAPER_CHARS = 3000         # a degree is named near the top of a transcript, and in a CV's education section
 GROUPED = ("lecture", "coursework")
 GROUP_MIN = 2              # one file is shown as itself
 GROUP_CHANGES = {"ticked", "section", "target_id"}
 
 
+def _settings_course() -> dict | None:
+    """The degree in the person's settings (`you.education`), as course words; None with no degree."""
+    degree = " ".join(str(settings.get("you.education.degree") or "").split())
+    if not degree:
+        return None
+    found = sort_courses.qualification_in(degree) or {}
+    qualification, subject = (found["qualification"], found["subject"]) if found else \
+        sort_courses.split_qualification(degree)
+    return {"qualification": qualification,
+            "subject": subject or " ".join(str(settings.get("you.education.subject") or "").split()),
+            "institution": " ".join(str(settings.get("you.education.university") or "").split())}
+
+
+def _papers_courses(con: sqlite3.Connection, sort_id: int, section: str) -> list[dict]:
+    """The degrees the sort's transcripts and certificates (`official`) or CVs (`cv`) name, newest first, at
+    most `PAPERS_READ_MAX` read."""
+    out = []
+    for r in con.execute("SELECT path, rel FROM record_sort_rows WHERE sort_id = ? AND section = ? AND state IN "
+                         "('proposed', 'accepted', 'added') AND doc_kind IN ('transcript', 'certificate', 'cv') "
+                         "ORDER BY mtime DESC LIMIT ?", (sort_id, section, PAPERS_READ_MAX)):
+        path = Path(r["path"])
+        try:
+            text = convert.text_of(path, rank.rule_for(r["rel"], path))
+        except Exception as e:  # a converter can fail any way; with a paper unread the folders' names stand
+            log.info("could not read %s for its degree: %s", r["rel"], e)
+            continue
+        if found := sort_courses.qualification_in(text[:PAPER_CHARS]):
+            out.append(found)
+    return out
+
+
 def courses_found(con: sqlite3.Connection, sort_id: int) -> list[dict]:
-    """The courses a sort's waiting coursework and lecture rows name (`sort_courses.courses_found`)."""
+    """The courses a sort's waiting coursework and lecture rows name (`sort_courses.courses_found`): named
+    from the person's settings, else the sort's transcripts, where those name the same course; the sort's CVs
+    only say which course folders that name none belong to."""
     rows = con.execute("SELECT rel, mtime FROM record_sort_rows WHERE sort_id = ? AND state = 'proposed' AND "
                        "section IN ('lecture', 'coursework') AND target_id IS NULL ORDER BY rel",
                        (int(sort_id),)).fetchall()
-    return sort_courses.courses_found((r["rel"], r["mtime"]) for r in rows)
+    if not rows:
+        return []
+    known = [c for c in (_settings_course(), *_papers_courses(con, int(sort_id), "official")) if c]
+    return sort_courses.courses_found(((r["rel"], r["mtime"]) for r in rows), known,
+                                      cvs=_papers_courses(con, int(sort_id), "cv"))
 
 
 def accept_course(con: sqlite3.Connection, sort_id, key: str, words: dict | None = None) -> dict:

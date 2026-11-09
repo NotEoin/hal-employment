@@ -1565,9 +1565,17 @@ you, `source_id` once added).
 - Courses Hal found (`sections/sort_courses.py`, `sections/sort_review.py`): `sort_courses.course_of(rel)`
   names a row's course from its folders (the first folder named as a qualification, by `merge.level` or
   `QUALIFICATION`; else the folder holding year folders or module folders, passing over a `CONTAINER` such
-  as "Modules") and its module (a folder with a module code). `sort_review.courses_found(con, id)` groups
-  the waiting coursework and lecture rows by course name (worked out on each request, never stored), with
-  modules, file count and the months of the oldest and newest files. `accept_course(con, id, key, words)`
+  as "Modules", or a `year_folder` such as "2023-24", "Year 1" or "Term 2", which is never a qualification)
+  and its module (a folder with a module code). `sort_review.courses_found(con, id)` groups the waiting
+  coursework and lecture rows by course (worked out on each request, never stored), with modules, file
+  count and the months of the oldest and newest files. Qualifications are one course when their
+  `course_words` match (`same_course`: the degree with "BsC" and "B.Sc." read as "BSc", and the subject's
+  words without case, punctuation, "(Hons)" or institution words; one name may add up to
+  `PLACE_WORDS_MAX` (2) words at its end, but not "and" or "with"). A course with no qualification joins
+  the only qualification the folders name, else the first known one: `you.education.degree` and
+  `university`, then a transcript or certificate in the sort, then a CV (`qualification_in` on each
+  paper's text, at most `PAPERS_READ_MAX` read). The settings or a transcript that match a course give
+  its name; a CV never renames one. `accept_course(con, id, key, words)`
   makes the education card with `profile.store.add_by_hand` (the person's words over Hal's; start and end
   from the file months; modules from the module folders), gives it to every waiting row under the course's
   folders, then runs `sorts.rematch`. The review shows these first, with "Add your CVs and papers first, so
