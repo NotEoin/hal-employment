@@ -25,6 +25,7 @@ from jobhunt.profile import store as profile_store
 from jobhunt.profile import writing as profile_writing
 from jobhunt.sections import cv, pipeline, readers, store
 from jobhunt.sections.pipeline import Incoming
+from jobhunt.writing import plan, rank
 
 AI_REPLY = {"facts": [
     {"kind": "job", "fields": {"title": "Archive volunteer", "employer": "Fenwick Lantern Museum Trust",
@@ -217,6 +218,29 @@ class CurrentAndOlderCvs(unittest.TestCase):
         self.assertEqual(left_out, {"duties": ["Delivered papers before school"]})
         marks = {e["source_id"]: e["from_older_cv"] for i in page["items"] for e in i["evidence"]}
         self.assertEqual(marks, {current: False, older: True})
+
+    def test_a_job_only_an_older_cv_gives_is_told_last_and_only_by_its_plain_facts(self):
+        with home() as (con, _, _):
+            add_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            add_cv(con, "Marnie CV.md", MARNIE.cv)
+            jobs = [card(con, "job", employer=e) for e in ("Harrowgate Gazette", "Made-up Books Ltd")]
+            profile_store.confirm_many(con, [j["id"] for j in jobs])
+            profile_store.set_star(con, jobs[0]["id"], True)
+            found = {c["name"]: c for c in profile_writing.cards(con) if c["kind"] == "job"}
+        paper, shop = found["Paper round at Harrowgate Gazette"], found["Shop assistant at Made-up Books Ltd"]
+        self.assertEqual((paper["older_cv_job"], shop["older_cv_job"]), (True, False))
+        self.assertEqual(paper["quotes"], ["Paper round at Harrowgate Gazette, 2018 to 2020",
+                                           "Delivered papers before school"], "its plain facts, nothing added")
+        stories = [plan.card_story(paper), plan.card_story(shop)]
+        ranked = [rank.Ranked(paper["name"]), rank.Ranked(shop["name"])]
+        cards = [paper, shop]
+        self.assertEqual([s.name for s in rank.order(stories, cards, ranked, "history", n=1).letter], [shop["name"]],
+                         "starred and ranked first, it is still told after the job the current CV gives")
+        self.assertEqual([s.name for s in rank.order(stories, cards, ranked, "history", n=2).letter],
+                         [shop["name"], paper["name"]], "and told when the letter has room")
+        self.assertEqual(plan.letter_stories(stories, cards, "history", n=1)[0].name, shop["name"])
+        self.assertIn(f"Where its facts come from: {plan.OLDER_CV_JOB_WORDS}", stories[0].block())
+        self.assertNotIn(plan.OLDER_CV_JOB_WORDS, stories[1].block())
 
     def test_a_project_only_cvs_give_is_marked_from_your_cv_only(self):
         with home() as (con, _, _):

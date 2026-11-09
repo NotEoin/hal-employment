@@ -32,7 +32,8 @@ Design decisions, each with its reason:
   fintech letter told two first-year coursework apps while the person's core AI assistant came 13th, and a
   trading letter left a core real-time pathfinding project 14th (2026-11-08). The message and the answers
   take untold work in the same order. Archived work is never offered. A starred job leads whatever the
-  ranking says (`plan.starred_first`): the person chose it (sections plan, 2026-11-09).
+  ranking says (`plan.starred_first`): the person chose it (sections plan, 2026-11-09). A job only older CVs
+  give comes after all other work, starred or not (`plan.older_last`), as an older CV only fills gaps.
 - A failed call (no usable names, or the AI unavailable for it) falls back to the word count
   (`plan.letter_stories`, `plan.fitting`), so a pack is never lost to the ranking.
 """
@@ -208,7 +209,8 @@ def order(found: list[Story], cards: list[dict], ranked: list[Ranked], wanted: s
     found = planning.offered(found, cards)
     if not ranked:
         fits = planning.fitting(found, cards, wanted)
-        return Told(tuple(planning.letter_stories(found, cards, wanted, n)), tuple([*found, *fits]))
+        return Told(tuple(planning.letter_stories(found, cards, wanted, n)),
+                    tuple(planning.older_last([*found, *fits])))
     by_story = {s.name: s for s in found if s.name}
     by_card = {c["name"]: c for c in planning.story_cards(cards) if c.get("name")}
     first: list[Story] = []
@@ -216,7 +218,7 @@ def order(found: list[Story], cards: list[dict], ranked: list[Ranked], wanted: s
         story = by_story.get(r.name) or (planning.card_story(by_card[r.name]) if r.name in by_card else None)
         if story is not None and story not in first:
             first.append(story)
-    every = planning.starred_first([*led(first), *(s for s in found if s not in first)])
+    every = planning.older_last(planning.starred_first([*led(first), *(s for s in found if s not in first)]))
     told = [s for s in every if s.kind in (planning.PROJECT, planning.JOB) and s.facts][:n]
     if len(told) < planning.MIN_PROJECTS:
         told += [s for s in every if s.kind not in (planning.PROJECT, planning.JOB)]

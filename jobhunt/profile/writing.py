@@ -84,6 +84,10 @@ Design decisions, each with its reason:
   `older_cv`, so the checks on drafts and fit rows can say whose it is not ("only on an older CV"); each card
   says where its facts come from in plain words (`source_words`: "from the code project", "from your current
   CV"), which the fit table cites per row (sections plan, 2026-11-09).
+- A job only older CVs give (`older_cv_job`: no current CV and no document backs it) is still a card, as an
+  older CV fills gaps, but its card says so (`older_cv_job`) and holds only its plain facts, its title,
+  employer, dates and duties (`plain_job_facts`), so the writer ranks it last and adds nothing to it
+  (sections plan, 2026-11-09).
 """
 from __future__ import annotations
 
@@ -449,6 +453,26 @@ def elsewhere_only(con: sqlite3.Connection, item: dict, view: owners.Files | Non
     return {"tools": out} if out else {}
 
 
+def older_cv_job(item: dict, cvs: CvAuthority, older_ids: frozenset[int] = frozenset()) -> bool:
+    """True for a job card only older CVs give: every one of its own sources is an older CV (`cvs.older`, or a
+    CV of the CVs section that is not the current one, `older_ids` from `profile.cvs.older_sources`), so no
+    current CV and no document backs it. False for a job the person added themselves."""
+    if item.get("kind") != "job" or item.get("origin") == "you":
+        return False
+    own = [e for e in item.get("evidence") or [] if e.get("role", "") in (OWN_ROLE, "")]
+    return bool(own) and all(e["source_rel"] in cvs.older or (e.get("source_id") is not None
+                                                              and e["source_id"] in older_ids) for e in own)
+
+
+def plain_job_facts(fields: dict) -> list[str]:
+    """A job's plain facts as its CV gives them, nothing added: "<title> at <employer>, <start> to <end>", then
+    each duty."""
+    head = " at ".join(str(fields[k]) for k in ("title", "employer") if fields.get(k))
+    when = " to ".join(str(fields[k]) for k in ("start", "end") if fields.get(k))
+    first = ", ".join(p for p in (head, when) if p)
+    return [*([first] if first else []), *(str(d) for d in fields.get("duties") or [] if str(d).strip())]
+
+
 def for_writing(con: sqlite3.Connection, item: dict, cvs: CvAuthority | None = None,
                 view: owners.Files | None = None) -> dict:
     """A card's fields as writing uses them: without what only older CVs give (`older_cv_only`), the tools
@@ -678,8 +702,10 @@ def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) ->
 def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     """Every project and job card the person checked, for the fit map and the checks on drafts: {kind, name,
     tools, summary, planned, context, tier, aliases, role, files, quotes, tag, similar, star, cv_only,
-    cv_filled, dissertation, older_cv, source}; `older_cv` holds the tools only older CVs give, left out of
-    `tools`, and `source` where its facts come from (`source_words`); `star` is the person's showcase mark
+    cv_filled, dissertation, older_cv, older_cv_job, source}; `older_cv` holds the tools only older CVs give, left
+    out of `tools`, `older_cv_job` marks a job only older CVs give (`older_cv_job`), whose summary and quotes are
+    its plain facts (`plain_job_facts`), and `source` where its facts come from (`source_words`); `star` is the
+    person's showcase mark
     (`store.set_star`), which chooses the
     projects told as stories (`writing.plan.story_cards`); `cv_only`, `cv_filled` and `dissertation` say where a
     project's facts come from (see the module notes); `tier` is its
@@ -698,6 +724,7 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     worked_for = employers(con)
     hidden = [it for it in store.items(con, "project") if it["state"] == "hidden"]
     cvs, view = CvAuthority.of(con), owners.Files.of(con)
+    older_ids = section_cvs.older_sources(con)
     names = [it["fields"].get("name", "") for it in store.items(con, "project", hidden=False)]
     out = []
     for kind in CARD_KINDS:
@@ -719,15 +746,18 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
                             "star": bool(it.get("star")), "cv_only": section_cvs.cv_only(it),
                             "cv_filled": cv_filled(con, it),
                             "dissertation": any(e["doc_type"] == DISSERTATION for e in it["evidence"]),
-                            "older_cv": older_cv_only(con, it, cvs).get("tools", []),
+                            "older_cv": older_cv_only(con, it, cvs).get("tools", []), "older_cv_job": False,
                             "source": source_words(it, cvs)})
             else:
+                older_job = older_cv_job(it, cvs, older_ids)
+                plain = plain_job_facts(it["fields"]) if older_job else []
+                duties = it["fields"].get("duties") if older_job else f.get("duties")
                 out.append({"kind": "job", "name": " at ".join(p for p in (f.get("title"), f.get("employer")) if p),
-                            "tools": [], "summary": "; ".join(f.get("duties") or []), "planned": [],
+                            "tools": [], "summary": "; ".join(duties or []), "planned": [],
                             "context": context, "tier": it.get("tier") or "", "role": "", "files": [],
-                            "quotes": quotes(it, f, cvs, view, names), "star": bool(it.get("star")),
+                            "quotes": plain or quotes(it, f, cvs, view, names), "star": bool(it.get("star")),
                             "tag": "", "similar": [], "cv_only": False, "cv_filled": {}, "dissertation": False,
-                            "older_cv": [], "source": source_words(it, cvs)})
+                            "older_cv": [], "older_cv_job": older_job, "source": source_words(it, cvs)})
     projects = [c for c in out if c["kind"].startswith("project")]
     alike = similar([c["name"] for c in projects])
     for c in projects:

@@ -16,6 +16,10 @@ What changed in each version, in plain words.
   in your showcase even when Hal's pick of evidence for the job found nothing in them. Before, such a pack
   was written without any of that work.
 
+- **Jobs only an older CV lists come last.** A job that only an older CV gives, with nothing on your
+  current CV or in your documents, is now told only when a letter has room after your other work, and
+  then only as the CV gives it: the title, employer, dates and duties.
+
 - **Tested for every kind of graduate.** Whole application packs are now tested on two made-up records
   built through Your record, one for a software graduate and one for a history graduate, each within 30
   AI calls.

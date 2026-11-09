@@ -84,6 +84,10 @@ Design decisions, each with its reason:
   and its story says so; a field only a CV fills for a project with its own sources is marked in the story
   (`Story.cv_filled`); a dissertation's story says it is the dissertation (`Story.dissertation`), under its
   own title.
+- A job only older CVs give (`Story.older_cv`, `profile.writing.older_cv_job`) is told after every project and
+  job with current evidence (`older_last`), so only when the draft has room after them, and from its plain
+  facts alone (title, employer, dates, duties), its story saying to add nothing: such a job was told as a full
+  story beside the person's current work (2026-11-09).
 - Every starred card is a story (`with_showcase`), built from the card's own facts when the plan picked
   nothing of it: a pack whose plan picked nothing was drafted whole and told none of the person's starred
   projects, coursework or jobs (2026-11-09).
@@ -328,6 +332,8 @@ WHERE_JOB = "a job"        # where a job card's work was done, as a story says i
 CV_ONLY_WORDS = "your CV only; no project files back it, so keep to what the CV says"
 CV_FILLED_WORDS = "From your CV, not the project's own sources (say no more than this)"
 DISSERTATION_WORDS = "your dissertation for your degree; call it your dissertation"
+OLDER_CV_JOB_WORDS = ("an older CV only; say only its title, employer, dates and duties as given, and add nothing "
+                      "to them")
 
 
 @dataclass(frozen=True)
@@ -352,6 +358,7 @@ class Story:
     cv_filled: tuple[str, ...] = ()       # "field: value" lines only a CV gives a project with its own sources
     cv_only: bool = False      # a project card only a CV names (`profile.cvs.cv_only`)
     dissertation: bool = False
+    older_cv: bool = False     # a job only older CVs give (`profile.writing.older_cv_job`): plain facts, told last
 
     def words(self) -> str:
         """Every word the story's facts hold, plans aside: what a paragraph about it may say."""
@@ -366,6 +373,7 @@ class Story:
         lines += [f"Where it was done: {self.where}"] if self.where else []
         lines += [f"What kind of work: {DISSERTATION_WORDS}"] if self.dissertation else []
         lines += [f"Where its facts come from: {CV_ONLY_WORDS}"] if self.cv_only else []
+        lines += [f"Where its facts come from: {OLDER_CV_JOB_WORDS}"] if self.older_cv else []
         lines += [f"Your part: {self.role}"] if self.role else []
         lines += [f"What it is: {self.summary}"] if self.summary else []
         lines += [f"Tools: {', '.join(self.tools)}"] if self.tools else []
@@ -385,8 +393,10 @@ def _where(card: dict | None, context: str) -> str:
 
 def _story(key: str, items: list[Item], card: dict | None, module: str = "") -> Story:
     """The story of one card (with no items when the plan picked none of it), of a module, of a project's own
-    file, or of items tied to none: its items' quotes first, its card's own after."""
-    quotes = [*(i.text for i in items if not i.planned), *((card or {}).get("quotes") or [])]
+    file, or of items tied to none: its items' quotes first, its card's own after. A job only older CVs give
+    (`older_cv_job`) is told from its card's plain facts alone, never its items' quotes."""
+    plain = bool(card is not None and card.get("older_cv_job"))
+    quotes = [*(i.text for i in items if not i.planned and not plain), *((card or {}).get("quotes") or [])]
     facts = tuple(list(dict.fromkeys(q for q in quotes if q.strip()))[:STORY_FACTS])
     plans = tuple(i.text for i in items if i.planned)
     use = next((i.use for i in items if i.use), "")
@@ -403,7 +413,7 @@ def _story(key: str, items: list[Item], card: dict | None, module: str = "") -> 
                  tuple(card.get("planned") or ()), use, card.get("tag", ""), tuple(card.get("aliases") or ()), card,
                  JOB if card.get("kind") == JOB else PROJECT,
                  tuple(f"{name}: {', '.join(values)}" for name, values in filled.items()),
-                 bool(card.get("cv_only")), bool(card.get("dissertation")))
+                 bool(card.get("cv_only")), bool(card.get("dissertation")), plain)
 
 
 def own_tools(card: dict, facts: tuple[str, ...] = ()) -> tuple[str, ...]:
@@ -509,6 +519,12 @@ def starred_first(found: list[Story]) -> list[Story]:
     return [s for s in found if lead(s)] + [s for s in found if not lead(s)]
 
 
+def older_last(found: list[Story]) -> list[Story]:
+    """`found` with the stories of jobs only older CVs give (`Story.older_cv`) after every other, each part in its
+    order: work with current evidence is told first, and an older CV's job only when there is room after it."""
+    return [s for s in found if not s.older_cv] + [s for s in found if s.older_cv]
+
+
 def card_story(card: dict) -> Story:
     """The story of a card the plan picked nothing of: its own quotes, tools, part and where it was done."""
     return _story(card["name"], [], card)
@@ -531,21 +547,21 @@ def fitting(found: list[Story], cards: list[dict], wanted: str) -> list[Story]:
     cards = story_cards(cards)
     fits = sorted(((relevance(c, wanted), k) for k, c in enumerate(cards)
                    if c.get("name") and c["name"] not in names and (c.get("quotes") or c.get("summary"))),
-                  key=lambda r: (bool(cards[r[1]].get("cv_only")), -r[0], cards[r[1]].get("tier") != tiers.CORE,
-                                 r[1]))
+                  key=lambda r: (bool(cards[r[1]].get("cv_only") or cards[r[1]].get("older_cv_job")), -r[0],
+                                 cards[r[1]].get("tier") != tiers.CORE, r[1]))
     return [card_story(cards[k]) for r, k in fits if r >= RELEVANT_MIN]
 
 
 def letter_stories(found: list[Story], cards: list[dict], wanted: str, n: int = LETTER_STORIES) -> list[Story]:
     """The `n` stories a letter tells (see the module notes): the plan's project and job stories, then the cards
     the job's requirements (`wanted`) fit best that no story tells, then, only below `MIN_PROJECTS` of those,
-    modules and other lines in the plan's order."""
+    modules and other lines in the plan's order; a job only older CVs give comes after every other project and
+    job (`older_last`)."""
     found = offered(found, cards)
     named = {s.name for s in found}
     found = starred_first([*found, *(card_story(c) for c in cards
                                      if c.get("kind") == JOB and c.get("star") and c.get("name") not in named)])
-    told = [s for s in found if s.kind in (PROJECT, JOB)]
-    told += fitting(found, cards, wanted)[:max(n - len(told), 0)]
+    told = older_last([*(s for s in found if s.kind in (PROJECT, JOB)), *fitting(found, cards, wanted)])[:n]
     if len(told) < MIN_PROJECTS:
         told += [s for s in found if s.kind not in (PROJECT, JOB)]
     return told[:n]

@@ -1418,6 +1418,13 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   offered, and unstarred projects still give the fit map and skills their evidence. With nothing starred,
   every project is offered as before. A starred job leads: `plan.starred_first` puts its story first in
   `rank.order` and `plan.letter_stories`, which tells it even when the plan picked nothing of it.
+- Jobs from older CVs: `profile.writing.older_cv_job` is true for a job card whose own sources are all
+  older CVs (`cvs.older`, or `profile.cvs.older_sources`), with no current CV and no document behind it.
+  `cards()` marks it `older_cv_job` and gives it only its plain facts (`plain_job_facts`: title, employer,
+  dates, duties) as its summary and quotes. `plan.Story.older_cv` tells its story from those facts alone,
+  never the plan's quotes, and its block says to add nothing. `plan.older_last` puts it after every other
+  project and job, starred or not, in `rank.order`, `plan.letter_stories` and `plan.fitting`, so it is told
+  only when a draft has room after the work with current evidence.
 - Stories from the sections: `profile.store.evidence_of` gives each piece of evidence its source's `section`
   and `doc_kind`. A project card with evidence from `profile.writing.OWN_SECTIONS` (project, coursework) is
   `sectioned`: its `cards()` quotes are those sources' own quotes (`_section_quotes`; a showcase piece adds
