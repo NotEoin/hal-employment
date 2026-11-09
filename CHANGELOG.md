@@ -11,6 +11,14 @@ What changed in each version, in plain words.
   card on Overview. On a phone the table slides sideways inside itself while the page stays put, and a long
   folder path is shortened in the middle, with the whole path shown when you point at it.
 
+- **The sorted list leads you through it.** When Hal has sorted a folder, Overview says so at the top ("Hal
+  sorted ... files from ... Nothing is added until you check the list.") with a **Check the list** button,
+  and **Your record** in the menu shows a small number. If you are on Your record when Hal finishes, the
+  list opens by itself. The list goes in six numbered steps: your courses, CVs and official papers,
+  coursework, lecture material, projects, and done. Each step shows only its own files, says what to do,
+  and has its own add button, and **Next** takes you on. **Add everything ticked** is only in the last
+  step, so it is not pressed by mistake.
+
 - **Sort a big folder keeps your reading out of your work.** A PDF in a folder of reading (named papers,
   readings, references or literature) is left out as a published paper, even inside your dissertation
   folder, unless its name says it is your notes on it. A course's downloaded materials folder and a notes

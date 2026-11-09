@@ -1613,9 +1613,14 @@ you, `source_id` once added).
   Overview's two-column grid (`.grid2`), about half the page whatever the window's width. Its table keeps a
   minimum width and scrolls inside `.rec-sort-scroll`, so the page never scrolls sideways, and a path
   longer than `PATH_SHOWN` (90) characters is shortened in the middle (`middle`) with the whole path as its
-  title. `SortReview` has section buttons
-  with counts, a page of rows with tick, section, kind, card and showcase, "Add the ticked ...", "Add
-  everything ticked", and the left out, copies, added and failed rows). The setup guide's record step
+  title. `SortReview` goes in numbered `STEPS` (courses; cv, letter, official, document and job_doc; coursework;
+  lecture; project; done), the current one `aria-current="step"`, with **Next**: each step asks for its own
+  sections only (`section=cv,letter,...`, `sorts.section_filter`), says in one line what to do and has
+  its own "Add the ticked ..."; "Add everything ticked" and the left out, copies, added and failed rows are
+  on the last. The review first opens on the first step with something in it. Overview shows `SortBanner`
+  while a sort sorts or waits (`sorts.waiting`: ready, with rows still proposed), the rail counts those
+  sorts on Your record (`sections/home.py`, Home's `counts.record`; a `sort` event reloads `/home`), and
+  `useSortsOpenWhenReady` opens the review when a sort the page saw sorting turns ready. The setup guide's record step
   (`setup/steps/record.js`) offers `SortStart` too.
 
 Moving an older record (`sections/move.py`): a record the bulk read built has evidence with `source_rel` a

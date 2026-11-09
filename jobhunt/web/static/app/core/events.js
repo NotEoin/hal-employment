@@ -43,7 +43,7 @@ export function stalePaths(ev) {
     case "health": return ["/health*", "/status"];
     case "helper": return ["/helpers*", "/health*"];
     case "profile": return ["/profile*", "/record*"];
-    case "sort": return ["/record/sort*"];
+    case "sort": return ["/record/sort*", "/home"];   // the rail counts the sorts waiting to be checked
     default: return [];
   }
 }

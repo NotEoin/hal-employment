@@ -4,10 +4,16 @@
 
    The review (`SortReview`) is its own page, "sort-<id>" (pages/sort.js), so it fills the window; its table
    scrolls sideways inside itself on a small screen, and a long path is shortened in the middle (`middle`) with
-   the whole path in its title. The review table shows the proposals one section at a time, a page of rows at once, with how many each
-   section has, so a dump of thousands of files stays quick. Each row can go to another section, kind or
-   card, be unticked, or (a project) be marked a showcase piece. "Add the ticked ones" accepts a section,
-   "Add everything ticked" all of them; files that still need their course or job wait until one is chosen.
+   the whole path in its title. A graduate did not find "Check the list" and pressed "Add everything ticked"
+   by mistake (2026-11-09), so Overview shows a banner while a sort waits (`SortBanner`), the review opens by
+   itself when a sort finishes on the page (`useSortsOpenWhenReady`), and the review goes in numbered `STEPS`:
+   courses, CVs and papers, coursework, lecture material, projects, done. Each step shows only its rows, says
+   in one line what to do and has its own add button; "Add everything ticked" is only on the last.
+
+   The review table shows the proposals, a page of rows at once, with how many each step has, so a dump of
+   thousands of files stays quick. Each row can go to another section, kind or card, be unticked, or (a
+   project) be marked a showcase piece. "Add the ticked ..." accepts a step's sections, "Add everything
+   ticked" all of them; files that still need their course or job wait until one is chosen.
    "Left out" lists what Hal would not guess in, each with why, and "Copies" the older copies it set aside;
    either can be given a section by hand. A row Hal kept lists its "Older copies", each with "Keep this one
    instead", which swaps which copy is proposed. Sorting runs as `record.sort` and adding as `record.sort_accept`;
@@ -19,12 +25,13 @@
    find it. Lecture material and coursework come one row a module, with its file count: ticking, moving or
    giving a card to that row changes all its files, and "Show the files" lists them one by one. A project's
    numbered folders ("lab1" to "lab8") come as one row the same way. The notes the review says once for the
-   whole sort (`notes`: projects with no history got no showcase guess; add the GitHub account) show above.
+   whole sort (`notes`: projects with no history got no showcase guess; add the GitHub account) show on the
+   projects step and the last.
 
    A record an older Hal read in whole gets "Move my record to sections" (jobhunt/sections/move.py): the same
    table proposes a section for each of its notes. "Finish the move" sets aside what the notes nobody
    accepted gave, and "Undo the move" puts everything back as it was. */
-import { html, useState } from "../core/html.js";
+import { html, cx, useState, useRef, useEffect, useLayoutEffect } from "../core/html.js";
 import { go, route } from "../core/router.js";
 import { api, post, put, del } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
@@ -41,6 +48,7 @@ const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden
 const STATE_WORDS = { new: "Waiting to start", sorting: "Sorting", ready: "Ready for you to check", failed: "Could not be sorted",
   undone: "Undone" };
 const PATH_SHOWN = 90;      // characters of a path shown in full; a longer one keeps its start and its end
+const SORTING = new Set(["new", "sorting"]);
 const OTHER_VIEWS = [["left_out", "Left out"], ["copy", "Copies"], ["added", "Added"], ["failed", "Could not be added"]];
 const reloadOn = id => [ev => (ev.type === "action" && KINDS.has(ev.kind)) || (ev.type === "sort" && (id == null || ev.sort_id === id))
   || ev.type === "profile"];
@@ -170,65 +178,120 @@ function CoursesFound({ id, courses }) {
     <ul class="rec-paths">${courses.map(c => html`<${CourseRow} key=${c.key} id=${id} course=${c} />`)}</ul></div>`;
 }
 
-/** The review table of one sort. */
+/** The steps the review goes through, in order: what each shows and the one line on what to do in it. */
+const STEPS = [
+  { id: "courses", words: "Your courses", sections: [],
+    how: "Check each course your folders name, change its words if Hal got them wrong, and add it." },
+  { id: "papers", words: "CVs and official papers", add: "CVs and papers",
+    sections: ["cv", "letter", "official", "document", "job_doc"],
+    how: "Untick anything that is not yours, then add these first: your CV tells Hal your courses and jobs." },
+  { id: "coursework", words: "Coursework", add: "coursework", sections: ["coursework"],
+    how: "Your essays, reports and other handed-in work. Check each has its course, then add it." },
+  { id: "lecture", words: "Lecture material", add: "lecture material", sections: ["lecture"],
+    how: "Slides and notes from your courses. Tick only the modules you want Hal to know you studied." },
+  { id: "projects", words: "Projects", add: "projects", sections: ["project"],
+    how: "Your own projects. Tick Showcase on your best work, then add them." },
+  { id: "done", words: "Done", sections: null,
+    how: "Check what is still ticked and what Hal left out, then add everything still ticked." },
+];
+const LAST = STEPS.length - 1;
+
+/** How much a step holds: the courses found, or the proposals in its sections. */
+function stepCount(step, data) {
+  if (step.id === "courses") return (data.courses || []).length;
+  if (!step.sections) return data.counts.proposed;
+  return data.counts.sections.filter(s => step.sections.includes(s.id)).reduce((n, s) => n + s.proposed, 0);
+}
+
+/** The first step with something in it, so a sort with no courses opens on its papers. */
+function firstStep(data) {
+  const i = STEPS.findIndex(s => s.id !== "done" && stepCount(s, data) > 0);
+  return i < 0 ? LAST : i;
+}
+
+/** The numbered steps, the current one marked; any can be opened. */
+function StepList({ step, data, onStep }) {
+  return html`<ol class="rec-steps" aria-label="Steps">${STEPS.map((s, i) => html`<li key=${s.id}>
+    <button type="button" class=${cx("rec-step", i === step && "on")} aria-current=${i === step ? "step" : null}
+      aria-label=${"Step " + (i + 1) + ": " + s.words} onClick=${() => onStep(i)}>
+      <span class="rec-step-n" aria-hidden="true">${i + 1}</span><span>${s.words}${s.id !== "done" ? html` <span class="small sub">(${stepCount(s, data)})</span>` : ""}</span>
+    </button></li>`)}</ol>`;
+}
+
+/** The review of one sort, a step at a time: each step shows only its own rows, says what to do, and has its
+    own add button; "Add everything ticked" is only on the last. */
 export function SortReview({ id }) {
   const sections = useSections();
-  const [view, setView] = useState({ section: "", state: "proposed", offset: 0, group: "" });
-  const q = "?state=" + view.state + "&offset=" + view.offset + "&limit=" + PAGE + (view.section ? "&section=" + view.section : "")
+  const [step, setStep] = useState(null);
+  const [view, setView] = useState({ state: "proposed", offset: 0, group: "" });
+  const current = STEPS[step == null ? LAST : step];
+  const only = current.sections && current.sections.length ? current.sections.join(",") : "";
+  const q = "?state=" + view.state + "&offset=" + view.offset + "&limit=" + PAGE + (only ? "&section=" + only : "")
     + (view.group ? "&group=" + encodeURIComponent(view.group) : "");
   const { data, error } = useApi(SORT + "/" + id + q, { on: reloadOn(id) });
+  useLayoutEffect(() => { if (step == null && data && data.state === "ready") setStep(firstStep(data)); }, [data, step]);
   if (error && !data) return html`<p class="sub">${error.message}</p>`;
   if (!data) return html`<p class="sub">Loading</p>`;
   const c = data.counts;
-  const show = (section, state = "proposed") => setView({ section, state, offset: 0, group: "" });
+  const goStep = i => { setStep(i); setView({ state: "proposed", offset: 0, group: "" }); };
+  const show = state => setView({ state, offset: 0, group: "" });
   const openGroup = group => setView({ ...view, group, offset: 0 });
-  const accept = section => act(() => post(SORT + "/" + id + "/accept", section ? { section } : {}), out =>
+  const accept = sectionList => act(() => post(SORT + "/" + id + "/accept", sectionList ? { section: sectionList } : {}), out =>
     (out.accepted ? "Adding " + plural(out.accepted, "file") + " to your record. Hal reads each in its place." : "Nothing ticked to add.")
     + (out.need_card ? " " + plural(out.need_card, "file waits", "files wait") + " for its course or job." : ""));
-  const tickAll = ticked => act(() => post(SORT + "/" + id + "/tick", view.section ? { ticked, section: view.section } : { ticked }));
+  const tickAll = ticked => act(() => post(SORT + "/" + id + "/tick", only ? { ticked, section: current.sections } : { ticked }));
   const running = data.state === "new" || data.state === "sorting";
   const moving = data.kind === "move";
   const finish = () => act(() => post(SORT + "/" + id + "/finish"), out =>
     "Done. What " + plural(out.set_aside, "older note", "older notes") + " gave is set aside; Undo the move puts it back.");
   const undo = () => act(() => post(SORT + "/" + id + "/undo"), out =>
     "Undone. " + plural(out.removed, "file was", "files were") + " taken out and your record is as it was.");
-  const label = view.state === "proposed" ? (view.section ? (c.sections.find(s => s.id === view.section) || {}).label : "Everything Hal proposes")
+  const done = current.id === "done";
+  const label = view.state === "proposed" ? (done ? "Everything Hal proposes" : current.words)
     : (OTHER_VIEWS.find(v => v[0] === view.state) || [, ""])[1];
+  const table = current.id !== "courses" && !running;
   return html`<section class="card stack s rec-sort" aria-labelledby="rec-sort-h" data-sort=${id}>
     <div class="row rec-head"><h2 class="h2 grow" id="rec-sort-h">${data.kind === "move" ? "Moving your record to sections" : "Sorting " + data.label}</h2></div>
     <p class="small sub rec-line">${STATE_WORDS[data.state] || data.state}. Nothing goes into your record until you add it.
       ${data.error && " " + data.error}</p>
     ${running && html`<${Bar} pct=${0} label="Sorting" />`}
-    ${c.sections.some(s => s.needs_card) && html`<p class="small sub rec-line">Add your CVs and papers first, so your courses exist.</p>`}
-    ${(data.notes || []).map(n => html`<p class="small sub rec-line" data-note=${n.id} key=${n.id}>${n.words}</p>`)}
-    <${CoursesFound} id=${id} courses=${data.courses} />
-    <div class="chips" role="group" aria-label="Show">
-      <button type="button" class=${"btn small" + (view.state === "proposed" && !view.section ? " primary" : "")} onClick=${() => show("")}>All proposed: ${c.proposed}</button>
-      ${c.sections.map(s => html`<button type="button" class=${"btn small" + (view.section === s.id && view.state === "proposed" ? " primary" : "")}
-        onClick=${() => show(s.id)}>${s.label}: ${s.proposed}${s.needs_card ? " (" + s.needs_card + " need a card)" : ""}</button>`)}
-      ${OTHER_VIEWS.filter(([state]) => c[state] > 0).map(([state, words]) => html`<button type="button"
-        class=${"btn small quiet" + (view.state === state ? " primary" : "")} onClick=${() => show("", state)}>${words}: ${c[state]}</button>`)}</div>
-    ${view.state === "proposed" && c.proposed > 0 && html`<div class="row wrap">
-      <button type="button" class="btn small" onClick=${() => tickAll(true)}>Tick all</button>
-      <button type="button" class="btn small" onClick=${() => tickAll(false)}>Untick all</button>
-      ${view.section && html`<button type="button" class="btn small primary" onClick=${() => accept(view.section)}>Add the ticked ${label}</button>`}
-      <button type="button" class="btn small primary" onClick=${() => accept(null)}>Add everything ticked</button></div>`}
-    ${moving && !data.undone && html`<div class="row wrap">
-      <p class="small sub grow rec-line">When you have added what you want, finish the move: what the other older notes gave is set aside, never deleted.</p>
-      <button type="button" class="btn small" onClick=${finish}>Finish the move</button>
-      ${data.can_undo && html`<button type="button" class="btn small" onClick=${undo}>Undo the move</button>`}</div>`}
-    <div class="row wrap"><h3 class="h3 grow">${view.group ? "Files in this group" : label}: ${data.total}</h3>
-      ${view.group && html`<button type="button" class="btn small" onClick=${() => setView({ ...view, group: "", offset: 0 })}>Back to the list</button>`}</div>
-    ${data.rows.length ? html`<div class="rec-sort-scroll"><table class="rec-sort-table"><thead><tr><th>Add</th><th>File</th><th>Where it goes</th>
-      <th>What it is</th><th>Course or job</th><th>Showcase</th></tr></thead>
-      <tbody>${data.rows.map(row => html`<${Row} key=${row.id == null ? row.group : row.id} row=${row} sections=${sections}
-        cards=${data.cards} sortId=${id} onOpen=${openGroup} />`)}</tbody></table></div>`
-      : html`<p class="small sub">Nothing here.</p>`}
-    ${data.total > PAGE && html`<div class="row"><button type="button" class="btn small" disabled=${view.offset === 0}
-        onClick=${() => setView({ ...view, offset: Math.max(0, view.offset - PAGE) })}>Previous</button>
-      <span class="small sub">${view.offset + 1} to ${Math.min(view.offset + PAGE, data.total)} of ${data.total}</span>
-      <button type="button" class="btn small" disabled=${view.offset + PAGE >= data.total}
-        onClick=${() => setView({ ...view, offset: view.offset + PAGE })}>Next</button></div>`}
+    ${!running && html`<${StepList} step=${step == null ? LAST : step} data=${data} onStep=${goStep} />
+    <div class="rec-step-box stack s" data-step=${current.id}>
+      <h3 class="h3">Step ${(step == null ? LAST : step) + 1}: ${current.words}</h3>
+      <p class="rec-line rec-step-how">${current.how}</p>
+      ${current.id === "courses" && html`${(data.courses || []).length ? html`<${CoursesFound} id=${id} courses=${data.courses} />`
+          : html`<p class="small sub rec-line">Hal found no course names in your folders. Your CV and papers in the next step can give them.</p>`}`}
+      ${(current.id === "courses" || current.id === "papers") && c.sections.some(s => s.needs_card)
+        && html`<p class="small sub rec-line">Add your CVs and papers first, so your courses exist.</p>`}
+      ${(current.id === "projects" || done) && (data.notes || []).map(n => html`<p class="small sub rec-line" data-note=${n.id} key=${n.id}>${n.words}</p>`)}
+      ${done && html`<div class="chips" role="group" aria-label="Show">
+        <button type="button" class=${"btn small" + (view.state === "proposed" ? " primary" : "")} onClick=${() => show("proposed")}>All proposed: ${c.proposed}</button>
+        ${OTHER_VIEWS.filter(([state]) => c[state] > 0).map(([state, words]) => html`<button type="button"
+          class=${"btn small quiet" + (view.state === state ? " primary" : "")} onClick=${() => show(state)}>${words}: ${c[state]}</button>`)}</div>`}
+      ${table && view.state === "proposed" && data.total > 0 && html`<div class="row wrap">
+        <button type="button" class="btn small" onClick=${() => tickAll(true)}>Tick all</button>
+        <button type="button" class="btn small" onClick=${() => tickAll(false)}>Untick all</button>
+        ${!done && html`<button type="button" class="btn small primary" onClick=${() => accept(current.sections)}>Add the ticked ${current.add}</button>`}
+        ${done && html`<button type="button" class="btn small primary" onClick=${() => accept(null)}>Add everything ticked</button>`}</div>`}
+      ${done && moving && !data.undone && html`<div class="row wrap">
+        <p class="small sub grow rec-line">When you have added what you want, finish the move: what the other older notes gave is set aside, never deleted.</p>
+        <button type="button" class="btn small" onClick=${finish}>Finish the move</button>
+        ${data.can_undo && html`<button type="button" class="btn small" onClick=${undo}>Undo the move</button>`}</div>`}
+      ${table && html`<div class="row wrap"><h4 class="h3 grow">${view.group ? "Files in this group" : label}: ${data.total}</h4>
+        ${view.group && html`<button type="button" class="btn small" onClick=${() => setView({ ...view, group: "", offset: 0 })}>Back to the list</button>`}</div>
+      ${data.rows.length ? html`<div class="rec-sort-scroll"><table class="rec-sort-table"><thead><tr><th>Add</th><th>File</th><th>Where it goes</th>
+        <th>What it is</th><th>Course or job</th><th>Showcase</th></tr></thead>
+        <tbody>${data.rows.map(row => html`<${Row} key=${row.id == null ? row.group : row.id} row=${row} sections=${sections}
+          cards=${data.cards} sortId=${id} onOpen=${openGroup} />`)}</tbody></table></div>`
+        : html`<p class="small sub">Nothing here.${done ? "" : " Press Next."}</p>`}
+      ${data.total > PAGE && html`<div class="row"><button type="button" class="btn small" disabled=${view.offset === 0}
+          onClick=${() => setView({ ...view, offset: Math.max(0, view.offset - PAGE) })}>Previous page</button>
+        <span class="small sub">${view.offset + 1} to ${Math.min(view.offset + PAGE, data.total)} of ${data.total}</span>
+        <button type="button" class="btn small" disabled=${view.offset + PAGE >= data.total}
+          onClick=${() => setView({ ...view, offset: view.offset + PAGE })}>Next page</button></div>`}`}
+      ${!done && html`<div class="row rec-step-next"><button type="button" class="btn primary" onClick=${() => goStep((step == null ? LAST : step) + 1)}>
+        Next<${Icon} n="chevR" c="s" /></button></div>`}
+    </div>`}
     ${Object.keys(data.skipped || {}).length > 0 && html`<p class="small sub rec-line">Not looked at, on purpose: ${Object.entries(data.skipped)
       .map(([why, n]) => n + " " + why).join(", ")}.</p>`}
   </section>`;
@@ -236,6 +299,39 @@ export function SortReview({ id }) {
 
 /** Opens the review of a sort on its own page. */
 export function openSort(id) { go(route("sort", String(id))); }
+
+/** The sorts, and the review opened by itself when one finishes sorting while the page is open. */
+export function useSortsOpenWhenReady() {
+  const { data } = useApi(SORT, { on: reloadOn(null) });
+  const seen = useRef(null);
+  useEffect(() => {
+    if (!data) return;
+    const before = seen.current;
+    seen.current = Object.fromEntries(data.sorts.map(s => [s.id, s.state]));
+    if (!before) return;
+    const finished = data.sorts.find(s => s.state === "ready" && (before[s.id] === undefined || SORTING.has(before[s.id])));
+    if (finished) openSort(finished.id);
+  }, [data]);
+  return data;
+}
+
+/** The banner at the top of Overview while a sort is being sorted or waits to be checked. */
+export function SortBanner({ data }) {
+  const sorts = data ? data.sorts : [];
+  const waiting = sorts.find(s => s.state === "ready" && s.counts.proposed > 0);
+  const going = sorts.find(s => SORTING.has(s.state));
+  if (waiting) {
+    return html`<div class="note rec-sort-banner" role="status"><${Icon} n="folder" /><div class="grow stack s">
+      <p class="rec-line"><b>Hal sorted ${plural(waiting.counts.total, "file")} from ${waiting.label || "your files"}.</b>
+        Nothing is added until you check the list.</p>
+      <div><button type="button" class="btn primary" onClick=${() => openSort(waiting.id)}>Check the list</button></div></div></div>`;
+  }
+  if (going) {
+    return html`<div class="note rec-sort-banner" role="status"><${Icon} n="clock" /><div class="grow">
+      <p class="rec-line"><b>Hal is sorting ${going.label || "your files"}.</b> The list opens here when it is ready to check.</p></div></div>`;
+  }
+  return null;
+}
 
 /** "Sort a big folder for me" on Overview: start one, list the latest, and open one's review. */
 export function SortCard() {
@@ -250,7 +346,7 @@ export function SortCard() {
       <p class="small sub rec-line">Have a folder of everything from your studies and jobs? Hal looks through it and suggests where each file goes:
         your CVs, your coursework and lecture notes by course, your projects, your certificates. You check the list and add what is right.
         Hal leaves out anything it is unsure about, private papers such as medical letters, and older copies.</p>
-      <${SortStart} onStarted=${openSort} />
+      <${SortStart} />
       ${data && data.can_move && html`<div class="row wrap"><p class="small sub grow rec-line">An older Hal read files into your record
         all at once. Move them into the parts of your record they belong in: you check each one first, and one click undoes it.</p>
         <button type="button" class="btn" onClick=${moveRecord}>Move my record to sections</button></div>`}

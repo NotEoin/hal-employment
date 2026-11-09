@@ -101,6 +101,29 @@ class Review(unittest.TestCase):
             add_and_read(con, sort_id)
             record.sync()
 
+    def test_a_step_of_several_sections_is_listed_ticked_and_accepted_together(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            sort_id = sorted_folder(con, software_dump(files))
+            papers = "cv,letter"
+            listed = {r["section"] for r in sorts.rows(con, sort_id, section=papers)["rows"]}
+            self.assertEqual(listed, {"cv", "letter"})
+            self.assertEqual(sorts.tick(con, sort_id, False, ["letter"]), 1)
+            self.assertEqual(sorts.accept(con, sort_id, ["cv", "letter"]), {"accepted": 2, "need_card": 0})
+            with self.assertRaises(LookupError):
+                sorts.rows(con, sort_id, section="cv,nowhere")
+
+    def test_home_counts_the_sorts_waiting_to_be_checked(self):
+        from jobhunt.sections import home as sections_home
+
+        with home() as (con, _vault, files), fake_ai(NONE):
+            self.assertEqual(sections_home.sections(con), {"counts": {"record": 0}})
+            sort_id = sorted_folder(con, software_dump(files))
+            self.assertEqual(sorts.waiting(con), [sort_id])
+            self.assertEqual(sections_home.sections(con), {"counts": {"record": 1}})
+            with con:
+                con.execute("UPDATE record_sort_rows SET state = 'left_out' WHERE sort_id = ?", (sort_id,))
+            self.assertEqual(sorts.waiting(con), [], "a sort with nothing left to check is not counted")
+
     def test_a_row_waits_for_its_course_and_finds_it_once_a_cv_gives_one(self):
         with home() as (con, _vault, files), fake_ai(NONE):
             sort_id = sorted_folder(con, history_dump(files))

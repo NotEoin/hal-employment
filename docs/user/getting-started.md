@@ -266,9 +266,12 @@ account downloaded as a zip), Hal can suggest where each file goes. It never add
   put them.
 
 Hal proposes a part of your record for each file: your CVs, your coursework and lecture notes by course,
-your code projects and project folders, your certificates and other papers. Press **Check the list** to see
-the proposals on a page of their own, one part at a time. Change where a file goes, what it is or which course or job it is for, or
-untick it, then press **Add the ticked ...** for one part or **Add everything ticked**. Each file you add is
+your code projects and project folders, your certificates and other papers. When it is ready, the list opens
+by itself if you are on Your record; otherwise Overview shows a banner and **Your record** in the menu a
+small number. Press **Check the list** to see the proposals on a page of their own, in six steps: your
+courses, CVs and official papers, coursework, lecture material, projects, and done. Change where a file
+goes, what it is or which course or job it is for, or untick it, then press **Add the ticked ...** in each
+step, or **Add everything ticked** in the last. Each file you add is
 read by that part of your record, as if you had added it there yourself.
 
 Hal leaves out what it is not sure about, with the reason: pictures and recordings, code outside a project,

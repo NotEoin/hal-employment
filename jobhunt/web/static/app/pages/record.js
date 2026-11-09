@@ -5,8 +5,9 @@
    The tab is part of the route ("record-work"), so a link opens the right one; the old "record-files" opens
    Documents. Each tab has its own "Add" panel (record/sections.js): Overview the CVs, each job and education
    card its own documents, Projects its ways to add a project, Documents its upload. Overview has "Sort a big
-   folder for me" (record/sort.js), whose proposals the person accepts, and shows how an older Hal's bulk read
-   went; each profile tab lists what Hal
+   folder for me" (record/sort.js), whose proposals the person accepts: a banner at its top leads to "Check the
+   list" while a sort waits, and a sort that finishes while the page is open opens its list. It also shows how
+   an older Hal's bulk read went; each profile tab lists what Hal
    found for the person to check, change or hide; Documents keeps the folder's groups, whose files download
    from any computer (so a laptop reaches the desktop's record), and "Ask your record", whose answer names
    the files it came from. */
@@ -22,7 +23,7 @@ import { IngestCard } from "../record/add.js";
 import { KindSection, ConflictsTab } from "../record/items.js";
 import { basicKey } from "../record/fields.js";
 import { SourcesPanel, ProjectsPanel } from "../record/sections.js";
-import { SortCard } from "../record/sort.js";
+import { SortCard, SortBanner, useSortsOpenWhenReady } from "../record/sort.js";
 // [tab, words, kinds shown in it]
 const TABS = [["overview", "Overview", []], ["work", "Work history", ["job"]], ["education", "Education", ["education"]],
   ["skills", "Skills", ["skill"]], ["projects", "Projects", ["project"]],
@@ -112,6 +113,7 @@ export function Record({ arg }) {
   const setT = next => { setTab(next); writeTab(next); };
   const { data, error, reload } = useApi("/record", { on: [ev => ev.type === "action" && ev.kind === "record.sync"] });
   const profile = useApi("/profile").data;
+  const sorts = useSortsOpenWhenReady();
   const make = async () => {
     try { await post("/record/create-folder"); reload(); } catch (err) { toast(err.message); }
   };
@@ -126,6 +128,7 @@ export function Record({ arg }) {
     ${error && html`<${Note} tone="warn">${error.message}<//>`}
     ${data && !data.exists && html`<${Note}>Your record folder is not there yet.
       <button class="btn small" type="button" onClick=${make}>Make the folder</button><//>`}
+    ${t === "overview" && html`<${SortBanner} data=${sorts} />`}
     <div class="rec-tabs"><${Tabs} label="Your record" value=${t} onChange=${setT} tabs=${tabs} /></div>
     ${t === "overview" && html`<div class="grid2"><div class="stack">
         <${SourcesPanel} uid="rec-cvs" heading="Your CVs" parts=${[["cv", null], ["letter", null]]}

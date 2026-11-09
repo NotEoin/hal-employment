@@ -89,7 +89,12 @@ class SortAFolder(unittest.TestCase):
         with closing(db.connect()) as con:
             return sources.listing(con, section)
 
-    def test_a_folder_is_sorted_checked_by_section_and_only_the_ticked_files_are_added(self) -> None:
+    def step(self, review, n: int) -> None:
+        """Opens step `n` of the review."""
+        review.get_by_role("button", name=re.compile(rf"^Step {n}: ")).click()
+        self.assertEqual(review.locator("[aria-current=step]").get_attribute("aria-label").split(":")[0], f"Step {n}")
+
+    def test_a_folder_is_sorted_checked_step_by_step_and_only_the_ticked_files_are_added(self) -> None:
         dump = history_dump(Path(self.hal.home) / "Files")
         p = self.page()
         card = p.page.locator("section.card", has=p.page.get_by_role("heading", name="Sort a big folder for me"))
@@ -97,33 +102,87 @@ class SortAFolder(unittest.TestCase):
         card.get_by_label("A folder on this computer").fill(str(dump))
         card.get_by_role("button", name="Sort this folder").click()
         review = p.page.locator("section.rec-sort")
-        p.shows(review.get_by_text("Ready for you to check"), "the finished sort")
+        p.shows(review.get_by_text("Ready for you to check"), "the list, opened by itself once sorted")
+        self.assertRegex(p.page.url, r"#sort-\d+$")
+        self.assertEqual(review.locator("[aria-current=step]").get_attribute("aria-label"), "Step 1: Your courses",
+                         "the review starts with the courses the folders name")
         p.shows(review.get_by_text("Add your CVs and papers first, so your courses exist."), "the order to add in")
-        p.shows(review.get_by_text("Hal could not see who wrote these (no history). Mark your best work as Showcase."),
-                "said once: a project folder with no history got no showcase guess")
         p.shows(review.get_by_role("heading", name="Courses Hal found"), "the courses the folders name")
         review.get_by_role("button", name="Add the course BA History").click()
         p.shows(p.page.get_by_text(re.compile(r"^Added BA History\.")), "the course added")
         with closing(db.connect()) as con:
             self.assertEqual([c["title"] for c in profile_store.items(con, "education")], ["BA History"])
-        review.get_by_role("button", name=re.compile(r"^Lecture material: \d+$")).click()
+        self.assertEqual(review.get_by_role("button", name="Add everything ticked").count(), 0,
+                         "adding everything is only on the last step")
+        review.get_by_role("button", name="Next", exact=True).click()
+        self.assertEqual(review.locator("[aria-current=step]").get_attribute("aria-label"),
+                         "Step 2: CVs and official papers")
+        p.shows(review.get_by_text("Marnie Quillfeather CV.md", exact=True), "the CV's row")
+        self.assertEqual(review.get_by_text("Seminar notes week 2.md", exact=True).count(), 0, "only this step's rows")
+        self.assertEqual(self.listed("cv"), [], "nothing is added before the person says so")
+        review.get_by_role("button", name="Add the ticked CVs and papers").click()
+        p.shows(p.page.get_by_text(re.compile(r"^Adding \d+ files? to your record")), "the papers added")
+        self.assertTrue(runner.idle(WAIT_S))
+        self.assertEqual([s["section"] for s in self.listed("cv")], ["cv"])
+        self.assertEqual(self.listed("lecture"), [])
+        self.step(review, 4)
         review.get_by_role("button", name="Show the files of HIS2040 Archival Methods").click()
         p.shows(review.get_by_text("Seminar notes week 2.md", exact=True), "a module's own files")
         review.get_by_role("button", name="Back to the list").click()
         p.shows(review.get_by_text("(3 files)"), "the module as one row")
-        review.get_by_role("button", name="CVs: 1").click()
-        p.shows(review.get_by_text("Marnie Quillfeather CV.md", exact=True), "the CV's row")
-        self.assertEqual(self.listed("cv"), [], "nothing is added before the person says so")
-        review.get_by_role("button", name="Add the ticked CVs").click()
-        p.shows(review.get_by_role("button", name="Added: 1"), "the added count")
-        self.assertEqual([s["section"] for s in self.listed("cv")], ["cv"])
-        self.assertEqual(self.listed("lecture"), [])
+        self.step(review, 5)
+        p.shows(review.get_by_text("Hal could not see who wrote these (no history). Mark your best work as Showcase."),
+                "said once: a project folder with no history got no showcase guess")
+        self.step(review, 6)
+        p.shows(review.get_by_role("button", name="Add everything ticked"), "adding everything on the last step")
         review.get_by_role("button", name=re.compile(r"^Left out: \d+$")).click()
         p.shows(review.get_by_text("Fit note.md", exact=True), "a private file left out")
         self.clean(p)
         for size, scheme in (("narrow", "dark"),):
             with self.subTest(size=size):
                 self.clean(self.page(size, scheme))
+
+    def test_overview_leads_to_a_sort_waiting_to_be_checked_and_the_menu_shows_a_badge(self) -> None:
+        sort_id = self.sorted_dump()
+        for size in ("wide", "narrow"):
+            with self.subTest(size=size):
+                p = self.page(size)
+                banner = p.page.locator(".rec-sort-banner")
+                p.shows(banner.get_by_text(re.compile(r"^Hal sorted \d+ files from Marnie files\.")), "the banner")
+                p.shows(banner.get_by_text("Nothing is added until you check the list."), "what happens next")
+                badge = p.page.locator("nav.rail .nav", has_text="Your record").locator(".count")
+                self.assertEqual(badge.text_content(), "1", "the menu counts the sort waiting")
+                button = banner.get_by_role("button", name="Check the list")
+                self.assertIn("primary", button.get_attribute("class"))
+                self.clean(p)
+                button.click()
+                p.shows(p.page.get_by_role("heading", name="Check the sorted list", level=1), "the list's own page")
+                self.assertTrue(p.page.url.endswith(f"#sort-{sort_id}"))
+
+    def test_the_steps_show_one_part_at_a_time_and_next_moves_on(self) -> None:
+        sort_id = self.sorted_dump()
+        for size in ("narrow", "wide"):
+            with self.subTest(size=size):
+                p = self.page(size)
+                p.go(f"sort-{sort_id}")
+                review = p.page.locator("section.rec-sort")
+                p.shows(review.get_by_text("Ready for you to check"), "the review")
+                names = review.locator(".rec-steps button").evaluate_all(
+                    "bs => bs.map(b => b.getAttribute('aria-label'))")
+                self.assertEqual(names, ["Step 1: Your courses", "Step 2: CVs and official papers",
+                                         "Step 3: Coursework", "Step 4: Lecture material", "Step 5: Projects",
+                                         "Step 6: Done"])
+                for n, words in ((2, "add these first"), (3, "handed-in work"), (4, "you studied"),
+                                 (5, "Tick Showcase"), (6, "add everything still ticked")):
+                    review.get_by_role("button", name="Next", exact=True).click()
+                    current = review.locator("[aria-current=step]").get_attribute("aria-label")
+                    self.assertTrue(current.startswith(f"Step {n}:"), current)
+                    p.shows(review.locator(".rec-step-how", has_text=words), f"what to do in step {n}")
+                    self.assertEqual(review.get_by_role("button", name="Add everything ticked").count(),
+                                     1 if n == 6 else 0)
+                self.assertEqual(review.get_by_role("button", name="Next", exact=True).count(), 0)
+                self.assertEqual(p.sideways(), 0)
+                self.clean(p)
 
     def test_the_list_fills_a_wide_window_and_follows_it_when_it_is_resized(self) -> None:
         sort_id = self.sorted_dump()
@@ -143,7 +202,7 @@ class SortAFolder(unittest.TestCase):
         p.go(f"sort-{sort_id}")
         review = p.page.locator("section.rec-sort")
         p.shows(review.get_by_text("Ready for you to check"), "the review on its own page")
-        review.get_by_role("button", name=re.compile(r"^Documents: \d+$")).click()
+        self.step(review, 2)
         long_path = review.locator(f'[title="Marnie files/{LONG_REL}"]')
         p.shows(long_path, "the long path, whole in its title")
         self.assertIn("...", long_path.inner_text(), "the path is shortened in the middle")
@@ -171,6 +230,7 @@ class SortAFolder(unittest.TestCase):
         p.page.get_by_role("button", name="Move my record to sections").click()
         review = p.page.locator("section.rec-sort")
         p.shows(review.get_by_text("Ready for you to check"), "the proposals for the older notes")
+        self.step(review, 6)
         review.get_by_role("button", name="Add everything ticked").click()
         p.shows(review.get_by_role("button", name=re.compile(r"^Added: \d+$")), "the added count")
         self.assertTrue(runner.idle(WAIT_S), "the accepted notes are read before the move is finished")

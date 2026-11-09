@@ -191,13 +191,10 @@ def _shape_group(key: str, members: list[sqlite3.Row], titles: dict[int, str]) -
             "note_rel": None, "copies": []}
 
 
-def _proposed(con: sqlite3.Connection, sort_id: int, section: str | None) -> list[sqlite3.Row]:
-    sql, args = "SELECT * FROM record_sort_rows WHERE sort_id = ? AND state = 'proposed'", [int(sort_id)]
-    if section:
-        registry.get(section)
-        sql += " AND section = ?"
-        args.append(section)
-    return con.execute(sql + " ORDER BY rel", args).fetchall()
+def _proposed(con: sqlite3.Connection, sort_id: int, section) -> list[sqlite3.Row]:
+    where, only = sorts.section_filter(section)
+    return con.execute("SELECT * FROM record_sort_rows WHERE sort_id = ? AND state = 'proposed'" + where +
+                       " ORDER BY rel", [int(sort_id), *only]).fetchall()
 
 
 def _numbered(name: str) -> tuple[int, str]:
@@ -214,7 +211,7 @@ def _groups(found: list[sqlite3.Row]) -> dict[str, list[sqlite3.Row]]:
     return members
 
 
-def rows(con: sqlite3.Connection, sort_id, *, section: str | None = None, group: str | None = None,
+def rows(con: sqlite3.Connection, sort_id, *, section=None, group: str | None = None,
          offset: int = 0, limit: int = sorts.PAGE) -> dict:
     """One page of a sort's proposals in path order, lecture material and coursework one row a module group;
     with `group`, that group's own files. {"rows", "total"}, as `sorts.rows`."""

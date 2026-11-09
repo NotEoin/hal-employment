@@ -17,6 +17,8 @@ Design decisions, each with its reason:
   accepted or added, so nothing they did is undone by it.
 - Files from the page or a zip are kept in Hal's data folder (`work_dir`) until the sort is removed, as the
   rows point at them; a folder on this computer and the drop folder are read where they are.
+- The review goes through the sort in steps, each of one or more sections (CVs and papers together), so
+  `rows`, `tick` and `accept` take a section, a comma-separated list of them or a list (`section_filter`).
 """
 from __future__ import annotations
 
@@ -228,6 +230,33 @@ def shape(con: sqlite3.Connection, sort_id) -> dict:
                                (s["id"],)).fetchone())}
 
 
+def waiting(con: sqlite3.Connection) -> list[int]:
+    """The ids of the sorts ready for the person with proposals still to check, newest first."""
+    return [r[0] for r in con.execute("SELECT s.id FROM record_sorts s WHERE s.state = 'ready' AND EXISTS (SELECT 1 "
+                                      "FROM record_sort_rows r WHERE r.sort_id = s.id AND r.state = 'proposed') "
+                                      "ORDER BY s.id DESC")]
+
+
+def section_ids(section) -> list[str]:
+    """The sections named by `section`: one id, a comma-separated list of them, or a list; [] for none.
+    LookupError for a section that is not there."""
+    if not section:
+        return []
+    parts = section.split(",") if isinstance(section, str) else list(section)
+    ids = [str(p).strip() for p in parts if str(p).strip()]
+    for one in ids:
+        registry.get(one)
+    return ids
+
+
+def section_filter(section) -> tuple[str, list[str]]:
+    """The SQL that keeps the rows of `section` (`section_ids`), with its arguments; ("", []) for all."""
+    ids = section_ids(section)
+    if not ids:
+        return "", []
+    return f" AND section IN ({','.join('?' * len(ids))})", ids     # placeholders only; the ids are bound
+
+
 def listing(con: sqlite3.Connection, limit: int = 10) -> list[dict]:
     """The latest sorts, newest first."""
     return [shape(con, r["id"]) for r in con.execute("SELECT id FROM record_sorts ORDER BY id DESC LIMIT ?",
@@ -243,17 +272,14 @@ def cards(con: sqlite3.Connection) -> dict[str, list[dict]]:
     return out
 
 
-def rows(con: sqlite3.Connection, sort_id: int, *, section: str | None = None, state: str = "proposed",
+def rows(con: sqlite3.Connection, sort_id: int, *, section=None, state: str = "proposed",
          offset: int = 0, limit: int = PAGE) -> dict:
-    """One page of a sort's rows in `state` (of one section when given), by path; {"rows", "total"}."""
+    """One page of a sort's rows in `state` (of the sections given, `section_ids`), by path; {"rows", "total"}."""
     row_of(con, sort_id)
     if state not in ROW_STATES:
         raise ValueError(f"Choose rows by one of: {', '.join(ROW_STATES)}.")
-    sql, args = "FROM record_sort_rows WHERE sort_id = ? AND state = ?", [int(sort_id), state]
-    if section:
-        registry.get(section)
-        sql += " AND section = ?"
-        args.append(section)
+    where, only = section_filter(section)
+    sql, args = "FROM record_sort_rows WHERE sort_id = ? AND state = ?" + where, [int(sort_id), state, *only]
     total = con.execute("SELECT count(*) " + sql, args).fetchone()[0]
     found = con.execute("SELECT * " + sql + " ORDER BY rel LIMIT ? OFFSET ?",
                         [*args, max(1, min(int(limit), PAGE_MAX)), max(0, int(offset))]).fetchall()
@@ -347,32 +373,27 @@ def keep_copy(con: sqlite3.Connection, row_id) -> dict:
                      older_copies(con, found["sort_id"], [found["rel"]]))
 
 
-def tick(con: sqlite3.Connection, sort_id, ticked: bool, section: str | None = None) -> int:
-    """Ticks or unticks every proposal of a sort (of one section when given); returns how many."""
+def tick(con: sqlite3.Connection, sort_id, ticked: bool, section=None) -> int:
+    """Ticks or unticks every proposal of a sort (of the sections given, `section_ids`); returns how many."""
     s = row_of(con, sort_id)
-    sql = "UPDATE record_sort_rows SET ticked = ? WHERE sort_id = ? AND state = 'proposed'"
-    args = [int(ticked), s["id"]]
-    if section:
-        registry.get(section)
-        sql += " AND section = ?"
-        args.append(section)
+    where, only = section_filter(section)
+    sql = "UPDATE record_sort_rows SET ticked = ? WHERE sort_id = ? AND state = 'proposed'" + where
+    args = [int(ticked), s["id"], *only]
     with con:
         return con.execute(sql, args).rowcount
 
 
-def accept(con: sqlite3.Connection, sort_id, section: str | None = None) -> dict:
-    """Marks the ticked proposals (of one section when given) accepted, all but those still needing a card;
+def accept(con: sqlite3.Connection, sort_id, section=None) -> dict:
+    """Marks the ticked proposals (of the sections given, `section_ids`) accepted, all but those still needing a card;
     returns {"accepted": n, "need_card": n}. The `record.sort_accept` action makes them sources."""
     s = row_of(con, sort_id)
     if s["state"] != "ready":
         raise ValueError("Wait until Hal has finished sorting, then accept." if s["state"] in ("new", "sorting")
                          else "This sort cannot be accepted any more.")
-    sql, args = "SELECT id, section, target_id FROM record_sort_rows WHERE sort_id = ? AND state = 'proposed' " \
-                "AND ticked = 1", [s["id"]]
-    if section:
-        registry.get(section)
-        sql += " AND section = ?"
-        args.append(section)
+    where, only = section_filter(section)
+    sql = "SELECT id, section, target_id FROM record_sort_rows WHERE sort_id = ? AND state = 'proposed' AND " \
+          "ticked = 1" + where
+    args = [s["id"], *only]
     ready, waiting = [], 0
     for r in con.execute(sql, args).fetchall():
         if sorter.needs_card(r["section"], r["target_id"]):

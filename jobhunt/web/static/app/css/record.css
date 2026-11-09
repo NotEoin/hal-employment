@@ -86,6 +86,21 @@
 .rec-sort-scroll { overflow-x: auto; max-width: 100%; }
 .rec-sort-table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 0.9rem; }
 .rec-path { overflow-wrap: anywhere; }
+/* Its numbered steps, the current one filled, and the banner on Overview that leads to it */
+.rec-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.rec-step { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; text-align: left; }
+.rec-step-n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--line);
+  font-weight: 700; font-size: 13px; flex: none; }
+.rec-step.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); background: var(--primary-soft); font-weight: 700; }
+.rec-step.on .rec-step-n { background: var(--primary); color: var(--on-primary); }
+.rec-step-box { border-top: 1px solid var(--line); padding-top: 12px; }
+.rec-step-box .h3 { margin: 0; }
+.rec-step-how { font-size: 15px; }
+.rec-step-next { justify-content: flex-end; }
+.rec-step-next .btn { min-height: 44px; }
+.rec-sort-banner { margin-bottom: 14px; }
+.rec-sort-banner .btn { min-height: 44px; }
 .rec-sort-table th { text-align: left; font-weight: 700; padding: 6px; border-bottom: 1px solid var(--line); }
 .rec-sort-table td { vertical-align: top; padding: 6px; border-bottom: 1px solid var(--line); }
 .rec-sort-table select { min-width: 9rem; }

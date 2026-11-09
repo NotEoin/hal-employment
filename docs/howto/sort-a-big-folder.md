@@ -18,17 +18,21 @@ code.
    python -m jobhunt sort ~/Documents/Uni    # prints what Hal proposes for each part of your record
    ```
 
-3. Wait for **Ready for you to check**, then press **Check the list**. The list opens on its own page, as
-   wide as your window; on a phone, slide the table sideways to see every column. A long folder path is
-   shortened in the middle: point at it to see all of it. The buttons at the top show how many
-   files Hal proposes for each part of your record: **CVs**, **Coursework**, **Lecture material**,
-   **Projects**, **Documents** and the rest. Press one to see its files, 50 at a time. Lecture material and
-   coursework show one row a module, with how many files it holds: ticking it, or changing its course,
+3. Wait while Hal sorts. If you stay on **Your record**, the list opens by itself when it is ready. If you
+   come back later, **Overview** shows "Hal sorted ... files from ... Nothing is added until you check the
+   list." at the top, and **Your record** in the menu shows a small number: press **Check the list**. The
+   list opens on its own page, as wide as your window; on a phone, slide the table sideways to see every
+   column. A long folder path is shortened in the middle: point at it to see all of it.
+
+   The list goes in six numbered steps, with the one you are on highlighted: **Your courses**, **CVs and
+   official papers**, **Coursework**, **Lecture material**, **Projects** and **Done**. Each step shows only
+   its own files, 50 at a time, and says in one line what to do. Press **Next** when you are done with a
+   step, or press any step to go back to it. Lecture material and coursework show one row a module, with how many files it holds: ticking it, or changing its course,
    changes them all. Press **Show the files** to see them one by one, and **Back to the list** to return.
    Code in a course, year or module folder (practicals, labs, assignments, a team project) goes to
    **Coursework** for that course, in its module's row. Numbered folders such as lab1 to lab8 are one row
    too, wherever they are.
-4. Under **Courses Hal found**, check each course your folders name, such as a "BSc Computing" folder with
+4. In step 1, **Your courses**, under **Courses Hal found**, check each course your folders name, such as a "BSc Computing" folder with
    its year and module folders. Change its qualification, subject or where you studied if Hal got them
    wrong, then press **Add this course**. Its coursework and lecture notes find it at once. A year folder
    such as "2023-24", "Year 1" or "Semester 2" is never a course: its modules join your degree, as your
@@ -43,11 +47,11 @@ code.
    **Settings**, the list also suggests adding it on **Projects**. To show coursework, such as a
    module's code, star it on its course once it is added. Your changes are kept, so you can stop and come
    back later.
-6. Add your CVs and papers next: press **CVs**, then **Add the ticked CVs**, and the same for **Official
-   papers**. Hal reads them and finds your courses and jobs, and the files still waiting for their course
-   or job find it.
-7. Press **Add everything ticked**, or **Add the ticked ...** one part at a time. Each file is read by its
-   part of your record, as if you had added it there yourself.
+6. In step 2, **CVs and official papers**, press **Add the ticked CVs and papers**. Hal reads them and
+   finds your courses and jobs, and the files still waiting for their course or job find it.
+7. In steps 3 to 5, press **Add the ticked coursework**, **Add the ticked lecture material** and **Add the
+   ticked projects**. In the last step, **Done**, **Add everything ticked** adds what is still ticked in
+   every part. Each file is read by its part of your record, as if you had added it there yourself.
 
    From a terminal:
 
@@ -56,7 +60,7 @@ code.
    python -m jobhunt sources list         # lists what each part of your record now holds
    ```
 
-8. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
+8. In the last step, look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
    or project. Copies of a project count as one even in different folders, including two folders you gave
    in one sort, with no git history and with
    different files, such as "Projects/tidewatch", "old/tidewatch-final" and "Desktop/Tidewatch-12gb": the
@@ -96,6 +100,8 @@ How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-fo
 
 | Symptom | Fix |
 | --- | --- |
+| You cannot find the list Hal sorted | Open **Your record**, **Overview**, and press **Check the list** in the banner at the top. |
+| There is no **Add everything ticked** | It is in the last step. Press **Done** at the top of the list. |
 | There is no box for a folder | You are using Hal from another computer. Upload a zip of the folder instead. |
 | "Hal is still sorting another folder." | Wait for the first sort to finish, then sort the next folder. |
 | A file says "Choose one, or add your CV first" | Add the course under **Courses Hal found**, or your CVs first, or choose its course under **Course or job**. |

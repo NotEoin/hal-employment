@@ -45,7 +45,8 @@ Routes:
   "action_id"}.
 - `POST /api/v2/record/sort/upload`: a multipart form of files `file0`, `file1`, ... with `path0`, ... (a
   path inside a folder the person chose); zips are unpacked. Kept in Hal's data folder; {"sort", "action_id"}.
-- `GET /api/v2/record/sort/{id}?section=&state=proposed&offset=0&limit=50&group=&flat=`: {SORT, "rows":
+- `GET /api/v2/record/sort/{id}?section=&state=proposed&offset=0&limit=50&group=&flat=` (`section` one id
+  or several, comma-separated: the review's step "CVs and official papers" is `cv,letter,official,...`): {SORT, "rows":
   [ROW or GROUP], "total", "cards", "courses": [COURSE], "notes": [{"id", "words"}]}, the notes said once
   for the whole sort (`sort_review.notes`: `no_history`, `github`). Proposed lecture material and coursework come one
   GROUP a module (`sort_review.rows`) unless `flat=1`; `group` lists one group's own rows.
@@ -58,8 +59,8 @@ Routes:
 - `POST /api/v2/record/sort-rows/{id}/keep`: keeps that older copy instead of the one Hal kept
   (`sorts.keep_copy`); the ROW now kept. 400 when it is no copy or the kept one is added already.
 - `POST /api/v2/record/sort/{id}/tick` {"ticked", "section"}: ticks or unticks every proposal (of one
-  section); {"changed"}.
-- `POST /api/v2/record/sort/{id}/accept` {"section"}: accepts the ticked proposals (of one section);
+  section, or a list of them); {"changed"}.
+- `POST /api/v2/record/sort/{id}/accept` {"section"}: accepts the ticked proposals (of one section, or a list);
   {"accepted", "need_card", "action_id"}.
 - `POST /api/v2/record/sort/{id}/again`: proposes again, keeping what was accepted; {"action_id"}.
 - `DELETE /api/v2/record/sort/{id}`: forgets the sort and the files Hal kept for it; what it added stays. A
