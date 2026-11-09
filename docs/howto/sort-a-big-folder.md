@@ -55,7 +55,8 @@ code.
    ```
 
 8. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
-   or project. Copies of a project count as one even in different folders, with no git history and with
+   or project. Copies of a project count as one even in different folders, including two folders you gave
+   in one sort, with no git history and with
    different files, such as "Projects/tidewatch", "old/tidewatch-final" and "Desktop/Tidewatch-12gb": the
    names match once case, separators and endings such as "-v3", "-final", "-main" or "(2)" are ignored.
    A folder with another name, such as "AQ-Tidewatch", counts as a copy only when its README starts with

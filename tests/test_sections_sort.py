@@ -117,6 +117,23 @@ class Review(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "showcase"):
                 sorts.change_row(con, back["id"], {"star": True})
 
+    def test_one_project_in_two_folders_of_a_sort_is_one_row(self):
+        # the same project in a repos folder and a cloud drive came out as two projects, as copies were only
+        # compared inside each folder sorted (2026-11-09)
+        readme = "# Wrenbot\n\n" + "Wrenbot plans river boat rotas from a shared calendar and tide tables. " * 12
+        with home() as (con, _vault, files), fake_ai(NONE):
+            older, newer = files / "drive" / "personal projects" / "Wrenbot", files / "repos" / "Wrenbot"
+            put(older, "README.md", readme)
+            put(older, "wrenbot.py", "def plan():\n    return []\n")
+            put(newer, "README.md", readme + "\nNow with a web page.\n")
+            put(newer, "wrenbot.py", "def plan():\n    return ['tide']\n")
+            put(newer, "web.py", "def page():\n    return 'rota'\n")
+            sort_id = sorts.create(con, "folder", [str(files / "drive"), str(files / "repos")], "two folders")
+            sorts.run(con, sort_id)
+            rows = con.execute("SELECT rel, state FROM record_sort_rows WHERE sort_id = ? AND section = 'project'",
+                               (sort_id,)).fetchall()
+            self.assertEqual(sorted(state for _rel, state in rows), ["copy", "proposed"], rows)
+
     def test_sorting_again_keeps_what_was_accepted(self):
         with home() as (con, _vault, files), fake_ai(NONE):
             folder = files / "Inbox"

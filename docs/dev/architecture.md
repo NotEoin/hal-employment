@@ -1517,7 +1517,9 @@ proposals to sources, and a record the bulk read built through a move and its un
   (`versions.shared`) or READMEs that say the same (`README_SAME`); two different remotes are never one
   project, and no group holds two names that differ only by numbers (`numbered_apart`). The copy kept is
   outside an "old", "archive", "backup", "unversioned" or "copies" folder (`ARCHIVED`) where one is, then
-  has the newest file. A proposed ROW lists its `copies` (`sorts.older_copies`), and `sorts.keep_copy`
+  has the newest file. `sorts.run` marks copies once more over all of a sort's folders together
+  (`sorter.across_roots`), since each folder is proposed on its own. A proposed ROW lists its `copies`
+  (`sorts.older_copies`), and `sorts.keep_copy`
   swaps which copy is proposed, carrying over the tick and showcase guess. A document placed in Projects
   that names `LISTING_MIN` (3) or more of the project folders proposed (`sort_rules.lists_projects`, without
   case or punctuation) is left out as a listing (`LISTING_WORDS`).

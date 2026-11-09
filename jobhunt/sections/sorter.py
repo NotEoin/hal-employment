@@ -571,6 +571,14 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
     return out
 
 
+def across_roots(con: sqlite3.Connection, proposals: list[Proposal]) -> None:
+    """Marks copies again over every folder of one sort: each folder is sorted on its own, and the same project
+    kept in two of them (a repos folder and a cloud drive) came out as two projects (2026-11-09)."""
+    live = [p for p in proposals if p.state == PROPOSED]
+    sort_copies.mark([p for p in live if p.section == "project"], COPY)
+    mark_copies(con, [p for p in live if p.section != "project" and not p.files])
+
+
 def mark_copies(con: sqlite3.Connection, docs: list[Proposal]) -> None:
     """Marks all but the newest copy of each document, and keeps one dissertation a course."""
     _doc_copies(docs)

@@ -134,6 +134,8 @@ def run(con: sqlite3.Connection, sort_id: int, progress=None) -> dict:
             found.proposals += one.proposals
             for why, n in one.skipped.items():
                 found.skipped[why] = found.skipped.get(why, 0) + n
+        if s["kind"] != "move":
+            sorter.across_roots(con, found.proposals)
         sorter.cap_stars(found.proposals)
         save(con, s["id"], found)
     except (OSError, ValueError) as e:
