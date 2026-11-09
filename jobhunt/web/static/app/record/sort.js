@@ -11,6 +11,10 @@
    their events and a `sort` event reload the table. The folder box is left out in a window from another
    computer, where a zip is uploaded instead.
 
+   "Courses Hal found" lists the courses the folders name (jobhunt/sections/sort_review.py), first, as
+   coursework and lecture notes wait for their course: adding one makes its education card, and its files
+   find it.
+
    A record an older Hal read in whole gets "Move my record to sections" (jobhunt/sections/move.py): the same
    table proposes a section for each of its notes. "Finish the move" sets aside what the notes nobody
    accepted gave, and "Undo the move" puts everything back as it was. */
@@ -107,6 +111,31 @@ function Row({ row, sections, cards }) {
       onChange=${e => change({ star: e.target.checked })} /> Showcase</label>`}</td></tr>`;
 }
 
+/** One course Hal found in the folders: its words, which the person may change, and "Add this course". */
+function CourseRow({ id, course }) {
+  const [words, setWords] = useState({ qualification: course.qualification, subject: course.subject, institution: course.institution });
+  const set = key => e => setWords({ ...words, [key]: e.target.value });
+  const add = () => act(() => post(SORT + "/" + id + "/courses", { key: course.key, ...words }), out =>
+    "Added " + (out.card.title || "the course") + ". " + plural(out.matched, "file") + " found it.");
+  const facts = [plural(course.files, "file"), course.modules.length ? "modules: " + course.modules.join(", ") : "",
+    course.start ? course.start + " to " + course.end : ""].filter(Boolean).join("; ");
+  return html`<li class="row wrap rec-course" data-course=${course.key}>
+    <label class="small">Qualification <input class="input" value=${words.qualification} onInput=${set("qualification")} /></label>
+    <label class="small">Subject <input class="input" value=${words.subject} onInput=${set("subject")} /></label>
+    <label class="small">Where <input class="input" value=${words.institution} onInput=${set("institution")} /></label>
+    <span class="small sub grow" style="overflow-wrap:anywhere">${facts}</span>
+    <button type="button" class="btn small primary" aria-label=${"Add the course " + course.title} onClick=${add}>Add this course</button></li>`;
+}
+
+/** "Courses Hal found": the courses the sort's folders name, shown first so coursework and lecture notes have a card. */
+function CoursesFound({ id, courses }) {
+  if (!courses || !courses.length) return null;
+  return html`<div class="stack s rec-courses"><h3 class="h3">Courses Hal found</h3>
+    <p class="small sub rec-line">Your folders name these courses. Add each one, changing its words if Hal got them wrong,
+      and its coursework and lecture notes find it.</p>
+    <ul class="rec-paths">${courses.map(c => html`<${CourseRow} key=${c.key} id=${id} course=${c} />`)}</ul></div>`;
+}
+
 /** The review table of one sort. */
 export function SortReview({ id, onClose }) {
   const sections = useSections();
@@ -134,6 +163,8 @@ export function SortReview({ id, onClose }) {
     <p class="small sub rec-line">${STATE_WORDS[data.state] || data.state}. Nothing goes into your record until you add it.
       ${data.error && " " + data.error}</p>
     ${running && html`<${Bar} pct=${0} label="Sorting" />`}
+    ${c.sections.some(s => s.needs_card) && html`<p class="small sub rec-line">Add your CVs and papers first, so your courses exist.</p>`}
+    <${CoursesFound} id=${id} courses=${data.courses} />
     <div class="chips" role="group" aria-label="Show">
       <button type="button" class=${"btn small" + (view.state === "proposed" && !view.section ? " primary" : "")} onClick=${() => show("")}>All proposed: ${c.proposed}</button>
       ${c.sections.map(s => html`<button type="button" class=${"btn small" + (view.section === s.id && view.state === "proposed" ? " primary" : "")}

@@ -24,6 +24,12 @@ A row (`ROW`, `sorts.shape_row`):
      "star": false, "can_star": false, "by": "rules", "why": "Named or set out like a CV.", "ticked": true,
      "state": "proposed", "copy_of": "", "source_id": null, "note_rel": null}
 
+A course Hal found in the folders (`COURSE`, `sort_courses.courses_found`), not yet a card:
+
+    {"key": "Avery stuff/Uni/BSc Computing", "keys": ["Avery stuff/Uni/BSc Computing"], "title": "BSc Computing",
+     "qualification": "BSc", "subject": "Computing", "institution": "", "modules": ["CS2041 Databases"],
+     "files": 14, "start": "2022-10", "end": "2024-05"}
+
 Routes:
 
 - `GET /api/v2/record/sort`: {"sorts": [SORT], newest first, "cards": {"education": [{"id", "title"}], "job":
@@ -33,7 +39,9 @@ Routes:
 - `POST /api/v2/record/sort/upload`: a multipart form of files `file0`, `file1`, ... with `path0`, ... (a
   path inside a folder the person chose); zips are unpacked. Kept in Hal's data folder; {"sort", "action_id"}.
 - `GET /api/v2/record/sort/{id}?section=&state=proposed&offset=0&limit=50`: {SORT, "rows": [ROW], "total",
-  "cards"}.
+  "cards", "courses": [COURSE]}.
+- `POST /api/v2/record/sort/{id}/courses` {"key", "qualification", "subject", "institution"}: makes the
+  education card for a course Hal found, with the words given (else Hal's); {"card", "matched"}.
 - `PUT /api/v2/record/sort-rows/{id}` {"section", "doc_kind", "target_id", "ticked", "star"}: ROW. A section
   of "" leaves it out.
 - `POST /api/v2/record/sort/{id}/tick` {"ticked", "section"}: ticks or unticks every proposal (of one
@@ -60,7 +68,7 @@ from jobhunt import record
 from jobhunt.core import events, paths
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
 from jobhunt.ingest import sources as ingest_sources
-from jobhunt.sections import sort_actions, sorts
+from jobhunt.sections import sort_actions, sort_review, sorts
 from jobhunt.web.router import BadRequest, NotHere, Request, route
 
 PREFIX = "/api/v2/record/sort"
@@ -177,7 +185,23 @@ def one(req: Request) -> dict:
                           limit=int(q.get("limit") or sorts.PAGE))
     except ValueError as e:
         raise BadRequest(str(e)) from e
-    return {**sorts.shape(req.con, req.params["sort_id"]), **page, "cards": sorts.cards(req.con)}
+    return {**sorts.shape(req.con, req.params["sort_id"]), **page, "cards": sorts.cards(req.con),
+            "courses": sort_review.courses_found(req.con, req.params["sort_id"])}
+
+
+@route("POST", PREFIX + "/{sort_id}/courses", auth="session_or_local")
+def accept_course(req: Request) -> dict:
+    """Makes the education card for a course Hal found in the sort's folders, as the person named it."""
+    body = _body(req)
+    if not isinstance(body.get("key"), str) or not body["key"]:
+        raise BadRequest("Say which course: its key from the list.", field="key")
+    try:
+        out = sort_review.accept_course(req.con, req.params["sort_id"], body["key"],
+                                        {k: body[k] for k in sort_review.COURSE_WORDS if k in body})
+    except ValueError as e:
+        raise BadRequest(str(e)) from e
+    events.publish("sort", sort_id=int(req.params["sort_id"]))
+    return out
 
 
 @route("PUT", "/api/v2/record/sort-rows/{row_id}", auth="session_or_local")

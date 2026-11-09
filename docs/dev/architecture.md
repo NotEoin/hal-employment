@@ -1545,9 +1545,19 @@ you, `source_id` once added).
 - Actions (`sections/sort_actions.py`): `record.sort` (priority 2, one at a time, resumable) runs `sorts.run`;
   `record.sort_accept` (priority 1) runs `add_accepted`, reads the new sources (`actions.read_all`), then
   `star_projects` and `rematch`. Both publish a `sort` event naming the sort.
+- Courses Hal found (`sections/sort_courses.py`, `sections/sort_review.py`): `sort_courses.course_of(rel)`
+  names a row's course from its folders (the first folder named as a qualification, by `merge.level` or
+  `QUALIFICATION`; else the folder holding year folders or module folders, passing over a `CONTAINER` such
+  as "Modules") and its module (a folder with a module code). `sort_review.courses_found(con, id)` groups
+  the waiting coursework and lecture rows by course name (worked out on each request, never stored), with
+  modules, file count and the months of the oldest and newest files. `accept_course(con, id, key, words)`
+  makes the education card with `profile.store.add_by_hand` (the person's words over Hal's; start and end
+  from the file months; modules from the module folders), gives it to every waiting row under the course's
+  folders, then runs `sorts.rematch`. The review shows these first, with "Add your CVs and papers first, so
+  your courses exist." while rows wait.
 - Routes (`sections/sort_routes.py`, shapes in its header): `GET/POST /api/v2/record/sort`, `POST
-  .../sort/upload`, `GET .../sort/{id}`, `PUT /api/v2/record/sort-rows/{id}`, `POST .../sort/{id}/tick`,
-  `.../accept`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
+  .../sort/upload`, `GET .../sort/{id}` (with `courses`), `PUT /api/v2/record/sort-rows/{id}`, `POST
+  .../sort/{id}/tick`, `.../accept`, `.../courses`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
   path is local only.
 - Command line (`cli/sort.py`, through the running Hal with the local API key, as `jobhunt ingest` does):
   `jobhunt sort FOLDER...` starts a sort and prints its counts once it is ready (`summary`); `jobhunt sort

@@ -29,7 +29,7 @@ from test_sections_sorter import (
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import move, pipeline, sorts
+from jobhunt.sections import move, pipeline, sort_review, sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 STATES = ("proposed", "left_out", "copy")
@@ -209,6 +209,17 @@ class FromADumpToTheRecord(unittest.TestCase):
 
     def test_a_history_graduates_dump_goes_where_proposed_and_only_once_accepted(self):
         self.check(messy_history_dump, MARNIE, ("BA", "History"), "Marnie Quillfeather")
+
+    def test_with_no_course_on_the_record_the_courses_its_folders_name_come_first(self):
+        for dump, owner, title in ((messy_software_dump, "Avery Quillon", "BSc Computing"),
+                                   (messy_history_dump, "Marnie Quillfeather", "BA History")):
+            with self.subTest(owner=owner), home() as (con, _vault, files), fake_ai(NONE):
+                settings.set("you.name", owner)
+                sort_id = sorted_folder(con, dump(files))
+                found = sort_review.courses_found(con, sort_id)
+                self.assertEqual([c["title"] for c in found], [title])
+                sort_review.accept_course(con, sort_id, found[0]["key"])
+                self.assertEqual(sorts.accept(con, sort_id)["need_card"], 0, "every waiting file found its course")
 
     def test_a_record_the_bulk_read_built_is_moved_and_one_undo_puts_it_back(self):
         with home() as (con, vault, files), fake_ai({"ingest_doc": json.dumps(REPLY), **NONE}):

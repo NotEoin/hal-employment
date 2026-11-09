@@ -18,6 +18,10 @@ What changed in each version, in plain words.
   coursework must look handed in; notes named by lecture or week, and your notes on a topic, are lecture
   material.
 
+- **Courses Hal found.** When you sort a big folder, the courses your folders name (a degree folder, its
+  years and its modules) show first in the list. Add each one, renaming it if you like, and its coursework
+  and lecture notes find their course at once instead of waiting.
+
 - **Letters tell your showcase from its own sources.** A project's story now comes from the project's own
   code, pages, files or form and your edits; a detail only your CV gives is marked as such for the writer.
   Showcase coursework is told like a showcase project, your dissertation by its title, and a job you put in

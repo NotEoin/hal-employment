@@ -22,6 +22,7 @@ from test_sections_sorter import history_dump
 from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.evidence import routes
+from jobhunt.profile import store as profile_store
 from jobhunt.sections import store as sources
 
 NOT_YET = ("/api/v2/home",)
@@ -76,6 +77,12 @@ class SortAFolder(unittest.TestCase):
         card.get_by_role("button", name="Sort this folder").click()
         review = p.page.locator("section.rec-sort")
         p.shows(review.get_by_text("Ready for you to check"), "the finished sort")
+        p.shows(review.get_by_text("Add your CVs and papers first, so your courses exist."), "the order to add in")
+        p.shows(review.get_by_role("heading", name="Courses Hal found"), "the courses the folders name")
+        review.get_by_role("button", name="Add the course BA History").click()
+        p.shows(p.page.get_by_text(re.compile(r"^Added BA History\.")), "the course added")
+        with closing(db.connect()) as con:
+            self.assertEqual([c["title"] for c in profile_store.items(con, "education")], ["BA History"])
         review.get_by_role("button", name="CVs: 1").click()
         p.shows(review.get_by_text("Marnie Quillfeather CV.md", exact=True), "the CV's row")
         self.assertEqual(self.listed("cv"), [], "nothing is added before the person says so")

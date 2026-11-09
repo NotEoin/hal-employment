@@ -165,6 +165,12 @@ class Routes(unittest.TestCase):
         page = self.c.get(f"/api/v2/record/sort/{sort_id}?section=cv").json()
         self.assertEqual((page["state"], page["total"]), ("ready", 2))
         self.assertIn("education", page["cards"])
+        self.assertEqual([c["title"] for c in page["courses"]], ["BSc Computing"])
+        course = page["courses"][0]["key"]
+        self.assertEqual(self.c.post(f"/api/v2/record/sort/{sort_id}/courses", {}).status, 400)
+        self.assertEqual(self.c.post(f"/api/v2/record/sort/{sort_id}/courses", {"key": "Nowhere"}).status, 404)
+        added = self.c.post(f"/api/v2/record/sort/{sort_id}/courses", {"key": course, "subject": "Computer Science"})
+        self.assertEqual((added.status, added.json()["card"]["title"]), (200, "BSc Computer Science"), added.text)
         first = page["rows"][0]
         changed = self.c.request("PUT", f"/api/v2/record/sort-rows/{first['id']}", {"ticked": False})
         self.assertEqual((changed.status, changed.json()["ticked"]), (200, False))

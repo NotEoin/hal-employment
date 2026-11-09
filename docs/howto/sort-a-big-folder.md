@@ -21,13 +21,18 @@ code.
 3. Wait for **Ready for you to check**, then press **Check the list**. The buttons at the top show how many
    files Hal proposes for each part of your record: **CVs**, **Coursework**, **Lecture material**,
    **Projects**, **Documents** and the rest. Press one to see its files, 50 at a time.
-4. Check each row. Under **Where it goes**, **What it is** and **Course or job**, change anything Hal got
+4. Under **Courses Hal found**, check each course your folders name, such as a "BSc Computing" folder with
+   its year and module folders. Change its qualification, subject or where you studied if Hal got them
+   wrong, then press **Add this course**. Its coursework and lecture notes find it at once.
+5. Check each row. Under **Where it goes**, **What it is** and **Course or job**, change anything Hal got
    wrong. Untick a file to keep it out. For a project, tick **Showcase** if you want employers to hear about
    it. Hal ticks it for you only on a few of your own code projects (at most 8): ones outside your course
-   folders, with your own commits and a README that says what they do. Your changes are kept, so you can stop and come back later.
-5. Add your CVs first: press **CVs**, then **Add the ticked CVs**. Hal reads them and finds your courses and
-   jobs, and the coursework and lecture notes that were waiting for their course find it.
-6. Press **Add everything ticked**, or **Add the ticked ...** one part at a time. Each file is read by its
+   folders, with your own commits and a README that says what they do. Your changes are kept, so you can
+   stop and come back later.
+6. Add your CVs and papers next: press **CVs**, then **Add the ticked CVs**, and the same for **Official
+   papers**. Hal reads them and finds your courses and jobs, and the files still waiting for their course
+   or job find it.
+7. Press **Add everything ticked**, or **Add the ticked ...** one part at a time. Each file is read by its
    part of your record, as if you had added it there yourself.
 
    From a terminal:
@@ -37,7 +42,7 @@ code.
    python -m jobhunt sources list         # lists what each part of your record now holds
    ```
 
-7. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
+8. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
    or project. It never looks inside a project's libraries or build output (folders such as `node_modules`,
    `build` or `dist`); the line at the bottom of the list counts those files. Hal also leaves out other
    people's work: published papers you kept as reading, and posters or reports named after someone else.
@@ -65,7 +70,7 @@ How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-fo
 | --- | --- |
 | There is no box for a folder | You are using Hal from another computer. Upload a zip of the folder instead. |
 | "Hal is still sorting another folder." | Wait for the first sort to finish, then sort the next folder. |
-| A file says "Choose one, or add your CV first" | Add your CVs first, or choose its course under **Course or job**. |
+| A file says "Choose one, or add your CV first" | Add the course under **Courses Hal found**, or your CVs first, or choose its course under **Course or job**. |
 | "Looks private (medical information), so Hal kept it out." | Hal keeps medical, bank, ID and pay papers out. If it is fine to keep, give it a place under **Where it goes**. |
 | "A published paper. Hal keeps your own work, not your reading." | If you wrote it, give it a place under **Where it goes**. |
 | "Someone else's work: it is named after ..." | If it is yours, check your name under **Settings**, **You**, then give it a place under **Where it goes**. |
