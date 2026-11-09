@@ -22,6 +22,8 @@ Design decisions, each with its reason:
 - A word in a name is not enough (`sort_kinds`): a transcript shows marks, a contract its terms, coursework
   a sign of a submission and more than a stub; a file named as a lecture or week, or a note in a topics
   folder, is what the person studied. When in doubt a course folder's file is lecture material.
+- A document about several of the person's projects (`sort_rules.lists_projects`: one naming three or more
+  of the project folders proposed) is never a project of its own: each project is read from its own files.
 - Someone else's work is left out: a published paper, or a poster or report named after another person; and
   what a course gave out (a materials folder, a brief, a handbook) is lecture material at most (`sort_rules`).
 - A file Hal cannot place is "Left out" with the reason in plain words, never guessed in: a picture with no
@@ -500,6 +502,7 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
     courses = {str(PurePosixPath(members[0][1]).parent)
                for members in group.courses([(f.path, f.rel) for f in loose]).values()}
     docs, asks, own = [], 0, sort_rules.own_words(con)
+    project_names = {sort_copies.copy_name(u.path.name) for u in units if u.section == "project"}
     for n, f in enumerate(loose):
         if progress:
             progress(n, len(loose))
@@ -558,6 +561,9 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
             if not _ask_ai(p, text):
                 p.leave_out(LEFT_OUT_WORDS["unplaced"])
                 continue
+        if p.section == "project" and sort_rules.lists_projects(text, project_names):
+            p.leave_out(sort_rules.LISTING_WORDS)
+            continue
         fill_card(con, p, text)
     mark_copies(con, docs)
     cap_stars(units)

@@ -509,6 +509,25 @@ class Sorter(unittest.TestCase):
             self.assertEqual(sort_copies.copy_name("Hal-v3-final (2)"), "hal")
             self.assertEqual(sort_copies.copy_name("lab2"), "lab2")
 
+    def test_a_document_naming_three_of_the_projects_is_a_listing_not_a_project(self):
+        # Regression: "PORTFOLIO-PLAN.md" and "PROJECT-DOSSIER.md", about many projects, were project rows
+        # (2026-11-09).
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            for name in ("tidewatch", "fog-bell", "Lantern exhibition"):
+                put(d, f"Projects/{name}/README.md", f"# {name}\n\nA made-up piece of work called {name}.\n")
+                put(d, f"Projects/{name}/make.py", f"NAME = {name!r}\n")
+            put(d, "PORTFOLIO-PLAN.md", "# Portfolio plan\n\nLead with Tidewatch, then Fog bell; the Lantern "
+                                        "exhibition (2023) goes last.\n")
+            put(d, "Projects/Tidewatch portfolio piece.md", "# Tidewatch\n\nWhat I built, and the fog-bell idea "
+                                                            "it grew from.\n")
+            found = by_rel(sorter.propose(con, d, local=True))
+            self.assertEqual((found["Dump/PORTFOLIO-PLAN.md"].state, found["Dump/PORTFOLIO-PLAN.md"].why),
+                             ("left_out", "Describes several of your projects. Hal reads each project from its own "
+                                          "files."))
+            self.assertEqual(where(found["Dump/Projects/Tidewatch portfolio piece.md"]),
+                             ("proposed", "project", "upload"), "naming two projects is no listing")
+
     def test_a_word_in_a_name_is_not_enough_for_a_transcript_or_a_contract(self):
         with home() as (con, _vault, files), fake_ai(NONE):
             d = files / "Dump"

@@ -51,7 +51,8 @@ code.
 8. Look at **Left out** and **Copies**. Hal leaves out what it is not sure about, and older copies of a file
    or project. Copies of a project count as one even in different folders and with no git history, such as
    "Projects/tidewatch" and "old/tidewatch-final": Hal keeps the one with the newest file, and never one in
-   an old, archive, backup or unversioned folder when there is another. It never looks inside a project's libraries or build output (folders such as `node_modules`,
+   an old, archive, backup or unversioned folder when there is another. A single file that names three or
+   more of your projects, such as a portfolio plan, is left out: Hal reads each project from its own files. It never looks inside a project's libraries or build output (folders such as `node_modules`,
    `build` or `dist`); the line at the bottom of the list counts those files. Hal also leaves out other
    people's work: published papers you kept as reading, and posters or reports named after someone else.
    A PDF in a folder of reading, such as one named papers, readings, references or literature, counts as
@@ -87,6 +88,7 @@ How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-fo
 | "Looks private (medical information), so Hal kept it out." | Hal keeps medical, bank, ID and pay papers out. If it is fine to keep, give it a place under **Where it goes**. |
 | "A published paper. Hal keeps your own work, not your reading." | If you wrote it, give it a place under **Where it goes**. |
 | "Someone else's work: it is named after ..." | If it is yours, check your name under **Settings**, **You**, then give it a place under **Where it goes**. |
+| "Describes several of your projects." | Nothing to do: each project is read from its own folder. To keep the file anyway, give it a place under **Where it goes**. |
 | "Hal could not tell where it goes." | Choose a place under **Where it goes**, or leave it out. |
 | "Only online: this computer has an empty copy." | Download the file first (in OneDrive, choose "Always keep on this device"), then sort the folder again. |
 | A file says "Already in your record, under ..." | It is in your record already. Nothing to do. |

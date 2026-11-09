@@ -1513,7 +1513,9 @@ proposals to sources, and a record the bulk read built through a move and its un
   `copy_name` drops case, separators and copy marks ("-main", "-v3", "-final", "-12gb", never a bare
   number) plus overlapping content hashes (`same_content`), shared paths (`versions.shared`) or, failing
   those, READMEs that say the same (`README_SAME`). The copy kept is outside an "old", "archive", "backup"
-  or "unversioned" folder (`ARCHIVED`) where one is, then has the newest file.
+  or "unversioned" folder (`ARCHIVED`) where one is, then has the newest file. A document placed in Projects
+  that names `LISTING_MIN` (3) or more of the project folders proposed (`sort_rules.lists_projects`, without
+  case or punctuation) is left out as a listing (`LISTING_WORDS`).
 - A loose document is placed by rules: `rank.rule_for` on its path, then `wrong_place.looks_like` on the
   start of its text (converted with `convert.text_of`, a PDF's first pages only). A course folder (one of
   `group.courses`, or a folder named like `COURSE_NAME`) makes notes and slides `lecture` and named work

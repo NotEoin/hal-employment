@@ -71,7 +71,8 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)},
          "Practical sheet 3.md": ("proposed", "lecture", "notes"), "starter.py": ("proposed", "lecture", "other"),
          "pyproject.toml": ("left_out", "", ""), "Readme.md": ("proposed", "lecture", "notes"),
-         "Subnetting.md": ("proposed", "lecture", "notes"), "fogbell-v2": ("copy", "project", "repo")}
+         "Subnetting.md": ("proposed", "lecture", "notes"), "fogbell-v2": ("copy", "project", "repo"),
+         "PORTFOLIO-PLAN.md": ("left_out", "", "")}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -98,7 +99,8 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           **{f"Seminar notes week {n}.md": ("proposed", "lecture", "notes") for n in range(4, 13)},
           **{f"week {n}.md": ("proposed", "lecture", "notes") for n in range(1, 5)},
           "README.txt": ("proposed", "lecture", "notes"), "Module page.md": ("proposed", "lecture", "notes"),
-          "Readme.md": ("proposed", "lecture", "notes"), "walking-tour-final": ("copy", "project", "upload")}
+          "Readme.md": ("proposed", "lecture", "notes"), "walking-tour-final": ("copy", "project", "upload"),
+          "Portfolio overview.md": ("left_out", "", "")}
 # The review's rows for a module's lecture material: one each, with its file count.
 MODULES = {"software": {"CS2041 Databases": 13, "CSC1022 Software Design": 6, "CSC3095 Project": 4},
            "history": {"HIS2040 Archival Methods": 17, "HIS2051 Early Modern Europe": 6, "Notes vault": 2}}
@@ -166,6 +168,7 @@ def messy_software_dump(root: Path) -> Path:
     put(d, f"{linked}/starter.py", "print(1)\n")
     for name in ("README.md", "bell.py", "horn.py"):       # a copy put away, newer but with no history
         dated(put(d, f"Old laptop/fogbell-v2/{name}", (d / "Projects/fogbell" / name).read_text()), NEW + DAY_S)
+    put(d, "PORTFOLIO-PLAN.md", "# Portfolio plan\n\nLead with tidewatch, then fogbell and harbour-site.\n")
     put(d, "obsidian/Master/.obsidian/app.json", "{}\n")
     put(d, "obsidian/Master/Readme.md", "# Master\n\nMy made-up notes.\n" + README)
     put(d, "obsidian/Master/Networks/Subnetting.md", "# Subnetting\n\nMade-up notes on masks.\n")
@@ -211,6 +214,8 @@ def messy_history_dump(root: Path) -> Path:
         "# Early Modern Europe\n\nWhat each made-up week covers.\n")
     for name in ("README.md", "route.md"):
         put(d, f"backup/walking-tour-final/{name}", (d / "Portfolio/Walking tour" / name).read_text())
+    put(d, "Portfolio/Portfolio overview.md", "# My portfolio\n\nThe Lantern exhibition, the Walking tour and the "
+                                              "Digital edition, in that order.\n")
     put(d, "Notes vault/.obsidian/app.json", "{}\n")
     put(d, "Notes vault/Readme.md", "# Notes vault\n\nMy made-up notes.\n")
     return d

@@ -211,6 +211,23 @@ def someone_elses(rel: str, text: str, own: list[str]) -> str:
     return ""
 
 
+# Documents that list projects ---------------------------------------------------------------------------------
+
+LISTING_MIN = 3                # two names could be a project and the one it grew from; three is a list
+LISTING_NAME_MIN = 3           # "hal" names a project; "ui" or "x" could be any word
+LISTING_WORDS = "Describes several of your projects. Hal reads each project from its own files."
+NOT_WORD = re.compile(r"[^a-z0-9]+")
+
+
+def lists_projects(text: str, names: set[str]) -> bool:
+    """True when `text` names `LISTING_MIN` or more of the projects `names` (folder names, compared without
+    case or punctuation): a plan or dossier about many projects, not one project's own document. A real
+    dump's "PORTFOLIO-PLAN.md" and "PROJECT-DOSSIER.md" were proposed as projects (2026-11-09)."""
+    folded = f" {NOT_WORD.sub(' ', text.lower())} "
+    keys = {NOT_WORD.sub(" ", n.lower()).strip() for n in names}
+    return sum(len(k) >= LISTING_NAME_MIN and f" {k} " in folded for k in keys) >= LISTING_MIN
+
+
 # What a course gave out ---------------------------------------------------------------------------------------
 
 MATERIALS_FOLDER = re.compile(r"(?<![a-z])(?:materials?|resources?|readings?|handouts?|reading[ _-]?lists?)"
