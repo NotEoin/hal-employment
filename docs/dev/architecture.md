@@ -1608,7 +1608,12 @@ you, `source_id` once added).
   does, `_form`; a folder of kind `repo` or `local_folder`, a link, an account or a name is added as a
   link) and `read ID`. The section routes take the local API key for these.
 - The page (`static/app/record/sort.js`): `SortCard` on Overview (start a sort, list the latest, open one),
-  `SortStart` (a folder path on this computer, or a zip or files uploaded) and `SortReview` (section buttons
+  `SortStart` (a folder path on this computer, or a zip or files uploaded) and `SortReview`, which is its
+  own full-width page, `sort-<id>` (`pages/sort.js`): the review was a card in the left column of
+  Overview's two-column grid (`.grid2`), about half the page whatever the window's width. Its table keeps a
+  minimum width and scrolls inside `.rec-sort-scroll`, so the page never scrolls sideways, and a path
+  longer than `PATH_SHOWN` (90) characters is shortened in the middle (`middle`) with the whole path as its
+  title. `SortReview` has section buttons
   with counts, a page of rows with tick, section, kind, card and showcase, "Add the ticked ...", "Add
   everything ticked", and the left out, copies, added and failed rows). The setup guide's record step
   (`setup/steps/record.js`) offers `SortStart` too.
@@ -1969,9 +1974,10 @@ title)` makes `0042 Company - Title`. Both fold to ASCII and drop characters Win
 Conventions for pages and dialogs:
 
 - A page module exports its component under the name in `core/router.js` ROUTES (`Home`, `Jobs`,
-  `JobPage`, `Apps`, `AppPage`, `Messages`, `CvStudio`, `Docs`, `Record`, `Activity`, `Memory`,
+  `JobPage`, `Apps`, `AppPage`, `Messages`, `CvStudio`, `Docs`, `Record`, `SortPage`, `Activity`, `Memory`,
   `Settings`); it gets the route's arg as `arg` (already decoded). Its first heading is `Head` (or an
-  `h1`), which gets focus on each route change.
+  `h1`), which gets focus on each route change. A route with `wide: true` (`sort`) fills the window: the
+  shell gives its `.page` the class `full`, which lifts the 1240-pixel cap.
 - Copy goes through `ui/clipboard.js` `copyText()`. `tests/ui/test_shell.py` fails on a placeholder page
   left in the app.
 - A dialog is `dialogs/<kind>.js` with a default export; set `.wide`, `.drawer` or `.label` on the

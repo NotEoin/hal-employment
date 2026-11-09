@@ -18,7 +18,9 @@ code.
    python -m jobhunt sort ~/Documents/Uni    # prints what Hal proposes for each part of your record
    ```
 
-3. Wait for **Ready for you to check**, then press **Check the list**. The buttons at the top show how many
+3. Wait for **Ready for you to check**, then press **Check the list**. The list opens on its own page, as
+   wide as your window; on a phone, slide the table sideways to see every column. A long folder path is
+   shortened in the middle: point at it to see all of it. The buttons at the top show how many
    files Hal proposes for each part of your record: **CVs**, **Coursework**, **Lecture material**,
    **Projects**, **Documents** and the rest. Press one to see its files, 50 at a time. Lecture material and
    coursework show one row a module, with how many files it holds: ticking it, or changing its course,

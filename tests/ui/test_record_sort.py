@@ -17,17 +17,25 @@ from unittest import mock
 from support.api import HalServer
 from support.fake_ai import fake_ai
 from support.ui import AppPage, chromium, skip_unless_browser
-from test_sections_sorter import history_dump
+from test_ingest import put
+from test_sections_sorter import REFERENCE, history_dump
 
 from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.evidence import routes
 from jobhunt.profile import store as profile_store
+from jobhunt.sections import sorts
 from jobhunt.sections import store as sources
 
 NOT_YET = ("/api/v2/home",)
 WAIT_S = 30
 FAILED_LOAD = "Failed to load resource"
+# A reference kept deep in its folders, so its path is longer than the review shows whole.
+LONG_REL = ("Volunteering/2023 to 2024 placements at the Fenwick Lantern Museum Trust/Letters and references kept "
+            "for applications/Reference from the museum archivist.md")
+WIDE_MIN = 1000      # the review's width in the 1400-pixel window, less the menu (252) and the page's margins
+RESIZED = 1000       # the window's width after it is made narrower
+RAIL = 252           # the menu's width beside the page (app.css `.app`)
 
 
 @skip_unless_browser
@@ -63,6 +71,19 @@ class SortAFolder(unittest.TestCase):
         self.assertEqual([e for e in p.errors if ours or not e.startswith(FAILED_LOAD)] + ours, [])
         self.assertEqual(p.sideways(), 0)
         self.assertEqual(p.serious_axe(), [])
+
+    def sorted_dump(self) -> int:
+        """The made-up history graduate's folder, with a deeply kept reference, sorted in this thread; its id."""
+        dump = history_dump(Path(self.hal.home) / "Files")
+        put(dump, LONG_REL, REFERENCE)
+        with closing(db.connect()) as con:
+            sort_id = sorts.create(con, "folder", [str(dump)], dump.name)
+            sorts.run(con, sort_id)
+        return sort_id
+
+    def width(self, p: AppPage, selector: str) -> float:
+        """The drawn width of the first element `selector` finds, in pixels."""
+        return p.page.locator(selector).first.bounding_box()["width"]
 
     def listed(self, section: str) -> list[dict]:
         with closing(db.connect()) as con:
@@ -103,6 +124,43 @@ class SortAFolder(unittest.TestCase):
         for size, scheme in (("narrow", "dark"),):
             with self.subTest(size=size):
                 self.clean(self.page(size, scheme))
+
+    def test_the_list_fills_a_wide_window_and_follows_it_when_it_is_resized(self) -> None:
+        sort_id = self.sorted_dump()
+        p = self.page()
+        p.go(f"sort-{sort_id}")
+        review = p.page.locator("section.rec-sort")
+        p.shows(review.get_by_text("Ready for you to check"), "the review on its own page")
+        self.assertGreater(self.width(p, "section.rec-sort"), WIDE_MIN, "the review is not a narrow card")
+        p.page.set_viewport_size({"width": RESIZED, "height": 900})
+        self.assertLess(self.width(p, "section.rec-sort"), RESIZED - RAIL + 1, "the review follows the window")
+        self.assertEqual(p.sideways(), 0)
+        self.clean(p)
+
+    def test_on_a_phone_the_table_scrolls_inside_itself_and_long_paths_are_shortened(self) -> None:
+        sort_id = self.sorted_dump()
+        p = self.page("narrow")
+        p.go(f"sort-{sort_id}")
+        review = p.page.locator("section.rec-sort")
+        p.shows(review.get_by_text("Ready for you to check"), "the review on its own page")
+        review.get_by_role("button", name=re.compile(r"^Documents: \d+$")).click()
+        long_path = review.locator(f'[title="Marnie files/{LONG_REL}"]')
+        p.shows(long_path, "the long path, whole in its title")
+        self.assertIn("...", long_path.inner_text(), "the path is shortened in the middle")
+        self.assertTrue(long_path.inner_text().endswith("Reference from the museum archivist.md"))
+        box = p.page.locator(".rec-sort-scroll").first
+        self.assertGreater(box.evaluate("e => e.scrollWidth - e.clientWidth"), 0, "the table scrolls in its box")
+        self.assertEqual(p.sideways(), 0, "the page itself never scrolls sideways")
+        self.clean(p)
+
+    def test_check_the_list_opens_the_review_on_its_own_page(self) -> None:
+        sort_id = self.sorted_dump()
+        p = self.page()
+        p.page.get_by_role("button", name="Check the list").first.click()
+        p.shows(p.page.get_by_role("heading", name="Check the sorted list", level=1), "the review's own page")
+        self.assertTrue(p.page.url.endswith(f"#sort-{sort_id}"))
+        p.page.get_by_role("button", name="Back to your record").click()
+        p.shows(p.page.get_by_role("heading", name="Your record", level=1), "back on Your record")
 
     def test_an_older_record_is_moved_to_sections_and_one_click_undoes_it(self) -> None:
         from test_sections_move import old_record

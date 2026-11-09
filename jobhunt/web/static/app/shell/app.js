@@ -5,7 +5,7 @@
    the page's h1 so a screen reader announces it, and the page scrolls to the top. */
 import { html, cx, useEffect, useState, useErrorBoundary } from "../core/html.js";
 import { useStore, store, openDialog } from "../core/store.js";
-import { parse, loadPage, titleFor, ROUTES } from "../core/router.js";
+import { parse, loadPage, titleFor, wideRoute, ROUTES } from "../core/router.js";
 import { installKeys } from "../core/keys.js";
 import { Icon } from "../ui/icons.js";
 import { DialogHost } from "../ui/dialog.js";
@@ -75,7 +75,7 @@ export function App() {
           n="menu" /></button><span class=${cx("eye sm", s.busy && "busy")} aria-hidden="true"></span>Hal Employment<span class="sp"></span>
           <button type="button" class="iconbtn" aria-label="Search or jump" onClick=${() => openDialog("palette")}><${Icon} n="search" /></button></div>
         <${Status} />
-        <main class="page" id="main"><${PageFrame} route=${s.route} /></main>
+        <main class=${cx("page", wideRoute(s.route) && "full")} id="main"><${PageFrame} route=${s.route} /></main>
       </div>
     </div>
     ${s.railOpen && html`<div class="scrim" style="z-index:44" onClick=${() => store.set({ railOpen: false })}></div>`}

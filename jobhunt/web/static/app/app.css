@@ -109,6 +109,7 @@ kbd { white-space: nowrap; font-family: var(--mono); font-size: 12px; padding: 1
 .dot.bad { background: var(--bad); }
 .dot.blue { background: var(--primary); }
 .page { width: 100%; max-width: 1240px; margin: 0 auto; padding: 26px clamp(16px, 3vw, 40px) 90px; }
+.page.full { max-width: none; }   /* a page that needs the whole window, such as a long table (core/router.js `wide`) */
 @media (max-width: 860px) {
   .app { grid-template-columns: minmax(0, 1fr); }
   .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(290px, 86vw); z-index: 45; transform: translateX(-105%); transition: transform 0.2s; box-shadow: var(--shadow); }

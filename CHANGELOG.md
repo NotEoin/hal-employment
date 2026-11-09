@@ -6,6 +6,11 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **The sorted list gets the whole window.** **Check the list** after **Sort a big folder for me** opens the
+  list on its own page, as wide as your window, and it grows and shrinks with the window. It was a narrow
+  card on Overview. On a phone the table slides sideways inside itself while the page stays put, and a long
+  folder path is shortened in the middle, with the whole path shown when you point at it.
+
 - **Sort a big folder keeps your reading out of your work.** A PDF in a folder of reading (named papers,
   readings, references or literature) is left out as a published paper, even inside your dissertation
   folder, unless its name says it is your notes on it. A course's downloaded materials folder and a notes

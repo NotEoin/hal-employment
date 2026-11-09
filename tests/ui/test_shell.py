@@ -17,7 +17,8 @@ from support.ui import LOAD_TIMEOUT_MS, ROUTES, AppPage, chromium, skip_unless_b
 
 TITLES = {"home": "Home", "jobs": "Jobs", "job": "Job", "apps": "Applications", "app": "Application",
           "inbox": "Messages", "cv": "My CV", "docs": "Documents", "record": "Your record", "activity": "Activity",
-          "check": "Check your record", "memory": "What Hal remembers", "settings": "Settings",
+          "check": "Check your record", "sort": "Check the sorted list", "memory": "What Hal remembers",
+          "settings": "Settings",
           "setup": "Setup guide"}
 FULL_MENU = ["Home", "Jobs", "Applications", "Messages", "My CV", "Documents", "Your record", "Activity",
              "What Hal remembers", "Settings", "Help and shortcuts"]

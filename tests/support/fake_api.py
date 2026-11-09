@@ -233,6 +233,22 @@ MADE_UP_PROFILE_CHECK = {
                "file_id": _SKILL["evidence"][0]["file_id"], "items": [_SKILL], "best": [3]}],
     "more": [], "studied": [], "mentioned": [], "merged": [], "hidden_twins": [], "done": 2, "total": 5}
 
+MADE_UP_SORT_ROW = {
+    "id": 11, "rel": "Robin stuff/University/BA Made-up Studies/Year 2/HIS2040 Archival Methods/Seminars/Week 3/"
+                     "Notes on the parish registers of Harrowgate Vale, second draft.md",
+    "name": "Notes on the parish registers of Harrowgate Vale, second draft.md", "held": "upload", "size": 1200,
+    "mtime": "2024-10-27T10:00:00Z", "section": "cv", "section_label": "CVs", "doc_kind": "cv",
+    "doc_kind_label": "CV", "target_id": None, "target_title": "", "target_kind": "", "needs_card": False,
+    "star": False, "can_star": False, "by": "rules", "why": "Named or set out like a CV.", "ticked": True,
+    "state": "proposed", "copy_of": "", "source_id": None, "note_rel": None, "copies": []}
+MADE_UP_SORT = {
+    "id": 1, "kind": "folder", "label": "Robin stuff", "state": "ready", "error": "", "created": "2026-11-09T09:00:00Z",
+    "updated": "2026-11-09T09:01:00Z", "skipped": {},
+    "counts": {"sections": [{"id": "cv", "label": "CVs", "proposed": 1, "ticked": 1, "needs_card": 0}],
+               "proposed": 1, "left_out": 0, "copy": 0, "accepted": 0, "added": 0, "failed": 0, "total": 1},
+    "undone": False, "can_undo": False, "rows": [MADE_UP_SORT_ROW], "total": 1,
+    "cards": {"education": [], "job": []}, "courses": [], "notes": []}
+
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
 MADE_UP_PAGES = {
@@ -339,6 +355,8 @@ MADE_UP_PAGES = {
          "doc_kinds": [{"id": "other", "label": "Something else", "held": "upload", "ready": True}]}],
     "/record/sources": [],
     "/record/sort": {"sorts": [], "cards": {"education": [], "job": []}, "can_move": False},
+    # One finished sort's review (`sections/sort_routes.py`), with a made-up long path to shorten
+    "/record/sort/1": MADE_UP_SORT,
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
                        "not_downloaded_paths": [], "not_mine": 0, "not_mine_paths": [], "errors": [],

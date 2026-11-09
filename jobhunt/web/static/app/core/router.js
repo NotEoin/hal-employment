@@ -3,7 +3,8 @@
 
    ROUTES lists every page from the start. Pages load on first visit, so one page that fails to load
    shows an error card instead of stopping the whole app. A page module exports its component under
-   `name`. The rail, the palette and deep links in pop-ups and emails all use this table. */
+   `name`. The rail, the palette and deep links in pop-ups and emails all use this table. A page with `wide`
+   fills the window: the shell lifts the page's width cap for it (shell/app.js). */
 import { store, openSetup } from "./store.js";
 
 export const APP_NAME = "Hal Employment";
@@ -18,6 +19,8 @@ export const ROUTES = {
   cv: { title: "My CV", name: "CvStudio", load: () => import("../pages/cv.js") },
   docs: { title: "Documents", name: "Docs", load: () => import("../pages/docs.js") },
   record: { title: "Your record", name: "Record", load: () => import("../pages/record.js") },
+  sort: { title: "Check the sorted list", name: "SortPage", load: () => import("../pages/sort.js"), parent: "record",
+    wide: true },
   check: { title: "Check your record", name: "Check", load: () => import("../pages/check.js"), parent: "record" },
   activity: { title: "Activity", name: "Activity", load: () => import("../pages/activity.js") },
   memory: { title: "What Hal remembers", name: "Memory", load: () => import("../pages/memory.js") },
@@ -28,7 +31,7 @@ export const ROUTES = {
 export const ROUTE_EXAMPLES = [
   "home", "jobs", "jobs-saved", "jobs-hidden", "jobs-where", "job-<id>", "apps", "app-<id>", "inbox", "cv", "cv-sugg",
   "cv-style", "cv-checks", "cv-versions", "docs", "docs-<id>", "docs-details", "record", "record-work",
-  "record-inconsistencies", "record-files", "check", "activity", "memory",
+  "record-inconsistencies", "record-files", "sort-<id>", "check", "activity", "memory",
   "memory-learned", "memory-sites", "memory-answers", "settings", "settings-<group>", "setup", "setup-<step>",
 ];
 
@@ -45,6 +48,12 @@ export function parse(route) {
 
 /** The route for a page and an optional arg, encoding the arg ("job", "reed:1" -> "job-reed%3A1"). */
 export function route(page, arg) { return arg ? page + "-" + encodeURIComponent(arg) : page; }
+
+/** True when the route's page fills the window instead of the usual page width. */
+export function wideRoute(r) {
+  const { page } = parse(r);
+  return !!(ROUTES[page] && ROUTES[page].wide);
+}
 
 /** The top-level page a route belongs to, for the rail ("job-..." -> "jobs"). */
 export function railPage(r) {

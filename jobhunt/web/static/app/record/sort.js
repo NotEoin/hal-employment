@@ -2,7 +2,9 @@
    files, and Hal proposes where each file goes (jobhunt/sections/sorter.py). Nothing is added until the
    person accepts it.
 
-   The review table shows the proposals one section at a time, a page of rows at once, with how many each
+   The review (`SortReview`) is its own page, "sort-<id>" (pages/sort.js), so it fills the window; its table
+   scrolls sideways inside itself on a small screen, and a long path is shortened in the middle (`middle`) with
+   the whole path in its title. The review table shows the proposals one section at a time, a page of rows at once, with how many each
    section has, so a dump of thousands of files stays quick. Each row can go to another section, kind or
    card, be unticked, or (a project) be marked a showcase piece. "Add the ticked ones" accepts a section,
    "Add everything ticked" all of them; files that still need their course or job wait until one is chosen.
@@ -23,6 +25,7 @@
    table proposes a section for each of its notes. "Finish the move" sets aside what the notes nobody
    accepted gave, and "Undo the move" puts everything back as it was. */
 import { html, useState } from "../core/html.js";
+import { go, route } from "../core/router.js";
 import { api, post, put, del } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
 import { plural } from "../core/format.js";
@@ -37,6 +40,7 @@ const PAGE = 50;            // jobhunt/sections/sorts.py PAGE
 const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden";
 const STATE_WORDS = { new: "Waiting to start", sorting: "Sorting", ready: "Ready for you to check", failed: "Could not be sorted",
   undone: "Undone" };
+const PATH_SHOWN = 90;      // characters of a path shown in full; a longer one keeps its start and its end
 const OTHER_VIEWS = [["left_out", "Left out"], ["copy", "Copies"], ["added", "Added"], ["failed", "Could not be added"]];
 const reloadOn = id => [ev => (ev.type === "action" && KINDS.has(ev.kind)) || (ev.type === "sort" && (id == null || ev.sort_id === id))
   || ev.type === "profile"];
@@ -46,6 +50,21 @@ function refresh() { invalidate(SORT + "*"); invalidate("/record/sources*"); inv
 async function act(fn, said) {
   try { const out = await fn(); if (said) toast(typeof said === "function" ? said(out) : said); refresh(); return out; }
   catch (err) { toast(err.message); return null; }
+}
+
+/** A long path shortened in the middle ("Uni/BSc.../week 3.pdf"), keeping the folder it starts in and the
+    file's own name; the whole path goes in the element's title. */
+export function middle(text, max = PATH_SHOWN) {
+  const s = String(text || "");
+  if (s.length <= max) return s;
+  const end = Math.ceil((max - 3) * 0.6);
+  return s.slice(0, max - 3 - end) + "..." + s.slice(s.length - end);
+}
+
+/** A path shown whole when it is short, else shortened in the middle with the whole path as its title. */
+function PathText({ rel, cls = "small sub rec-path" }) {
+  const shown = middle(rel);
+  return html`<div class=${cls} title=${shown === rel ? null : rel}>${shown}</div>`;
 }
 
 /** Starting a sort: a folder on this computer, or a zip or files uploaded. */
@@ -100,13 +119,13 @@ function Row({ row, sections, cards, sortId, onOpen }) {
     <td>${row.state === "proposed" && html`<input type="checkbox" checked=${row.ticked} aria-label=${"Add " + row.name}
       onChange=${e => change({ ticked: e.target.checked })} />`}</td>
     <td><b>${row.name}</b>${row.group && html` <span class="small sub">(${plural(row.count, unit)})</span>`}
-      <div class="small sub" style="overflow-wrap:anywhere">${row.rel}</div>
+      <${PathText} rel=${row.rel} />
       <div class="small sub">${row.why}${row.by === "ai" ? " (the AI's guess)" : ""}</div>
       ${row.group && html`<button type="button" class="btn quiet small" aria-label=${"Show the files of " + row.name}
         onClick=${() => onOpen(row.group)}>Show the files</button>`}
       ${row.copies && row.copies.length > 0 && html`<details class="small rec-copies"><summary>Older copies (${row.copies.length})</summary>
         <ul class="rec-paths">${row.copies.map(c => html`<li class="row wrap" key=${c.id}>
-          <span class="grow sub" style="overflow-wrap:anywhere">${c.rel}</span>
+          <span class="grow sub rec-path" title=${middle(c.rel) === c.rel ? null : c.rel}>${middle(c.rel)}</span>
           <button type="button" class="btn quiet small" aria-label=${"Keep " + c.rel + " instead"}
             onClick=${() => act(() => post("/record/sort-rows/" + c.id + "/keep"), "Hal keeps " + c.rel + " now.")}>Keep this one instead</button></li>`)}</ul></details>`}</td>
     <td>${open ? html`<select class="input" aria-label=${"Where " + row.name + " goes"} value=${row.section}
@@ -152,12 +171,13 @@ function CoursesFound({ id, courses }) {
 }
 
 /** The review table of one sort. */
-export function SortReview({ id, onClose }) {
+export function SortReview({ id }) {
   const sections = useSections();
   const [view, setView] = useState({ section: "", state: "proposed", offset: 0, group: "" });
   const q = "?state=" + view.state + "&offset=" + view.offset + "&limit=" + PAGE + (view.section ? "&section=" + view.section : "")
     + (view.group ? "&group=" + encodeURIComponent(view.group) : "");
-  const { data } = useApi(SORT + "/" + id + q, { on: reloadOn(id) });
+  const { data, error } = useApi(SORT + "/" + id + q, { on: reloadOn(id) });
+  if (error && !data) return html`<p class="sub">${error.message}</p>`;
   if (!data) return html`<p class="sub">Loading</p>`;
   const c = data.counts;
   const show = (section, state = "proposed") => setView({ section, state, offset: 0, group: "" });
@@ -175,8 +195,7 @@ export function SortReview({ id, onClose }) {
   const label = view.state === "proposed" ? (view.section ? (c.sections.find(s => s.id === view.section) || {}).label : "Everything Hal proposes")
     : (OTHER_VIEWS.find(v => v[0] === view.state) || [, ""])[1];
   return html`<section class="card stack s rec-sort" aria-labelledby="rec-sort-h" data-sort=${id}>
-    <div class="row rec-head"><h2 class="h2 grow" id="rec-sort-h">${data.kind === "move" ? "Moving your record to sections" : "Sorting " + data.label}</h2>
-      ${onClose && html`<button type="button" class="btn quiet small" onClick=${onClose}>Close</button>`}</div>
+    <div class="row rec-head"><h2 class="h2 grow" id="rec-sort-h">${data.kind === "move" ? "Moving your record to sections" : "Sorting " + data.label}</h2></div>
     <p class="small sub rec-line">${STATE_WORDS[data.state] || data.state}. Nothing goes into your record until you add it.
       ${data.error && " " + data.error}</p>
     ${running && html`<${Bar} pct=${0} label="Sorting" />`}
@@ -200,7 +219,7 @@ export function SortReview({ id, onClose }) {
       ${data.can_undo && html`<button type="button" class="btn small" onClick=${undo}>Undo the move</button>`}</div>`}
     <div class="row wrap"><h3 class="h3 grow">${view.group ? "Files in this group" : label}: ${data.total}</h3>
       ${view.group && html`<button type="button" class="btn small" onClick=${() => setView({ ...view, group: "", offset: 0 })}>Back to the list</button>`}</div>
-    ${data.rows.length ? html`<div style="overflow-x:auto"><table class="rec-sort-table"><thead><tr><th>Add</th><th>File</th><th>Where it goes</th>
+    ${data.rows.length ? html`<div class="rec-sort-scroll"><table class="rec-sort-table"><thead><tr><th>Add</th><th>File</th><th>Where it goes</th>
       <th>What it is</th><th>Course or job</th><th>Showcase</th></tr></thead>
       <tbody>${data.rows.map(row => html`<${Row} key=${row.id == null ? row.group : row.id} row=${row} sections=${sections}
         cards=${data.cards} sortId=${id} onOpen=${openGroup} />`)}</tbody></table></div>`
@@ -215,32 +234,31 @@ export function SortReview({ id, onClose }) {
   </section>`;
 }
 
-/** "Sort a big folder for me" on Overview: start one, list the latest, and review one. */
+/** Opens the review of a sort on its own page. */
+export function openSort(id) { go(route("sort", String(id))); }
+
+/** "Sort a big folder for me" on Overview: start one, list the latest, and open one's review. */
 export function SortCard() {
   const { data } = useApi(SORT, { on: reloadOn(null) });
-  const [open, setOpen] = useState(null);
   const forget = s => act(() => del(SORT + "/" + s.id), "Hal forgot that sort. What you added stays.");
   const sorts = data ? data.sorts : [];
   const moveRecord = async () => {
     const out = await act(() => post("/record/move"), "Hal is looking through your older record. Nothing changes until you say so.");
-    if (out) setOpen(out.sort.id);
+    if (out) openSort(out.sort.id);
   };
-  return html`<div class="stack">
-    <section class="card stack s" aria-labelledby="rec-sort-start-h"><h2 class="h2" id="rec-sort-start-h">Sort a big folder for me</h2>
+  return html`<section class="card stack s" aria-labelledby="rec-sort-start-h"><h2 class="h2" id="rec-sort-start-h">Sort a big folder for me</h2>
       <p class="small sub rec-line">Have a folder of everything from your studies and jobs? Hal looks through it and suggests where each file goes:
         your CVs, your coursework and lecture notes by course, your projects, your certificates. You check the list and add what is right.
         Hal leaves out anything it is unsure about, private papers such as medical letters, and older copies.</p>
-      <${SortStart} onStarted=${setOpen} />
+      <${SortStart} onStarted=${openSort} />
       ${data && data.can_move && html`<div class="row wrap"><p class="small sub grow rec-line">An older Hal read files into your record
         all at once. Move them into the parts of your record they belong in: you check each one first, and one click undoes it.</p>
         <button type="button" class="btn" onClick=${moveRecord}>Move my record to sections</button></div>`}
       ${sorts.length > 0 && html`<ul class="rec-paths">${sorts.map(s => html`<li class="row wrap" key=${s.id}>
         <span class="grow"><b>${s.label || "Your files"}</b>: ${STATE_WORDS[s.state] || s.state}.
           ${s.counts.proposed} to check, ${s.counts.added} added, ${s.counts.left_out} left out.</span>
-        <button type="button" class="btn small" onClick=${() => setOpen(s.id)}>Check the list</button>
+        <button type="button" class="btn small" onClick=${() => openSort(s.id)}>Check the list</button>
         <button type="button" class="btn quiet small" aria-label=${"Forget " + (s.label || "this sort")} onClick=${() => forget(s)}>
-          <${Icon} n="x" c="s" />Forget</button></li>`)}</ul>`}</section>
-    ${open != null && html`<${SortReview} id=${open} onClose=${() => setOpen(null)} />`}
-  </div>`;
+          <${Icon} n="x" c="s" />Forget</button></li>`)}</ul>`}</section>`;
 }
 
