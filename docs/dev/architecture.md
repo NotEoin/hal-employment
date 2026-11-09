@@ -1578,8 +1578,11 @@ you, `source_id` once added).
   `change_group` ticks, moves or gives a card to every file of a group through `sorts.change_row`. Grouping
   is done in Python from the sort's rows on each request; `sorts.rows` stays file by file (the command line
   and `flat=1`).
+- Notes said once for the whole sort (`sort_review.notes`, shown above the list): `no_history` when a
+  proposed project folder has no `.git`, so no commits showed whose it is and no showcase was guessed; and
+  `github` when `you.links.github` is set and no `github_account` source is on Projects yet.
 - Routes (`sections/sort_routes.py`, shapes in its header): `GET/POST /api/v2/record/sort`, `POST
-  .../sort/upload`, `GET .../sort/{id}` (with `courses`), `PUT /api/v2/record/sort-rows/{id}`, `POST
+  .../sort/upload`, `GET .../sort/{id}` (with `courses` and `notes`), `PUT /api/v2/record/sort-rows/{id}`, `POST
   .../sort/{id}/tick`, `.../accept`, `.../courses`, `.../groups`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
   path is local only.
 - Command line (`cli/sort.py`, through the running Hal with the local API key, as `jobhunt ingest` does):

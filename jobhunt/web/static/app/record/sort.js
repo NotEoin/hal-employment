@@ -15,7 +15,8 @@
    coursework and lecture notes wait for their course: adding one makes its education card, and its files
    find it. Lecture material and coursework come one row a module, with its file count: ticking, moving or
    giving a card to that row changes all its files, and "Show the files" lists them one by one. A project's
-   numbered folders ("lab1" to "lab8") come as one row the same way.
+   numbered folders ("lab1" to "lab8") come as one row the same way. The notes the review says once for the
+   whole sort (`notes`: projects with no history got no showcase guess; add the GitHub account) show above.
 
    A record an older Hal read in whole gets "Move my record to sections" (jobhunt/sections/move.py): the same
    table proposes a section for each of its notes. "Finish the move" sets aside what the notes nobody
@@ -174,6 +175,7 @@ export function SortReview({ id, onClose }) {
       ${data.error && " " + data.error}</p>
     ${running && html`<${Bar} pct=${0} label="Sorting" />`}
     ${c.sections.some(s => s.needs_card) && html`<p class="small sub rec-line">Add your CVs and papers first, so your courses exist.</p>`}
+    ${(data.notes || []).map(n => html`<p class="small sub rec-line" data-note=${n.id} key=${n.id}>${n.words}</p>`)}
     <${CoursesFound} id=${id} courses=${data.courses} />
     <div class="chips" role="group" aria-label="Show">
       <button type="button" class=${"btn small" + (view.state === "proposed" && !view.section ? " primary" : "")} onClick=${() => show("")}>All proposed: ${c.proposed}</button>

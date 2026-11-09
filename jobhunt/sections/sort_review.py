@@ -19,6 +19,10 @@ Design decisions, each with its reason:
   lecture rows were too many to read (2026-11-09). A group of one is shown as its file. The rows are grouped
   from the sort's proposed rows each time, as a sort holds thousands of rows, not millions, and a stored
   group would go stale when the person moves a file.
+- The review says some things once for the whole sort (`notes`), not on each row: that a project with no
+  git history got no showcase guess, as Hal cannot see who wrote it, and that a GitHub account in the
+  settings can be added on Projects. A real dump's projects had no history, so none was pre-starred
+  (2026-11-09); saying so once tells the person to star their best work.
 - A project's sibling folders numbered in one series ("lab1" to "lab8", `sort_units.series`) are one row the
   same way, named by its first and last folder: a real dump gave nine rows for one module's practicals
   (2026-11-09).
@@ -28,8 +32,9 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections import Counter, defaultdict
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
+from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import registry, sort_courses, sort_units, sorter, sorts
 
@@ -74,6 +79,34 @@ def accept_course(con: sqlite3.Connection, sort_id, key: str, words: dict | None
                                  "substr(rel, 1, ?) = ?", (card["id"], s["id"], len(folder) + 1,
                                                           folder + "/")).rowcount
     return {"card": card, "matched": given + sorts.rematch(con, s["id"])}
+
+
+# Notes about the whole sort -------------------------------------------------------------------------------
+
+NO_HISTORY = "no_history"
+GITHUB = "github"
+NOTE_WORDS = {
+    NO_HISTORY: "Hal could not see who wrote these (no history). Mark your best work as Showcase.",
+    GITHUB: "Your GitHub account is in your settings. Add it on Projects, so Hal reads your code with its "
+            "history.",
+}
+
+
+def notes(con: sqlite3.Connection, sort_id) -> list[dict]:
+    """What the review says once about the whole sort, as [{"id", "words"}]: that projects with no git history
+    got no showcase guess, and that the person's GitHub account in their settings can be added on Projects
+    (when no GitHub account is a source yet)."""
+    s = sorts.row_of(con, sort_id)
+    out = []
+    folders = con.execute("SELECT path FROM record_sort_rows WHERE sort_id = ? AND state = 'proposed' AND "
+                          "section = 'project' AND held != ?", (s["id"], registry.UPLOAD)).fetchall()
+    if any(not (Path(r["path"]) / ".git").exists() for r in folders):
+        out.append({"id": NO_HISTORY, "words": NOTE_WORDS[NO_HISTORY]})
+    if str(settings.get("you.links.github") or "").strip() and not con.execute(
+            "SELECT 1 FROM record_sources WHERE section = 'project' AND doc_kind = 'github_account' LIMIT 1"
+    ).fetchone():
+        out.append({"id": GITHUB, "words": NOTE_WORDS[GITHUB]})
+    return out
 
 
 # Module groups --------------------------------------------------------------------------------------------

@@ -44,7 +44,8 @@ Routes:
 - `POST /api/v2/record/sort/upload`: a multipart form of files `file0`, `file1`, ... with `path0`, ... (a
   path inside a folder the person chose); zips are unpacked. Kept in Hal's data folder; {"sort", "action_id"}.
 - `GET /api/v2/record/sort/{id}?section=&state=proposed&offset=0&limit=50&group=&flat=`: {SORT, "rows":
-  [ROW or GROUP], "total", "cards", "courses": [COURSE]}. Proposed lecture material and coursework come one
+  [ROW or GROUP], "total", "cards", "courses": [COURSE], "notes": [{"id", "words"}]}, the notes said once
+  for the whole sort (`sort_review.notes`: `no_history`, `github`). Proposed lecture material and coursework come one
   GROUP a module (`sort_review.rows`) unless `flat=1`; `group` lists one group's own rows.
 - `POST /api/v2/record/sort/{id}/groups` {"group", "ticked", "section", "target_id"}: changes every file of a
   group at once; {"changed"}.
@@ -200,7 +201,8 @@ def one(req: Request) -> dict:
     except ValueError as e:
         raise BadRequest(str(e)) from e
     return {**sorts.shape(req.con, req.params["sort_id"]), **page, "cards": sorts.cards(req.con),
-            "courses": sort_review.courses_found(req.con, req.params["sort_id"])}
+            "courses": sort_review.courses_found(req.con, req.params["sort_id"]),
+            "notes": sort_review.notes(req.con, req.params["sort_id"])}
 
 
 @route("POST", PREFIX + "/{sort_id}/courses", auth="session_or_local")

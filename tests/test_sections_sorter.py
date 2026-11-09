@@ -19,7 +19,7 @@ from test_record import tiny_pdf
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sort_copies, sort_kinds, sort_review, sort_rules, sort_units, sorter, sorts
+from jobhunt.sections import pipeline, sort_copies, sort_kinds, sort_review, sort_rules, sort_units, sorter, sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600
@@ -527,6 +527,29 @@ class Sorter(unittest.TestCase):
                                           "files."))
             self.assertEqual(where(found["Dump/Projects/Tidewatch portfolio piece.md"]),
                              ("proposed", "project", "upload"), "naming two projects is no listing")
+
+    def test_the_review_says_once_that_projects_with_no_history_got_no_showcase_guess(self):
+        # A real dump's projects had no git history, so none was pre-starred and nothing said why (2026-11-09).
+        from test_sections_sort import sorted_folder  # imported here: that module imports this one
+        with home() as (con, _vault, files), fake_ai(NONE):
+            settings.set("you.name", "Avery Quillon")
+            put(files, "Git only/tidewatch/README.md", README)
+            put(files, "Git only/tidewatch/gauge.py", "def read():\n    return 1\n")
+            committed(files / "Git only/tidewatch", repos.AVERY, "2024-10-27T10:00:00Z")
+            self.assertEqual(sort_review.notes(con, sorted_folder(con, files / "Git only")), [])
+            put(files, "Mixed/tidewatch/README.md", README)
+            put(files, "Mixed/tidewatch/gauge.py", "def read():\n    return 1\n")
+            committed(files / "Mixed/tidewatch", repos.AVERY, "2024-10-27T10:00:00Z")
+            put(files, "Mixed/Lantern exhibition/README.md", "# Lantern exhibition\n\nAn exhibition I curated.\n")
+            sort_id = sorted_folder(con, files / "Mixed")
+            self.assertEqual(sort_review.notes(con, sort_id), [{"id": "no_history", "words": "Hal could not see who "
+                                                               "wrote these (no history). Mark your best work as "
+                                                               "Showcase."}])
+            settings.set("you.links.github", "https://github.com/avery-quillon-example")
+            self.assertEqual([n["id"] for n in sort_review.notes(con, sort_id)], ["no_history", "github"])
+            pipeline.add_link(con, "project", "avery-quillon-example", doc_kind="github_account")
+            self.assertEqual([n["id"] for n in sort_review.notes(con, sort_id)], ["no_history"],
+                             "once the account is on Projects, Hal stops suggesting it")
 
     def test_a_word_in_a_name_is_not_enough_for_a_transcript_or_a_contract(self):
         with home() as (con, _vault, files), fake_ai(NONE):

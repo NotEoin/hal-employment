@@ -32,7 +32,9 @@ code.
 5. Check each row. Under **Where it goes**, **What it is** and **Course or job**, change anything Hal got
    wrong. Untick a file to keep it out. For a project, tick **Showcase** if you want employers to hear about
    it. Hal ticks it for you only on a few of your own code projects (at most 8): ones outside your course
-   folders, with your own commits and a README that says what they do. To show coursework, such as a
+   folders, with your own commits and a README that says what they do. A folder with no git history shows
+   no one's commits, so Hal ticks none of those, and the list says so once. If your GitHub account is in
+   **Settings**, the list also suggests adding it on **Projects**. To show coursework, such as a
    module's code, star it on its course once it is added. Your changes are kept, so you can stop and come
    back later.
 6. Add your CVs and papers next: press **CVs**, then **Add the ticked CVs**, and the same for **Official

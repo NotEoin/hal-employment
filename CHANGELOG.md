@@ -15,7 +15,10 @@ What changed in each version, in plain words.
   folders such as lab1 to lab8 are one row. Copies of a project in different folders, with or without git
   history ("Projects/Hal", "old/Hal-final"), are one row: Hal keeps the newest, and never one in an old,
   archive, backup or unversioned folder when there is another. A single file that names three or more of
-  your projects, such as a portfolio plan, is left out, as each project is read from its own files.
+  your projects, such as a portfolio plan, is left out, as each project is read from its own files. When
+  your project folders have no git history, the list says once that Hal could not see who wrote them, so
+  you mark your best work as Showcase yourself, and suggests adding your GitHub account on Projects when
+  it is in your settings.
 
 - **Sort a big folder proposes less, and more of it right.** Hal never proposes anything inside a
   project's libraries or build output (`node_modules`, `build`, `dist`, `_build/libs` and the like): the

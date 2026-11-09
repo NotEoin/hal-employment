@@ -78,6 +78,8 @@ class SortAFolder(unittest.TestCase):
         review = p.page.locator("section.rec-sort")
         p.shows(review.get_by_text("Ready for you to check"), "the finished sort")
         p.shows(review.get_by_text("Add your CVs and papers first, so your courses exist."), "the order to add in")
+        p.shows(review.get_by_text("Hal could not see who wrote these (no history). Mark your best work as Showcase."),
+                "said once: a project folder with no history got no showcase guess")
         p.shows(review.get_by_role("heading", name="Courses Hal found"), "the courses the folders name")
         review.get_by_role("button", name="Add the course BA History").click()
         p.shows(p.page.get_by_text(re.compile(r"^Added BA History\.")), "the course added")
