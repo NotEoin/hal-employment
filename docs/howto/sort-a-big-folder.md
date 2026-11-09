@@ -41,7 +41,9 @@ code.
    `build` or `dist`); the line at the bottom of the list counts those files. Hal also leaves out other
    people's work: published papers you kept as reading, and posters or reports named after someone else.
    What your course gave out, such as a brief, a handbook or a folder of course materials, is proposed as
-   lecture material, never as your coursework. To add one anyway, choose a place for it under **Where it goes**, then add it.
+   lecture material, never as your coursework. A folder of note folders on one subject is one row, and so
+   is a folder of practice exercises (such as HackerRank or LeetCode), which Hal never stars. Downloads
+   from a 3D-print sharing site and a notes app's templates are left out. To add one anyway, choose a place for it under **Where it goes**, then add it.
 
 ## Moving a record an older Hal read in
 

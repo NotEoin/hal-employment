@@ -1476,6 +1476,13 @@ proposals to sources, and a record the bulk read built through a move and its un
   `bin`, `obj`, `Pods` and the like) is proposed, nor a project found inside `lib` or `libs`
   (`vendored_project`); such files are counted in `skipped` as `VENDORED_SKIP`. A project is proposed at its
   top, so the libraries in its build folder stay part of it.
+- `sections/sort_units.py` makes some folders one row (`groups`, each taking every file below it): a folder
+  of `NOTE_FOLDERS_MIN` or more sibling note folders with a README, mostly text (`NOTES_SHARE`) and no code
+  (`coursework` notes under a course folder, else a `project` upload); a practice site's folder
+  (`PRACTICE_SITE`, an unstarred project said to be practice); and a download named "<Thing> - <6 or 7
+  digits>" (`DOWNLOAD_ID`, left out). A notes app's own folders (`APP_FOLDER`: "+Inbox", "_Session-Logs",
+  "Templates", "Attachments") are never projects, and files in its templates or attachments are left out
+  (`app_file`).
 - Someone else's work is left out before the rules place a document: a published paper (`published_paper`:
   an abstract or an arXiv or DOI line on the first page, before any references heading, with
   `PAPER_SIGNS_MIN` of abstract, identifier, venue, "et al." citations and a references heading, and no

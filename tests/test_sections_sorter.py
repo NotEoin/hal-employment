@@ -18,7 +18,7 @@ from test_record import tiny_pdf
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sort_rules, sorter
+from jobhunt.sections import sort_rules, sort_units, sorter
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600
@@ -53,6 +53,13 @@ def paper(title: str, venue: str) -> bytes:
     return tiny_pdf([title, "Ada Brindle, Cole Fenwick and Dana Hollis", venue, "Abstract",
                      "We study a made-up question with a made-up method.", "As Smith et al. and Jones et al. show,",
                      "the results hold.", "References", "Smith, A. et al. (2019). A made-up paper."])
+
+
+def notes_folders(d: Path, parent: str, names: tuple[str, ...]) -> None:
+    """Sibling folders of made-up notes under `parent`, each with a README."""
+    for name in names:
+        put(d, f"{parent}/{name}/README.md", f"# {name}\n\nMade-up notes on {name}, with dates and sources.\n")
+        put(d, f"{parent}/{name}/timeline.md", f"# Timeline\n\nWhat happened, made up, for {name}.\n")
 
 
 def with_libraries(d: Path, project: str, readme: str, libraries: tuple[str, ...]) -> None:
@@ -265,6 +272,47 @@ class Sorter(unittest.TestCase):
             found = sorter.propose(con, files / "Uni", local=True)
             self.assertEqual({where(p) for p in found.proposals}, {("proposed", "lecture", "notes")})
             self.assertEqual(backend.requests("sort_pick"), [], "a course document never needs the AI")
+
+    def test_sibling_folders_of_notes_are_one_proposal_at_their_parent(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            notes_folders(files / "Dump", "Notes/known-cyber-attacks", ("2017 WannaCry", "2014 Heartbleed",
+                                                                         "2020 SolarWinds"))
+            notes_folders(files / "Dump", "Uni/BA History/Year 2/archive-visits", ("1851 census", "1871 census",
+                                                                                     "Tithe map"))
+            notes_folders(files / "Dump", "Portfolio", ("Lantern exhibition", "Walking tour"))
+            found = by_rel(sorter.propose(con, files / "Dump", local=True))
+            self.assertEqual(where(found["Dump/Notes/known-cyber-attacks"]), ("proposed", "project", "upload"))
+            self.assertEqual(where(found["Dump/Uni/BA History/Year 2/archive-visits"]),
+                             ("proposed", "coursework", "notes"), "under a course folder it is coursework")
+            self.assertFalse([r for r in found if "WannaCry" in r or "census" in r], "no sub-folder is a row")
+            self.assertEqual(where(found["Dump/Portfolio/Walking tour"]), ("proposed", "project", "upload"),
+                             "two project folders stay two projects")
+
+    def test_practice_exercises_downloads_and_a_notes_apps_folders_are_never_showcase_projects(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            for task in ("two-sum", "anagrams"):
+                put(d, f"Code/hackerrank/{task}/README.md", f"# {task}\n\n{README}")
+                put(d, f"Code/hackerrank/{task}/solution.py", "def solve():\n    return 1\n")
+                put(d, f"Code/hackerrank/{task}/test_solution.py", "def test():\n    assert 1\n")
+            put(d, "Code/Advent of Code 2023/day1.py", "print(1)\n")
+            put(d, "Downloads/Harbour Crane - 4417852/README.txt", "Harbour Crane by a made-up maker.\n")
+            put(d, "Downloads/Harbour Crane - 4417852/LICENSE.txt", "Made-up licence.\n")
+            put(d, "Vault/Templates/README.md", "# Templates\n\nMade-up note templates.\n")
+            put(d, "Vault/Templates/Daily note.md", "# {{date}}\n\n## Today\n")
+            put(d, "Vault/+Inbox/README.md", "# Inbox\n\nThings to file.\n")
+            put(d, "Vault/_Session-Logs/README.md", "# Logs\n\nMade-up session logs.\n")
+            found = sorter.propose(con, d, local=True)
+            rels = by_rel(found)
+            practice = rels["Dump/Code/hackerrank"]
+            self.assertEqual((*where(practice), practice.star), ("proposed", "project", "upload", False))
+            self.assertEqual(practice.why, sort_units.WORDS[sort_units.PRACTICE])
+            self.assertEqual(where(rels["Dump/Code/Advent of Code 2023"])[:2], ("proposed", "project"))
+            self.assertEqual(rels["Dump/Downloads/Harbour Crane - 4417852"].state, "left_out")
+            self.assertFalse([r for r in rels if "two-sum" in r or "Crane - 4417852/" in r])
+            self.assertFalse([p.rel for p in found.proposals if p.section == "project" and "Vault" in p.rel],
+                             "a notes app's own folders are never projects")
+            self.assertEqual(rels["Dump/Vault/Templates/Daily note.md"].state, "left_out")
 
     def test_coursework_with_no_course_on_the_record_waits_for_one(self):
         with home() as (con, _vault, files), fake_ai({"sort_pick": json.dumps({"choice": "none"})}):

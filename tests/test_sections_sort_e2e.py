@@ -15,7 +15,7 @@ from support.fake_ai import fake_ai
 from test_ingest import CV_TEXT, OWNER, REPLY, home, put, run
 from test_record import tiny_pdf
 from test_sections_sort import add_and_read, sections_of, sorted_folder
-from test_sections_sorter import history_dump, paper, software_dump, with_libraries
+from test_sections_sorter import history_dump, notes_folders, paper, software_dump, with_libraries
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
@@ -42,7 +42,10 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "Project List 2024.md": ("proposed", "lecture", "notes"),
          "Research Methods in Computing Projects.pdf": ("proposed", "lecture", "notes"),
          "CSC3095_Jordan_Pellow_Project_Poster.pdf": ("left_out", "", ""),
-         "CLIP-Dissect probing.pdf": ("left_out", "", ""), "CheXpert Plus.pdf": ("left_out", "", "")}
+         "CLIP-Dissect probing.pdf": ("left_out", "", ""), "CheXpert Plus.pdf": ("left_out", "", ""),
+         "known-cyber-attacks": ("proposed", "project", "upload"), "hackerrank": ("proposed", "project", "upload"),
+         "Harbour Crane - 4417852": ("left_out", "", ""), "Daily note.md": ("left_out", "", ""),
+         "README.md": ("left_out", "", "")}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -57,7 +60,15 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Fenwick 2021 Baptism registers.pdf": ("left_out", "", ""),
           "Module handbook 2023.md": ("proposed", "lecture", "notes"),
           "Dissertation guidance.md": ("proposed", "lecture", "notes"),
-          "Essay brief.md": ("proposed", "lecture", "notes"), "HIS2040_Talia_Wren_Poster.pdf": ("left_out", "", "")}
+          "Essay brief.md": ("proposed", "lecture", "notes"), "HIS2040_Talia_Wren_Poster.pdf": ("left_out", "", ""),
+          "archive-visits": ("proposed", "project", "upload"), "Lantern stand - 5512093": ("left_out", "", ""),
+          "Seminar template.md": ("left_out", "", ""), "README.md": ("left_out", "", "")}
+
+
+def download(d: Path, folder: str) -> None:
+    """A made-up 3D-print download, named as a sharing site names one."""
+    put(d, f"{folder}/README.txt", "A made-up design by a made-up maker, to print at home.\n")
+    put(d, f"{folder}/LICENSE.txt", "Made-up licence.\n")
 
 
 def messy_software_dump(root: Path) -> Path:
@@ -79,6 +90,15 @@ def messy_software_dump(root: Path) -> Path:
     papers = "Uni/BSc Computing/Year 3/Dissertation/papers"
     put(d, f"{papers}/CLIP-Dissect probing.pdf", paper("Probing made-up vision models", "arXiv:2301.01234v2"))
     put(d, f"{papers}/CheXpert Plus.pdf", paper("A made-up chest X-ray dataset", "Journal of Made-up Imaging, Vol. 4"))
+    notes_folders(d, "Notes/known-cyber-attacks", ("2017 WannaCry", "2014 Heartbleed", "2020 SolarWinds",
+                                                   "2021 Log4Shell"))
+    for task in ("two-sum", "anagrams"):
+        put(d, f"Code/hackerrank/{task}/README.md", f"# {task}\n\nA made-up practice problem.\n")
+        put(d, f"Code/hackerrank/{task}/solution.py", "def solve():\n    return 1\n")
+        put(d, f"Code/hackerrank/{task}/test_solution.py", "def test():\n    assert 1\n")
+    download(d, "Downloads/Harbour Crane - 4417852")
+    put(d, "Vault/Templates/README.md", "# Templates\n\nMade-up note templates.\n")
+    put(d, "Vault/Templates/Daily note.md", "# {{date}}\n\n## Today\n")
     return d
 
 
@@ -98,6 +118,10 @@ def messy_history_dump(root: Path) -> Path:
     put(d, f"{module}/Essays/Essay brief.md", "# Essay brief\n\nWrite 2,000 words on a made-up question.\n")
     put(d, f"{module}/Seminar posters/HIS2040_Talia_Wren_Poster.pdf",
         tiny_pdf(["Women in the parish vestry", "Talia Wren", "HIS2040 poster"]))
+    notes_folders(d, "Research/archive-visits", ("1851 census trip", "1871 census trip", "Tithe map visit"))
+    download(d, "Downloads/Lantern stand - 5512093")
+    put(d, "Notes vault/Templates/README.md", "# Templates\n\nMade-up templates.\n")
+    put(d, "Notes vault/Templates/Seminar template.md", "# Seminar\n\n## Reading\n")
     return d
 
 

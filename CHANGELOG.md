@@ -11,6 +11,8 @@ What changed in each version, in plain words.
   project is one row, with its libraries part of it. Published papers you kept as reading, and posters or
   reports named after someone else, are left out with the reason. What your course gave out (a brief, a
   handbook, a project list, a folder of course materials) is lecture material, never your coursework.
+  Folders of notes on one subject are one row, practice exercises are one unstarred project, and 3D-print
+  downloads and a notes app's templates are left out.
 
 - **Letters tell your showcase from its own sources.** A project's story now comes from the project's own
   code, pages, files or form and your edits; a detail only your CV gives is marked as such for the writer.

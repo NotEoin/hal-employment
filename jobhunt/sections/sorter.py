@@ -16,6 +16,8 @@ Design decisions, each with its reason:
   prompt `sort_pick`); it never reads a fact, and "none" leaves the file out.
 - Nothing in a library or build folder is proposed, and a project inside one is part of the project around it
   (`sort_rules`): a real dump's "_build/libs" folders gave about 20 wrong project rows (2026-11-09).
+- Folders of notes on one subject, a practice site's exercises and a download are one row each, and a notes
+  app's own folders are never projects (`sort_units`): one folder of notes gave 20 project rows (2026-11-09).
 - Someone else's work is left out: a published paper, or a poster or report named after another person; and
   what a course gave out (a materials folder, a brief, a handbook) is lecture material at most (`sort_rules`).
 - A file Hal cannot place is "Left out" with the reason in plain words, never guessed in: a picture with no
@@ -48,7 +50,7 @@ from pathlib import Path, PurePosixPath
 
 from jobhunt.ingest import convert, discover, group, privacy, rank, versions
 from jobhunt.profile import merge
-from jobhunt.sections import registry, sort_rules, store, wrong_place
+from jobhunt.sections import registry, sort_rules, sort_units, store, wrong_place
 
 log = logging.getLogger(__name__)
 
@@ -314,6 +316,26 @@ def _unit(path: Path, rel: str, files: list[Path], *, local: bool, repo: bool) -
     return p
 
 
+def _group_unit(con: sqlite3.Connection, path: Path, rel: str, files: list[Path], kind: str, *, local: bool,
+                repo: bool) -> Proposal:
+    """A folder that is one proposal (`sort_units.groups`): notes on one subject, practice exercises, or a
+    download left out."""
+    stamp = versions.stamp(path)
+    p = Proposal(path, rel, registry.FILES, size=sum(f.stat().st_size for f in files if f.exists()),
+                 mtime=stamp.commit or stamp.newest_file, files=files)
+    why = sort_units.WORDS[kind]
+    if kind == sort_units.DOWNLOAD:
+        return p.leave_out(why)
+    if kind == sort_units.PRACTICE:
+        p.held = registry.FOLDER if local and repo else registry.FILES
+        return p.place("project", "repo" if p.held == registry.FOLDER else "upload", why)
+    if _course_folder(rel, set()):
+        p.place("coursework", "notes", why)
+        fill_card(con, p)
+        return p
+    return p.place("project", "upload", why)
+
+
 def _repo_copies(units: list[Proposal]) -> None:
     """Marks every copy of a code project but the newest (see the module notes)."""
     groups: list[list[Proposal]] = []
@@ -409,13 +431,19 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
     found_repos = {r for r in walk.repos if not sort_rules.vendored_project(r, base)}
     found_readmes = {r for r in walk.readmes if not sort_rules.vendored_project(r, base)}
     libraries = (walk.repos | walk.readmes) - found_repos - found_readmes
-    repos = group.outermost(found_repos)
-    folders = group.projects(found_readmes, found_repos)
+    apps = {f for f in found_repos | found_readmes if sort_units.app_folder(f)}
+    repos = group.outermost(found_repos - apps)
+    folders = group.projects(found_readmes - apps, found_repos - apps)
+    kept = [f.path for f in walk.files if not sort_rules.in_vendored(f.path, base)]
+    grouped = {g: kind for g, kind in sort_units.groups(base, kept, repos, folders).items()
+               if group.repo_of(g, repos) is None}
     units: list[Proposal] = []
-    unit_files: dict[Path, list[Path]] = {u: [] for u in (*repos, *folders)}
+    unit_files: dict[Path, list[Path]] = {u: [] for u in (*grouped, *repos, *folders)
+                                          if u in grouped or sort_units.holder(u, grouped) is None}
     loose: list[discover.Found] = []
     for f in walk.files:
-        holder = group.repo_of(f.path, repos) or group.project_of(f.path, folders)
+        holder = sort_units.holder(f.path, grouped) or group.repo_of(f.path, repos) or \
+            group.project_of(f.path, folders)
         if holder is not None:
             unit_files[holder].append(f.path)
         elif sort_rules.in_vendored(f.path, base) or any(lib in f.path.parents for lib in libraries):
@@ -427,8 +455,11 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
             continue
         rel = (PurePosixPath(prefix if prefix is not None else base.name) / folder.relative_to(base).as_posix()
                ).as_posix()
-        units.append(_unit(folder, rel, files, local=local, repo=folder in repos))
-    _repo_copies(units)
+        if folder in grouped:
+            units.append(_group_unit(con, folder, rel, files, grouped[folder], local=local, repo=folder in repos))
+        else:
+            units.append(_unit(folder, rel, files, local=local, repo=folder in repos))
+    _repo_copies([u for u in units if u.section == "project"])
     courses = {str(PurePosixPath(members[0][1]).parent)
                for members in group.courses([(f.path, f.rel) for f in loose]).values()}
     docs, asks, own = [], 0, sort_rules.own_words(con)
@@ -440,6 +471,9 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
         docs.append(p)
         if f.state in ("not_downloaded", "skipped"):
             p.leave_out(LEFT_OUT_WORDS[f.state])
+            continue
+        if why := sort_units.app_file(f.rel):
+            p.leave_out(why)
             continue
         if (same := store.by_hash(con, f.sha256)) is not None:
             p.leave_out(f"Already in your record, under {registry.get(same['section']).label}.")
