@@ -24,7 +24,8 @@ from jobhunt.sections import move, pipeline, sorts
 
 CV = ("# Marnie Quillfeather\n\nCurriculum vitae\n\n## Work experience\n\nVisitor guide, Fenwick Lantern Museum "
       "Trust, 2023 to 2024.\n\n## Education\n\nBA History, University of Nowhere Fen, 2021 to 2024.\n")
-ESSAY = "# The parish registers of Harrowgate Vale\n\nAn essay on baptisms, 1750 to 1850, using archival research.\n"
+ESSAY = ("# The parish registers of Harrowgate Vale\n\nAn essay on baptisms, 1750 to 1850, using archival research.\n"
+         + "It reads the made-up registers year by year and weighs what they say against the vestry minutes. " * 12)
 NOTES = "# Seminar 3\n\nReading secretary hand: palaeography for the parish registers.\n"
 OTHERS = "# Sam Pike\n\nCurriculum vitae of a classmate.\n"
 

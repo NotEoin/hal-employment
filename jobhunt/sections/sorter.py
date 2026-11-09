@@ -18,6 +18,9 @@ Design decisions, each with its reason:
   (`sort_rules`): a real dump's "_build/libs" folders gave about 20 wrong project rows (2026-11-09).
 - Folders of notes on one subject, a practice site's exercises and a download are one row each, and a notes
   app's own folders are never projects (`sort_units`): one folder of notes gave 20 project rows (2026-11-09).
+- A word in a name is not enough (`sort_kinds`): a transcript shows marks, a contract its terms, coursework
+  a sign of a submission and more than a stub; a file named as a lecture or week, or a note in a topics
+  folder, is what the person studied. When in doubt a course folder's file is lecture material.
 - Someone else's work is left out: a published paper, or a poster or report named after another person; and
   what a course gave out (a materials folder, a brief, a handbook) is lecture material at most (`sort_rules`).
 - A file Hal cannot place is "Left out" with the reason in plain words, never guessed in: a picture with no
@@ -53,7 +56,7 @@ from pathlib import Path, PurePosixPath
 
 from jobhunt.ingest import convert, discover, group, privacy, rank, versions
 from jobhunt.profile import merge
-from jobhunt.sections import registry, sort_rules, sort_units, store, wrong_place
+from jobhunt.sections import registry, sort_kinds, sort_rules, sort_units, store, wrong_place
 from jobhunt.sections import repo as repo_reader
 
 log = logging.getLogger(__name__)
@@ -91,6 +94,8 @@ WORK_FOLDER = re.compile(r"(?<![a-z])(?:coursework|assignments?|submissions?|ess
                          r"thesis)(?![a-z])", re.I)
 TAUGHT_FOLDER = re.compile(r"(?<![a-z])(?:lectures?|slides|handouts?|readings?|seminars?|tutorials?)(?![a-z])",
                            re.I)
+WORK_KINDS = ("report", "writing", "project")
+STUDIED_KINDS = ("notes", "slides", *WORK_KINDS)     # what a course folder's file is when not handed in
 DISSERTATION_NAME = re.compile(r"(?<![a-z])(?:dissertation|thesis)(?![a-z])", re.I)
 ESSAY_NAME = re.compile(r"(?<![a-z])essays?(?![a-z])", re.I)
 STATEMENT_NAME = re.compile(r"(?<![a-z])(?:personal|supporting)[ _-]?statement|statement[ _-]?of[ _-]?purpose", re.I)
@@ -246,6 +251,11 @@ def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool) -> bool
     kind = rule.doc_type
     if kind not in rank.STRONG and looks:
         kind = {"cv": "cv", "official": "transcript", "letter": "letter"}[looks[0]]
+    if kind == "transcript" and not sort_kinds.transcript_content(text):
+        kind = rule.doc_type if rule.doc_type != "transcript" else "notes"
+    if kind == "job_description" and CONTRACT_NAME.search(stem) and not sort_kinds.contract_content(text):
+        kind = "notes"
+    taught = "slides" if suffix in rank.SLIDE_SUFFIXES else "notes"
     if kind == "cv":
         p.place("cv", "cv", "Named or set out like a CV.")
     elif kind == "letter":
@@ -264,15 +274,19 @@ def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool) -> bool
             p.place("document", "contract", "A contract.")
         else:
             p.leave_out(LEFT_OUT_WORDS["jd"])
-    elif taught := sort_rules.course_material(p.rel, in_course):
-        p.place("lecture", "slides" if suffix in rank.SLIDE_SUFFIXES else "notes", taught)
-    elif in_course and (kind in ("report", "writing", "project") or _nearest(p.rel, WORK_FOLDER)) \
-            and not (kind in ("notes", "slides") and _nearest(p.rel, TAUGHT_FOLDER)):
-        p.place("coursework", _work_kind(stem, suffix) if kind != "notes" else "notes",
+    elif material := sort_rules.course_material(p.rel, in_course):
+        p.place("lecture", taught, material)
+    elif sort_kinds.lecture_named(stem, text):
+        p.place("lecture", taught, "Named as a lecture, seminar or week's material: what you studied.")
+    elif kind in STUDIED_KINDS and sort_kinds.study_note(p.rel):
+        p.place("lecture", taught, "Your notes on a topic: what you studied.")
+    elif in_course and (kind in WORK_KINDS or _nearest(p.rel, WORK_FOLDER)) \
+            and not (kind in ("notes", "slides") and _nearest(p.rel, TAUGHT_FOLDER)) \
+            and sort_kinds.submitted_work(p.rel, text):
+        p.place("coursework", _work_kind(stem, suffix) if kind != "notes" or rank.work_named(stem) else "notes",
                 "Your own work in a course folder.")
-    elif in_course and kind in ("notes", "slides"):
-        p.place("lecture", "slides" if suffix in rank.SLIDE_SUFFIXES else "notes",
-                "Notes or slides in a course folder: what you studied.")
+    elif in_course and (kind in STUDIED_KINDS or _nearest(p.rel, WORK_FOLDER)):
+        p.place("lecture", taught, "Notes or slides in a course folder: what you studied.")
     elif kind == "project":
         p.place("project", "upload", "Named as a project or portfolio piece.")
     else:

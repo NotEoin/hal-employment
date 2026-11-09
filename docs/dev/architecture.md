@@ -1506,6 +1506,13 @@ proposals to sources, and a record the bulk read built through a move and its un
   with a degree word, else `document`; references and contracts go to `document`, or `job_doc` when a job's
   employer is named (`fill_card`). Only a document the rules cannot place goes to the AI (`sort_pick`
   prompt), which picks one of `CHOICES` (`section/kind`) or "none"; at most `AI_ASKS_MAX` a sort.
+- `sections/sort_kinds.py` checks a guess by the content before `place_kind` trusts it: a transcript shows
+  a module row ending in a mark, a classification, a student number or a certificate's words
+  (`transcript_content`); a contract names two of its parties, pay and hours (`contract_content`); a file
+  named "Lecture", "Week N", "Seminar" or "Workshop" is `lecture` unless its text shows a submission
+  (`lecture_named`); a note in a topics or study-notes folder is `lecture` (`study_note`); and coursework
+  needs a submission sign in its folders or name plus `WORK_WORDS_MIN` (150) words (`submitted_work`), else
+  a course folder's file is `lecture`.
 - Left out, with the reason: pictures (unless named as a certificate), recordings, code outside a project,
   emails, other kinds of file, files only online, files with no words, files `privacy.held_back` keeps out
   (checked before the AI sees any text), files already in the record (`store.by_hash`), job descriptions

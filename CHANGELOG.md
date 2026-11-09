@@ -13,7 +13,10 @@ What changed in each version, in plain words.
   handbook, a project list, a folder of course materials) is lecture material, never your coursework.
   Folders of notes on one subject are one row, practice exercises are one unstarred project, and 3D-print
   downloads and a notes app's templates are left out. Hal ticks **Showcase** only on up to 8 of your own
-  code projects, outside your course, with your commits and a README of about 150 words or more.
+  code projects, outside your course, with your commits and a README of about 150 words or more. A word in
+  a file's name is no longer enough: a transcript must show marks, a contract its pay or hours, and
+  coursework must look handed in; notes named by lecture or week, and your notes on a topic, are lecture
+  material.
 
 - **Letters tell your showcase from its own sources.** A project's story now comes from the project's own
   code, pages, files or form and your edits; a detail only your CV gives is marked as such for the writer.

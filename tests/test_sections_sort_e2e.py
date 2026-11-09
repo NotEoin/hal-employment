@@ -16,7 +16,16 @@ from support.fake_ai import fake_ai
 from test_ingest import CV_TEXT, OWNER, REPLY, home, put, run
 from test_record import tiny_pdf
 from test_sections_sort import add_and_read, sections_of, sorted_folder
-from test_sections_sorter import README, committed, history_dump, notes_folders, paper, software_dump, with_libraries
+from test_sections_sorter import (
+    README,
+    WORDS,
+    committed,
+    history_dump,
+    notes_folders,
+    paper,
+    software_dump,
+    with_libraries,
+)
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
@@ -47,7 +56,11 @@ AVERY = {"Avery Quillon CV.md": ("proposed", "cv", "cv"), "Avery CV 2022.md": ("
          "known-cyber-attacks": ("proposed", "project", "upload"), "hackerrank": ("proposed", "project", "upload"),
          "Harbour Crane - 4417852": ("left_out", "", ""), "Daily note.md": ("left_out", "", ""),
          "README.md": ("left_out", "", ""), "practical-1": ("proposed", "project", "repo"),
-         "practical-2": ("proposed", "project", "repo"), "fogbell": ("proposed", "project", "repo")}
+         "practical-2": ("proposed", "project", "repo"), "fogbell": ("proposed", "project", "repo"),
+         "smart contract.md": ("proposed", "lecture", "notes"),
+         "UMLActivityAnswer.md": ("proposed", "coursework", "notes"),
+         "Lecture 9 Project Planning.md": ("proposed", "lecture", "notes"),
+         "Agile project management.md": ("proposed", "lecture", "notes")}
 MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Seminar notes week 1.md": ("proposed", "lecture", "notes"),
           "Seminar notes week 2.md": ("proposed", "lecture", "notes"),
@@ -65,7 +78,10 @@ MARNIE = {"Marnie Quillfeather CV.md": ("proposed", "cv", "cv"),
           "Essay brief.md": ("proposed", "lecture", "notes"), "HIS2040_Talia_Wren_Poster.pdf": ("left_out", "", ""),
           "archive-visits": ("proposed", "project", "upload"), "Lantern stand - 5512093": ("left_out", "", ""),
           "Seminar template.md": ("left_out", "", ""), "README.md": ("left_out", "", ""),
-          "Walking tour": ("proposed", "project", "upload")}
+          "Walking tour": ("proposed", "project", "upload"), "marriage contract.md": ("proposed", "lecture", "notes"),
+          "Palaeography answer sheet.md": ("proposed", "lecture", "notes"),
+          "Lecture 4 Writing an essay.md": ("proposed", "lecture", "notes"),
+          "Writing history essays.md": ("proposed", "lecture", "notes")}
 # The showcase guesses: only a project of the person's own, with their commits and a README that says what it is.
 STARRED = {"software": ["tidewatch"], "history": []}
 
@@ -112,6 +128,12 @@ def messy_software_dump(root: Path) -> Path:
     put(d, "Projects/fogbell/README.md", README)
     put(d, "Projects/fogbell/bell.py", "print(1)\n")
     put(d, "Projects/fogbell/horn.py", "print(2)\n")
+    put(d, "Notes/smart contract.md", "# Smart contracts\n\nCode on a blockchain that holds parties to terms.\n")
+    put(d, "Uni/BSc Computing/Year 1/CSC1021 Programming/Coursework/UMLActivityAnswer.md",
+        "# UML activity diagram answer\n\nModule CSC1021. Question 2 is worth 10 marks of the credits.\n\n" + WORDS)
+    put(d, "Uni/BSc Computing/Year 2/CS2041 Databases/Coursework/Lecture 9 Project Planning.md",
+        "# Lecture 9\n\nProject planning: milestones and risks.\n")
+    put(d, "Uni/BSc Computing/Year 2/Topics/Agile project management.md", "# Agile\n\n" + WORDS)
     return d
 
 
@@ -137,6 +159,12 @@ def messy_history_dump(root: Path) -> Path:
     put(d, "Notes vault/Templates/Seminar template.md", "# Seminar\n\n## Reading\n")
     put(d, "Portfolio/Walking tour/README.md", "# Walking tour\n\n" + README)
     put(d, "Portfolio/Walking tour/route.md", "# Route\n\nTwelve made-up stops.\n")
+    put(d, "Notes vault/marriage contract.md", "# Marriage contracts\n\nIn the made-up 1700s a marriage contract "
+                                               "set out what each party brought.\n")
+    put(d, f"{module}/Palaeography answer sheet.md", "# Palaeography\n\nThis module has 20 credits; answer for 10 "
+                                                      "marks.\n")
+    put(d, f"{module}/Essays/Lecture 4 Writing an essay.md", "# Lecture 4\n\nHow to write a made-up essay.\n")
+    put(d, f"{module}/Topics/Writing history essays.md", "# Writing history essays\n\n" + WORDS)
     return d
 
 

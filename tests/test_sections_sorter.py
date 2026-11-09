@@ -19,7 +19,7 @@ from test_record import tiny_pdf
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sort_rules, sort_units, sorter
+from jobhunt.sections import sort_kinds, sort_rules, sort_units, sorter
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600
@@ -91,9 +91,10 @@ def software_dump(root: Path) -> Path:
     for week in (1, 2, 3):
         put(d, f"{course}/Lectures/week {week} notes.md", f"# Week {week}\n\nNormal forms and joins, part {week}.\n")
     put(d, f"{course}/Coursework/Database design report.md", "# Database design report\n\nMy design for a "
-                                                             "made-up library, with an ER diagram.\n")
-    dated(put(d, "Uni/BSc Computing/Year 3/Dissertation/Dissertation final.md", "# Tide prediction\n\nFinal.\n"), NEW)
-    dated(put(d, "Uni/BSc Computing/Year 3/Dissertation/Dissertation.md", "# Tide prediction\n\nDraft.\n"), OLD)
+                                                             "made-up library, with an ER diagram.\n\n" + WORDS)
+    thesis = "Uni/BSc Computing/Year 3/Dissertation"
+    dated(put(d, f"{thesis}/Dissertation final.md", "# Tide prediction\n\n" + WORDS + "Final.\n"), NEW)
+    dated(put(d, f"{thesis}/Dissertation.md", "# Tide prediction\n\n" + WORDS + "Draft.\n"), OLD)
     for name, when in (("tidewatch", NEW), ("tidewatch (2)", OLD)):
         put(d, f"Projects/{name}/README.md", README)
         put(d, f"Projects/{name}/pyproject.toml", "[project]\nname = \"tidewatch\"\n")
@@ -118,7 +119,7 @@ def history_dump(root: Path) -> Path:
     for week in (1, 2, 3):
         put(d, f"{course}/Seminar notes week {week}.md",
             f"# Seminar {week}\n\nReading parish registers, part {week}.\n")
-    essay = "# The parish registers of Harrowgate Vale\n\nAn essay on baptisms, 1750 to 1850.\n"
+    essay = "# The parish registers of Harrowgate Vale\n\nAn essay on baptisms, 1750 to 1850.\n\n" + WORDS
     dated(put(d, f"{course}/Essays/Parish registers essay.md", essay), NEW)
     dated(put(d, f"{course}/Essays/Parish registers essay (1).md", essay), OLD)
     put(d, "BA History/Transcript of study.md", TRANSCRIPT)
@@ -352,6 +353,52 @@ class Sorter(unittest.TestCase):
             self.assertEqual(len(starred), sorter.STARS_MAX)
             self.assertTrue(all(r.startswith("Dump/Projects/p") for r in starred),
                             "never a practical, a classmate's project, a short README or one with no commits")
+
+    def test_a_word_in_a_name_is_not_enough_for_a_transcript_or_a_contract(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            put(d, "Misc/smart contract.md", "# Smart contracts\n\nCode on a blockchain that holds parties to terms.\n")
+            put(d, "Work/Employment contract.md", "# Contract of employment\n\nBetween the employer, Made-up Tides "
+                                                  "Ltd, and the employee, Avery Quillon. Salary: 24,000 per annum. "
+                                                  "Hours of work: 37.5 hours per week.\n")
+            put(d, "Uni/Year 1/CSC1021 Programming/Coursework/UMLActivityAnswer.md",
+                "# UML activity diagram answer\n\nModule CSC1021. Question 2 is worth 10 marks of the credits.\n\n"
+                + WORDS)
+            put(d, "Uni/Transcript of study.md", TRANSCRIPT)
+            found = by_rel(sorter.propose(con, d, local=True))
+            self.assertNotEqual(found["Dump/Misc/smart contract.md"].doc_kind, "contract")
+            self.assertFalse(sort_kinds.contract_content("Code that holds parties to terms."))
+            self.assertEqual(where(found["Dump/Work/Employment contract.md"]), ("proposed", "document", "contract"))
+            self.assertEqual(where(found["Dump/Uni/Year 1/CSC1021 Programming/Coursework/UMLActivityAnswer.md"]),
+                             ("proposed", "coursework", "notes"), "a question worth 10 marks is no transcript")
+            self.assertEqual(where(found["Dump/Uni/Transcript of study.md"]), ("proposed", "official", "transcript"))
+
+    def test_a_file_named_as_a_lecture_is_studied_unless_it_shows_a_submission(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            work = files / "Uni/Year 2/CS2041 Databases/Coursework"
+            put(work, "Lecture 9 Project Planning.md", "# Lecture 9\n\nProject planning: milestones and risks.\n")
+            put(work, "Week 3 report.md", "# Week 3 report\n\nStudent number: 2301234\n\n" + WORDS)
+            found = by_rel(sorter.propose(con, files / "Uni", local=True))
+            c = "Uni/Year 2/CS2041 Databases/Coursework/"
+            self.assertEqual(where(found[c + "Lecture 9 Project Planning.md"]), ("proposed", "lecture", "notes"))
+            self.assertEqual(where(found[c + "Week 3 report.md"]), ("proposed", "coursework", "report"))
+
+    def test_notes_on_a_topic_are_studied_and_coursework_needs_a_submission_and_more_than_a_stub(self):
+        with home() as (con, _vault, files), fake_ai(NONE):
+            d = files / "Dump"
+            put(d, "Uni/Year 2/Topics/Agile project management.md", "# Agile\n\n" + WORDS)
+            put(d, "Vault/Topics/Normalisation.md", "# Normalisation\n\nFirst normal form, made up.\n")
+            put(d, "Uni/Year 2/Coursework/Short report.md", "# Short report\n\nA title and a line.\n")
+            put(d, "Uni/Year 2/Coursework/Long report.md", "# Long report\n\n" + WORDS)
+            found = by_rel(sorter.propose(con, d, local=True))
+            self.assertEqual(where(found["Dump/Uni/Year 2/Topics/Agile project management.md"]),
+                             ("proposed", "lecture", "notes"))
+            self.assertEqual(where(found["Dump/Vault/Topics/Normalisation.md"]), ("proposed", "lecture", "notes"),
+                             "a topic note outside a course folder is studied too")
+            self.assertEqual(where(found["Dump/Uni/Year 2/Coursework/Short report.md"]),
+                             ("proposed", "lecture", "notes"), "a stub is never coursework")
+            self.assertEqual(where(found["Dump/Uni/Year 2/Coursework/Long report.md"]),
+                             ("proposed", "coursework", "report"))
 
     def test_coursework_with_no_course_on_the_record_waits_for_one(self):
         with home() as (con, _vault, files), fake_ai({"sort_pick": json.dumps({"choice": "none"})}):

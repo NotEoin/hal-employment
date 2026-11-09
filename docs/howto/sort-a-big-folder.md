@@ -44,7 +44,10 @@ code.
    What your course gave out, such as a brief, a handbook or a folder of course materials, is proposed as
    lecture material, never as your coursework. A folder of note folders on one subject is one row, and so
    is a folder of practice exercises (such as HackerRank or LeetCode), which Hal never stars. Downloads
-   from a 3D-print sharing site and a notes app's templates are left out. To add one anyway, choose a place for it under **Where it goes**, then add it.
+   from a 3D-print sharing site and a notes app's templates are left out. A file goes to **Coursework** only
+   when it looks handed in: a word such as coursework, assignment, report or essay in its name or folder,
+   and more than a few lines. Lecture slides, notes named by week, and your notes on a topic go to
+   **Lecture material**, as what you studied. To add one anyway, choose a place for it under **Where it goes**, then add it.
 
 ## Moving a record an older Hal read in
 
