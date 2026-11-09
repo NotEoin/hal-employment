@@ -45,8 +45,9 @@ Design notes:
   opening and closing drafted from who is writing, the role and the reason (`writing.frame`). A grader capped
   every pack at 2 of 5 for readability across four designs that drafted and checked sentence by sentence
   with evidence markers, rewrote, cut and smoothed them, named projects with "For <card>, " and cut the
-  advert's lead-ins (15 packs, 2026-11-08); all of that is gone. A pack whose plan tells no story is drafted
-  whole and checked with `fix_claims`, as before the plan.
+  advert's lead-ins (15 packs, 2026-11-08); all of that is gone. Every starred card is a story too, from the
+  card's own facts (`plan.with_showcase`), so a pack is drafted whole and checked with `fix_claims`, as before
+  the plan, only when the plan tells no story and the record has no starred card (2026-11-09).
 - Which work the drafts tell comes from one AI ranking per pack (`story_ranking`, `writing.rank`), made by
   `write_letter` and passed to `write_others`: word overlap with the advert led letters with weak projects
   (15 graded packs, 2026-11-08). The letter tells the ranking's best, the message and answers the next.
@@ -832,11 +833,11 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     The same path for a pack and for a letter drafted at form time: the advert read, the record searched,
     the fit map made and the evidence plan picked (`evidence_plan`), each unless given, then the letter and its
     checks. `request` holds the person's own words when they asked for a rewrite. Its reason for the employer
-    comes from a motivation pairing (`writing.motive`), or it gives none. When the plan tells any piece of work
-    (`plan.stories`), the letter is one paragraph per piece of work (`_story_letter`), the work chosen by the
-    `ranking` (`story_ranking`, one AI call made here unless given). Otherwise it is drafted
-    whole, revised once for the writing rules and once for restating the advert, and checked whole for claims
-    the facts do not support (`fix_claims`).
+    comes from a motivation pairing (`writing.motive`), or it gives none. When the plan or a starred card tells
+    any piece of work (`plan.stories`, `plan.with_showcase`), the letter is one paragraph per piece of work
+    (`_story_letter`), the work chosen by the `ranking` (`story_ranking`, one AI call made here unless given).
+    Otherwise it is drafted whole, revised once for the writing rules and once for restating the advert, and
+    checked whole for claims the facts do not support (`fix_claims`).
     """
     who = who or person(job)
     facts = cv.facts_text()
@@ -846,7 +847,7 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept)
     names = (job["title"], job["company"])
     cards = profile_writing.cards()
-    found = planning.stories(plan, cards)
+    found = planning.with_showcase(planning.stories(plan, cards), cards)
     if found:
         scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
                                 request=request, kind="letter")
@@ -1136,24 +1137,23 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     """The message to the person hiring and the form answers, written from their requests and checked as a
     pack checks them: {message, answers, flags}. `answers_request` "" writes no answers.
 
-    When the evidence `plan` tells any piece of work (`plan.stories`), they are told one piece of work a
-    paragraph (`_story_others`): the answers to `questions`, the person's own words (`request`) in every
-    request, a "why here" answer from the letter's motivation `pairing` (`paired` when the letter asked for
-    one, which may be None; else one is asked for here), the work the letter told (`told`) left to the
-    answers last, and the rest in the order of the letter's `ranking` (one AI call made here unless given,
-    `story_ranking`). Otherwise the message is written after its opening (`message_opening`: the greeting and who
-    is writing, with no AI), asked for again when it stops mid-sentence and rewritten once without claims the
-    facts do not support (project contexts and misplaced tools included); a greeting or introduction the
-    writer adds is taken out (`writing.opening.body_of`), and the message returned starts with the opening.
-    The answers are revised for the writing rules, for restating the advert and for claims (`_answers`). The
-    pack and a change the person asks for (`docs.change`) both write them here, so neither skips a check. The
-    `plan` is the pack's, else one picked here for the advert's and the common questions.
+    When the evidence `plan` or a starred card tells any piece of work (`plan.stories`, `plan.with_showcase`), they are
+    told one piece of work a paragraph (`_story_others`): the answers to `questions`, the person's own words (`request`)
+    in every request, a "why here" answer from the letter's motivation `pairing` (`paired` when the letter asked for
+    one, which may be None; else one is asked for here), the work the letter told (`told`) left to the answers last, and
+    the rest in the order of the letter's `ranking` (one AI call made here unless given, `story_ranking`). Otherwise the
+    message is written after its opening (`message_opening`: the greeting and who is writing, with no AI), asked for
+    again when it stops mid-sentence and rewritten once without claims the facts do not support (project contexts and
+    misplaced tools included); a greeting or introduction the writer adds is taken out (`writing.opening.body_of`), and
+    the message returned starts with the opening. The answers are revised for the writing rules, for restating the
+    advert and for claims (`_answers`). The pack and a change the person asks for (`docs.change`) both write them here,
+    so neither skips a check. The `plan` is the pack's, else one picked here for the advert's and the common questions.
     """
     job_text = _job_text(job)
     their_words, trimmed = (job_text, about), set()
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
     cards = profile_writing.cards()
-    found = planning.stories(plan, cards)
+    found = planning.with_showcase(planning.stories(plan, cards), cards)
     if found:
         scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
                                 request=request, kind="answer")

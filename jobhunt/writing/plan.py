@@ -84,6 +84,9 @@ Design decisions, each with its reason:
   and its story says so; a field only a CV fills for a project with its own sources is marked in the story
   (`Story.cv_filled`); a dissertation's story says it is the dissertation (`Story.dissertation`), under its
   own title.
+- Every starred card is a story (`with_showcase`), built from the card's own facts when the plan picked
+  nothing of it: a pack whose plan picked nothing was drafted whole and told none of the person's starred
+  projects, coursework or jobs (2026-11-09).
 """
 from __future__ import annotations
 
@@ -509,6 +512,15 @@ def starred_first(found: list[Story]) -> list[Story]:
 def card_story(card: dict) -> Story:
     """The story of a card the plan picked nothing of: its own quotes, tools, part and where it was done."""
     return _story(card["name"], [], card)
+
+
+def with_showcase(found: list[Story], cards: list[dict]) -> list[Story]:
+    """`found` and, after it, the story of every starred card it does not tell, built from the card itself
+    (`card_story`), so what the person showcased is told even when the evidence plan picked nothing of it. A
+    starred card with nothing of its own to tell (no quote, no summary) gives no story."""
+    named = {s.name for s in found}
+    return [*found, *(card_story(c) for c in cards if c.get("star") and c.get("name") and c["name"] not in named
+                      and (c.get("quotes") or c.get("summary")))]
 
 
 def fitting(found: list[Story], cards: list[dict], wanted: str) -> list[Story]:

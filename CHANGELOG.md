@@ -12,6 +12,10 @@ What changed in each version, in plain words.
   your showcase leads the letter. A project only your CV names is told only when nothing is in your
   showcase.
 
+- **Your showcase is always told.** A letter, message or answer now tells the projects, coursework and jobs
+  in your showcase even when Hal's pick of evidence for the job found nothing in them. Before, such a pack
+  was written without any of that work.
+
 - **Tested for every kind of graduate.** Whole application packs are now tested on two made-up records
   built through Your record, one for a software graduate and one for a history graduate, each within 30
   AI calls.

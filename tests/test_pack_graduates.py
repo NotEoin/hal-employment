@@ -58,9 +58,11 @@ class GraduateWriter(FakeWriter):
 
 
 @contextlib.contextmanager
-def graduate_world(who: graduates.Graduate, person: people.Person) -> Iterator[SimpleNamespace]:
-    """A made-up world holding `who`'s sectioned record, with the fake writer answering every document prompt."""
-    writer = GraduateWriter()
+def graduate_world(who: graduates.Graduate, person: people.Person,
+                   writer: FakeWriter | None = None) -> Iterator[SimpleNamespace]:
+    """A made-up world holding `who`'s sectioned record, with the fake writer (`GraduateWriter` unless `writer`)
+    answering every document prompt."""
+    writer = writer if writer is not None else GraduateWriter()
     with World() as w, people.as_person(person), people.cv_type(person.key), \
             tempfile.TemporaryDirectory(prefix="hal-grad-") as tmp:
         settings.set("you.name", who.name)
@@ -103,6 +105,22 @@ class WholePack(unittest.TestCase):
                         "the letter's frame carries the person's voice")
         self.assertIn("| Source |", section(md, "Fit"))
         self.assertLessEqual(len(g.writer.log), MAX_CALLS)
+
+
+class NothingPicked(unittest.TestCase):
+    def test_showcase_projects_untold_when_the_evidence_plan_picked_nothing(self):
+        """Regression: a pack whose evidence plan picked nothing was drafted whole and told none of the starred
+        work (2026-11-09); each starred card is now a story from its own facts."""
+        for who, person in PEOPLE:
+            with self.subTest(who.name), graduate_world(who, person, FakeWriter()) as g:
+                cards = profile_writing.cards(g.con)
+                pack.build(g.con, g.job["id"], use_web=False)
+                stories = [e["user"] for e in g.writer.asked("story")]
+                told = {m.group(1) for u in stories for m in [STORY_NAME.search(u)] if m}
+                starred = {c["name"] for c in cards if c["star"]}
+                self.assertTrue(starred, "the graduate has a showcase")
+                self.assertTrue(starred & told, "the starred work is told though the plan picked nothing")
+                self.assertFalse(g.writer.asked("letter"), "the letter is not drafted whole")
 
 
 if __name__ == "__main__":

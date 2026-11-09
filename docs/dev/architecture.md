@@ -586,8 +586,10 @@ runs: tests use `tests/support/fake_claude/`.
   its dropped paragraphs. A message body must ask a question (`Shape.question`, `paragraphs.NO_QUESTION`)
   and never say the built opening's degree again (`paragraphs.message(opening)`, `Shape.after`,
   `paragraphs.says_again`: a sentence `repeats.same` as the opening, or one matching `plan.DEGREE` with at
-  least `paragraphs.DEGREE_SHARED` (2) of the opening's own words; `paragraphs.SAID_AGAIN`). A
-  draft with no story is drafted whole as below.
+  least `paragraphs.DEGREE_SHARED` (2) of the opening's own words; `paragraphs.SAID_AGAIN`). Every starred
+  card with a quote or a summary is a story too (`plan.with_showcase`, `plan.card_story`, from the card's own
+  facts), whether or not the plan picked anything of it, so only a draft with no plan story and no starred
+  card is drafted whole as below.
 - What replaced sentence checks (2026-11-08): a grader capped every graded pack at 2 of 5 for readability
   across four designs that drafted against evidence ids ("[E2]") and checked, rewrote, cut and smoothed each
   sentence, named projects with "For <card>, " and cut the advert's lead-ins with no AI. Those modules
