@@ -87,6 +87,7 @@ class Source:
     module: str | None = None                  # the card's module the person chose; None until they choose
     details: dict = field(default_factory=dict)    # what the last read found about the source (`Reading.details`)
     meta: dict | None = None                   # what the person said of it (`theirs`, a hand-made project's form)
+    cards: tuple[dict, ...] = ()               # the education cards papers added with no card may be about
 
 
 @dataclass

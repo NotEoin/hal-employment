@@ -28,6 +28,9 @@ Design decisions, each with its reason:
   instead: with Hal's model stopped, the rules read every CV into junk cards (2026-11-11). The read is
   `waiting_ai`, so the caller can wait for the AI and try again. A source the privacy guard stops from going
   to the AI (`ai.PrivateLeak`) fails, as waiting would not change it.
+- Official papers added with no card are given the education cards (`readers.Source.cards`); the reader names
+  the one the papers are about, and the source is put on that card. A sorted folder added a transcript and a
+  HEAR with no card, and each made a card of its own from its headers (2026-11-11).
 - Adding a source makes the record folder when it is missing (`ensure_record`), as setup makes it: on a fresh
   install where setup was skipped, accepting a sort failed when the folder was read, with "no employment
   record at ..." (2026-11-09).
@@ -271,10 +274,12 @@ def _source(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
             target = profile_store.item(con, r["target_id"])
         except LookupError:
             target = None
+    cards = tuple(profile_store.items(con, "education", hidden=False)) if target is None and \
+        r["section"] == documents.OFFICIAL else ()
     return readers.Source(id=r["id"], section=r["section"], doc_kind=r["doc_kind"], title=r["title"],
                           held=r["kind"], locator=r["locator"], files=files, target=target,
                           starred=bool(r["starred"]), module=r["module"], details=store.details(r),
-                          meta=store.meta(con, r["id"]))
+                          meta=store.meta(con, r["id"]), cards=cards)
 
 
 def vault() -> Path:
@@ -442,6 +447,10 @@ def finish(con: sqlite3.Connection, begun: Begun, reading: readers.Reading | Exc
     suggestion = wrong_place.suggest(section.id, name, reading.text) or \
         wrong_place.suggest_kind(section.id, r["doc_kind"], name, reading.text)
     now = db.now()
+    card = reading.details.pop(documents.CARD, None)
+    if card is not None and r["target_id"] is None:
+        with con:
+            con.execute("UPDATE record_sources SET target_id = ? WHERE id = ?", (card, r["id"]))
     with con:
         con.execute("""UPDATE record_sources SET title = CASE WHEN title = '' THEN ? ELSE title END, dated = ?,
                        note_rel = ?, revision = revision + 1, last_checked = ?,

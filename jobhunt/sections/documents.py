@@ -13,7 +13,8 @@ and may say which card it is about: an education period, a job or a certificate.
   duties it gives, at the rank of documents (`merge.RANKS["letter"]`): below the current CV, above older CVs;
 - anything else (a check, a report, a letter of thanks): its text, a title and a date, and no facts;
 - official papers added on an education card (the `official` reader): a transcript's facts as above and a
-  certificate's grade (its labelled grade, else the class of degree it names), both on that card.
+  certificate's grade (its labelled grade, else the class of degree it names), both on that card; papers added
+  with no card go on the card they name (`card_named`), else they are read as on Documents.
 
 Design decisions, each with its reason:
 
@@ -33,13 +34,15 @@ Design decisions, each with its reason:
 """
 from __future__ import annotations
 
+import dataclasses
 import re
 
 from jobhunt.cvstudio import parse as cv_parse
 from jobhunt.ingest import roles
 from jobhunt.sections import readers
 
-LABEL = r"^\W*(?:{words})\s*[:\-]\s*(?P<value>.+?)\s*$"
+# A label, then a colon or a spaced dash: "Degree - BSc", never the hyphen of "degree-awarding bodies"
+LABEL = r"^\W*(?:{words})\s*(?::|\s[-\u2013]\s)\s*(?P<value>.+?)\s*$"
 QUALIFICATION = re.compile(LABEL.format(words=r"programme|program|course|degree|qualification|award|"
                                               r"programme of study|course of study"), re.I | re.M)
 GRADE = re.compile(LABEL.format(words=r"(?:final |degree |overall |award )?(?:classification|grade|result)"),
@@ -55,6 +58,13 @@ ORG_WORDS = re.compile(rf"\b(?:{ORG})\b", re.I)
 ISSUER = re.compile(r"^\W*(?:issuer|issued by|awarding body|provider)\s*[:\-]\s*(?P<labelled>.+?)\s*$|"
                     rf"\bby\s+(?:the\s+)?(?P<by>[^,.\n]*?\b(?:{ORG})\b)", re.I | re.M)
 ORG_LINE_WORDS = 10        # a line naming an organisation is short; a longer one is a sentence
+DIGIT = re.compile(r"\d")
+OFFICIAL = "official"
+CARD = "card"              # `Reading.details` key: the card the reader found the papers are about
+# Words that do not tell one course from another: every university is a university.
+CARD_COMMON = {"the", "and", "for", "with", "upon", "university", "college", "school", "institute", "honours",
+               "hons"}
+CARD_WORD_MIN = 3
 # A module's mark as transcripts write it: a number out of 100 (with a decimal or a % sign), or a letter or
 # word grade.
 MARK = re.compile(r"^(?:\d{1,3}(?:\.\d+)?%?|A\*|[A-F][+-]?|Pass|Merit|Distinction|Fail|Credit)$", re.I)
@@ -68,6 +78,12 @@ TRAILING_FIGURES = re.compile(r"(?:\s+\d{1,3}(?:\.\d)?)+$")
 CLASS_OF_DEGREE = re.compile(r"\b(first[- ]class(?: honours)?|upper second[- ]class(?: honours)?|lower second[- ]"
                              r"class(?: honours)?|third[- ]class(?: honours)?|2:1|2:2)\b", re.I)
 PLAIN_ROW = re.compile(r"^\W*(?P<name>.*?[A-Za-z].*?)\s+(?P<mark>\d{1,3}(?:\.\d+)?%?)\s*$")
+# After the mark a university's transcript may give the module's status and the attempts ("85 Pass 1", a HEAR's
+# "70 P 1"), and before
+# the credits when it was studied ("Semester 1", "Full year"); the attempts were read as the mark (2026-11-11).
+ROW_STATUS = re.compile(r"\s+(?:pass(?:ed)?|fail(?:ed)?|[pf]|compensated|condoned|deferred|referred|exempt)"
+                        r"(?:\s+\d{1,2})?\s*$", re.I)
+ROW_STUDIED = re.compile(r"\s+(?:semester\s*\d|full year|year long|term\s*\d)(?:\s+\d{1,3})*\s*$", re.I)
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
 GREETING = re.compile(r"^\s*(?:dear\b|to whom it may concern|re:|subject:)", re.I)
 QUOTE_WORDS = 40           # a referee's quote is a sentence or two
@@ -106,7 +122,8 @@ def _org_line(text: str) -> str:
     """The first short line that names an organisation (a university, a society), as written."""
     for line in text.splitlines():
         plain = line.strip("#*-|_ \t")
-        if plain and len(plain.split()) <= ORG_LINE_WORDS and ORG_WORDS.search(plain) and ":" not in plain:
+        if plain and len(plain.split()) <= ORG_LINE_WORDS and ORG_WORDS.search(plain) and ":" not in plain \
+                and not DIGIT.search(plain):     # "University Student Number 230466043" is a reference
             return plain
     return ""
 
@@ -148,9 +165,10 @@ def _plain_modules(text: str) -> list[dict]:
     for line in text.splitlines():
         if "|" in line:
             continue
-        m = PLAIN_ROW.match(line.strip())
+        m = PLAIN_ROW.match(ROW_STATUS.sub("", line.strip()))
         if m and merge.module_code(m.group("name")):
-            out.append({"name": TRAILING_FIGURES.sub("", m.group("name")).strip(" *_-"), "mark": m.group("mark")})
+            name = TRAILING_FIGURES.sub("", ROW_STUDIED.sub("", m.group("name")))
+            out.append({"name": " ".join(name.split()).strip(" *_-"), "mark": m.group("mark")})
     return out
 
 
@@ -347,6 +365,29 @@ class JobDocReader:
         return reading
 
 
+def _card_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= CARD_WORD_MIN and w not in CARD_COMMON}
+
+
+def card_named(cards: tuple[dict, ...], text: str) -> dict | None:
+    """The education card of `cards` that papers with `text` are about, or None when it is not plain which.
+
+    Every word of the card's institution (one that names an organisation) and of its subject, else its
+    qualification, must be in the text, and no other card's may be: papers naming two courses at one university
+    are not plainly about either.
+    """
+    words = _card_words(text)
+    named = []
+    for card in cards:
+        fields = card.get("fields") or {}
+        institution = str(fields.get("institution") or "")
+        course = _card_words(str(fields.get("subject") or "")) or _card_words(str(fields.get("qualification") or ""))
+        at = _card_words(institution)
+        if ORG_WORDS.search(institution) and at and course and at <= words and course <= words:
+            named.append(card)
+    return named[0] if len(named) == 1 else None
+
+
 class OfficialReader:
     """Reads the official papers of an education card: a transcript's course, grade and modules with their
     marks, and a certificate's grade, on that card."""
@@ -354,8 +395,12 @@ class OfficialReader:
     name = "official"
 
     def read(self, source: readers.Source) -> readers.Reading:
-        """The text, title and date of the papers, and their facts on the card they were added to."""
+        """The text, title and date of the papers, and their facts on the card they were added to, else on the
+        card they name (`card_named`, kept in `details` under `CARD`)."""
         reading = readers.DocumentReader().read(source)
+        if source.target is None and (found := card_named(source.cards, reading.text)) is not None:
+            source = dataclasses.replace(source, target=found)
+            reading.details[CARD] = found["id"]
         if source.doc_kind == "transcript":
             reading.facts = _on_card(transcript_facts(reading.text, source), source.target)
             return reading

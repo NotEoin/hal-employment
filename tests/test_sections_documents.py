@@ -231,9 +231,46 @@ class OfficialPapers(unittest.TestCase):
             certificates = profile_store.items(con, "certificate")
         self.assertEqual((card["fields"]["grade"], certificates), ("Upper Second Class Honours", []))
 
+    def test_papers_added_with_no_card_go_on_the_course_they_name(self):
+        """A sorted folder added a transcript and a HEAR with no card: each made a card of its own from its headers,
+        "University Student Number 4401" and "awarding bodies in England use credit" (2026-11-11)."""
+        transcript = ("TRANSCRIPT OF STUDY\nMade-up Student\n Student Details\n  University Student Number    4401\n"
+                      " Programme of Study\n G400      BSc Made-up Computing\n Module Details\n"
+                      "COMP1010  Programming Foundations     Semester 1 20    71   Pass   1\n"
+                      "The programme, approved by the University of Nowhere Fen, was taught in English.\n")
+        hear = ("HIGHER EDUCATION ACHIEVEMENT REPORT\nThe University of Nowhere Fen awards the BSc Made-up Computing.\n"
+                "degree-awarding bodies in England use credit in the same way.\n")
+        with home() as (con, _, _):
+            ids = {k: graduates.education(con, k) for k in ("access", "bsc")}
+            profile_store.add_found(con, "education", {"institution": "University Student Number 4401"},
+                                    {"source_rel": graduates.CV_REL, "doc_type": "cv", "role": "own"})
+            got = [add_document(con, n, t, "transcript", section="official")
+                   for n, t in (("transcript.pdf.md", transcript), ("hear.md", hear))]
+            cards = profile_store.items(con, "education", hidden=False)
+            bsc = profile_store.item(con, ids["bsc"])
+        self.assertEqual([g["target_id"] for g in got], [ids["bsc"], ids["bsc"]])
+        self.assertEqual(len(cards), 3, "no card of their own")
+        self.assertIn({"name": "COMP1010 Programming Foundations", "mark": "71"}, bsc["fields"]["modules"])
+        self.assertEqual(bsc["fields"]["qualification"], "BSc")
+
+    def test_papers_naming_no_one_course_plainly_are_not_put_on_a_card(self):
+        both = "The University of Nowhere Fen: modules in Made-up Computing and History.\n"
+        cards = tuple({"id": i, "fields": dict(graduates.COURSES[k])} for i, k in enumerate(("bsc", "ba")))
+        self.assertIsNone(documents.card_named(cards, both))
+        self.assertEqual(documents.card_named(cards, both.replace(" and History", ""))["id"], 0)
+
     def test_credits_before_a_mark_are_not_part_of_the_modules_name(self):
         text = "HIS2040 Archival Methods 20 75\nYear 2 average 68\n"
         self.assertEqual(documents.modules_in(text), [{"name": "HIS2040 Archival Methods", "mark": "75"}])
+
+    def test_a_rows_status_and_attempts_after_the_mark_are_not_the_mark(self):
+        """A transcript's "CSC1034 Programming Portfolio 1 Semester 1 30 85 Pass 1" gave the mark 1 (2026-11-11)."""
+        text = ("HIS1010  Medieval Europe              Semester 1 30    85   Pass      1\n"
+                "HIS1020  Early Modern Records         Full year  20    58   Compensated 2\n"
+                "HIS3990  Dissertation                         40        20      71    P       1\n")
+        self.assertEqual(documents.modules_in(text), [{"name": "HIS1010 Medieval Europe", "mark": "85"},
+                                                      {"name": "HIS1020 Early Modern Records", "mark": "58"},
+                                                      {"name": "HIS3990 Dissertation", "mark": "71"}])
 
 
 if __name__ == "__main__":

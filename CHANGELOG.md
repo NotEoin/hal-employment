@@ -372,6 +372,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Transcripts fill in your course.** A transcript or HEAR added from a sorted folder, with no course
+  chosen, made a course card of its own from its headers, such as "University Student Number ...", and read
+  the attempts column as each module's mark. Now papers with no course go on the course they name (its
+  university and its subject), and a module's mark is read before its status ("85 Pass 1" is 85).
+
 - **Hal waits for its AI instead of guessing.** When Hal's model was stopped or busy, Hal read CVs,
   coursework, lecture material and projects with simple rules instead, and those turned a CV's skills line
   into a university and a project's result into a degree. Now such a file waits with "Waiting for Hal's AI",
