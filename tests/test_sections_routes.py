@@ -74,7 +74,13 @@ class SourceRoutes(unittest.TestCase):
         self.folder.mkdir(parents=True, exist_ok=True)
         self.enterContext(mock.patch.object(record, "VAULT", self.folder, create=True))
         self.addCleanup(record._CACHE.clear)
+        self.addCleanup(self.reads_ended)
         self.c = self.hal.signed_in()
+
+    def reads_ended(self):
+        # regression: a read still running after its test wrote notes into the shared record folder, and a later
+        # setup test found "a record already there" (CI on 2026-11-09)
+        self.assertEqual(list(runner._LIVE), [], "every read a test starts has ended before it finishes")
 
     def put(self, path: str, body: dict):
         return self.c.request("PUT", path, body)
@@ -108,6 +114,7 @@ class SourceRoutes(unittest.TestCase):
                                                            ("b.md", ESSAY, "Awards/older/b.md")])
         self.assertEqual(status, 200, out)
         self.assertEqual([(s["held"], s["name"], s["files"]) for s in out["added"]], [("files", "Awards", 2)])
+        ended(out["action_id"])   # a read left running wrote its notes into the next test's record folder
 
     def test_coursework_needs_its_education_card_in_plain_words(self):
         status, out = form(self.hal, self.c, "/coursework", [("essay.md", ESSAY, "")])
@@ -156,6 +163,7 @@ class SourceRoutes(unittest.TestCase):
         ok = self.c.post("/api/v2/record/sources/project/link", body)
         self.assertEqual(ok.status, 200, ok.text)
         self.assertEqual(ok.json()["added"][0]["locator"], str(repo.resolve()))
+        ended(ok.json()["action_id"])
 
     def test_a_source_is_changed_starred_marked_current_moved_read_again_and_removed(self):
         degree = card("education", {"qualification": "BA", "subject": "History",
