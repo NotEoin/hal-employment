@@ -17,6 +17,9 @@ The gateway only listens on loopback (another computer reaches it through
 an SSH tunnel, which is loopback again), so the token is only ever sent to a loopback address, straight
 there: never through a proxy from the environment and never on to where a redirect points.
 
+The gateway says how many requests a model serves at once (`meta.slots` in its list, from the model's
+`parallel`), and `slots` passes that on, so Hal sends that many at once (`ai.at_once`).
+
 The gateway always listens on a Unix socket in Hal's runtime directory, and on TCP only when
 `[gateway].tcp = true`. With `ai.hal_url` left at its default, this backend talks to that socket when it
 is there, so Hal mode works without turning the TCP listener on. A test run only looks in
@@ -235,6 +238,20 @@ class GatewayBackend(OpenAICompatBackend):
             return [m["id"] for m in self._listed() if not self._remote(m)]
         except (LLMUnavailable, urllib.error.HTTPError):
             return []
+
+    def slots(self, model: str) -> int:
+        """How many requests the gateway serves `model` at once (its `meta.slots`); 0 when it does not say or
+        does not answer."""
+        try:
+            listed = self._listed()
+        except (LLMUnavailable, urllib.error.HTTPError):
+            return 0
+        for entry in listed:
+            if entry["id"] == model:
+                meta = entry.get("meta")
+                slots = meta.get("slots") if isinstance(meta, dict) else None
+                return slots if isinstance(slots, int) and slots > 0 else 0
+        return 0
 
     def default_model(self, role: str) -> str:
         """The gateway's alias for `role` (`hal-writer` for the writer), else its first model."""

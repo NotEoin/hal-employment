@@ -292,7 +292,9 @@ comes from their settings.
 2. The allowance (`ai/budget.py`): the "Never use online AI" switch, the pause after a Claude limit, and for
    Claude only the hours kept free and the daily cap on background checks.
 3. The GPU gate (`ai/gpu.py`, local models only): wait while another program holds the graphics card.
-4. The backend, under `ai.parallel` turns served lowest priority first.
+4. The backend, under `ai.at_once()` turns served lowest priority first: `ai.parallel`, or the slots the
+   backend says its model serves when that is more (Hal's gateway lists `meta.slots`, its writer's
+   `parallel`).
 5. One `ai_usage` row of sizes only.
 
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks
@@ -1244,7 +1246,11 @@ people). Readers only take facts out of a source, within that frame.
 - `wrong_place.suggest(section, name, text)` is the bulk read's first-glance rules (`ingest.rank`) for a CV,
   a transcript and a letter; the source's `suggestion` is shown, never acted on.
 - `actions`: `record.sources` reads a list of source ids at priority 1, resumable, and then publishes a
-  `profile` event naming them, so the profile tabs read their cards again. `routes`: under
+  `profile` event naming them, so the profile tabs read their cards again. It keeps `ai.at_once()` sources
+  with the AI at once: `read` is `begin`, `run` and `finish`, and only `run` (the reader, which touches no
+  database) goes to a worker thread, with the action's context (`as_batch`, its priority); the action's
+  own thread takes each source up and files it, so the record and the database keep one writer. A source
+  the AI could not read goes back first, and no source is handed out until the wait is over. `routes`: under
   `/api/v2/record/sources` (the shapes are in its header), with `GET /api/v2/record/sections`, and
   `PUT /api/v2/profile/items/{id}/star` for a project or job card's star (`profile_items.star`, `star_by`).
 - The page (`static/app/record/sections.js`): `SourcesPanel` (one or more sections, a target card),

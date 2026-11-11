@@ -1,9 +1,10 @@
 """Hal's AI: one way to ask, whichever backend the person chose.
 
 `chat` runs, in order: the private-answer guard; the allowance (`budget.admit`); the GPU gate
-for backends on this computer's card; the backend call, at most `ai.parallel` at once with lower
-priority numbers served first; and one `ai_usage` row with sizes only. A failure raises `LLMUnavailable`
-with a `kind` and plain words, and callers fall back to rules as they always have.
+for backends on this computer's card; the backend call, at most `at_once` at once (`ai.parallel`, or more when
+the backend says its model serves more) with lower priority numbers served first; and one `ai_usage` row with
+sizes only. A failure raises `LLMUnavailable` with a `kind` and plain words, and callers fall back to rules
+as they always have.
 
 The backend comes from `ai.provider` (`provider.current`, which never changes by itself) and is rebuilt
 when any setting changes. In a test run it is a made-up AI that is never ready, unless a test installs one
@@ -158,6 +159,20 @@ def model_for(be: Backend, role: str) -> str:
     return found[0]
 
 
+def at_once(role: str = "checker") -> int:
+    """How many calls for `role` go to the AI at once: `ai.parallel`, or the slots the backend says its model
+    serves when that is more (Hal's gateway reports its writer's `parallel`), so a reader can keep them busy."""
+    chosen = max(1, int(_settings().get("ai.parallel")))
+    be = backend()
+    slots = getattr(be, "slots", None)
+    if slots is None:
+        return chosen
+    try:
+        return max(chosen, int(slots(model_for(be, role))))
+    except LLMUnavailable:
+        return chosen
+
+
 class _Turns:
     """At most `limit` calls at once; a waiting call with a lower priority number goes first."""
 
@@ -216,7 +231,7 @@ def chat(system: str, user: str, *, role: str = "checker", json_out: bool = Fals
     if be.local_gpu and gpu.gate_on():
         gpu.wait(req.priority)
     model = model_for(be, req.role)
-    with _turns.turn(req.priority, int(settings.get("ai.parallel")), req.timeout), \
+    with _turns.turn(req.priority, at_once(req.role), req.timeout), \
             (gpu.claim(req.priority) if be.local_gpu else contextlib.nullcontext()):
         try:
             result = be.chat(req, model)

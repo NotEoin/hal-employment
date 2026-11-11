@@ -10,8 +10,11 @@ background, so it waits behind what the person asked for (priority 2), one at a 
 """
 from __future__ import annotations
 
+import contextvars
 import time
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 
+from jobhunt import ai
 from jobhunt.ai.hal_gateway import as_batch
 from jobhunt.core import events, runner
 from jobhunt.sections import pipeline, store
@@ -51,12 +54,15 @@ def read_sources(ctx, ids: list, allow: list | None = None) -> dict:
 def read_all(ctx, ids: list, allowed: set[int]) -> dict:
     """Reads each source in `ids` and the sources found inside them, once each; says what each gave.
 
-    A source the AI cannot read now is tried again, after `AI_RETRY_S` and then longer waits up to
-    `AI_RETRY_MAX_S`, for up to `AI_WAIT_S` in all, so a model that stops for a while (another program took the
-    graphics card) holds the read up instead of failing it; an AI that is not set up (`AI_GONE`) ends the read
-    with the rest still waiting. Carried on after a restart, it reads only what is still waiting, and the
-    sources found inside those read before. The reads are batch work for Hal's gateway (`as_batch`), so they
-    give the graphics card up to the person's chat and voice.
+    As many sources are with the AI at once as it serves (`ai.at_once`: Hal's writer has two slots), on worker
+    threads that only read (`pipeline.run`); this thread alone takes each up and files it (`pipeline.begin`,
+    `pipeline.finish`), so the record and the database keep one writer. A source the AI cannot read now is
+    tried again, after `AI_RETRY_S` and then longer waits up to `AI_RETRY_MAX_S`, for up to `AI_WAIT_S` in all,
+    so a model that stops for a while (another program took the graphics card) holds the read up instead of
+    failing it; an AI that is not set up (`AI_GONE`) ends the read with the rest still waiting. Carried on after
+    a restart, it reads only what is still waiting, and the sources found inside those read before. The reads
+    are batch work for Hal's gateway (`as_batch`), so they give the graphics card up to the person's chat and
+    voice.
     """
     out = {"read": 0, "waiting": 0, "failed": 0, "kept_out": 0, "facts": 0, "missing": 0, "waiting_ai": 0}
     todo = list(dict.fromkeys(int(i) for i in ids))   # grows by the sources a read finds inside one
@@ -66,27 +72,15 @@ def read_all(ctx, ids: list, allowed: set[int]) -> dict:
         with ctx.con:
             ctx.con.executemany("UPDATE record_sources SET state = 'new' WHERE id = ?", [(i,) for i in todo])
     with as_batch():
-        gone = ""
-        for n, source_id in enumerate(todo):
-            ctx.step(f"Reading {n + 1} of {len(todo)}", total=len(todo))
+        reading = _Reading(ctx, out, todo, allowed)
+        workers = max(1, ai.at_once())
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="record-read") as pool:
             try:
-                store.row(ctx.con, source_id)
-            except LookupError:      # removed while it waited
-                out["missing"] += 1
-                continue
-            if gone:
-                out["waiting_ai"] += 1
-                continue
-            done = _read_waiting_for_ai(ctx, source_id, source_id in allowed)
-            if done["state"] == "waiting_ai":
-                gone = done.get("why", "")
-                out["waiting_ai"] += 1
-                continue
-            state = {"new": "waiting", "read": "read", "failed": "failed", "kept_out": "kept_out"}[done["state"]]
-            out[state] += 1
-            out["facts"] += done["facts"]
-            todo += [c for c in done.get("children", []) if c not in todo]
-            ctx.progress(n + 1, len(todo))
+                reading.run(pool, workers)
+            finally:
+                for job in reading.in_hand.values():
+                    job.cancel()
+    gone = reading.gone
     if out["read"] or out["kept_out"]:
         events.publish("profile", sources=[int(i) for i in todo])
     if out["read"]:
@@ -103,6 +97,101 @@ def read_all(ctx, ids: list, allowed: set[int]) -> dict:
     return out
 
 
+class _Reading:
+    """One `read_all`: hands sources to the workers in order, files what they give, and waits out an AI that
+    cannot answer for a while, for all of them at once."""
+
+    def __init__(self, ctx, out: dict, todo: list[int], allowed: set[int]) -> None:
+        self.ctx, self.out, self.todo, self.allowed = ctx, out, todo, allowed
+        self.next = 0                       # the index in `todo` of the next source to hand out
+        self.done = 0
+        self.in_hand: dict[int, Future] = {}
+        self.begun: dict[int, pipeline.Begun] = {}
+        self.again: list[int] = []          # sources the AI could not read yet, handed out first
+        self.gone = ""                      # why the AI is not coming back; the rest wait
+        self.pause = AI_RETRY_S
+        self.resume_at = 0.0                # no source is handed out before this, while the AI is away
+        self.away_since: float | None = None
+
+    def run(self, pool: ThreadPoolExecutor, workers: int) -> None:
+        """Reads until every source is read, waiting or out of reach."""
+        while True:
+            self._hand_out(pool, workers)
+            if not self.in_hand:
+                if self.gone or (not self.again and self.next >= len(self.todo)):
+                    return
+                self._wait_for_ai()
+                continue
+            finished, _ = wait(list(self.in_hand.values()), timeout=CHECK_S, return_when=FIRST_COMPLETED)
+            self.ctx.checkpoint()
+            for source_id, job in [(i, j) for i, j in self.in_hand.items() if j in finished]:
+                del self.in_hand[source_id]
+                self._file(source_id, job.result())
+
+    def _hand_out(self, pool: ThreadPoolExecutor, workers: int) -> None:
+        while len(self.in_hand) < workers and not self.gone and time.monotonic() >= self.resume_at:
+            if self.again:
+                source_id = self.again.pop(0)
+            elif self.next < len(self.todo):
+                source_id = self.todo[self.next]
+                self.next += 1
+            else:
+                return
+            self.ctx.step(f"Reading {self.done + len(self.in_hand) + 1} of {len(self.todo)}", total=len(self.todo))
+            try:
+                begun = pipeline.begin(self.ctx.con, source_id)
+            except LookupError:      # removed while it waited
+                self.out["missing"] += 1
+                self.done += 1
+                continue
+            self.begun[source_id] = begun
+            # the worker carries this thread's context: the batch token (`as_batch`) and the action's priority
+            self.in_hand[source_id] = pool.submit(contextvars.copy_context().run, pipeline.run, begun)
+
+    def _file(self, source_id: int, reading) -> None:
+        begun = self.begun.pop(source_id)
+        try:
+            done = pipeline.finish(self.ctx.con, begun, reading, allow_private=source_id in self.allowed)
+        except LookupError:          # removed while it was read
+            self.out["missing"] += 1
+            self.done += 1
+            return
+        if done["state"] == "waiting_ai":
+            self._ai_away(source_id, done)
+            return
+        self.pause, self.away_since = AI_RETRY_S, None
+        state = {"new": "waiting", "read": "read", "failed": "failed", "kept_out": "kept_out"}[done["state"]]
+        self.out[state] += 1
+        self.out["facts"] += done["facts"]
+        self.todo += [c for c in done.get("children", []) if c not in self.todo]
+        self.done += 1
+        self.ctx.progress(self.done, len(self.todo))
+
+    def _ai_away(self, source_id: int, done: dict) -> None:
+        """The AI could not read `source_id` now: it is tried again after a pause, unless the AI is not coming
+        back, when it and every source not read yet wait for the person."""
+        now = time.monotonic()
+        self.away_since = self.away_since if self.away_since is not None else now
+        if done["kind"] in AI_GONE or now - self.away_since >= AI_WAIT_S:
+            self.gone = store.row(self.ctx.con, source_id)["error"]
+            left = len(self.again) + len(self.todo) - self.next + 1
+            self.out["waiting_ai"] += left
+            self.done += left
+            self.again.clear()
+            self.next = len(self.todo)
+            return
+        self.again.append(source_id)
+        if now >= self.resume_at:     # the first of the reads in hand to find the AI away sets the pause
+            self.resume_at = now + self.pause
+            self.pause = min(self.pause * 2, AI_RETRY_MAX_S)
+            self.ctx.step(f"Waiting for Hal's AI, then reading again ({done['kind']})")
+
+    def _wait_for_ai(self) -> None:
+        while time.monotonic() < self.resume_at:
+            self.ctx.checkpoint()
+            time.sleep(min(CHECK_S, max(0.0, self.resume_at - time.monotonic())))
+
+
 def _still_waiting(con, ids: list[int]) -> list[int]:
     """Of `ids` and the sources under them, those not read yet: what a read carried on after a restart reads."""
     marks = ",".join("?" * len(ids))
@@ -110,24 +199,6 @@ def _still_waiting(con, ids: list[int]) -> list[int]:
                            AND (id IN ({marks}) OR parent_id IN ({marks})) ORDER BY id""",
                        [*ids, *ids]).fetchall()
     return [r["id"] for r in rows]
-
-
-def _read_waiting_for_ai(ctx, source_id: int, allow_private: bool) -> dict:
-    """`pipeline.read`, tried again while the AI cannot answer for a while; `why` says why it gave up."""
-    deadline = time.monotonic() + AI_WAIT_S
-    pause = AI_RETRY_S
-    while True:
-        done = pipeline.read(ctx.con, source_id, allow_private=allow_private)
-        if done["state"] != "waiting_ai":
-            return done
-        if done["kind"] in AI_GONE or time.monotonic() >= deadline:
-            return {**done, "why": store.row(ctx.con, source_id)["error"]}
-        ctx.step(f"Waiting for Hal's AI, then reading again ({done['kind']})")
-        until = time.monotonic() + pause
-        while time.monotonic() < until:
-            ctx.checkpoint()
-            time.sleep(min(CHECK_S, max(0.0, until - time.monotonic())))
-        pause = min(pause * 2, AI_RETRY_MAX_S)
 
 
 def _refresh_example(_world) -> dict:

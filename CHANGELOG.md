@@ -6,6 +6,10 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Reading your record is up to twice as fast.** Hal reads as many files at once as the AI serves:
+  Hal's writer serves two, so two files are read side by side, and the setting **AI calls at once** still
+  sets the least.
+
 - **Reading your record gives the graphics card up.** With a batch token from Hal's gateway in
   `~/.config/hal-employment/gateway-batch-token` (new setting `ai.hal_batch_token_file`), Hal reads your
   record as batch work: the gateway gives the model to your chat and voice questions first, and to other

@@ -7,6 +7,7 @@ stood in for by `Scripted`, a made-up reader that returns the facts it is given.
 """
 import io
 import shutil
+import threading
 import unittest
 import zipfile
 from contextlib import contextmanager
@@ -358,6 +359,34 @@ class Pipeline(unittest.TestCase):
             ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])["added"]
             runner.run(actions.KIND, params={"ids": ids})
         self.assertEqual(seen, [True])
+
+    def test_the_action_keeps_as_many_reads_with_the_ai_as_it_serves(self):
+        """Hal read the record one file at a time while Hal's writer served two at once (2026-11-11)."""
+        both = threading.Barrier(2, timeout=5)    # each read waits for the other: one at a time never passes
+
+        class Together(AiAway):
+            def read(self, source):
+                both.wait()
+                return super().read(source)
+
+        with home() as (con, _, _), reader("document", made=Together("document", fails=0)), \
+                mock.patch.object(ai, "at_once", return_value=2):
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode()),
+                                                         Incoming("essay.md", ESSAY.encode())])["added"]
+            done = runner.run(actions.KIND, params={"ids": ids})
+            states = [store.get(con, i)["state"] for i in ids]
+        self.assertEqual((done["result"]["read"], done["result"]["failed"]), (2, 0))
+        self.assertEqual(states, ["read", "read"])
+
+    def test_reads_with_the_ai_together_wait_for_it_once_and_are_all_read_after(self):
+        with home() as (con, _, _), reader("document", made=AiAway("document", fails=2)) as away, \
+                mock.patch.object(ai, "at_once", return_value=2), mock.patch.object(actions, "AI_RETRY_S", 0):
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode()),
+                                                         Incoming("essay.md", ESSAY.encode())])["added"]
+            done = runner.run(actions.KIND, params={"ids": ids})
+            states = [store.get(con, i)["state"] for i in ids]
+        self.assertEqual((done["result"]["read"], done["result"]["waiting_ai"]), (2, 0))
+        self.assertEqual((states, away.calls), (["read", "read"], 4))
 
 
 if __name__ == "__main__":

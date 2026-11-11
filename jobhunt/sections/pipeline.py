@@ -349,6 +349,18 @@ def _write_note(r: sqlite3.Row, section: registry.Section, kind: registry.DocKin
     return rel
 
 
+@dataclass(frozen=True)
+class Begun:
+    """A source taken up for reading (`begin`): what its reader needs, and what `finish` files."""
+
+    row: sqlite3.Row
+    section: registry.Section
+    kind: registry.DocKind
+    source: readers.Source
+    name: str
+    reader: readers.Reader
+
+
 def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> dict:
     """Reads one source with its section's reader, writes its note and puts its facts in the profile.
 
@@ -356,31 +368,53 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
     found inside this one, added under it and still to read); a reader not written yet leaves the
     source waiting (state `new`), as does an AI that cannot answer now (state `waiting_ai`, with `kind` from
     `ai.UNAVAILABLE_KINDS`); one that cannot read it marks it failed with the reason. LookupError for a source
-    that is not there.
+    that is not there. It is `begin`, `run` and `finish` in turn; a caller reading several at once runs `run`
+    on worker threads and the other two on its own.
     """
+    begun = begin(con, source_id)
+    return finish(con, begun, run(begun), allow_private=allow_private)
+
+
+def begin(con: sqlite3.Connection, source_id) -> Begun:
+    """Marks the source as being read and gathers what its reader needs; LookupError when it is not there."""
     r = store.row(con, source_id)
     section = registry.get(r["section"])
-    kind = registry.DOC_KINDS[r["doc_kind"]]
-    source = _source(con, r)
-    name = store.shape(con, r)["name"]
+    begun = Begun(row=r, section=section, kind=registry.DOC_KINDS[r["doc_kind"]], source=_source(con, r),
+                  name=store.shape(con, r)["name"], reader=readers.get(section.reader_of(r["doc_kind"])))
     store.set_state(con, r["id"], "reading")
-    out = {"id": r["id"], "state": "", "facts": 0, "left_out": 0, "hidden": [], "suggestion": ""}
+    return begun
+
+
+def run(begun: Begun) -> readers.Reading | Exception:
+    """The reader's reading of the source, or the error it raised; touches no database, so it may run on a
+    worker thread."""
     try:
-        reading = readers.get(section.reader_of(r["doc_kind"])).read(source)
-    except readers.NotReadYet as e:
-        store.set_state(con, r["id"], "new", str(e))
+        return begun.reader.read(begun.source)
+    except Exception as e:  # `finish` files it, or raises it again on the caller's thread
+        return e
+
+
+def finish(con: sqlite3.Connection, begun: Begun, reading: readers.Reading | Exception, *,
+           allow_private: bool = False) -> dict:
+    """Files what `run` gave: the source's note, facts and state, as `read` returns them."""
+    r, section, kind, source, name = begun.row, begun.section, begun.kind, begun.source, begun.name
+    out = {"id": r["id"], "state": "", "facts": 0, "left_out": 0, "hidden": [], "suggestion": ""}
+    if isinstance(reading, readers.NotReadYet):
+        store.set_state(con, r["id"], "new", str(reading))
         return {**out, "state": "new"}
-    except ai.LLMUnavailable as e:
-        log.info("source %s waits for the AI: %s", r["id"], e)
-        store.set_state(con, r["id"], "new", f"Waiting for Hal's AI: {e}")
-        return {**out, "state": "waiting_ai", "kind": e.kind}
-    except ai.PrivateLeak as e:
-        store.set_state(con, r["id"], "failed", f"Hal kept it from the AI: {e}")
+    if isinstance(reading, ai.LLMUnavailable):
+        log.info("source %s waits for the AI: %s", r["id"], reading)
+        store.set_state(con, r["id"], "new", f"Waiting for Hal's AI: {reading}")
+        return {**out, "state": "waiting_ai", "kind": reading.kind}
+    if isinstance(reading, ai.PrivateLeak):
+        store.set_state(con, r["id"], "failed", f"Hal kept it from the AI: {reading}")
         return {**out, "state": "failed"}
-    except (OSError, ValueError) as e:
-        log.warning("could not read source %s: %s", r["id"], e)
-        store.set_state(con, r["id"], "failed", f"Hal could not read it: {e}")
+    if isinstance(reading, (OSError, ValueError)):
+        log.warning("could not read source %s: %s", r["id"], reading)
+        store.set_state(con, r["id"], "failed", f"Hal could not read it: {reading}")
         return {**out, "state": "failed"}
+    if isinstance(reading, Exception):
+        raise reading
     why = "" if allow_private else privacy.held_back({"allowed": False, "rel": name}, reading.text)
     if why:
         gone = profile_store.swap_source(con, r["id"], [])
@@ -404,7 +438,7 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
                      int(swapped["changed"]), now, suggestion, json.dumps(reading.details), r["id"]))
     if section.id == cv_reader.SECTION:
         cv_reader.settle(con)
-    readers.settle(readers.get(section.reader_of(r["doc_kind"])), con)
+    readers.settle(begun.reader, con)
     revisions.record(con, r["id"], facts, reading.details, before=store.details(r))
     return {**out, "state": "read", "facts": swapped["added"], "left_out": len(reading.facts) - len(facts)
             + len(swapped["left_out"]), "hidden": swapped["hidden"], "suggestion": suggestion,

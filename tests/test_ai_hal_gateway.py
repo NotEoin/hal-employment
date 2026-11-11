@@ -41,6 +41,7 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
     redirect: ClassVar[bool] = False
     aliases: ClassVar[list] = []
     refuse: ClassVar[tuple | None] = None    # (status, error code, message) for every chat
+    slots: ClassVar[int] = 0                 # the `meta.slots` listed for made-up-model; 0 lists none
 
 
     def log_message(self, *args):
@@ -73,6 +74,8 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
             return
         listed = [{"id": "made-up-online", "owned_by": "remote:cloud.example.invalid"},
                   {"id": "made-up-model", "owned_by": "ollama"}]
+        if type(self).slots:
+            listed[1]["meta"] = {"slots": type(self).slots}
         self._send(200, {"data": listed + [{"id": a, "owned_by": "ollama"} for a in type(self).aliases]})
 
     def do_POST(self):
@@ -94,6 +97,7 @@ class Gateway(InHome):
         _Gateway.redirect = False
         _Gateway.aliases = []
         _Gateway.refuse = None
+        _Gateway.slots = 0
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Gateway)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.addCleanup(self.httpd.server_close)
@@ -167,6 +171,22 @@ class Gateway(InHome):
         be = GatewayBackend(self.url, self.token)
         self.assertEqual([be.default_model(r) for r in ("writer", "checker", "quick")],
                          ["hal-writer", "hal-chat", "hal-chat"])
+
+    def test_the_gateway_says_how_many_requests_a_model_serves_at_once(self):
+        be = GatewayBackend(self.url, self.token)
+        self.assertEqual(be.slots("made-up-model"), 0, "a gateway that does not say gives no slots")
+        _Gateway.slots = 2
+        self.assertEqual((be.slots("made-up-model"), be.slots("made-up-other")), (2, 0))
+
+    def test_hal_keeps_as_many_calls_with_the_gateway_as_its_model_serves(self):
+        """Hal read the record one file at a time while Hal's writer served two at once."""
+        settings.set("ai.parallel", 1, by="you")
+        _Gateway.slots = 2
+        with ai.use(GatewayBackend(self.url, self.token)):
+            self.assertEqual(ai.at_once("checker"), 2)
+        settings.set("ai.parallel", 3, by="you")
+        with ai.use(GatewayBackend(self.url, self.token)):
+            self.assertEqual(ai.at_once("checker"), 3, "a setting above the slots still holds")
 
     def test_online_models_behind_the_gateway_are_never_offered(self):
         be = GatewayBackend(self.url, self.token)
