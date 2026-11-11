@@ -56,7 +56,7 @@ code.
    Lecture material starts unticked. Lecture notes only teach Hal what you studied, and reading many takes
    a long time, so tick only the modules you want Hal to know about. When you add more than 50 files at
    once, Hal asks first and says how long reading them should take on your computer: the average of the
-   files it read lately, or a first guess of 20 seconds a file before it has read any. Press **Add them**
+   files it read lately, or a first guess of 35 seconds a file before it has read any. Press **Add them**
    to go on, or **Not now** to change your ticks.
 
    While Hal reads what you added, the top of the list shows how many files it has read, with **Stop

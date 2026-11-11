@@ -1654,7 +1654,7 @@ upload, inbox or move; `roots`, `label`, `state` new | sorting | ready | failed 
   `CONFIRM_OVER` (50) ticked files, counted afresh from the server, asks first in the in-page confirm
   dialog (`ui/dialog.js` `ask`) with the reading time: the review's `read` is `sorts.read_estimate`, the
   seconds per file of the latest `READ_SAMPLE` (10) finished `record.sources` and `record.sort_accept`
-  actions (their run time over `done_n`), else `READ_S_DEFAULT` (20 s, a cautious first guess) with
+  actions (their run time over `done_n`), else `READ_S_DEFAULT` (35 s, near the mean measured on Hal's writer) with
   `measured` false. The adds are listed above the steps: a reading one shows the action's `done_n` of
   `done_total` (asked again every `PROGRESS_POLL_MS`, 2 s, since `ctx.progress` sends no event) with **Stop
   reading**, and a finished or stopped one **Undo this add** behind the confirm dialog. The setup guide's

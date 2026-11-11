@@ -64,9 +64,11 @@ UNREAD = ("new", "reading")  # source states of a file not read yet: a stopped a
 ACTIVE_ACTIONS = ("queued", "running", "waiting_for_you")    # `core.runner.ACTIVE`
 READ_KINDS = ("record.sources", "record.sort_accept")   # the actions that read sources, timed for the estimate
 READ_SAMPLE = 10           # the latest reads averaged: recent enough to follow a change of AI or computer
-# Seconds to read one file when this computer has read none yet: a cautious first guess for an AI on a home
-# computer writing a file's summary and facts. It is replaced by the measured figure after the first reads.
-READ_S_DEFAULT = 20
+# Seconds to read one file when this computer has read none yet, replaced by the measured figure after the first
+# reads: Hal's writer (Gemma 4 31B on one card) read 110 lecture files one at a time in a median 24.5 s and a
+# mean 36 s each, the mean pulled up by long decks (2026-11-11); a first guess near the mean does not promise
+# too little.
+READ_S_DEFAULT = 35
 
 
 def work_dir(sort_id: int) -> Path:
