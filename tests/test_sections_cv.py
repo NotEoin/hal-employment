@@ -19,6 +19,7 @@ from support.fake_ai import fake_ai
 from support.graduates import AVERY, MARNIE
 from test_ingest import home
 
+from jobhunt import ai
 from jobhunt.profile import conflicts, cvs
 from jobhunt.profile import routes as profile_routes
 from jobhunt.profile import store as profile_store
@@ -56,7 +57,7 @@ class CvReader(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         return readers.get("cv").read(src)
 
-    def test_a_cv_is_read_by_rules_into_jobs_education_skills_projects_and_basics_when_the_ai_is_away(self):
+    def test_a_cv_is_read_into_jobs_education_skills_projects_and_basics(self):
         got = self.read(MARNIE.cv, "Marnie CV 2025.md")
         jobs = {f.fields["title"]: f for f in facts_of(got, "job")}
         (degree,) = facts_of(got, "education")
@@ -95,10 +96,16 @@ class CvReader(unittest.TestCase):
         self.assertEqual(job.quote.line, 9)
         self.assertEqual([f.fields["name"] for f in facts_of(got, "skill")], ["Palaeography"])
 
-    def test_an_ai_that_gives_no_facts_leaves_the_cv_to_the_rules(self):
+    def test_an_ai_that_gives_no_facts_gives_the_cv_none(self):
         with fake_ai({cv.PURPOSE: "{}"}):
             got = self.read(AVERY.cv)
-        self.assertEqual({f.fields["title"] for f in facts_of(got, "job")}, {"Junior developer", "Lab helper"})
+        self.assertEqual(got.facts, [])
+
+    def test_a_cv_the_ai_cannot_read_now_is_never_read_by_rules(self):
+        """With Hal's model stopped, the rules read every CV into junk education cards (2026-11-11)."""
+        with fake_ai({cv.PURPOSE: ai.LLMUnavailable("backend qwen was stopped", kind="unavailable")}), \
+                self.assertRaises(ai.LLMUnavailable):
+            self.read(AVERY.cv)
 
     def test_a_cvs_date_is_its_headings_else_its_latest_entry_else_its_files(self):
         self.assertEqual(self.read(AVERY.cv).date, "2025-06")

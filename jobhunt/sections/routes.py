@@ -228,6 +228,14 @@ def reread(req: Request) -> dict:
     return {"action_id": _start(req, [got["id"]], allow=allow, why="You asked Hal to read a source again")}
 
 
+@route("POST", "/api/v2/record/read-waiting", auth="session_or_local")
+def read_waiting(req: Request) -> dict:
+    """Starts reading every source still waiting to be read, such as those that waited for Hal's AI."""
+    ids = [r["id"] for r in req.con.execute(
+        "SELECT id FROM record_sources WHERE state IN ('new', 'reading') ORDER BY id").fetchall()]
+    return {"waiting": len(ids), "action_id": _start(req, ids, why="You asked Hal to read what is waiting")}
+
+
 @route("POST", PREFIX + "/{source_id}/back")
 def go_back(req: Request) -> dict:
     """Puts back the facts of the read before the last one; 404 when Hal keeps no earlier read."""

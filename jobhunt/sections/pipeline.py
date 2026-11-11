@@ -24,6 +24,10 @@ Design decisions, each with its reason:
   worked out again (`cv.settle`).
 - A reader not written yet (`readers.NotReadYet`) leaves the source waiting, state `new`, with the words saying
   so; it is not a failure.
+- A read the AI cannot answer now (`ai.LLMUnavailable`) also leaves the source waiting, never read by rules
+  instead: with Hal's model stopped, the rules read every CV into junk cards (2026-11-11). The read is
+  `waiting_ai`, so the caller can wait for the AI and try again. A source the privacy guard stops from going
+  to the AI (`ai.PrivateLeak`) fails, as waiting would not change it.
 - Adding a source makes the record folder when it is missing (`ensure_record`), as setup makes it: on a fresh
   install where setup was skipped, accepting a sort failed when the folder was read, with "no employment
   record at ..." (2026-11-09).
@@ -39,7 +43,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from jobhunt import db, record
+from jobhunt import ai, db, record
 from jobhunt.evidence.routes import make_default
 from jobhunt.ingest import notes, privacy, roles
 from jobhunt.ingest import sources as ingest_sources
@@ -350,8 +354,9 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
 
     Returns {"id", "state", "facts", "left_out", "hidden", "suggestion", "children"} (the ids of sources the read
     found inside this one, added under it and still to read); a reader not written yet leaves the
-    source waiting (state `new`), and one that cannot read it marks it failed with the reason. LookupError for
-    a source that is not there.
+    source waiting (state `new`), as does an AI that cannot answer now (state `waiting_ai`, with `kind` from
+    `ai.UNAVAILABLE_KINDS`); one that cannot read it marks it failed with the reason. LookupError for a source
+    that is not there.
     """
     r = store.row(con, source_id)
     section = registry.get(r["section"])
@@ -365,6 +370,13 @@ def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> 
     except readers.NotReadYet as e:
         store.set_state(con, r["id"], "new", str(e))
         return {**out, "state": "new"}
+    except ai.LLMUnavailable as e:
+        log.info("source %s waits for the AI: %s", r["id"], e)
+        store.set_state(con, r["id"], "new", f"Waiting for Hal's AI: {e}")
+        return {**out, "state": "waiting_ai", "kind": e.kind}
+    except ai.PrivateLeak as e:
+        store.set_state(con, r["id"], "failed", f"Hal kept it from the AI: {e}")
+        return {**out, "state": "failed"}
     except (OSError, ValueError) as e:
         log.warning("could not read source %s: %s", r["id"], e)
         store.set_state(con, r["id"], "failed", f"Hal could not read it: {e}")

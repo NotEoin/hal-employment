@@ -1218,6 +1218,15 @@ people). Readers only take facts out of a source, within that frame.
   naming the phase: cv and letter 2; repo, github_account, project_files, portfolio, page and manual 3;
   coursework, lecture and official 4; job_doc 5). A phase plugs its reader in with `readers.register`, from
   its own module, listed in `pipeline.READER_MODULES`.
+- The readers that ask the AI (cv, coursework, lecture, repo and page summaries) have no rules to fall back
+  on: `ai.LLMUnavailable` reaches `pipeline.read`, which leaves the source `new` with "Waiting for Hal's AI"
+  and returns state `waiting_ai`. The `record.sources` action tries such a source again after `AI_RETRY_S`,
+  doubling to `AI_RETRY_MAX_S`, for up to `AI_WAIT_S`, and ends at once on a kind waiting cannot change
+  (`AI_GONE`). Carried on after a restart it reads only sources still `new` or `reading`.
+  `POST /api/v2/record/read-waiting` (`jobhunt sources read waiting`) reads every waiting source; the command
+  stops the read and exits 75 on SIGUSR2, SIGTERM or SIGINT, so it runs as a gpu-light batch job that yields
+  the graphics card and is run again later. The rules read every CV into junk cards while the model was
+  stopped (2026-11-11). Tests answer the readers with `tests/support/reader_ai.py`.
 - `store` keeps `record_sources` and `record_source_files` (migration 0028; not `sources`, which 0012 gave to
   job sites). Uploads are copied to `data/record-sources/<id>/`.
 - `pipeline`: `add_uploads(con, section, [Incoming(name, data, relative_path)], doc_kind=, target_id=)` (a
@@ -1241,8 +1250,7 @@ people). Readers only take facts out of a source, within that frame.
   On screen a star is **Showcase**, as the app's words keep "STAR" for the way of telling examples.
 - `cv` (`sections/cv.py`, put in place when `pipeline` imports it): the CV reader. It asks the AI only what
   the CV says (`record_cv` prompt: facts of every kind, never the document's type or owner), checks the facts
-  with `ingest.understand.facts` (quotes against the text, unnamed organisations left out), and falls back to
-  the CV studio's rules (`cvstudio.parse.read_rules`) when the AI does not answer or gives no facts. Each
+  with `ingest.understand.facts` (quotes against the text, unnamed organisations left out). Each
   fact's `Quote` names the file and line. The CV's date (`Reading.date`, kept in `record_sources.dated`) is a
   date in its first lines, else its latest dated entry, else its file's date.
 - `profile/cvs.py` says which CV leads: the one the person marked (`record_sources.current`, kept only for
@@ -1296,7 +1304,7 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   module code in the name or opening lines, else at least `SHARE_MIN` of a module's own words). The AI
   (`coursework_read` prompt) writes the summary and names the methods the work shows, each with a quote; a
   method whose quote is not in the work is dropped. The AI's reply is cached in `details["ai"]` by a hash of
-  the title and text, so reading the same work again asks nothing. Without the AI the summary is the
+  the title and text, so reading the same work again asks nothing. When the AI gives no summary it is the
   abstract or first full paragraph. Every method is a `skill` fact, filed with the section's role (own).
 - The module a piece is for is the person's choice (`record_sources.module`, migration 0029: NULL until they
   choose, "" for none), checked against the card's modules (`store.module_choices`); Hal's suggestion stays
@@ -1316,8 +1324,9 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
 - `lecture` (`sections/lecture.py`) gives only `skill` facts, filed as taught (studied). Its note is the
   material with emails and phone numbers scrubbed (`ingest.lectures.scrub`); a converted deck, PDF or Word
   file, or anything past `DECK_CHARS`, becomes the AI's study notes (`ingest.lectures.write`), in parts of
-  `DECK_CHARS` and at most `PARTS_MAX` of them, so a large deck is summarised, not read whole. Without the AI
-  a large file keeps its first part and says the rest was left out. The topics come from the
+  `DECK_CHARS` and at most `PARTS_MAX` of them, so a large deck is summarised, not read whole
+  (`ingest.lectures.ask`, which raises when the AI does not answer). When a note comes back too short, a large
+  file keeps its first part and says the rest was left out. The topics come from the
   `lecture_topics` prompt, each with a quote found in the notes. The notes and topics are cached in
   `details` by hash, and Hal's suggested module is `details["module"]`, as for coursework.
 - Skill strength (`profile/strength.py`): each piece of a skill's evidence is `shown` (any

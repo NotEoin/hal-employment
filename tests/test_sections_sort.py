@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
+from support import reader_ai
 from support.api import HalServer
 from support.fake_ai import fake_ai
 from test_ingest import home, put
@@ -23,7 +24,7 @@ from jobhunt.core import paths, runner
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import actions, pipeline, sort_actions, sorter, sorts
 
-NONE = {"sort_pick": json.dumps({"choice": "none"})}
+NONE = {"sort_pick": json.dumps({"choice": "none"}), "record_cv": reader_ai.cv_reply}
 WAIT_S = 30
 BIG = 10_000                   # the size of dump the review table must stay quick for
 

@@ -86,20 +86,27 @@ def _tidy(reply: str) -> str:
     return scrub(fenced.group(1) if fenced else text).strip()
 
 
-def write(rel: str, title: str, text: str) -> str:
-    """The AI's lecture note for one piece of course material; "" when the AI cannot write one now."""
+def ask(rel: str, title: str, text: str) -> str:
+    """The AI's lecture note for one piece of course material, "" when it is too short to keep; raises
+    `LLMUnavailable` when the AI cannot write one now."""
     from jobhunt import ai
     from jobhunt.ai import prompts
 
-    system = prompts.text(PURPOSE)
     user = f"File: {rel}\nTitle: {title}\n\nText:\n{text[:PROMPT_CHARS]}"
+    note = _tidy(ai.chat(prompts.text(PURPOSE), user, role="checker", timeout=TIMEOUT_S, purpose=PURPOSE,
+                         priority=2))
+    return note if len(note) >= NOTE_MIN_CHARS else ""
+
+
+def write(rel: str, title: str, text: str) -> str:
+    """The AI's lecture note for one piece of course material; "" when the AI cannot write one now."""
+    from jobhunt import ai
+
     try:
-        reply = ai.chat(system, user, role="checker", timeout=TIMEOUT_S, purpose=PURPOSE, priority=2)
+        return ask(rel, title, text)
     except ai.LLMUnavailable as e:
         log.info("kept the words of %s as they are: %s", rel, e)
         return ""
-    note = _tidy(reply)
-    return note if len(note) >= NOTE_MIN_CHARS else ""
 
 
 def _key(rel: str, title: str) -> str:

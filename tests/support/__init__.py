@@ -6,7 +6,8 @@ no `HAL_EMPLOYMENT_HOME` is set, a fresh temporary one that is removed when the 
 without the gate's variables therefore still never reaches real data.
 
 Importing it also puts `support.offline` in place, so no test reaches the internet: a lookup or connection
-that would leave this computer fails at once, as it would offline.
+that would leave this computer fails at once, as it would offline; and `support.reader_ai`, the made-up AI that
+answers the record's readers.
 """
 import atexit
 import os
@@ -28,3 +29,7 @@ if not os.environ.get("HAL_EMPLOYMENT_OSRELEASE"):
         _file.write("6.8.0-generic\n")
     os.environ["HAL_EMPLOYMENT_OSRELEASE"] = _release
     atexit.register(shutil.rmtree, os.path.dirname(_release), ignore_errors=True)
+
+from . import reader_ai  # noqa: E402 - jobhunt loads only once the temporary home is set above
+
+reader_ai.install()

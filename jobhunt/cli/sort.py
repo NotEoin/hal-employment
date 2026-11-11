@@ -4,13 +4,15 @@
 prints how many files it proposes for each section and how many it left out; nothing is added. `sort
 --accept-all` adds everything ticked in the latest sort (or `--id N`) and follows until it is in. `sources
 list|add|read` lists the sources of a section, adds one (a file or folder is uploaded, a link, account,
-folder on this computer or project name is added as it is) and reads one again. Everything goes through the
+folder on this computer or project name is added as it is) and reads one again; `sources read waiting` reads
+everything still waiting and can run as a gpu-light batch job (`read_waiting`). Everything goes through the
 running Hal's API, as `ingest` does, so the page shows the same and only one program writes the record.
 """
 from __future__ import annotations
 
 import http.client
 import json
+import signal
 import sys
 import time
 import uuid
@@ -20,6 +22,8 @@ FOLLOW_EVERY_S = 3          # how often a followed sort is asked how far it got
 FOLLOW_FOR_S = 3600         # a sort of a very large folder ends well within this
 HTTP_TIMEOUT_S = 120        # an upload of a few hundred megabytes on this computer
 SORTING = ("new", "sorting")
+YIELD_EXIT = 75             # gpu-light's default `--yield-exit`: run the job again later
+YIELD_SIGNALS = tuple(getattr(signal, n) for n in ("SIGUSR2", "SIGTERM", "SIGINT") if hasattr(signal, n))
 FOLDER_KINDS = ("repo", "local_folder")     # kinds of document held as a folder on this computer
 
 
@@ -141,9 +145,12 @@ def sources(op: str, words: list[str], section: str | None = None, kind: str | N
         for s in out:
             print(f"{s['id']:>5}  {s['section_label']}: {s['title']} ({s['doc_kind_label']}, {s['state_words']})")
         return
+    if op == "read" and words == ["waiting"]:
+        read_waiting()
+        return
     if op == "read":
         if len(words) != 1 or not words[0].isdigit():
-            sys.exit("sources read: give the number of the source, from `jobhunt sources list`")
+            sys.exit("sources read: give the number of the source, from `jobhunt sources list`, or `waiting`")
         _or_exit("sources", lambda: _hal("POST", f"/api/v2/record/sources/{words[0]}/reread", {}))
         print(f"Hal is reading source {words[0]} again.")
         return
@@ -164,6 +171,36 @@ def sources(op: str, words: list[str], section: str | None = None, kind: str | N
         print(f"{d['name']} is already in your record, under {d['section_label']}.")
 
 
+def read_waiting() -> None:
+    """Reads every source still waiting and follows the read until it ends.
+
+    Run as a gpu-light batch job, it yields the graphics card: on `YIELD_SIGNALS` it stops the read (what was
+    read is kept) and exits `YIELD_EXIT`, so gpu-light runs it again later and it reads only what still waits.
+    """
+    out = _or_exit("sources", lambda: _hal("POST", "/api/v2/record/read-waiting", {}))
+    if not out["action_id"]:
+        print("Nothing is waiting to be read.")
+        return
+    action_id = out["action_id"]
+    print(f"Reading {out['waiting']} waiting source(s) (action {action_id}).", flush=True)
+
+    def stop(signum, _frame) -> None:
+        _hal("POST", f"/api/v2/actions/{action_id}/stop", {})
+        print(f"Stopped the read for {signal.Signals(signum).name}; what was read is kept.", flush=True)
+        sys.exit(YIELD_EXIT)
+
+    for sig in YIELD_SIGNALS:
+        signal.signal(sig, stop)
+    while True:
+        action = _or_exit("sources", lambda: _hal("GET", f"/api/v2/actions/{action_id}"))
+        if action["state"] not in ("queued", "running"):
+            break
+        time.sleep(FOLLOW_EVERY_S)
+    print(f"The read {action['state']}: {action.get('message') or ''}".rstrip(": "))
+    if action["state"] != "done":
+        sys.exit(1)
+
+
 def cmd_sources(args):
     """Handles `jobhunt sources`: lists, adds or reads again the sources of Your record."""
     sources(args.op, args.words, section=args.section, kind=args.kind, card=args.card)
@@ -178,7 +215,8 @@ def register(sub) -> None:
     s.set_defaults(fn=cmd_sort)
     s = sub.add_parser("sources", help="list, add or read again what each part of your record holds")
     s.add_argument("op", choices=["list", "add", "read"])
-    s.add_argument("words", nargs="*", help="add: the section and a file, folder, link or name; read: its number")
+    s.add_argument("words", nargs="*", help="add: the section and a file, folder, link or name; read: its number, "
+                   "or `waiting` for everything still to read")
     s.add_argument("--section", help="list only this section (cv, coursework, project, document, ...)")
     s.add_argument("--kind", help="add: what it is within the section (essay, transcript, repo, ...)")
     s.add_argument("--card", type=int, help="add: the course or job card it is for, by its number")

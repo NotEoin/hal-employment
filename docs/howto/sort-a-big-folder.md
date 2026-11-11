@@ -111,6 +111,7 @@ How it works inside is in [Architecture](../dev/architecture.md#sorting-a-big-fo
 
 | Symptom | Fix |
 | --- | --- |
+| A file says "Waiting for Hal's AI" | Hal's model was stopped or busy. Hal tries again by itself until it is back. To read everything still waiting, run `python -m jobhunt sources read waiting`. |
 | You cannot find the list Hal sorted | Open **Your record**, **Overview**, and press **Check the list** in the banner at the top. |
 | "Add ... files?" says it takes hours | Press **Not now** and untick what Hal does not need, such as lecture notes for modules you do not want to mention. |
 | You added far more than you meant to | Press **Stop reading** at the top of the list, then **Undo this add**. |

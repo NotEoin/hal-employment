@@ -4,7 +4,8 @@ usage: jobhunt sources [-h] [--section SECTION] [--kind KIND] [--card CARD]
 
 positional arguments:
   {list,add,read}
-  words              add: the section and a file, folder, link or name; read: its number
+  words              add: the section and a file, folder, link or name; read: its number, or
+                     `waiting` for everything still to read
 
 options:
   -h, --help         show this help message and exit

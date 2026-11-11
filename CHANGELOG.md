@@ -363,6 +363,15 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Hal waits for its AI instead of guessing.** When Hal's model was stopped or busy, Hal read CVs,
+  coursework, lecture material and projects with simple rules instead, and those turned a CV's skills line
+  into a university and a project's result into a degree. Now such a file waits with "Waiting for Hal's AI",
+  and Hal tries it again, waiting longer each time, until the model is back. A read stopped part way, or
+  after a restart, carries on with what is still waiting. To read everything that waits, run
+  `jobhunt sources read waiting`; with gpu-light installed you can run it as a batch job
+  (`gpu-light submit --class batch --uses hal-gateway -- jobhunt sources read waiting`), so it gives the
+  graphics card to Hal's chat and voice and carries on afterwards.
+
 - **Letters and CVs use Hal's writing model.** With Hal's brain set to **Hal's local model**, every job asked
   the gateway for whichever model it listed first, so cover letters and CVs were written by Hal's chat model.
   Writing now asks for `hal-writer` and checking for `hal-chat`, the models you set for each in `hal tune`.

@@ -378,19 +378,15 @@ def ai_reading(name: str, docs: list[tuple[str, str]]) -> tuple[str, list[dict]]
     """The AI's summary and its quoted facts [{"kind", "text", "quote", "file", "line"}] from the docs only.
 
     A fact whose quote is not found on one line of the file it names is left out. ("", []) when there are no
-    docs or the AI cannot answer now; the caller then uses the description.
+    docs; the caller then uses the description. Raises `LLMUnavailable` when the AI cannot answer now.
     """
     if not docs:
         return "", []
     from jobhunt import ai
     from jobhunt.ai import prompts
 
-    try:
-        reply = ai.chat_json(prompts.text(PURPOSE), f"Project: {name}\n\n{_numbered(docs)}", role="checker",
-                             timeout=AI_TIMEOUT_S, purpose=PURPOSE, priority=2)
-    except ai.LLMUnavailable as e:
-        log.info("the AI could not summarise %s: %s", name, e)
-        return "", []
+    reply = ai.chat_json(prompts.text(PURPOSE), f"Project: {name}\n\n{_numbered(docs)}", role="checker",
+                         timeout=AI_TIMEOUT_S, purpose=PURPOSE, priority=2)
     summary = " ".join(str(reply.get("summary") or "").split())
     sentences = re.split(r"(?<=[.!?])\s+", summary)
     summary = " ".join(sentences[:SUMMARY_SENTENCES])

@@ -11,11 +11,12 @@ import unittest
 import zipfile
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from test_ingest import home
 
-from jobhunt import record
+from jobhunt import ai, record
 from jobhunt.core import events, runner
 from jobhunt.ingest import engine, frontmatter
 from jobhunt.ingest import tidy as ingest_tidy
@@ -44,15 +45,32 @@ class Scripted:
         return readers.Reading(title="", text=readers.text_of(source.files), facts=list(self.facts))
 
 
+@dataclass
+class AiAway:
+    """A made-up reader whose AI does not answer for its first `fails` reads, with `kind` as the reason."""
+
+    name: str
+    fails: int
+    kind: str = "timeout"
+    calls: int = 0
+
+    def read(self, source: readers.Source) -> readers.Reading:
+        """Raises `LLMUnavailable` until `fails` reads have failed, then reads the source's text."""
+        self.calls += 1
+        if self.calls <= self.fails:
+            raise ai.LLMUnavailable("backend qwen was stopped", kind=self.kind)
+        return readers.Reading(title="", text=readers.text_of(source.files))
+
+
 def skill(name: str, quote: str, line: int = 1) -> readers.Fact:
     """A skill fact resting on `quote` at `line` of the essay."""
     return readers.Fact("skill", {"name": name}, readers.Quote("name", quote, "essay.md", line))
 
 
 @contextmanager
-def reader(name: str, facts=()):
-    """Puts a scripted reader in place of `name` for the length of a block; yields it."""
-    made = Scripted(name, list(facts))
+def reader(name: str, facts=(), made=None):
+    """Puts a scripted reader (or `made`) in place of `name` for the length of a block; yields it."""
+    made = made or Scripted(name, list(facts))
     before = readers.register(made)
     try:
         yield made
@@ -287,6 +305,44 @@ class Pipeline(unittest.TestCase):
             runner.run(actions.KIND, params={"ids": ids})
             seen = [e for e in iter(lambda: sub.get(timeout=0.2), None) if e.type == "profile"]
         self.assertEqual([e.data for e in seen], [{"sources": ids}])
+
+    def test_a_source_the_ai_cannot_read_now_waits_and_is_never_read_without_it(self):
+        """Every CV was read by rules into junk cards while Hal's model was stopped (2026-11-11)."""
+        with home() as (con, _, _), reader("document", made=AiAway("document", fails=1)):
+            (source_id,) = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])["added"]
+            out = pipeline.read(con, source_id)
+            got = store.get(con, source_id)
+        self.assertEqual((out["state"], out["kind"]), ("waiting_ai", "timeout"))
+        self.assertEqual((got["state"], got["note_rel"]), ("new", None))
+        self.assertIn("Waiting for Hal's AI", got["error"])
+
+    def test_the_action_waits_for_the_ai_to_come_back_and_reads_the_source_then(self):
+        with home() as (con, _, _), reader("document", made=AiAway("document", fails=2)) as away:
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])["added"]
+            with mock.patch.object(actions, "AI_RETRY_S", 0):
+                done = runner.run(actions.KIND, params={"ids": ids})
+            state = store.get(con, ids[0])["state"]
+        self.assertEqual((done["result"]["read"], done["result"]["waiting_ai"], state), (1, 0, "read"))
+        self.assertEqual(away.calls, 3)
+
+    def test_an_ai_that_is_not_set_up_ends_the_read_with_the_rest_still_waiting(self):
+        with home() as (con, _, _), reader("document", made=AiAway("document", 99, "not_installed")) as away:
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode()),
+                                                         Incoming("essay.md", ESSAY.encode())])["added"]
+            done = runner.run(actions.KIND, params={"ids": ids})
+            states = [store.get(con, i)["state"] for i in ids]
+        self.assertEqual((done["result"]["read"], done["result"]["waiting_ai"]), (0, 2))
+        self.assertEqual(away.calls, 1, "the second source is not tried once the AI is known to be missing")
+        self.assertEqual(states, ["new", "new"])
+
+    def test_a_read_carried_on_after_a_restart_reads_only_what_still_waits(self):
+        with home() as (con, _, _):
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode()),
+                                                         Incoming("essay.md", ESSAY.encode())])["added"]
+            pipeline.read(con, ids[0])
+            with reader("document", made=AiAway("document", fails=0)) as again:
+                done = runner.run(actions.KIND, params={"ids": ids, "_carry_on_from": "an-earlier-read"})
+        self.assertEqual((done["result"]["read"], again.calls), (1, 1))
 
 
 if __name__ == "__main__":

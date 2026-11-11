@@ -21,8 +21,8 @@ Design decisions, each with its reason:
   computed never comes from the AI). The AI writes only the summary and names the methods, each with a
   quote; a method whose quote is not in the work is left out, so nothing rests on words the work does not
   have.
-- Without the AI the summary is the work's own abstract or first paragraph, and only languages are found:
-  the work is still read, and reading it again later finds the rest.
+- Coursework is read by the AI only: when it does not answer, `LLMUnavailable` reaches the pipeline and the
+  work waits to be read again, never read with only its first paragraph and languages (2026-11-11).
 - Coursework never makes a project card on its own: a course's every essay as a project crowded out the
   person's real projects. A star makes one, evidenced by the piece alone, and `settle` gives that card the
   star and the context "degree" (`STAR_BY`); taking the star off reads the piece again with no project fact,
@@ -159,9 +159,9 @@ def _languages(files: tuple[readers.SourceFile, ...], text: str) -> list[readers
     return out
 
 
-def ask(source: readers.Source, title: str, text: str) -> dict | None:
+def ask(source: readers.Source, title: str, text: str) -> dict:
     """The AI's summary and methods of a piece of work, {"sha", "summary", "methods": [[name, quote]]}; the last
-    read's when the text is the same; None when the AI cannot answer now."""
+    read's when the text is the same. Raises `LLMUnavailable` when the AI cannot answer now."""
     sha = hashlib.sha256(f"{title}\n{text}".encode()).hexdigest()
     kept = source.details.get("ai")
     if isinstance(kept, dict) and kept.get("sha") == sha:
@@ -171,12 +171,8 @@ def ask(source: readers.Source, title: str, text: str) -> dict | None:
 
     course = (source.target or {}).get("title", "")
     user = f"Course: {course}\nTitle: {title}\n\nText:\n{text[:PROMPT_CHARS]}"
-    try:
-        reply = ai.chat_json(prompts.text(PURPOSE), user, role="checker", timeout=TIMEOUT_S, purpose=PURPOSE,
-                             priority=2)
-    except ai.LLMUnavailable as e:
-        log.info("read coursework %s without the AI: %s", source.id, e)
-        return None
+    reply = ai.chat_json(prompts.text(PURPOSE), user, role="checker", timeout=TIMEOUT_S, purpose=PURPOSE,
+                         priority=2)
     whole = _normal(text)
     methods, seen = [], set()
     for m in reply.get("methods") or []:
@@ -243,9 +239,9 @@ class CourseworkReader:
         name = source.title or (source.files[0].rel if len(source.files) == 1 else source.locator)
         title = readers.title_in(own_words(text, source.files), name)
         read = ask(source, title, text)
-        summary = (read or {}).get("summary") or first_summary(text)
+        summary = read.get("summary") or first_summary(text)
         facts = []
-        for method, quote in (read or {}).get("methods", []):
+        for method, quote in read.get("methods", []):
             place, line = locate(quote, text, source.files)
             facts.append(readers.Fact("skill", {"name": method}, readers.Quote("name", quote, place, line)))
         facts += _languages(source.files, text)
@@ -255,7 +251,7 @@ class CourseworkReader:
         choices = [m["name"] for m in ((source.target or {}).get("fields") or {}).get("modules") or []
                    if m.get("name")]
         details = {"mark": mark, "summary": summary, "module": suggest_module(name, title, text, choices),
-                   **({"ai": read} if read else {})}
+                   "ai": read}
         return readers.Reading(title=title, date=date, text=text, summary=summary, facts=facts, details=details)
 
     def settle(self, con: sqlite3.Connection) -> None:

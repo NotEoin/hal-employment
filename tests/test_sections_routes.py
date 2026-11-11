@@ -191,6 +191,15 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual(self.c.request("DELETE", path).status, 404)
         self.assertEqual(self.put(path, {"title": "x"}).status, 404)
 
+    def test_reading_what_waits_reads_every_source_still_waiting_and_nothing_else(self):
+        _, first = form(self.hal, self.c, "/document", [("Avery Quillon CV.md", CV, "")])
+        ended(first["action_id"])
+        with db.connect() as con:
+            con.execute("UPDATE record_sources SET state = 'new'")
+        r = self.c.post("/api/v2/record/read-waiting", {}).json()
+        self.assertEqual((r["waiting"], ended(r["action_id"])["state"]), (1, "done"))
+        self.assertEqual(self.c.post("/api/v2/record/read-waiting", {}).json(), {"waiting": 0, "action_id": None})
+
     def test_the_upload_takes_the_same_size_as_the_record_upload(self):
         found = router.find("POST", "/api/v2/record/sources/document")
         self.assertEqual(found[0].max_body, UPLOAD_MAX_BODY)

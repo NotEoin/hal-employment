@@ -18,9 +18,10 @@ What the reader keeps:
 Design decisions, each with its reason:
 
 - A large deck is summarised, not read whole: past `DECK_CHARS` its words go to the AI in parts of that size,
-  at most `PARTS_MAX` of them, and the study notes of each part make the note. Without the AI the note keeps
-  the first `DECK_CHARS` and says the rest was left out. A course's full-year deck ran to hundreds of pages,
-  and its every word is not what the person studied.
+  at most `PARTS_MAX` of them, and the study notes of each part make the note. A course's full-year deck ran
+  to hundreds of pages, and its every word is not what the person studied.
+- Converted or large material is read by the AI only: when it does not answer, `LLMUnavailable` reaches the
+  pipeline and the material waits to be read again, never kept "without its topics" (2026-11-11).
 - A topic whose quote is not in the notes is left out, as with coursework methods.
 """
 from __future__ import annotations
@@ -60,7 +61,7 @@ def study_notes(source: readers.Source, title: str, words: str) -> tuple[str, bo
         return kept["text"], True
     rel = source.files[0].rel
     parts = [words[i:i + DECK_CHARS] for i in range(0, len(words), DECK_CHARS)][:PARTS_MAX]
-    notes = [lectures.write(rel, title, part) for part in parts]
+    notes = [lectures.ask(rel, title, part) for part in parts]
     if all(notes):
         return "\n\n".join(notes), True
     if len(words) <= DECK_CHARS:
@@ -68,9 +69,9 @@ def study_notes(source: readers.Source, title: str, words: str) -> tuple[str, bo
     return words[:DECK_CHARS] + LEFT_OUT.format(chars=len(words) - DECK_CHARS), False
 
 
-def ask(source: readers.Source, title: str, notes: str) -> dict | None:
+def ask(source: readers.Source, title: str, notes: str) -> dict:
     """The topics the AI found in the notes, {"sha", "topics": [[name, quote]]}; the last read's when the notes are
-    the same; None when the AI cannot answer now."""
+    the same. Raises `LLMUnavailable` when the AI cannot answer now."""
     sha = _sha(f"{title}\n{notes}")
     kept = source.details.get("ai")
     if isinstance(kept, dict) and kept.get("sha") == sha:
@@ -79,12 +80,8 @@ def ask(source: readers.Source, title: str, notes: str) -> dict | None:
     from jobhunt.ai import prompts
 
     user = f"Course: {(source.target or {}).get('title', '')}\nTitle: {title}\n\nNotes:\n{notes[:DECK_CHARS]}"
-    try:
-        reply = ai.chat_json(prompts.text(PURPOSE), user, role="checker", timeout=TIMEOUT_S, purpose=PURPOSE,
-                             priority=2)
-    except ai.LLMUnavailable as e:
-        log.info("kept lecture material %s without its topics: %s", source.id, e)
-        return None
+    reply = ai.chat_json(prompts.text(PURPOSE), user, role="checker", timeout=TIMEOUT_S, purpose=PURPOSE,
+                         priority=2)
     whole = " ".join(notes.split()).lower()
     topics, seen = [], set()
     for t in reply.get("topics") or []:
@@ -114,14 +111,14 @@ class LectureReader:
         notes, by_ai = study_notes(source, title, words)
         found = ask(source, title, notes)
         facts = []
-        for topic, quote in (found or {}).get("topics", []):
+        for topic, quote in found.get("topics", []):
             place, line = coursework.locate(quote, notes, source.files)
             facts.append(readers.Fact("skill", {"name": topic}, readers.Quote("name", quote, place, line)))
         choices = [m["name"] for m in ((source.target or {}).get("fields") or {}).get("modules") or []
                    if m.get("name")]
         details = {"module": coursework.suggest_module(name, title, notes, choices),
                    **({"notes": {"sha": _sha(words), "text": notes}} if by_ai else {}),
-                   **({"ai": found} if found else {})}
+                   "ai": found}
         return readers.Reading(title=title, date=readers.date_in(notes), text=notes, facts=facts, details=details)
 
 
