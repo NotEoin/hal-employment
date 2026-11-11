@@ -179,6 +179,19 @@ class Pipeline(unittest.TestCase):
         self.assertEqual((ev["role"], ev["doc_type"], ev["source_id"], ev["place"], ev["line"], ev["verified"]),
                          ("own", "essay", source_id, "essay.md", 3, True))
 
+    def test_a_true_quote_is_found_whatever_its_dashes_spaces_and_emphasis(self):
+        """True CV quotes were marked to be checked: the file said "**September 2023 \u2013 Present**" and a
+        PDF's text "8%n ationally" (2026-11-11)."""
+        text = "# Week 3\n\nCatalogue work, **September 2023 \u2013\nPresent**, roughly the top 8%n ationally.\n"
+        quotes = ["Catalogue work, September 2023 - Present", "roughly the top 8% nationally", "not in the notes"]
+        facts = [skill(f"Made-up skill {n}", q) for n, q in enumerate(quotes)]
+        with home() as (con, _, _), reader("lecture", facts):
+            source_id = pipeline.add_uploads(con, "lecture", [Incoming("week 3.md", text.encode())],
+                                             target_id=self.education(con))["added"][0]
+            pipeline.read(con, source_id)
+            found = {i["fields"]["name"]: i["evidence"][0]["verified"] for i in profile_store.items(con, "skill")}
+        self.assertEqual(found, {"Made-up skill 0": True, "Made-up skill 1": True, "Made-up skill 2": False})
+
     def test_lecture_material_gives_skills_as_studied_and_never_a_job(self):
         job = readers.Fact("job", {"title": "Lecturer", "employer": "University of Nowhere Fen"},
                            readers.Quote("title", "Lecturer"))

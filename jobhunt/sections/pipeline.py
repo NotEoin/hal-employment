@@ -305,8 +305,21 @@ def _drop_note(note_rel: str | None) -> None:
         path.unlink(missing_ok=True)
 
 
+# Typographic dashes and quotes the AI writes plainly, and Markdown emphasis it leaves out of a quote.
+_PLAIN = str.maketrans({**dict.fromkeys("\u2010\u2011\u2012\u2013\u2014\u2212", "-"),
+                        **dict.fromkeys("\u2018\u2019", "'"), **dict.fromkeys("\u201c\u201d", '"'),
+                        **dict.fromkeys("*_`", None)})
+
+
+def _plain(text: str) -> str:
+    return "".join(text.translate(_PLAIN).lower().split())
+
+
 def _found_in(quote: str, text: str) -> bool:
-    return " ".join(quote.split()).lower() in " ".join(text.split()).lower()
+    """True when `quote` is in `text`, whatever the spaces, dashes, curly quotes and Markdown emphasis: a CV's
+    "**September 2023 - Present**" and a PDF's "8%n ationally" left true quotes marked to be checked
+    (2026-11-11)."""
+    return _plain(quote) in _plain(text)
 
 
 def _evidence(section: registry.Section, kind: registry.DocKind, source_id: int, note_rel: str,
