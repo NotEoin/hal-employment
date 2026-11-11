@@ -303,6 +303,16 @@ class Sorter(unittest.TestCase):
             self.assertNotIn("Someone else", found[m + "HIS2040_Marnie_Quillfeather_Poster.pdf"].why,
                              "the person's own poster is never someone else's")
 
+    def test_a_report_whose_first_line_is_one_word_of_its_title_is_not_named_after_a_person(self):
+        # regression: "Cloud security report.pdf", headed "Cloud", was left out as named after "Cloud" (2026-11-11)
+        with home() as (con, _vault, files), fake_ai(NONE):
+            module = files / "Uni/BA History/HIS2040 Archival Methods"
+            name = "Archive security report.pdf"
+            put(module, name, tiny_pdf(["Archive", "Keeping parish papers safe"]))
+            settings.set("you.name", "Marnie Quillfeather")
+            found = by_rel(sorter.propose(con, files / "Uni", local=True))
+            self.assertNotIn("named after", found[f"Uni/BA History/HIS2040 Archival Methods/{name}"].why)
+
     def test_what_a_course_gave_out_is_lecture_material_at_most(self):
         with home() as (con, _vault, files), fake_ai(NONE) as backend:
             course = files / "Uni/BSc Computing/Year 3/CSC3095 Project"

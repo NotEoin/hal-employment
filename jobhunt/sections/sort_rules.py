@@ -190,6 +190,8 @@ def _name_blocks(words: list[str]) -> list[tuple[int, tuple[str, ...]]]:
 
 
 def _author_line(name: str, head: str) -> bool:
+    if len(name.split()) < 2:     # a line of one word is a heading: "Cloud" topped a report on cloud security
+        return False
     folded = " ".join(name.lower().split())
     return any(" ".join(line.lower().split()).removeprefix("by ") == folded for line in head.splitlines())
 
