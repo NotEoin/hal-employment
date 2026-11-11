@@ -21,6 +21,7 @@ from jobhunt.ai.base import LLMUnavailable
 from jobhunt.ai.hal_gateway import (
     DEFAULT_URL,
     GatewayBackend,
+    as_batch,
     default_socket,
     gateway_answers,
     loose_mode_warning,
@@ -31,6 +32,7 @@ from jobhunt.core.settings import store
 from jobhunt.core.settings.catalog import ai as ai_catalog
 
 TOKEN = "made-up-token"
+BATCH_TOKEN = "made-up-batch-token"
 
 
 class _Gateway(http.server.BaseHTTPRequestHandler):
@@ -38,6 +40,8 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
     remote_reply: ClassVar[bool] = False
     redirect: ClassVar[bool] = False
     aliases: ClassVar[list] = []
+    refuse: ClassVar[tuple | None] = None    # (status, error code, message) for every chat
+
 
     def log_message(self, *args):
         pass
@@ -53,7 +57,7 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
 
     def _allowed(self) -> bool:
         type(self).seen.append((self.path, self.headers.get("Authorization")))
-        if self.headers.get("Authorization") != f"Bearer {TOKEN}":
+        if self.headers.get("Authorization") not in (f"Bearer {TOKEN}", f"Bearer {BATCH_TOKEN}"):
             self._send(401, {"error": "bad token"})
             return False
         return True
@@ -73,8 +77,13 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         self.rfile.read(int(self.headers["Content-Length"]))
-        if self._allowed():
-            self._send(200, {"choices": [{"message": {"content": "made-up answer"}}]})
+        if not self._allowed():
+            return
+        if type(self).refuse:
+            code, kind, message = type(self).refuse
+            self._send(code, {"error": {"message": message, "type": kind, "code": kind}})
+            return
+        self._send(200, {"choices": [{"message": {"content": "made-up answer"}}]})
 
 
 class Gateway(InHome):
@@ -84,6 +93,7 @@ class Gateway(InHome):
         _Gateway.remote_reply = False
         _Gateway.redirect = False
         _Gateway.aliases = []
+        _Gateway.refuse = None
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Gateway)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.addCleanup(self.httpd.server_close)
@@ -120,6 +130,36 @@ class Gateway(InHome):
         out = be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
         self.assertEqual(out.text, "made-up answer")
         self.assertEqual(_Gateway.seen[-1], ("/v1/chat/completions", f"Bearer {TOKEN}"))
+
+    def test_a_read_of_the_record_goes_out_with_the_batch_token(self):
+        batch = self.tmp / "gateway-batch-token"
+        batch.write_text(BATCH_TOKEN + "\n", encoding="utf-8")
+        be = GatewayBackend(self.url, self.token, batch)
+        with as_batch():
+            be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        self.assertEqual(_Gateway.seen[-1][1], f"Bearer {BATCH_TOKEN}")
+        be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        self.assertEqual(_Gateway.seen[-1][1], f"Bearer {TOKEN}", "what the person asks for keeps the owner token")
+
+    def test_without_a_batch_token_a_read_still_goes_out_with_the_owner_token(self):
+        be = GatewayBackend(self.url, self.token, self.tmp / "no-batch-token")
+        with as_batch(), self.assertLogs("jobhunt.ai.hal_gateway", "WARNING"):
+            be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        self.assertEqual(_Gateway.seen[-1][1], f"Bearer {TOKEN}")
+
+    def test_a_gateway_giving_the_card_to_someone_else_makes_the_read_wait(self):
+        """Regression: a batch request refused with 503 `gpu_busy` was not told apart from a broken gateway."""
+        _Gateway.refuse = (503, "gpu_busy", "Hal's models are in use; batch work waits for them")
+        with self.assertRaises(LLMUnavailable) as caught:
+            GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        self.assertEqual(caught.exception.kind, "gpu_busy")
+
+    def test_another_refusal_still_says_the_gateways_reason(self):
+        _Gateway.refuse = (503, "hal_off", "Hal is off; run `hal on`")
+        with self.assertRaises(LLMUnavailable) as caught:
+            GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        self.assertIn("Hal is off", str(caught.exception))
+        self.assertNotEqual(caught.exception.kind, "gpu_busy")
 
     def test_each_job_asks_for_the_gateway_alias_that_fits_it(self):
         """Regression: every job got the gateway's first model, so prose went to hal-chat, not hal-writer."""

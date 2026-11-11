@@ -6,6 +6,11 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Reading your record gives the graphics card up.** With a batch token from Hal's gateway in
+  `~/.config/hal-employment/gateway-batch-token` (new setting `ai.hal_batch_token_file`), Hal reads your
+  record as batch work: the gateway gives the model to your chat and voice questions first, and to other
+  gpu-light jobs in their turn, and the read waits and carries on once the card is free.
+
 - **The sorted list gets the whole window.** **Check the list** after **Sort a big folder for me** opens the
   list on its own page, as wide as your window, and it grows and shrinks with the window. It was a narrow
   card on Overview. On a phone the table slides sideways inside itself while the page stays put, and a long
@@ -368,9 +373,9 @@ What changed in each version, in plain words.
   into a university and a project's result into a degree. Now such a file waits with "Waiting for Hal's AI",
   and Hal tries it again, waiting longer each time, until the model is back. A read stopped part way, or
   after a restart, carries on with what is still waiting. To read everything that waits, run
-  `jobhunt sources read waiting`; with gpu-light installed you can run it as a batch job
-  (`gpu-light submit --class batch --uses hal-gateway -- jobhunt sources read waiting`), so it gives the
-  graphics card to Hal's chat and voice and carries on afterwards.
+  `jobhunt sources read waiting`; with gpu-light installed you can run it as a batch job, so it gives the
+  graphics card to Hal's chat and voice and carries on afterwards (see
+  [Use the helper with Hal](docs/howto/use-the-helper-with-hal.md), step 7).
 
 - **Letters and CVs use Hal's writing model.** With Hal's brain set to **Hal's local model**, every job asked
   the gateway for whichever model it listed first, so cover letters and CVs were written by Hal's chat model.

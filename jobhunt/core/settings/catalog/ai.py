@@ -86,6 +86,11 @@ register(
             visible_if="ai.provider == 'hal'", remote="local_only", order=75),
     Setting("ai.hal_token_file", "text", "~/.config/hal/gateway-token", "File holding Hal's gateway token",
             advanced=True, visible_if="ai.provider == 'hal'", remote="local_only", order=76),
+    Setting("ai.hal_batch_token_file", "text", "~/.config/hal-employment/gateway-batch-token",
+            "File holding Hal's gateway token for reading your record", advanced=True,
+            visible_if="ai.provider == 'hal'", remote="local_only", order=77,
+            help="Made with hal-gateway token issue --class batch, so a long read gives the graphics card up "
+                 "whenever you use Hal."),
     Setting("ai.openai_url", "url", "http://localhost:8000/v1", "Address of the other local server", advanced=True,
             visible_if="ai.provider == 'openai_compat'", order=80),
     Setting("ai.openai_key", "secret", None, "Key for the other local server", secret_name="ai.openai_key",

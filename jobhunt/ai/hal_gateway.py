@@ -7,6 +7,12 @@ GPU claims and loads or unloads models itself, so this backend never asks gpu-li
 The gateway wants a bearer token on every request but `/health`. The owner token is one line in
 `ai.hal_token_file` (default `~/.config/hal/gateway-token`, mode 0600), read at each call so a rotated token
 is picked up without a restart. `status()` warns, but still works, when group or others can access the file.
+
+Reading the record is bulk work that must give the card up whenever the person uses Hal, so calls made inside
+`as_batch()` send the batch token in `ai.hal_batch_token_file` instead (`hal-gateway token issue --class
+batch`). The gateway runs those as gpu-light batch work: it answers 503 `gpu_busy`, which the read waits out,
+while gpu-light has not given it the card or a chat or voice request is in flight. Without a batch token the
+calls go out with the owner token, as a `service` claim that keeps gpu-light's batch jobs waiting.
 The gateway only listens on loopback (another computer reaches it through
 an SSH tunnel, which is loopback again), so the token is only ever sent to a loopback address, straight
 there: never through a proxy from the environment and never on to where a redirect points.
@@ -27,13 +33,18 @@ any reply that still carries the header.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import http.client
+import io
+import json
 import logging
 import os
 import socket
 import stat
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +55,8 @@ log = logging.getLogger(__name__)
 
 DEFAULT_URL = "http://127.0.0.1:8741/v1"        # the gateway's loopback listener when `[gateway].tcp = true`
 DEFAULT_TOKEN_FILE = "~/.config/hal/gateway-token"
+BUSY_STATUS = 503
+BUSY_CODE = "gpu_busy"     # the gateway's error code while batch work must wait (halgateway/gpu/manager.py)
 SOCKET_NAME = "gateway.sock"        # the gateway's Unix listener in Hal's runtime directory (halgateway/server.py)
 RUN_USER_ROOT = Path("/run/user")   # Hal's runtime directory without XDG_RUNTIME_DIR (halkit/paths.py)
 PROBE_TIMEOUT_S = 2        # setup waits on this; a running gateway answers in milliseconds
@@ -139,15 +152,32 @@ def loose_mode_warning(path: str | Path) -> str | None:
 
 ROLE_ALIASES = {"writer": "hal-writer", "checker": "hal-chat", "quick": "hal-chat"}   # Hal's role -> alias
 
+_batch: contextvars.ContextVar[bool] = contextvars.ContextVar("hal_gateway_batch", default=False)
+
+
+@contextlib.contextmanager
+def as_batch() -> Iterator[None]:
+    """Runs the block's calls to Hal's gateway as batch work, with the batch token when there is one."""
+    token = _batch.set(True)
+    try:
+        yield
+    finally:
+        _batch.reset(token)
+
 
 class GatewayBackend(OpenAICompatBackend):
-    """Hal's model gateway at `ai.hal_url`, with the owner token read from `token_file`."""
+    """Hal's model gateway at `ai.hal_url`, with the owner token read from `token_file`.
+
+    Inside `as_batch()` it sends the token in `batch_token_file` when that file holds one.
+    """
 
     name = "hal"
 
-    def __init__(self, url: str, token_file: str | Path) -> None:
+    def __init__(self, url: str, token_file: str | Path, batch_token_file: str | Path | None = None) -> None:
         super().__init__(url, None)
         self.token_file = token_file
+        self.batch_token_file = batch_token_file
+        self._warned_no_batch = False
         self.socket = default_socket() if self.url == DEFAULT_URL.rstrip("/") else None
         self.loopback = classify(self.url)[1]     # (online, local_gpu): only loopback gives local_gpu
         self._opener = (urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect,
@@ -156,7 +186,15 @@ class GatewayBackend(OpenAICompatBackend):
 
     @property
     def key(self) -> str | None:  # type: ignore[override]  # the parent stores a plain attribute; here it is live
-        """Returns the gateway token, read from the token file on each use."""
+        """Returns the gateway token, read from its file on each use: the batch token inside `as_batch()`."""
+        if _batch.get() and self.batch_token_file:
+            batch = read_token(self.batch_token_file)
+            if batch:
+                return batch
+            if not self._warned_no_batch:
+                self._warned_no_batch = True
+                log.warning("no batch token in %s: reading the record holds a service claim, so gpu-light's batch "
+                            "jobs wait for it", self.batch_token_file)
         return read_token(self.token_file)
 
     @key.setter
@@ -167,7 +205,16 @@ class GatewayBackend(OpenAICompatBackend):
         if not self.loopback:
             raise LLMUnavailable(f"Hal's gateway must be on this computer, not at {self.url}, so the token "
                                  "stays here.")
-        reply = self._opener.open(req, timeout=timeout)
+        try:
+            reply = self._opener.open(req, timeout=timeout)
+        except urllib.error.HTTPError as e:
+            if e.code != BUSY_STATUS:
+                raise
+            body = e.read()     # read once, so it is handed on for `openai_compat._refused` to read again
+            if _error_code(body) == BUSY_CODE:
+                raise LLMUnavailable("Hal's gateway is giving the graphics card to someone else; the read waits.",
+                                     kind="gpu_busy") from e
+            raise urllib.error.HTTPError(e.url, e.code, e.msg, e.hdrs, io.BytesIO(body)) from None
         host = reply.headers.get(REMOTE_HEADER)
         if host:
             reply.close()
@@ -238,6 +285,15 @@ class GatewayBackend(OpenAICompatBackend):
             return [row["embedding"] for row in out["data"]]
         except (KeyError, TypeError) as e:
             raise LLMUnavailable("Hal's gateway sent vectors Hal could not read.") from e
+
+
+def _error_code(body: bytes) -> str:
+    """The gateway's `error.code` in a refused request's body, or "" when it has none."""
+    try:
+        error = json.loads(body or b"{}").get("error")
+    except (ValueError, AttributeError):
+        return ""
+    return str(error.get("code") or "") if isinstance(error, dict) else ""
 
 
 def gateway_answers(url: str = DEFAULT_URL, token_file: str | Path = DEFAULT_TOKEN_FILE,

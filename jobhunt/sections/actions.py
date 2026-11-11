@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 
+from jobhunt.ai.hal_gateway import as_batch
 from jobhunt.core import events, runner
 from jobhunt.sections import pipeline, store
 
@@ -54,7 +55,8 @@ def read_all(ctx, ids: list, allowed: set[int]) -> dict:
     `AI_RETRY_MAX_S`, for up to `AI_WAIT_S` in all, so a model that stops for a while (another program took the
     graphics card) holds the read up instead of failing it; an AI that is not set up (`AI_GONE`) ends the read
     with the rest still waiting. Carried on after a restart, it reads only what is still waiting, and the
-    sources found inside those read before.
+    sources found inside those read before. The reads are batch work for Hal's gateway (`as_batch`), so they
+    give the graphics card up to the person's chat and voice.
     """
     out = {"read": 0, "waiting": 0, "failed": 0, "kept_out": 0, "facts": 0, "missing": 0, "waiting_ai": 0}
     todo = list(dict.fromkeys(int(i) for i in ids))   # grows by the sources a read finds inside one
@@ -63,27 +65,28 @@ def read_all(ctx, ids: list, allowed: set[int]) -> dict:
     else:
         with ctx.con:
             ctx.con.executemany("UPDATE record_sources SET state = 'new' WHERE id = ?", [(i,) for i in todo])
-    gone = ""
-    for n, source_id in enumerate(todo):
-        ctx.step(f"Reading {n + 1} of {len(todo)}", total=len(todo))
-        try:
-            store.row(ctx.con, source_id)
-        except LookupError:      # removed while it waited
-            out["missing"] += 1
-            continue
-        if gone:
-            out["waiting_ai"] += 1
-            continue
-        done = _read_waiting_for_ai(ctx, source_id, source_id in allowed)
-        if done["state"] == "waiting_ai":
-            gone = done.get("why", "")
-            out["waiting_ai"] += 1
-            continue
-        state = {"new": "waiting", "read": "read", "failed": "failed", "kept_out": "kept_out"}[done["state"]]
-        out[state] += 1
-        out["facts"] += done["facts"]
-        todo += [c for c in done.get("children", []) if c not in todo]
-        ctx.progress(n + 1, len(todo))
+    with as_batch():
+        gone = ""
+        for n, source_id in enumerate(todo):
+            ctx.step(f"Reading {n + 1} of {len(todo)}", total=len(todo))
+            try:
+                store.row(ctx.con, source_id)
+            except LookupError:      # removed while it waited
+                out["missing"] += 1
+                continue
+            if gone:
+                out["waiting_ai"] += 1
+                continue
+            done = _read_waiting_for_ai(ctx, source_id, source_id in allowed)
+            if done["state"] == "waiting_ai":
+                gone = done.get("why", "")
+                out["waiting_ai"] += 1
+                continue
+            state = {"new": "waiting", "read": "read", "failed": "failed", "kept_out": "kept_out"}[done["state"]]
+            out[state] += 1
+            out["facts"] += done["facts"]
+            todo += [c for c in done.get("children", []) if c not in todo]
+            ctx.progress(n + 1, len(todo))
     if out["read"] or out["kept_out"]:
         events.publish("profile", sources=[int(i) for i in todo])
     if out["read"]:
@@ -98,7 +101,6 @@ def read_all(ctx, ids: list, allowed: set[int]) -> dict:
     if out["kept_out"]:
         ctx.changed(f"{out['kept_out']} kept out because they look private.")
     return out
-
 
 
 def _still_waiting(con, ids: list[int]) -> list[int]:
@@ -126,6 +128,7 @@ def _read_waiting_for_ai(ctx, source_id: int, allow_private: bool) -> dict:
             ctx.checkpoint()
             time.sleep(min(CHECK_S, max(0.0, until - time.monotonic())))
         pause = min(pause * 2, AI_RETRY_MAX_S)
+
 
 def _refresh_example(_world) -> dict:
     """A made-up project added by hand and not read yet, which the refresh reads, for gate G9."""

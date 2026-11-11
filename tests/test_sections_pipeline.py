@@ -17,6 +17,7 @@ import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from test_ingest import home
 
 from jobhunt import ai, record
+from jobhunt.ai import hal_gateway
 from jobhunt.core import events, runner
 from jobhunt.ingest import engine, frontmatter
 from jobhunt.ingest import tidy as ingest_tidy
@@ -343,6 +344,20 @@ class Pipeline(unittest.TestCase):
             with reader("document", made=AiAway("document", fails=0)) as again:
                 done = runner.run(actions.KIND, params={"ids": ids, "_carry_on_from": "an-earlier-read"})
         self.assertEqual((done["result"]["read"], again.calls), (1, 1))
+
+    def test_the_action_reads_as_batch_work_so_it_gives_the_card_up(self):
+        """Regression: the read held Hal's gateway as a service, which kept gpu-light's batch jobs off the card."""
+        seen = []
+
+        class Watching(AiAway):
+            def read(self, source):
+                seen.append(hal_gateway._batch.get())
+                return super().read(source)
+
+        with home() as (con, _, _), reader("document", made=Watching("document", fails=0)):
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])["added"]
+            runner.run(actions.KIND, params={"ids": ids})
+        self.assertEqual(seen, [True])
 
 
 if __name__ == "__main__":

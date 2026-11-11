@@ -90,7 +90,8 @@ def _build(name: str) -> Backend:
     if name == "hal":
         from .hal_gateway import GatewayBackend
 
-        return GatewayBackend(settings.get("ai.hal_url"), settings.get("ai.hal_token_file"))
+        return GatewayBackend(settings.get("ai.hal_url"), settings.get("ai.hal_token_file"),
+                              settings.get("ai.hal_batch_token_file"))
     if name == "claude_cli":
         from .claude_cli import ClaudeCLIBackend
 

@@ -297,7 +297,8 @@ comes from their settings.
 
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks
 the OpenAI format), `ai/hal_gateway.py` (the Hal suite's model gateway: the same format plus the owner token
-read from `ai.hal_token_file` at each call) and `ai/claude_cli.py` (Claude Code on the person's own subscription: prompt on stdin,
+read from `ai.hal_token_file` at each call; inside `as_batch()`, which `record.sources` wraps its reads in,
+the batch token from `ai.hal_batch_token_file`, and a 503 `gpu_busy` is `LLMUnavailable(kind="gpu_busy")`) and `ai/claude_cli.py` (Claude Code on the person's own subscription: prompt on stdin,
 system prompt in a file deleted after the call, tools off). The default is Hal's gateway when it answers
 with the stored token, else the local model on Linux when Ollama answers, else Claude. With Hal chosen a
 down gateway is an error in words, never a call to Claude. Local calls also hold a gpu-light claim
@@ -1225,7 +1226,8 @@ people). Readers only take facts out of a source, within that frame.
   (`AI_GONE`). Carried on after a restart it reads only sources still `new` or `reading`.
   `POST /api/v2/record/read-waiting` (`jobhunt sources read waiting`) reads every waiting source; the command
   stops the read and exits 75 on SIGUSR2, SIGTERM or SIGINT, so it runs as a gpu-light batch job that yields
-  the graphics card and is run again later. The rules read every CV into junk cards while the model was
+  the graphics card and is run again later. The reads go to Hal's gateway as batch work (`as_batch()`), so
+  the gateway's claim for them is `batch`, not `service`, and does not keep other batch jobs off the card. The rules read every CV into junk cards while the model was
   stopped (2026-11-11). Tests answer the readers with `tests/support/reader_ai.py`.
 - `store` keeps `record_sources` and `record_source_files` (migration 0028; not `sources`, which 0012 gave to
   job sites). Uploads are copied to `data/record-sources/<id>/`.
