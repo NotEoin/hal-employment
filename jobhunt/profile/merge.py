@@ -442,6 +442,9 @@ LEVELS = (("pgce", r"\bpgce\b|postgraduate certificate in education"),
           ("btec", r"\bbtec\b"),
           ("gcse", r"\bi?gcses?\b"),
           ("diploma", r"\bdiploma\b"))
+LEVELS_BY_NAME = dict(LEVELS)
+# Levels a qualification's name only hints at: a "Diploma" may be an Access, BTEC or foundation diploma.
+VAGUE_LEVELS = {"diploma"}
 # Words that say what a qualification is rather than what it is in: left out when subjects are compared.
 LEVEL_WORDS = {"bsc", "ba", "beng", "bed", "bmus", "msc", "ma", "mres", "mphil", "mba", "meng", "phd", "honours",
                "hons", "degree", "bachelor", "bachelors", "master", "masters", "of", "in", "with", "and", "science",
@@ -496,7 +499,15 @@ def _same_education(a: dict, b: dict) -> bool:
     shared = bool(_subject_words(a) & _subject_words(b))
     if ia and ib and not (a.get("qualification") and b.get("qualification")):
         return True     # modules from course notes, with no qualification named, belong to the one studied there
+    if la and lb and la != lb and {la, lb} & VAGUE_LEVELS and ia and ib:
+        # "Diploma" there says less than the "Access to HE Diploma" there: one course when the subject or the
+        # dates agree (a CV wrote "Diploma, Computing, Kingston College" beside the Access card, 2026-11-11)
+        vague, named = (a, b) if la in VAGUE_LEVELS else (b, a)
+        said = re.search(LEVELS_BY_NAME[level(vague.get("qualification", ""))], _plain(named.get("qualification", "")))
+        return bool(said) and (shared or shared_months(a, b) > 0)
     if la and lb:
+        if la == lb and la in VAGUE_LEVELS and ia and ib:
+            return shared or shared_months(a, b) > 0      # two diplomas at one college may be two courses
         return la == lb and (bool(ia and ib) or shared)
     if ia and ib:
         return shared or shared_months(a, b) > 0

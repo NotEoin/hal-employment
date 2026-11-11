@@ -372,6 +372,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **One course for one diploma.** A CV that wrote "Diploma, Computing" at the college where another CV
+  wrote "Access to Higher Education Diploma" made two course cards. A plain diploma now joins the named
+  one at the same place when the subject or the dates agree.
+
 - **Transcripts fill in your course.** A transcript or HEAR added from a sorted folder, with no course
   chosen, made a course card of its own from its headers, such as "University Student Number ...", and read
   the attempts column as each module's mark. Now papers with no course go on the course they name (its

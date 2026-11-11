@@ -400,6 +400,19 @@ class Store(unittest.TestCase):
         with self.assertRaises(ValueError):
             edu("Sources/Coursework/e.md", qualification="Dissertation (HIS3020)", institution="University of Wexley")
 
+    def test_a_plain_diploma_is_the_named_diploma_studied_there_at_the_same_time(self):
+        """A CV's "Diploma, Computing, Kingston College" stayed a card beside the Access to HE Diploma (2026-11-11)."""
+        def edu(source, **fields):
+            return store.add_found(self.con, "education", fields, ev(source, "cv", "Computing"))
+        access = edu("Sources/CVs and letters/a.md", qualification="Access to Higher Education Diploma",
+                     subject="Computing", institution="Fenbridge College", start="2022-09", end="2023-07")
+        self.assertEqual(edu("Sources/CVs and letters/b.md", qualification="Diploma", subject="Computing",
+                             institution="Fenbridge College", start="2022-09", end="2023-07"), access)
+        self.assertNotEqual(edu("Sources/CVs and letters/c.md", qualification="Diploma", subject="Art",
+                                institution="Fenbridge College", start="2019-09", end="2020-07"), access)
+        self.assertNotEqual(edu("Sources/CVs and letters/d.md", qualification="Diploma", subject="Computing",
+                                institution="Wexley College", start="2022-09", end="2023-07"), access)
+
     def test_modules_from_course_notes_join_the_qualification_studied_there(self):
         degree = store.add_found(self.con, "education",
                                  {"qualification": "BA History", "institution": "Wexley University"},
