@@ -10,7 +10,7 @@ import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support.fake_ai import fake_ai
 from test_ingest import home
 from test_sections_sort import sorted_folder
-from test_sections_sorter import history_dump
+from test_sections_sorter import history_dump, put
 
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import sort_review, sorts
@@ -36,6 +36,21 @@ class CoursesHalFound(unittest.TestCase):
             self.assertEqual(sort_review.courses_found(con, sort_id), [], "a course with its card is no longer listed")
             waiting = [r for r in sorts.rows(con, sort_id, limit=sorts.PAGE_MAX)["rows"] if r["needs_card"]]
             self.assertEqual(waiting, [], "every file in its folders, and the rest, found the card")
+
+    def test_accepting_one_course_leaves_another_courses_files_waiting_for_their_own(self):
+        # regression: making the first course's card gave every other course's files to it, as "the only card"
+        # (an Access diploma's coursework landed on the degree, 2026-11-11)
+        with home() as (con, _vault, files), fake_ai(NONE):
+            folder = history_dump(files)
+            for week in (1, 2):
+                put(folder, f"Access to Humanities/Week {week} notes.md", f"# Week {week}\n\nReading old maps.\n")
+            sort_id = sorted_folder(con, folder)
+            sorts.accept(con, sort_id)
+            found = {c["title"]: c["key"] for c in sort_review.courses_found(con, sort_id)}
+            self.assertEqual(len(found), 2, found)
+            sort_review.accept_course(con, sort_id, found["BA History"])
+            left = [c["title"] for c in sort_review.courses_found(con, sort_id)]
+            self.assertEqual(len(left), 1, "the other course is still offered, with its files")
 
     def test_a_renamed_course_keeps_the_persons_words_and_an_unknown_one_is_refused(self):
         with home() as (con, _vault, files), fake_ai(NONE):

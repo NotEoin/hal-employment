@@ -35,6 +35,7 @@ import json
 import logging
 import shutil
 import sqlite3
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
@@ -609,13 +610,14 @@ def star_projects(con: sqlite3.Connection, sort_id: int) -> list[int]:
     return starred
 
 
-def rematch(con: sqlite3.Connection, sort_id: int) -> int:
+def rematch(con: sqlite3.Connection, sort_id: int, skip: Iterable[str] = ()) -> int:
     """Finds a card again for each proposal still waiting for one (the cards an accepted CV gave); returns how
-    many found one."""
+    many found one. Rows under a folder in `skip` (a course still waiting for its own card) keep waiting."""
     found = 0
+    skip = tuple(folder + "/" for folder in skip)
     for r in con.execute("SELECT * FROM record_sort_rows WHERE sort_id = ? AND state = 'proposed' AND "
                          "target_id IS NULL AND section != ''", (sort_id,)).fetchall():
-        if not sorter.needs_card(r["section"], None):
+        if not sorter.needs_card(r["section"], None) or r["rel"].startswith(skip):
             continue
         p = sorter.Proposal(Path(r["path"]), r["rel"], r["held"], section=r["section"], doc_kind=r["doc_kind"],
                             mtime=_ts(r["mtime"]))

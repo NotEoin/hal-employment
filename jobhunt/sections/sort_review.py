@@ -103,7 +103,8 @@ def accept_course(con: sqlite3.Connection, sort_id, key: str, words: dict | None
     LookupError when the sort has no such course (any more); ValueError when the words do not make a course.
     """
     s = sorts.row_of(con, sort_id)
-    course = next((c for c in courses_found(con, s["id"]) if c["key"] == key), None)
+    found = courses_found(con, s["id"])
+    course = next((c for c in found if c["key"] == key), None)
     if course is None:
         raise LookupError("Hal found no such course in this sort. It may have its card already.")
     words = words or {}
@@ -121,7 +122,8 @@ def accept_course(con: sqlite3.Connection, sort_id, key: str, words: dict | None
                                  "'proposed' AND target_id IS NULL AND section IN ('lecture', 'coursework') AND "
                                  "substr(rel, 1, ?) = ?", (card["id"], s["id"], len(folder) + 1,
                                                           folder + "/")).rowcount
-    return {"card": card, "matched": given + sorts.rematch(con, s["id"])}
+    others = [folder for c in found if c is not course for folder in c["keys"]]
+    return {"card": card, "matched": given + sorts.rematch(con, s["id"], skip=others)}
 
 
 # Notes about the whole sort -------------------------------------------------------------------------------
