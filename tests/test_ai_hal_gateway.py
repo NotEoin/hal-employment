@@ -37,6 +37,7 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
     seen: ClassVar[list] = []
     remote_reply: ClassVar[bool] = False
     redirect: ClassVar[bool] = False
+    aliases: ClassVar[list] = []
 
     def log_message(self, *args):
         pass
@@ -66,8 +67,9 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        self._send(200, {"data": [{"id": "made-up-online", "owned_by": "remote:cloud.example.invalid"},
-                                  {"id": "made-up-model", "owned_by": "ollama"}]})
+        listed = [{"id": "made-up-online", "owned_by": "remote:cloud.example.invalid"},
+                  {"id": "made-up-model", "owned_by": "ollama"}]
+        self._send(200, {"data": listed + [{"id": a, "owned_by": "ollama"} for a in type(self).aliases]})
 
     def do_POST(self):
         self.rfile.read(int(self.headers["Content-Length"]))
@@ -81,6 +83,7 @@ class Gateway(InHome):
         _Gateway.seen = []
         _Gateway.remote_reply = False
         _Gateway.redirect = False
+        _Gateway.aliases = []
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Gateway)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.addCleanup(self.httpd.server_close)
@@ -117,6 +120,13 @@ class Gateway(InHome):
         out = be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
         self.assertEqual(out.text, "made-up answer")
         self.assertEqual(_Gateway.seen[-1], ("/v1/chat/completions", f"Bearer {TOKEN}"))
+
+    def test_each_job_asks_for_the_gateway_alias_that_fits_it(self):
+        """Regression: every job got the gateway's first model, so prose went to hal-chat, not hal-writer."""
+        _Gateway.aliases = ["hal-chat", "hal-writer"]
+        be = GatewayBackend(self.url, self.token)
+        self.assertEqual([be.default_model(r) for r in ("writer", "checker", "quick")],
+                         ["hal-writer", "hal-chat", "hal-chat"])
 
     def test_online_models_behind_the_gateway_are_never_offered(self):
         be = GatewayBackend(self.url, self.token)

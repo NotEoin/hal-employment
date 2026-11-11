@@ -16,6 +16,10 @@ The gateway always listens on a Unix socket in Hal's runtime directory, and on T
 is there, so Hal mode works without turning the TCP listener on. A test run only looks in
 `HAL_RUNTIME_DIR`, never the real runtime directory, so no test meets a live Hal.
 
+Each of Hal's jobs asks for the gateway's role alias that fits it (`ROLE_ALIASES`): the writer asks for
+`hal-writer`, the model Hal's tuning picked for prose, and the checker and quick jobs for `hal-chat`. A
+gateway that does not list the alias gets its first model, as any OpenAI-compatible server does.
+
 The gateway can also front an online model (a backend with `allow_remote = true`; it lists such models as
 `owned_by: "remote:<host>"` and marks each reply with `X-Hal-Remote`). Hal mode promises a local model and
 never Claude, so this backend leaves those models out of its list, refuses to ask one by name, and refuses
@@ -133,6 +137,9 @@ def loose_mode_warning(path: str | Path) -> str | None:
             f"(mode {stat.S_IMODE(mode):04o}).")
 
 
+ROLE_ALIASES = {"writer": "hal-writer", "checker": "hal-chat", "quick": "hal-chat"}   # Hal's role -> alias
+
+
 class GatewayBackend(OpenAICompatBackend):
     """Hal's model gateway at `ai.hal_url`, with the owner token read from `token_file`."""
 
@@ -181,6 +188,11 @@ class GatewayBackend(OpenAICompatBackend):
             return [m["id"] for m in self._listed() if not self._remote(m)]
         except (LLMUnavailable, urllib.error.HTTPError):
             return []
+
+    def default_model(self, role: str) -> str:
+        """The gateway's alias for `role` (`hal-writer` for the writer), else its first model."""
+        alias = ROLE_ALIASES.get(role)
+        return alias if alias and alias in self.models() else super().default_model(role)
 
     def chat(self, req: ChatRequest, model: str) -> ChatResult:
         """Asks `model` through the gateway; refuses before sending when the gateway lists it as online."""

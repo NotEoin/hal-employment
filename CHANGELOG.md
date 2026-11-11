@@ -363,6 +363,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Letters and CVs use Hal's writing model.** With Hal's brain set to **Hal's local model**, every job asked
+  the gateway for whichever model it listed first, so cover letters and CVs were written by Hal's chat model.
+  Writing now asks for `hal-writer` and checking for `hal-chat`, the models you set for each in `hal tune`.
 - **Adding to your record works before setup is done.** If you skipped setup, Hal had never made your record
   folder, and adding what you accepted from **Sort a big folder for me** failed with "no employment record
   at ...". Adding files or a sort now makes the folder first, as setup does.
