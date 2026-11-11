@@ -17,6 +17,8 @@ class CoursesFromFolders(unittest.TestCase):
         self.assertEqual((c.qualification, c.subject, c.module), ("BA", "History", "HIS2051 Early Modern Europe"))
         c = sort_courses.course_of("Study/Access Humanities/Lectures/week 1 notes.md")
         self.assertEqual((c.qualification, c.subject), ("Access", "Humanities"))
+        c = sort_courses.course_of("Study/access to humanities/Lectures/week 1 notes.md")
+        self.assertEqual((c.qualification, c.subject), ("Access", "Humanities"), "not 'access', 'to humanities'")
 
     def test_with_no_degree_folder_the_folder_holding_years_or_modules_is_the_course(self):
         c = sort_courses.course_of("Dump/Fenwick University/Year 1/notes.md")

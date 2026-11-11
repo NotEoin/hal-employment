@@ -105,17 +105,23 @@ def _degree(word: str) -> str:
 
 def split_qualification(name: str) -> tuple[str, str]:
     """A qualification folder's name as (qualification, subject): "Computer Science BsC (Hons)" is
-    ("BSc (Hons)", "Computer Science"), "Access Humanities" is ("Access", "Humanities")."""
+    ("BSc (Hons)", "Computer Science"), "Access Humanities" and "access to humanities" are ("Access", "Humanities")."""
     name = " ".join(name.split())
     first, _, rest = name.partition(" ")
     if not _degree(first) and (merge.level(first) or QUALIFICATION.match(first)):
-        return first, rest.strip()
+        subject = re.sub(r"^(?:to|in|of)\s+", "", rest.strip(), flags=re.IGNORECASE)
+        return _capital(first), _capital(subject)
     words = HONS.sub(" ", name).split()
     found = next((_degree(w) for w in words if _degree(w)), "")
     if not found:
         return name, ""
     hons = " (Hons)" if HONS.search(name) else ""
     return found + hons, " ".join(w for w in words if not _degree(w))
+
+
+def _capital(words: str) -> str:
+    """`words` with a capital first letter, as a folder named in lower case ("access to computing") is shown."""
+    return words[:1].upper() + words[1:]
 
 
 def course_words(qualification: str, subject: str, places: Iterable[str] = ()) -> tuple[str, tuple[str, ...]]:
