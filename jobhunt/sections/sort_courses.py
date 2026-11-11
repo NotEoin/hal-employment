@@ -64,6 +64,10 @@ DEGREE_IN_TEXT = re.compile(r"(?<![A-Za-z])(?P<q>B\.?Sc|B\.?A|B\.?Eng|LLB|M\.?Sc
 INSTITUTION_IN_TEXT = re.compile(r"(?:University|College) of [A-Z][A-Za-z]+(?:\s+(?:upon\s+)?[A-Z][A-Za-z]+)*|"
                                  r"[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*\s+(?:University|College)")
 MODULE_DASH = re.compile(r"^(?P<name>.+?)\s+-\s+(?P<code>[A-Za-z]{2,5}\s?\d{3,5}[A-Za-z]?)$")
+CODE_DASH = re.compile(r"^(?P<code>[A-Za-z]{2,5}\s?\d{3,5}[A-Za-z]?)\s+-\s+(?P<name>.+)$")
+MODULE_CODES = re.compile(r"\b[A-Za-z]{2,5}\s?\d{3,5}\b")
+# A folder named with a student number ("c3046604 CS1032 practical report") holds one piece of work, not a module
+STUDENT_NUMBER = re.compile(r"\b[a-z]?\d{7,9}\b", re.IGNORECASE)
 UNI = re.compile(r"(?<![a-z])(?:uni|universit(?:y|ies)|college|school|academy|polytechnic|conservatoire)"
                  r"(?![a-z])", re.I)
 # A folder that only holds the modules, which names no course: the course is the folder above it.
@@ -155,7 +159,25 @@ def _module(name: str) -> str:
     """A module folder's name as a module ("CS2041 Databases"), or "" when it names no module."""
     if m := MODULE_DASH.match(name.strip()):
         return f"{m['code'].upper().replace(' ', '')} {m['name'].strip()}"
-    return name.strip() if merge.module_code(name) and not _qualification(name) else ""
+    if m := CODE_DASH.match(name.strip()):
+        return f"{m['code'].upper().replace(' ', '')} {m['name'].strip()}"
+    if not merge.module_code(name) or _qualification(name) or STUDENT_NUMBER.search(name):
+        return ""
+    return name.strip()
+
+
+def _one_a_code(modules: list[str]) -> list[str]:
+    """`modules` with one name a module code: the longest, so a bare "CSC2031" folds into "CSC2031 Security
+    Programming"; names with no single code are kept as they are."""
+    best: dict[str, str] = {}
+    out = []
+    for name in modules:
+        code = merge.module_code(name)
+        if not code or name.count(code) != 1 or len(MODULE_CODES.findall(name)) > 1:
+            out.append(name)
+        elif code not in best or len(name) > len(best[code]):
+            best[code] = name
+    return sorted(out + list(best.values()))
 
 
 def _module_in(parts: tuple[str, ...], start: int) -> dict:
@@ -295,5 +317,5 @@ def courses_found(rows: Iterable[tuple[str, str]], known: Iterable[dict] = (),
     for found in out:
         found.pop("_words", None)
         found["title"] = _title(found)
-        found["modules"].sort()
+        found["modules"] = _one_a_code(found["modules"])
     return sorted(out, key=lambda f: (-f["files"], f["title"]))

@@ -26,6 +26,15 @@ class CoursesFromFolders(unittest.TestCase):
                          "a folder that only holds the modules names no course")
         self.assertIsNone(sort_courses.course_of("Dump/Notes/smart contract.md"))
 
+    def test_a_module_written_several_ways_is_listed_once_and_one_pieces_folder_is_no_module(self):
+        # regression: a real degree listed "CSC2031", "CSC3632 - System and Network Security" and its two other
+        # spellings as separate modules, and "c3046604 CS1032 practical report" as one (2026-11-11)
+        found = sort_courses.courses_found([
+            (f"D/BA History/{folder}/week 1.md", "2022-10-03T09:00:00Z") for folder in (
+                "HIS2040", "HIS2040 Archival Methods", "HIS2051 - Early Modern Europe", "HIS2051 Early modern Europe",
+                "b1234567 HIS2040 seminar essay")])
+        self.assertEqual(found[0]["modules"], ["HIS2040 Archival Methods", "HIS2051 Early Modern Europe"])
+
     def test_a_folder_named_master_alone_is_no_masters_degree(self):
         # Regression: a notes vault at "obsidian/Master" was proposed as a course (2026-11-09).
         self.assertIsNone(sort_courses.course_of("Dump/obsidian/Master/Networks/Subnetting.md"))
