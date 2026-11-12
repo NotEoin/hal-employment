@@ -25,9 +25,11 @@ The gateway always listens on a Unix socket in Hal's runtime directory, and on T
 is there, so Hal mode works without turning the TCP listener on. A test run only looks in
 `HAL_RUNTIME_DIR`, never the real runtime directory, so no test meets a live Hal.
 
-Each of Hal's jobs asks for the gateway's role alias that fits it (`ROLE_ALIASES`): the writer asks for
-`hal-writer`, the model Hal's tuning picked for prose, and the checker and quick jobs for `hal-chat`. A
-gateway that does not list the alias gets its first model, as any OpenAI-compatible server does.
+Every job asks for `hal-writer`, the model Hal's tuning picked for prose (`ROLE_ALIASES`), and the checker
+and quick jobs fall back to `hal-chat` on a gateway with no writer; a gateway that lists neither gets its
+first model, as any OpenAI-compatible server does. Checking went to `hal-chat` once, but on a 24 GB card
+beside the resident writer the gateway handed it to Ollama with no room on the card, every layer went to
+system RAM, and each CV read timed out after 300 s (2026-11-12). One model also keeps both writer slots busy.
 
 The gateway can also front an online model (a backend with `allow_remote = true`; it lists such models as
 `owned_by: "remote:<host>"` and marks each reply with `X-Hal-Remote`). Hal mode promises a local model and
@@ -153,7 +155,8 @@ def loose_mode_warning(path: str | Path) -> str | None:
             f"(mode {stat.S_IMODE(mode):04o}).")
 
 
-ROLE_ALIASES = {"writer": "hal-writer", "checker": "hal-chat", "quick": "hal-chat"}   # Hal's role -> alias
+# Hal's role -> the gateway aliases it asks for, first listed first
+ROLE_ALIASES = {"writer": ("hal-writer",), "checker": ("hal-writer", "hal-chat"), "quick": ("hal-writer", "hal-chat")}
 
 _batch: contextvars.ContextVar[bool] = contextvars.ContextVar("hal_gateway_batch", default=False)
 
@@ -254,9 +257,10 @@ class GatewayBackend(OpenAICompatBackend):
         return 0
 
     def default_model(self, role: str) -> str:
-        """The gateway's alias for `role` (`hal-writer` for the writer), else its first model."""
-        alias = ROLE_ALIASES.get(role)
-        return alias if alias and alias in self.models() else super().default_model(role)
+        """The first of `role`'s aliases (`ROLE_ALIASES`) the gateway lists, else its first model."""
+        listed = self.models()
+        alias = next((a for a in ROLE_ALIASES.get(role, ()) if a in listed), None)
+        return alias or super().default_model(role)
 
     def chat(self, req: ChatRequest, model: str) -> ChatResult:
         """Asks `model` through the gateway; refuses before sending when the gateway lists it as online."""

@@ -170,7 +170,11 @@ class Gateway(InHome):
         _Gateway.aliases = ["hal-chat", "hal-writer"]
         be = GatewayBackend(self.url, self.token)
         self.assertEqual([be.default_model(r) for r in ("writer", "checker", "quick")],
-                         ["hal-writer", "hal-chat", "hal-chat"])
+                         ["hal-writer", "hal-writer", "hal-writer"],
+                         "checking on hal-chat beside the writer ran on the CPU and timed out (2026-11-12)")
+        _Gateway.aliases = ["hal-chat"]
+        self.assertEqual([be.default_model(r) for r in ("writer", "checker")], ["made-up-model", "hal-chat"],
+                         "with no writer, checking still finds the chat model")
 
     def test_the_gateway_says_how_many_requests_a_model_serves_at_once(self):
         be = GatewayBackend(self.url, self.token)
