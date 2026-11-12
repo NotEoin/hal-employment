@@ -485,6 +485,25 @@ class ClaimWriter(FakeWriter):
         return super().reply(system, user)
 
 
+class Refusals(unittest.TestCase):
+    """Regression: the AI's refusal went out as the cover letter and as form answers (persona evals,
+    2026-11-12): "I cannot complete this request because the Evidence map is empty"."""
+
+    def test_a_refusal_is_left_out_and_flagged_and_real_drafts_are_kept(self):
+        letter = "I cannot fulfil this request because the Evidence map and CV facts provided are empty."
+        answers = [{"question": "Which novel do you admire?",
+                    "answer": "I have no facts provided about a novel, so I cannot answer this question."},
+                   {"question": "When can you start?", "answer": "I cannot wait to start in January."}]
+        message = "Dear Amira, I catalogued 300 letters at a made-up archive."
+        kept_letter, kept_message, kept_answers, flags = pack.without_refusals(letter, message, answers)
+        self.assertEqual(kept_letter, "")
+        self.assertEqual(kept_message, message)
+        self.assertEqual([a["answer"] for a in kept_answers], ["", "I cannot wait to start in January."])
+        self.assertEqual(len(flags), 2)
+        self.assertIn("Cover letter tab", flags[0])
+        self.assertIn("Which novel do you admire?", flags[1])
+
+
 class Claims(unittest.TestCase):
     def test_the_check_reads_the_advert_and_brief_as_the_employers_own_words(self):
         # most "Check before sending" items in real packs were the employer's own facts restated (2026-11-06)

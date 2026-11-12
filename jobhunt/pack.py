@@ -1303,6 +1303,35 @@ def has_facts(con) -> bool:
     return bool(own) or profile_writing.checked_any(con)
 
 
+# The AI declining the task rather than drafting: "I cannot complete this request because the Evidence map is
+# empty", "I have no facts provided about a novel" (persona evals, 2026-11-12). "I cannot wait to start" is not.
+REFUSAL = re.compile(r"\bI (?:cannot|can't|can not|am unable to|am not able to) (?:complete|fulfil+|write|answer|"
+                     r"draft|provide|help with) (?:this|that|the|your|a)\b|\bas an AI\b|\bno (?:facts|information|"
+                     r"evidence) (?:was |were |is |are )?(?:provided|given|available)\b|\b(?:Evidence map|CV facts)\b"
+                     r"[^.]{0,60}\bempty\b", re.I)
+REFUSED_LETTER = ("NO LETTER: Hal's AI would not write a cover letter for this job from what it had, so there is "
+                  "none. Write one on the Cover letter tab, or check more of your record and ask again.")
+REFUSED_ANSWER = "NO ANSWER: Hal's AI would not answer \"{q}\" from what it had. Answer it yourself on the Answers tab."
+REFUSED_MESSAGE = "NO MESSAGE: Hal's AI would not write the message from what it had. Write it on the Message tab."
+
+
+def without_refusals(letter: str, message: str, answers: list[dict]) -> tuple[str, str, list[dict], list[str]]:
+    """The drafts with any refusal by the AI left empty, and a "Check before sending" line for each, so a refusal
+    never goes to an employer as if it were the person's words."""
+    flags = []
+    if REFUSAL.search(letter or ""):
+        letter, flags = "", [REFUSED_LETTER]
+    if REFUSAL.search(message or ""):
+        message, flags = "", [*flags, REFUSED_MESSAGE]
+    kept = []
+    for a in answers:
+        if REFUSAL.search(a.get("answer") or ""):
+            flags.append(REFUSED_ANSWER.format(q=a.get("question", "")))
+            a = {**a, "answer": ""}
+        kept.append(a)
+    return letter, message, kept, flags
+
+
 def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     """Drafts the pack for one job and returns the pack's Markdown path; the log says how many model calls it
     made (`llm.counted`), the measure of a pack's cost on a local model.
@@ -1344,10 +1373,11 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
                           pairing=written["pairing"], paired=True, told=tuple(written.get("told", ())),
                           ranking=written.get("ranking"))
     message, answers = others["message"], others["answers"]
+    letter, message, answers, refused = without_refusals(letter, message, answers)
 
     variant, track = cv.tailor(job_text)
     pdf = cv.render(variant, out_dir)
-    flagged = written["flags"] + others["flags"]
+    flagged = refused + written["flags"] + others["flags"]
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"
     employer = (analysis.get("employer") or job["company"]) if ktp else job["company"]

@@ -456,6 +456,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The AI saying no is never sent as your words.** When the AI declined to write ("I cannot complete
+  this request..."), that text became the cover letter or a form answer. Hal now leaves that part empty
+  and says so first under **Check before sending**, so you write it yourself.
+
 - **No pack from nothing.** With no fact of yours checked and no CV added, Hal still wrote packs: some
   cover letters were the AI saying it had nothing to go on, and the line under your name, "Graduate",
   turned into a degree in the answers. Hal now writes nothing until it has something of yours: it says to
