@@ -212,7 +212,7 @@ def _profile_counts(items: list) -> dict:
 MADE_UP_PROFILE = {
     "counts": {k: _profile_counts(v) for k, v in PROFILE_ITEMS.items()},
     "kinds": [{"kind": k, "label": PROFILE_LABELS[k], "n": len(v),
-               "to_check": sum(i["state"] == "hal" for i in v)} for k, v in PROFILE_ITEMS.items()],
+               "to_check": sum(i["state"] == "hal" for i in v), "studied": 0} for k, v in PROFILE_ITEMS.items()],
     "basics": PROFILE_ITEMS["basic"], "links": PROFILE_ITEMS["link"],
     "to_check": sum(i["state"] == "hal" for v in PROFILE_ITEMS.values() for i in v),
     "conflicts": [{**PROFILE_CONFLICT, "items": [{"id": 1, "kind": "job", "title": "Collections volunteer",

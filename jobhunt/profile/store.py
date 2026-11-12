@@ -857,6 +857,21 @@ def is_studied(item: dict) -> bool:
         strength.studied_only(item)
 
 
+def studied_count(con: sqlite3.Connection) -> int:
+    """How many skills nobody checked are `is_studied`, counted in SQL from each piece of evidence's strength as
+    `strength.of_evidence` decides it, as the Overview counts them on every load (6,216 in one degree)."""
+    studied = [s for s, v in strength.SECTION_STRENGTH.items() if v == strength.STUDIED]
+    other = [s for s, v in strength.SECTION_STRENGTH.items() if v != strength.STUDIED]
+    marks = lambda xs: ",".join("?" * len(xs))      # noqa: E731 - placeholders only; the sections are bound
+    not_studied = (f"NOT (COALESCE(s.section, '') IN ({marks(studied)}) OR (COALESCE(s.section, '') NOT IN "
+                   f"({marks(other)}) AND e.role = ?))")
+    return con.execute(f"""SELECT count(*) FROM profile_items i WHERE i.kind = 'skill' AND i.state = 'hal'
+                           AND i.origin != 'you' AND EXISTS (SELECT 1 FROM profile_evidence e WHERE e.item_id = i.id)
+                           AND NOT EXISTS (SELECT 1 FROM profile_evidence e LEFT JOIN record_sources s
+                                           ON s.id = e.source_id WHERE e.item_id = i.id AND {not_studied})""",
+                       (*studied, *other, strength.TAUGHT)).fetchone()[0]
+
+
 def is_usable(item: dict, tools: set[str]) -> bool:
     """True for a skill the person can stand behind: on one of their CVs, checked by them (confirmed, edited
     or added), or a tool of a project worth telling an employer about (`tools`, as `merge.skill_key` keys).

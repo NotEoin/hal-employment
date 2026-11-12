@@ -97,7 +97,8 @@ function Summary({ profile, onTab }) {
       <${Icon} n="check" c="s" />Check your record</button>
       <p class="small sub rec-line">Hal only uses the facts you have checked.</p></div>`}
     <ul class="rec-counts">${kinds.map(k => html`<li key=${k.kind}><button type="button" class="btn quiet small" onClick=${() => onTab(TAB_OF[k.kind])}>
-      <b>${k.label}</b></button> <span>${k.n}</span>${k.to_check > 0 && html` <${Chip} tone="warn">${k.to_check} to check<//>`}</li>`)}
+      <b>${k.label}</b></button> <span>${k.n}</span>${k.to_check > 0 && html` <${Chip} tone="warn">${k.to_check} to check<//>`}${k.studied > 0
+        && html` <span class="small sub">and ${k.studied} studied in your course</span>`}</li>`)}
       <li><button type="button" class="btn quiet small" onClick=${() => onTab("inconsistencies")}><b>Inconsistencies</b></button>
         <span>${open}</span>${open > 0 && html` <${Chip} tone="warn">${open} to sort out<//>`}</li></ul>
     ${(profile.basics.length > 0 || profile.links.length > 0) && html`<dl class="kv rec-kv">

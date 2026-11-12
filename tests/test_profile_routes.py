@@ -85,6 +85,20 @@ class ProfileRoutes(unittest.TestCase):
         self.assertEqual((conflict["field"], [v["words"] for v in conflict["values"]]),
                          ("start", ["September 2023", "October 2023"]))
 
+    def test_skills_only_lectures_name_are_counted_apart_and_never_to_check(self):
+        # Overview said "6722 things to check" when 6,216 were lecture topics the check page sets apart (2026-11-12)
+        self.seed()
+        with closing(db.connect()) as con:
+            for name in ("Two-phase commit", "Lamport clocks"):
+                store.add_found(con, "skill", {"name": name}, {"source_rel": "Courses/Week 9.md", "quote": name,
+                                                               "doc_type": "notes", "field": "", "role": "taught"})
+            studied = sum(store.is_studied(i) for i in store.items(con, "skill"))
+            self.assertEqual(store.studied_count(con), studied)
+        page = self.c.get("/api/v2/profile").json()
+        skills = next(k for k in page["kinds"] if k["kind"] == "skill")
+        self.assertEqual((skills["n"], skills["to_check"], skills["studied"]), (1, 1, 2))
+        self.assertEqual(page["to_check"], 4)
+
     def test_a_kind_lists_its_items_with_sources_that_open_their_files(self):
         self.seed()
         page = self.c.get("/api/v2/profile/job").json()

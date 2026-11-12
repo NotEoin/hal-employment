@@ -319,7 +319,8 @@ changed.
 
 Your record has a tab for each part of your profile: **Work history**, **Education**, **Skills**,
 **Projects**, **Certificates and achievements** and **About you and links**. **Overview** shows how many
-things of each kind Hal found and how many are left to check, and is where you add your CVs. Each tab has
+things of each kind Hal found and how many are left to check (skills only your course material names are
+counted apart, as "studied in your course"), and is where you add your CVs. Each tab has
 its own place to add files: a job's documents, a course's coursework and papers, your projects, and
 **Documents**, which also lists the folder's contents and has **Ask your record**. See
 [Add your CVs, education, projects and documents](../howto/add-to-your-record.md).

@@ -283,6 +283,9 @@ class RecordPage(unittest.TestCase):
         studied.locator("summary").click()
         p.shows(studied.get_by_text("Two-phase commit"), "the lecture topic, folded apart")
         self.clean(p)
+        p.open("record")
+        p.shows(p.page.get_by_text("and 1 studied in your course"), "the topics counted apart on Overview")
+        self.assertIn("1 thing to check", p.page.locator("#rec-sum-h").locator("..").inner_text())
 
     def test_a_long_keep_button_wraps_on_a_phone_and_the_page_never_scrolls_sideways(self) -> None:
         # "Keep Teams software project (degree module) (March 2025 to May 2025)" was 493 px wide on a 390 px

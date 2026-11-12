@@ -143,12 +143,14 @@ def _visible_first(items: list[dict]) -> list[dict]:
 def overview(req: Request) -> dict:
     """Counts of each kind, the basics and links, and every open conflict."""
     counts = store.counts(req.con)
+    # skills only course material names are folded apart and never asked about (`check.queue`'s "studied")
+    studied = {k: store.studied_count(req.con) if k == "skill" else 0 for k in counts}
     return {"counts": counts,
-            "kinds": [{"kind": k, "label": LABELS[k], "n": c["total"] - c["hidden"], "to_check": c["hal"]}
-                      for k, c in counts.items()],
+            "kinds": [{"kind": k, "label": LABELS[k], "n": c["total"] - c["hidden"] - studied[k],
+                       "to_check": c["hal"] - studied[k], "studied": studied[k]} for k, c in counts.items()],
             "basics": [with_files(i) for i in store.items(req.con, "basic", hidden=False)],
             "links": [with_files(i) for i in store.items(req.con, "link", hidden=False)],
-            "to_check": sum(c["hal"] for c in counts.values()),
+            "to_check": sum(c["hal"] for c in counts.values()) - sum(studied.values()),
             "conflicts": named(req.con, conflicts.listing(req.con)),
             "resolved": named(req.con, conflicts.listing(req.con, "resolved")[::-1])}
 
