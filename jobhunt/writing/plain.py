@@ -30,7 +30,10 @@ Design decisions, each with its reason:
   was "This experience matters for the role because it demonstrates my ability to ..." (2026-11-08). The
   sentence that ties a piece of work to the job should name what in the job it helps with instead. Letter
   openings said the role "matches my experience" or "fits my recent work" (2026-11-08), so "matches my",
-  "fits my", "suits my", "in line with my" and their kin are stock too.
+  "fits my", "suits my", "in line with my" and their kin are stock too. Every paragraph of a graded letter
+  closed by calling the work "useful for the technical challenges at <employer>" or "applicable to the
+  engineering challenges" (2026-11-12): work said to be useful, applicable or valuable for the employer's
+  challenges, environment or demands is stock too.
 - What the person is looking for ("I am seeking a role in backend, systems or applied AI", `GOAL`) is a
   problem: a letter is for one role, and the search settings and a CV's summary leaked into one (2026-11-08).
 - The settings' own wording reaches a request only as the person's plain values (`cv.status_line`); a
@@ -79,7 +82,10 @@ STOCK = re.compile(
     r"position|post|team)|demonstrates? my (?:ability|capacity|capability|skills?)|(?:this|that|the) experience "
     r"matters|(?:match(?:es)?|fits?|suits?|reflects?|mirrors?|complements?|(?:is |are )?in (?:line|keeping) with|"
     r"ties? in with|aligns? (?:directly |closely |well )?with|speaks? to|connects? (?:directly |well )?(?:to|with))"
-    r" (?:well |closely |directly |perfectly )?(?:with )?my)\b", re.I)
+    r" (?:well |closely |directly |perfectly )?(?:with )?my|"
+    r"(?:is|are|was|will be|would be|could be) (?:\w+ ){0,2}(?:useful|applicable|relevant|valuable|helpful|"
+    r"transferable|beneficial) (?:to|for|in|at) (?:[\w'-]+[ -]){0,4}?(?:challenges?|environment|demands|setting)|"
+    r"meet the challenges of (?:the|this|your) (?:role|job|position|post|team))\b", re.I)
 # What the person is looking for, as a CV's summary or the search settings say it: "seeking a role in ...".
 GOAL = re.compile(r"\b(?:seeking|looking for|searching for|hoping to find|aiming for)\s+(?:an?\s+|my\s+)?"
                   r"(?:[\w-]+\s+){0,3}?(?:roles?|positions?|jobs?|posts?|opportunit(?:y|ies)|placements?|"

@@ -23,6 +23,10 @@ What changed in each version, in plain words.
   An answer cut off at the cap is asked for once more, then Hal says plainly that it ran on; it is never used
   half-written.
 
+- **No more "useful for the challenges at ..." endings.** A letter's paragraphs each closed by calling the
+  work "useful for the technical challenges at" the employer, which says nothing. Hal now drafts such a
+  paragraph again, as it does for other stock phrases.
+
 - **Your dissertation is read, not its poster.** When a folder held a dissertation's poster or proposal
   beside the dissertation, the newest of them was taken as the course's one dissertation, and the
   dissertation itself could not be added. A poster, proposal, brief, plan or abstract is now coursework of

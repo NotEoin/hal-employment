@@ -578,6 +578,21 @@ class Stock(unittest.TestCase):
             self.assertTrue(plain.problems(said), said)
 
 
+    def test_work_said_to_be_useful_for_the_employers_challenges_is_stock(self):
+        # every paragraph of a graded letter closed this way: "This quantitative approach is applicable to the
+        # engineering challenges at Mako" (2026-11-12)
+        for said in ("This quantitative approach is applicable to the engineering challenges at Mako.",
+                     "My work with these algorithms is useful for the technical challenges at Mako.",
+                     "This experience of working at such a pace will be useful in the busy environment at Mako.",
+                     "These skills would be valuable in a fast-paced environment like yours.",
+                     "This will help me meet the challenges of the role."):
+            self.assertTrue(plain.problems(said), said)
+        for fine in ("The tests caught two timing faults before release.",
+                     "Mako writes its trading systems in C++ on Linux, the language I used most last year.",
+                     "I found the library useful for parsing packets."):
+            self.assertEqual(plain.problems(fine), [], fine)
+
+
 class Motive(unittest.TestCase):
     """Openings gave "matches my experience", led in with the advert's requirements, and told a project that a
     paragraph then told again (2026-11-08)."""
