@@ -1287,6 +1287,22 @@ def salutation(analysis: dict) -> str:
     return f"Dear {names[0]}," if names else "Dear Hiring Team,"
 
 
+class NothingChecked(RuntimeError):
+    """No card the person checked and no CV with entries: there is nothing true to write from."""
+
+
+NOTHING_CHECKED = ("Hal has nothing of yours to write from yet, so it wrote nothing for this job. Open Your record "
+                   "and press Check your record to confirm the facts Hal found, or add your CV on My CV, then try "
+                   "again.")
+def has_facts(con) -> bool:
+    """True when a draft has something of the person's to tell: a card they checked, or a CV fact beyond the line
+    under the name and the settings' status line. Hal's starter CV holds only "Graduate", which the writer took
+    for a degree."""
+    said = {cv.load().get("title", ""), cv.status_line()}
+    own = [line for line in cv.facts_text().splitlines() if line.strip() and line not in said]
+    return bool(own) or profile_writing.checked_any(con)
+
+
 def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     """Drafts the pack for one job and returns the pack's Markdown path; the log says how many model calls it
     made (`llm.counted`), the measure of a pack's cost on a local model.
@@ -1303,6 +1319,8 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     from . import documents
 
+    if not has_facts(con):
+        raise NothingChecked(NOTHING_CHECKED)
     job_text = _job_text(job)
     facts = cv.facts_text()
     out_dir = documents.pack_dir(job)

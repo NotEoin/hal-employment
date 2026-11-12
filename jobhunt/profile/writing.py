@@ -852,6 +852,18 @@ def module_names(con: sqlite3.Connection | None = None) -> list[str]:
             for m in it["fields"].get("modules") or [] if m.get("name")]
 
 
+WORK_KINDS = ("job", "education", "project", "achievement", "certificate")   # cards a draft can tell
+
+
+def checked_any(con: sqlite3.Connection | None = None) -> bool:
+    """True when the person checked or edited at least one card of work, study or achievement, so a draft has a
+    fact of theirs to tell (Hal's own database unless `con`)."""
+    if con is None:
+        with closing(db.connect()) as own:
+            return checked_any(own)
+    return any(it["state"] in USED_STATES for kind in WORK_KINDS for it in store.items(con, kind, hidden=False))
+
+
 def degrees(con: sqlite3.Connection | None = None) -> list[str]:
     """The qualification and subject of each education card not hidden ("BA (Hons) Imaginary Studies"), so a
     draft naming a degree the person does not hold is drafted again (`writing.paragraphs`); any state, as a

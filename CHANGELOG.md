@@ -456,6 +456,12 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **No pack from nothing.** With no fact of yours checked and no CV added, Hal still wrote packs: some
+  cover letters were the AI saying it had nothing to go on, and the line under your name, "Graduate",
+  turned into a degree in the answers. Hal now writes nothing until it has something of yours: it says to
+  open Your record and press **Check your record**, or to add your CV on **My CV**, and the queue of
+  prepared jobs waits too.
+
 - **Your original CV file is the one sent.** With My CV set to send your original file, applications
   still uploaded Hal's copy, reordered for the job. They now upload your own file, unchanged, in its own
   format, and the CV step says so. With **Adjust for each job** set to **No**, applications now send

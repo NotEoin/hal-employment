@@ -4,7 +4,8 @@ The queue is the open jobs with status 'ready'. While it holds fewer than `scori
 shown job among the kinds the person chose (`hidden_rule IS NULL`, at or above `scoring.min_show`) is
 screened by the AI when `scoring.screen` is on and, if it fits, gets a pack. Paid internships, placements
 and the other kinds are prepared like any job when the goal includes them; today's code never queued a
-graduate internship. Model work waits for the GPU.
+graduate internship. Model work waits for the GPU, and nothing is drafted while the person has no checked
+card and no CV (`pack.has_facts`): every pack would fail in turn.
 """
 from . import db, gpu, pack, screen
 from .core import settings
@@ -68,6 +69,9 @@ def step(con, report=lambda msg: None) -> tuple[bool, str]:
     job = con.execute(CANDIDATES, (min_score, RETRY_AFTER)).fetchone()
     if job is None:
         return False, f"{have} of {target} queued; no more jobs score {min_score:.0f} or above"
+    if not pack.has_facts(con):
+        return False, (f"{have} of {target} queued; nothing of yours to write from yet: check your record or add "
+                       "your CV")
     reason = gpu.busy()
     if reason:
         return False, f"{have} of {target} queued; {reason}"

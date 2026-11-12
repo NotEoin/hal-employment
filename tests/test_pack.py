@@ -214,6 +214,40 @@ def section(md: str, heading: str) -> str:
     return found.group(1) if found else ""
 
 
+class NothingToWriteFrom(unittest.TestCase):
+    """Regression: with no card checked and no CV, a pack was still written: refusals ("I cannot complete this
+    request because the Evidence map is empty") went out as cover letters, and the starter CV's "Graduate"
+    became a degree in every answer (persona evals, 2026-11-12)."""
+
+    def test_a_pack_stops_before_any_ai_call_and_says_what_to_do(self):
+        starter = {"title": "Graduate", "education": [], "experience": [], "projects": []}
+        with as_applicant(people.HUMANITIES) as a, mock.patch.object(cv, "load", lambda: starter), \
+                mock.patch.object(cv, "facts_text", lambda: cv.facts_text_of(starter)):
+            a.con.execute("UPDATE profile_items SET state = 'hal'")
+            a.con.commit()
+            job = add_job(a.con, "humanities_grad")
+            with self.assertRaises(pack.NothingChecked) as said:
+                pack.build(a.con, job["id"], use_web=False)
+        self.assertEqual(a.writer.log, [], "no model call is made")
+        self.assertIn("Check your record", str(said.exception))
+        self.assertIn("My CV", str(said.exception))
+
+    def test_one_checked_card_or_a_cv_with_entries_is_enough(self):
+        with as_applicant(people.HUMANITIES) as a:
+            a.con.execute("UPDATE profile_items SET state = 'hal'")
+            a.con.execute("INSERT INTO profile_items (kind, fields, state, origin, created, updated) VALUES "
+                          "('job', '{\"title\": \"Guide\", \"employer\": \"Made-up Museum\"}', 'confirmed', 'you', "
+                          "'2026-11-12T00:00:00Z', '2026-11-12T00:00:00Z')")
+            a.con.commit()
+            self.assertTrue(pack.has_facts(a.con))
+            a.con.execute("UPDATE profile_items SET state = 'hal'")
+            a.con.commit()
+            self.assertTrue(pack.has_facts(a.con), "the made-up CV's facts")
+            with mock.patch.object(cv, "facts_text", lambda: "Graduate"), \
+                    mock.patch.object(cv, "load", lambda: {"title": "Graduate"}):
+                self.assertFalse(pack.has_facts(a.con))
+
+
 class Letter(unittest.TestCase):
     def test_the_letter_follows_the_types_evidence_and_your_tone_and_length(self):
         with as_applicant(people.HUMANITIES) as a:
