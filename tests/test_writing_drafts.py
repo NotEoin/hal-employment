@@ -64,6 +64,15 @@ class Tools(unittest.TestCase):
         self.assertFalse(drafts.names_tool("a r value", "R"))
         self.assertTrue(drafts.names_tool("used c++ daily", "C++"))
 
+    def test_a_tool_named_like_a_plain_word_matches_only_in_its_capitals(self):
+        # "you use AI to make loans fairer" was checked as naming Make, a build tool of another project, and the
+        # paragraph was drafted again for it (2026-11-12)
+        self.assertFalse(drafts.names_tool("You use AI to make loans fairer.", "Make"))
+        self.assertTrue(drafts.names_tool("I wrote its Make rules and its Python.", "Make"))
+        self.assertFalse(drafts.names_tool("I react quickly to a spark of interest.", "React"))
+        self.assertTrue(drafts.names_tool("The front end is React.", "React"))
+        self.assertTrue(drafts.names_tool("I wrote python scripts.", "Python"), "a tool that is no plain word")
+
 
 # Made-up project cards with the context each one's card keeps (`profile.contexts`).
 PLACED = [{"kind": "project (personal project)", "name": "Tide gauge", "tools": [], "summary": "",

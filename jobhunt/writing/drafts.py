@@ -56,6 +56,11 @@ SIGNOFF_WORDS = 4          # a last line this short is a sign-off or a name, not
 ENDS = re.compile(r"[.!?:;)\]\"'\u2019]\s*$")
 FULL_STOP = re.compile(r"[.!?][\"')\u2019]?(?=\s|$)")
 SHORT_TOOL = 2             # a tool this short ("R", "Go") is matched only with its own capitals
+# Tools named like a plain English word, matched only with their own capitals: "you use AI to make loans fairer"
+# was checked as naming Make, another project's build tool (2026-11-12)
+WORD_TOOLS = frozenset({"ant", "chef", "dart", "elm", "ember", "express", "flask", "gin", "julia", "make", "meteor",
+                        "nest", "next", "pandas", "puppet", "react", "ruby", "rust", "salt", "spark", "spring",
+                        "swift", "vagrant"})
 
 
 def cut_off(text: str) -> bool:
@@ -74,9 +79,10 @@ def last_full_sentence(text: str) -> str:
 
 
 def names_tool(text: str, tool: str) -> bool:
-    """True when `text` names `tool` as a word ("C++" and "C#" included); short tools only in their capitals."""
+    """True when `text` names `tool` as a word ("C++" and "C#" included); short tools and tools named like a
+    plain word (`WORD_TOOLS`) only in their capitals."""
     tool = tool.strip()
-    flags = 0 if len(tool) <= SHORT_TOOL else re.I
+    flags = 0 if len(tool) <= SHORT_TOOL or tool.lower() in WORD_TOOLS else re.I
     return bool(tool) and re.search(rf"(?<![\w+#]){re.escape(tool)}(?![\w+#])", text or "", flags) is not None
 
 
