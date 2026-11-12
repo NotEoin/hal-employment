@@ -456,6 +456,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A letter's opening names only your degree's modules, beside the degree.** Openings listed module marks
+  after the reason for the employer, and one led with an Access diploma's credits next to a degree. Marks
+  now come from the course the opening describes, in the sentence that gives it.
+
 - **"Why do you want to work here?" answers hang together.** When the letter had already told the work that
   goes with Hal's reason about the employer, the answer joined that reason to unrelated work ("I am drawn
   to them because of their reach. I created a project that..."). It now goes through a task of the role

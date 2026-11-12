@@ -789,7 +789,8 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
     shape = paragraphs.letter(who.get("letter_words"), len(chosen))
     bodies = _letter_bodies(chosen, list(spare), shape, scope, who.get("letter_words"))
     told = tuple(b.story.name for b in bodies if b.text and b.story.name)
-    modules = planning.relevant_modules(profile_writing.marked_modules(), wanted,
+    course = scope.now.institution if scope.now else ""
+    modules = planning.relevant_modules(profile_writing.marked_modules(institution=course), wanted,
                                         "\n".join(b.story.words() for b in bodies if b.text))
     middle = tuple((b.story.name, b.text) for b in bodies if b.text)
     facts_said = letter_frame(who, job, scope, pairing, told, modules, middle)

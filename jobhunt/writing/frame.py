@@ -17,7 +17,9 @@ Design decisions, each with its reason:
   among it), a sentence restating the advert or said twice, and the writing rules' high hits.
 - A module the job's requirements name and no paragraph shows may be one clause of the opening, with its mark
   (`Facts.modules`, `plan.relevant_modules`): letters to an employer stressing security missed the person's
-  high marks in security modules (2026-11-08). It is never a paragraph of its own while projects exist.
+  high marks in security modules (2026-11-08). It is never a paragraph of its own while projects exist, comes
+  only from the course the opening describes, and goes in the sentence giving the course: openings ran marks
+  into the employer's fact and led with an Access diploma's credits (2026-11-12).
 - The opening's reason for this employer is one concrete thing about the employer (`motive_problems`,
   2026-11-08): its product, its mission or a fact from the company brief, in the writer's own words, with one
   specific word of the employer's fact. It names no project or job of the person's (`NAMES_WORK`): openings
@@ -96,8 +98,9 @@ class Facts:
         if self.told:
             lines.append(f"The letter's middle tells (never name or retell them): {'; '.join(self.told)}")
         if self.modules:
-            lines.append("Modules of the applicant's that this job asks about and no paragraph shows (the opening "
-                         f"may name them and their marks in one clause): {'; '.join(self.modules)}")
+            lines.append("Modules of the applicant's course that this job asks about and no paragraph shows (the "
+                         "opening may name them and their marks in one clause of the sentence giving the course, never "
+                         f"after the reason for this employer): {'; '.join(self.modules)}")
         lines.append(stage.today_lines(scope.now) if scope.now else "")
         if scope.request:
             lines.append(f"The applicant asked for this change: {scope.request}")

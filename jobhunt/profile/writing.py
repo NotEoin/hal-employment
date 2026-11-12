@@ -876,14 +876,18 @@ def degrees(con: sqlite3.Connection | None = None) -> list[str]:
             for it in store.items(con, "education", hidden=False)]
 
 
-def marked_modules(con: sqlite3.Connection | None = None) -> list[tuple[str, str]]:
+def marked_modules(con: sqlite3.Connection | None = None, institution: str = "") -> list[tuple[str, str]]:
     """The (name, mark) of each module on the education facts the person checked; mark "" when none is given
-    (Hal's own database unless `con`)."""
+    (Hal's own database unless `con`). With `institution` (the course a letter's opening describes), only that
+    course's: an opening put an Access diploma's credits beside the degree (2026-11-12)."""
     if con is None:
         with closing(db.connect()) as own:
-            return marked_modules(own)
+            return marked_modules(own, institution)
+    want = merge.org_key(institution) if institution.strip() else ""
     return [(m["name"], str(m.get("mark") or "")) for it in store.items(con, "education", hidden=False)
-            if it["state"] in USED_STATES for m in it["fields"].get("modules") or [] if m.get("name")]
+            if it["state"] in USED_STATES
+            and (not want or merge.org_key(it["fields"].get("institution") or "") == want)
+            for m in it["fields"].get("modules") or [] if m.get("name")]
 
 
 def skill_names(con: sqlite3.Connection | None = None) -> list[str]:

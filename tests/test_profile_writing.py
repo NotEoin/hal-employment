@@ -47,6 +47,19 @@ class Writing(unittest.TestCase):
         store.hide(self.con, ids["degree"])
         self.assertEqual(writing.degrees(self.con), [])
 
+    def test_the_modules_an_opening_may_name_are_the_courses_own(self):
+        # regression: an opening led with an Access diploma's "9 Distinction credits in Mathematics" beside the
+        # degree, and ran CV marks into the employer's fact (final eval, 2026-11-12)
+        for fields in ({"qualification": "BA (Hons)", "subject": "History", "institution": "Made-up University",
+                        "modules": [{"name": "Oral History", "mark": "72"}]},
+                       {"qualification": "Access to HE Diploma", "institution": "Made-up College",
+                        "modules": [{"name": "Mathematics", "mark": "Distinction"}]}):
+            store.confirm(self.con, store.add_found(self.con, "education", fields,
+                                                    {"source_rel": "Sources/CVs/cv.md", "doc_type": "cv"}))
+        self.assertEqual(len(writing.marked_modules(self.con)), 2)
+        self.assertEqual(writing.marked_modules(self.con, institution="Made-up University"), [("Oral History", "72")])
+        self.assertEqual(len(writing.marked_modules(self.con, institution="")), 2, "no course known: all of them")
+
     def test_hidden_items_never_reach_the_context_block(self):
         humanities_profile(self.con)
         block = profile.context_block(self.con)

@@ -906,8 +906,8 @@ class Paragraphs(unittest.TestCase):
                 {"source_rel": "Sources/CVs and letters/CV.md", "quote": "BSc", "field": "", "doc_type": "cv"})
             store.confirm(a.con, course)
             pack.write_letter(a.con, a.job)
-        self.assertIn("no paragraph shows (the opening may name them and their marks in one clause): Writing "
-                      "Skills (88)\n", writer.asked("frame")[0]["user"])
+        self.assertIn("never after the reason for this employer): Writing Skills (88)\n",
+                      writer.asked("frame")[0]["user"])
 
     def test_a_letter_needing_no_fix_makes_these_calls(self):
         # a pack made about 55 calls, most of them one per sentence (2026-11-08); a letter is now a call per
