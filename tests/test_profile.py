@@ -93,6 +93,16 @@ class Store(unittest.TestCase):
         c = self.job(CV_B, title="Barista", employer="Wesley\u2019s Coffee Bar at New Malden Methodist Church")
         self.assertEqual((a, a), (b, c))
 
+    def test_a_certificate_named_with_and_without_the_word_certificate_is_one(self):
+        # a CV's "Food Safety Level 2" and its scan's "Food Safety Level 2 Certificate" were two cards, and
+        # twelve certificates were 29 cards (2026-11-12)
+        def cert(name: str, source: str) -> int:
+            return store.add_found(self.con, "certificate", {"name": name}, ev(source, "certificate", name))
+        cv = cert("Food Safety Level 2", CV_A)
+        self.assertEqual(cert("Food Safety Level 2 Certificate", CV_B), cv)
+        self.assertEqual(cert("The Fire Marshal Certificate", CV_B), cert("The Fire Marshall", CV_A))
+        self.assertNotEqual(cert("Food Safety Level 3 Certificate", CV_B), cv, "another level is another one")
+
     def test_conflicting_start_dates_make_one_conflict_naming_both_sources(self):
         a = self.job(CV_A, start="May 2024", current=True)
         self.job(CV_B, start="June 2024", current=True)

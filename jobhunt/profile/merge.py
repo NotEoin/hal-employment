@@ -454,6 +454,8 @@ LEVEL_WORDS = {"bsc", "ba", "beng", "bed", "bmus", "msc", "ma", "mres", "mphil",
 ORG_SUBSET_MIN = 2
 # "Fire Marshal" and "The Fire Marshall" are one certificate; "Food Safety Level 2" and "Level 3" are not
 NAME_CLOSE = 0.9
+# Words a name is compared without: a scan says "Food Safety Level 2 Certificate" where the CV says the name
+NAME_GENERIC = {"certificate", "certification"}
 # A tagline after a spaced dash or a colon: "Hatch - AI desktop companion", "QuizMaster: a Java quiz app"
 TAGLINE = re.compile(r"\s+[-\u2013\u2014]\s+.*$|:\s.*$")
 PROFILE_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "huggingface.co", "kaggle.com", "linkedin.com"}
@@ -486,7 +488,8 @@ def _org_same(a: str, b: str) -> bool:
 
 
 def _name_close(a: str, b: str) -> bool:
-    ka, kb = (re.sub(r"^the ", "", text_key(x)) for x in (a, b))
+    ka, kb = (" ".join(w for w in re.sub(r"^the ", "", text_key(x)).split() if w not in NAME_GENERIC)
+              for x in (a, b))
     if not ka or re.findall(r"\d+", ka) != re.findall(r"\d+", kb):
         return False                       # Level 2 and Level 3 differ by one letter and are two certificates
     return ka == kb or difflib.SequenceMatcher(None, ka, kb).ratio() >= NAME_CLOSE
