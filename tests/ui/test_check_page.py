@@ -6,6 +6,7 @@ made up. Needs `HAL_TEST_BROWSER=1` and Playwright.
 from __future__ import annotations
 
 import contextlib
+import time
 import unittest
 from contextlib import closing
 
@@ -46,6 +47,18 @@ def state(item_id: int) -> str:
     """The item's state as the store has it now."""
     with closing(db.connect()) as con:
         return store.item(con, item_id)["state"]
+
+
+SAVE_WAIT_S = 5.0     # a press saves after the page moves on; a loaded CI machine took over a second
+
+
+def state_soon(item_id: int, want: str) -> str:
+    """The item's state once it is `want`, or as it stands after `SAVE_WAIT_S`: the page shows the next card
+    before the press's save has landed, so reading at once raced it (3.13 local CI, 2026-11-12)."""
+    deadline = time.monotonic() + SAVE_WAIT_S
+    while (now := state(item_id)) != want and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return now
 
 
 @skip_unless_browser
@@ -107,10 +120,10 @@ class CheckPage(unittest.TestCase):
         self.clean(p)
         self.card(p).get_by_role("button", name="Use October 2023").click()
         p.shows(self.card(p).get_by_text("Alex Doe"), "the name")
-        self.assertEqual(state(job), "edited", "choosing a value checks the job too")
+        self.assertEqual(state_soon(job, "edited"), "edited", "choosing a value checks the job too")
         self.card(p).get_by_role("button", name="Yes, that's right").click()
         p.shows(self.card(p).get_by_text("Skills from Alex Doe CV"), "the skills group, from the file trusted most")
-        self.assertEqual(state(name), "confirmed")
+        self.assertEqual(state_soon(name, "confirmed"), "confirmed")
         self.assertIn("2 of 4 checked.", p.page.inner_text("#main"))
         self.card(p).get_by_label("Transcription").uncheck()
         self.card(p).get_by_role("button", name="Keep the ticked ones").click()
