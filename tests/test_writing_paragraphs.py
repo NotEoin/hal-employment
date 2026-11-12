@@ -493,6 +493,21 @@ class WhyHere(unittest.TestCase):
         self.assertIn(paragraphs.NOT_TIED.format(card="Quill Employment"), fake.calls("Write")[1])
         self.assertEqual(done.text, good)
 
+    def test_an_answer_told_with_another_story_leaves_the_employer_fact_out(self):
+        # regression: with the paired story already told, the answer joined the employer's fact to unrelated
+        # work: "I am drawn to Mako because of its wide reach ... I created a personal project called
+        # hal-employment" (final eval, every pack, 2026-11-12)
+        shape = paragraphs.why("Why do you want to work here?", self.PAIRING, tied=False)
+        self.assertNotIn("ticket triage service for river trusts", shape.words)
+        self.assertEqual(shape.fact, "")
+        self.assertIn("a task of this role that this work also did", shape.words)
+        self.assertTrue(shape.employer)
+        self.assertIn("ticket triage service", paragraphs.why("Why here?", self.PAIRING, tied=True).words)
+        good = ("Sorting requests for your users is the work I want to do here. Quill Employment, my job-search "
+                "helper, sorts requests with a 113-test suite behind it.")
+        self.assertNotIn(paragraphs.NOT_EMPLOYER,
+                         [p.reason for p in paragraphs.problems(good, EMPLOYMENT_STORY, SCOPE, shape)])
+
     def test_the_shape_asks_for_the_employer_first_and_one_sentence_of_work_at_most(self):
         shape = paragraphs.why("Why do you want to work here?", self.PAIRING)
         self.assertIn('The reason about the employer: "ticket triage service for river trusts". Say in the first '

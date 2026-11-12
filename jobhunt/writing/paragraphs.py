@@ -241,13 +241,22 @@ def answer(question: str, nth: int = 0, of: int = 1) -> Shape:
 
 def why(question: str, pairing: Pairing | None, tied: bool = True) -> Shape:
     """The shape of an answer to a question asking why this job or employer: the reason about the employer
-    first, from the motivation `pairing`'s fact, then one sentence tying it to this work, with the pairing's
-    reason when the work is the pairing's own (`tied`)."""
-    because = f", because {pairing.reason}," if pairing and tied else ""
+    first, from the motivation `pairing`'s fact, then one sentence tying it to this work with the pairing's
+    reason, when the work is the pairing's own (`tied`). Told with other work, the answer leaves the fact out
+    and goes through a task of the role the work also did: given the fact and no reason linking them, every
+    graded answer jumped from the employer to unrelated work (final eval, 2026-11-12)."""
+    if pairing and not tied:
+        return Shape("answer", f'The answer to the application question "{question}", in 2 to 3 sentences and at '
+                               f"most 80 words, answering it in the first sentence. In the first sentence, name "
+                               f"the employer or speak to it as \"you\", and say which part of the work you want "
+                               f"to do: a task of this role that this work also did, in your own words; never "
+                               f"restate the advert. Then say in one sentence what this work did of that task, "
+                               f"naming the work.", "", WHY_LEAST, employer=True,
+                     fact="")
     reason = (f"The reason about the employer: \"{pairing.fact}\". Say in the first sentence one concrete thing "
               f"about the employer from it (its product, its mission or this fact), as you see it, in your own "
-              f"words; never restate the advert or quote an employee. Then tie it to this work{because} in one "
-              f"sentence, naming the work and one concrete thing it did." if pairing else
+              f"words; never restate the advert or quote an employee. Then tie it to this work, because "
+              f"{pairing.reason}, in one sentence, naming the work and one concrete thing it did." if pairing else
               "No fact about the employer was found: say in the first sentence what of this role or this employer "
               "draws you, in your own words, without a fact about the employer you were not given; then tie it "
               "to this work in one sentence, naming the work and one concrete thing it did.")
