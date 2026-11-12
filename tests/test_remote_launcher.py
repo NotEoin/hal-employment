@@ -212,6 +212,17 @@ class Filled(unittest.TestCase):
                             for line in lines), "the link is captured with for /f")
         self.assertIn('start "Hal tunnel" /min %SSH%', text)
 
+    def test_the_launchers_say_they_are_connecting_before_the_first_login(self):
+        # the window stayed blank until Hal opened, which looked like a hang on a slow login (2026-11-12)
+        for os_name, call in (("linux", "ssh "), ("mac", "ssh "), ("windows", "%SSH% ")):
+            lines = [line.strip() for line in launcher.render(os_name, host=HOST, user=USER, port=8737)
+                     .decode("ascii").splitlines() if not line.strip().startswith(("#", "rem "))]
+            said = next((k for k, line in enumerate(lines) if line.startswith("echo") and "Connecting to" in line),
+                        None)
+            first = next(k for k, line in enumerate(lines) if call in line and not line.startswith("echo"))
+            self.assertIsNotNone(said, os_name)
+            self.assertLess(said, first, os_name)
+
     def test_the_launchers_refuse_names_that_could_run_commands(self):
         for host, user in (("desk;rm -rf ~", USER), (HOST, "sam$(id)"), ("", USER), (HOST, "a b")):
             with self.subTest(host=host, user=user), self.assertRaises(ValueError):

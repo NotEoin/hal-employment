@@ -456,6 +456,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The laptop's window says it is connecting.** The window that opens Hal from another computer stayed
+  blank until Hal opened, which can take a minute and looked as if nothing was happening. It now says
+  it is connecting and that Hal opens in your browser when it is ready. Fetch the launcher again to get
+  this.
+
 - **Your dissertation is told once.** A project whose own summary says it was your dissertation was told
   in letters next to the dissertation itself, as if they were two pieces of work, and its summary's wording
   came with it. Once your record has the dissertation's own card, letters and answers tell the work from

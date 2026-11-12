@@ -56,6 +56,7 @@ if [ "${1:-}" = "--install" ]; then install_entry; exit 0; fi
 LOCAL_PORT="${HAL_LOCAL_PORT:-$PORT}"
 # pick the next free local port when this one is taken
 while (exec 3<>"/dev/tcp/127.0.0.1/${LOCAL_PORT}") 2>/dev/null; do LOCAL_PORT=$((LOCAL_PORT + 1)); done
+echo "Connecting to $HOST. This can take a minute; Hal opens in your browser when it is ready."
 
 # The tunnel is the control master, so this window lives exactly as long as the tunnel. An `ssh -N -L`
 # that joins an existing master hands its forward over and exits at once, which closed the window as soon
