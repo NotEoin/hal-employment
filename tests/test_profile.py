@@ -601,6 +601,16 @@ class Store(unittest.TestCase):
         one = store.add_found(self.con, "basic", {"key": "phone", "value": "07700900123"}, src)
         self.assertEqual(store.add_found(self.con, "basic", {"key": "phone", "value": "07700 900123"}, src), one)
 
+    def test_a_uk_number_written_with_its_country_code_is_the_same_number(self):
+        # one phone number was two cards, "07484..." on one CV and "+44 7484..." on another (2026-11-12)
+        src = ev("Sources/CVs and letters/a.md", "cv", "x")
+        one = store.add_found(self.con, "basic", {"key": "phone", "value": "07700 900123"}, src)
+        for written in ("+44 7700 900123", "+44 (0)7700 900123", "0044 7700 900123"):
+            with self.subTest(written=written):
+                self.assertEqual(store.add_found(self.con, "basic", {"key": "phone", "value": written}, src), one)
+        self.assertNotEqual(store.add_found(self.con, "basic", {"key": "phone", "value": "+353 87 900 1234"}, src),
+                            one, "another country's number is another number")
+
     def test_near_identical_certificate_names_merge_but_different_levels_do_not(self):
         def cert(source, name):
             return store.add_found(self.con, "certificate", {"name": name}, ev(source, "certificate", name))

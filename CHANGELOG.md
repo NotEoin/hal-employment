@@ -37,7 +37,7 @@ What changed in each version, in plain words.
 - **One employer, one card, apostrophe or not.** "Wesley's Coffee Bar" and "Wesleys Coffee Bar" were two
   employers to Hal, so one volunteering role became several job cards. Names are now compared without their
   apostrophes. In the same way, a certificate your CV names and the scan that says "... Certificate" are one
-  card.
+  card, and so is a UK phone number written with +44.
 
 - **A long "Keep" button fits on a phone.** When two jobs overlap, the button to keep one is named after the
   job, and a long job title pushed Work history sideways on a phone. The button now wraps onto two lines.

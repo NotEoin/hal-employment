@@ -82,6 +82,7 @@ CENTURY = 100
 FIRST_MONTH, LAST_MONTH = 1, 12
 ORG_ENDINGS = {"ltd", "limited", "plc", "llp", "llc", "inc", "co", "cic", "uk"}
 ORG_SKIP = {"the", "of", "and", "at", "for"}
+UK_CODE = "44"                  # the country code a UK number drops for its leading 0
 APOSTROPHES = re.compile(r"['`\u2018\u2019]")   # "Wesley's", "Wesley\u2019s" and "Wesleys" are one name
 # Other names for one skill, by their compared form (see `skill_key`); the value is the shared key.
 SKILL_ALIASES = {
@@ -405,6 +406,17 @@ def qualification_key(text: str) -> str:
     return f"{found} {number.group(1)}" if number else found
 
 
+def _phone_key(text: str) -> str:
+    """A phone number's digits, a UK number as dialled at home: "07700 900123", "+44 7700 900123" and
+    "+44 (0)7700 900123" are one number."""
+    digits = re.sub(r"\D", "", text)
+    if text.strip().startswith(("+", "00")):
+        digits = digits.removeprefix("00")
+        if digits.startswith(UK_CODE):
+            digits = "0" + digits.removeprefix(UK_CODE).removeprefix("0")
+    return digits
+
+
 def value_key(field: str, value) -> str:
     """A field's value as compared for conflicts: dates by month, a qualification by level, wording aside."""
     if field in ("start", "end", "date", "expires"):
@@ -416,7 +428,7 @@ def value_key(field: str, value) -> str:
     if field in ("title", "grade"):
         return fact_key(str(value or ""), grade=field == "grade")
     if field == "value" and re.fullmatch(r"[\d\s()+-]{7,}", str(value or "")):
-        return re.sub(r"\D", "", str(value))      # "07700 900123" and "07700900123" are one number
+        return _phone_key(str(value))
     if isinstance(value, bool):
         return "yes" if value else "no"
     return _plain(str(value or ""))
