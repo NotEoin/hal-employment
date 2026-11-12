@@ -27,6 +27,11 @@ What changed in each version, in plain words.
   with a friend and a rewrite you made alone said you were a "contributor (12% of commits)", from the one
   read first. It now says "sole author", and drafts no longer say you "helped".
 
+- **Projects says what the showcase leaves out.** Once any project is in your showcase, Hal tells only
+  showcase projects in letters and answers. A sort that guessed one project for the showcase left every
+  other project out, and letters filled with less relevant work. **Projects** now says so: showcase all
+  your best work.
+
 - **No module codes in letters.** A letter opened with "85 in my CSC1034 Programming Portfolio". Letters,
   answers and messages now give a module's name without its code, which an employer would not know.
 

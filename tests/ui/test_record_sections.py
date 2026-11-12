@@ -198,6 +198,10 @@ class RecordSections(unittest.TestCase):
                       "A folder on this computer", "Portfolio site", "Web page or online document", "Add one by hand"):
             self.assertTrue(panel.get_by_role("button", name=words).is_enabled(), words)
         self.assertEqual(panel.get_by_text("Coming soon").count(), 0)
+        # one showcase project the sort guessed left every other project out of the letters, and the panel said
+        # only that Hal tells employers about the showcase (2026-11-12)
+        p.shows(panel.get_by_text("Projects outside it still count for your skills, but Hal leaves them out"),
+                "what a project outside the showcase is for")
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Tide gauge"))
         p.shows(card.get_by_text("from your CV only"), "the mark on a project only a CV gives")
         card.get_by_role("button", name="Showcase: Tide gauge").click()

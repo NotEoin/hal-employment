@@ -311,7 +311,7 @@ export function ProjectsPanel() {
   const entry = way && PROJECT_WAYS.find(w => w[0] === way);
   return html`<section class="card stack s rec-panel" data-section="project" aria-labelledby="rec-proj-h">
     <h2 class="h2" id="rec-proj-h">Add projects</h2>
-    <p class="small sub rec-line">${sections.project.hint} Hal tells employers about the projects in your showcase.</p>
+    <p class="small sub rec-line">${sections.project.hint} Hal tells employers about the projects in your showcase. Projects outside it still count for your skills, but Hal leaves them out of letters and answers, so showcase all your best work.</p>
     <ul class="rec-ways">${PROJECT_WAYS.filter(([id]) => kinds[id]).map(([id, words]) => {
       const off = !kinds[id].ready || (id === "local_folder" && remote);
       return html`<li key=${id}><button type="button" class=${"btn small" + (way === id ? " primary" : "")} disabled=${off}
