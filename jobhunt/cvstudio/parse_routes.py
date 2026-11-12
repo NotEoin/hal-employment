@@ -2,7 +2,8 @@
 
 - `POST /cv/upload` takes one file (multipart) or `{text}`. The cheap checks (size, kind, pages, a PDF
   that is only a picture) answer at once with words that say what to do; the file is then stored
-  unchanged and `cv.parse` reads it in the background.
+  unchanged and `cv.parse` reads it in the background. A file also goes into Your record's CVs (once: the
+  same file there already is left as it is), so the record knows the CV the person started with.
 - `GET /cv/parse-report` is the "Check what Hal read" dialog: the original on the left (page pictures of a
   PDF, the paragraphs of a Word file or pasted text) and Hal's reading on the right.
 - `PUT /cv/parse-report/{path}` corrects one field and makes a version "You corrected N things Hal misread".
@@ -54,7 +55,18 @@ def upload(req) -> dict:
     file_id = store.add_file(data, name, role="baseline")
     action_id = runner.start("cv.parse", subject="cv.parse", params={"file_id": file_id, "file": name},
                              replace=True, session_id=_session(req), remote=req.remote)
+    if req.files:
+        _to_record(req, data, name)
     return {"action_id": action_id, "file_id": file_id}
+
+
+def _to_record(req, data: bytes, name: str) -> None:
+    """Adds the CV file to Your record's CVs and starts reading it, unless it is there already: a person who gave
+    Hal their CV in setup found Your record saying "No CVs yet" (2026-11-12)."""
+    from jobhunt.sections import actions, pipeline
+
+    added = pipeline.add_uploads(req.con, "cv", [pipeline.Incoming(name, data)])["added"]
+    actions.queue(added, session_id=_session(req), remote=req.remote, why="You added your CV")
 
 
 def latest(con: sqlite3.Connection) -> sqlite3.Row | None:

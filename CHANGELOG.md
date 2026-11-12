@@ -375,6 +375,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **The CV you give in setup is in Your record.** After adding a CV in setup or on My CV, Your record
+  said "No CVs yet." (twice). The file now also goes into Your record's CVs, once, and Hal reads your
+  courses and jobs from it there.
+
 - **Remove and Delete ask first.** **Remove** on a file in Your record took it out at once, with everything
   Hal found in it and Hal's copy of the file, and **Delete** on a card you made yourself deleted it at once;
   nothing could bring either back. Hal now asks, and **Keep it** leaves it as it was.

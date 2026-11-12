@@ -256,7 +256,7 @@ export function SourcesPanel({ uid, heading, hint, parts, target, empty, cards, 
       ${chosen.kind.held === "files" && html`<${Upload} uid=${uid + "-folder"} section=${chosen.section.id} kind=${chosen.kind.id}
         target=${target ?? about} folder=${true} words="Add a folder" />`}</div>
     ${!chosen.kind.ready && html`<p class="small sub rec-line">Hal keeps these now and reads them once it can.</p>`}
-    ${parts.map(([id]) => html`<${SourceList} key=${id} section=${id} target=${target} empty=${empty} />`)}
+    ${parts.map(([id], i) => html`<${SourceList} key=${id} section=${id} target=${target} empty=${i === 0 ? empty : null} />`)}
   </section>`;
 }
 
