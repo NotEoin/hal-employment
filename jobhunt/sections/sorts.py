@@ -598,6 +598,15 @@ def add_accepted(con: sqlite3.Connection, sort_id: int, add_id: int | None = Non
     return new
 
 
+def added_sources(con: sqlite3.Connection, sort_id: int, add_id: int | None = None) -> list[int]:
+    """The ids of the sources a sort's rows (of one add when given) were made, read or not."""
+    sql, args = "SELECT source_id FROM record_sort_rows WHERE sort_id = ? AND state = 'added'", [sort_id]
+    if add_id is not None:
+        sql += " AND add_id = ?"
+        args.append(int(add_id))
+    return [r[0] for r in con.execute(sql + " AND source_id IS NOT NULL ORDER BY id", args)]
+
+
 def star_projects(con: sqlite3.Connection, sort_id: int) -> list[int]:
     """Stars the project cards each added row guessed a showcase gave, once read; returns their ids."""
     starred = []

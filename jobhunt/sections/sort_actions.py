@@ -79,6 +79,10 @@ def accept_sort(ctx, sort_id: int, add_id: int | None = None) -> dict:
         states = move.before_accept(ctx.con, int(sort_id))
     try:
         ids = sorts.add_accepted(ctx.con, int(sort_id), add_id, checkpoint=ctx.checkpoint)
+        if ctx.resumed_from:
+            # carried on after a restart: what the add made before it is still to read (`read_all` keeps only
+            # those not read yet); it was left waiting for good when only the new ones were read (2026-11-12)
+            ids = list(dict.fromkeys(sorts.added_sources(ctx.con, int(sort_id), add_id) + ids))
         out = actions.read_all(ctx, ids, set(), batch=len(ids) > actions.BULK_FILES)
     except runner.Stopped:
         if add_id is not None:

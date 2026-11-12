@@ -23,7 +23,7 @@ from test_sections_sorter import AVERY_CV, CERTIFICATE, history_dump, software_d
 from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import actions, pipeline, sort_actions, sorter, sorts
+from jobhunt.sections import actions, pipeline, sort_actions, sorter, sorts, store
 
 NONE = {"sort_pick": json.dumps({"choice": "none"}), "record_cv": reader_ai.cv_reply}
 WAIT_S = 30
@@ -92,6 +92,17 @@ class Review(unittest.TestCase):
             self.assertEqual(sorts.counts(con, sort_id)["proposed"], 1, "only the unticked letter is left")
             left = sorts.rows(con, sort_id, state="left_out")["rows"]
             self.assertTrue(any("private" in r["why"] for r in left))
+
+    def test_an_add_carried_on_after_a_restart_reads_what_it_made_before(self):
+        """Hal restarted while an add was reading; carried on, it read only sources it made after, and the rest
+        stayed "Waiting to be read" for good (2026-11-12)."""
+        with home() as (con, _vault, files), fake_ai(NONE):
+            sort_id = sorted_folder(con, software_dump(files))
+            sorts.accept(con, sort_id, "cv")
+            made = sorts.add_accepted(con, sort_id)          # the add made its sources, then Hal stopped
+            done = runner.run(sort_actions.ACCEPT, params={"sort_id": sort_id, "_carry_on_from": "made-up-add"})
+            states = {store.get(con, i)["state"] for i in made}
+        self.assertEqual((done["result"]["read"], states), (len(made), {"read"}))
 
     def test_accepting_a_sort_makes_a_missing_record_folder(self):
         # regression: accepting a sort on a fresh install where setup was skipped failed in `record.sync` with

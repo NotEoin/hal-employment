@@ -375,6 +375,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **An add carries on after a restart.** If Hal restarted while it read files you added from a sorted
+  folder, the files added before the restart stayed "Waiting to be read" for good. Hal now reads them
+  when it carries the add on.
+
 - **LibreOffice files are read.** An essay or notes saved as `.odt` (or slides and sheets as `.odp` and
   `.ods`) showed "Hal found no words it could read in it". Hal now reads their headings and paragraphs.
 
