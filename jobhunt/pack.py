@@ -190,7 +190,7 @@ def _research(company: str) -> tuple[str, list[str]]:
 
 def _analyse(job, who: dict) -> dict:
     text = _job_text(job)[:12000]
-    analysis = llm.chat_json(prompt("analyse", who), text, role="main")
+    analysis = llm.chat_json(prompt("analyse", who), text, role="main", purpose="analyse")
     analysis["questions"] = written_out(analysis.get("questions") or [], text)
     resolved = fields.resolve(job["title"], text, who)
     analysis.update(field=resolved.field, background=resolved.background)
@@ -258,7 +258,8 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
         return with_card_tools(without_reasoning(llm.chat_json(
             prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
             + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
-            + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept), role="main")), cards)
+            + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept), role="main",
+            purpose="fit")), cards)
 
     fit = complete_fit(ask(_requirements(analysis)), analysis.get("must_have") or [], ask)
     fit = consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
@@ -531,7 +532,8 @@ def _draft(who: dict, prompt_id: str, user: str, trimmed: set[str]) -> str:
     reply stops mid-sentence (`drafts.cut_off`); when that one stops too it is kept to its last full sentence
     and added to `trimmed`, so "Check before sending" can say so if it is the draft that is kept."""
     def ask(text: str, ctx: int | None = None) -> str:
-        said = llm.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx, temperature=DRAFT_TEMPERATURE).strip()
+        said = llm.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx, temperature=DRAFT_TEMPERATURE,
+                        purpose=prompt_id).strip()
         return spelt(drop_notes(llm.undash(said)), who)
 
     draft = ask(user)
@@ -607,7 +609,7 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
                f"them.\n<<<EMPLOYER\n{words}\nEMPLOYER>>>\n\nFacts about the applicant:\n{stage.today_lines(now)}\n"
                f"CV:\n{facts}" + (f"\n\n{shown}" if shown else "")
                + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept) + f"\n\nDrafts:\n{written}")
-    found = llm.chat_json(prompt("verify", who), request, role="main").get("unsupported", [])
+    found = llm.chat_json(prompt("verify", who), request, role="main", purpose="verify").get("unsupported", [])
     claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
     claims = [c for c in claims if not drafts.stated_in(c, facts)]
     known = known_tools(cards)
@@ -948,7 +950,7 @@ def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[s
     the facts do not support, after once more when a later answer repeats an earlier one (`fix_repeats`);
     returns (answers, the claims still unsupported, the sentences still restating the advert)."""
     def ask(text: str) -> list[dict]:
-        found = llm.chat_json(prompt("answers", who), text, role="writer").get("answers", [])
+        found = llm.chat_json(prompt("answers", who), text, role="writer", purpose="answers").get("answers", [])
         return [{**a, "answer": spelt(llm.undash(a.get("answer", "")), who)}
                 for a in found if isinstance(a, dict)]
 
@@ -1310,7 +1312,7 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     web, urls = _research(job["company"]) if use_web else ("", [])
     about = llm.chat(prompt("brief", who),
                      f"Company: {job['company']}\n\nJob advert:\n{job_text[:4000]}\n\nWeb sources:\n{web[:8000]}",
-                     role="main")
+                     role="main", purpose="brief")
     kept = _kept(analysis)
     fit = _fit(who, analysis, facts, kept, job)
     plan = evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))

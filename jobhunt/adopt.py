@@ -92,7 +92,7 @@ def describe(page: dict) -> tuple[str, str]:
         reply = llm.chat_json(prompts.text("adopt_name"),
                               f"Address: {page['url']}\nPage title: {page.get('title', '')}\n"
                               f"Heading: {page.get('heading', '')}\nSite name: {page.get('site', '')}\n\n"
-                              f"{page.get('text', '')[:2000]}", role="main", timeout=60)
+                              f"{page.get('text', '')[:2000]}", role="main", timeout=60, purpose="adopt_name")
     except llm.LLMUnavailable:
         return company, title
     named = str(reply.get("company") or "").strip()

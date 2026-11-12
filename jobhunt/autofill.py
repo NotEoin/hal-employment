@@ -1143,7 +1143,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
             found = record.context([f"{f.get('label') or ''} {f.get('help') or ''}" for f in batch])
             kept = f"\n\nEmployment record ({record.OWN_DOCUMENTS}):\n{found}" if found else ""
             reply = llm.chat_json(_prompt("form_fill"), f"Fields:\n{listing}\n\n{facts}{kept}{style}", role="main",
-                                  timeout=300)
+                                  timeout=300, purpose="form_fill")
         except llm.LLMUnavailable as e:
             return answered, str(e)
         passages.append(found)
@@ -1235,7 +1235,7 @@ def _review(job, fields: list[dict]) -> None:
                         f"answer={f['value']!r}" for f in chosen)
     try:
         reply = llm.chat_json(_prompt("form_review"), f"Job: {job['title']} at {job['company']}\n\nAnswers:\n{listing}",
-                              role="main", timeout=180)
+                              role="main", timeout=180, purpose="form_review")
     except llm.LLMUnavailable:
         return
     by_hid = {f["hid"]: f for f in chosen}
@@ -1259,7 +1259,8 @@ def choose_control(job, found: dict) -> str:
     prompt = (f"Job: {job['title']} at {job['company']}\nPage title: {found['title']}\n"
               f"Page address: {found['url']}\nControls:\n" + "\n".join(f"- {n}" for n in names[:60]))
     try:
-        reply = llm.chat_json(prompts.text("choose_control"), prompt, role="main", timeout=120)
+        reply = llm.chat_json(prompts.text("choose_control"), prompt, role="main", timeout=120,
+                               purpose="choose_control")
     except llm.LLMUnavailable:
         return ""
     press = str(reply.get("press") or "")

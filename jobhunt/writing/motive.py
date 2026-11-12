@@ -206,7 +206,8 @@ def make(names: tuple[str, ...], advert: str, brief: str, plan: list[Item],
     items = offered(plan, fitting)
     request = (f"Job: {title} at {company}\n\nCompany brief (look here first):\n{brief or 'none'}\n\n"
                f"Advert:\n{advert}\n\nEvidence plan:\n" + "\n".join(i.words() for i in items))
-    return checked(llm.chat_json(prompts.text(PROMPT), request, role="main"), advert, brief, items, names)
+    reply = llm.chat_json(prompts.text(PROMPT), request, role="main", purpose=PROMPT)
+    return checked(reply, advert, brief, items, names)
 
 
 def block(pairing: Pairing | None) -> str:

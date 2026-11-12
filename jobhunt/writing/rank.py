@@ -178,7 +178,7 @@ def make(job: Job, cards: list[dict], found: list[Story]) -> list[Ranked]:
     if not offered:
         return []
     try:
-        reply = llm.chat_json(prompts.text(PROMPT), request(job, offered), role="main")
+        reply = llm.chat_json(prompts.text(PROMPT), request(job, offered), role="main", purpose=PROMPT)
     except llm.LLMUnavailable as e:
         log.warning("story ranking: the AI could not rank the work (%s); the job's words choose it", e)
         return []

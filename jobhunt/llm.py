@@ -64,11 +64,12 @@ def _count() -> None:
 
 
 def chat(system: str, user: str, *, role: str = "main", json_out: bool = False, timeout: float = OLD_TIMEOUT_S,
-         ctx: int | None = None, temperature: float | None = None) -> str:
-    """Asks the AI; `ctx` widens a local model's context window, in tokens, for long material, and
-    `temperature` replaces the backend's own for this request."""
+         ctx: int | None = None, temperature: float | None = None, purpose: str = "") -> str:
+    """Asks the AI; `ctx` widens a local model's context window, in tokens, for long material,
+    `temperature` replaces the backend's own for this request, and `purpose` names the call in the usage log."""
     _count()
-    return ai.chat(system, user, role=role, json_out=json_out, timeout=timeout, ctx=ctx, temperature=temperature)
+    return ai.chat(system, user, role=role, json_out=json_out, timeout=timeout, ctx=ctx, temperature=temperature,
+                   purpose=purpose)
 
 
 def chat_json(system: str, user: str, **kw) -> dict:

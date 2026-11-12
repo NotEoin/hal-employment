@@ -1,4 +1,5 @@
 """The AI layer and its backends: old roles, JSON replies, the provider, the GPU gate, Ollama and local servers."""
+import ast
 import contextlib
 import http.server
 import json
@@ -258,6 +259,27 @@ class Counted(unittest.TestCase):
                     llm.chat_json("s", "u")
             llm.chat("s", "u")
         self.assertEqual((outer.n, inner.n), (2, 1))
+
+
+class Purposes(unittest.TestCase):
+    """Every pack and writing call was logged as "unnamed" in the AI usage log (2026-11-12)."""
+
+    def test_the_old_chat_passes_its_purpose_on(self):
+        seen = []
+        with mock.patch.object(ai, "chat", lambda *a, **k: seen.append(k["purpose"]) or "{}"):
+            llm.chat("s", "u", purpose="brief")
+            llm.chat_json("s", "u", purpose="fit")
+        self.assertEqual(seen, ["brief", "fit"])
+
+    def test_every_call_through_the_old_chat_names_its_purpose(self):
+        unnamed = []
+        for path in sorted(Path(llm.__file__).parent.rglob("*.py")):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in ("chat", "chat_json") and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "llm" and not any(k.arg == "purpose" for k in node.keywords)):
+                    unnamed.append(f"{path.name}:{node.lineno}")
+        self.assertEqual(unnamed, [])
 
 
 if __name__ == "__main__":

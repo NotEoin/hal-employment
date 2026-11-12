@@ -128,7 +128,7 @@ def _by_model(job, people: list[dict]) -> list[dict]:
                         for n, p in enumerate(people, 1))
     reply = llm.chat_json(pack.prompt("contacts_pick"),
                           f"Job: {job['title']} at {job['company']} ({job['location'] or 'UK'})\n\n"
-                          f"People:\n{listing}", role="main", timeout=180)
+                          f"People:\n{listing}", role="main", timeout=180, purpose="contacts_pick")
     picked = {}
     for pick in reply.get("picks") or []:
         n = pick.get("n")

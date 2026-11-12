@@ -614,7 +614,7 @@ def verify(text: str, story: Story, scope: Scope) -> list[Problem]:
     """What the AI finds a paragraph says that its story's facts do not (prompt `paragraph_verify`); quoted
     words the facts or the employer's words hold are dropped (`_dropped`); [] for a reply that is not JSON."""
     request = f"Paragraph:\n{text}\n\nThe facts of the work it is about:\n{story.block()}"
-    reply = llm.chat_json(prompts.text(VERIFY_PROMPT), request, role="main")
+    reply = llm.chat_json(prompts.text(VERIFY_PROMPT), request, role="main", purpose=VERIFY_PROMPT)
     if not isinstance(reply, dict):
         return []
     said, where = writing_check.sentences(text), f"{story.words()}\n{scope.allowed}\n{' '.join(scope.names)}"
@@ -637,7 +637,7 @@ def ask(prompt_id: str, request: str, scope: Scope, key: str = "paragraph") -> d
     """One draft from the AI: the `key` of its JSON reply, undashed and respelt ("" for none), or the whole reply
     when `key` is ""."""
     reply = llm.chat_json(prompts.text(prompt_id, **scope.values), request, role="writer",
-                          temperature=DRAFT_TEMPERATURE)
+                          temperature=DRAFT_TEMPERATURE, purpose=prompt_id)
     if not key:
         return reply if isinstance(reply, dict) else {}
     return clean(reply.get(key) if isinstance(reply, dict) else "", scope)
