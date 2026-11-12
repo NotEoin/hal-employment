@@ -6,10 +6,10 @@ What changed in each version, in plain words.
 
 ### What's new
 
-- **Reading your record is up to twice as fast.** Hal reads as many files at once as the AI serves:
-  Hal's writer serves two, so two files are read side by side. With Hal's gateway, Hal sends no more calls
-  at once than the model serves, whatever **AI calls at once** says, so no call times out waiting in a
-  queue. A model the gateway lists without its slots gets one call at a time.
+- **Reading your record keeps the AI busy, and no busier.** Hal reads as many files at once as the AI
+  serves: with Hal's writer set to two slots, two files are read side by side. With Hal's gateway, Hal sends
+  no more calls at once than the model serves, whatever **AI calls at once** says, so no call times out
+  waiting in a queue; a model the gateway lists without its slots gets one call at a time.
 
 - **Reading your record gives the graphics card up.** With a batch token from Hal's gateway in
   `~/.config/hal-employment/gateway-batch-token` (new setting `ai.hal_batch_token_file`), Hal does big reads
