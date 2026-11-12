@@ -142,6 +142,8 @@ LEFT_OUT_WORDS = {
     "other": "A kind of file Hal does not read.",
     "no_text": "Hal found no words it could read in it.",
     "unplaced": "Hal could not tell where it goes.",
+    "ai_away": "Hal's AI did not answer, so Hal could not tell where it goes. Choose where it goes, or sort again "
+               "once the AI is back.",
     "ai_cap": "Hal could not tell where it goes, and did not ask the AI about this many files.",
     "jd": "A job description for a job not on your record yet. Add it from the job's card.",
 }
@@ -316,8 +318,10 @@ def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool, *, vaul
     return True
 
 
-def _ask_ai(p: Proposal, text: str) -> bool:
-    """Asks the AI to pick one of `CHOICES` for a document the rules cannot place; False on "none" or no AI."""
+def _ask_ai(p: Proposal, text: str) -> str:
+    """Asks the AI to pick one of `CHOICES` for a document the rules cannot place: "" when it placed it, else the
+    `LEFT_OUT_WORDS` key to leave it out with ("ai_away" when the AI did not answer, so the person is not told
+    Hal looked and found nothing, 2026-11-12)."""
     from jobhunt import ai
     from jobhunt.ai import prompts
 
@@ -330,13 +334,13 @@ def _ask_ai(p: Proposal, text: str) -> bool:
                              purpose=PURPOSE, priority=2)
     except ai.LLMUnavailable as e:
         log.info("sorted %s without the AI: %s", p.rel, e)
-        return False
+        return "ai_away"
     choice = str(reply.get("choice") or "").strip().lower()
     if choice not in CHOICES:
-        return False
+        return "unplaced"
     section, kind = choice.split("/")
     p.place(section, kind, f"The AI says it is {CHOICES[choice]}.", by="ai")
-    return True
+    return ""
 
 
 # The walk -------------------------------------------------------------------------------------------------
@@ -558,8 +562,8 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
                 p.leave_out(LEFT_OUT_WORDS["ai_cap"])
                 continue
             asks += 1
-            if not _ask_ai(p, text):
-                p.leave_out(LEFT_OUT_WORDS["unplaced"])
+            if missed := _ask_ai(p, text):
+                p.leave_out(LEFT_OUT_WORDS[missed])
                 continue
         if p.section == "project" and sort_rules.lists_projects(text, project_names):
             p.leave_out(sort_rules.LISTING_WORDS)

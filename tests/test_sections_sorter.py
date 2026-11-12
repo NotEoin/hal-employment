@@ -17,6 +17,7 @@ from support.fake_ai import fake_ai
 from test_ingest import home, put
 from test_record import tiny_pdf
 
+from jobhunt import ai
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import pipeline, sort_copies, sort_kinds, sort_review, sort_rules, sort_units, sorter, sorts
@@ -702,6 +703,15 @@ class Sorter(unittest.TestCase):
             put(files, "Writing/zine.md", "A made-up zine about harbour birds.\n")
             found = by_rel(sorter.propose(con, files / "Writing", local=True))
             self.assertEqual(found["Writing/zine.md"].state, "left_out", "an answer off the list is no answer")
+
+    def test_a_file_left_out_because_the_ai_did_not_answer_says_so(self):
+        """A sort with Hal's AI away left files out as "Hal could not tell where it goes" (2026-11-12)."""
+        away = ai.LLMUnavailable("The made-up AI is loading.", kind="timeout")
+        with home() as (con, _vault, files), fake_ai({"sort_pick": away}):
+            put(files, "Writing/zine.md", "A made-up zine about harbour birds.\n")
+            found = by_rel(sorter.propose(con, files / "Writing", local=False, prefix=""))
+        self.assertEqual(found["zine.md"].state, "left_out")
+        self.assertIn("Hal's AI did not answer", found["zine.md"].why)
 
     def test_a_zips_code_project_is_proposed_as_its_files(self):
         with home() as (con, _vault, files), fake_ai():
