@@ -292,9 +292,9 @@ comes from their settings.
 2. The allowance (`ai/budget.py`): the "Never use online AI" switch, the pause after a Claude limit, and for
    Claude only the hours kept free and the daily cap on background checks.
 3. The GPU gate (`ai/gpu.py`, local models only): wait while another program holds the graphics card.
-4. The backend, under `ai.at_once()` turns served lowest priority first: `ai.parallel`, or the slots the
-   backend says its model serves when that is more (Hal's gateway lists `meta.slots`, its writer's
-   `parallel`).
+4. The backend, under `ai.at_once()` turns served lowest priority first: the slots the backend says its
+   model serves (Hal's gateway lists `meta.slots`, its writer's `parallel`), else `ai.parallel`. More calls
+   than slots would only queue at the model, inside each call's timeout.
 5. One `ai_usage` row of sizes only.
 
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks

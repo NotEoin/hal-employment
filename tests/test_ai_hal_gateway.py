@@ -184,9 +184,12 @@ class Gateway(InHome):
         _Gateway.slots = 2
         with ai.use(GatewayBackend(self.url, self.token)):
             self.assertEqual(ai.at_once("checker"), 2)
-        settings.set("ai.parallel", 3, by="you")
+        settings.set("ai.parallel", 4, by="you")
         with ai.use(GatewayBackend(self.url, self.token)):
-            self.assertEqual(ai.at_once("checker"), 3, "a setting above the slots still holds")
+            self.assertEqual(ai.at_once("checker"), 2, "four calls on two slots timed out queueing (2026-11-12)")
+        _Gateway.slots = 0
+        with ai.use(GatewayBackend(self.url, self.token)):
+            self.assertEqual(ai.at_once("checker"), 4, "a gateway that does not say leaves it to the setting")
 
     def test_online_models_behind_the_gateway_are_never_offered(self):
         be = GatewayBackend(self.url, self.token)
