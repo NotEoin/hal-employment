@@ -456,6 +456,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Your dissertation is told once.** A project whose own summary says it was your dissertation was told
+  in letters next to the dissertation itself, as if they were two pieces of work, and its summary's wording
+  came with it. Once your record has the dissertation's own card, letters and answers tell the work from
+  that card; the project still counts for your skills.
+
 - **Clearer words on an empty record.** Your profile said "Everything is checked." before Hal had found
   anything; it now says to add your CV first. A sorted folder with nothing left to check says "All
   checked" instead of "Ready for you to check. 0 to check".

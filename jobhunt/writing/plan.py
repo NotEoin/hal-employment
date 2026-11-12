@@ -92,6 +92,9 @@ Design decisions, each with its reason:
 - Every starred card is a story (`with_showcase`), built from the card's own facts when the plan picked
   nothing of it: a pack whose plan picked nothing was drafted whole and told none of the person's starred
   projects, coursework or jobs (2026-11-09).
+- A project whose summary says it was done as a dissertation is not told when another card is the
+  dissertation (`story_cards`): letters told the work twice, as two pieces, and copied the repo's wrong
+  degree (2026-11-12).
 """
 from __future__ import annotations
 
@@ -323,6 +326,9 @@ DEGREE = re.compile(r"^(?:Education|Degree|Qualifications?)\b|\b(?:BSc|BA|MSc|MA
                     r"A-levels?|degree|graduat\w*|honours|hons|first[- ]class|2:[12]|GPA|final[- ]year)\b", re.I)
 # A module line: the Profile's "Module (BA History): Oral History (68)" or a CV's "Year 2 modules: Ferry Studies 86".
 MODULE_LINE = re.compile(r"^(?P<head>[^:]{0,60}\bmodules?\b[^:]{0,60}):\s*(?P<name>.+)$", re.I)
+# A project whose summary says it is the dissertation ("developed as an MSc dissertation"), not work done beside one
+# ("a side-project during a dissertation"): the record's dissertation card tells that work.
+AS_DISSERTATION = re.compile(r"\b(?:as|for) (?:an? |my |the |their )?(?:[\w-]+ )?dissertation\b", re.I)
 ANSWER_STORIES = 1         # an answer tells one piece of work ...
 ANSWER_STORIES_MANY = 2    # ... or two, when its question asks for more than one example
 MESSAGE_STORIES = 1        # a message to the person hiring has room for one
@@ -496,13 +502,24 @@ def _kept(card: dict | None, cards: list[dict]) -> bool:
         return True
     if _is_project(card) and showcase_on(cards) and not card.get("star"):
         return False
+    if _is_project(card) and _is_dissertation_work(card, cards):
+        return False
     return not (card.get("cv_only") and not card.get("star") and any(c.get("star") for c in cards))
+
+
+def _is_dissertation_work(card: dict, cards: list[dict]) -> bool:
+    """True when `card` says it was done as a dissertation and another card is the dissertation itself, so a letter
+    tells that work once, from the dissertation's own sources; letters told both as two pieces of work and copied
+    the repo's wrong degree (eval, 2026-11-12)."""
+    return (not card.get("dissertation") and bool(AS_DISSERTATION.search(card.get("summary") or ""))
+            and any(c.get("dissertation") and c is not card for c in cards))
 
 
 def story_cards(cards: list[dict]) -> list[dict]:
     """The cards a draft may tell as stories: every job, and the starred projects once any project is starred
     (all projects while none is, so a record from before stars is not left with nothing to tell); a project only
-    a CV names is left out while any card is starred. The cards left out still give the fit map and skills their
+    a CV names is left out while any card is starred, and so is a project that says it was done as a dissertation
+    when the record has the dissertation's own card. The cards left out still give the fit map and skills their
     evidence."""
     return [c for c in cards if _kept(c, cards)]
 

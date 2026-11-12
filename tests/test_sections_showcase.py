@@ -65,6 +65,17 @@ class Showcase(unittest.TestCase):
                  {"kind": "project (personal)", "name": "Harbour bot", "star": False}]
         self.assertEqual([c["name"] for c in plan.story_cards(cards)], ["Tide gauge", "Barista at Fen Cafe"])
 
+    def test_a_repo_done_as_the_dissertation_is_told_once_as_the_dissertation(self):
+        # letters told a dissertation's repo and the dissertation as two pieces of work (eval, 2026-11-12)
+        thesis = {"kind": "project (dissertation)", "name": "Dissertation", "star": True, "dissertation": True,
+                  "summary": "Dissertation for the BSc. Tide models from gauge data."}
+        repo = {"kind": "project (personal project)", "name": "tide-models", "star": True,
+                "summary": "A tide model pipeline developed as an MSc dissertation."}
+        side = {"kind": "project (personal project)", "name": "cell-alerts", "star": True,
+                "summary": "Sounds an alert when a cell ends, built as a side-project during a dissertation."}
+        self.assertEqual([c["name"] for c in plan.story_cards([thesis, repo, side])], ["Dissertation", "cell-alerts"])
+        self.assertEqual(plan.story_cards([repo, side]), [repo, side], "with no dissertation card the repo tells it")
+
 
 class Authority(unittest.TestCase):
     def test_a_projects_own_code_outranks_the_cv_line_about_it(self):
