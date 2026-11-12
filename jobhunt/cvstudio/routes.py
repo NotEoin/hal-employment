@@ -65,7 +65,7 @@ def summary(con) -> dict:
         baseline = {"id": f["id"], "name": f["name"], "added": f["added"], "pages": f["pages"], "sha256": f["sha256"]}
     return {"route": d["route"], "route_words": ROUTE_WORDS[d["route"]], "send": d["send"],
             "employers_get": line, "employers_get_sub": sub,
-            "type": {"id": d["type_id"], "name": _name_of("jobhunt.cvstudio.types", "load", d["type_id"])},
+            "type": {"id": (t := store.type_in_use(con)), "name": _name_of("jobhunt.cvstudio.types", "load", t)},
             "look": {"id": d["look_id"], "name": _name_of("jobhunt.cvstudio.render", "look", d["look_id"])},
             "version": {"id": vid, "n": v["n"], "what": v["what"], "when": v["created"]},
             "baseline": baseline, "glance": _glance(con),

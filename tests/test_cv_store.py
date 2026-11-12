@@ -311,7 +311,7 @@ class Routes(unittest.TestCase):
         # the glance card stayed empty and the type showed as its id once the checks were in
         cv = self.c.get("/api/v2/cv").json()
         checked = self.c.get("/api/v2/cv/checks").json()
-        self.assertEqual(cv["type"]["name"], "Technical graduate")
+        self.assertEqual(cv["type"]["name"], "Graduate, any subject")   # nobody chose one: Hal's suggestion
         self.assertEqual(cv["glance"]["scanner"], checked["scanner"]["score"])
         self.assertEqual((cv["glance"]["type_pass"], cv["glance"]["type_total"]),
                          (checked["type"]["passed"], checked["type"]["total"]))

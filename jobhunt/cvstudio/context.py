@@ -69,7 +69,7 @@ def cv_type():
     from . import store, types
 
     try:
-        return types.load(store.doc()["type_id"])
+        return types.load(store.type_in_use())
     except LookupError as e:
         log.warning("the CV type could not be read (%s); documents use neutral wording", e)
         return None

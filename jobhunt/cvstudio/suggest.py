@@ -140,8 +140,7 @@ def _setting(key: str):
 
 def cv_type(row: dict | None = None):
     """The CV type Hal's copy uses now."""
-    row = row or _store().doc()
-    return _types().load(row["type_id"])
+    return _types().load(row["type_id"] if row else _store().type_in_use())
 
 
 # -- reading the document ---------------------------------------------------------------------------------

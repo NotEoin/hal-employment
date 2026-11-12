@@ -456,6 +456,11 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Your CV type follows what you studied.** Until you chose a CV type under **My CV, Type and look**,
+  Hal wrote everyone's letters and CV as a technical graduate's: a History graduate's message searched
+  for an engineering manager. Hal now uses the type it suggests from your goal and degree until you
+  choose one, and My CV shows that type.
+
 - **The AI saying no is never sent as your words.** When the AI declined to write ("I cannot complete
   this request..."), that text became the cover letter or a form answer. Hal now leaves that part empty
   and says so first under **Check before sending**, so you write it yourself.

@@ -587,9 +587,10 @@ def current_cv() -> tuple[str, Any, cvtypes.CVType, dict]:
 
     row = store.doc()
     version_id, doc = store.current()
+    type_id = store.type_in_use()
     try:
-        t = cvtypes.load(row["type_id"])
+        t = cvtypes.load(type_id)
     except LookupError:
-        log.warning("CV type %s is gone; showing %s", row["type_id"], cvtypes.FALLBACK)
+        log.warning("CV type %s is gone; showing %s", type_id, cvtypes.FALLBACK)
         t = cvtypes.load(cvtypes.FALLBACK)
     return version_id, doc, t, row
