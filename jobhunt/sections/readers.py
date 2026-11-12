@@ -132,6 +132,14 @@ def settle(reader: Reader, con) -> None:
         own(con)
 
 
+class NotTheirs(Exception):
+    """The source is plainly someone else's (a classmate's CV): it gives the person nothing, and says whose."""
+
+    def __init__(self, message: str, whose: str) -> None:
+        super().__init__(message)
+        self.whose = whose
+
+
 class NotReadYet(NotImplementedError):
     """A reader a later phase of the sectioned record writes; the source waits, and nothing else fails."""
 

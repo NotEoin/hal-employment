@@ -1260,7 +1260,10 @@ people). Readers only take facts out of a source, within that frame.
   the CV says (`record_cv` prompt: facts of every kind, never the document's type or owner), checks the facts
   with `ingest.understand.facts` (quotes against the text, unnamed organisations left out). Each
   fact's `Quote` names the file and line. The CV's date (`Reading.date`, kept in `record_sources.dated`) is a
-  date in its first lines, else its latest dated entry, else its file's date.
+  date in its first lines, else its latest dated entry, else its file's date. Before the AI, `someone_else`
+  looks for another person's name heading a CV that never names the person (`you.name`, `you.other_names`):
+  such a CV raises `readers.NotTheirs`, and `pipeline.finish` takes back its facts and keeps it out with
+  `details` {"not_yours", "someone_else"}, until "This is mine" sets `meta.theirs`.
 - `profile/cvs.py` says which CV leads: the one the person marked (`record_sources.current`, kept only for
   their choice), else the newest-dated CV read (`current_source`); every other CV of the section is older
   (`older_sources`). `profile.store.refold` ranks an older CV's evidence at `merge.OLDER_CV_RANK` (1.5:

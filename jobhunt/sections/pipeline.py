@@ -427,6 +427,14 @@ def finish(con: sqlite3.Connection, begun: Begun, reading: readers.Reading | Exc
     if isinstance(reading, ai.PrivateLeak):
         store.set_state(con, r["id"], "failed", f"Hal kept it from the AI: {reading}")
         return {**out, "state": "failed"}
+    if isinstance(reading, readers.NotTheirs):
+        gone = profile_store.swap_source(con, r["id"], [])
+        _drop_note(r["note_rel"])
+        with con:
+            con.execute("UPDATE record_sources SET note_rel = NULL, details = ? WHERE id = ?",
+                        (json.dumps({"not_yours": True, "someone_else": reading.whose}), r["id"]))
+        store.set_state(con, r["id"], "kept_out", str(reading))
+        return {**out, "state": "kept_out", "hidden": gone["hidden"]}
     if isinstance(reading, (OSError, ValueError)):
         log.warning("could not read source %s: %s", r["id"], reading)
         store.set_state(con, r["id"], "failed", f"Hal could not read it: {reading}")

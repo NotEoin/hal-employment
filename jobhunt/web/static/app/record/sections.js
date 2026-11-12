@@ -121,7 +121,9 @@ function SourceRow({ s }) {
       ${s.suggestion_kind && html`<${Note} tone="info">This looks like a ${s.suggestion_kind_label.toLowerCase()}.
         <button type="button" class="btn small" onClick=${() => act(() => put(path, { doc_kind: s.suggestion_kind }),
           "Marked as a " + s.suggestion_kind_label.toLowerCase() + ". Hal is reading it again.")}>Mark it as a ${s.suggestion_kind_label.toLowerCase()}</button><//>`}
-      ${s.not_yours && !s.theirs && html`<${Note} tone="info">None of the changes are yours, so Hal made no card from it.
+      ${s.not_yours && !s.theirs && html`<${Note} tone="info">${s.someone_else
+          ? "This CV is headed " + s.someone_else + " and never names you, so Hal took nothing from it."
+          : "None of the changes are yours, so Hal made no card from it."}
         <button type="button" class="btn small" aria-label=${"This is mine: " + s.title} onClick=${() => act(() => put(path, { theirs: true }),
           "Hal is reading it again as yours.")}>This is mine</button><//>`}
       ${s.pieces && s.pieces.length > 0 && html`<${PiecePicker} s=${s} path=${path} />`}</div>
@@ -136,7 +138,7 @@ function SourceRow({ s }) {
         ${s.dissertation ? "My dissertation" : "This is my dissertation"}</button>`}
       ${s.can_be_current && !s.current && html`<button type="button" class="btn small"
         onClick=${() => act(() => put(path, { current: true }), "This is your current CV now.")}>Make this my current CV</button>`}
-      ${s.state === "kept_out" && html`<button type="button" class="btn small" aria-label=${"Add " + s.title + " anyway"}
+      ${s.state === "kept_out" && !s.not_yours && html`<button type="button" class="btn small" aria-label=${"Add " + s.title + " anyway"}
         onClick=${() => act(() => post(path + "/reread", { allow: true }), "Hal is reading it.")}>Add it anyway</button>`}
       ${s.can_split && html`<button type="button" class="btn quiet small" aria-label=${"Split into projects by folder: " + s.title}
         onClick=${() => act(() => post(path + "/split"), out => "Split into " + plural(out.added.length, "project") + ". Hal is reading them.")}>

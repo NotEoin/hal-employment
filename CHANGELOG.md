@@ -11,6 +11,10 @@ What changed in each version, in plain words.
   no more calls at once than the model serves, whatever **AI calls at once** says, so no call times out
   waiting in a queue; a model the gateway lists without its slots gets one call at a time.
 
+- **Someone else's CV gives you nothing.** A CV headed by another person's name that never names you, such
+  as a classmate's CV in a folder you sorted, is kept out with whose it is. It no longer gives you their
+  jobs and projects. A CV in a name you also go by (**Other names you go by** in **Settings**) is still yours.
+
 - **Reading your record gives the graphics card up.** With a batch token from Hal's gateway in
   `~/.config/hal-employment/gateway-batch-token` (new setting `ai.hal_batch_token_file`), Hal does big reads
   of your record as batch work: reading what waits, adding more than 50 files at once, and the regular check

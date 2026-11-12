@@ -37,6 +37,8 @@ from jobhunt.sections import registry, wrong_place
 STATES = ("new", "reading", "read", "failed", "kept_out")
 STATE_WORDS = {"new": "Waiting to be read", "reading": "Reading", "read": "Read", "failed": "Could not be read",
                "kept_out": "Kept out: it looks private"}
+SOMEONE_ELSES = "Kept out: someone else's"   # a CV headed by another person's name (`sections.cv`)
+THEIRS_SECTIONS = ("project", "cv")          # where the person may say a source Hal took for another's is theirs
 STAR_SECTIONS = ("coursework",)
 CURRENT_SECTIONS = ("cv",)
 MODULE_SECTIONS = ("coursework", "lecture")
@@ -172,7 +174,9 @@ def shape(con: sqlite3.Connection, r: sqlite3.Row) -> dict:
             "can_be_current": r["section"] in CURRENT_SECTIONS, "current_chosen": bool(r["current"]),
             "dated": r["dated"], "note_rel": r["note_rel"],
             "added": r["added"], "last_checked": r["last_checked"], "last_changed": r["last_changed"],
-            "revision": r["revision"], "state": r["state"], "state_words": STATE_WORDS.get(r["state"], r["state"]),
+            "revision": r["revision"], "state": r["state"],
+            "state_words": SOMEONE_ELSES if found.get("someone_else") else STATE_WORDS.get(r["state"], r["state"]),
+            "someone_else": str(found.get("someone_else") or ""),
             "error": r["error"], "suggestion": "" if hint else r["suggestion"],
             "suggestion_label": suggestion.label if suggestion else "", "suggestion_kind": hint,
             "suggestion_kind_label": registry.DOC_KINDS[hint].label if hint in registry.DOC_KINDS else "",
@@ -269,8 +273,8 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
             raise ValueError("Pick pieces of a portfolio site by their web addresses.")
         set_meta(con, r["id"], picked=sorted(set(picked)))
     if "theirs" in changes:
-        if not isinstance(changes["theirs"], bool) or r["section"] != "project":
-            raise ValueError("Only a project can be marked as yours: true or false.")
+        if not isinstance(changes["theirs"], bool) or r["section"] not in THEIRS_SECTIONS:
+            raise ValueError("Only a project or a CV can be marked as yours: true or false.")
         set_meta(con, r["id"], theirs=changes["theirs"] or None)
     section = registry.get(str(changes.get("section") or r["section"]))
     moved = section.id != r["section"]

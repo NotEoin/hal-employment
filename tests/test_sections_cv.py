@@ -20,6 +20,7 @@ from support.graduates import AVERY, MARNIE
 from test_ingest import home
 
 from jobhunt import ai
+from jobhunt.core import settings
 from jobhunt.profile import conflicts, cvs
 from jobhunt.profile import routes as profile_routes
 from jobhunt.profile import store as profile_store
@@ -120,6 +121,59 @@ class CvReader(unittest.TestCase):
     def test_a_cv_with_no_words_cannot_be_read(self):
         with self.assertRaisesRegex(ValueError, "no words"):
             self.read("   \n")
+
+
+class SomeoneElsesCv(unittest.TestCase):
+    def test_a_cv_headed_by_another_persons_name_is_theirs(self):
+        cases = [("Quentin Arbuckle\nquentin@example.org\nSecond-year student", "Quentin Arbuckle"),
+                 ("Document author: Quentin Arbuckle\n\nCurriculum Vitae\n# Quentin Arbuckle\nLeeds",
+                  "Quentin Arbuckle"),
+                 ("# Avery Quillon\nJunior developer", ""),
+                 ("AVERY QUILLON\nJunior developer", ""),
+                 ("Software Engineer\navery.quillon@example.org\nJunior developer", ""),
+                 ("Junior developer at Fenwick Labs, 2024 to 2025", "")]
+        for text, whose in cases:
+            with self.subTest(text=text):
+                self.assertEqual(cv.someone_else(text, "Avery Quillon"), whose)
+        self.assertEqual(cv.someone_else("Quentin Arbuckle\nStudent", ""), "", "with no name set, every CV is theirs")
+        irish = "Siobh\u00e1n N\u00ed Bhriain"
+        self.assertEqual(cv.someone_else(f"{irish}\nArchivist", "Avery Quillon"), irish)
+        self.assertEqual(cv.someone_else(f"{irish}\nArchivist", irish), "")
+        self.assertEqual(cv.someone_else("Quentin Arbuckle\nStudent", "Avery Quillon Arbuckle"), "",
+                         "a CV in a name the person also goes by is theirs")
+
+    def test_another_persons_cv_gives_no_cards_and_is_kept_out_saying_whose_it_is(self):
+        """Regression: a classmate's CV sorted under CVs gave the person three of the classmate's projects
+        (2026-11-12)."""
+        with home() as (con, _vault, _):
+            settings.set("you.name", AVERY.name)
+            add_cv(con, "Avery CV.md", AVERY.cv)
+            theirs = add_cv(con, "Comp sci CV.md", MARNIE.cv)
+            got = store.get(con, theirs)
+            jobs = {j["fields"]["title"] for j in profile_store.items(con, "job", hidden=False)}
+        self.assertEqual((got["state"], got["state_words"], got["someone_else"], got["not_yours"]),
+                         ("kept_out", "Kept out: someone else's", "Marnie Quillfeather", True))
+        self.assertIn("Marnie Quillfeather", got["error"])
+        self.assertEqual(jobs, {"Junior developer", "Lab helper"}, "only the person's own CV gives cards")
+
+    def test_a_cv_the_person_says_is_theirs_is_read_whatever_name_heads_it(self):
+        with home() as (con, _vault, _):
+            settings.set("you.name", AVERY.name)
+            theirs = add_cv(con, "Stage name CV.md", MARNIE.cv)
+            store.change(con, theirs, {"theirs": True})
+            out = pipeline.read(con, theirs)
+            jobs = {j["fields"]["title"] for j in profile_store.items(con, "job", hidden=False)}
+        self.assertEqual(out["state"], "read")
+        self.assertIn("Archive volunteer", jobs)
+
+    def test_reading_another_persons_cv_again_takes_back_the_cards_it_gave(self):
+        with home() as (con, _vault, _):
+            theirs = add_cv(con, "Comp sci CV.md", MARNIE.cv)
+            self.assertIn("Archive volunteer", {j["fields"]["title"] for j in profile_store.items(con, "job")})
+            settings.set("you.name", AVERY.name)
+            pipeline.read(con, theirs)
+            jobs = profile_store.items(con, "job", hidden=False)
+        self.assertEqual(jobs, [])
 
 
 class CvSection(unittest.TestCase):

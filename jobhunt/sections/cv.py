@@ -14,6 +14,11 @@ Design decisions, each with its reason:
 - A CV's date (`Reading.date`, kept as `record_sources.dated`) is the one in its heading ("CV, March 2025"),
   else the latest date of its entries, else the date of its file: the newest CV leads the others
   (`profile.cvs`), and a CV is newest by what it covers, not by when it was copied to Hal.
+- A CV headed by another person's name, that never names the person (`you.name`, `you.other_names`, in its
+  words or its email address), is theirs: a classmate's CV sorted under CVs gave the person three of the
+  classmate's projects (2026-11-12). It is kept out with whose it is, before the AI is asked, until the person
+  says it is theirs (`meta.theirs`, "This is mine"). A heading that only names a role ("Software Engineer") is
+  no name, and with no name set every CV is the person's.
 - Which CV is current is `profile.cvs`'s answer, so the card, the letters and the list of CVs agree; reading,
   removing or choosing a CV works out again every card the CVs give (`settle`).
 """
@@ -38,6 +43,13 @@ PRIORITY = 1               # the person waits on the page, as for the `record.so
 HEADING_LINES = 3          # a CV's own date ("CV, March 2025") is in its first lines
 YEAR = re.compile(r"\b((?:19|20)\d\d)\b")
 LOCATE_WORDS = 6           # a quote's first words find its line; a CV line is rarely shorter
+HEAD_LINES = 5             # the lines a CV's owner's name heads: after "Curriculum Vitae" and a title at most
+NAME_WORDS = (2, 4)        # "Ben Smith" to "Mary Anne de Vere Smith" written short
+NAME_WORD = re.compile(r"[^\W\d_][\w'\-]*")   # letters of any alphabet, so "Siobh\u00e1n" is a name word
+NOT_NAME = {"curriculum", "vitae", "cv", "resume", "profile", "personal", "statement", "contact", "details",
+            "engineer", "developer", "student", "graduate", "scientist", "analyst", "manager", "assistant",
+            "officer", "designer", "teacher", "intern", "consultant", "researcher", "volunteer", "software",
+            "data", "web", "junior", "senior", "summary"}
 
 
 def file_texts(files: tuple[readers.SourceFile, ...]) -> list[tuple[str, str]]:
@@ -73,6 +85,39 @@ def locate(texts: list[tuple[str, str]], quote: str) -> tuple[str, int | None]:
 def _fact(texts: list[tuple[str, str]], kind: str, fields: dict, field: str, quote: str) -> readers.Fact:
     place, line = locate(texts, quote)
     return readers.Fact(kind, fields, readers.Quote(field, quote, place, line))
+
+
+# Whose CV ----------------------------------------------------------------------------------------------------
+
+def _name_line(line: str) -> str:
+    """`line` as a person's name ("Ben Smith"), or "" when it is not shaped like one."""
+    words = line.strip().lstrip("#*_ ").rstrip("*_ ").split()
+    if not NAME_WORDS[0] <= len(words) <= NAME_WORDS[1]:
+        return ""
+    if any(not NAME_WORD.fullmatch(w) or not w[0].isupper() or w.lower() in NOT_NAME for w in words):
+        return ""
+    return " ".join(words)
+
+
+def someone_else(text: str, names: str) -> str:
+    """The name heading a CV when it is plainly another person's: a name in its first lines, with no word of
+    `names` (the person's own, space-separated) anywhere in it; "" when it may be the person's."""
+    own = re.findall(r"[^\W\d_]{2,}", names.lower())
+    if not own:
+        return ""
+    plain = text.lower()
+    if any(re.search(rf"(?<![^\W\d_]){re.escape(w)}(?![^\W\d_])", plain) for w in own):
+        return ""
+    head = [line for line in text.splitlines() if line.strip()
+            and not line.startswith((convert.AUTHOR_LINE, convert.SAVED_LINE))][:HEAD_LINES]
+    return next((found for line in head if (found := _name_line(line))), "")
+
+
+def own_names() -> str:
+    """The person's name and the other names they go by, from their settings."""
+    from jobhunt.core import settings
+
+    return f"{understand.owner()} {settings.get('you.other_names') or ''}".strip()
 
 
 # The AI ------------------------------------------------------------------------------------------------------
@@ -146,6 +191,10 @@ class CvReader:
         if not texts:
             raise ValueError("Hal found no words in this CV. Upload it as a Word file or a PDF with text in it.")
         name = source.files[0].rel
+        whose = "" if (source.meta or {}).get("theirs") else someone_else(joined(texts), own_names())
+        if whose:
+            raise readers.NotTheirs(f"This CV is {whose}'s, not yours, so Hal took nothing from it. Remove it, or "
+                                    "press This is mine if it is yours.", whose)
         facts = by_ai(texts, name)
         title = source.title or readers.title_in("", Path(name).stem if len(source.files) == 1 else source.locator)
         return readers.Reading(title=title, date=cv_date(joined(texts), facts, source.files), text=joined(texts),

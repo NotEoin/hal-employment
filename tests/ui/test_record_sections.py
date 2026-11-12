@@ -206,6 +206,20 @@ class RecordSections(unittest.TestCase):
             self.assertTrue(store.item(con, project)["star"])
         self.clean(p)
 
+    def test_someone_elses_cv_says_whose_it_is_and_this_is_mine_reads_it(self) -> None:
+        settings.set("you.name", "Avery Quillon")
+        p = self.page("record")
+        cvs = self.panel(p, "Your CVs")
+        cvs.locator("input[type=file]").first.set_input_files(self.file("Comp sci CV.md", CV))
+        row = cvs.locator("li.rec-source", has_text="Comp sci CV")
+        p.shows(row.get_by_text("Kept out: someone else's"), "the chip")
+        p.shows(row.get_by_text("This CV is headed Marnie Quillfeather"), "whose it is")
+        self.assertEqual(row.get_by_role("button", name="Add Comp sci CV anyway").count(), 0,
+                         "a privacy override does not fit someone else's CV")
+        self.clean(p)
+        row.get_by_role("button", name="This is mine: Comp sci CV").click()
+        p.shows(row.get_by_text("Current CV"), "read as the person's own")
+
     def test_a_code_project_with_none_of_your_changes_is_marked_yours_with_this_is_mine(self) -> None:
         settings.set("you.name", repos.AVERY[0])
         settings.set("you.email", repos.AVERY[1])
