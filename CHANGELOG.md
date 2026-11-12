@@ -39,6 +39,10 @@ What changed in each version, in plain words.
   apostrophes. In the same way, a certificate your CV names and the scan that says "... Certificate" are one
   card, and so is a UK phone number written with +44.
 
+- **A sorted folder stops asking once you have added from it.** The files you left unticked kept "Nothing is
+  added until you check the list" on Overview, and a badge on **Your record**, after you had added the rest.
+  The two sentences in that message also ran together without a space.
+
 - **A long "Keep" button fits on a phone.** When two jobs overlap, the button to keep one is named after the
   job, and a long job title pushed Work history sideways on a phone. The button now wraps onto two lines.
 

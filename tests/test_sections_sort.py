@@ -205,6 +205,19 @@ class Review(unittest.TestCase):
                 con.execute("UPDATE record_sort_rows SET state = 'left_out' WHERE sort_id = ?", (sort_id,))
             self.assertEqual(sorts.waiting(con), [], "a sort with nothing left to check is not counted")
 
+    def test_a_sort_added_from_stops_waiting_for_the_files_left_unticked(self):
+        # after 1,408 files were added, 20 left unticked kept "Nothing is added until you check the list" and the
+        # menu's badge up for good (2026-11-12)
+        with home() as (con, _vault, files), fake_ai(NONE):
+            sort_id = sorted_folder(con, software_dump(files))
+            sorts.tick(con, sort_id, False, ["letter"])
+            self.assertTrue(sorts.shape(con, sort_id)["waits"], "nothing added yet: the whole list waits")
+            sorts.accept(con, sort_id, ["cv"])
+            self.assertEqual(sorts.waiting(con), [sort_id], "ticked files are still waiting to be added")
+            sorts.tick(con, sort_id, False)
+            self.assertEqual(sorts.waiting(con), [])
+            self.assertFalse(sorts.shape(con, sort_id)["waits"])
+
     def test_a_row_waits_for_its_course_and_finds_it_once_a_cv_gives_one(self):
         with home() as (con, _vault, files), fake_ai(NONE):
             sort_id = sorted_folder(con, history_dump(files))

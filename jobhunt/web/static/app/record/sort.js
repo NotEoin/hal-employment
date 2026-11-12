@@ -412,11 +412,11 @@ export function useSortsOpenWhenReady() {
 /** The banner at the top of Overview while a sort is being sorted or waits to be checked. */
 export function SortBanner({ data }) {
   const sorts = data ? data.sorts : [];
-  const waiting = sorts.find(s => s.state === "ready" && s.counts.proposed > 0);
+  const waiting = sorts.find(s => s.waits);
   const going = sorts.find(s => SORTING.has(s.state));
   if (waiting) {
     return html`<div class="note rec-sort-banner" role="status"><${Icon} n="folder" /><div class="grow stack s">
-      <p class="rec-line"><b>Hal sorted ${plural(waiting.counts.total, "file")} from ${waiting.label || "your files"}.</b>
+      <p class="rec-line"><b>Hal sorted ${plural(waiting.counts.total, "file")} from ${waiting.label || "your files"}.</b>${" "}
         Nothing is added until you check the list.</p>
       <div><button type="button" class="btn primary" onClick=${() => openSort(waiting.id)}>Check the list</button></div></div></div>`;
   }

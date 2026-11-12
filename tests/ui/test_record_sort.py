@@ -168,6 +168,8 @@ class SortAFolder(unittest.TestCase):
                 banner = p.page.locator(".rec-sort-banner")
                 p.shows(banner.get_by_text(re.compile(r"^Hal sorted \d+ files from Marnie files\.")), "the banner")
                 p.shows(banner.get_by_text("Nothing is added until you check the list."), "what happens next")
+                # the two sentences were glued, "...from record, current-cv.Nothing is added" (2026-11-12)
+                self.assertIn("Marnie files. Nothing is added", banner.inner_text())
                 badge = p.page.locator("nav.rail .nav", has_text="Your record").locator(".count")
                 self.assertEqual(badge.text_content(), "1", "the menu counts the sort waiting")
                 button = banner.get_by_role("button", name="Check the list")

@@ -52,6 +52,11 @@ KINDS = ("folder", "upload", "inbox", "move")
 LOCAL_KINDS = ("folder", "inbox", "move")    # read where they are, on this computer
 STATES = ("new", "sorting", "ready", "failed", "undone")
 ROW_STATES = ("proposed", "left_out", "copy", "accepted", "added", "failed")
+# A ready sort waits for the person while it has proposals and either nothing was added from it yet or some are
+# still ticked: after an add, the files left unticked were the person's choice, not more to check (2026-11-12).
+WAITS = ("s.state = 'ready' AND EXISTS (SELECT 1 FROM record_sort_rows r WHERE r.sort_id = s.id "
+         "AND r.state = 'proposed' AND (r.ticked = 1 OR NOT EXISTS (SELECT 1 FROM record_sort_rows a "
+         "WHERE a.sort_id = s.id AND a.state IN ('accepted', 'added'))))")
 PAGE = 50                  # rows a page of the review table shows
 PAGE_MAX = 500             # a client asking for more is paged anyway
 FOLDER = "record-sort"
@@ -242,9 +247,10 @@ def counts(con: sqlite3.Connection, sort_id: int) -> dict:
 def shape(con: sqlite3.Connection, sort_id) -> dict:
     """A sort as the page shows it, with its counts and the cards its rows may be for."""
     s = row_of(con, sort_id)
+    waits = con.execute(f"SELECT 1 FROM record_sorts s WHERE s.id = ? AND {WAITS}", (s["id"],)).fetchone()
     return {"id": s["id"], "kind": s["kind"], "label": s["label"], "state": s["state"], "error": s["error"],
             "created": s["created"], "updated": s["updated"], "skipped": json.loads(s["skipped"] or "{}"),
-            "counts": counts(con, s["id"]),
+            "counts": counts(con, s["id"]), "waits": waits is not None,
             "undone": s["state"] == "undone", "can_undo": s["kind"] == "move" and s["state"] != "undone" and bool(
                 con.execute("SELECT 1 FROM record_sort_kept_out WHERE sort_id = ? LIMIT 1", (s["id"],)).fetchone()
                 or con.execute("SELECT 1 FROM record_sort_rows WHERE sort_id = ? AND source_id IS NOT NULL LIMIT 1",
@@ -266,10 +272,8 @@ def read_estimate(con: sqlite3.Connection) -> dict:
 
 
 def waiting(con: sqlite3.Connection) -> list[int]:
-    """The ids of the sorts ready for the person with proposals still to check, newest first."""
-    return [r[0] for r in con.execute("SELECT s.id FROM record_sorts s WHERE s.state = 'ready' AND EXISTS (SELECT 1 "
-                                      "FROM record_sort_rows r WHERE r.sort_id = s.id AND r.state = 'proposed') "
-                                      "ORDER BY s.id DESC")]
+    """The ids of the sorts waiting for the person (`WAITS`), newest first."""
+    return [r[0] for r in con.execute(f"SELECT s.id FROM record_sorts s WHERE {WAITS} ORDER BY s.id DESC")]
 
 
 def section_ids(section) -> list[str]:
