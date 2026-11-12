@@ -178,7 +178,7 @@ class Gateway(InHome):
 
     def test_the_gateway_says_how_many_requests_a_model_serves_at_once(self):
         be = GatewayBackend(self.url, self.token)
-        self.assertEqual(be.slots("made-up-model"), 0, "a gateway that does not say gives no slots")
+        self.assertEqual(be.slots("made-up-model"), 1, "the gateway names slots only past one")
         _Gateway.slots = 2
         self.assertEqual((be.slots("made-up-model"), be.slots("made-up-other")), (2, 0))
 
@@ -193,7 +193,8 @@ class Gateway(InHome):
             self.assertEqual(ai.at_once("checker"), 2, "four calls on two slots timed out queueing (2026-11-12)")
         _Gateway.slots = 0
         with ai.use(GatewayBackend(self.url, self.token)):
-            self.assertEqual(ai.at_once("checker"), 4, "a gateway that does not say leaves it to the setting")
+            self.assertEqual(ai.at_once("checker"), 1, "a one-slot writer is sent one call at a time, whatever "
+                                                       "the setting says")
 
     def test_online_models_behind_the_gateway_are_never_offered(self):
         be = GatewayBackend(self.url, self.token)

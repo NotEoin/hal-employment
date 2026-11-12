@@ -243,8 +243,9 @@ class GatewayBackend(OpenAICompatBackend):
             return []
 
     def slots(self, model: str) -> int:
-        """How many requests the gateway serves `model` at once (its `meta.slots`); 0 when it does not say or
-        does not answer."""
+        """How many requests the gateway serves `model` at once: its `meta.slots`, else 1, as the gateway names
+        slots only past one and a second request only waits for the first inside its timeout; 0 when the
+        gateway does not list the model or does not answer."""
         try:
             listed = self._listed()
         except (LLMUnavailable, urllib.error.HTTPError):
@@ -253,7 +254,7 @@ class GatewayBackend(OpenAICompatBackend):
             if entry["id"] == model:
                 meta = entry.get("meta")
                 slots = meta.get("slots") if isinstance(meta, dict) else None
-                return slots if isinstance(slots, int) and slots > 0 else 0
+                return slots if isinstance(slots, int) and slots > 0 else 1
         return 0
 
     def default_model(self, role: str) -> str:
