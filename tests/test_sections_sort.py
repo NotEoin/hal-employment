@@ -3,6 +3,7 @@ accepted ones made sources, each read by its own section's reader.
 
 The made-up dumps are `test_sections_sorter`'s: Avery Quillon (software) and Marnie Quillfeather (history).
 """
+import io
 import json
 import shutil
 import time
@@ -526,6 +527,45 @@ class CommandLine(unittest.TestCase):
         calls, _ = self.run_cli(lambda: cli_sort.sources("read", ["5"]),
                                 {("POST", "/api/v2/record/sources/5/reread"): {"action_id": "a3"}})
         self.assertEqual(calls[0][:2], ("POST", "/api/v2/record/sources/5/reread"))
+
+    def test_reading_what_waits_follows_the_read_hal_carries_on_after_a_restart(self):
+        """A restart of Hal failed the batch job with "Hal is not running here" (2026-11-11)."""
+        from jobhunt.cli import record as cli_record
+        from jobhunt.cli import sort as cli_sort
+
+        replies = iter([(200, {"waiting": 3, "action_id": "a1"}), OSError("refused"),
+                        (200, {"state": "interrupted"}), (200, {"waiting": 2, "action_id": "a2"}),
+                        (200, {"state": "running"}), (200, {"state": "done", "message": "Read 2."})])
+        calls = []
+
+        def hal(method, path, body=None):
+            calls.append((method, path))
+            reply = next(replies)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+
+        with mock.patch.object(cli_record, "_hal", hal), mock.patch.object(cli_sort.time, "sleep"), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+            cli_sort.read_waiting()
+        self.assertEqual(calls[-1], ("GET", "/api/v2/actions/a2"))
+        self.assertIn("following the read it carried on (action a2)", out.getvalue())
+
+    def test_reading_what_waits_yields_when_hal_stays_away(self):
+        from jobhunt.cli import record as cli_record
+        from jobhunt.cli import sort as cli_sort
+
+        def hal(method, path, body=None):
+            if method == "POST":
+                return 200, {"waiting": 1, "action_id": "a1"}
+            raise OSError("refused")
+
+        clock = iter(range(0, 10_000, 60))
+        with mock.patch.object(cli_record, "_hal", hal), mock.patch.object(cli_sort.time, "sleep"), \
+                mock.patch.object(cli_sort.time, "monotonic", lambda: next(clock)), \
+                mock.patch("sys.stdout", new_callable=io.StringIO), self.assertRaises(SystemExit) as ended:
+            cli_sort.read_waiting()
+        self.assertEqual(ended.exception.code, cli_sort.YIELD_EXIT)
 
 
 if __name__ == "__main__":

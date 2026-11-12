@@ -23,6 +23,7 @@ FOLLOW_FOR_S = 3600         # a sort of a very large folder ends well within thi
 HTTP_TIMEOUT_S = 120        # an upload of a few hundred megabytes on this computer
 SORTING = ("new", "sorting")
 YIELD_EXIT = 75             # gpu-light's default `--yield-exit`: run the job again later
+HAL_BACK_S = 120            # Hal restarting (an update, a crash) answers again well within this
 YIELD_SIGNALS = tuple(getattr(signal, n) for n in ("SIGUSR2", "SIGTERM", "SIGINT") if hasattr(signal, n))
 FOLDER_KINDS = ("repo", "local_folder")     # kinds of document held as a folder on this computer
 
@@ -176,23 +177,46 @@ def read_waiting() -> None:
 
     Run as a gpu-light batch job, it yields the graphics card: on `YIELD_SIGNALS` it stops the read (what was
     read is kept) and exits `YIELD_EXIT`, so gpu-light runs it again later and it reads only what still waits.
+    It rides out Hal restarting: it follows the read Hal carries on, and exits `YIELD_EXIT` when Hal does not
+    answer for `HAL_BACK_S`. A restart of Hal failed the batch job with "Hal is not running here" (2026-11-11).
     """
     out = _or_exit("sources", lambda: _hal("POST", "/api/v2/record/read-waiting", {}))
     if not out["action_id"]:
         print("Nothing is waiting to be read.")
         return
-    action_id = out["action_id"]
-    print(f"Reading {out['waiting']} waiting source(s) (action {action_id}).", flush=True)
+    following = {"id": out["action_id"]}
+    print(f"Reading {out['waiting']} waiting source(s) (action {following['id']}).", flush=True)
 
     def stop(signum, _frame) -> None:
-        _hal("POST", f"/api/v2/actions/{action_id}/stop", {})
+        _hal("POST", f"/api/v2/actions/{following['id']}/stop", {})
         print(f"Stopped the read for {signal.Signals(signum).name}; what was read is kept.", flush=True)
         sys.exit(YIELD_EXIT)
 
     for sig in YIELD_SIGNALS:
         signal.signal(sig, stop)
+    away_since = None
     while True:
-        action = _or_exit("sources", lambda: _hal("GET", f"/api/v2/actions/{action_id}"))
+        try:
+            status, action = _hal("GET", f"/api/v2/actions/{following['id']}")
+        except (OSError, ValueError) as e:
+            away_since = away_since or time.monotonic()
+            if time.monotonic() - away_since > HAL_BACK_S:
+                print(f"Hal stopped answering ({e}); what was read is kept, and the rest is read next time.",
+                      flush=True)
+                sys.exit(YIELD_EXIT)
+            time.sleep(FOLLOW_EVERY_S)
+            continue
+        away_since = None
+        if status != 200:
+            sys.exit(f"sources: {(action.get('error') or {}).get('message') or status}")
+        if action["state"] == "interrupted":      # Hal restarted; it carries the read on as a new one
+            out = _or_exit("sources", lambda: _hal("POST", "/api/v2/record/read-waiting", {}))
+            if not out["action_id"]:
+                print("Nothing is waiting to be read.")
+                return
+            following["id"] = out["action_id"]
+            print(f"Hal restarted; following the read it carried on (action {following['id']}).", flush=True)
+            continue
         if action["state"] not in ("queued", "running"):
             break
         time.sleep(FOLLOW_EVERY_S)

@@ -372,6 +372,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Reading what waits survives a restart of Hal.** `jobhunt sources read waiting` failed with "Hal is not
+  running here" when Hal restarted during the read. It now follows the read Hal carries on, and when Hal
+  stays away for two minutes it stops with exit code 75, so a gpu-light job runs it again later.
+
 - **A file is read once.** Asking Hal to read what is waiting while it was already reading those files,
   for example after Hal restarted and carried its read on, read every file a second time beside it. Hal now
   leaves files to the read that already has them.
