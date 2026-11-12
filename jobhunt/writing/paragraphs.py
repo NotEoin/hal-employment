@@ -18,7 +18,8 @@ Design decisions, each with its reason:
   named their project, and no fact crossed, because none was in the prompt.
 - Every check is scoped to the paragraph's story (`problems`): a number, or a known tool, its facts do not
   hold; a plan's tool said to be used (`writing.planned`); words placing the work in a degree or in the
-  person's own time against its context; "I built" of a team's work without the person's part; a course that
+  person's own time against its context; a degree the person's education does not hold (`DEGREE_RX`); "I
+  built" of a team's work without the person's part; a course that
   has ended spoken of as running (`stage.ended_course`); the wording `writing.plain` finds, the stock links of
   `plain.STOCK` among them; a sentence restating the advert (`drafts.echoes`), one about the person's work
   taking an advert phrase as its fact (`drafts.lifted`, `LIFTED_SAID`), or one already said in the
@@ -152,6 +153,7 @@ NOT_TIED = ("does not tie the reason to {card} in a sentence after the first; na
             "did")
 NOT_EMPLOYER = ("does not give the reason about the employer in its first sentence; say what of the employer "
                 "draws you, its product or its mission, then tie it to the work in one sentence at most")
+DEGREE_SAID = "names a {degree}, which your education does not hold"
 SAID_AGAIN = "says your degree again, which Hal's opening already says; tell a fact of the work instead"
 TOO_SHORT = "is too short to tell what the work was, what you did and what came of it"
 NOT_SUPPORTED = 'its facts do not say: "{span}"'
@@ -275,6 +277,7 @@ class Scope:
     request: str = ""                  # the person's own words, when they asked for a change
     studied: tuple[str, ...] = ()      # skills only course material shows (`profile.writing.studied_skills`)
     voice: tuple[str, ...] = ()        # excerpts of the person's own letters, for their voice only, never facts
+    degrees: tuple[str, ...] = ()      # the person's education cards' qualifications (`profile.writing.degrees`)
 
 
 @dataclass(frozen=True)
@@ -487,6 +490,44 @@ def _reasons(found: list[str]) -> list[str]:
     return [m.group(1) for m in (re.search(r"\(([^()]*)\)$", f) for f in found) if m]
 
 
+# A degree a sentence names, short ("MSc") or long ("master's"), and the long names a qualification may hold:
+# a README's "developed as an MSc dissertation" was told as the person's MSc, though they hold a BSc (2026-11-12).
+# Short names match only in their own capitals, and "LLM" is left out, as a draft means a language model by it.
+DEGREE_RX = re.compile(r"\b(BSc|BA|BEng|BEd|LLB|MSc|MA|MEng|MRes|MPhil|MEd|MBA|PhD|DPhil|PGCE)\b|"
+                       r"\b((?i:master'?s|doctorate|doctoral))\b")
+LONG_DEGREES = {"bachelor of science": "BSc", "bachelor of arts": "BA", "bachelor of engineering": "BEng",
+                "bachelor of education": "BEd", "master of science": "MSc", "master of arts": "MA",
+                "master of engineering": "MEng", "master of research": "MRes", "master of philosophy": "MPhil",
+                "master of education": "MEd", "master of business administration": "MBA",
+                "doctor of philosophy": "PhD"}
+MASTERS = {"MSc", "MA", "MEng", "MRes", "MPhil", "MEd", "MBA"}
+DOCTORATES = {"PhD", "DPhil"}
+
+
+def held_degrees(degrees: tuple[str, ...]) -> set[str]:
+    """The short names of the degrees the person's qualifications name ("BSc (Hons)", "Master of Science")."""
+    text = " ".join(degrees)
+    held = {m.group(1).upper() for m in re.finditer(DEGREE_RX.pattern, text, re.I) if m.group(1)}  # "Bsc" too
+    held |= {short.upper() for long, short in LONG_DEGREES.items() if long in text.lower()}
+    return held
+
+
+def _degree_problem(sentence: str, scope: Scope) -> str:
+    """What is wrong when a sentence names a degree the person's education does not hold; "" with no education on
+    record, as nothing can then be checked."""
+    if not scope.degrees:
+        return ""
+    held = held_degrees(scope.degrees)
+    for m in DEGREE_RX.finditer(sentence):
+        short = m.group(1)
+        if short and short.upper() not in held:
+            return DEGREE_SAID.format(degree=short)
+        family = MASTERS if not short and m.group(2).lower().startswith("master") else DOCTORATES
+        if not short and not {d.upper() for d in family} & held:
+            return DEGREE_SAID.format(degree=m.group(2))
+    return ""
+
+
 def sentence_problems(sentence: str, story: Story, scope: Scope, before: list[str] = ()) -> list[str]:
     """What is wrong with one sentence of a paragraph about `story`, with no AI (see the module notes);
     `before` are the paragraph's sentences ahead of it."""
@@ -503,7 +544,7 @@ def sentence_problems(sentence: str, story: Story, scope: Scope, before: list[st
     if story.card is not None:
         out += _reasons(drafts.crossed(sentence, list(scope.cards)))
     out += [p for p in (_context_problem(sentence, story), _alone_problem(sentence, story),
-                        _label_problem(sentence, story)) if p]
+                        _label_problem(sentence, story), _degree_problem(sentence, scope)) if p]
     if scope.now is not None and stage.ended_course(sentence, scope.now):
         out.append(stage.ended_said(scope.now))
     out += plain.problems(sentence, list(scope.person), list(scope.labels))

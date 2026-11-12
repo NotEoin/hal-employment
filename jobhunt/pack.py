@@ -723,7 +723,7 @@ def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, k
                             f"{advert}\n{about}\n{stage.today_lines(now)}", advert, about,
                             (job["title"], job["company"]), now, tuple(profile_writing.module_names()), (facts, kept),
                             tuple(applicant_names(who)), tuple(plain.settings_labels()), who, context.strip(), request,
-                            tuple(profile_writing.studied_skills()), _voice(kind))
+                            tuple(profile_writing.studied_skills()), _voice(kind), tuple(profile_writing.degrees()))
 
 
 def _voice(kind: str) -> tuple[str, ...]:

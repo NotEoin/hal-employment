@@ -39,6 +39,14 @@ class Writing(unittest.TestCase):
         self.con = db.connect()
         self.addCleanup(self.con.close)
 
+    def test_the_degrees_a_draft_is_checked_against_are_the_education_cards_qualifications(self):
+        # a README's "MSc dissertation" reached letters of a BSc holder; a draft is checked against these
+        ids = humanities_profile(self.con)
+        self.assertEqual(writing.degrees(self.con), [f"{HUMANITIES.you['education.degree']} "
+                                                     f"{HUMANITIES.you['education.subject']}"])
+        store.hide(self.con, ids["degree"])
+        self.assertEqual(writing.degrees(self.con), [])
+
     def test_hidden_items_never_reach_the_context_block(self):
         humanities_profile(self.con)
         block = profile.context_block(self.con)

@@ -40,6 +40,11 @@ What changed in each version, in plain words.
   fits the job, "Check before sending" now says that, not "your facts gave nothing", which read as if the
   work had no facts at all.
 
+- **Letters name only degrees you hold.** A project's README said it was "developed as an MSc
+  dissertation", and letters told it as your MSc dissertation, though your record holds a BSc. A sentence
+  naming a degree that none of your education cards holds is now drafted again. With no education on your
+  record, nothing is checked.
+
 - **"Make" in a sentence is not a tool.** A letter saying an employer helps "make loans fairer" was checked
   as naming Make, a build tool from another of your projects, and drafted again. Tools named like ordinary
   words (Make, React, Swift, Spark and others) now count only when written with their capital.

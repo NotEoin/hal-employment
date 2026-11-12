@@ -555,6 +555,34 @@ class DegreeAgain(unittest.TestCase):
             "I built Quill in Lua as part of my degree. How does your team search its notes?"))
 
 
+class DegreeHeld(unittest.TestCase):
+    """A project's README said it was "developed as an MSc dissertation", and letters told it as the person's MSc
+    dissertation, though they hold a BSc (2026-11-12)."""
+
+    def reasons(self, sentence: str, degrees: tuple[str, ...]) -> list[str]:
+        return paragraphs.sentence_problems(sentence, QUILL_STORY, replace(SCOPE, degrees=degrees))
+
+    def test_a_degree_the_person_does_not_hold_is_drafted_again(self):
+        said = self.reasons("For my MSc dissertation, I built Quill in Lua.", ("BSc (Hons) Software Studies",))
+        self.assertIn(paragraphs.DEGREE_SAID.format(degree="MSc"), said)
+        self.assertTrue(self.reasons("I built Quill in Lua during my master's degree.", ("BA History",)))
+
+    def test_a_degree_the_person_holds_is_fine_in_its_short_or_long_form(self):
+        for degrees in (("BSc (Hons) Software Studies",), ("Bachelor of Science in Software Studies",)):
+            said = self.reasons("For my BSc dissertation, I built Quill in Lua.", degrees)
+            self.assertFalse([r for r in said if "does not hold" in r], degrees)
+        self.assertFalse([r for r in self.reasons("In my MSc I built Quill in Lua.", ("Master of Science",))
+                          if "does not hold" in r])
+
+    def test_a_language_model_or_a_lowercase_word_is_no_degree(self):
+        for sentence in ("I built Quill around a local LLM.", "I wrote Quill in Lua, ma'am."):
+            self.assertFalse([r for r in self.reasons(sentence, ("BA History",)) if "does not hold" in r], sentence)
+
+    def test_no_education_on_record_checks_nothing(self):
+        self.assertFalse([r for r in self.reasons("For my MSc dissertation, I built Quill in Lua.", ())
+                          if "does not hold" in r])
+
+
 class Listed(unittest.TestCase):
     def test_a_course_story_with_nothing_to_say_is_never_listed(self):
         # "Hal left out the paragraph about First-Class Honours: your facts gave nothing" was most of the false

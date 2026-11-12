@@ -852,6 +852,18 @@ def module_names(con: sqlite3.Connection | None = None) -> list[str]:
             for m in it["fields"].get("modules") or [] if m.get("name")]
 
 
+def degrees(con: sqlite3.Connection | None = None) -> list[str]:
+    """The qualification and subject of each education card not hidden ("BA (Hons) Imaginary Studies"), so a
+    draft naming a degree the person does not hold is drafted again (`writing.paragraphs`); any state, as a
+    degree Hal found and nobody checked yet is still more likely held than not (Hal's own database unless
+    `con`)."""
+    if con is None:
+        with closing(db.connect()) as own:
+            return degrees(own)
+    return [" ".join(str(it["fields"].get(k) or "").strip() for k in ("qualification", "subject")).strip()
+            for it in store.items(con, "education", hidden=False)]
+
+
 def marked_modules(con: sqlite3.Connection | None = None) -> list[tuple[str, str]]:
     """The (name, mark) of each module on the education facts the person checked; mark "" when none is given
     (Hal's own database unless `con`)."""
