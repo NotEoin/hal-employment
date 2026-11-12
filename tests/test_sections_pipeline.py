@@ -118,6 +118,17 @@ class Pipeline(unittest.TestCase):
         self.assertEqual((fm["role"], fm["category"], fm["doc_type"]), ("own", "Documents", "other"))
         self.assertIn("cataloguing letters", body)
 
+    def test_a_file_with_an_accented_spaced_odd_name_is_kept_and_read(self):
+        odd = "Pr\u00e9mio Jo\u00e3o (final) #2 & copy [v3].md"
+        with home() as (con, vault, _):
+            source_id = pipeline.add_uploads(con, "document", [Incoming(odd, AWARD.encode())])["added"][0]
+            kept = (store.files_dir(source_id) / odd).is_file()
+            out = pipeline.read(con, source_id)
+            note = (vault / store.get(con, source_id)["note_rel"]).is_file()
+        self.assertTrue(kept)
+        self.assertEqual(out["state"], "read")
+        self.assertTrue(note)
+
     def test_the_same_file_in_another_section_is_one_source_and_the_person_is_told_where(self):
         with home() as (con, _, _):
             first = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])
