@@ -253,6 +253,24 @@ class OfficialPapers(unittest.TestCase):
         self.assertIn({"name": "COMP1010 Programming Foundations", "mark": "71"}, bsc["fields"]["modules"])
         self.assertEqual(bsc["fields"]["qualification"], "BSc")
 
+    def test_a_transcript_gives_its_modules_and_marks_to_a_course_card_you_made(self):
+        """Regression: a sorted folder's course card held its folder names as modules ("CSC3121 Cryptography",
+        "c3046604 CS1032 Semester 2 practical report"), and as the person's own card it never took the three
+        transcripts' modules and marks (2026-11-12)."""
+        transcript = ("TRANSCRIPT OF STUDY\nMade-up Student\n Programme of Study\n G400      BSc Made-up Computing\n"
+                      " Module Details\nCOMP1010  Programming Foundations     Semester 1 20    71   Pass   1\n"
+                      "The programme, approved by the University of Nowhere Fen, was taught in English.\n")
+        with home() as (con, _, _):
+            mine = profile_store.add_by_hand(con, "education", {
+                "qualification": "BSc", "subject": "Made-up Computing", "institution": "University of Nowhere Fen",
+                "modules": [{"name": "COMP1010 Databases"}, {"name": "x4401 COMP1010 practical report"}]})
+            got = add_document(con, "transcript.pdf.md", transcript, "transcript", mine["id"], "official")
+            card = profile_store.item(con, mine["id"])
+        self.assertEqual(got["target_id"], mine["id"])
+        self.assertEqual(card["fields"]["modules"], [{"name": "COMP1010 Programming Foundations", "mark": "71"}])
+        self.assertEqual((card["fields"]["subject"], card["state"]), ("Made-up Computing", "edited"),
+                         "the person's own words for the course stay")
+
     def test_papers_naming_no_one_course_plainly_are_not_put_on_a_card(self):
         both = "The University of Nowhere Fen: modules in Made-up Computing and History.\n"
         cards = tuple({"id": i, "fields": dict(graduates.COURSES[k])} for i, k in enumerate(("bsc", "ba")))

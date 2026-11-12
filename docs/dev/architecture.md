@@ -1278,6 +1278,9 @@ people). Readers only take facts out of a source, within that frame.
   removing or choosing a CV calls `cv.settle`, which refolds every card the CVs give
   (`profile.store.refold_sources`). The profile's `GET /api/v2/profile/{kind}` marks each source
   `from_older_cv` and a project card that only CVs give `cv_only` ("from your CV only" on the page).
+  `refold` leaves a card the person checked or made alone, except a course (`store._refill`): its empty
+  fields are filled from its sources, and an official paper's modules, with their marks, replace its own, as
+  a sorted folder's course card held its folder names as modules.
 - `letter` (`sections/letters.py`): cover letters and personal statements keep their text, title and date
   and give no facts. `letters.voice_samples(con, n)` returns the words of the `n` newest letters that were
   read (by their own date, then when added), from the kept files rather than the notes.

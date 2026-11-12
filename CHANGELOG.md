@@ -23,6 +23,11 @@ What changed in each version, in plain words.
   An answer cut off at the cap is asked for once more, then Hal says plainly that it ran on; it is never used
   half-written.
 
+- **Your transcripts set your modules and marks, even on a course you made.** A course made from a sorted
+  folder took its module folders' names as modules, wrong ones and a student number among them, and never
+  took the transcripts' true modules and marks. Now an official paper's modules replace them, and the
+  course's empty details (grade, dates) are filled from your papers. Your own words for the course stay.
+
 - **Someone else's CV gives you nothing.** A CV headed by another person's name that never names you, such
   as a classmate's CV in a folder you sorted, is kept out with whose it is. It no longer gives you their
   jobs and projects. A CV in a name you also go by (**Other names you go by** in **Settings**) is still yours,

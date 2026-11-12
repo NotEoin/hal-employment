@@ -289,15 +289,16 @@ def section_rank(section: str | None) -> int:
 
 
 def refold(con: sqlite3.Connection, item_id: int) -> None:
-    """Works out a found item's fields again from its sources; an item the person checked is left alone.
+    """Works out a found item's fields again from its sources; an item the person checked is left alone, but
+    for a course (`_refill`).
 
     Among sources of one rank its own come before those moved from cards merged into it, so a merged card
     keeps its own name unless a better source, such as the person's CV, names it otherwise. A fact from a
     section's source ranks at least as its section says (`section_rank`): a project's own repository or page
     outranks a CV's line about it.
     """
-    row = con.execute("SELECT kind, state FROM profile_items WHERE id = ?", (item_id,)).fetchone()
-    if row is None or row["state"] != "hal":
+    row = con.execute("SELECT kind, state, fields FROM profile_items WHERE id = ?", (item_id,)).fetchone()
+    if row is None or (row["state"] != "hal" and row["kind"] != "education"):
         return
     older = cvs.older_sources(con)
     sources = [(max(cvs.rank(e["doc_type"], e["source_id"], older), section_rank(e["section"])),
@@ -308,11 +309,27 @@ def refold(con: sqlite3.Connection, item_id: int) -> None:
     if not sources:
         return
     fields = merge.fold(sources)
+    if row["state"] != "hal":
+        fields = _refill(json.loads(row["fields"]), fields, sources)
     if row["kind"] == "skill":
         ranked = sorted(enumerate(sources), key=lambda p: (-p[1][0], p[0]))
         fields["name"] = merge.skill_name([said.get("name", "") for _, (_, said) in ranked])
     con.execute("UPDATE profile_items SET fields = ?, updated = ? WHERE id = ?",
                 (json.dumps(fields), db.now(), item_id))
+
+
+def _refill(own: dict, folded: dict, sources: list[tuple[int, dict]]) -> dict:
+    """A course card the person made or checked, with what its sources add: the fields they left empty, and the
+    modules an official paper lists, with their marks, in place of the card's.
+
+    A sorted folder's course card took its module folders' names as modules, wrong ones and a student number
+    among them, and as the person's own card it never took its three transcripts' modules and marks
+    (2026-11-12). The person's words for the course itself are never changed.
+    """
+    out = {**folded, **{k: v for k, v in own.items() if v}}
+    if any(rank >= merge.OFFICIAL_RANK and said.get("modules") for rank, said in sources):
+        out["modules"] = folded["modules"]
+    return out
 
 
 def refold_sources(con: sqlite3.Connection, source_ids: list[int]) -> list[int]:
