@@ -117,6 +117,44 @@ class Tailored(unittest.TestCase):
             self.assertEqual(documents.tailored(JOB, {"cv_title": "Archivist"})["title"], "Archivist")
 
 
+class SentAsChosen(unittest.TestCase):
+    """Regression: My CV said "Employers get: your original file, unchanged." and "No" adjusting, but every
+    application rendered and uploaded Hal's copy, reordered for the job (2026-11-12)."""
+
+    def setUp(self):
+        from test_cv_store import cv_home
+
+        self.enterContext(cv_home())
+        settings.set("you.name", "Robin Testwell")
+
+    def test_no_adjusting_sends_the_main_cv_as_it_is(self):
+        from jobhunt import cv, documents
+
+        base = {"title": "Archivist", "projects": [{"name": "A"}, {"name": "B"}]}
+        moved = {"title": "Data Analyst", "projects": [{"name": "B"}, {"name": "A"}]}
+        with mock.patch.object(cv, "load", lambda: base), mock.patch.object(cv, "tailor", lambda text: (moved, "data")):
+            settings.set("cvdocs.tailor", "no")
+            self.assertEqual(documents.tailored(JOB, {}), base)
+            settings.set("cvdocs.tailor", "little")
+            self.assertEqual(documents.tailored(JOB, {}), moved)
+
+    def test_the_original_file_is_uploaded_unchanged_with_its_own_kind(self):
+        import tempfile
+
+        from jobhunt import cv, documents
+        from jobhunt.cvstudio import store
+
+        for name, data in (("Robin-CV.pdf", b"%PDF-1.4\n% a made-up CV\n%%EOF\n"), ("Robin-CV.docx", b"PK made-up")):
+            store.set_baseline_file(store.add_file(data, name, role="baseline"))
+            store.set_send("original")
+            with tempfile.TemporaryDirectory() as out, \
+                    mock.patch.object(cv, "render", side_effect=AssertionError("Hal's copy was drawn")):
+                made = documents.render(JOB, {"letter": ""}, Path(out))
+                self.assertEqual(Path(made["cv"]).name, "Robin Testwell CV" + Path(name).suffix)
+                self.assertEqual(Path(made["cv"]).read_bytes(), data)
+            self.assertEqual(documents.tailored(JOB, {}), cv.load(), "nothing is adjusted while the original goes")
+
+
 class Letter(unittest.TestCase):
     """Regression: documents.render drew every letter with the main CV's header, not the CV sent with it."""
 

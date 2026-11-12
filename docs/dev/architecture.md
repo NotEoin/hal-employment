@@ -391,6 +391,9 @@ runs: tests use `tests/support/fake_claude/`.
 - `tailor.for_job` (No, A little, More) keeps each change for a job in `job_cvs` and rebuilds the job's CV
   from the base version plus the changes still on. An AI change for a job only rewords: one that adds a
   result the CV does not have is dropped.
+  Applications do not call it yet: they take `documents.tailored` (the cv.json reorder of `cv.tailor`),
+  which sends the main CV as it is while the setting is No, and the person's own file byte for byte while My
+  CV is set to send the original (`documents.original_file`).
 - `fresh.py` builds a CV of the chosen type from interview answers and turns failing checks into
   suggestions.
 

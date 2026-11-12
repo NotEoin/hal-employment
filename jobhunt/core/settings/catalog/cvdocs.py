@@ -10,8 +10,8 @@ from __future__ import annotations
 from jobhunt.core.settings.catalog._shared import choices, safe
 from jobhunt.core.settings.registry import Setting, register
 
-TAILOR_HELP = ("No: the same CV for every job. A little: reorder and adjust the profile line. "
-               "More: also rewrite bullets from your evidence.")
+TAILOR_HELP = ("No: the same CV for every job. A little: the projects and skill groups that fit the job go "
+               "first. More: the same as A little in this version.")
 
 register(
     Setting("cvdocs.route", "link", None, "How your CV is made", to="cv", order=10),

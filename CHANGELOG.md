@@ -456,6 +456,13 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Your original CV file is the one sent.** With My CV set to send your original file, applications
+  still uploaded Hal's copy, reordered for the job. They now upload your own file, unchanged, in its own
+  format, and the CV step says so. With **Adjust for each job** set to **No**, applications now send
+  your main CV as it is. The card now says what each level does today: **A little** and **More** both
+  put the projects and skill groups that fit the job first; rewriting lines for a job is not in this
+  version, and the switch to pick what the job cares about first is gone until it does something.
+
 - **The laptop's window says it is connecting.** The window that opens Hal from another computer stayed
   blank until Hal opened, which can take a minute and looked as if nothing was happening. It now says
   it is connecting and that Hal opens in your browser when it is ready. Fetch the launcher again to get

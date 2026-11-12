@@ -429,7 +429,8 @@ def application(con, ref: str) -> dict:
                  or docs.get("approved") or None,
                  "cv": {"changes": _cv_changes(r, docs), "preview_url": _file_url(files.get("cv")),
                         "version_n": None, "look": None,
-                        "sent_as": (row["cv_sent_as"] if row is not None else None) or "hal_copy"},
+                        "sent_as": (row["cv_sent_as"] if row is not None else None)
+                        or ("original" if documents.original_file() else "hal_copy")},
                  "letter": {"text": letter, "words": len(letter.split()), "tone": notes.get("tone"),
                             "evidence": notes.get("evidence"), "checked": notes.get("checked"),
                             "preview_url": _file_url(files.get("letter"))},
