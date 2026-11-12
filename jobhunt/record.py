@@ -82,6 +82,7 @@ def _live(name: str):
 
 # What is converted to notes; Markdown notes themselves are indexed as they are.
 DOCUMENTS = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".epub", ".msg", ".txt")
+OPENDOCUMENT = (".odt", ".odp", ".ods")   # LibreOffice's own formats, read from their XML (`_opendocument`)
 # Photos and scans of certificates, read by OCR.
 IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff")
 MIN_SCORE = 0.5  # below half the query's weight a passage is about something else
@@ -178,6 +179,24 @@ def _docx(path: Path) -> str:
     return "\n\n".join(lines)
 
 
+def _opendocument(path: Path) -> str:
+    """An OpenDocument file's headings (as Markdown headings) and paragraphs, read from its XML: MarkItDown reads
+    none, so a LibreOffice essay had no words Hal could read (2026-11-12)."""
+    ns = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}"
+    with zipfile.ZipFile(path) as z:
+        root = ET.fromstring(z.read("content.xml"))
+    lines = []
+    for el in root.iter():
+        if el.tag not in (f"{ns}h", f"{ns}p"):
+            continue
+        text = " ".join("".join(el.itertext()).split())
+        if not text:
+            continue
+        level = el.get(f"{ns}outline-level") if el.tag == f"{ns}h" else None
+        lines.append(f"{'#' * min(int(level or 1), 6)} {text}" if el.tag == f"{ns}h" else text)
+    return "\n\n".join(lines)
+
+
 def _text_of(path: Path) -> str:
     """A document as Markdown, keeping its headings, lists and tables; pdftotext for a PDF without headings.
 
@@ -196,6 +215,11 @@ def _text_of(path: Path) -> str:
         text = _MARKITDOWN.convert_local(str(path)).markdown or ""
     except Exception:  # a converter missing or failing falls back below, or leaves the file unread
         text = ""
+    if not text.strip() and suffix in OPENDOCUMENT:
+        try:
+            text = _opendocument(path)
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile, ET.ParseError):
+            text = ""
     if not text.strip() and suffix == ".docx":
         try:
             text = _docx(path)

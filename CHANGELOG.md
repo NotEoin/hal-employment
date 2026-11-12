@@ -372,6 +372,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **LibreOffice files are read.** An essay or notes saved as `.odt` (or slides and sheets as `.odp` and
+  `.ods`) showed "Hal found no words it could read in it". Hal now reads their headings and paragraphs.
+
 - **Reading what waits survives a restart of Hal.** `jobhunt sources read waiting` failed with "Hal is not
   running here" when Hal restarted during the read. It now follows the read Hal carries on, and when Hal
   stays away for two minutes it stops with exit code 75, so a gpu-light job runs it again later.

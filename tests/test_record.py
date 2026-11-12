@@ -115,6 +115,21 @@ class Record(unittest.TestCase):
         self.assertIn("## First Aid", (self.vault / "certs (DOCX).md").read_text(encoding="utf-8"))
         self.assertEqual(record.search("first aid certificate", min_score=0.3)[0]["heading"], "First Aid")
 
+    def test_a_libreoffice_document_is_read(self):
+        """MarkItDown reads no OpenDocument file, so a LibreOffice essay had no words Hal could read (2026-11-12)."""
+        t = 'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+        o = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
+        xml = (f'<office:document-content {o} {t}><office:body><office:text>'
+               '<text:h text:outline-level="2">Reform petitions</text:h>'
+               '<text:p>I read <text:span>46 petitions</text:span> in the Made-up Record Office.</text:p>'
+               '<text:list><text:list-item><text:p>Archival research</text:p></text:list-item></text:list>'
+               '</office:text></office:body></office:document-content>')
+        path = self.vault / "Essay (final) [v2].odt"
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("content.xml", xml)
+        self.assertEqual(record.text_of(path), "## Reform petitions\n\nI read 46 petitions in the Made-up Record "
+                                               "Office.\n\nArchival research")
+
     @unittest.skipUnless(record._tesseract(), "tesseract is not installed")
     def test_a_scanned_certificate_is_read_by_ocr(self):
         """A photo of a certificate has no text layer, so its words come from OCR."""
