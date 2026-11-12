@@ -3,20 +3,28 @@
 vLLM, LM Studio and llama.cpp all answer `POST /chat/completions` and `GET /models`. Whether text leaves the
 computer is decided by the address, not by a setting the person might forget: a loopback or private address
 is local (and on loopback this computer's graphics card is the one in use, so the GPU gate applies);
-anything else is online, so `ai.local_only` refuses it. Some servers reject `response_format`; a refused
-JSON request is tried once more without it.
+anything else is online, so `ai.local_only` refuses it. Some servers reject `response_format` or a backend's
+`EXTRA` fields; a refused request is tried again without the extras, then without `response_format`.
+
+Every request caps its answer at `MAX_TOKENS`: one CV pack prompt made Gemma 4 write until its 48K context was
+full, 508 s and 594 s, so the pack timed out (2026-11-12). An answer cut off at the cap (`finish_reason`
+"length") is never used: it is asked once more at `RETRY_TEMPERATURE`, as a loop at a low temperature tends
+to repeat, then refused in plain words.
 """
 from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, ClassVar
 
 from .base import ChatRequest, ChatResult, LLMUnavailable, Status
+
+log = logging.getLogger(__name__)
 
 STATUS_TIMEOUT_S = 3
 DEFAULT_TIMEOUT_S = 300
@@ -25,6 +33,10 @@ PROSE_TEMPERATURE = 0.7
 REFUSED_FORMAT = (400, 422)     # what servers without JSON mode answer to `response_format`
 LOOPBACK_NAMES = ("localhost",)
 REASON_CHARS = 200              # the server's own reason, shown to the person, stays one line
+# Thinking plus answer: the longest normal reply measured was about 3,000 thinking tokens and a 3,000-token CV;
+# at the 78-93 tok/s Hal's writer gives, the cap ends a runaway in about 3 minutes, inside the 300 s wait.
+MAX_TOKENS = 16384
+RETRY_TEMPERATURE = 0.7         # a second try at an answer that ran on
 
 
 def _address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -53,6 +65,7 @@ class OpenAICompatBackend:
     """A local server with the OpenAI chat API at `ai.openai_url`."""
 
     name = "openai_compat"
+    EXTRA: ClassVar[dict[str, int | str]] = {}    # fields a backend adds to every request, dropped when refused
 
     def __init__(self, url: str, key: str | None = None) -> None:
         self.url = url.rstrip("/")
@@ -86,23 +99,37 @@ class OpenAICompatBackend:
                          "messages": [{"role": "system", "content": req.system}, {"role": "user", "content": req.user}]}
         if req.json_out:
             payload["response_format"] = {"type": "json_object"}
+        payload.update({"max_tokens": MAX_TOKENS, **self.EXTRA})
+        # what a refusing server is asked again without, one step at a time: the backend's extras first
+        optional = [keys for keys in (tuple(self.EXTRA), ("response_format",)) if keys and keys[0] in payload]
         timeout = req.timeout or DEFAULT_TIMEOUT_S
         start = time.monotonic()
-        try:
-            out = self._request("POST", "/chat/completions", payload, timeout)
-        except urllib.error.HTTPError as e:
-            if not (req.json_out and e.code in REFUSED_FORMAT):
-                raise _refused(e) from e
-            payload.pop("response_format")
+        for attempt in range(2):
+            out = self._post_chat(payload, optional, timeout)
             try:
-                out = self._request("POST", "/chat/completions", payload, timeout)
-            except urllib.error.HTTPError as again:
-                raise _refused(again) from again
-        try:
-            text = out["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as e:
-            raise LLMUnavailable("The local server sent an answer Hal could not read.") from e
-        return ChatResult(text=text or "", provider=self.name, model=model, ms=int((time.monotonic() - start) * 1000))
+                choice = out["choices"][0]
+                text = choice["message"]["content"]
+            except (KeyError, IndexError, TypeError) as e:
+                raise LLMUnavailable("The local server sent an answer Hal could not read.") from e
+            if choice.get("finish_reason") != "length":
+                return ChatResult(text=text or "", provider=self.name, model=model,
+                                  ms=int((time.monotonic() - start) * 1000))
+            log.warning("%s ran on to %d tokens (try %d)", model, MAX_TOKENS, attempt + 1)
+            payload["temperature"] = max(payload["temperature"], RETRY_TEMPERATURE)
+        raise LLMUnavailable("The AI's answer ran on without finishing, twice. Try again; if it keeps happening, "
+                             "choose another model in Settings, Hal's brain.")
+
+    def _post_chat(self, payload: dict, optional: list[tuple[str, ...]], timeout: float) -> dict:
+        """The server's reply to `payload`; a 400 or 422 is asked again without each `optional` step in turn
+        (the steps are used up, so a retry of the whole chat keeps what was dropped)."""
+        while True:
+            try:
+                return self._request("POST", "/chat/completions", payload, timeout)
+            except urllib.error.HTTPError as e:
+                if not (optional and e.code in REFUSED_FORMAT):
+                    raise _refused(e) from e
+                for k in optional.pop(0):
+                    payload.pop(k)
 
     def models(self) -> list[str]:
         """The server's models; empty when it does not answer."""

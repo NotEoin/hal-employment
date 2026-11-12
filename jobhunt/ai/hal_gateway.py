@@ -51,12 +51,13 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from .base import ChatRequest, ChatResult, LLMUnavailable, Status
 from .openai_compat import STATUS_TIMEOUT_S, OpenAICompatBackend, classify
 
 log = logging.getLogger(__name__)
+THINKING_BUDGET_TOKENS = 8192   # Gemma 4 has no named levels of thinking, only on or off; this caps it
 
 DEFAULT_URL = "http://127.0.0.1:8741/v1"        # the gateway's loopback listener when `[gateway].tcp = true`
 DEFAULT_TOKEN_FILE = "~/.config/hal/gateway-token"
@@ -178,6 +179,9 @@ class GatewayBackend(OpenAICompatBackend):
     """
 
     name = "hal"
+    # llama.cpp ends thinking at this many tokens and has the model answer (b12121, checked 2026-11-12); normal
+    # calls think for up to about 3,000 tokens, so only a runaway meets it
+    EXTRA: ClassVar[dict[str, int | str]] = {"thinking_budget_tokens": THINKING_BUDGET_TOKENS}
 
     def __init__(self, url: str, token_file: str | Path, batch_token_file: str | Path | None = None) -> None:
         super().__init__(url, None)

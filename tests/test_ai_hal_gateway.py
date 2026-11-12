@@ -16,7 +16,7 @@ import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from test_ai_backends import InHome
 
 from jobhunt import ai
-from jobhunt.ai import provider
+from jobhunt.ai import hal_gateway, openai_compat, provider
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.ai.hal_gateway import (
     DEFAULT_URL,
@@ -42,6 +42,8 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
     aliases: ClassVar[list] = []
     refuse: ClassVar[tuple | None] = None    # (status, error code, message) for every chat
     slots: ClassVar[int] = 0                 # the `meta.slots` listed for made-up-model; 0 lists none
+    bodies: ClassVar[list] = []              # each chat's JSON body
+    ran_on: ClassVar[int] = 0                # how many chats in a row end at max_tokens, half-written
 
 
     def log_message(self, *args):
@@ -79,14 +81,28 @@ class _Gateway(http.server.BaseHTTPRequestHandler):
         self._send(200, {"data": listed + [{"id": a, "owned_by": "ollama"} for a in type(self).aliases]})
 
     def do_POST(self):
-        self.rfile.read(int(self.headers["Content-Length"]))
+        type(self).bodies.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
         if not self._allowed():
             return
         if type(self).refuse:
             code, kind, message = type(self).refuse
             self._send(code, {"error": {"message": message, "type": kind, "code": kind}})
             return
-        self._send(200, {"choices": [{"message": {"content": "made-up answer"}}]})
+        if type(self).ran_on:
+            type(self).ran_on -= 1
+            self._send(200, {"choices": [{"message": {"content": "made-up half"}, "finish_reason": "length"}]})
+            return
+        self._send(200, {"choices": [{"message": {"content": "made-up answer"}, "finish_reason": "stop"}]})
+
+
+def _refuse_budget(self):
+    """A chat handler that refuses any body with a thinking budget, as a server without the field may."""
+    body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+    _Gateway.bodies.append(body)
+    if "thinking_budget_tokens" in body:
+        self._send(400, {"error": {"message": "unknown field", "type": "invalid_request_error"}})
+        return
+    self._send(200, {"choices": [{"message": {"content": "made-up answer"}, "finish_reason": "stop"}]})
 
 
 class Gateway(InHome):
@@ -98,6 +114,8 @@ class Gateway(InHome):
         _Gateway.aliases = []
         _Gateway.refuse = None
         _Gateway.slots = 0
+        _Gateway.bodies = []
+        _Gateway.ran_on = 0
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Gateway)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.addCleanup(self.httpd.server_close)
@@ -134,6 +152,36 @@ class Gateway(InHome):
         out = be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
         self.assertEqual(out.text, "made-up answer")
         self.assertEqual(_Gateway.seen[-1], ("/v1/chat/completions", f"Bearer {TOKEN}"))
+
+    def test_every_call_caps_the_models_thinking_and_its_whole_answer(self):
+        """Regression: one CV pack prompt made Gemma 4 write until its 48K context was full, 508 s and 594 s,
+        so the pack timed out (2026-11-12)."""
+        GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        body = _Gateway.bodies[-1]
+        self.assertEqual(body["max_tokens"], openai_compat.MAX_TOKENS)
+        self.assertEqual(body["thinking_budget_tokens"], hal_gateway.THINKING_BUDGET_TOKENS)
+        self.assertLess(hal_gateway.THINKING_BUDGET_TOKENS, openai_compat.MAX_TOKENS)
+
+    def test_an_answer_cut_off_at_the_cap_is_asked_once_more_warmer_and_never_used(self):
+        _Gateway.ran_on = 1
+        be = GatewayBackend(self.url, self.token)
+        out = be.chat(ai.ChatRequest(system="s", user="u", json_out=True, timeout=5), "made-up-model")
+        self.assertEqual(out.text, "made-up answer")
+        self.assertGreater(_Gateway.bodies[-1]["temperature"], _Gateway.bodies[-2]["temperature"])
+        _Gateway.ran_on = 2
+        with self.assertRaises(LLMUnavailable) as caught:
+            be.chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        self.assertIn("ran on", str(caught.exception))
+
+    def test_a_server_that_refuses_the_thinking_budget_is_asked_again_without_it(self):
+        _Gateway.refuse = None
+        be = GatewayBackend(self.url, self.token)
+        with mock.patch.object(_Gateway, "do_POST", _refuse_budget):
+            out = be.chat(ai.ChatRequest(system="s", user="u", json_out=True, timeout=5), "made-up-model")
+        self.assertEqual(out.text, "made-up answer")
+        self.assertNotIn("thinking_budget_tokens", _Gateway.bodies[-1])
+        self.assertEqual(_Gateway.bodies[-1]["response_format"], {"type": "json_object"},
+                         "only the refused setting is dropped")
 
     def test_a_read_of_the_record_goes_out_with_the_batch_token(self):
         batch = self.tmp / "gateway-batch-token"
