@@ -82,6 +82,7 @@ CENTURY = 100
 FIRST_MONTH, LAST_MONTH = 1, 12
 ORG_ENDINGS = {"ltd", "limited", "plc", "llp", "llc", "inc", "co", "cic", "uk"}
 ORG_SKIP = {"the", "of", "and", "at", "for"}
+APOSTROPHES = re.compile(r"['`\u2018\u2019]")   # "Wesley's", "Wesley\u2019s" and "Wesleys" are one name
 # Other names for one skill, by their compared form (see `skill_key`); the value is the shared key.
 SKILL_ALIASES = {
     "msexcel": "excel", "microsoftexcel": "excel", "excelspreadsheets": "excel", "spreadsheets": "excel",
@@ -279,7 +280,7 @@ def date_words(point: str) -> str:
 # Names ---------------------------------------------------------------------------------------------------
 
 def _plain(text: str) -> str:
-    t = (text or "").lower().replace("&", " and ")
+    t = APOSTROPHES.sub("", (text or "").lower()).replace("&", " and ")
     return " ".join(re.sub(r"[^a-z0-9+#]+", " ", t).split())
 
 

@@ -86,6 +86,13 @@ class Store(unittest.TestCase):
         b = self.job(CV_B, title="Front of house assistant", start="Sep 2023", end="Jun 2024")
         self.assertEqual(a, b)
 
+    def test_an_employer_written_with_and_without_its_apostrophe_is_one(self):
+        # one church cafe was three job cards: "Wesleys coffee bar", "Wesley's" and "Wesley\u2019s" (2026-11-12)
+        a = self.job(CV_A, title="Volunteering", employer="Wesleys coffee bar at New Malden Methodist church")
+        b = self.job(CV_B, title="Serving coffee", employer="Wesley's coffee bar, New Malden Methodist Church")
+        c = self.job(CV_B, title="Barista", employer="Wesley\u2019s Coffee Bar at New Malden Methodist Church")
+        self.assertEqual((a, a), (b, c))
+
     def test_conflicting_start_dates_make_one_conflict_naming_both_sources(self):
         a = self.job(CV_A, start="May 2024", current=True)
         self.job(CV_B, start="June 2024", current=True)
