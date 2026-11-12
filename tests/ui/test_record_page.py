@@ -16,7 +16,7 @@ from unittest import mock
 
 from support.api import HalServer
 from support.fake_ai import fake_ai
-from support.ui import AppPage, chromium, skip_unless_browser
+from support.ui import SIZES, AppPage, chromium, skip_unless_browser
 
 from jobhunt import db, record
 from jobhunt.core import clock, paths
@@ -265,6 +265,19 @@ class RecordPage(unittest.TestCase):
         p.shows(p.page.get_by_text("Nothing to sort out"), "the empty list")
         p.page.locator("summary", has_text="Settled (1)").click()
         p.shows(p.page.get_by_text("You chose 2023-10."), "the settled conflict")
+        self.clean(p)
+
+    def test_a_long_keep_button_wraps_on_a_phone_and_the_page_never_scrolls_sideways(self) -> None:
+        # "Keep Teams software project (degree module) (March 2025 to May 2025)" was 493 px wide on a 390 px
+        # screen, so the whole Work history page scrolled sideways (2026-11-12)
+        for title, employer in (("Teams software project for the collections catalogue (degree module)", EMPLOYER),
+                                ("Volunteer guide and front of house assistant", "Harbour Gallery")):
+            found("job", {"title": title, "employer": employer, "start": "March 2025", "end": "July 2025"},
+                  quote=title)
+        p = self.page("record-work", "narrow")
+        keep = p.page.get_by_role("button", name="Keep Teams software project").first
+        p.shows(keep, "the long keep button")
+        self.assertLessEqual(keep.bounding_box()["width"], SIZES["narrow"]["width"])
         self.clean(p)
 
     def test_keeping_it_as_it_is_from_the_inconsistencies_tab(self) -> None:

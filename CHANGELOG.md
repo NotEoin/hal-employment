@@ -28,6 +28,9 @@ What changed in each version, in plain words.
   a dot for every step, so reading a few hundred files made every page scroll sideways. Past 12 steps it
   shows one bar that fills as Hal goes.
 
+- **A long "Keep" button fits on a phone.** When two jobs overlap, the button to keep one is named after the
+  job, and a long job title pushed Work history sideways on a phone. The button now wraps onto two lines.
+
 - **Reading your record gives the graphics card up.** With a batch token from Hal's gateway in
   `~/.config/hal-employment/gateway-batch-token` (new setting `ai.hal_batch_token_file`), Hal does big reads
   of your record as batch work: reading what waits, adding more than 50 files at once, and the regular check
