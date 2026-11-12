@@ -38,7 +38,7 @@ code.
    such as "2023-24", "Year 1" or "Semester 2" is never a course: its modules join your degree, as your
    folders, your **Settings** (**You**, **Degree** and **University or college**) or your transcript or CV name it. Folders
    that name one degree in different ways, such as "Computer Science BSc" and "Computer Science BsC
-   Newcastle", are one course with all their modules, named as your settings or transcript name it.
+   Leeds", are one course with all their modules, named as your settings or transcript name it.
 5. Check each row. Under **Where it goes**, **What it is** and **Course or job**, change anything Hal got
    wrong. Untick a file to keep it out. For a project, tick **Showcase** if you want employers to hear about
    it. Hal ticks it for you only on a few of your own code projects (at most 8): ones outside your course

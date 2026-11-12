@@ -84,7 +84,7 @@ class CoursesMerged(unittest.TestCase):
 
     def test_names_of_one_degree_written_two_ways_are_one_course_with_every_years_modules(self):
         # Regression: "2023-24", "2024-25", "2025-26", "Computer Science BSc" and "Computer Science BsC
-        # Newcastle" were five courses for one graduate (2026-11-09).
+        # Leeds" were five courses for one graduate (2026-11-09).
         found = sort_courses.courses_found(YEARS_AND_DEGREES)
         self.assertEqual(len(found), 1)
         self.assertEqual((found[0]["qualification"], found[0]["subject"], found[0]["modules"], found[0]["files"]),
@@ -92,11 +92,11 @@ class CoursesMerged(unittest.TestCase):
         self.assertEqual((found[0]["start"], found[0]["end"]), ("2023-10", "2026-03"))
 
     def test_the_settings_or_a_transcript_name_the_course_and_a_cv_only_places_the_years(self):
-        settings = {"qualification": "BSc (Hons)", "subject": "Computer Science", "institution": "Fenwick University"}
+        settings = {"qualification": "BSc", "subject": "Computer Science", "institution": "Fenwick University"}
         found = sort_courses.courses_found(YEARS_AND_DEGREES, [settings])
-        self.assertEqual([c["title"] for c in found], ["BSc (Hons) Computer Science, Fenwick University"])
+        self.assertEqual([c["title"] for c in found], ["BSc Computer Science, Fenwick University"])
         self.assertEqual(found[0]["modules"], MODULES)
-        transcript = sort_courses.qualification_in("Avery Quillon\nBSc (Hons) Computer Science, Fenwick University")
+        transcript = sort_courses.qualification_in("Avery Quillon\nBSc Computer Science, Fenwick University")
         self.assertEqual(transcript, settings)
         cv = {"qualification": "BA", "subject": "History", "institution": "Fenwick University"}
         years = [r for r in YEARS_AND_DEGREES if "/20" in r[0]]

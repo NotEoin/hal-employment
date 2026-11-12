@@ -73,7 +73,7 @@ What changed in each version, in plain words.
   row a module, with its file count, added together, so a folder of thousands of notes is a list of
   modules you can read. A year folder such as "2023-24" or "Semester 2" is never a course: its modules
   join your degree. Folders that name one degree in different ways ("Computer Science BSc" and "Computer
-  Science BsC Newcastle") are one course, named as your settings or transcript name it.
+  Science BsC Leeds") are one course, named as your settings or transcript name it.
 
 - **Sort a big folder finds copies of a project that changed.** Copies of a project with different files
   are one row when their names match once case, separators and endings such as "-v3", "-final" or "(2)"

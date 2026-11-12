@@ -189,7 +189,7 @@ def clean(kind: str, fields: dict) -> dict:
 # A module, project or dissertation the model filed under education is not a qualification (2026-11-05): it
 # would show as a second degree. Projects are found as projects anyway.
 BASIC_KEYS = ("name", "email", "phone", "location")
-PATH_SLASHES = 2           # "London / Newcastle" is a place; "Computer Science BSc/Year 3/ideas" is a folder
+PATH_SLASHES = 2           # "London / Leeds" is a place; "Computer Science BSc/Year 3/ideas" is a folder
 SKILL_LIST = re.compile(r"\s*[,;]\s*")
 NOT_QUALIFICATION = re.compile(r"\b(?:project|dissertation|module|coursework|assignment|practical|lecture|"
                                r"student)\b", re.I)

@@ -113,7 +113,7 @@ class Routes(unittest.TestCase):
         self.assertEqual(self.c.post(self.url("cobalt-interview", "/discard"), {"reason": "bored"}).status, 400)
 
     def test_discarding_skips_copies_in_the_same_place_only(self):
-        # discarding the Newcastle copies of an agency's advert also took its London listing out of Matches
+        # discarding the Leeds copies of an agency's advert also took its London listing out of Matches
         here, there = "lever:copy-here", "lever:copy-there"
         for copy, place in ((here, "London"), (there, "Manchester")):
             self.con.execute("INSERT INTO jobs (id, source, company, title, location, url, description, status, "

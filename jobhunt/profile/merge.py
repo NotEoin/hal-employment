@@ -449,7 +449,7 @@ VAGUE_LEVELS = {"diploma"}
 LEVEL_WORDS = {"bsc", "ba", "beng", "bed", "bmus", "msc", "ma", "mres", "mphil", "mba", "meng", "phd", "honours",
                "hons", "degree", "bachelor", "bachelors", "master", "masters", "of", "in", "with", "and", "science",
                "arts", "studies", "student", "diploma", "certificate", "first", "class", "1st", "2", "1", "the"}
-# "Newcastle University" is "University of Newcastle upon Tyne"; "University" alone is not
+# "Leeds University" is "The University of Leeds"; "University" alone is not
 ORG_SUBSET_MIN = 2
 # "Fire Marshal" and "The Fire Marshall" are one certificate; "Food Safety Level 2" and "Level 3" are not
 NAME_CLOSE = 0.9
@@ -476,7 +476,7 @@ def _subject_words(fields: dict) -> set[str]:
 
 
 def _org_same(a: str, b: str) -> bool:
-    """True when two institutions are one: equal, or one's name inside the other's ("Newcastle University")."""
+    """True when two institutions are one: equal, or one's name inside the other's ("Leeds University")."""
     ka, kb = set(org_key(a).split()), set(org_key(b).split())
     if not ka or not kb:
         return False

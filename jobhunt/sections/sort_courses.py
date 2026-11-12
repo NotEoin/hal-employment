@@ -18,12 +18,12 @@ Design decisions, each with its reason:
 - Courses are grouped by their normalised name (`course_words`: no case, punctuation, "(Hons)" or
   institution words, and "BsC" or "B.Sc." read as "BSc"), so one degree split over several places is one
   proposal with all its modules (`courses_found`). A name that only adds up to `PLACE_WORDS_MAX` words at its
-  end ("Computer Science BsC Newcastle" beside "Computer Science BSc") is the same course, as those words
+  end ("Computer Science BsC Leeds" beside "Computer Science BSc") is the same course, as those words
   name where it was studied; one adding "and" or "with" is a joint degree and stays apart.
 - A course named by no qualification (the folder holding year or module folders) joins the one qualification
   the dump's folders name; with none or several, the first of `known` (the settings, then a transcript, then
   a CV in the sort). A course that matches a known qualification is named from it ("BSc (Hons) Computer
-  Science, Newcastle University"): the person's settings and a transcript outrank folder names. It is only a
+  Science, Leeds University"): the person's settings and a transcript outrank folder names. It is only a
   proposal: the person accepts or renames it, and only then is a card made (`sorts.accept_course`).
 - A card made from folders needs where or when it was studied (`profile.store`), and the folders rarely name
   the institution, so its start and end are the months of its oldest and newest files: dates Hal computes,
@@ -55,8 +55,8 @@ HONS = re.compile(r"\(?\b(?:hons|honours)\b\)?", re.I)
 NAME_FILLER = {"in", "of", "the"}
 WORDS = ("qualification", "subject", "institution")
 JOINT = {"and", "with"}      # "Computer Science and Maths" is another degree than "Computer Science"
-PLACE_WORDS_MAX = 2            # "Newcastle", "Fenwick Vale": a place's name, not another subject
-# A degree in a CV's or transcript's text: "BSc (Hons) Computer Science", "BA History". Capitals only, so
+PLACE_WORDS_MAX = 2            # "Leeds", "Fenwick Vale": a place's name, not another subject
+# A degree in a CV's or transcript's text: "BSc (Hons) Geography", "BA History". Capitals only, so
 # "ma" or "ba" inside a sentence is no degree.
 DEGREE_IN_TEXT = re.compile(r"(?<![A-Za-z])(?P<q>B\.?Sc|B\.?A|B\.?Eng|LLB|M\.?Sc|M\.?A|M\.?Eng|M\.?Res|M\.?Phil|MBA|"
                             r"Ph\.?D|PGCE|HN[CD])\.?(?P<hons>\s*\((?:Hons|Honours|hons)\))?\s+(?:in\s+)?"
@@ -220,7 +220,7 @@ def group_key(rel: str) -> str:
 
 
 def _title(words: dict) -> str:
-    """A course's name as the review shows it: "BSc (Hons) Computer Science, Newcastle University"."""
+    """A course's name as the review shows it: "BSc (Hons) Geography, Leeds University"."""
     name = " ".join(p for p in (words.get("qualification"), words.get("subject")) if p)
     return ", ".join(p for p in (name, words.get("institution")) if p)
 
