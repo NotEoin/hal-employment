@@ -5,9 +5,9 @@
 points at the CV instead of saying the thing ("My CV lists ..."), speaks of
 the person in the third person ("The applicant developed ...", "<name> has ...") or pastes the wording of a
 setting (`labels`, from `settings_labels`); `writing.paragraphs` lists them with a sentence's other problems,
-so its paragraph is drafted again. `tidy(text, cards)` is the draft as it is saved: no stray evidence id,
-straight quotes and apostrophes, no stray space at the start of a line, and each project named as its card
-spells it.
+so its paragraph is drafted again. `tidy(text, cards)` is the draft as it is saved: no stray evidence id, no
+title in capitals, straight quotes and apostrophes, no stray space at the start of a line, and each project
+named as its card spells it.
 
 Design decisions, each with its reason:
 
@@ -151,12 +151,27 @@ def _distinct(name: str) -> bool:
 MODULE_CODE_RX = re.compile(r"\b(?!(?:ISO|BS|EN|IEC|IEEE)\b)[A-Z]{2,4} ?\d{4}\s+(?=[A-Z][a-z])|"
                             r"\s*\((?!(?:ISO|BS|EN|IEC|IEEE)\b)[A-Z]{2,4} ?\d{4}\)")
 
+# A title or employer copied in capitals from a CV heading ("VOLUNTEER ASSISTANT DRAMA INSTRUCTOR at SAINT FRANCIS
+# XAVIER CENTRE", 2026-11-12): two or more capitalised words with at least `SHOUTED_MIN` letters and one long word,
+# so acronyms side by side ("AWS EC2", "NHS UK", "UK GDPR") stay
+SHOUTED_RX = re.compile(r"(?<![\w-])[A-Z][A-Z'&]*(?: [A-Z][A-Z'&]*)+(?![\w-])")
+SHOUTED_MIN = 10
+SHOUTED_LONG = 5
+SMALL_WORDS = frozenset({"a", "an", "and", "as", "at", "by", "for", "in", "of", "on", "or", "the", "to", "with"})
+
+
+def _unshout(m: re.Match) -> str:
+    words = m.group(0).split(" ")
+    if sum(len(w) for w in words) < SHOUTED_MIN or max(len(w) for w in words) < SHOUTED_LONG:
+        return m.group(0)
+    return " ".join(w.lower() if i and w.lower() in SMALL_WORDS else w.capitalize() for i, w in enumerate(words))
+
 
 def tidy(text: str, cards: list[dict] = ()) -> str:
-    """A draft as it is saved: no stray evidence id (`STRAY_ID`), no module code (`MODULE_CODE_RX`), curly
-    quotes and apostrophes straight, no space before a line's first word (a bullet's indent aside), and each
-    distinctive project name spelt as its card spells it."""
-    out = MODULE_CODE_RX.sub("", STRAY_ID.sub("", text or ""))
+    """A draft as it is saved: no stray evidence id (`STRAY_ID`), no module code (`MODULE_CODE_RX`), no title in
+    capitals (`SHOUTED_RX`), curly quotes and apostrophes straight, no space before a line's first word (a
+    bullet's indent aside), and each distinctive project name spelt as its card spells it."""
+    out = SHOUTED_RX.sub(_unshout, MODULE_CODE_RX.sub("", STRAY_ID.sub("", text or "")))
     out = LEADING.sub("", CURLY_RX.sub(lambda m: CURLY[m.group(0)], out))
     for card in cards:
         name = str(card.get("name") or "").strip()

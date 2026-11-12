@@ -104,6 +104,18 @@ class Saved(unittest.TestCase):
         for kept in ("I wrote it in C++ for Python 3.11.", "The A320 crew used it.", "I passed CSC1034."):
             self.assertEqual(plain.tidy(kept), kept, "a code with no name after it stays")
 
+    def test_a_title_copied_in_capitals_is_written_in_ordinary_case(self):
+        # a CV headed its job "VOLUNTEER ASSISTANT DRAMA INSTRUCTOR at SAINT FRANCIS XAVIER CENTRE" and every
+        # letter copied the capitals (2026-11-12)
+        self.assertEqual(plain.tidy("I was a VOLUNTEER ASSISTANT DRAMA INSTRUCTOR at SAINT FRANCIS XAVIER CENTRE."),
+                         "I was a Volunteer Assistant Drama Instructor at Saint Francis Xavier Centre.")
+        self.assertEqual(plain.tidy("I worked at THE OLD GEORGE INN in DURHAM."),
+                         "I worked at The Old George Inn in DURHAM.")
+        self.assertEqual(plain.tidy("HEAD OF SALES AND MARKETING"), "Head of Sales and Marketing")
+        for kept in ("I used AWS EC2 and the NHS UK API.", "I met UK GDPR rules with SQL and ROS.",
+                     "BOIN-LIDAR-Autonavigation-System ran in UKMT."):
+            self.assertEqual(plain.tidy(kept), kept, "acronyms stay as they are")
+
 
 class Tidy(unittest.TestCase):
     def test_quotes_are_straight_and_no_line_starts_with_a_space(self):
