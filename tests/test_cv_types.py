@@ -205,6 +205,27 @@ class TypeRoutes(unittest.TestCase):
         hum = next(t for t in out["types"] if t["id"] == "humanities_grad")
         self.assertEqual(hum["order"], "Profile, Education, Volunteering or experience, Skills")
 
+    def test_a_type_nobody_chose_is_the_one_hal_suggests(self):
+        # regression: a History graduate who never opened Type and look was written for as a technical
+        # graduate, and their message searched LinkedIn for an engineering manager (persona evals, 2026-11-12)
+        from jobhunt.cvstudio import context
+
+        self.assertEqual(self.type_id(), store.DEFAULT_TYPE)
+        self.assertEqual(store.type_in_use(), "humanities_grad")
+        self.assertEqual(context.cv_type().id, "humanities_grad")
+        self.assertEqual(self.client.get("/api/v2/cv").json()["type"]["id"], "humanities_grad")
+
+    def test_a_chosen_type_is_kept_even_when_it_is_the_first_one(self):
+        self.client.request("PUT", "/api/v2/cv/type", {"id": "humanities_grad"})
+        out = self.client.request("PUT", "/api/v2/cv/type", {"id": store.DEFAULT_TYPE}).json()
+        self.assertIsNotNone(out["version_id"])
+        self.assertEqual(store.type_in_use(), store.DEFAULT_TYPE)
+
+    def test_choosing_the_suggested_type_still_records_the_choice(self):
+        out = self.client.request("PUT", "/api/v2/cv/type", {"id": "humanities_grad"}).json()
+        self.assertIsNotNone(out["version_id"])
+        self.assertTrue(store.type_chosen())
+
     def test_choosing_a_type_makes_a_version(self):
         out = self.client.request("PUT", "/api/v2/cv/type", {"id": "humanities_grad"}).json()
         self.assertEqual(self.type_id(), "humanities_grad")

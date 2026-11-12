@@ -64,6 +64,41 @@ guide or in Settings, **You**, **Private answers (equality and adjustments)**. T
 - Hal never shows them again: the screen only says whether they are saved.
 - When Hal fills one in, the form shows "Filled in from your private answers".
 
+## Private documents in your files
+
+When you add a file to your record, or Hal sorts a big folder or zip for you, Hal checks each file before
+the AI sees it. Files that look like any of these are kept out:
+
+- bank details: a sort code with an account number, a bank card number, or an IBAN;
+- a passport or ID card, read from the lines of letters and `<` signs at the bottom of the photo page;
+- a National Insurance or social security number;
+- a payslip, P60, P45 or other tax form;
+- medical information: a fit note, a letter about a diagnosis, or an NHS number;
+- a date of birth together with a passport, driving licence or ID card number, or a page of
+  personal details (a date of birth and an ID number with no results on it);
+- passwords or secret keys, such as a settings file with a real password in it.
+
+A file kept out is not filed in your record, no copy of it is kept, it is not sent to the AI, and Hal takes
+no facts from it. Hal keeps only its name and the reason. If the AI is reading a document and says it holds
+one of the kinds of detail above, Hal keeps that one out too, with the AI's reason. Passwords and keys are
+the exception: Hal checks those itself, so a document that only talks about them is read.
+
+Teaching material about these things, such as a lecture on cryptography or a payroll seminar, is not kept
+out, and neither is a CV with your own email address and phone number.
+
+A date of birth anywhere else, such as on a transcript or a certificate, is taken out of the words Hal
+files, and the rest of the document is read as usual. Hal then keeps no copy of the original file, as the
+copy would still have the date.
+
+A file you add that looks private shows **Kept out: it looks private** where you added it. If Hal got it
+wrong, press **Add it anyway**. When Hal sorts a big folder, it leaves such files out of its suggestions and
+says why; if one is fine to keep, give it a place by hand in the list. For a record an older Hal read in,
+the Overview lists the files it kept out, each with **Add it anyway**; if the file came in a zip, Hal no
+longer has it, so add it again where it belongs.
+
+To turn the check off, turn off **Keep private documents out of your record** in Settings, CV and
+documents.
+
 ## Your data, your choice
 
 Settings, **Privacy and data**:

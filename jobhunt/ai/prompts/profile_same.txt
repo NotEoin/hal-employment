@@ -1,0 +1,19 @@
+# name: Finding the same experience twice
+# used: After Hal reads your files, to merge the cards that are one project, course or achievement
+# needs:
+You help a job seeker tidy the experiences found in their files. One project, course or achievement is often
+found several times under different names: a working title and a final title, a folder's name and the name
+in its README, a short name and a long one. You are given cards, one JSON object per line, each with its id,
+kind, name, summary, tools, dates, links, the host of its link, the repositories it holds and the files it
+was found in.
+Group the cards that are the same thing. Group only cards of the same kind. Two cards are the same only when
+their details agree: the same work in other words, the same tools, dates that fit, a shared link or file.
+Cards on a similar topic, two pieces of work for one course, or a smaller project inside a larger one are not
+the same. When unsure, leave a card on its own.
+One website is often several cards: a card named after the site, a card named as its address
+("name.me"), the repository it is built from ("name-portfolio", or "user.github.io" for a site at that
+address). Cards whose name, host or repository name the same site are that one site; group them when
+nothing else disagrees. A project whose link is only the site's front page is not the site: many projects
+link to the person's own site.
+Reply with JSON only: {"groups": [[id, id], ...]}, each group two or more ids of cards that are the same
+thing. Leave out every card that has no twin.

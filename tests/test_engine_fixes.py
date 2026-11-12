@@ -184,7 +184,7 @@ class SiteKeys(unittest.TestCase):
         self.assertTrue(driver._one_cv(placed, [dict(guessed[0])])[0]["skip"])
         # Lever relabels its upload after each file, and the relabelled box names the CV itself.
         named = {"hid": "h7", "kind": "file", "source": "documents: CV", "value": "/made/up/cv.pdf", "note": "",
-                 "label": "Resume/CV EOIN EXAMPLE CV.PDF Success!"}
+                 "label": "Resume/CV ALEX EXAMPLE CV.PDF Success!"}
         self.assertTrue(driver._one_cv(placed, [named])[0]["skip"])
         self.assertEqual(driver._one_cv([], [dict(guessed[0])])[0]["value"], "/made/up/cv.pdf")
 

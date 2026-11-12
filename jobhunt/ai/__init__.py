@@ -1,9 +1,10 @@
 """Hal's AI: one way to ask, whichever backend the person chose.
 
 `chat` runs, in order: the private-answer guard; the allowance (`budget.admit`); the GPU gate
-for backends on this computer's card; the backend call, at most `ai.parallel` at once with lower
-priority numbers served first; and one `ai_usage` row with sizes only. A failure raises `LLMUnavailable`
-with a `kind` and plain words, and callers fall back to rules as they always have.
+for backends on this computer's card; the backend call, at most `at_once` at once (the slots the backend says its
+model serves, else `ai.parallel`) with lower priority numbers served first; and one `ai_usage` row with
+sizes only. A failure raises `LLMUnavailable` with a `kind` and plain words, and callers fall back to rules
+as they always have.
 
 The backend comes from `ai.provider` (`provider.current`, which never changes by itself) and is rebuilt
 when any setting changes. In a test run it is a made-up AI that is never ready, unless a test installs one
@@ -90,7 +91,8 @@ def _build(name: str) -> Backend:
     if name == "hal":
         from .hal_gateway import GatewayBackend
 
-        return GatewayBackend(settings.get("ai.hal_url"), settings.get("ai.hal_token_file"))
+        return GatewayBackend(settings.get("ai.hal_url"), settings.get("ai.hal_token_file"),
+                              settings.get("ai.hal_batch_token_file"))
     if name == "claude_cli":
         from .claude_cli import ClaudeCLIBackend
 
@@ -157,6 +159,22 @@ def model_for(be: Backend, role: str) -> str:
     return found[0]
 
 
+def at_once(role: str = "checker") -> int:
+    """How many calls for `role` go to the AI at once: the slots the backend says its model serves (Hal's gateway
+    reports its writer's `parallel`), else `ai.parallel`. More calls than slots only queue at the model, and the
+    wait counts against each call's timeout: four calls on Hal's two-slot writer timed out after 300 s
+    (2026-11-12)."""
+    chosen = max(1, int(_settings().get("ai.parallel")))
+    be = backend()
+    slots = getattr(be, "slots", None)
+    if slots is None:
+        return chosen
+    try:
+        return int(slots(model_for(be, role))) or chosen
+    except LLMUnavailable:
+        return chosen
+
+
 class _Turns:
     """At most `limit` calls at once; a waiting call with a lower priority number goes first."""
 
@@ -200,19 +218,22 @@ def _record(outcome, req: ChatRequest, be: Backend, model: str, chars_out: int) 
 
 
 def chat(system: str, user: str, *, role: str = "checker", json_out: bool = False, timeout: float | None = None,
-         ctx: int | None = None, purpose: str = "", priority: int | None = None, job_id: str | None = None) -> str:
-    """Asks the AI and returns its reply; raises `LLMUnavailable` when it cannot answer now."""
+         ctx: int | None = None, purpose: str = "", priority: int | None = None, job_id: str | None = None,
+         temperature: float | None = None) -> str:
+    """Asks the AI and returns its reply; raises `LLMUnavailable` when it cannot answer now. `temperature`
+    overrides the backend's own for this request."""
     settings = _settings()
     req = ChatRequest(system=system, user=user, role=role_for(role), json_out=json_out,
                       timeout=float(timeout or settings.get("ai.timeout")), ctx=ctx, purpose=purpose,
-                      priority=current_priority() if priority is None else priority, job_id=job_id)
+                      priority=current_priority() if priority is None else priority, job_id=job_id,
+                      temperature=temperature)
     guard.check(req)
     be = backend()
     budget.admit(req.priority, purpose, be)
     if be.local_gpu and gpu.gate_on():
         gpu.wait(req.priority)
     model = model_for(be, req.role)
-    with _turns.turn(req.priority, int(settings.get("ai.parallel")), req.timeout), \
+    with _turns.turn(req.priority, at_once(req.role), req.timeout), \
             (gpu.claim(req.priority) if be.local_gpu else contextlib.nullcontext()):
         try:
             result = be.chat(req, model)

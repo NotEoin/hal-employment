@@ -2,7 +2,9 @@
 
 Preparing ahead is a search-side job, so it stops while the person has paused Hal, or while the owner's
 Hal is switched off and the Hal add-on respects that. Reading the record folder is the schedule's
-`record.sync` job, which calls `sync_record` every `schedule.record_every` minutes.
+`record.sync` job, which calls `sync_record` every `schedule.record_every` minutes; that is also when files
+put in the drop folder (`record.drop_folder`) are sorted: Hal proposes a place for each, for the person to accept
+on Your record, and never reads them straight in (`sections.sort_actions.queue_inbox`).
 """
 import logging
 import time
@@ -40,11 +42,18 @@ def step_once(con) -> bool:
 
 
 def sync_record() -> dict:
-    """Reads new or changed notes in the record folder; an unreadable folder is reported, not raised."""
+    """Reads new or changed notes in the record folder, and starts sorting the drop folder when it has new files.
+
+    An unreadable folder is reported, not raised.
+    """
+    from ..sections import sort_actions
+
     try:
-        return record.sync()
+        out = record.sync()
     except record.RecordUnavailable as e:
         return {"error": str(e)}
+    out["sort_id"] = sort_actions.queue_inbox()
+    return out
 
 
 def worker() -> None:

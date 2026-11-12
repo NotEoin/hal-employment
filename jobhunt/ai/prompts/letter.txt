@@ -2,10 +2,35 @@
 # used: When Hal drafts a cover letter for a job
 # needs: name, letter_words, tone, spelling, type_letter_mentions, type_evidence, avoid_phrases, voice_examples
 Write a cover letter from {name} for this job. About {letter_words} words, and
-not much fewer, in three paragraphs: why this employer and role specifically; the two or three
-strongest pieces of evidence, each tied to a requirement; a one-line close. Mention
+not much fewer, in three or four paragraphs. The first names the role and says why this
+employer: tie one specific thing about the applicant (a named project, module or interest from
+their facts) to one specific thing about the employer, in the applicant's own words. Never
+restate the advert or the company's description of itself as the reason. The middle gives
+the two or three strongest pieces of evidence, each tied by name to a requirement the advert
+states: what was done, where, for whom and what came of it. The last is one or two sentences
+asking for the next step. Mention
 {type_letter_mentions}. The evidence that counts most for this applicant is {type_evidence}.
-Refer to each piece of evidence by its name, never by a code. The tone is {tone}; write in
-{spelling}. Never use these words or phrases: {avoid_phrases}. No greeting line or sign-off;
-those are added separately. Use only the facts given.
+Refer to each piece of evidence by its name. The tone is {tone}; write in {spelling}.
+Rules:
+- Use only the facts given. Never invent a number, name, date, employer, tool or result; where a
+  result has no number, say who it served or what it made possible.
+- Today's date and the applicant's stage are given. Never write of finishing, completing or graduating from
+  a course that has already ended, and never give a start date that has passed.
+- A project's kind is given where it is known (degree work, university team project, at work, personal
+  project). Never change it: a personal project is never part of a degree, coursework or research, a
+  university team project is never a personal project, degree work is never personal work or a job.
+- Keep each project's context and the applicant's part as given (a team's work stays a team's).
+- When the request gives a motivation pairing, the sentences on why this employer use that pairing alone:
+  its fact about the employer and the applicant's fact, in your own words.
+- Add what the CV cannot say (context, motive, the link to this job); never repeat CV lines.
+- The reason for this employer must fit no other employer: name one thing from the advert in a few
+  words and say what it means to the applicant; never copy the advert's sentences.
+- Plain words and short sentences. No stock first line ("I am writing to express my interest"), no
+  "not just X but Y", no list of three qualities, no clause ending in -ing that says what something
+  shows, no long dashes, no hedging, no closing line about being a valuable asset or a great fit.
+- Write in the first person, as {name} writing to the employer; start no more than half the sentences with
+  "I", without writing round it ("The dissertation demonstrated ..." reads as if someone else wrote it).
+- Follow the conventions for this kind of job when the request gives them.
+Never use these words or phrases: {avoid_phrases}. No greeting line or sign-off; those are added
+separately.
 {voice_examples}

@@ -1,0 +1,449 @@
+"""Checks on a finished draft that need no AI: a reply cut off, a tool put on the wrong project.
+
+Each is a rule a pattern can see, so the same draft always gets the same answer (as in `writing.check`).
+
+Design decisions, each with its reason:
+
+- A reply is cut off when its last line is a sentence (more than `SIGNOFF_WORDS` words) that ends without
+  punctuation: a letter ended "distingu" when the model ran out of room (2026-11-07). A short last line is a
+  sign-off ("Best wishes," or a name), not a cut. The AI layer does not say why a reply stopped, so the
+  text is the only sign.
+- A tool is on the wrong project when a sentence names one project card and a tool some checked card or
+  skill lists, but that project's own tools, name and summary never name it: a letter said a Lua project
+  "required C++ and multithreading" (2026-11-07). A sentence naming two projects is left alone, as the tool
+  may be the other's.
+- A sentence misframes a project when it names one project card and words of a degree or of the person's own
+  time that disagree with that card's context (`profile.contexts`): a letter said "My Computer Science
+  degree includes building a local RAG assistant" of a personal project (2026-11-07). The words are narrow
+  on purpose ("module" only as course work, "personal" only as personal work or project), as "a Lua module"
+  or "personal data" say nothing about where the work was done. A sentence that also says words agreeing
+  with the card ("alongside my degree, in my own time") is left alone.
+- A fit row says each project's own kind (`own_contexts`): "personal projects like Hal and CramBerry" called a
+  degree team project personal (2026-11-08), so a kind that does not fit a named card is taken out and each
+  card's own context words follow its name.
+- A sentence names a project card by its name, by another name the card carries (`aliases`: the names of
+  hidden cards resting on the same file, and its repository's or folder's name), or by a distinctive word
+  of its name used as a name ("LIDAR" in "the LIDAR Autonavigation project" for "LIDAR Autonomous
+  Navigation"): a letter placed a personal project in a degree under a shorter name and was not caught
+  (2026-11-07). A distinctive word is an acronym or a word with inner capitals that no other card's names
+  hold, and it counts only before another capitalised word or "project", so "about LIDAR" names nothing.
+- Evidence words (a fit row, the letter's Evidence line) get the same checks (`evidence_checked`), fixed in
+  place since each tool there is a list entry: a tool given to the wrong card is taken out, and a card of a
+  similar name is followed by its tag (`tagged`). A CV line names a card only as `named_cards` reads it in
+  `backed`, as "Quill Employment: SQLite" backed SQLite for "Quill" and the fit table gave the assistant its
+  namesake's stack (2026-11-08).
+- A sentence echoes the employer when at least `ECHO_SHARE` of its own words sit in runs of `ECHO_RUN` words
+  found in the advert or the company brief: "I am drawn to the challenge of maintaining low default rates"
+  and "the role offers full in-house training" restated the advert as a reason (2026-11-07). Runs of three
+  words rarely match by chance, and a sentence half made of them restates rather than gives a reason. The
+  words of the job title and the employer's name (`names`) never count, so a sentence that only names the
+  role or the company is not an echo, and neither is one with fewer than `ECHO_MIN_WORDS` other words.
+- An advert phrase is never a fact of the person's work (`lifted`, 2026-11-08): "low-latency systems", "help
+  clients bring their ideas to life", "reliability of financial calculations" and "AI agents for customer
+  support" were the advert's words put into claims about the person, in sentences mostly their own, so
+  `echoes` let them through. A run of `ECHO_RUN` or more words found in the advert or the brief, with at
+  least `LIFT_CONTENT` own words, fails a sentence about the person's work, unless the person's facts hold
+  every one of those words. A sentence about the employer or the role (`about_employer`: "you", "your", "this
+  role", the employer's name or the job title) may use the advert's words.
+"""
+from __future__ import annotations
+
+import re
+
+from jobhunt.writing import check, planned, stage
+
+SIGNOFF_WORDS = 4          # a last line this short is a sign-off or a name, not a sentence
+ENDS = re.compile(r"[.!?:;)\]\"'\u2019]\s*$")
+FULL_STOP = re.compile(r"[.!?][\"')\u2019]?(?=\s|$)")
+SHORT_TOOL = 2             # a tool this short ("R", "Go") is matched only with its own capitals
+# Tools named like a plain English word, matched only with their own capitals: "you use AI to make loans fairer"
+# was checked as naming Make, another project's build tool (2026-11-12)
+WORD_TOOLS = frozenset({"ant", "chef", "dart", "elm", "ember", "express", "flask", "gin", "julia", "make", "meteor",
+                        "nest", "next", "pandas", "puppet", "react", "ruby", "rust", "salt", "spark", "spring",
+                        "swift", "vagrant"})
+
+
+def cut_off(text: str) -> bool:
+    """True when a draft stops mid-sentence: its last line is a sentence with no closing punctuation."""
+    lines = [line.strip() for line in (text or "").strip().splitlines() if line.strip()]
+    if not lines:
+        return False
+    last = lines[-1]
+    return len(last.split()) > SIGNOFF_WORDS and not ENDS.search(last)
+
+
+def last_full_sentence(text: str) -> str:
+    """The draft up to the end of its last whole sentence; the draft as it is when it has none."""
+    ends = list(FULL_STOP.finditer(text or ""))
+    return text[:ends[-1].end()].rstrip() if ends else text
+
+
+def names_tool(text: str, tool: str) -> bool:
+    """True when `text` names `tool` as a word ("C++" and "C#" included); short tools and tools named like a
+    plain word (`WORD_TOOLS`) only in their capitals."""
+    tool = tool.strip()
+    flags = 0 if len(tool) <= SHORT_TOOL or tool.lower() in WORD_TOOLS else re.I
+    return bool(tool) and re.search(rf"(?<![\w+#]){re.escape(tool)}(?![\w+#])", text or "", flags) is not None
+
+
+# A word of a card's name distinctive enough to stand for the card: an acronym ("LIDAR") or a word with
+# inner capitals ("FerryApp").
+DISTINCT = re.compile(r"[A-Z]{3,}\d*|[A-Z]?[a-z]+[A-Z]\w*")
+
+
+def card_names(card: dict) -> list[str]:
+    """Every name a card goes by: its own and its `aliases`, each also with "-" and "_" read as spaces."""
+    names = [card["name"], *card.get("aliases", [])]
+    return [n for n in dict.fromkeys(f for name in names if name.strip()
+                                      for f in (name.strip(), re.sub(r"[-_]+", " ", name).strip()))]
+
+
+def _distinct_words(card: dict, cards: list[dict]) -> list[str]:
+    """The distinctive words of a card's name that no other card's names hold."""
+    others = {w for c in cards if c is not card for n in card_names(c) for w in re.findall(r"\w+", n)}
+    return [w for w in re.findall(r"\w+", card["name"]) if DISTINCT.fullmatch(w) and w not in others]
+
+
+def names_card(sentence: str, card: dict, cards: list[dict] = ()) -> bool:
+    """True when a sentence names a project card: by a name of `card_names`, or by a distinctive word of its
+    name used as a name (see the module notes); `cards` are all the cards, to tell what is distinctive."""
+    if any(names_tool(sentence, n) for n in card_names(card)):
+        return True
+    return any(re.search(rf"(?<![\w-]){re.escape(w)}(?=\s+([A-Z]\w*|projects?\b))", sentence)
+               for w in _distinct_words(card, cards))
+
+
+def named_cards(sentence: str, cards: list[dict]) -> list[dict]:
+    """The cards a sentence names (`names_card`), leaving out a card named only inside a longer named card's
+    name: "Quill Employment drafts letters" names Quill Employment, not Quill too."""
+    named = [c for c in cards if c["name"].strip() and names_card(sentence, c, cards)]
+    out = []
+    for card in named:
+        longer = [n for o in named if o is not card for n in card_names(o)
+                  if any(names_tool(n, own) for own in card_names(card)) and len(n) > len(card["name"])]
+        rest = sentence
+        for n in sorted(longer, key=len, reverse=True):
+            rest = re.sub(re.escape(n), " ", rest, flags=re.I)
+        if not longer or names_card(rest, card, cards):
+            out.append(card)
+    return out
+
+
+def _purpose_words(card: dict) -> list[str]:
+    """The words of a card's tag that say what it is for, little and general words left out."""
+    return [w for w in re.findall(r"[\w+#-]+", card.get("tag") or "")
+            if w.lower() not in LITTLE_WORDS | NOT_PURPOSE and len(w) >= CROSSED_MIN]
+
+
+CROSSED_MIN = 3            # a tag's word this short ("a", "UI") says nothing of what a card is for
+# Words of a tag any project may say of itself, so they never tell one card from another.
+NOT_PURPOSE = frozenset("""over under between through across around via onto without within using built made
+personal project projects app application tool tools local small simple new own based my""".split())
+
+
+def crossed(draft: str, cards: list[dict]) -> list[str]:
+    """Sentences that name one of two cards with similar names (`profile.writing.similar`) with a tool or a
+    word of what it is for that only the other's card holds, each with whose it is: "Quill, a job-search
+    helper, ... (job-search is Quill Employment's, not Quill's)"."""
+    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    by_name = {c["name"]: c for c in projects}
+    out = []
+    for sentence in check.sentences(draft):
+        named = named_cards(sentence, projects)
+        if len(named) != 1 or not named[0].get("similar"):
+            continue
+        card = named[0]
+        own = " ".join([*card_names(card), card["kind"], card["summary"], *card["tools"], card.get("tag") or ""])
+        for other in (by_name[n] for n in card["similar"] if n in by_name):
+            hit = next((w for w in [*other["tools"], *_purpose_words(other)]
+                        if names_tool(sentence, w) and not names_tool(own, w)), None)
+            if hit:
+                out.append(f"{sentence} ({hit} is {other['name']}'s, not {card['name']}'s)")
+                break
+    return out
+
+
+def _planned_said(text: str, *cards: dict) -> list[str]:
+    """The tools the `cards`' plans name (`profile.writing.planned_only`), when `text` says they were planned;
+    [] otherwise, as a plan never backs a tool said to be used."""
+    return [t for c in cards for t in c.get("planned", ())] if planned.said(text) else []
+
+
+def misplaced_tools(draft: str, cards: list[dict], known: list[str]) -> list[str]:
+    """Sentences that give a project card a tool from `known` that the card's own facts never name, each
+    with the tool and the project: "The Lua tide gauge needed C++. (C++ is not among Tide gauge's tools)"."""
+    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    out = []
+    for sentence in check.sentences(draft):
+        named = named_cards(sentence, projects)
+        if len(named) != 1:
+            continue
+        card = named[0]
+        own = " ".join([*card_names(card), card["summary"], *card["tools"], *_planned_said(sentence, card)])
+        for tool in dict.fromkeys(known):
+            if names_tool(sentence, tool) and not names_tool(own, tool):
+                why = "is only on an older CV for" if tool in (card.get("older_cv") or ()) else "is not among"
+                out.append(f"{sentence} ({tool} {why} {card['name']}" + ("'s tools)" if why == "is not among" else ")"))
+                break
+    return out
+
+
+def backed(tool: str, named: list[dict], facts: str = "", cards: list[dict] = ()) -> bool:
+    """True when one of the `named` project cards names `tool` in its own facts (names, summary, tools), or a
+    line of `facts` (the CV) names the card and the tool together. With every card (`cards`), a line names a
+    card only as `named_cards` reads it, so "Quill Employment: SQLite" never backs SQLite for "Quill"."""
+    lines = (facts or "").splitlines()
+    for card in named:
+        if names_tool(" ".join([*card_names(card), card["summary"], *card["tools"]]), tool):
+            return True
+        if any(names_tool(line, tool) and _names_in(line, card, cards) for line in lines):
+            return True
+    return False
+
+
+def _names_in(line: str, card: dict, cards: list[dict]) -> bool:
+    if cards:
+        return card in named_cards(line, list(cards))
+    return any(names_tool(line, n) for n in card_names(card))
+
+
+def _others_tools(text: str, card: dict, by_name: dict[str, dict]) -> list[str]:
+    """The tools `text` names that only a card of a name like `card`'s holds (`crossed`)."""
+    own = " ".join([*card_names(card), card["kind"], card["summary"], *card["tools"], card.get("tag") or ""])
+    return [t for n in card.get("similar") or () if n in by_name for t in by_name[n]["tools"]
+            if names_tool(text, t) and not names_tool(own, t)]
+
+
+def tagged(text: str, cards: list[dict]) -> str:
+    """`text` with the first mention of each card of a similar name followed by its tag ("Quill (offline
+    assistant over personal notes)"), unless the tag is there already; a name inside a longer card's name
+    ("Quill" in "Quill Employment") is not a mention."""
+    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    for card in named_cards(text, projects):
+        tag = (card.get("tag") or "").strip()
+        if not tag or not card.get("similar") or tag.lower() in text.lower():
+            continue
+        longer = [n for o in projects if o is not card and len(o["name"]) > len(card["name"])
+                  for n in card_names(o) if names_tool(n, card["name"])]
+        inside = [m.span() for n in longer for m in re.finditer(re.escape(n), text, re.I)]
+        for m in re.finditer(rf"(?<![\w-]){re.escape(card['name'])}(?![\w-])", text, re.I):
+            if not any(a <= m.start() and m.end() <= b for a, b in inside):
+                text = f"{text[:m.end()]} ({tag}){text[m.end():]}"
+                break
+    return text
+
+
+def evidence_checked(text: str, cards: list[dict], known: list[str], facts: str = "") -> tuple[str, bool]:
+    """Evidence words (a fit row's, a letter note's) with each tool given to a project card that never used it
+    taken out, and each card of a similar name followed by its tag (`tagged`): (the words, whether a tool was
+    taken out).
+
+    Each part (a sentence or a ";" clause) naming project cards is read as `misplaced_tools` reads a draft: a
+    tool of `known` that none of the named cards' own facts, nor a CV line naming the card (`backed`), names,
+    or that only a card of a similar name holds (`crossed`), is taken out (`without_tools`); a part left with
+    no tool is dropped. A fit table gave a local assistant its namesake's database (2026-11-08).
+    """
+    projects = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    by_name = {c["name"]: c for c in projects}
+    parts, dropped = [], False
+    for part in re.split(r"(?<=[.;])\s+", str(text or "")):
+        named = named_cards(part, projects)
+        wrong = [t for t in dict.fromkeys(known) if named and names_tool(part, t)
+                 and not backed(t, named, facts, projects) and t not in _planned_said(part, *named)]
+        if len(named) == 1:
+            wrong += _others_tools(part, named[0], by_name)
+        if wrong:
+            dropped = True
+            part = without_tools(part, list(dict.fromkeys(wrong)))
+            if not any(names_tool(part, t) for t in known):
+                continue
+        parts.append(tagged(own_contexts(part, named), projects))
+    return " ".join(parts), dropped
+
+
+# "personal projects", "university project": a kind of project said of the cards a fit row names, with the
+# contexts (`stage.CONTEXTS`) each word fits.
+CONTEXT_PHRASE = re.compile(r"\b(personal|side|hobby|university|uni|degree|coursework|academic|module|team|group)"
+                            r"\s+(projects?)\b", re.I)
+PHRASE_FITS = {"personal": {stage.PERSONAL}, "side": {stage.PERSONAL}, "hobby": {stage.PERSONAL},
+               "university": {stage.DEGREE, stage.TEAM}, "uni": {stage.DEGREE, stage.TEAM},
+               "degree": {stage.DEGREE, stage.TEAM}, "coursework": {stage.DEGREE, stage.TEAM},
+               "academic": {stage.DEGREE, stage.TEAM}, "module": {stage.DEGREE, stage.TEAM},
+               "team": {stage.TEAM, stage.WORK}, "group": {stage.TEAM, stage.WORK}}
+
+
+def own_contexts(text: str, named: list[dict]) -> str:
+    """Evidence words whose kind of project ("personal projects like Quill and Ferry planner") does not fit a
+    named card's own context, with the kind taken out and each card's own context words after its name
+    ("projects like Quill (personal project) and Ferry planner (university team project)"); `text` as it is
+    when every named card fits. A fit row called a degree team project personal (2026-11-08)."""
+    found = list(CONTEXT_PHRASE.finditer(text or ""))
+    known = [c for c in named if c.get("context") in stage.CONTEXT_WORDS]
+    if not found or not any(c["context"] not in PHRASE_FITS[m.group(1).lower()] for m in found for c in known):
+        return text
+    out = CONTEXT_PHRASE.sub(lambda m: m.group(2), text)
+    for card in known:
+        out = re.sub(rf"(?<![\w-]){re.escape(card['name'])}(?![\w-])(?!\s*\()",
+                     lambda m, c=card: f"{m.group(0)} ({stage.CONTEXT_WORDS[c['context']]})", out, count=1, flags=re.I)
+    return out
+
+
+def without_tools(text: str, tools: list[str]) -> str:
+    """`text` with each of `tools` taken out of the list it stands in: "Lua, Pandas and SQL" without Pandas is
+    "Lua and SQL"."""
+    for tool in tools:
+        word = rf"(?<![\w+#]){re.escape(tool)}(?![\w+#])"
+        flags = 0 if len(tool.strip()) <= SHORT_TOOL else re.I
+        text = re.sub(rf"\s*,\s*{word}|{word}\s*,\s*|\s+(and|or|&)\s+{word}|{word}\s+(and|or|&)\s+|{word}", "", text,
+                      flags=flags)
+    text = re.sub(r",\s+(and|or)\s+", r" \1 ", text)
+    text = re.sub(r",(?=\s*([.;:)]|$))", "", text)
+    text = re.sub(r"\(\s*(tools:\s*)?\)", "", text)
+    return re.sub(r"\s+([.,;:)])", r"\1", " ".join(text.split()))
+
+
+# Words a sentence uses to place a project in a degree, in the person's own time, or at work.
+SAID_DEGREE = re.compile(r"\b(degree(?! of)|university|coursework|dissertation|my studies|(my|our) research|"
+                         r"research project|(as|for|in) (a|my|the|one) module|module (work|assignment|project))\b",
+                         re.I)
+SAID_PERSONAL = re.compile(r"\b(personal (project|work|interest|initiative)|(my|in my) own time|spare time|"
+                           r"side project|hobby|hobbies|for fun)\b", re.I)
+SAID_WORK = re.compile(r"\b(at work|placement|internship|in my (job|role)|for my employer|client)\b", re.I)
+SAID = {"degree": SAID_DEGREE, "personal": SAID_PERSONAL, "work": SAID_WORK}
+# For each context: the words that disagree with it, and the words that agree with it.
+CLASHES = {stage.PERSONAL: ("degree",), stage.DEGREE: ("personal",), stage.TEAM: ("personal",),
+           stage.WORK: ("degree", "personal")}
+AGREES = {stage.PERSONAL: ("personal",), stage.DEGREE: ("degree",), stage.TEAM: ("degree",), stage.WORK: ("work",)}
+NOT_WORDS = {"degree": "part of a degree", "personal": "a personal project"}
+IS_WORDS = {stage.DEGREE: "degree work", stage.TEAM: "a university team project", stage.WORK: "work done in a job",
+            stage.PERSONAL: "a personal project"}
+
+
+def wrong_context(draft: str, cards: list[dict]) -> list[str]:
+    """Sentences that place one project card in a degree or in the person's own time against its `context`,
+    each with what the card says: "My degree includes Tide gauge. (Tide gauge is a personal project, not part
+    of a degree)"."""
+    every = [c for c in cards if c["kind"].startswith("project") and c["name"].strip()]
+    projects = [c for c in every if c.get("context") in CLASHES]
+    out = []
+    for sentence in check.sentences(draft):
+        named = [c for c in named_cards(sentence, every) if c in projects]
+        if len(named) != 1:
+            continue
+        card = named[0]
+        if any(SAID[a].search(sentence) for a in AGREES[card["context"]]):
+            continue
+        clash = next((w for w in CLASHES[card["context"]] if SAID[w].search(sentence)), None)
+        if clash:
+            out.append(f"{sentence} ({card['name']} is {IS_WORDS[card['context']]}, not {NOT_WORDS[clash]})")
+    return out
+
+
+ECHO_RUN = 3               # words in a row that must match the employer's text to count
+ECHO_SHARE = 0.5           # share of a sentence's own words in such runs that makes it an echo
+ECHO_MIN_WORDS = 3         # a sentence needs this many own words in runs before it can echo
+# Words that carry no content of their own; they are matched in runs but never counted.
+LITTLE_WORDS = frozenset("""a an the and or but of to in on at for with by from as is are was were be been it its this
+that these those i me my we our you your they their which who will would can could am do does did so than
+into about also very""".split())
+WHY_QUESTION = re.compile(r"\bwhy\b.*\b(work|join|apply|applying|want|interested|choose|chose)\b|"
+                          r"\bmotivat\w*|\b(attracts?|appeals?|interests?) you\b", re.I)
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", (text or "").lower())
+
+
+def echoes(sentence: str, advert: str, brief: str = "", names: tuple[str, ...] = ()) -> bool:
+    """True when a sentence restates the advert or company brief (see the module notes); `names` are the job
+    title and the employer's name, whose words never count."""
+    words = _tokens(sentence)
+    theirs = [*_tokens(advert), "|", *_tokens(brief)]
+    runs = {tuple(theirs[i:i + ECHO_RUN]) for i in range(len(theirs) - ECHO_RUN + 1)}
+    named = {w for n in names for w in _tokens(n)}
+    covered = [False] * len(words)
+    for i in range(len(words) - ECHO_RUN + 1):
+        if tuple(words[i:i + ECHO_RUN]) in runs:
+            covered[i:i + ECHO_RUN] = [True] * ECHO_RUN
+    own = [c for w, c in zip(words, covered, strict=True) if w not in LITTLE_WORDS and w not in named]
+    echoed = sum(own)
+    return echoed >= ECHO_MIN_WORDS and echoed >= ECHO_SHARE * len(own)
+
+
+LIFT_CONTENT = 2           # own words an advert phrase of `ECHO_RUN` or more words needs to be a claim of its own
+LIFT_STEM = 5              # letters compared when the person's facts excuse a phrase ("builds" meets "build")
+# A sentence about the employer: it addresses them, or speaks of the role itself.
+ABOUT_EMPLOYER = re.compile(r"\b(?:you|your|yours)\b|\b(?:this|the) (?:role|job|position|post|vacancy)\b", re.I)
+
+
+def about_employer(sentence: str, names: tuple[str, ...] = ()) -> bool:
+    """True when a sentence is about the employer or the role (`ABOUT_EMPLOYER`, or it names the job title or
+    the employer, `names`), not about the person's own work."""
+    return bool(ABOUT_EMPLOYER.search(sentence or "")) or any(
+        n.strip() and re.search(rf"(?<!\w){re.escape(n.strip())}(?!\w)", sentence or "", re.I) for n in names)
+
+
+def lifted(sentence: str, advert: str, brief: str = "", names: tuple[str, ...] = (), own: str = "") -> str:
+    """The first phrase of at least `ECHO_RUN` words a sentence takes from the advert or the brief that holds at
+    least `LIFT_CONTENT` own words (little words and `names` aside) the person's facts (`own`) do not all hold
+    (by their first `LIFT_STEM` letters); "" when there is none (see the module notes)."""
+    words = _tokens(sentence)
+    theirs = [*_tokens(advert), "|", *_tokens(brief)]
+    runs = {tuple(theirs[i:i + ECHO_RUN]) for i in range(len(theirs) - ECHO_RUN + 1)}
+    covered = [False] * len(words)
+    for i in range(len(words) - ECHO_RUN + 1):
+        if tuple(words[i:i + ECHO_RUN]) in runs:
+            covered[i:i + ECHO_RUN] = [True] * ECHO_RUN
+    named = {w for n in names for w in _tokens(n)}
+    held = {w[:LIFT_STEM] for w in _tokens(own)}
+    k = 0
+    while k < len(words):
+        if not covered[k]:
+            k += 1
+            continue
+        end = next((j for j in range(k, len(words)) if not covered[j]), len(words))
+        content = [w for w in words[k:end] if w not in LITTLE_WORDS and w not in named]
+        if len(content) >= LIFT_CONTENT and not all(w[:LIFT_STEM] in held for w in content):
+            return " ".join(words[k:end])
+        k = end
+    return ""
+
+
+def first_paragraph(text: str) -> str:
+    """A letter's first paragraph, where it says why this role and this employer."""
+    return next((p for p in re.split(r"\n\s*\n", (text or "").strip()) if p.strip()), "")
+
+
+def echoed(text: str, advert: str, brief: str = "", names: tuple[str, ...] = ()) -> list[str]:
+    """The sentences of `text` that echo the advert or the brief (`echoes`)."""
+    return [s for s in check.sentences(text) if echoes(s, advert, brief, names)]
+
+
+CV_SHARE = 0.8             # share of a claim's own words one CV line must hold for the CV to state it
+CV_MIN_WORDS = 3           # a claim needs this many own words before the CV can be said to state it
+
+
+def stated_in(claim: str, cv_text: str) -> bool:
+    """True when one line or sentence of the CV holds at least `CV_SHARE` of a claim's own words: the CV
+    states it, so it is supported (a CV sentence was flagged as unsupported, 2026-11-07)."""
+    own = {w for w in _tokens(claim) if w not in LITTLE_WORDS}
+    if len(own) < CV_MIN_WORDS:
+        return False
+    parts = [set(_tokens(p)) for p in re.split(r"\n|(?<=[.!?;])\s+", cv_text or "") if p.strip()]
+    return any(len(own & part) >= CV_SHARE * len(own) for part in parts)
+
+
+# A form question asking why the person fits the job: graders saw a coursework expense tracker given as the fit
+# (2026-11-08), so its answer tells work the ranking fits to the job.
+FIT_QUESTION = re.compile(r"\b(?:good|great|right|best|strong) (?:fit|match)\b|\bsuit(?:ed|able|s you)\b|"
+                          r"\bwhy should we\b|\bwhat makes you\b", re.I)
+
+
+def fit_question(question: str) -> bool:
+    """True for a form question that asks why the person fits the job (`FIT_QUESTION`)."""
+    return bool(FIT_QUESTION.search(question or ""))
+
+
+def why_question(question: str) -> bool:
+    """True for a form question that asks why the person wants this job or employer."""
+    return bool(WHY_QUESTION.search(question or ""))

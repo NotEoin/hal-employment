@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 
 DOC_ID = "main"
 BIN_DAYS = 30                      # `cv_versions.binned`: purged after 30 days
-DEFAULT_TYPE = "technical_grad"    # the recipe used until a CV type is chosen
+DEFAULT_TYPE = "technical_grad"    # stored until a type is chosen; documents use `type_in_use`
 DEFAULT_LOOK = "classic"
 ROUTES = {"as_is": "original", "improve": "hal_copy", "fresh": "hal_copy"}   # route -> what employers get
 SENDS = ("original", "hal_copy")
@@ -437,6 +437,35 @@ def set_baseline_file(file_id: str, con: sqlite3.Connection | None = None) -> No
         with _writing(c):
             _update_doc(c, baseline_file_id=file_id)
     events.publish("cv", what="file", id=file_id)
+
+
+def type_chosen(con: sqlite3.Connection | None = None) -> bool:
+    """True when the person chose the CV type: a `type_change` version, or a type other than the first one."""
+    with _conn(con) as c:
+        if doc(c)["type_id"] != DEFAULT_TYPE:
+            return True
+        return c.execute("SELECT 1 FROM cv_versions WHERE origin = 'type_change' LIMIT 1").fetchone() is not None
+
+
+def type_in_use(con: sqlite3.Connection | None = None) -> str:
+    """The CV type documents are written for: the one the person chose, else the one Hal suggests from their goal,
+    subject and CV (`types.suggest`). Until 2026-11-12 everyone who never opened Type and look was written for as
+    a technical graduate (`DEFAULT_TYPE`), whatever they studied."""
+    with _conn(con) as c:
+        if type_chosen(c):
+            return doc(c)["type_id"]
+        _, cv = current(c)
+    from jobhunt.core import settings
+    from jobhunt.cvstudio import types
+
+    try:
+        from jobhunt.find import goal
+
+        wanted = goal.current()
+    except (ImportError, LookupError, KeyError) as e:
+        log.info("no goal to suggest a CV type from: %s", e)
+        wanted = None
+    return types.suggest(wanted, cv, subject=str(settings.get("you.education.subject") or ""))[0]
 
 
 def set_type(type_id: str, con: sqlite3.Connection | None = None) -> None:

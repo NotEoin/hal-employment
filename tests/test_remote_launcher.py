@@ -91,6 +91,10 @@ def serve(spec, master=None):
     try:
         srv.bind((lhost, int(lport)))
     except OSError:
+        # OpenSSH's words when -L cannot listen, with ExitOnForwardFailure
+        sys.stderr.write(f"bind [{{lhost}}]:{{lport}}: Address already in use\n"
+                         f"channel_setup_fwd_listener_tcpip: cannot listen to port: {{lport}}\n"
+                         "Could not request local forwarding.\n")
         sys.exit(255)
     srv.listen(16)
 
@@ -207,6 +211,17 @@ class Filled(unittest.TestCase):
         self.assertTrue(any(re.match(r'for /f "usebackq delims=" %%u in \(`%SSH% .*open-url --remote', line)
                             for line in lines), "the link is captured with for /f")
         self.assertIn('start "Hal tunnel" /min %SSH%', text)
+
+    def test_the_launchers_say_they_are_connecting_before_the_first_login(self):
+        # the window stayed blank until Hal opened, which looked like a hang on a slow login (2026-11-12)
+        for os_name, call in (("linux", "ssh "), ("mac", "ssh "), ("windows", "%SSH% ")):
+            lines = [line.strip() for line in launcher.render(os_name, host=HOST, user=USER, port=8737)
+                     .decode("ascii").splitlines() if not line.strip().startswith(("#", "rem "))]
+            said = next((k for k, line in enumerate(lines) if line.startswith("echo") and "Connecting to" in line),
+                        None)
+            first = next(k for k, line in enumerate(lines) if call in line and not line.startswith("echo"))
+            self.assertIsNotNone(said, os_name)
+            self.assertLess(said, first, os_name)
 
     def test_the_launchers_refuse_names_that_could_run_commands(self):
         for host, user in (("desk;rm -rf ~", USER), (HOST, "sam$(id)"), ("", USER), (HOST, "a b")):
@@ -346,6 +361,15 @@ class EndToEnd(unittest.TestCase):
         self.assertGreater(urlport(seen["url"]), taken)
         self.assertEqual((seen["open"], seen["session"]), (302, 200))
         self.assertTrue(seen["body"]["remote"])
+
+    def test_a_port_that_refuses_connections_but_cannot_be_listened_on_is_skipped(self):
+        """The next port answered nothing but was held by a connection, and the launcher gave up (2026-11-05)."""
+        with socket.socket() as busy:
+            busy.bind(("127.0.0.1", 0))      # bound, not listening: a connection to it is refused
+            taken = busy.getsockname()[1]
+            seen = self.run_launcher(taken)
+        self.assertGreater(urlport(seen["url"]), taken)
+        self.assertEqual((seen["open"], seen["session"]), (302, 200))
 
     def test_install_adds_a_menu_entry_that_opens_in_a_terminal(self):
         done = subprocess.run([str(self.script), "--install"], env=self.env, capture_output=True, text=True,

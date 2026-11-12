@@ -6,7 +6,10 @@
 - Opening or choosing the folder acts on the computer Hal runs on, so those routes are `local_only`.
 - Reading the folder and asking it a question are actions (`evidence/actions.py`); the routes return their
   ids at once.
-- Uploaded files go into the record's Inbox folder, never over a file already there.
+- Uploaded files and zips are sorted, never read straight in: they start "Sort a big folder for me"
+  (`sections.sort_routes.start_upload`), whose proposals the person accepts. The bulk read that guessed each
+  file's kind and owner is kept only for records an older Hal built (`ingest.engine`). This route and the
+  sort's own upload take bodies past the router's usual cap, up to `UPLOAD_MAX_BODY`.
 """
 from __future__ import annotations
 
@@ -23,13 +26,16 @@ from pathlib import Path
 from jobhunt import record
 from jobhunt.core import runner
 from jobhunt.evidence import actions  # noqa: F401 - registers record.sync and record.ask before a route starts one
-from jobhunt.web.router import BadRequest, FileResponse, NotFound, route
+from jobhunt.web.router import MB, BadRequest, FileResponse, NotFound, route
 
 log = logging.getLogger(__name__)
 INBOX = "Inbox"
 OTHER_GROUP = "Other files"                   # files at the top of the folder, in no subfolder
 SAMPLE_NAMES = 3                              # file names shown under each group
 OPEN_TIMEOUT_S = 10
+# The whole request is held in memory while it is parsed, twice over, so the cap stays well under a laptop's
+# memory; a larger set of files is sorted from its folder (`POST /api/v2/record/sort`) on the computer itself.
+UPLOAD_MAX_BODY = 256 * MB
 # The folders setup makes: Private holds what the AI never sees.
 STARTER_FOLDERS = ("Certificates", "Education", "Jobs", "Volunteering", "References", INBOX, "Private")
 START_HERE = """---
@@ -106,32 +112,19 @@ def download(req) -> FileResponse:
                         download=True)
 
 
-def _free_name(folder: Path, name: str) -> Path:
-    clean = Path(name).name.strip() or "file"
-    if clean.startswith("."):
-        raise BadRequest("Files whose names start with a dot cannot be added.")
-    target, n = folder / clean, 2
-    while target.exists():
-        target, n = folder / f"{Path(clean).stem} ({n}){Path(clean).suffix}", n + 1
-    return target
-
-
-@route("POST", "/api/v2/record/files")
+@route("POST", "/api/v2/record/files", max_body=UPLOAD_MAX_BODY)
 def add_files(req) -> dict:
-    """Copies uploaded files into the record's Inbox and starts reading the folder."""
+    """Keeps uploaded files and zips for "Sort a big folder for me" and starts sorting them; nothing is read into
+    the record until the person accepts where Hal proposes each goes (`sections.sort_routes`).
+
+    Returns {"added": [names], "sort": SORT, "action_id"}. The form's `origin`, which an older page sent, is
+    not needed: the section the person accepts says whose each file is.
+    """
+    from jobhunt.sections import sort_routes
+
     if not req.files:
         raise BadRequest("Choose one or more files to add.")
-    folder = Path(record._live("VAULT"))
-    if not folder.exists():
-        raise BadRequest("Your record folder is not there yet. Make it first.")
-    inbox = folder / INBOX
-    inbox.mkdir(exist_ok=True)
-    added = []
-    for upload in req.files.values():
-        target = _free_name(inbox, upload.name)
-        target.write_bytes(upload.data)
-        added.append(target.name)
-    return {"added": added, "action_id": _start_sync(req)}
+    return sort_routes.start_upload(req, "You added files to sort into your record")
 
 
 def _start_sync(req) -> str | None:

@@ -17,7 +17,9 @@ from support.ui import LOAD_TIMEOUT_MS, ROUTES, AppPage, chromium, skip_unless_b
 
 TITLES = {"home": "Home", "jobs": "Jobs", "job": "Job", "apps": "Applications", "app": "Application",
           "inbox": "Messages", "cv": "My CV", "docs": "Documents", "record": "Your record", "activity": "Activity",
-          "memory": "What Hal remembers", "settings": "Settings", "setup": "Setup guide"}
+          "check": "Check your record", "sort": "Check the sorted list", "memory": "What Hal remembers",
+          "settings": "Settings",
+          "setup": "Setup guide"}
 FULL_MENU = ["Home", "Jobs", "Applications", "Messages", "My CV", "Documents", "Your record", "Activity",
              "What Hal remembers", "Settings", "Help and shortcuts"]
 NAV_TEXTS = """() => [...document.querySelectorAll('nav.rail .nav')].map(b => {
@@ -288,6 +290,20 @@ class ShellTest(unittest.TestCase):
                                  timeout=LOAD_TIMEOUT_MS)
         self.assertEqual(p.page.title(), "(1) Home - Hal Employment")
         self.assertEqual(p.errors, [])
+
+    def test_a_long_job_shows_a_bar_not_a_dot_per_step_and_the_page_never_scrolls_sideways(self) -> None:
+        """Regression: reading 285 waiting files drew 285 step dots, 4,842 px wide, so every page scrolled
+        sideways while it ran (2026-11-12)."""
+        srv = self.serve(status=made_up_status(busy=True, text="Hal is reading your files", step_n=120,
+                                               step_total=285, action_id="a1", why_activity_id=7, problems=0))
+        for size in ("narrow", "wide"):
+            with self.subTest(size=size):
+                p = self.tab(srv, size).open("home")
+                line = p.page.get_by_role("status").first
+                p.page.wait_for_function("() => document.querySelector('.stepsm')", timeout=LOAD_TIMEOUT_MS)
+                self.assertIn("Step 120 of 285", line.inner_text())
+                self.assertLessEqual(p.page.locator(".stepsm i").count(), 1)
+                self.assertEqual(p.sideways(), 0)
 
     def test_the_status_line_shows_what_hal_is_doing_with_why_and_stop(self) -> None:
         srv = self.serve(status=made_up_status(busy=True, text="Hal is writing a cover letter", step_n=2,

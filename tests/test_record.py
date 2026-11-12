@@ -115,6 +115,21 @@ class Record(unittest.TestCase):
         self.assertIn("## First Aid", (self.vault / "certs (DOCX).md").read_text(encoding="utf-8"))
         self.assertEqual(record.search("first aid certificate", min_score=0.3)[0]["heading"], "First Aid")
 
+    def test_a_libreoffice_document_is_read(self):
+        """MarkItDown reads no OpenDocument file, so a LibreOffice essay had no words Hal could read (2026-11-12)."""
+        t = 'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+        o = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
+        xml = (f'<office:document-content {o} {t}><office:body><office:text>'
+               '<text:h text:outline-level="2">Reform petitions</text:h>'
+               '<text:p>I read <text:span>46 petitions</text:span> in the Made-up Record Office.</text:p>'
+               '<text:list><text:list-item><text:p>Archival research</text:p></text:list-item></text:list>'
+               '</office:text></office:body></office:document-content>')
+        path = self.vault / "Essay (final) [v2].odt"
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("content.xml", xml)
+        self.assertEqual(record.text_of(path), "## Reform petitions\n\nI read 46 petitions in the Made-up Record "
+                                               "Office.\n\nArchival research")
+
     @unittest.skipUnless(record._tesseract(), "tesseract is not installed")
     def test_a_scanned_certificate_is_read_by_ocr(self):
         """A photo of a certificate has no text layer, so its words come from OCR."""
@@ -145,6 +160,14 @@ class Record(unittest.TestCase):
         self.assertEqual((out["changed"], out["removed"], out["notes"]), (1, 1, 1))
         self.assertIn("Trained three", record.search("bar staff", min_score=0)[0]["text"])
         self.assertFalse(record.search("chess team"))
+
+    def test_a_note_removed_while_the_record_is_read_is_left_out(self):
+        """A tidy deleted a note between the walk and the read, and the sync failed (2026-11-05)."""
+        self.note("Notes/a.md", "# A\n\nWorked the late bar shift at the Made-up Arms on weekends.\n")
+        listed = [*record._walk((".md",)), self.vault / "Notes" / "gone.md"]
+        with mock.patch.object(record, "_walk", return_value=listed):
+            out = record.sync()
+        self.assertEqual((out["notes"], out["changed"]), (1, 1))
 
     def test_word_forms_match_and_off_subject_passages_are_left_out(self):
         """"Archival cataloguing" finds a note on cataloguing archives; a passage sharing only "experience" does not."""
@@ -240,6 +263,96 @@ class Record(unittest.TestCase):
         self.assertEqual(record.status()["read"], "2026-10-22T09:00:00Z")
         self.assertEqual(json.loads(Path(record.INDEX).read_text())["read"], "2026-10-22T09:00:00Z")
 
+    def whose_notes(self) -> None:
+        """One note about a made-up robot arm for each kind of owner, each naming who it belongs to."""
+        hal = "---\ntype: source\nhal: ingested\nrole: {role}\n---\n# {title}\n\nThe robot arm {words}, made-up text.\n"
+        self.note("Sources/Projects/Mine.md", hal.format(role="own", title="Mine", words="I built in Python"))
+        self.note("Sources/Study notes/Lecture.md",
+                  hal.format(role="taught", title="Lecture", words="a lecture showed"))
+        self.note("Sources/Other/Unsure.md", hal.format(role="unsure", title="Unsure", words="someone described"))
+        self.note("Sources/Other/Theirs.md", hal.format(role="others", title="Theirs", words="a classmate built"))
+        self.note("Sources/Other/Older.md", "---\nhal: ingested\n---\n# Older\n\nThe robot arm an older read filed, "
+                                            "made-up text.\n")
+        self.note("My notes/Robot.md", "# Robot\n\nThe robot arm I wired up myself at home, made-up text.\n")
+        self.note("My notes/Old robot.md", "---\ntier: archive\n---\n# Old robot\n\nThe robot arm from years ago, "
+                                           "made-up text.\n")
+
+    def test_only_the_persons_own_documents_feed_writing(self):
+        # lecture notes, unsure notes and other people's notes were passages a letter called true (2026-11-06)
+        self.whose_notes()
+        record.sync()
+        used = set(re.findall(r"^\[(.*?) >", record.context(["robot arm"]), re.M))
+        self.assertEqual(used, {"Sources/Projects/Mine.md", "My notes/Robot.md"})
+        self.assertEqual({h["path"] for hits in record.writing_hits(["robot arm"], per_query=10) for h in hits}, used)
+        # Asking the record may still search everything, course material too.
+        everything = {h["path"] for h in record.search("robot arm", k=10)}
+        self.assertIn("Sources/Study notes/Lecture.md", everything)
+        self.assertIn("My notes/Old robot.md", everything)
+
+    def test_old_cvs_and_letters_to_other_employers_never_feed_writing(self):
+        # an older CV draft's unfinished project and other employers' letters were a letter's evidence (2026-11-07)
+        own = ("---\ntype: source\nhal: ingested\nrole: own\ndoc_type: {kind}\n---\n# {title}\n\n"
+               "The robot arm {words}, with a gripper, two servos and a made-up controller board on a bench.\n")
+        self.note("Sources/CVs and letters/Old CV.md",
+                  own.format(kind="cv", title="Old CV", words="I am building"))
+        self.note("Sources/CVs and letters/Letter.md", own.format(kind="letter", title="Letter", words="at your firm"))
+        self.note("Sources/Projects/Arm.md", own.format(kind="project", title="Arm", words="I built in Python"))
+        for n in range(4):               # other notes, so the words being searched for are not in every note
+            self.note(f"My notes/Other {n}.md", f"# Other {n}\n\nA made-up note about river tides and the moon's "
+                                                f"pull on the made-up bay, number {n}.\n")
+        record.sync()
+        used = {h["path"] for hits in record.writing_hits(["robot arm"], per_query=10) for h in hits}
+        self.assertEqual(used, {"Sources/Projects/Arm.md"})
+        self.assertIn("Sources/CVs and letters/Old CV.md", {h["path"] for h in record.search("robot arm", k=10)})
+
+    def test_only_the_persons_own_documents_feed_writing_when_searching_by_meaning(self):
+        self.settings["record.search"] = "meaning"
+        self.whose_notes()
+        with ai.use(WordVectors()):
+            record.sync()
+            hits = record.writing_hits(["robot arm made-up text"], per_query=10)[0]
+        self.assertEqual({h["by"] for h in hits}, {"meaning"})
+        self.assertEqual({h["path"] for h in hits}, {"Sources/Projects/Mine.md", "My notes/Robot.md"})
+
+    def test_cv_suggestions_read_only_the_persons_own_documents(self):
+        from types import SimpleNamespace
+
+        from jobhunt.cvstudio import suggest
+
+        self.whose_notes()
+        record.sync()
+        entry = SimpleNamespace(heading="Robot arm", org="", hidden=False)
+        doc = SimpleNamespace(sections=[SimpleNamespace(id="s:projects", entries=[entry])])
+        self.assertTrue({p["path"] for p in suggest.passages_for(doc, ["s:projects"])}
+                        <= {"Sources/Projects/Mine.md", "My notes/Robot.md"})
+        self.assertTrue(suggest.passages_for(doc, ["s:projects"]))
+
+    def test_a_projects_passage_says_its_kind(self):
+        # a letter called a personal project "degree work" (2026-11-06)
+        own = "---\nhal: ingested\nrole: own\ndoc_type: {doc_type}\n---\n# {title}\n\nThe tide gauge {words}.\n"
+        self.note("Sources/Code/Tide gauge.md", own.format(doc_type="repository", title="Tide gauge",
+                                                           words="logs made-up harbour levels in Lua"))
+        self.note("Sources/Coursework/Harbour.md", own.format(doc_type="coursework", title="Harbour",
+                                                              words="survey of a made-up harbour for a module"))
+        record.sync()
+        found = record.context(["tide gauge harbour"], per_query=5)
+        self.assertIn("[Sources/Code/Tide gauge.md > Tide gauge]\n(Kind: personal project)\n", found)
+        self.assertIn("[Sources/Coursework/Harbour.md > Harbour]\n(Kind: degree work)\n", found)
+
+    def test_an_index_made_before_passages_kept_their_role_is_read_again(self):
+        self.whose_notes()
+        record.sync()
+        index = json.loads(Path(record.INDEX).read_text())
+        old = {**index, "chunks": [{k: c[k] for k in ("path", "title", "heading", "text")} for c in index["chunks"]]}
+        del old["version"]
+        Path(record.INDEX).write_text(json.dumps(old), encoding="utf-8")
+        record._CACHE.clear()
+        self.assertEqual(record.context(["robot arm"]), "", "a passage whose role is unknown is never used")
+        self.assertEqual(record.sync()["changed"], 7)
+        self.assertEqual(json.loads(Path(record.INDEX).read_text())["version"], record.INDEX_VERSION)
+        self.assertIn("[Sources/Projects/Mine.md > Mine]", record.context(["robot arm"]))
+        self.assertEqual(record.sync()["changed"], 0)
+
 
 class Health(unittest.TestCase):
     """Regression: the record check was a plain dict, so "Is Hal working?" showed it as a broken check."""
@@ -253,6 +366,19 @@ class Health(unittest.TestCase):
         self.assertEqual(rows["record"]["text"], "Your record folder is not there yet.")
         self.assertEqual(rows["record"]["fix"], {"label": "Make the folder", "action": None, "route": "record"})
 
+
+
+class EvidenceWeight(unittest.TestCase):
+    def test_a_cv_outranks_a_lecture_note_that_matches_the_words_better(self):
+        # a trivia quiz in the study notes outranked the person's CVs as a letter's evidence (2026-11-05)
+        hits = [[{"path": "Sources/Study notes/quiz.md", "heading": "Text", "text": "Quiz on customers.", "score": 1.0},
+                 {"path": "Sources/CVs and letters/CV.md", "heading": "Experience", "text": "Served customers.",
+                  "score": 0.8},
+                 {"path": "My notes/Volunteering.md", "heading": "Museum", "text": "Ran tours.", "score": 0.7}]]
+        with mock.patch.object(record, "search_many", return_value=hits):
+            out = record.context(["customer service"], per_query=2)
+        self.assertEqual(re.findall(r"^\[(.*?) >", out, re.M),
+                         ["Sources/CVs and letters/CV.md", "My notes/Volunteering.md"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -111,9 +111,11 @@ class SuggestionsTab(unittest.TestCase):
     def test_the_adjust_card_and_a_jobs_change_list_draw_and_answer(self) -> None:
         p = self.page("narrow", "dark")
         p.page.evaluate(MOUNT, ["tailor-setting.js", "TailorSetting", {}])
-        p.page.wait_for_selector("#p34-TailorSetting >> text=A little: Hal reorders sections and skills")
+        p.page.wait_for_selector("#p34-TailorSetting >> text=A little: Hal puts the projects and skill groups")
+        # regression: the card promised rewritten bullets and a "cares about first" step no application did
+        self.assertNotIn("Ask me what the job cares about first", p.page.inner_text("#p34-TailorSetting"))
         p.page.click("#p34-TailorSetting [role=radio]:has-text('More')")
-        p.page.wait_for_selector("#p34-TailorSetting >> text=More: Hal may also rewrite bullets")
+        p.page.wait_for_selector("#p34-TailorSetting >> text=More: the same as A little in this version")
         p.page.evaluate(MOUNT, ["job-changes.js", "JobChanges", {"changes": CHANGES}])
         box = p.page.inner_text("#p34-JobChanges")
         self.assertIn("Hal changed 2 things from your CV for this job.", box)

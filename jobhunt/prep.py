@@ -6,6 +6,7 @@ to send on their behalf. The prompt (`ai/prompts/prep.txt`) names no one: `cvstu
 with the person and the CV type's `prep_topics`, and the tests the advert names go in the request.
 """
 from . import cv, db, documents, llm, pack, record
+from .writing import stage as person_stage
 
 PREP_TIMEOUT = 600   # seconds; the notes are long, and a local model on a busy graphics card is slow
 ADVERT_CHARS = 8000  # what fits a local model's context beside the instructions and the evidence
@@ -20,17 +21,18 @@ def request(job, who: dict) -> str:
     kept = record.context([job["title"], *(m["requirement"] for m in s["fit"])], per_query=2)
     # with no record, "Employment record: none" read to Claude as a record that lacked a job on the CV, and
     # the notes warned the person about it (made-up humanities run, 2026-10-23); so an empty record is left out
-    return (f"Stage: {stage}\nJob: {job['title']} at {job['company']}\n"
+    return (f"Application stage: {stage}\n{person_stage.today_lines()}\nJob: {job['title']} at {job['company']}\n"
             f"Tests the advert names: {who['test_kinds_line']}\n\n"
             f"Advert:\n{(job['description'] or '')[:ADVERT_CHARS]}\n\nFit map:\n{fit}\n"
             f"Gaps: {s['gaps']}\n\nCV facts:\n{cv.facts_text()}"
-            + (f"\n\nEmployment record (true; fuller than the CV):\n{kept}" if kept else ""))
+            + (f"\n\nEmployment record ({record.OWN_DOCUMENTS}; fuller than the CV):\n{kept}" if kept else ""))
 
 
 def build(con, job) -> str:
     """Drafts the preparation notes for a job, stores them, and returns them."""
     who = pack.person(job)
-    notes = llm.chat(pack.prompt("prep", who), request(job, who), role="main", timeout=PREP_TIMEOUT).strip()
+    notes = pack.spelt(llm.chat(pack.prompt("prep", who), request(job, who), role="main",
+                                timeout=PREP_TIMEOUT, purpose="prep").strip(), who)
     con.execute("""INSERT INTO applications (job_id, stage, prep, updated) VALUES (?, 'submitted', ?, ?)
                    ON CONFLICT(job_id) DO UPDATE SET prep = excluded.prep, updated = excluded.updated""",
                 (job["id"], notes, db.now()))

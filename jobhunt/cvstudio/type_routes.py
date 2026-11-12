@@ -28,7 +28,7 @@ def _store():
 
 
 def _current_type_id() -> str:
-    return _store().doc()["type_id"]
+    return _store().type_in_use()
 
 
 def _goal():
@@ -72,7 +72,8 @@ def list_types(req: Request) -> dict:
 def choose_type(req: Request) -> dict:
     """Uses another CV type: a new version records the change, then Hal works out suggestions to match."""
     t = _type_or_404(str((req.body or {}).get("id") or ""), req.con)
-    if t.id == _current_type_id():
+    # a type nobody chose is only Hal's suggestion: choosing it, even the one in use, records the choice
+    if _store().type_chosen() and t.id == _store().doc()["type_id"]:
         return {"ok": True, "type": {"id": t.id, "name": t.name}, "version_id": None}
     _set_type(req.con, t.id)
     version_id = None

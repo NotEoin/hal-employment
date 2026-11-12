@@ -48,13 +48,13 @@ def actions_list(req: Request) -> list[dict]:
     return runner.listing(req.con, req.query.get("state") or None)
 
 
-@route("GET", "/api/v2/actions/{action_id}")
+@route("GET", "/api/v2/actions/{action_id}", auth="session_or_local")
 def actions_one(req: Request) -> dict:
     """One action and its steps."""
     return runner.get(req.params["action_id"], req.con)
 
 
-@route("POST", "/api/v2/actions/{action_id}/stop")
+@route("POST", "/api/v2/actions/{action_id}/stop", auth="session_or_local")
 def actions_stop(req: Request) -> dict:
     """Stops an action; the work it already did is kept."""
     runner.get(req.params["action_id"], req.con)

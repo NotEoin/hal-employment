@@ -25,6 +25,7 @@ POLL_S = 1.0                # how often the listener checks its deadline
 BUSY_RETRY_S = 30.0         # a run already going: look again after this
 SEARCH_KINDS = ("find.discover",)
 WHY = {"search": "A search for jobs finished", "cv": "You left a CV suggestion as it is",
+       "writing": "You changed something Hal wrote",
        "feedback": "You saved or hid a job", "nightly": "Nightly look at your choices"}
 
 
@@ -36,7 +37,7 @@ def _example(world) -> dict:
                why="You chose {reason} for {n} jobs this week", priority=2, example=_example)
 def look(ctx, trigger: str = "nightly", reason: str | None = None, n: int | None = None) -> dict:
     """Runs every pattern; suggestions wait for the person, nothing else changes."""
-    ctx.step("Looking at the jobs you saved and hid, and the CV lines you kept")
+    ctx.step("Looking at the jobs you saved and hid, the CV lines you kept and your edits")
     found = patterns.run(ctx.con)
     if found["new"]:
         ctx.changed(f"{len(found['new'])} new suggestion{'s' if len(found['new']) != 1 else ''} waiting for you "
@@ -79,6 +80,8 @@ def trigger_of(ev: events.Event) -> str | None:
     """Which kind of run an event calls for, or None."""
     if ev.type == "job":
         return "feedback"
+    if ev.type == "writing":
+        return "writing"
     if ev.type == "suggestions" and ev.data.get("source") != items.EVENT_SOURCE:
         return "cv"
     if ev.type == "action" and ev.data.get("kind") in SEARCH_KINDS and ev.data.get("state") == "done":
@@ -101,7 +104,7 @@ class Listener:
         trigger = trigger_of(ev) if ev is not None else None
         if trigger is not None:
             # a search outranks feedback for the why, as it may bring many new jobs at once
-            self.pending = trigger if self.pending in (None, "feedback", "cv") else self.pending
+            self.pending = trigger if self.pending in (None, "feedback", "cv", "writing") else self.pending
             self.due = self.now() + self.delay
 
     def tick(self) -> str | None:
@@ -109,7 +112,7 @@ class Listener:
         if self.pending is None or self.now() < self.due:
             return None
         trigger, self.pending = self.pending, None
-        if not patterns.enabled("finding") and not patterns.enabled("cv"):
+        if not any(patterns.enabled(area) for area in set(patterns.SOURCES.values())):
             return None
         try:
             action_id = self.begin(trigger)

@@ -41,6 +41,8 @@ def cmd_pack(args):
         why = ai.backend().status().why or "the AI is not ready"
         sys.exit(f"Packs need the AI: {why}")
     con = db.connect()
+    if not pack.has_facts(con):
+        sys.exit(pack.NOTHING_CHECKED)
     if args.shortlisted:
         ids = [r["id"] for r in con.execute(
             "SELECT id FROM jobs WHERE status = 'shortlisted' AND active = 1 ORDER BY score DESC")]
@@ -78,7 +80,7 @@ def cmd_check(args):
     for r in rows:
         pack_md = _pack_md(r)
         if pack_md is not None:
-            pack.add_company_check(pack_md, r["company"])
+            pack.add_company_check(pack_md, r["company"], r)
             print(f"checked {r['company']}")
 
 

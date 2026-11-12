@@ -65,7 +65,7 @@ def summary(con) -> dict:
         baseline = {"id": f["id"], "name": f["name"], "added": f["added"], "pages": f["pages"], "sha256": f["sha256"]}
     return {"route": d["route"], "route_words": ROUTE_WORDS[d["route"]], "send": d["send"],
             "employers_get": line, "employers_get_sub": sub,
-            "type": {"id": d["type_id"], "name": _name_of("jobhunt.cvstudio.types", "load", d["type_id"])},
+            "type": {"id": (t := store.type_in_use(con)), "name": _name_of("jobhunt.cvstudio.types", "load", t)},
             "look": {"id": d["look_id"], "name": _name_of("jobhunt.cvstudio.render", "look", d["look_id"])},
             "version": {"id": vid, "n": v["n"], "what": v["what"], "when": v["created"]},
             "baseline": baseline, "glance": _glance(con),
@@ -148,9 +148,13 @@ def put_document(req) -> dict:
     data = {k: v for k, v in data.items() if k not in ("version_id", "n")}
     try:
         doc = model.from_dict(data)
+        before = store.current(req.con)[1]
         vid = store.new_version(doc, origin="manual", what=what, by="you", con=req.con)
     except CVError as e:
         raise _bad(e) from e
+    from ..writing import edits
+
+    edits.from_cv(req.con, before, doc)
     n = store.version(vid, con=req.con)["n"]
     _note(f"Saved your CV as version {n}: {what}")
     return {"version_id": vid, "n": n}

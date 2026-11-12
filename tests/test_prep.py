@@ -29,9 +29,20 @@ class Notes(unittest.TestCase):
         self.assertIn("why this sector, a written exercise and competency questions", asked["system"])
         self.assertIn("Prepare Marnie, a new graduate", asked["system"])
         self.assertIn("Tests the advert names: written exercise and assessment centre", asked["user"])
-        self.assertIn("Stage: interview", asked["user"])
+        self.assertIn("Application stage: interview", asked["user"])
         self.assertNotIn("coding practice", asked["system"] + asked["user"])
         self.assertEqual(stored["prep"], notes)
+
+    def test_prep_notes_are_asked_for_and_kept_in_your_spelling(self):
+        with as_applicant(people.HUMANITIES) as a:
+            job = add_job(a.con, "humanities_grad", status="interview")
+            pack.build(a.con, job["id"], use_web=False)
+            plain = a.writer.reply
+            a.writer.reply = lambda system, user: ("## Stories to tell\n\nHow you organized the catalog."
+                                                   if system.startswith("Prepare") else plain(system, user))
+            notes = prep.build(a.con, job)
+        self.assertEqual(notes, "## Stories to tell\n\nHow you organised the catalogue.")
+        self.assertIn("write in UK English, with UK spelling", " ".join(a.writer.asked("prep")[0]["system"].split()))
 
     def test_with_no_employment_record_prep_is_not_told_of_an_empty_one(self):
         # Claude read "Employment record: none" as a record lacking the bookshop job on the CV and warned the

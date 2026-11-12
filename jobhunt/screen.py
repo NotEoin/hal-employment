@@ -59,7 +59,7 @@ def screen_one(con, job) -> tuple[bool, str]:
     system = prompts.text("screen", con=con, **values(goal, job))
     advert = (job["description"] or "")[:ADVERT_CHARS]
     verdict = llm.chat_json(system, f"{job['title']} at {job['company']}\n\n{advert}", role="main",
-                            timeout=SCREEN_TIMEOUT)
+                            timeout=SCREEN_TIMEOUT, purpose="screen")
     eligible = verdict.get("eligible") is True
     reason = str(verdict.get("reason", ""))[:REASON_CHARS]
     if eligible:

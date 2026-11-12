@@ -27,6 +27,9 @@ LINKS = (("linkedin", "LinkedIn"), ("website", "Website"), ("github", "GitHub"))
 
 register(
     Setting("you.name", "text", "", "Your name", help="As it appears on your CV, letters and forms.", order=10),
+    Setting("you.other_names", "text", "", "Other names you go by", advanced=True, order=15,
+            help="Usernames, a student or staff number, a maiden name: how Hal knows a file is yours when it "
+                 "does not give your full name. Separate them with commas."),
     Setting("you.preferred_name", "text", "", "What Hal calls you", default_fn=_preferred_name, order=20),
     Setting("you.email", "email", "", "Email for applications", order=30),
     Setting("you.phone", "phone", "", "Phone", order=40),

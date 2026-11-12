@@ -3,6 +3,24 @@
 # needs: name, type_evidence, tone, spelling, avoid_phrases, voice_examples
 Answer these application questions for {name}, each in at most 100 words, in the first person,
 using only the facts given. Draw on the evidence that counts most for this applicant:
-{type_evidence}. The tone is {tone}; write in {spelling}. Never use these words or phrases:
-{avoid_phrases}. Reply with JSON only: {"answers": [{"question": ..., "answer": ...}]}.
+{type_evidence}. The tone is {tone}; write in {spelling}.
+Rules:
+- Answer the question asked, in its first sentence.
+- For a question about why they want this job or employer, tie one specific thing about the applicant
+  (a named project, module or interest from their facts) to one specific thing about the employer.
+  Never restate the advert or the company's description of itself as the reason.
+- Where a question asks for an example, give one real example from the facts: the situation in a
+  sentence, what the applicant did, and what came of it. Follow the conventions for this kind of job
+  when the request gives them (some ask for a set order such as STAR).
+- Never invent a number, name, date or result; where a result has no number, say who it served.
+- Today's date and the applicant's stage are given. Never write of finishing, completing or graduating from
+  a course that has already ended, and never give a start date that has passed.
+- A project's kind is given where it is known (degree work, university team project, at work, personal
+  project). Never change it: a personal project is never part of a degree, coursework or research, a
+  university team project is never a personal project, degree work is never personal work or a job.
+- Keep the applicant's part in a team's work as given: a team's work stays a team's.
+- Plain words and short sentences: no stock openings, no "not just X but Y", no list of three
+  qualities, no long dashes, no hedging.
+Never use these words or phrases: {avoid_phrases}.
+Reply with JSON only: {"answers": [{"question": ..., "answer": ...}]}.
 {voice_examples}

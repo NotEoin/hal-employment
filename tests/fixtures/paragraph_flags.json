@@ -1,0 +1,155 @@
+{
+  "about": "Made-up sentences of the kinds a local model wrote in graded packs (2026-11-07), each in a paragraph about one made-up story, marked flagged or not as a careful reader would. These are the checks with no AI, scoped to the paragraph's story: the work placed in the wrong context, a team's work written as solo, and numbers and tools the story's facts lack. Problems only the AI check can see (a module named as the basis of a personal project, a purpose added to fit the advert) are in ai_only, and the checks with no AI must leave them to it.",
+  "known": [
+    "Lua",
+    "Python",
+    "Flask",
+    "Docker",
+    "SQL"
+  ],
+  "allowed": "Join our river data team. The role starts in 2027.\nToday: 2026-11-07",
+  "stories": {
+    "Ferry planner": {
+      "name": "Ferry planner",
+      "context": "team",
+      "role": "built the statistics features; team of 7",
+      "tools": [
+        "Python",
+        "Flask"
+      ],
+      "facts": [
+        "wrote the statistics features of Ferry planner, a timetable app built by a team of 7"
+      ]
+    },
+    "Tide gauge": {
+      "name": "Tide gauge",
+      "context": "personal",
+      "role": "",
+      "tools": [
+        "Lua"
+      ],
+      "facts": [
+        "a sensor logger in Lua that records river levels every ten minutes, written in my own time"
+      ]
+    },
+    "Databases": {
+      "name": "",
+      "context": "degree",
+      "role": "",
+      "tools": [],
+      "facts": [
+        "Databases module: SQL, normalisation and query plans, mark 72"
+      ]
+    },
+    "Guide": {
+      "name": "",
+      "context": "",
+      "role": "",
+      "tools": [],
+      "facts": [
+        "Volunteer guide at a made-up heritage centre, 2024 to 2026"
+      ]
+    }
+  },
+  "sentences": [
+    {
+      "text": "My degree included building a river logger in Lua.",
+      "story": "Tide gauge",
+      "flagged": true
+    },
+    {
+      "text": "As part of my coursework, I wrote a logger that records river levels.",
+      "story": "Tide gauge",
+      "flagged": true
+    },
+    {
+      "text": "I wrote a river logger in Lua in my own time.",
+      "story": "Tide gauge",
+      "flagged": false
+    },
+    {
+      "text": "Ferry planner was a personal project I built in my spare time.",
+      "story": "Ferry planner",
+      "flagged": true
+    },
+    {
+      "text": "I built the React frontend and Flask backend of Ferry planner.",
+      "story": "Ferry planner",
+      "flagged": true
+    },
+    {
+      "text": "I designed and built Ferry planner, a timetable app.",
+      "story": "Ferry planner",
+      "flagged": true
+    },
+    {
+      "text": "I wrote the statistics features of Ferry planner.",
+      "story": "Ferry planner",
+      "flagged": false
+    },
+    {
+      "text": "In a team of seven, I wrote Ferry planner's statistics features in Python.",
+      "story": "Ferry planner",
+      "flagged": false
+    },
+    {
+      "text": "We built Ferry planner as a team, and my part was its statistics.",
+      "story": "Ferry planner",
+      "flagged": false
+    },
+    {
+      "text": "I spent three years building a river logger.",
+      "story": "Tide gauge",
+      "flagged": true
+    },
+    {
+      "text": "My logger records river levels every ten minutes.",
+      "story": "Tide gauge",
+      "flagged": false
+    },
+    {
+      "text": "I used Docker to deploy the river logger.",
+      "story": "Tide gauge",
+      "flagged": true
+    },
+    {
+      "text": "I scored 72 in the Databases module, which covered SQL and query plans.",
+      "story": "Databases",
+      "flagged": false
+    },
+    {
+      "text": "I scored 75 in the Databases module.",
+      "story": "Databases",
+      "flagged": true
+    },
+    {
+      "text": "As a volunteer guide from 2024 to 2026, I answered visitors' questions.",
+      "story": "Guide",
+      "flagged": false
+    }
+  ],
+  "ai_only": [
+    {
+      "text": "My Databases module was the basis of the river logger I wrote.",
+      "story": "Tide gauge",
+      "reply": {
+        "supported": true,
+        "unsupported": [],
+        "context_ok": false,
+        "role_ok": true
+      }
+    },
+    {
+      "text": "My logger records river levels every ten minutes, so patient data stays local and secure.",
+      "story": "Tide gauge",
+      "reply": {
+        "supported": false,
+        "unsupported": [
+          "so patient data stays local and secure"
+        ],
+        "context_ok": true,
+        "role_ok": true
+      }
+    }
+  ]
+}

@@ -1,12 +1,13 @@
-"""Company checks: only an article or a registration that names the whole employer is shown as the employer.
+"""Company checks: only an article or a registration that plausibly is the advert's employer is shown.
 
-The web is faked: `reputation.get` answers with made-up Wikipedia search results and a made-up Companies
-House results page, so no test leaves the machine.
+The web is faked: `reputation.get` answers with made-up Wikipedia search results and articles, and a
+made-up Companies House results page and company pages, so no test leaves the machine.
 """
 from __future__ import annotations
 
 import json
 import unittest
+import urllib.parse
 from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
@@ -14,42 +15,238 @@ import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from jobhunt import reputation
 
 EMPLOYER = "Riverside Heritage Trust"   # the made-up humanities advert's employer
+ADVERT = reputation.Advert(location="Made-up Town, UK",
+                           text="Help catalogue the Trust's museum collections and archives for visitors.",
+                           url="https://careers.riverside-heritage.org.uk/jobs/1")
+FINTECH = "Brightledger"                # a made-up lender
+FINTECH_ADVERT = reputation.Advert(location="London",
+                                   text="Join our open banking team building lending and payments software.",
+                                   url="https://boards.greenhouse.io/brightledger/jobs/2")
 
 
-def fake_get(titles: list[str], registrations: list[str]):
-    """A stand-in for `reputation.get` that knows these article titles and registration lines."""
+TRADER = "Kestrelmark"                  # a made-up trading firm
+TRADER_ADVERT = reputation.Advert(
+    location="London", url="https://jobs.example.org/kestrelmark/3",
+    text="Kestrelmark is a proprietary trading firm in London. Join our trading desk to price options and other "
+         "derivatives on global financial markets, working with traders and quantitative researchers.")
+LENDER = "Brightvale"                   # a made-up consumer lender
+LENDER_ADVERT = reputation.Advert(
+    location="London", url="https://jobs.example.org/brightvale/4",
+    text="Brightvale is a consumer lending fintech in London. Join our credit risk team to build the models that "
+         "decide each loan, keep default rates low and help customers borrow fairly.")
+
+
+def fake_get(articles: dict[str, tuple], registrations: dict[str, tuple], addresses: dict[str, str] | None = None,
+             born: dict[str, str] | None = None, pages: dict[str, str] | None = None):
+    """A stand-in for `reputation.get`: article title -> (summary, links[, a disambiguation page]); number ->
+    (name, status, SIC codes); `addresses` give a registration's address on the results page, `born` its day
+    of incorporation ("28 October 2026") and `pages` more text on its company page."""
+    addresses, born, pages = addresses or {}, born or {}, pages or {}
+
     def get(url: str, **kw) -> str:
         if url.startswith(reputation.COMPANIES_HOUSE):
-            return "".join(f'<li class="type-company"><a>{r}</a></li>' for r in registrations)
-        if "list=search" in url:
-            return json.dumps({"query": {"search": [{"title": t} for t in titles]}})
-        if "prop=sections" in url:
-            return json.dumps({"parse": {"sections": []}})
-        return json.dumps({"query": {"pages": {"1": {"extract": "A made-up summary."}}}})
+            return "".join(f'<li class="type-company"><h3><a href="/company/{n}">{name}</a></h3>'
+                           f'<p>{n} - Incorporated on {born.get(n, "2 May 1990")}</p>'
+                           f'<p>{addresses.get(n, "1 Made-up Street")}</p></li>'
+                           for n, (name, _, _) in registrations.items())
+        if url.startswith(f"{reputation.COMPANIES_HOUSE_SITE}/company/"):
+            number = url.rsplit("/", 1)[1]
+            _, status, sic = registrations[number]
+            return (f'<dd class="text data" id="company-status">{status}</dd>'
+                    + "".join(f'<span id="sic{i}">{s}</span>' for i, s in enumerate(sic)) + pages.get(number, ""))
+        query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+        if query.get("list") == "search":
+            return json.dumps({"query": {"search": [{"title": t} for t in articles]}})
+        if query.get("prop") == "sections":
+            return json.dumps({"parse": {"sections": [{"line": "Controversies"}]}})
+        summary, links, *disambiguation = articles[query["titles"]]
+        page = {"extract": summary, "extlinks": [{"*": u} for u in links]}
+        if disambiguation and disambiguation[0]:
+            page["pageprops"] = {"disambiguation": ""}
+        return json.dumps({"query": {"pages": {"1": page}}})
     return get
 
 
+# A made-up London consumer lender hiring a junior engineer through a job board, in the shape of the live
+# advert: lending words, then software words, and a "London / Remote" location.
+LIVE_LENDER_ADVERT = reputation.Advert(
+    location="London / Remote", url="https://jobs.example.org/brightvale/5",
+    text="We are changing consumer lending. Our credit decisions use open banking data, so fair personal loans "
+         "reach more people, and our default rates stay low. Join our engineering team in London to build the "
+         "lending platform: backend services in Python, a React frontend, Postgres databases and cloud "
+         "software, from onboarding customers to paying out loans. Find out more at www.brightvale-loans.co.uk.")
+SOLAR_ARTICLE = {"Brightvale Solar": ("Brightvale Solar was a solar technology company that made thin film panels "
+                                      "in a made-up American town. It drew a federal loan guarantee before it went "
+                                      "bankrupt.", [])}
+NOW = "2026-11-07T09:00:00Z"
+
+
 class CompanyCheck(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(mock.patch.dict("os.environ", {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
+
+    def check(self, company: str, advert: reputation.Advert, articles: dict, registrations: dict,
+              addresses: dict | None = None, **more):
+        with mock.patch.object(reputation, "get", fake_get(articles, registrations, addresses, **more)):
+            return reputation.check(company, advert)
+
     def test_a_namesake_is_never_shown_as_the_employer(self):
         # the pack for the made-up Riverside Heritage Trust showed "Riverside Cemetery (Denver)" from Wikipedia
         # and "RIVERSIDE HERITAGE JOINERY LTD" from Companies House as the employer (2026-10-23)
-        get = fake_get(["Riverside Cemetery (Denver)", "Riverside Museum"],
-                       ["RIVERSIDE HERITAGE JOINERY LTD 10279495 - Incorporated on 14 July 2016"])
-        with mock.patch.object(reputation, "get", get):
-            flags, md = reputation.check(EMPLOYER)
+        flags, md = self.check(EMPLOYER, ADVERT, {"Riverside Cemetery (Denver)": ("A cemetery.", []),
+                                                  "Riverside Museum": ("A museum in Made-up Town.", [])},
+                               {"10279495": ("RIVERSIDE HERITAGE JOINERY LTD", "Active", ["16230 - Joinery"])})
         self.assertEqual(flags, [])
-        self.assertIn("- Wikipedia: no article", md)
-        self.assertIn("- Companies House: no registration found", md)
+        self.assertIn(f"- Wikipedia: {reputation.NO_MATCH}", md)
+        self.assertIn(f"- Companies House: {reputation.NO_MATCH}", md)
         self.assertNotIn("Cemetery", md)
         self.assertNotIn("JOINERY", md)
 
     def test_the_employers_own_article_and_registration_are_shown(self):
-        get = fake_get(["Riverside Cemetery (Denver)", "Riverside Heritage Trust"],
-                       ["RIVERSIDE HERITAGE TRUST LIMITED 01234567 - Incorporated on 2 May 1990"])
-        with mock.patch.object(reputation, "get", get):
-            _, md = reputation.check(EMPLOYER)
+        flags, md = self.check(EMPLOYER, ADVERT,
+                               {"Riverside Heritage Trust": ("A charity in Made-up Town that runs a museum.", [])},
+                               {"01234567": ("RIVERSIDE HERITAGE TRUST LIMITED", "Active",
+                                             ["91020 - Museums activities"])},
+                               {"01234567": "1 Made-up Street, Made-up Town"})
         self.assertIn("[Riverside Heritage Trust]", md)
         self.assertIn("- Companies House: RIVERSIDE HERITAGE TRUST LIMITED 01234567", md)
+        self.assertIn("(Active; 91020 - Museums activities)", md)
+        self.assertEqual(flags, ["company check: Wikipedia sections on Controversies"])
+
+    def test_a_same_named_company_in_another_trade_or_dissolved_is_no_reliable_match(self):
+        # one employer's check listed a solar company, a fungicide and a dissolved company of the same name
+        # (2026-11-06)
+        articles = {"Brightledger": ("Brightledger is a solar panel maker in a made-up city.", []),
+                    "Brightledger (fungicide)": ("Brightledger is a fungicide used on wheat.", [])}
+        registrations = {"07654321": ("BRIGHTLEDGER LTD", "Dissolved", ["64999 - Financial intermediation"]),
+                         "07654322": ("BRIGHTLEDGER SOLAR LIMITED", "Active", ["35110 - Production of electricity"])}
+        flags, md = self.check(FINTECH, FINTECH_ADVERT, articles, registrations)
+        self.assertEqual(flags, [])
+        self.assertIn(f"- Wikipedia: {reputation.NO_MATCH}", md)
+        self.assertIn(f"- Companies House: {reputation.NO_MATCH}", md)
+        for wrong in ("solar", "fungicide", "DISSOLVED", "07654321", "07654322"):
+            self.assertNotIn(wrong, md)
+
+    def test_an_article_linking_to_the_employers_own_site_is_the_employer(self):
+        articles = {"Riverside Heritage Trust": ("A charity founded in 1990.",
+                                                 ["https://www.riverside-heritage.org.uk/about"])}
+        _, md = self.check(EMPLOYER, ADVERT, articles, {})
+        self.assertIn("[Riverside Heritage Trust]", md)
+
+    def test_an_article_in_the_adverts_trade_is_the_employer(self):
+        articles = {"Brightledger": ("Brightledger is a lender offering payments and open banking loans.", [])}
+        registrations = {"07654323": ("BRIGHTLEDGER LIMITED", "Active", ["64929 - Other credit granting"])}
+        _, md = self.check(FINTECH, FINTECH_ADVERT, articles, registrations, {"07654323": "2 Made-up Wharf, London"})
+        self.assertIn("[Brightledger]", md)
+        self.assertIn("- Companies House: BRIGHTLEDGER LIMITED 07654323", md)
+
+    def no_match(self, md: str, flags: list[str], *wrong: str) -> None:
+        """The check says "No reliable match found" for both lookups and names none of `wrong`."""
+        self.assertEqual(flags, [])
+        self.assertIn(f"- Wikipedia: {reputation.NO_MATCH}", md)
+        self.assertIn(f"- Companies House: {reputation.NO_MATCH}", md)
+        self.assertNotIn("Sections to read", md)
+        for word in wrong:
+            self.assertNotIn(word, md)
+
+    def test_a_trading_firm_never_gets_a_disambiguation_page_or_namesakes_in_other_trades(self):
+        # a London trading firm's pack showed a Wikipedia disambiguation page and three unrelated Companies
+        # House firms of the same name (2026-11-07)
+        articles = {
+            "Kestrelmark": ("Kestrelmark may refer to: Kestrelmark, a trading card game; Kestrelmark Surgical, a "
+                            "maker of medical robots; Kestrelmark House, an office block in London.", [], True),
+            "Kestrelmark Surgical": ("Kestrelmark Surgical is a medical device company that makes surgical robots "
+                                     "for hospitals. It trades on public markets and has offices in London.", [])}
+        registrations = {
+            "11111111": ("KESTRELMARK LTD", "Active", ["70229 - Management consultancy activities other than "
+                                                       "financial management"]),
+            "11111112": ("KESTRELMARK HOLDINGS LIMITED", "Active", ["64209 - Activities of other holding "
+                                                                    "companies n.e.c."]),
+            "11111113": ("KESTRELMARKS PROPERTY LTD", "Active", ["68100 - Buying and selling of own real estate"])}
+        flags, md = self.check(TRADER, TRADER_ADVERT, articles, registrations)
+        self.no_match(md, flags, "may refer to", "Surgical", "KESTRELMARK LTD", "HOLDINGS", "PROPERTY")
+
+    def test_a_lender_never_gets_a_solar_firm_with_a_loan_in_its_history(self):
+        # a consumer lender's pack showed a solar maker's article with "Wikipedia sections to read:
+        # Environmental controversy" and three unrelated Companies House firms (2026-11-07)
+        articles = {"Brightvale Solar": ("Brightvale Solar was a manufacturer of thin film solar panels in a made-up "
+                                         "American town. It drew a federal loan guarantee and credit from investors "
+                                         "before it went bankrupt, and its default led to a political row.", [])}
+        registrations = {
+            "22222221": ("BRIGHTVALE SOLAR LIMITED", "Active", ["35110 - Production of electricity"]),
+            "22222222": ("BRIGHTVALE LTD", "Active", ["82990 - Other business support service activities n.e.c."]),
+            "22222223": ("BRIGHTVALE CONSULTING LTD", "Active", ["70229 - Management consultancy activities other "
+                                                                 "than financial management"])}
+        flags, md = self.check(LENDER, LENDER_ADVERT, articles, registrations,
+                               {"22222222": "4 Made-up Road, Leeds"})
+        self.no_match(md, flags, "Solar", "SOLAR", "22222222", "CONSULTING")
+
+    def test_a_namesake_whose_title_adds_a_word_needs_the_employers_site_or_town(self):
+        # despite the last fix, a London lender's advert still matched a US solar maker's article with the same
+        # first word, and its "Environmental controversy" section became a check item (2026-11-07). Each rule's
+        # verdict, logged: the article's "technology" names the software trade the advert has too, so the
+        # trade rule alone said yes.
+        summary, links = SOLAR_ARTICLE["Brightvale Solar"]
+        said = reputation.article_verdicts(LIVE_LENDER_ADVERT, LENDER, summary, links, "Brightvale Solar")
+        self.assertEqual(said, {"site": False, "adds_words": True, "trade": True, "town": False})
+        self.assertFalse(reputation.plausible_article(LIVE_LENDER_ADVERT, LENDER, summary, links, "Brightvale Solar"))
+        with self.assertLogs("jobhunt.reputation", "INFO") as logged:
+            flags, md = self.check(LENDER, LIVE_LENDER_ADVERT, SOLAR_ARTICLE, {})
+        self.assertIn("'adds_words': True, 'trade': True, 'town': False", "\n".join(logged.output))
+        self.no_match(md, flags, "Solar")
+        linked = {"Brightvale Solar": (summary, ["https://www.brightvale-loans.co.uk/about"])}
+        _, md = self.check(LENDER, LIVE_LENDER_ADVERT, linked, {})
+        self.assertIn("[Brightvale Solar]", md, "the employer's own site still ties it")
+
+    def test_a_company_incorporated_this_year_is_never_the_employer_by_name_and_trade(self):
+        # Companies House matched a finance company of the same name incorporated 10 days before the run
+        # (2026-11-07)
+        registrations = {"44444441": ("BRIGHTVALE FINANCE LTD", "Active", ["64999 - Financial intermediation"]),
+                         "44444442": ("BRIGHTVALE LIMITED", "Active", ["64929 - Other credit granting n.e.c."])}
+        born = {"44444441": "28 October 2026", "44444442": "1 March 2026"}
+        flags, md = self.check(LENDER, LIVE_LENDER_ADVERT, {}, registrations, born=born)
+        self.no_match(md, flags, "44444441", "44444442")
+        _, md = self.check(LENDER, LIVE_LENDER_ADVERT, {}, registrations, born=born,
+                           pages={"44444442": "<p>Website: brightvale-loans.co.uk</p>"})
+        self.assertIn("- Companies House: BRIGHTVALE LIMITED 44444442", md, "its exact name and the advert's site")
+        self.assertNotIn("FINANCE", md)
+        _, md = self.check(LENDER, LIVE_LENDER_ADVERT, {}, registrations, {"44444441": "5 Made-up Row, London"},
+                           born={"44444441": "2 May 2019"})
+        self.assertIn("- Companies House: BRIGHTVALE FINANCE LTD 44444441", md, "an older one in the trade is")
+
+    def test_a_registration_in_the_adverts_trade_and_town_is_the_employer(self):
+        registrations = {"33333331": ("BRIGHTVALE FINANCE LIMITED", "Active", ["64929 - Other credit granting n.e.c."]),
+                         "33333332": ("BRIGHTVALE LTD", "Active", ["70100 - Activities of head offices"])}
+        _, md = self.check(LENDER, LENDER_ADVERT, {}, registrations, {"33333331": "8 Made-up Lane, London",
+                                                                      "33333332": "9 Made-up Lane, London"})
+        self.assertIn("- Companies House: BRIGHTVALE FINANCE LIMITED 33333331", md)
+        self.assertIn(f"- Companies House: {reputation.POSSIBLE.format(name='BRIGHTVALE LTD 33333332')}", md,
+                      "the advert's town but no trade: its exact name makes it possible at most")
+
+    def test_an_exact_name_that_fits_by_one_thing_or_is_small_is_only_a_possible_match(self):
+        # a large trading firm's pack stated an IT consultancy of the same name, registered at a flat, as the
+        # employer (2026-11-07)
+        advert = reputation.Advert(location="London", url="https://jobs.example.org/kestrelmark/6",
+                                   text=f"{TRADER_ADVERT.text} Our software engineers build trading systems. "
+                                        "More at www.kestrelmark-trading.co.uk.")
+        registrations = {"55555551": ("KESTRELMARK LTD", "Active", ["62020 - Information technology consultancy "
+                                                                    "activities"])}
+        possible = f"- Companies House: {reputation.POSSIBLE.format(name='KESTRELMARK LTD 55555551')}"
+        for address in ("Flat 4, 12 Made-up Court, London", "3 Made-up Mews, Leeds"):
+            _, md = self.check(TRADER, advert, {}, registrations, {"55555551": address})
+            self.assertIn(possible, md, address)
+            self.assertNotIn("Made-up", md, "nothing of it is stated as the employer's")
+        _, md = self.check(TRADER, advert, {}, registrations, {"55555551": "Flat 4, 12 Made-up Court, London"},
+                           pages={"55555551": "<p>Website: kestrelmark-trading.co.uk</p>"})
+        self.assertIn("- Companies House: KESTRELMARK LTD 55555551", md, "the advert's own site on its page")
+        longer = {"55555552": ("KESTRELMARK DIGITAL LTD", "Active", registrations["55555551"][2])}
+        _, md = self.check(TRADER, advert, {}, longer, {"55555552": "3 Made-up Mews, Leeds"})
+        self.assertIn(f"- Companies House: {reputation.NO_MATCH}", md,
+                      "a longer name fitting by trade alone is left out")
+
+    def test_a_job_boards_link_names_no_employer(self):
+        self.assertEqual(reputation.domains(FINTECH_ADVERT), set())
+        self.assertEqual(reputation.domains(ADVERT), {"riverside-heritage"})
 
 
 if __name__ == "__main__":

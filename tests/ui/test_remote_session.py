@@ -94,6 +94,6 @@ class RemoteWindow(unittest.TestCase):
         self.assertIn("Run the launcher on this computer again.", p.page.inner_text("body"))
 
     def test_the_record_offers_no_folder_to_open_from_another_computer(self) -> None:
-        p = self.page("record")
+        p = self.page("record-files")
         p.page.wait_for_selector("text=What is in it")
         self.assertEqual(p.page.locator("button:has-text('Open the folder')").count(), 0)

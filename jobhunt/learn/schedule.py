@@ -17,10 +17,10 @@ WHY = "Nightly look at your choices"
 
 
 def run_after(after: datetime) -> datetime | None:
-    """03:30 local time after `after`, or None while learning is off for both jobs and the CV."""
+    """03:30 local time after `after`, or None while learning is off for every area."""
     from . import patterns
 
-    if not patterns.enabled("finding") and not patterns.enabled("cv"):
+    if not any(patterns.enabled(area) for area in set(patterns.SOURCES.values())):
         return None
     return daily([RUN_AT], after)
 

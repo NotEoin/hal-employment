@@ -17,7 +17,7 @@ from support.fake_ai import fake_ai
 
 from jobhunt import db
 from jobhunt.ai import prompts
-from jobhunt.core import paths, runner
+from jobhunt.core import paths, runner, settings
 from jobhunt.core.settings import store as settings_store
 from jobhunt.cvstudio import model, store, suggest
 
@@ -130,11 +130,11 @@ class Reviewers(CvCase):
     def test_the_reviewer_is_asked_to_suggest_where_a_line_is_weak_and_to_say_why_to_you(self):
         # with an earlier wording Claude answered {"none": true} for every section of the made-up humanities CV
         # (2026-10-23), and its reasons spoke of "the person" rather than to them
-        text = " ".join(prompts.text("cv_suggest", con=self.con).split())
+        text = " ".join(prompts.text("cv_suggest", con=self.con, spelling=suggest.spelling_words()).split())
         self.assertIn("when a bullet lists a duty without saying what came of it", text)
         self.assertIn('Reply {"none": true} only when every line already follows the rules', text)
         self.assertIn('The "title" and "why" speak to the CV\'s owner as "you"', text)
-        self.assertIn("en-GB is UK spelling", text)
+        self.assertIn("Write in UK English, with UK spelling", text)
 
     def test_look_again_stops_at_six_waiting(self):
         settings_store.drop_cache()
@@ -147,7 +147,38 @@ class Reviewers(CvCase):
         self.assertEqual(suggest.listing(self.con)["state"], "ready")
 
 
+class Studied(CvCase):
+    """A skill whose every source in the record is lecture material is never listed as one you used."""
+
+    def test_a_studied_skill_in_a_skills_line_is_offered_left_out_or_labelled(self):
+        doc = store.current()[1]
+        found = suggest.checks_for(doc, "skills", suggest.cv_type(), ["Oral History", "palaeography"])
+        drafts = [d for d in found if d.trigger["id"] == "studied_skills"]
+        self.assertEqual([(d.target, d.before, d.afters) for d in drafts],
+                         [("s:skills/e:sk-research/items", "archival research, oral history",
+                           ["archival research", "archival research, oral history (studied)"])])
+
+    def test_accepting_it_changes_the_skills_line_and_a_labelled_skill_is_not_offered_again(self):
+        with mock.patch.object(suggest.profile_writing, "studied_skills", lambda con: ["oral history"]):
+            suggest.look_again(self.con)
+            offered = [s for s in self.pending() if "as studied" in s["title"]]
+            self.assertEqual(len(offered), 1)
+            suggest.accept(self.con, offered[0]["id"], alt=1)
+            self.assertEqual(store.current()[1].sections[-2].entries[1].items,
+                             ["archival research", "oral history (studied)"])
+            suggest.look_again(self.con)
+        self.assertFalse([s for s in self.pending() if "as studied" in s["title"]])
+
+
 class Accepting(CvCase):
+    def test_your_edit_of_a_suggestion_is_kept_as_a_pair_to_learn_from(self):
+        suggest.look_again(self.con)
+        spelling = self.one("Consistency", "Profile")
+        mine = "History graduate who catalogued parish letters and organised a heritage open day."
+        suggest.accept(self.con, spelling["id"], text=mine)
+        rows = self.con.execute("SELECT kind, ref, draft, final FROM writing_edits").fetchall()
+        self.assertEqual([tuple(r) for r in rows], [("cv_line", PROFILE, spelling["afters"][0], mine)])
+
     def test_accept_makes_a_version_the_next_suggestion_is_worked_out_from(self):
         suggest.look_again(self.con)
         spelling = self.one("Consistency", "Profile")
@@ -311,6 +342,38 @@ class Guards(CvCase):
             suggest.look_again(self.con)
         self.assertEqual(self.one("Wording", "Bookseller")["afters"],
                          ["Ran the history table and wrote weekly recommendations"])
+
+    def test_an_ai_wording_in_the_other_spelling_is_respelt_before_it_reaches_a_card(self):
+        reply = ai_suggests(TABLE, "Ran the local history table and wrote weekly staff recommendations",
+                            "Ran the history table and organized weekly recommendations by color")
+        with fake_ai({"cv_suggest": reply}) as backend:
+            suggest.look_again(self.con)
+        self.assertEqual(self.one("Wording", "Bookseller")["afters"],
+                         ["Ran the history table and organised weekly recommendations by colour"])
+        self.assertIn("Write in UK English, with UK spelling", backend.requests("cv_suggest")[0].system)
+
+    def test_a_us_spelling_setting_gives_us_spelling_suggestions_and_prompts(self):
+        # cv_suggest was told the CV type's en-GB whatever the setting said, and only UK spelling was fixed
+        settings.set("cvdocs.spelling", "en-US", by="you")
+        self.addCleanup(settings.set, "cvdocs.spelling", "en-GB", by="you")
+        with fake_ai({"cv_suggest": json.dumps({"none": True})}) as backend:
+            suggest.look_again(self.con)
+        self.assertIn("Write in US English, with US spelling", backend.requests("cv_suggest")[0].system)
+        fixes = {s["target"]: s for s in self.pending("Consistency")}
+        self.assertEqual(fixes[PROFILE]["afters"], ["I am a hard-working History graduate who cataloged parish "
+                                                    "letters and organized a heritage open day."])
+        self.assertTrue(fixes[STAR]["afters"][0].startswith("Cataloged parish letters"))
+        self.assertIn("Your settings say US English", fixes[STAR]["why"])
+
+
+    def test_the_ai_is_told_each_lines_writing_problems_and_the_fields_conventions(self):
+        with fake_ai({"cv_suggest": json.dumps({"none": True})}) as backend:
+            suggest.look_again(self.con)
+        asked = [json.loads(r.user) for r in backend.requests("cv_suggest")]
+        problems = [p for a in asked for p in a["writing_problems"]]
+        self.assertTrue(any(p.startswith(VISITORS) and "duty" in p for p in problems), problems)
+        self.assertTrue(all("Show the dissertation as a research project" in " ".join(a["field_conventions"])
+                            for a in asked), "the humanities type's field conventions reach every request")
 
 
 class TryAnother(CvCase):

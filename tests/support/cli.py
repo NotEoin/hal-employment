@@ -40,7 +40,7 @@ SUBCOMMANDS = ["discover", "rescore", "mail", "digest", "vault", "record", "queu
                "add", "screen", "letter", "check", "pack", "inbox", "stats", "list", "show", "set", "note", "probe"]
 # Added by the rebuild; the top-level help may gain their names.
 NEW_COMMANDS = ["open", "settings", "import", "migrate", "backup", "open-url", "helper-files", "remote-launcher",
-                "install"]
+                "install", "ingest", "sort", "sources"]
 NEW_OPTIONS = {"serve": ["--background"]}     # options added by name to old commands (gate G4)
 BRACES = re.compile(r"\{([a-z0-9,-]+)\}")
 OPTION_PADDING = re.compile(r"^(  \S.*?\S) {2,}(?=\S)", re.M)  # argparse widens it when a longer option comes

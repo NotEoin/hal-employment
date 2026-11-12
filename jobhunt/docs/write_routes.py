@@ -1,5 +1,5 @@
 """The routes that ask Hal to write for one application: changes in your words, a new letter,
-notes for the interview and who to message.
+notes for the interview, who to message, and a recruiter's read of the documents.
 
 Each only starts its action (`docs/write_actions.py`) and returns the id; the page follows it on the event
 stream. An application is named by its job id or by its number, as on the other
@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from ..apply import actions as apply_actions
 from ..apply import queries
+from ..apply import routes as apply_routes
 from ..apply.routes import PREFIX, _body, _who
+from ..core import runner
 from ..web.router import BadRequest, Request, route
-from .write_actions import WORDS_SHOWN
+from .write_actions import WORDS_SHOWN, critique_subject
 
 
 def _words(req: Request, *, needed: bool) -> str:
@@ -40,6 +42,17 @@ def rewrite_letter(req: Request) -> dict:
     """Rewrite the letter, with your words when you gave some."""
     words = _words(req, needed=False)
     return _start(req, "docs.rewrite_letter", {"words": words or "Rewrite the letter"})
+
+
+@route("POST", PREFIX + "/{app_id}/documents/critique")
+def critique(req: Request) -> dict:
+    """Critique as a recruiter: grades, line comments and the top three fixes for the CV and the letter."""
+    job_id = queries.resolve(req.con, req.params["app_id"])
+    who = _who(req)
+    return {"action_id": runner.start("docs.critique", subject=critique_subject(job_id), job_id=job_id,
+                                      params={"job_id": job_id}, replace=True, priority=apply_routes.NOW,
+                                      session_id=who["session_id"], helper_id=who["helper_id"],
+                                      remote=who["remote"])}
 
 
 @route("POST", PREFIX + "/{app_id}/prep")

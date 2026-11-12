@@ -293,11 +293,25 @@ class Routes(unittest.TestCase):
         self.assertTrue(self.c.get("/api/v2/cv/versions").json()[0]["binned"])
         self.assertEqual(self.c.post(f"/api/v2/cv/versions/{saved['version_id']}/restore").json(), {"ok": True})
 
+    def test_a_line_you_reword_is_kept_to_learn_your_writing_from_and_a_new_one_is_not(self):
+        for text in ("Made-up profile line.", "A made-up profile line, in my own words."):
+            doc = self.c.get("/api/v2/cv/document").json()
+            doc.pop("version_id")
+            doc.pop("n")
+            doc["sections"][0]["text"] = text
+            self.c.request("PUT", "/api/v2/cv/document", {"doc": doc, "what": "You wrote a profile"})
+        con = db.connect()
+        try:
+            rows = [tuple(r) for r in con.execute("SELECT kind, draft, final FROM writing_edits")]
+        finally:
+            con.close()
+        self.assertEqual(rows, [("cv_line", "Made-up profile line.", "A made-up profile line, in my own words.")])
+
     def test_at_a_glance_shows_the_scanner_score_and_the_types_checks(self):
         # the glance card stayed empty and the type showed as its id once the checks were in
         cv = self.c.get("/api/v2/cv").json()
         checked = self.c.get("/api/v2/cv/checks").json()
-        self.assertEqual(cv["type"]["name"], "Technical graduate")
+        self.assertEqual(cv["type"]["name"], "Graduate, any subject")   # nobody chose one: Hal's suggestion
         self.assertEqual(cv["glance"]["scanner"], checked["scanner"]["score"])
         self.assertEqual((cv["glance"]["type_pass"], cv["glance"]["type_total"]),
                          (checked["type"]["passed"], checked["type"]["total"]))

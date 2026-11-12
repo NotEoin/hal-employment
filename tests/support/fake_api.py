@@ -44,7 +44,7 @@ def csp_header(index_html: str) -> str:
 
 def made_up_session(**over: Any) -> dict:
     """A /session reply for a made-up person on their own computer."""
-    s = {"remote": False, "remote_host": None, "developer": False, "version": "2.0.0", "platform": "linux",
+    s = {"remote": False, "remote_host": None, "developer": False, "version": "2.1.0", "platform": "linux",
          "setup_done": True, "first_name": "Robin", "simple_menu": False, "theme": "system",
          "install_id": "0f1e2d3c-0000-4000-8000-000000000000",
          "caps": {"open_folder": True, "window_mode": True, "sign_in_here": True, "start_at_login": True}}
@@ -115,6 +115,141 @@ MADE_UP_JOB = {"id": "demo:1", "title": "Museum Assistant", "org": "Riverside Tr
                "saved": False, "status": "new", "score": 72, "band": "good",
                "top_points": [["In Leeds, your first choice of place", 10]], "reqs": None, "eligibility_line": None,
                "application_id": None, "hidden_rule": None}
+
+# Your record's profile, in the shapes of `profile/routes.py` (tests/test_profile_routes.py compares the keys).
+PROFILE_CV = "Sources/CVs and letters/Marnie Quillfeather CV.md"
+PROFILE_TRANSCRIPT = "Sources/Education/Nowhere Fen transcript.md"
+
+
+def profile_source(rel: str, quote: str, field: str, doc_type: str, n: int) -> dict:
+    """One made-up source of a profile item, with the file id the real server gives it."""
+    fid = base64.urlsafe_b64encode(rel.encode("utf-8")).decode("ascii").rstrip("=")
+    return {"id": n, "source_rel": rel, "quote": quote, "field": field, "doc_type": doc_type,
+            "verified": True, "role": "own", "found_at": "2026-11-05T09:00:00Z", "file_id": fid,
+            "source_id": None, "place": "", "line": None, "section": "", "doc_kind": "", "strength": "",
+            "strength_words": ""}
+
+
+# Where a made-up experience was done, by kind: (context, the page's words for it).
+CONTEXTS = {"job": ("work", "At work"), "education": ("degree", "Part of my degree"),
+            "project": ("degree", "Part of my degree")}
+
+
+def profile_item(n: int, kind: str, fields: dict, title: str, sub: str = "", when: str = "", state: str = "hal",
+                 evidence: list | None = None, conflicts: list | None = None, origin: str = "found",
+                 tier: tuple[str, str] = ("", "")) -> dict:
+    """One made-up profile item; `tier` is (tier, why), Hal's, for the kinds that have one."""
+    words = {"hal": "Found by Hal", "confirmed": "Checked by you", "edited": "Edited by you", "hidden": "Hidden"}
+    tier_words = {"core": "Lead with this", "supporting": "Useful when a job asks", "archive": "Archived",
+                  "": "Not sorted yet"}
+    tiered = kind in ("job", "education", "project", "achievement", "certificate")
+    studied = {"studied": False} if kind == "skill" else {}
+    return {**studied, "id": n, "kind": kind, "state": state, "state_words": words[state], "origin": origin,
+            "fields": fields, "title": title, "sub": sub, "when": when, "evidence": evidence or [],
+            "conflicts": conflicts or [], "can_delete": origin == "you",
+            "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",
+            "tier": tier[0], "tier_by": "hal" if tier[0] else "", "tier_why": tier[1],
+            "tier_words": tier_words[tier[0]] if tiered else "",
+            "context": CONTEXTS.get(kind, ("", ""))[0], "context_by": "hal" if kind in CONTEXTS else "",
+            "context_words": CONTEXTS.get(kind, ("", ""))[1], "merged_into": None, "merged_why": "",
+            "star": False, "star_by": "", "can_star": kind in ("project", "job")}
+
+
+PROFILE_CONFLICT = {
+    "id": 1, "kind": "field", "item_ids": [1], "field": "start",
+    "values": [{"value": "2023-09", "words": "September 2023",
+                "sources": [{"source_rel": PROFILE_CV, "doc_type": "cv", "quote": "Sept 2023 - present"}]},
+               {"value": "2023-10", "words": "October 2023",
+                "sources": [{"source_rel": "Sources/CVs and letters/Museum letter.md", "doc_type": "letter",
+                             "quote": "since October 2023"}]}],
+    "why": "Your files give Collections volunteer at Fenwick Lantern Museum Trust different start dates: "
+           "September 2023 in your CV ...; October 2023 in your letter .... Hal uses September 2023 until you "
+           "choose.",
+    "state": "open", "resolution": None, "choices": ["value", "keep_all"]}
+PROFILE_ITEMS = {
+    "job": [profile_item(1, "job", {"title": "Collections volunteer", "employer": "Fenwick Lantern Museum Trust",
+                                    "start": "2023-09", "current": True,
+                                    "duties": ["Catalogued a donated collection of letters"]},
+                         "Collections volunteer", "Fenwick Lantern Museum Trust", "September 2023 to now",
+                         evidence=[profile_source(PROFILE_CV, "Collections volunteer, Sept 2023 - present", "start",
+                                                  "cv", 1)],
+                         conflicts=[PROFILE_CONFLICT], tier=("archive", "Far from the work you want"))],
+    "education": [profile_item(2, "education", {"qualification": "BA (Hons)",
+                                                "subject": "History and Imaginary Studies",
+                                                "institution": "University of Nowhere Fen",
+                                                "start": "2022-09", "end": "2025-06", "grade": "2:1",
+                                                "modules": [{"name": "Early Modern Letters", "mark": "72"},
+                                                            {"name": "Oral History in Practice", "mark": ""}]},
+                               "BA (Hons) History and Imaginary Studies", "University of Nowhere Fen, 2:1",
+                               "September 2022 to June 2025", state="confirmed", tier=("core", "Your degree"),
+                               evidence=[profile_source(PROFILE_TRANSCRIPT, "Early Modern Letters 72", "modules",
+                                                        "transcript", 2)])],
+    "skill": [profile_item(3, "skill", {"name": "Archival research", "category": "research"}, "Archival research",
+                           "research", evidence=[profile_source(PROFILE_CV, "archival research in parish records",
+                                                                "name", "cv", 3)])],
+    "project": [profile_item(4, "project", {"name": "Dissertation: letters of a made-up mill town",
+                                            "summary": "Read 300 letters in a record office.", "period": "2024-25"},
+                             "Dissertation: letters of a made-up mill town", origin="you", state="edited",
+                             tier=("supporting", "A long piece of research"))],
+    "achievement": [], "certificate": [],
+    "basic": [profile_item(5, "basic", {"key": "name", "value": "Marnie Quillfeather"}, "name",
+                           "Marnie Quillfeather",
+                           evidence=[profile_source(PROFILE_CV, "Marnie Quillfeather", "value", "cv", 4)])],
+    "link": [],
+}
+PROFILE_LABELS = {"job": "Work history", "education": "Education", "skill": "Skills", "project": "Projects",
+                  "achievement": "Achievements", "certificate": "Certificates", "basic": "About you",
+                  "link": "Links"}
+
+
+def _profile_counts(items: list) -> dict:
+    out = {"total": len(items), "hal": 0, "confirmed": 0, "edited": 0, "hidden": 0}
+    for item in items:
+        out[item["state"]] += 1
+    return out
+
+
+MADE_UP_PROFILE = {
+    "counts": {k: _profile_counts(v) for k, v in PROFILE_ITEMS.items()},
+    "kinds": [{"kind": k, "label": PROFILE_LABELS[k], "n": len(v),
+               "to_check": sum(i["state"] == "hal" for i in v), "studied": 0} for k, v in PROFILE_ITEMS.items()],
+    "basics": PROFILE_ITEMS["basic"], "links": PROFILE_ITEMS["link"],
+    "to_check": sum(i["state"] == "hal" for v in PROFILE_ITEMS.values() for i in v),
+    "conflicts": [{**PROFILE_CONFLICT, "items": [{"id": 1, "kind": "job", "title": "Collections volunteer",
+                                                  "when": "September 2023 to now", "state": "hal"}]}],
+    "resolved": []}
+MADE_UP_PROFILE_KINDS = {f"/profile/{k}": {"kind": k, "label": PROFILE_LABELS[k],
+                                           "items": [{**i, "older_cv": {}, "planned": {}, "cv_only": False,
+                                                      "evidence": [{**e, "from_older_cv": False}
+                                                                   for e in i["evidence"]]} for i in v],
+                                           "conflicts": [PROFILE_CONFLICT] if any(i["conflicts"] for i in v) else []}
+                         for k, v in PROFILE_ITEMS.items()}
+_SKILL = PROFILE_ITEMS["skill"][0]
+MADE_UP_PROFILE_CHECK = {
+    "best": [PROFILE_ITEMS["project"][0]], "archived": [PROFILE_ITEMS["job"][0]],
+    "conflicts": MADE_UP_PROFILE["conflicts"],
+    "cards": [{"type": "item", "key": "item:5", "source_rel": "", "file_id": None, "items": PROFILE_ITEMS["basic"],
+               "best": [4]},
+              {"type": "skills", "key": "skills:" + PROFILE_CV, "source_rel": PROFILE_CV,
+               "file_id": _SKILL["evidence"][0]["file_id"], "items": [_SKILL], "best": [3]}],
+    "more": [], "studied": [], "mentioned": [], "merged": [], "hidden_twins": [], "done": 2, "total": 5}
+
+MADE_UP_SORT_ROW = {
+    "id": 11, "rel": "Robin stuff/University/BA Made-up Studies/Year 2/HIS2040 Archival Methods/Seminars/Week 3/"
+                     "Notes on the parish registers of Harrowgate Vale, second draft.md",
+    "name": "Notes on the parish registers of Harrowgate Vale, second draft.md", "held": "upload", "size": 1200,
+    "mtime": "2024-10-27T10:00:00Z", "section": "cv", "section_label": "CVs", "doc_kind": "cv",
+    "doc_kind_label": "CV", "target_id": None, "target_title": "", "target_kind": "", "needs_card": False,
+    "star": False, "can_star": False, "by": "rules", "why": "Named or set out like a CV.", "ticked": True,
+    "state": "proposed", "copy_of": "", "source_id": None, "note_rel": None, "copies": []}
+MADE_UP_SORT = {
+    "id": 1, "kind": "folder", "label": "Robin stuff", "state": "ready", "error": "", "created": "2026-11-09T09:00:00Z",
+    "updated": "2026-11-09T09:01:00Z", "skipped": {},
+    "counts": {"sections": [{"id": "cv", "label": "CVs", "proposed": 1, "ticked": 1, "needs_card": 0}],
+               "proposed": 1, "left_out": 0, "copy": 0, "accepted": 0, "added": 0, "failed": 0, "total": 1},
+    "waits": True, "undone": False, "can_undo": False, "rows": [MADE_UP_SORT_ROW], "total": 1,
+    "cards": {"education": [], "job": []}, "courses": [], "notes": [], "read": {"seconds": 20, "measured": False},
+    "adds": []}
 
 # Made-up replies for the built pages' own GET routes, by path without the query. A page that lands adds
 # the routes it calls when it first draws; a page's own tests run it against the real server instead.
@@ -213,6 +348,25 @@ MADE_UP_PAGES = {
     # Your record
     "/record": {"exists": True, "folder_words": "~/Documents/Employment Record", "can_open": True, "groups": [],
                 "last_read": None, "files": 0, "notes": 0, "private_folders": ["Private"]},
+    # The sections of the record and their sources (`sections/routes.py`); none added yet
+    "/record/sections": [
+        {"id": "cv", "label": "CVs", "hint": "Every CV you have.", "role": "own", "target": "",
+         "target_required": False, "doc_kinds": [{"id": "cv", "label": "CV", "held": "upload", "ready": False}]},
+        {"id": "document", "label": "Documents", "hint": "Certificates and anything else that helps.",
+         "role": "official", "target": "", "target_required": False,
+         "doc_kinds": [{"id": "other", "label": "Something else", "held": "upload", "ready": True}]}],
+    "/record/sources": [],
+    "/record/sort": {"sorts": [], "cards": {"education": [], "job": []}, "can_move": False},
+    # One finished sort's review (`sections/sort_routes.py`), with a made-up long path to shorten
+    "/record/sort/1": MADE_UP_SORT,
+    "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
+                       "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
+                       "not_downloaded_paths": [], "not_mine": 0, "not_mine_paths": [], "errors": [],
+                       "left_out": {}, "by_rules": 0, "again": False, "tidy": False, "private": [], "skipped": {},
+                       "skills": {}},
+    "/profile": MADE_UP_PROFILE,
+    **MADE_UP_PROFILE_KINDS,
+    "/profile/check": MADE_UP_PROFILE_CHECK,
     # My CV; the parse report is the real server's answer before any CV is added
     "/cv/parse-report": {"version_id": None, "n": None, "found": "", "rows": [], "unsure": 0,
                          "original_preview_url": None, "original": None, "file": None, "from_cv": {}},

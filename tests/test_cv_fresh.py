@@ -92,6 +92,15 @@ class FreshCv(unittest.TestCase):
         self.assertEqual(summary, fresh.profile_line(NO_MARKS))
         self.assertNotIn(" I ", f" {summary} ")
 
+    def test_an_ai_profile_is_asked_for_and_kept_in_your_spelling(self):
+        # cv_compose said "British English" whatever the spelling setting
+        said = "History graduate (BA Hons, 2:1) who cataloged parish letters and organized a heritage open day."
+        with fake_ai({"cv_compose": json.dumps({"summary": said})}) as backend:
+            fresh.make(NO_MARKS, "humanities_grad")
+        self.assertIn("Write in UK English, with UK spelling", backend.requests("cv_compose")[0].system)
+        summary = store.current()[1].sections[0].text
+        self.assertIn("catalogued parish letters and organised", summary)
+
 
 if __name__ == "__main__":
     unittest.main()

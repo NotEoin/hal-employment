@@ -11,6 +11,7 @@ import textwrap
 import threading
 import unittest
 import unittest.mock
+from datetime import UTC, datetime
 from pathlib import Path
 
 import support  # noqa: F401 - puts the run in a temporary home before jobhunt is imported
@@ -235,6 +236,29 @@ class Runner(unittest.TestCase):
         done = runner.wait(runner.start("test.ai"))
         ai = json.loads(self.con.execute("SELECT ai FROM activity WHERE action_id = ?", (done["id"],)).fetchone()[0])
         self.assertEqual((ai["calls"], ai["ms"], ai["model"]), (2, 200, "small-model"))
+
+    def test_an_action_reports_items_done_beside_its_steps_with_the_time_left(self):
+        seen, release = threading.Event(), threading.Event()
+
+        def read_files(ctx):
+            ctx.step("Reading your files")
+            ctx.progress(2, 8, "report.pdf")
+            seen.set()
+            release.wait(WAIT_S)
+            ctx.progress(8, 8)
+        self.kinds.add("test.items", read_files)
+        aid = runner.start("test.items")
+        self.assertTrue(seen.wait(WAIT_S))
+        runner.flush()
+        going = runner.get(aid)
+        release.set()
+        self.assertEqual((going["done_n"], going["done_total"], going["message"]), (2, 8, "Report.pdf"))
+        self.assertEqual(len(going["steps"]), 1, "an item is not a step")
+        row = {**going, "started": "2026-11-05T10:00:00Z"}
+        self.assertEqual(runner.eta_s(row, now=datetime(2026, 11, 5, 10, 1, tzinfo=UTC)), 180,
+                         "two items took a minute, so six more take three")
+        done = runner.wait(aid)
+        self.assertEqual((done["done_n"], done["done_total"], done["eta_s"]), (8, 8, None))
 
     def test_waiting_for_you_is_shown_until_the_next_step(self):
         reached, release = threading.Event(), threading.Event()

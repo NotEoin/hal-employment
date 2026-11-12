@@ -22,6 +22,8 @@ documents explain how Hal works and how to change it.
 | [Use the helper with Hal](howto/use-the-helper-with-hal.md) | Use Hal's local model through its gateway, and never Claude |
 | [Use the helper on its own](howto/use-the-helper-on-its-own.md) | Pick Claude, the model on this computer or another local server |
 | [Use Hal from another computer](howto/use-hal-from-another-computer.md) | Run Hal on a desktop and use it from a laptop over SSH |
+| [Add your CVs, education, projects and documents](howto/add-to-your-record.md) | Put each file in its place on Your record, so Hal knows what it is and whose it is |
+| [Sort a big folder into your record](howto/sort-a-big-folder.md) | Let Hal suggest a place for each file of a big folder or zip, check the list, and move a record an older Hal read in |
 
 ## For developers
 

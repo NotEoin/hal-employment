@@ -49,10 +49,12 @@ def hal_answers(get) -> bool:
 
 
 def suggested_provider(get) -> str:
-    """Hal when its gateway answers; else Claude on Windows; on Linux this computer if Ollama answers, else Claude."""
+    """Hal when its gateway answers; else Claude on Windows; on Linux this computer if Ollama answers, else Claude.
+    A test run never asks this computer's Ollama, as it never asks a live Hal: tests passed here only because
+    Ollama answered, and failed on CI (2026-11-12)."""
     if hal_answers(get):
         return "hal"
-    if sys.platform == "win32":
+    if sys.platform == "win32" or (os.environ.get("HAL_TEST_MODE") == "1" and not os.environ.get("HAL_TEST_REAL_AI")):
         return "claude_cli"
     return "local" if ollama_answers(safe(get, "ai.ollama_url") or OLLAMA_URL) else "claude_cli"
 
@@ -76,12 +78,21 @@ register(
             order=50),
     Setting("ai.model.embed", "text", "nomic-embed-text", "For searching your record by meaning", advanced=True,
             visible_if="ai.provider == 'local'", order=60),
+    # Kept for a model that looks at pictures; developer-only until the AI layer can send one a picture.
+    Setting("ai.model.vision", "text", "", "For looking at pictures in your record", advanced=True, dev_only=True,
+            visible_if="ai.provider == 'local'", remote="local_only", order=65,
+            help="Leave empty to use the model for writing."),
     Setting("ai.ollama_url", "url", OLLAMA_URL, "Address of the AI on this computer", advanced=True, order=70),
     # where the owner token is read from and sent to: only someone at this computer may change either
     Setting("ai.hal_url", "url", "http://127.0.0.1:8741/v1", "Address of Hal's model gateway", advanced=True,
             visible_if="ai.provider == 'hal'", remote="local_only", order=75),
     Setting("ai.hal_token_file", "text", "~/.config/hal/gateway-token", "File holding Hal's gateway token",
             advanced=True, visible_if="ai.provider == 'hal'", remote="local_only", order=76),
+    Setting("ai.hal_batch_token_file", "text", "~/.config/hal-employment/gateway-batch-token",
+            "File holding Hal's gateway token for reading your record", advanced=True,
+            visible_if="ai.provider == 'hal'", remote="local_only", order=77,
+            help="Made with hal-gateway token issue --class batch, so a long read gives the graphics card up "
+                 "whenever you use Hal."),
     Setting("ai.openai_url", "url", "http://localhost:8000/v1", "Address of the other local server", advanced=True,
             visible_if="ai.provider == 'openai_compat'", order=80),
     Setting("ai.openai_key", "secret", None, "Key for the other local server", secret_name="ai.openai_key",

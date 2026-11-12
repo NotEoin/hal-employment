@@ -95,7 +95,7 @@ def approve(req: Request) -> dict:
 @route("PUT", PREFIX + "/{app_id}/documents")
 def save_documents(req: Request) -> dict:
     """Keeps edits to the letter, the answers or the message."""
-    return actions.save_documents(req.con, _id(req), _body(req))
+    return actions.save_documents(req.con, _id(req), _body(req), by_you=True)
 
 
 @route("POST", PREFIX + "/{app_id}/documents/changes/{change_id}")

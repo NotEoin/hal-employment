@@ -37,8 +37,12 @@ def _ask_example(world) -> dict:
 @runner.action("record.sync", area="documents", label="Reading your record",
                why="New or changed files in your record", priority=2, exclusive="kind", example=_sync_example)
 def sync(ctx) -> dict:
-    """Turns new documents into notes and re-reads changed ones; says what changed."""
+    """Turns new documents into notes and re-reads changed ones; says what changed. With no record folder yet
+    there is nothing to read: a fresh install showed every hourly read as an error naming a path (2026-11-12)."""
     ctx.step("Reading the files in your record")
+    if not Path(record._live("VAULT")).exists():
+        ctx.changed("Nothing to read yet: Hal makes your record folder when you first add something.")
+        return {"converted": [], "changed": 0, "removed": 0}
     out = record.sync()
     if out["converted"]:
         ctx.changed(f"Read {len(out['converted'])} new or changed files.")

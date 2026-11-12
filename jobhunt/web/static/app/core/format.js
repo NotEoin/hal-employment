@@ -33,6 +33,19 @@ export function clock(d) { return CLOCK.format(toDate(d)); }
 /** "1 job", "3 jobs"; `many` defaults to `one` plus "s". */
 export function plural(n, one, many = one + "s") { return n + " " + (n === 1 ? one : many); }
 
+const MINUTE_MS = 60000;
+const HOUR_MIN = 60;
+const DAY_MIN = 1440;
+
+/** How long ago `iso` was, in plain words: "just now", "5 minutes ago", "2 days ago". */
+export function agoWords(iso) {
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / MINUTE_MS));
+  if (min < 1) return "just now";
+  if (min < HOUR_MIN) return plural(min, "minute") + " ago";
+  if (min < DAY_MIN) return plural(Math.round(min / HOUR_MIN), "hour") + " ago";
+  return plural(Math.round(min / DAY_MIN), "day") + " ago";
+}
+
 /** Whole days from today to `d`, counted on the calendar (tomorrow is 1 even at 23:59). */
 export function daysFrom(d, now = new Date()) {
   const a = toDate(d), b = now;

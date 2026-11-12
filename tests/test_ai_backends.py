@@ -1,4 +1,5 @@
 """The AI layer and its backends: old roles, JSON replies, the provider, the GPU gate, Ollama and local servers."""
+import ast
 import contextlib
 import http.server
 import json
@@ -15,7 +16,7 @@ from jobhunt import ai, llm
 from jobhunt.ai import gpu, provider
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.ai.ollama import OllamaBackend
-from jobhunt.ai.openai_compat import OpenAICompatBackend, classify
+from jobhunt.ai.openai_compat import MAX_TOKENS, RETRY_TEMPERATURE, OpenAICompatBackend, classify
 from jobhunt.core import paths, settings
 from jobhunt.core.settings import store
 from jobhunt.core.settings.catalog import ai as ai_catalog
@@ -154,6 +155,8 @@ class GpuGate(InHome):
 class _Handler(http.server.BaseHTTPRequestHandler):
     seen: ClassVar[list] = []
     refuse_format = False
+    off = False
+    ran_on = 0          # how many /api/chat answers still to cut off at the cap
 
     def log_message(self, *args):
         pass
@@ -176,10 +179,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         type(self).seen.append((self.path, body))
-        if self.path == "/api/chat":
-            self._send(200, {"message": {"content": '{"ok": true}'}})
+        if self.path == "/api/chat" and type(self).ran_on:
+            type(self).ran_on -= 1
+            self._send(200, {"message": {"content": "and so on and so on"}, "done_reason": "length"})
+        elif self.path == "/api/chat":
+            self._send(200, {"message": {"content": '{"ok": true}'}, "done_reason": "stop"})
         elif self.path == "/api/embed":
             self._send(200, {"embeddings": [[0.1, 0.2] for _ in body["input"]]})
+        elif type(self).off:
+            self._send(503, {"error": {"message": "Hal is off; run `hal on`", "type": "unavailable"}})
         elif "response_format" in body and type(self).refuse_format:
             self._send(400, {"error": "response_format is not supported"})
         else:
@@ -200,11 +208,35 @@ class Servers(unittest.TestCase):
         out = be.chat(ai.ChatRequest(system="s", user="u", json_out=True, ctx=8192, timeout=5), "big:30b")
         self.assertEqual(out.text, '{"ok": true}')
         body = _Handler.seen[0][1]
-        self.assertEqual((body["think"], body["format"], body["options"]), (False, "json", {"temperature": 0.1,
-                                                                                          "num_ctx": 8192}))
+        self.assertEqual((body["think"], body["format"], body["options"]),
+                         (False, "json", {"temperature": 0.1, "num_ctx": 8192, "num_predict": MAX_TOKENS}))
         self.assertEqual((be.default_model("writer"), be.default_model("quick")), ("big:30b", "small:1b"))
         self.assertTrue(be.status().ready)
         self.assertEqual(be.embed(["a", "b"], "made-up-embed"), [[0.1, 0.2], [0.1, 0.2]])
+
+    def test_a_request_that_names_a_temperature_is_sent_at_it(self):
+        OllamaBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5, temperature=0.4), "big:30b")
+        OpenAICompatBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5, temperature=0.4), "m")
+        OpenAICompatBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "m")
+        bodies = [b for _, b in _Handler.seen]
+        self.assertEqual(bodies[0]["options"], {"temperature": 0.4, "num_predict": MAX_TOKENS})
+        self.assertEqual([b["temperature"] for b in bodies[1:]], [0.4, 0.7], "other prose keeps 0.7")
+
+    def test_an_ollama_answer_that_runs_on_is_asked_once_more_warmer(self):
+        # Gemma wrote until its context was full, 508 s and 594 s, and timed a pack out (2026-11-12)
+        _Handler.ran_on = 1
+        self.addCleanup(setattr, _Handler, "ran_on", 0)
+        out = OllamaBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "big:30b")
+        self.assertEqual(out.text, '{"ok": true}')
+        self.assertEqual([b["options"] for _, b in _Handler.seen],
+                         [{"num_predict": MAX_TOKENS}, {"num_predict": MAX_TOKENS, "temperature": RETRY_TEMPERATURE}])
+
+    def test_an_ollama_answer_that_runs_on_twice_is_refused_in_words(self):
+        _Handler.ran_on = 2
+        self.addCleanup(setattr, _Handler, "ran_on", 0)
+        with self.assertRaises(ai.LLMUnavailable) as caught:
+            OllamaBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "big:30b")
+        self.assertIn("ran on without finishing, twice", str(caught.exception))
 
     def test_a_stopped_ollama_is_reported_in_words(self):
         status = OllamaBackend("http://127.0.0.1:9").status()
@@ -220,11 +252,54 @@ class Servers(unittest.TestCase):
         self.assertEqual(["response_format" in b for _, b in _Handler.seen], [True, False])
         self.assertEqual(be.models(), ["made-up-model"])
 
+    def test_a_refusal_carries_the_servers_own_reason(self):
+        # Hal's gateway says "Hal is off" after a restart, and Hal Employment showed only "(503)" (2026-11-06)
+        _Handler.off = True
+        self.addCleanup(setattr, _Handler, "off", False)
+        with self.assertRaises(ai.LLMUnavailable) as caught:
+            OpenAICompatBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "made-up-model")
+        self.assertEqual(str(caught.exception), "The local server refused the request (503): Hal is off; run `hal on`")
+
     def test_where_a_local_server_runs_decides_whether_it_is_online(self):
         self.assertEqual(classify("http://127.0.0.1:8000/v1"), (False, True))
         self.assertEqual(classify("http://localhost:8000/v1"), (False, True))
         self.assertEqual(classify("http://192.168.1.20:8000/v1"), (False, False))
         self.assertEqual(classify("https://models.example.com/v1"), (True, False))
+
+
+class Counted(unittest.TestCase):
+    """A pack's model calls are counted so the cut from about 55 can be measured (2026-11-08)."""
+
+    def test_calls_inside_a_block_are_counted_and_an_outer_block_counts_the_inner(self):
+        with mock.patch.object(ai, "chat", lambda *a, **k: "{}"):
+            llm.chat("s", "u")
+            with llm.counted() as outer:
+                llm.chat("s", "u")
+                with llm.counted() as inner:
+                    llm.chat_json("s", "u")
+            llm.chat("s", "u")
+        self.assertEqual((outer.n, inner.n), (2, 1))
+
+
+class Purposes(unittest.TestCase):
+    """Every pack and writing call was logged as "unnamed" in the AI usage log (2026-11-12)."""
+
+    def test_the_old_chat_passes_its_purpose_on(self):
+        seen = []
+        with mock.patch.object(ai, "chat", lambda *a, **k: seen.append(k["purpose"]) or "{}"):
+            llm.chat("s", "u", purpose="brief")
+            llm.chat_json("s", "u", purpose="fit")
+        self.assertEqual(seen, ["brief", "fit"])
+
+    def test_every_call_through_the_old_chat_names_its_purpose(self):
+        unnamed = []
+        for path in sorted(Path(llm.__file__).parent.rglob("*.py")):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in ("chat", "chat_json") and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "llm" and not any(k.arg == "purpose" for k in node.keywords)):
+                    unnamed.append(f"{path.name}:{node.lineno}")
+        self.assertEqual(unnamed, [])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 /* The Documents step of an application: while Hal writes, its steps and Stop; then the
    CV changes (Undo and Redo per change), the letter, the answers and the message, with "Approve and fill in
    the form". The first approval shows the three-step guide (dialogs/firstapp.js) before anything opens.
+   "Critique as a recruiter" (dialogs/critique.js) reads the saved documents against the advert and changes
+   nothing.
 
    The CV and the letter are each shown beside the PDF Hal will upload, so the person sees the document
    itself and not only the words. An Undo, a Redo or saved letter edits make the PDF again, and its address
@@ -13,6 +15,7 @@ import { Tabs } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { copyText } from "../ui/clipboard.js";
 import { plural } from "../core/format.js";
+import { UncheckedNote } from "../ui/unchecked-note.js";
 
 const appPath = a => "/applications/" + encodeURIComponent(a.id);
 
@@ -84,21 +87,27 @@ export function DocsStep({ a, reload, onApproved }) {
     try { await put(appPath(a) + "/documents", body); toast("Saved"); reload(); } catch (err) { toast(err.message); }
   };
   const changes = d.cv.changes || [];
+  const original = d.cv.sent_as === "original";
   return html`
     <div class="approve"><div class="ic info"><${Icon} n="file" /></div><div class="grow"><b>Check what Hal made for this job, then approve it.</b>
       <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div></div>
       <button type="button" class="btn primary" onClick=${onApprove}>Approve and fill in the form</button>
-      <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button></div>
+      <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button>
+      <button type="button" class="btn quiet" onClick=${() => openDialog("critique", { app: a })}><${Icon} n="eye" c="s" />Critique as a recruiter</button></div>
+    <${UncheckedNote} />
     <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
     ${tab === "cv" && html`<div class="docs-split"><div class="stack s">
-      <p class="sub" style="margin:0">${changes.length ? "Hal changed " + plural(changes.length, "thing") + " from your CV for this job." : "Hal used your main CV as it is for this job."}</p>
+      <p class="sub" style="margin:0">${original ? "Hal sends your own CV file, unchanged, as you chose on My CV." : changes.length ? "Hal changed " + plural(changes.length, "thing") + " from your CV for this job." : "Hal used your main CV as it is for this job."}</p>
       ${changes.map(c => html`<article class=${cx("sugg", !c.on && "done")}><div class="row tight"><span class="chip info">${c.kind}</span><span class="small sub">${c.where}</span><span class="sp"></span>
         ${c.on ? html`<button type="button" class="btn quiet small" onClick=${() => toggle(c, false)}><${Icon} n="undo" c="s" />Undo</button>`
           : html`<span class="small sub">Undone: your CV's version is used</span><button type="button" class="btn quiet small" onClick=${() => toggle(c, true)}>Redo</button>`}</div>
         ${c.on && html`<div class="ba"><div class="b"><small>Your CV</small>${c.before || "(not there)"}</div><div class="a"><small>For this job</small>${c.after || "(changed)"}</div></div>
           ${c.why && html`<div class="small"><b style="color:var(--why)">Why:</b> ${c.why}</div>`}`}</article>`)}
-      </div><${Pdf} url=${d.cv.preview_url} label="CV preview" /></div>`}
+      </div>${original && d.cv.preview_url && !/\.pdf&/i.test(d.cv.preview_url)
+        ? html`<div class="card"><p class="small">Your file is not a PDF, so it cannot be shown here.</p>
+            <a class="btn small" href=${d.cv.preview_url} download><${Icon} n="download" c="s" />Download your file</a></div>`
+        : html`<${Pdf} url=${d.cv.preview_url} label="CV preview" />`}</div>`}
     ${tab === "letter" && html`<div class="docs-split"><div class="stack s">
       <label class="small" for="letter-text"><b>Cover letter</b> <span class="sub">${letter.split(/\s+/).filter(Boolean).length} words</span></label>
       <textarea id="letter-text" class="input" style="min-height:260px" value=${letter} onInput=${e => setLetter(e.target.value)}></textarea>

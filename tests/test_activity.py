@@ -13,6 +13,7 @@ from support.api import HalServer
 from test_runner import WAIT_S, Kinds, fresh_home, gate
 
 from jobhunt.core import activity, runner
+from jobhunt.web import auth
 
 CANARY = "canary-private-answer-1234"
 
@@ -121,6 +122,21 @@ class Routes(unittest.TestCase):
         self.assertEqual(self.web.get("/api/v2/activity?limit=ten").status, 400)
         self.assertEqual(self.web.post(f"/api/v2/activity/{new}/undo").status, 409)
         self.assertEqual(self.hal.client().get("/api/v2/activity").status, 401)
+
+    def test_the_command_line_follows_and_stops_an_action_with_the_local_key(self):
+        """`jobhunt sources read waiting` was refused "Hal opens from its shortcut" and lost its read (2026-11-11)."""
+        reached, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        self.kinds.add("test.local", lambda ctx: gate(ctx, reached, release), area="email", label="Checking email",
+                       why="Email check, every 30 minutes")
+        action_id = runner.start("test.local", subject="_mail")
+        self.assertTrue(reached.wait(WAIT_S))
+        key = {"Authorization": "Bearer " + auth.local_api_key()}
+        cli = self.hal.client()
+        self.assertEqual(cli.get(f"/api/v2/actions/{action_id}", headers=key).json()["state"], "running")
+        self.assertEqual(cli.post(f"/api/v2/actions/{action_id}/stop", headers=key).json(), {"ok": True})
+        release.set()
+        self.assertEqual(runner.wait(action_id)["state"], "stopped")
 
     def test_an_action_is_listed_stopped_and_carried_on_through_the_routes(self):
         reached, release = threading.Event(), threading.Event()

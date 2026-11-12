@@ -1,48 +1,40 @@
-/* Your record: the folder of certificates, references and notes Hal uses as evidence.
-   Files dropped here are copied into the record's Inbox and read at once; a question is an action whose
-   answer names the files it came from. Each group opens to its files, which download from any computer,
-   so a laptop reaches the desktop's record. */
-import { html, useState } from "../core/html.js";
-import { api, post, run } from "../core/api.js";
+/* Your record: the folder of certificates, references and notes Hal uses as evidence, and the profile Hal
+   reads out of it (jobs, education, skills, projects and the rest), each in its own tab. "Check your record"
+   (pages/check.js) asks about what Hal found one card at a time.
+
+   The tab is part of the route ("record-work"), so a link opens the right one; the old "record-files" opens
+   Documents. Each tab has its own "Add" panel (record/sections.js): Overview the CVs, each job and education
+   card its own documents, Projects its ways to add a project, Documents its upload. Overview has "Sort a big
+   folder for me" (record/sort.js), whose proposals the person accepts: a banner at its top leads to "Check the
+   list" while a sort waits, and a sort that finishes while the page is open opens its list. It also shows how
+   an older Hal's bulk read went; each profile tab lists what Hal
+   found for the person to check, change or hide; Documents keeps the folder's groups, whose files download
+   from any computer (so a laptop reaches the desktop's record), and "Ask your record", whose answer names
+   the files it came from. */
+import { html, useState, useLayoutEffect } from "../core/html.js";
+import { post, run } from "../core/api.js";
 import { useApi, toast } from "../core/store.js";
-import { plural } from "../core/format.js";
-import { Head, Chip, Note, Empty } from "../ui/controls.js";
+import { go } from "../core/router.js";
+import { plural, agoWords } from "../core/format.js";
+import { Head, Tabs, Chip, Note, Empty } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { OpenFolderButton } from "../ui/open-buttons.js";
+import { IngestCard } from "../record/add.js";
+import { KindSection, ConflictsTab } from "../record/items.js";
+import { basicKey } from "../record/fields.js";
+import { SourcesPanel, ProjectsPanel } from "../record/sections.js";
+import { SortCard, SortBanner, useSortsOpenWhenReady } from "../record/sort.js";
+// [tab, words, kinds shown in it]
+const TABS = [["overview", "Overview", []], ["work", "Work history", ["job"]], ["education", "Education", ["education"]],
+  ["skills", "Skills", ["skill"]], ["projects", "Projects", ["project"]],
+  ["certificates", "Certificates and achievements", ["certificate", "achievement"]],
+  ["about", "About you and links", ["basic", "link"]], ["inconsistencies", "Inconsistencies", []], ["documents", "Documents", []]];
+// Tabs that were renamed, so an old link still opens the right one.
+const RENAMED = { files: "documents" };
+const TAB_OF = Object.fromEntries(TABS.flatMap(([t, , kinds]) => kinds.map(k => [k, t])));
 
-const MINUTE_MS = 60000;
-const HOUR_MIN = 60;
-const DAY_MIN = 1440;
-const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden";
-
-function agoWords(iso) {
-  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / MINUTE_MS));
-  if (min < 1) return "just now";
-  if (min < HOUR_MIN) return plural(min, "minute") + " ago";
-  if (min < DAY_MIN) return plural(Math.round(min / HOUR_MIN), "hour") + " ago";
-  return plural(Math.round(min / DAY_MIN), "day") + " ago";
-}
-
-function Drop({ onAdded }) {
-  const [over, setOver] = useState(false);
-  const send = async list => {
-    const files = [...(list || [])];
-    if (!files.length) return;
-    const form = new FormData();
-    files.forEach((f, i) => form.append("file" + i, f, f.name));
-    try {
-      const out = await api("POST", "/record/files", form);
-      toast(out.added.length === 1 ? "Added " + out.added[0] : "Added " + plural(out.added.length, "file"));
-      onAdded();
-    } catch (err) { toast(err.message); }
-  };
-  return html`<label class="drop" style=${"position:relative;display:block;cursor:pointer" + (over ? ";border-color:var(--primary)" : "")}
-      onDragOver=${e => { e.preventDefault(); setOver(true); }} onDragLeave=${() => setOver(false)}
-      onDrop=${e => { e.preventDefault(); setOver(false); send(e.dataTransfer.files); }}>
-    <${Icon} n="upload" c="l" /><p style="margin:8px 0 4px"><b>Drop files here to add them</b></p>
-    <p class="small" style="margin:0">PDF, Word, photos of certificates, or notes. Hal reads them within 10 minutes.</p>
-    <input type="file" multiple style=${HIDDEN} aria-label="Add files to your record"
-      onChange=${e => { send(e.target.files); e.target.value = ""; }} /></label>`;
+function writeTab(t) {
+  try { history.replaceState(null, "", "#" + (t === "overview" ? "record" : "record-" + t)); } catch (err) { /* a sandboxed frame may refuse */ }
 }
 
 function Ask() {
@@ -83,24 +75,72 @@ function Group({ g }) {
     </div></div>`;
 }
 
+function DocumentsTab({ data }) {
+  return html`<div class="stack"><${SourcesPanel} uid="rec-docs" heading="Add documents" parts=${[["document", null]]}
+      cards=${["education", "job", "certificate"]}
+      hint="Certificates, awards, references, checks and anything else that helps. Choose what each one is."
+      empty="Nothing added here yet." />
+    ${data && data.exists && html`<div class="grid2"><section class="card"><h2 class="h2">What is in it</h2>
+      ${data.groups.length ? data.groups.map(g => html`<${Group} g=${g} />`) : html`<${Empty}>Nothing yet. Add your first file on the Overview tab.<//>`}
+      <p class="small sub" style="margin:10px 0 0">${data.last_read ? "Last read " + agoWords(data.last_read) + ". " : ""}Private files you mark as private are never sent to the AI.</p></section>
+    <${Ask} /></div>`}</div>`;
+}
+
+/** The profile in numbers: each kind with how many Hal found and how many wait to be checked, then the basics. */
+function Summary({ profile, onTab }) {
+  const kinds = profile.kinds.filter(k => k.kind !== "basic" && k.kind !== "link");
+  const open = (profile.conflicts || []).length;
+  return html`<section class="card stack s" aria-labelledby="rec-sum-h"><h2 class="h2" id="rec-sum-h">Your profile</h2>
+    <p class="small sub rec-line">${!kinds.some(k => k.n) ? "Nothing yet. Add your CV and Hal fills this in from it."
+      : "What Hal found about you in your files. " + (profile.to_check ? plural(profile.to_check, "thing") + " to check." : "Everything is checked.")}</p>
+    ${(profile.to_check > 0 || open > 0) && html`<div><button type="button" class="btn primary" onClick=${() => go("check")}>
+      <${Icon} n="check" c="s" />Check your record</button>
+      <p class="small sub rec-line">Hal only uses the facts you have checked.</p></div>`}
+    <ul class="rec-counts">${kinds.map(k => html`<li key=${k.kind}><button type="button" class="btn quiet small" onClick=${() => onTab(TAB_OF[k.kind])}>
+      <b>${k.label}</b></button> <span>${k.n}</span>${k.to_check > 0 && html` <${Chip} tone="warn">${k.to_check} to check<//>`}${k.studied > 0
+        && html` <span class="small sub">and ${k.studied} studied in your course</span>`}</li>`)}
+      <li><button type="button" class="btn quiet small" onClick=${() => onTab("inconsistencies")}><b>Inconsistencies</b></button>
+        <span>${open}</span>${open > 0 && html` <${Chip} tone="warn">${open} to sort out<//>`}</li></ul>
+    ${(profile.basics.length > 0 || profile.links.length > 0) && html`<dl class="kv rec-kv">
+      ${profile.basics.map(b => html`<dt>${basicKey(b.fields.key)}</dt><dd>${b.fields.value}</dd>`)}
+      ${profile.links.map(l => html`<dt>${l.fields.label || "Link"}</dt><dd>${l.fields.url}</dd>`)}</dl>`}
+  </section>`;
+}
+
 /** The Your record page. */
-export function Record() {
+export function Record({ arg }) {
+  const named = RENAMED[arg] || arg;
+  const [t, setTab] = useState(TABS.some(x => x[0] === named) ? named : "overview");
+  useLayoutEffect(() => { setTab(TABS.some(x => x[0] === named) ? named : "overview"); }, [named]);
+  const setT = next => { setTab(next); writeTab(next); };
   const { data, error, reload } = useApi("/record", { on: [ev => ev.type === "action" && ev.kind === "record.sync"] });
+  const profile = useApi("/profile").data;
+  const sorts = useSortsOpenWhenReady();
   const make = async () => {
     try { await post("/record/create-folder"); reload(); } catch (err) { toast(err.message); }
   };
+  const n = kinds => (profile ? kinds.reduce((sum, k) => sum + ((profile.kinds.find(x => x.kind === k) || {}).n || 0), 0) || "" : "");
+  const tabs = TABS.map(([id, words, kinds]) => [id, words, id === "inconsistencies"
+    ? (profile && profile.conflicts.length) || "" : n(kinds)]);
+  const kinds = (TABS.find(x => x[0] === t) || TABS[0])[2];
   return html`
-    <${Head} title="Your record" sub="A folder of certificates, references, reports and notes. Hal uses it as evidence when it writes, and says which file each fact came from.">
+    <${Head} title="Your record" sub="Your certificates, references, reports and notes, and what Hal found in them about you. Hal uses it as evidence when it writes, and says which file each fact came from.">
       ${data && data.exists && html`<${OpenFolderButton} path="/record/open-folder" />`}
     <//>
     ${error && html`<${Note} tone="warn">${error.message}<//>`}
     ${data && !data.exists && html`<${Note}>Your record folder is not there yet.
       <button class="btn small" type="button" onClick=${make}>Make the folder</button><//>`}
-    ${data && data.exists && html`<div class="grid2"><div class="stack">
-      <${Drop} onAdded=${reload} />
-      <${Ask} />
-    </div>
-    <section class="card"><h2 class="h2">What is in it</h2>
-      ${data.groups.length ? data.groups.map(g => html`<${Group} g=${g} />`) : html`<${Empty}>Nothing yet. Drop your first file on the left.<//>`}
-      <p class="small sub" style="margin:10px 0 0">${data.last_read ? "Last read " + agoWords(data.last_read) + ". " : ""}Private files you mark as private are never sent to the AI.</p></section></div>`}`;
+    ${t === "overview" && html`<${SortBanner} data=${sorts} />`}
+    <div class="rec-tabs"><${Tabs} label="Your record" value=${t} onChange=${setT} tabs=${tabs} /></div>
+    ${t === "overview" && html`<div class="grid2"><div class="stack">
+        <${SourcesPanel} uid="rec-cvs" heading="Your CVs" parts=${[["cv", null], ["letter", null]]}
+          hint="Add every CV you have; Hal uses the newest as your main one. Cover letters and personal statements only teach Hal how you write."
+          empty="No CVs yet." />
+        <${SortCard} />
+        <${IngestCard} /></div>
+      ${profile ? html`<${Summary} profile=${profile} onTab=${setT} />` : html`<p class="sub">Loading</p>`}</div>`}
+    ${t === "projects" && html`<div class="stack" style="margin-bottom:16px"><${ProjectsPanel} /></div>`}
+    ${kinds.length > 0 && html`<div class="stack">${kinds.map(k => html`<${KindSection} key=${k} kind=${k} heading=${kinds.length > 1} />`)}</div>`}
+    ${t === "inconsistencies" && (profile ? html`<${ConflictsTab} profile=${profile} />` : html`<p class="sub">Loading</p>`)}
+    ${t === "documents" && html`<${DocumentsTab} data=${data} />`}`;
 }

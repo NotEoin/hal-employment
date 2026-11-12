@@ -9,7 +9,9 @@ Documents dropped in (PDF, Word, PowerPoint, Excel, web pages, saved emails) are
 beside them, keeping their headings and tables, so they can be searched in sensible sections: by
 Microsoft's MarkItDown when it is installed, else by pypdfium2 for PDFs (`cvstudio/pdfread.py`) and by
 reading a Word file's XML. Photos and scans are read by OCR when tesseract is installed and `record.ocr`
-is on.
+is on. Two folders are left to the bulk ingest (`jobhunt.ingest`), which writes their notes in `Sources/`:
+the drop folder (`record.drop_folder`) and its copies of originals (`ORIGINALS`). Frontmatter is read with
+YAML lists as lists (`ingest/frontmatter.py`), as Obsidian writes tags.
 
 Search is by words (BM25) over passages split at each heading, in pure Python, so it needs no AI, no
 graphics card and no internet; the index is one JSON file in the data folder. A passage's score is the share
@@ -19,6 +21,14 @@ computer when it answers, and falls back to words when it does not.
 
 Files in the folders `record.private_folders` names (default "Private") are never sent to any AI: they are
 left out of `context`, `ask`, `notes_for_ai` and the vectors, and only the person's own search shows them.
+
+Only the person's own documents feed writing (`context` and `writing_hits`): a passage counts when its
+note's `role` is `own`, or when the person wrote the note themselves (no `hal` frontmatter key and no
+role), and never when its `tier` is `archive`. Lecture notes, someone else's documents and notes Hal could
+not place were used as the person's own work in letters (2026-11-06). Each passage keeps its note's `role`,
+`hal` and `tier` in the index for this; an index made before that (`INDEX_VERSION`) is read again in full
+on the next `sync`. `ask` still searches every passage: a question about the record may be about course
+material too.
 """
 import hashlib
 import json
@@ -32,10 +42,12 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
 from .core import paths
+from .ingest import frontmatter
 
 log = logging.getLogger(__name__)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # Windows: no console flashes up for tesseract
@@ -70,13 +82,28 @@ def _live(name: str):
 
 # What is converted to notes; Markdown notes themselves are indexed as they are.
 DOCUMENTS = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".epub", ".msg", ".txt")
+OPENDOCUMENT = (".odt", ".odp", ".ods")   # LibreOffice's own formats, read from their XML (`_opendocument`)
 # Photos and scans of certificates, read by OCR.
 IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff")
 MIN_SCORE = 0.5  # below half the query's weight a passage is about something else
 SKIP_DIRS = {".obsidian", ".trash"}
-# Navigation notes, not content: the "Start Here" note setup writes is one.
-SKIP_TYPE = {"topic", "dashboard", "index"}
+# Navigation notes, not content: the "Start Here" note setup writes is one, as are the ingest's entity notes,
+# which hold only links to the notes that mention them.
+SKIP_TYPE = {"topic", "dashboard", "index", "entity"}
+ORIGINALS = "Attachments/Sources"   # the ingest's copies of the files it read (`ingest/notes.py`)
 MAX_CHARS = 1200  # a passage's size: a paragraph or two, enough to quote from
+# The index's layout. 2: each passage carries its note's `role`, `hal`, `tier` and `doc_type` (2026-11-07);
+# an index of another version is read again in full by `sync`.
+INDEX_VERSION = 2
+OWN_ROLE = "own"          # `ingest/roles.py`'s role for the person's own documents
+ARCHIVE_TIER = "archive"  # a note kept in the record but never used for writing
+# CVs and letters reach a writer only as the person's current CV, which every writer is given whole: older CV
+# drafts held claims the person had dropped (an unfinished project), and a letter to another employer is
+# tailored to that employer, yet both were passages a letter used as evidence (2026-11-07).
+NOT_FOR_WRITING_TYPES = ("cv", "letter", "personal_statement")
+# How a writing request labels these passages. Never "true": they are what the person's own documents say,
+# and passages a prompt called true became claims a letter made about the person (2026-11-06).
+OWN_DOCUMENTS = "from the applicant's own documents"
 # BM25's usual constants (Robertson and Zaragoza, 2009).
 K1, B = 1.5, 0.75
 STOP = set("""a about above after again all also am an and any are as at be been being below between both but by
@@ -152,6 +179,24 @@ def _docx(path: Path) -> str:
     return "\n\n".join(lines)
 
 
+def _opendocument(path: Path) -> str:
+    """An OpenDocument file's headings (as Markdown headings) and paragraphs, read from its XML: MarkItDown reads
+    none, so a LibreOffice essay had no words Hal could read (2026-11-12)."""
+    ns = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}"
+    with zipfile.ZipFile(path) as z:
+        root = ET.fromstring(z.read("content.xml"))
+    lines = []
+    for el in root.iter():
+        if el.tag not in (f"{ns}h", f"{ns}p"):
+            continue
+        text = " ".join("".join(el.itertext()).split())
+        if not text:
+            continue
+        level = el.get(f"{ns}outline-level") if el.tag == f"{ns}h" else None
+        lines.append(f"{'#' * min(int(level or 1), 6)} {text}" if el.tag == f"{ns}h" else text)
+    return "\n\n".join(lines)
+
+
 def _text_of(path: Path) -> str:
     """A document as Markdown, keeping its headings, lists and tables; pdftotext for a PDF without headings.
 
@@ -170,6 +215,11 @@ def _text_of(path: Path) -> str:
         text = _MARKITDOWN.convert_local(str(path)).markdown or ""
     except Exception:  # a converter missing or failing falls back below, or leaves the file unread
         text = ""
+    if not text.strip() and suffix in OPENDOCUMENT:
+        try:
+            text = _opendocument(path)
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile, ET.ParseError):
+            text = ""
     if not text.strip() and suffix == ".docx":
         try:
             text = _docx(path)
@@ -194,6 +244,16 @@ def _text_of(path: Path) -> str:
     return text
 
 
+def text_of(path: Path) -> str:
+    """A document's text as its note holds it: Markdown with line ends and blank runs tidied; "" for none.
+
+    The bulk ingest (`jobhunt.ingest`) reads documents through this too, so a file reads the same either way.
+    """
+    # Runs of spaces inside a line are kept: in pdftotext's layout they are what keeps columns apart.
+    text = re.sub(r"[ \t]+\n", "\n", _text_of(path).replace("\r\n", "\n").replace("\f", "\n"))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 def convert() -> list[Path]:
     """Writes a note beside each document that has none, or whose document changed; returns the notes written."""
     written = []
@@ -201,9 +261,7 @@ def convert() -> list[Path]:
         note = doc.with_name(f"{doc.stem} ({doc.suffix[1:].upper()}).md")
         if note.exists() and note.stat().st_mtime >= doc.stat().st_mtime:
             continue
-        # Runs of spaces inside a line are kept: in pdftotext's layout they are what keeps columns apart.
-        text = re.sub(r"[ \t]+\n", "\n", _text_of(doc).replace("\r\n", "\n").replace("\f", "\n"))
-        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        text = text_of(doc)
         if not text:
             continue
         note.write_text(f"---\ntype: document\nsource: \"[[{doc.name}]]\"\nconverted: {date.today().isoformat()}\n---\n"
@@ -212,10 +270,24 @@ def convert() -> list[Path]:
     return written
 
 
+def _ingest_owned(vault: Path) -> set[Path]:
+    """Folders of the record whose documents the bulk ingest reads, so `convert` leaves them alone.
+
+    The drop folder's files are read into `Sources/` notes, and the copies of originals in `ORIGINALS`
+    already have theirs; a second note beside each would put every passage in the index twice.
+    """
+    from .ingest import sources
+
+    return {(vault / ORIGINALS).resolve(), sources.drop_folder().expanduser().resolve()}
+
+
 def _walk(suffixes: tuple) -> list[Path]:
     found = []
-    for folder, dirs, files in os.walk(_live("VAULT")):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
+    vault = Path(_live("VAULT"))
+    owned = _ingest_owned(vault)
+    for folder, dirs, files in os.walk(vault):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")
+                   and (Path(folder) / d).resolve() not in owned]
         found += [Path(folder) / f for f in files if f.lower().endswith(suffixes)]
     return sorted(found)
 
@@ -223,40 +295,40 @@ def _walk(suffixes: tuple) -> list[Path]:
 # Passages -----------------------------------------------------------------------------------
 
 def _frontmatter(text: str) -> tuple[dict, str]:
-    fm, body = {}, text
-    if text.startswith("---"):
-        end = text.find("\n---", 3)
-        if end != -1:
-            for line in text[3:end].splitlines():
-                m = re.match(r"^([A-Za-z0-9_]+):\s*(.*)$", line)
-                if m:
-                    fm[m.group(1)] = m.group(2).strip()
-            body = text[end + 4:]
-    return fm, body
+    """A note's frontmatter, with YAML lists as lists (`ingest/frontmatter.py`), and its body."""
+    return frontmatter.parse(text)
+
+
+def _one(value) -> str:
+    """A frontmatter value as one string: a list's items joined, as a person may type `type: [index]`."""
+    return " ".join(value) if isinstance(value, list) else str(value or "")
 
 
 def should_index(text: str) -> bool:
-    """False for navigation notes (index, topic, dashboard) and empty stubs."""
+    """False for navigation notes (index, topic, dashboard, entity) and empty stubs."""
     fm, _ = _frontmatter(text)
-    return fm.get("type", "").strip().lower() not in SKIP_TYPE and fm.get("status", "").strip().lower() != "stub"
+    return _one(fm.get("type")).strip().lower() not in SKIP_TYPE and _one(fm.get("status")).strip().lower() != "stub"
 
 
 def chunks(rel: str, text: str) -> list[dict]:
     """A note's passages, each under its nearest heading and no longer than MAX_CHARS.
 
     No passage carries text from the one before: a carried tail would file one year's
-    module marks under the next year's heading.
+    module marks under the next year's heading. Each passage keeps its note's `role`, `tier` and `doc_type`
+    (lower case, "" when unset) and whether Hal wrote the note (`hal`), for `for_writing`.
     """
     fm, body = _frontmatter(text)
     body = "\n".join(line for line in body.splitlines() if not line.strip().startswith("<!--"))
     found = re.search(r"^#\s+(.*)$", body, re.M)
-    title = fm.get("title") or (found.group(1).strip() if found else Path(rel).stem)
+    title = _one(fm.get("title")) or (found.group(1).strip() if found else Path(rel).stem)
+    whose = {"role": _one(fm.get("role")).strip().lower(), "hal": bool(fm.get("hal")),
+             "tier": _one(fm.get("tier")).strip().lower(), "doc_type": _one(fm.get("doc_type")).strip().lower()}
     out, heading, buf = [], title, []
 
     def flush():
         passage = "\n".join(buf).strip()
         if len(passage) >= 40:  # a fragment shorter than this is a stray label, not a fact
-            out.append({"path": rel, "title": title, "heading": heading, "text": passage})
+            out.append({"path": rel, "title": title, "heading": heading, "text": passage, **whose})
         buf.clear()
 
     for para in re.split(r"\n\s*\n", body):
@@ -273,6 +345,20 @@ def chunks(rel: str, text: str) -> list[dict]:
         buf.append(para)
     flush()
     return out
+
+
+def for_writing(passage: dict) -> bool:
+    """True when a passage may be used to write for the person: from their own document, not archived, and
+    not a CV or a letter (`NOT_FOR_WRITING_TYPES`).
+
+    A passage from an index made before passages kept their note's role is never used.
+    """
+    if "role" not in passage or passage.get("tier") == ARCHIVE_TIER:
+        return False
+    if passage.get("doc_type") in NOT_FOR_WRITING_TYPES:
+        return False
+    role = passage["role"]
+    return role == OWN_ROLE or (not role and not passage.get("hal"))
 
 
 def _stem(word: str) -> str:
@@ -295,10 +381,6 @@ def words(text: str) -> list[str]:
 
 
 # The index ----------------------------------------------------------------------------------
-
-def _hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
 
 def _load() -> dict:
     try:
@@ -324,22 +406,30 @@ def sync() -> dict:
         raise RecordUnavailable(f"no employment record at {_live('VAULT')}")
     converted = convert()
     index = _load()
-    notes = {}
+    rebuilt = index.get("version") != INDEX_VERSION
+    if rebuilt:   # passages without their note's role: read every note again
+        index = {**index, "manifest": {}, "chunks": []}
+    notes, hashes = {}, {}
     for path in _walk((".md",)):
-        if should_index(path.read_text(encoding="utf-8", errors="replace")):
-            notes[path.relative_to(_live("VAULT")).as_posix()] = path
-    hashes = {rel: _hash(p) for rel, p in notes.items()}
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            continue  # an ingest removed the note after the walk listed it (2026-11-05)
+        text = data.decode("utf-8", errors="replace")
+        if should_index(text):
+            rel = path.relative_to(_live("VAULT")).as_posix()
+            notes[rel], hashes[rel] = text, hashlib.sha256(data).hexdigest()
     changed = [rel for rel, h in hashes.items() if index["manifest"].get(rel) != h]
     gone = set(index["manifest"]) - set(notes)
     if changed or gone:
         drop = set(changed) | gone
         index["chunks"] = [c for c in index["chunks"] if c["path"] not in drop]
         for rel in changed:
-            index["chunks"] += chunks(rel, notes[rel].read_text(encoding="utf-8", errors="replace"))
+            index["chunks"] += chunks(rel, notes[rel])
         index["manifest"] = {rel: h for rel, h in index["manifest"].items() if rel not in gone} | \
             {rel: hashes[rel] for rel in changed}
     vectors_changed = _embed_new(index)
-    if changed or gone or vectors_changed:
+    if changed or gone or vectors_changed or rebuilt:
         index["read"] = _now()
         _save(index)
     return {"notes": len(notes), "passages": len(index["chunks"]), "changed": len(changed), "removed": len(gone),
@@ -353,6 +443,7 @@ def _now() -> str:
 
 
 def _save(index: dict) -> None:
+    index["version"] = INDEX_VERSION
     _live("INDEX").parent.mkdir(parents=True, exist_ok=True)
     tmp = _live("INDEX").with_suffix(".tmp")
     tmp.write_text(json.dumps(index), encoding="utf-8")
@@ -428,8 +519,13 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / size if size else 0.0
 
 
-def _meaning_search(queries: list[str], k: int) -> list[list[dict]] | None:
-    """Passages ranked by meaning, or None when there are no vectors or the AI does not answer."""
+def _hit(passage: dict) -> dict:
+    """A passage as a search hit: where it is, its words and its note's document type."""
+    return {**{f: passage[f] for f in ("path", "title", "heading", "text")}, "doc_type": passage.get("doc_type", "")}
+
+
+def _meaning_search(queries: list[str], k: int, keep: Callable[[dict], bool]) -> list[list[dict]] | None:
+    """Passages `keep` allows, ranked by meaning; None when there are no vectors or the AI does not answer."""
     index = _searcher()["raw"]
     vectors = index.get("vectors") or {}
     if not vectors or index.get("vector_model") != _embed_model():
@@ -439,11 +535,11 @@ def _meaning_search(queries: list[str], k: int) -> list[list[dict]] | None:
     except RecordUnavailable as e:
         log.info("searching by words: %s", e)
         return None
-    keyed = [(c, vectors.get(_passage_key(c))) for c in index["chunks"]]
+    keyed = [(c, vectors.get(_passage_key(c))) for c in index["chunks"] if keep(c)]
     out = []
     for q in asked:
         scored = sorted(((_cosine(q, v), c) for c, v in keyed if v is not None), key=lambda x: -x[0])
-        out.append([{**{f: c[f] for f in ("path", "title", "heading", "text")}, "score": round(s, 3), "by": "meaning"}
+        out.append([{**_hit(c), "score": round(s, 3), "by": "meaning"}
                     for s, c in scored[:k] if s >= MEANING_MIN])
     return out
 
@@ -474,14 +570,25 @@ def search(query: str, k: int = 5, min_score: float = MIN_SCORE, include_private
     Passages in private folders are left out unless `include_private`, which only the person's own search
     (the command line) sets.
     """
-    return search_many([query], k, min_score, include_private)[0]
+    return search_many([query], k, min_score, keep=(lambda c: True) if include_private else shared)[0]
+
+
+def shared(passage: dict) -> bool:
+    """True for a passage outside the private folders: one Hal may give the AI."""
+    return not is_private(passage["path"])
+
+
+def usable(passage: dict) -> bool:
+    """True for a passage writing may use: outside the private folders and allowed by `for_writing`."""
+    return shared(passage) and for_writing(passage)
 
 
 def search_many(queries: list[str], k: int = 5, min_score: float = MIN_SCORE,
-                include_private: bool = False) -> list[list[dict]]:
-    """One search per query: by meaning when chosen and the AI answers, else by words (BM25)."""
+                keep: Callable[[dict], bool] = shared) -> list[list[dict]]:
+    """One search per query over the passages `keep` allows (`shared` ones unless told otherwise; `usable`
+    ones for writing): by meaning when chosen and the AI answers, else by words (BM25)."""
     if _by_meaning():
-        found = _meaning_search(queries, k)
+        found = _meaning_search(queries, k, keep)
         if found is not None:
             return found
     s = _searcher()
@@ -493,7 +600,7 @@ def search_many(queries: list[str], k: int = 5, min_score: float = MIN_SCORE,
         total = sum(weight.values())
         hits = []
         for i, bag in enumerate(s["bags"]):
-            if not include_private and is_private(s["chunks"][i]["path"]):
+            if not keep(s["chunks"][i]):
                 continue
             held = [t for t in terms if t in bag]
             if not held or not total:
@@ -504,29 +611,70 @@ def search_many(queries: list[str], k: int = 5, min_score: float = MIN_SCORE,
             if share >= min_score:
                 hits.append((share, bm25, i))
         hits.sort(reverse=True)
-        results.append([{**{f: s["chunks"][i][f] for f in ("path", "title", "heading", "text")},
+        results.append([{**_hit(s["chunks"][i]),
                          "score": round(share, 3), "by": "words"} for share, _, i in hits[:k]])
     return results
 
 
-def context(queries: list[str], per_query: int = 3, limit: int = 6000) -> str:
-    """Passages of the record relevant to the queries, as text for a prompt; "" when the record cannot be read.
+# How much a passage counts for writing, by the ingest's category in its path (`Sources/<Category>/`): a
+# trivia quiz in the study notes outranked the person's CVs as evidence for a letter (2026-11-05). Notes
+# outside `Sources/` are the person's own and count fully.
+CATEGORY_WEIGHT = {"CVs and letters": 1.0, "Work": 1.0, "Education": 1.0, "Certificates": 1.0, "Projects": 1.0,
+                   "Coursework": 0.9, "Writing": 0.9, "Code": 0.7, "Creative work": 0.7, "Study notes": 0.5,
+                   "Slides": 0.4, "Email": 0.6, "Media": 0.3, "Other": 0.3}
+CANDIDATES = 4                # passages fetched per one kept, so the weighting has some to choose from
 
-    Never holds a passage from a private folder.
+
+def weight(path: str) -> float:
+    """How much a passage at `path` counts as evidence for writing (see `CATEGORY_WEIGHT`)."""
+    parts = path.split("/")
+    if len(parts) > 2 and parts[0] == "Sources":
+        return CATEGORY_WEIGHT.get(parts[1], 1.0)
+    return 1.0
+
+
+def writing_hits(queries: list[str], per_query: int = 3) -> list[list[dict]]:
+    """For each query, the passages of the person's own documents that writing may use, best first.
+
+    Only passages `usable` allows; each query's passages are ranked by score times `weight`. Raises what
+    `search_many` raises.
     """
+    found = search_many(queries, per_query * CANDIDATES, keep=usable)
+    return [sorted((h for h in hits if shared(h)),
+                   key=lambda h: -h.get("score", 0) * weight(h["path"]))[:per_query] for hits in found]
+
+
+def context(queries: list[str], per_query: int = 3, limit: int = 6000) -> str:
+    """Passages of the person's own documents relevant to the queries, as text for a prompt, each under a
+    "[file > heading]" line (`writing_hits` chooses them); "" when the record cannot be read."""
     try:
-        found = search_many([q for q in queries if q.strip()][:20], per_query)
+        found = writing_hits([q for q in queries if q.strip()][:20], per_query)
     except (OSError, ValueError, KeyError, TypeError):
         return ""
     seen, lines = set(), []
     for hits in found:
         for h in hits:
             key = (h["path"], h["heading"], h["text"][:80])
-            if key in seen or is_private(h["path"]):
+            if key in seen:
                 continue
             seen.add(key)
-            lines.append(f"[{h['path']} > {h['heading']}]\n{h['text']}")
+            kind = passage_kind(h)
+            lines.append(f"[{h['path']} > {h['heading']}]\n" + (f"(Kind: {kind})\n" if kind else "") + h["text"])
     return "\n\n".join(lines)[:limit]
+
+
+def passage_kind(hit: dict) -> str:
+    """The context of the project a passage's note is, in a prompt's words (`writing.stage.CONTEXT_WORDS`),
+    read from its document type, path and title; "" for a note that is not a project, coursework or
+    dissertation. A project card resting on the note says its own context instead
+    (`profile.writing.with_contexts`)."""
+    from .writing import stage
+
+    doc_type = hit.get("doc_type") or ""
+    if doc_type not in (*stage.DEGREE_TYPES, *stage.PERSONAL_TYPES):
+        return ""
+    kind = stage.project_kind([hit.get("path", ""), hit.get("title", "")], [doc_type])
+    return stage.CONTEXT_WORDS.get(stage.context_of(kind), "")
 
 
 def notes_for_ai() -> list[tuple[str, str]]:

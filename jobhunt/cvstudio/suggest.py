@@ -14,10 +14,17 @@ counts as a gap, whoever wrote it, so a gap is never accepted into the CV or sen
 Design decisions:
 - One suggestion per line. A spelling fix covers every word on its line, so accepting one never makes
   another suggestion's `before` stale, and "Accept all" can apply a kind in one version.
+- The AI's wordings are respelt to the person's spelling (`writing.spelling`) before the guards, so a
+  suggestion never brings in the other spelling; the person's own lines get a spelling suggestion instead.
 - `before` and each `after` are what the card shows. For a reorder they are the names in order, which
   are resolved back to ids against the version being changed, so a renamed part is caught by the guard.
 - The store's functions open their own connection, so this module commits its own rows before and after
   each store call and never holds a write transaction across one.
+- A skills list never gives a skill only studied in a course as one the person has (`_studied`, sections plan,
+  2026-11-09): a skill whose every source in the record is lecture material
+  (`profile.writing.studied_skills`) in a list that is not already labelled as knowledge gets one suggestion,
+  to leave it out or to label it "(studied)". The person may keep it: a suggestion they leave never comes
+  back, so a skill they add themselves stays.
 """
 from __future__ import annotations
 
@@ -30,6 +37,8 @@ import uuid
 from dataclasses import dataclass, field
 
 from jobhunt.core import clock, events
+from jobhunt.profile import writing as profile_writing
+from jobhunt.writing import stage
 
 log = logging.getLogger(__name__)
 
@@ -59,15 +68,6 @@ DECIDED = "You already decided on this suggestion."
 REVIEW_ORDER = ("summary", ("experience", "volunteering"), "projects", "skills", "interests")
 REVIEW_FIRST = ("summary", "education")
 
-# US spellings Hal turns into UK ones when `cvdocs.spelling` is en-GB (the same list `cvscore.py` uses).
-US_TO_UK = (
-    (r"organiz", "organis"), (r"analyz", "analys"), (r"optimiz", "optimis"), (r"prioritiz", "prioritis"),
-    (r"summariz", "summaris"), (r"recogniz", "recognis"), (r"visualiz", "visualis"), (r"customiz", "customis"),
-    (r"minimiz", "minimis"), (r"maximiz", "maximis"), (r"behavior", "behaviour"), (r"color", "colour"),
-    (r"modeled", "modelled"), (r"modeling", "modelling"), (r"defense", "defence"),
-)
-US_WORD = re.compile(r"\b(" + "|".join(us for us, _ in US_TO_UK) + r")(\w*)", re.I)
-CENTER = re.compile(r"\b(cent)(er)(s|ed)?\b", re.I)
 # Characters job-site scanners drop or misread, with what to write instead ("" drops them).
 SYMBOLS = {"\u2605": "", "\u2606": "", "\u2713": "", "\u2714": "", "\u2192": "-", "\u27a4": "", "\u25ba": "",
            "\u25cf": "", "\u2022": "", "\u25aa": "", "\u2794": "-", "\u00bb": "", "\u2756": ""}
@@ -78,6 +78,10 @@ YEAR = re.compile(r"^(19|20)\d{2}$")
 QUALIFICATION = re.compile(r"\b(First|2:1|2:2|Third|Distinction|Merit|BA|BSc|MA|MSc|MPhil|PhD|LLB|PGCE|"
                            r"A[- ]levels?|GCSEs?|BTEC|HND)\b")
 NUMBER = re.compile(r"\d[\d,.]*")
+ITEMS = "/items"                    # the target of an entry's list of items, such as a skills line
+# A skills line already labelled as knowledge ("Studied in my degree", "Familiar with"): studied skills belong there.
+KNOWLEDGE_HEADING = re.compile(r"\b(?:stud(?:ied|y)|knowledge|coursework|familiar|learn(?:ed|t|ing)|covered)\b", re.I)
+STUDIED_LABEL = " (studied)"
 
 
 @dataclass
@@ -136,8 +140,7 @@ def _setting(key: str):
 
 def cv_type(row: dict | None = None):
     """The CV type Hal's copy uses now."""
-    row = row or _store().doc()
-    return _types().load(row["type_id"])
+    return _types().load(row["type_id"] if row else _store().type_in_use())
 
 
 # -- reading the document ---------------------------------------------------------------------------------
@@ -166,6 +169,8 @@ def shown_at(doc, op: str, target: str) -> str:
     if op == "reorder":
         return ", ".join(names_at(doc, target))
     node = _model().find(doc, model_target(target))
+    if isinstance(node, list):
+        return ", ".join(str(x) for x in node)
     if op == "hide":
         if hasattr(node, "visible"):
             return node.title if node.visible else ""
@@ -225,29 +230,23 @@ def _locked(doc, target: str, layout: dict) -> bool:
 
 # -- the checks that need no AI ---------------------------------------------------------------------------
 
-def _uk(text: str) -> str:
-    def word(m: re.Match) -> str:
-        stem, rest = m.group(1), m.group(2)
-        uk = next(u for us, u in US_TO_UK if re.fullmatch(us, stem, re.I))
-        return (uk.capitalize() if stem[0].isupper() else uk) + rest
-    text = US_WORD.sub(word, text)
-    return CENTER.sub(lambda m: m.group(1) + ("re" if m.group(2).islower() else "RE") + (m.group(3) or ""), text)
-
-
 def _spelling(doc, sid: str) -> list[Draft]:
-    if str(_setting("cvdocs.spelling")) != "en-GB":
-        return []
+    from jobhunt.writing import spelling
+
+    code = spelling.chosen()
+    label = spelling.LABELS[code]
     out = []
     for target, text, s in lines(doc):
-        fixed = _uk(text)
-        if s != sid or fixed == text:
+        found = spelling.find(text, code) if s == sid else []
+        if not found:
             continue
-        us = (US_WORD.search(text) or CENTER.search(text)).group(0)
-        uk = _uk(us)
-        out.append(Draft(target, "replace", "Consistency", f'Use one spelling: "{uk.lower()}"',
-                         f'This line uses the US spelling "{us}". Your settings say UK English.',
-                         {"type": "setting", "id": "cvdocs.spelling", "label": "Setting: spelling is UK English"},
-                         text, [fixed], sid, [{"label": f'Found: "{us}"', "ref": target}]))
+        first = found[0]
+        out.append(Draft(target, "replace", "Consistency", f'Use one spelling: "{first.fix.lower()}"',
+                         f'This line uses the {spelling.SIDES[code]} spelling "{first.word}". Your settings say '
+                         f'{label}.',
+                         {"type": "setting", "id": "cvdocs.spelling", "label": f"Setting: spelling is {label}"},
+                         text, [spelling.respell(text, code)], sid,
+                         [{"label": f'Found: "{first.word}"', "ref": target}]))
     return out
 
 
@@ -367,12 +366,45 @@ def _order(doc, type_) -> list[Draft]:
                   ", ".join(s.title for s in shown), [", ".join(s.title for s in wanted)], WHOLE_CV)]
 
 
-def checks_for(doc, sid: str, type_) -> list[Draft]:
-    """The suggestions for one section that need no AI."""
+def skill_key(name: str) -> str:
+    """A skill's name as two lists compare it: case, spaces and punctuation aside."""
+    return " ".join(re.findall(r"[a-z0-9+#]+", name.lower()))
+
+
+def _studied(doc, sid: str, studied: list[str] | tuple[str, ...]) -> list[Draft]:
+    """For each skills line of the section that lists a skill only studied in a course (`studied`, see the module
+    notes): leave those skills out, or label each "(studied)"."""
+    sec = _section(doc, sid)
+    if sec is None or not sec.visible or sec.kind != "skills" or not studied:
+        return []
+    keys = {skill_key(s) for s in studied}
+    out = []
+    for e in sec.entries:
+        if e.hidden or not e.items or KNOWLEDGE_HEADING.search(e.heading or ""):
+            continue
+        found = [i for i in e.items if skill_key(i) in keys]
+        if not found:
+            continue
+        kept = [i for i in e.items if i not in found]
+        labelled = [f"{i}{STUDIED_LABEL}" if i in found else i for i in e.items]
+        names = '", "'.join(found)
+        out.append(Draft(f"s:{sid}/e:{e.id}{ITEMS}", "replace", "Wording",
+                         f'Show "{found[0]}" as studied, not used',
+                         f'Your record shows "{names}" only in lecture material, so an employer would read this list '
+                         "as things you have used. Leave it out, or say you studied it. Keep it if you have used it.",
+                         {"type": "check", "id": "studied_skills", "label": "Your record: skills you studied"},
+                         ", ".join(e.items), [a for a in (", ".join(kept), ", ".join(labelled)) if a], sid,
+                         [{"label": f'Studied only: "{f}"', "ref": f"s:{sid}/e:{e.id}"} for f in found]))
+    return out
+
+
+def checks_for(doc, sid: str, type_, studied: list[str] | tuple[str, ...] = ()) -> list[Draft]:
+    """The suggestions for one section that need no AI; `studied` are the record's skills only studied in a
+    course (`_studied`)."""
     if sid == WHOLE_CV:
         return _order(doc, type_)
     return [*_spelling(doc, sid), *_symbols(doc, sid), *_dates(doc, sid), *_banned(doc, sid, type_),
-            *_limits(doc, sid, type_)]
+            *_limits(doc, sid, type_), *_studied(doc, sid, studied)]
 
 
 def reviewers(doc, type_) -> list[list[str]]:
@@ -445,6 +477,8 @@ def _has(text: str, phrase: str) -> bool:
 
 def guard(draft: Draft, ctx: Context) -> Draft | None:
     """The draft with gaps filled in when it passes every guard, else None."""
+    from jobhunt.writing import spelling
+
     model = _model()
     if draft.op not in OPS or draft.kind not in KINDS or not draft.afters:
         return None
@@ -460,8 +494,11 @@ def guard(draft: Draft, ctx: Context) -> Draft | None:
         return None
     afters = []
     phrases = banned_phrases(ctx.type_)
+    code = spelling.chosen() if draft.ai else None
     for after in draft.afters:
         after = with_gaps(str(after), ctx.known_text) if draft.op == "replace" else str(after)
+        if code:
+            after = spelling.respell(after, code)
         if any(_has(after, p) and not _has(now, p) for p in phrases):
             continue
         # a fix that needs no AI keeps the person's own I; the AI's wording never speaks as I
@@ -506,7 +543,8 @@ def _profile() -> dict:
 # -- the AI reviewer --------------------------------------------------------------------------------------
 
 def passages_for(doc, sids: list[str]) -> list[dict]:
-    """Record passages about these sections' entries; none when the record cannot be searched."""
+    """Passages of the person's own documents about these sections' entries (`record.writing_hits`); none when
+    the record cannot be searched."""
     from jobhunt import record
 
     queries = []
@@ -517,7 +555,7 @@ def passages_for(doc, sids: list[str]) -> list[dict]:
     if not queries:
         return []
     try:
-        found = record.search_many(queries, k=2)
+        found = record.writing_hits(queries, per_query=2)
     except Exception as e:  # a missing or unreadable record means fewer facts, not no suggestions
         log.info("record search for CV suggestions failed: %r", e)
         return []
@@ -544,6 +582,40 @@ def ai_ready() -> bool:
     return ai.ready(AI_PRIORITY, "cv_suggest") is None
 
 
+def spelling_words() -> str:
+    """The person's spelling as the CV prompts name it ("UK English, with UK spelling ...")."""
+    from jobhunt.writing import spelling
+
+    return spelling.WORDS[spelling.chosen()]
+
+
+def writing_problems(block: str, type_) -> list[str]:
+    """What the writing checker finds in a section's bullet lines, as "<target>: <problem>" lines."""
+    from jobhunt.writing import check as writing_check
+    from jobhunt.writing import spelling as spelling_mod
+
+    out = []
+    spelling = spelling_mod.chosen()   # the setting, as the prompt is told; the type's own is only a default
+    for row in block.splitlines():
+        target, _, text = row.partition("\t")
+        if "/b:" not in target:
+            continue
+        out += [f"{target}: {h.flag}. {h.message}" for h in writing_check.flagged(writing_check.check(text, "cv",
+                                                                                           spelling=spelling))]
+    return out
+
+
+def field_conventions(job: dict | None = None) -> list[str]:
+    """The CV conventions of the person's field, or of the job's when one is given (`writing.fields`)."""
+    from jobhunt.writing import fields
+
+    if not job:
+        return fields.conventions(fields.resolve("", "", fields.person_now()), "cv")
+    advert = " ".join([str(job.get("description") or ""), *(str(r) for r in job.get("requirements") or [])])
+    resolved = fields.resolve(str(job.get("title") or ""), advert, fields.person_now())
+    return fields.conventions(resolved, "cv")
+
+
 def ask_ai(con: sqlite3.Connection, doc, type_, sids: list[str], failing: list[Draft], passages: list[dict],
            *, job: dict | None = None) -> Draft | None:
     """At most one suggestion for these sections from the `cv_suggest` prompt; None for `{"none": true}`."""
@@ -554,10 +626,13 @@ def ask_ai(con: sqlite3.Connection, doc, type_, sids: list[str], failing: list[D
     if not block:
         return None
     extra = str((type_.prompts or {}).get("cv_suggest") or "").strip()
-    system = prompts.text("cv_suggest", con=con) + (f"\n{extra}\n" if extra else "")
+    system = prompts.text("cv_suggest", con=con, spelling=spelling_words()) + (f"\n{extra}\n" if extra else "")
+    now = stage.current(con)
     user = json.dumps({
+        "today": now.today.isoformat(), "stage": now.words,
         "cv_type": type_.name, "writing": type_.writing, "lines": block,
-        "failing_checks": [d.title for d in failing], "preferences": _prefs_words(con),
+        "failing_checks": [d.title for d in failing], "writing_problems": writing_problems(block, type_),
+        "field_conventions": field_conventions(job), "preferences": _prefs_words(con),
         "record": [{"label": f"{p.get('path', '')} > {p.get('heading', '')}", "text": p.get("text", "")}
                    for p in passages],
         "job": {"title": job.get("title"), "requirements": job.get("requirements")} if job else None,
@@ -641,6 +716,7 @@ def look_again(con: sqlite3.Connection, *, step=None, use_ai: bool | None = None
     type_ = cv_type()
     recheck(con, vid, doc)
     use_ai = ai_ready() if use_ai is None else use_ai
+    studied = profile_writing.studied_skills(con)
     found = 0
     pending = len(_pending(con))
     finished = True
@@ -652,7 +728,7 @@ def look_again(con: sqlite3.Connection, *, step=None, use_ai: bool | None = None
             step(f"Reading {where(doc, 's:' + sids[0]) if sids != [WHOLE_CV] else 'your whole CV'}")
         passages = passages_for(doc, sids) if use_ai and sids != [WHOLE_CV] else []
         ctx = context(con, doc, type_, passages="\n".join(p.get("text", "") for p in passages))
-        failing = [d for sid in sids for d in checks_for(doc, sid, type_)]
+        failing = [d for sid in sids for d in checks_for(doc, sid, type_, studied)]
         for draft in failing:
             if pending >= MAX_PENDING:
                 break
@@ -763,6 +839,8 @@ def change_for(doc, op: str, target: str, text: str):
         return model.Change("reorder", model_target(target), _ids_for(doc, target, text))
     if op == "hide":
         return model.Change("hide" if not text else "show", target)
+    if target.endswith(ITEMS):
+        return model.Change("replace", target, [x.strip() for x in text.split(",") if x.strip()])
     return model.Change("replace" if op != "retitle" else "retitle", target, text)
 
 
@@ -801,6 +879,10 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
     new_vid = _store().new_version(new_doc, origin="improved", what=f"You accepted: {row['title']}", by="you",
                                    parent=vid)
     edited = text is not None and after != afters[alt]
+    if edited:
+        from jobhunt.writing import edits
+
+        edits.record(con, "cv_line", row["target"], afters[alt], after, job_id=row["job_id"])
     con.execute("UPDATE cv_suggestions SET status = ?, alt = ?, edited = ?, result_version_id = ?, decided = ? "
                 "WHERE id = ?", ("edited" if edited else "accepted", alt, after if edited else None, new_vid,
                                  clock.iso(), sugg_id))
@@ -907,7 +989,7 @@ def another(con: sqlite3.Connection, sugg_id: str) -> dict:
     if row["op"] != "replace" or not ai_ready():
         return {"new": False, "message": ONLY_OPTION, "alt": row["alt"]}
     type_ = cv_type()
-    system = prompts.text("cv_another", con=con)
+    system = prompts.text("cv_another", con=con, spelling=spelling_words())
     user = json.dumps({"cv_type": type_.name, "writing": type_.writing, "target": row["target"],
                        "now": row["before"], "why": row["why"], "already_shown": afters,
                        "preferences": _prefs_words(con)}, ensure_ascii=True)

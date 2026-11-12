@@ -1,10 +1,10 @@
 """The CV patterns Hal's CV checks share, and a CV matched against one job's advert.
 
-`cvstudio.checks` reads its patterns (headings parsers know, cliches, weak openings, US spellings, contact
-details) and the PDF readers from here. Against a job, `keywords` finds which of the advert's skills the CV
-names, and `requirements` asks the model for the advert's requirements and the CV's evidence for each,
-keeping only quotes that really are in the text. The PDF is read with pypdfium2 (`cvstudio/pdfread.py`),
-so nothing here needs poppler.
+`cvstudio.checks` reads its patterns (headings parsers know, cliches, weak openings, contact details) and
+the PDF readers from here; spelling lives in `writing.spelling`. Against a job, `keywords` finds which of
+the advert's skills the CV names, and `requirements` asks the model for the advert's requirements and the
+CV's evidence for each, keeping only quotes that really are in the text. The PDF is read with pypdfium2
+(`cvstudio/pdfread.py`), so nothing here needs poppler.
 """
 import re
 from pathlib import Path
@@ -25,9 +25,6 @@ CLICHES = re.compile(r"\b(passionate|results[- ]driven|team player|hard[- ]worki
 DUTIES = re.compile(r"^(responsible for|duties (included|include)|tasks?:|in charge of)", re.I)
 WEAK_VERBS = re.compile(r"^(helped|assisted|worked on|worked with|participated|was involved|involved in|"
                         r"exposed to|gained experience|utili[sz]ed|tasked with|contributed to)\b", re.I)
-AMERICAN = re.compile(r"\b(optimiz\w*|analyz\w*|organiz\w*|prioritiz\w*|visualiz\w*|customiz\w*|summariz\w*|"
-                      r"minimiz\w*|maximiz\w*|recogniz\w*|color\w*|behavior\w*|modeled|modeling|centers?|centered|"
-                      r"defense|catalog)\b", re.I)
 NUMBER = re.compile(r"\d")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 PHONE = re.compile(r"(\+44\s?7\d{3}|\(?07\d{3}\)?)\s?\d{3}\s?\d{3}")

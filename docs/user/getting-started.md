@@ -43,11 +43,14 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    weeks, apprenticeships, part-time or fixed-term work. Press every career area you are interested in, such
    as **Heritage and museums** and **Creative and media**; each fills in example roles you can change. Hal
    then says "Here is what I understood"; press **Change something** if it is not right.
-5. **Your record.** Hal makes a folder for your certificates, references and other evidence. Press
-   **Add files** to copy documents into it.
+5. **Your record.** Hal makes a folder for your certificates, references and other evidence. Under
+   **Sort a big folder for me**, give Hal a folder or a zip of your old files, and check its suggestions on
+   Your record later.
 6. **How Hal thinks.** Choose **On this computer** if your computer runs a local model through Ollama, or
    **Your Claude subscription** (Claude Pro or Max). For Claude, press **Install**, then **Sign in**, then
-   **Test**. Hal never sees your Claude password.
+   **Test**. Hal never sees your Claude password. If the Hal assistant is installed, **Use Hal's own AI**
+   uses its models through the Hal gateway. **Use another local server instead** takes a server such as
+   LM Studio or llama.cpp; put its address in **Settings**, **Hal's brain**. Then press **Test**.
 7. **Browser helper.** The helper lets Hal fill in forms in your own browser, where you are already signed
    in. Pick your browser and follow the steps on the screen, or see
    [Load the browser helper](../howto/load-the-browser-helper.md).
@@ -77,6 +80,118 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
 6. Check the form, then press **Submit** on the employer's site yourself. The application moves to
    **Sent** on the **Applications** board.
 7. When the employer replies, Hal sorts it into **Messages** and moves the application on the board.
+
+### How Hal writes, and a recruiter's read
+
+Hal writes each letter and answer for the kind of job it is: a Civil Service form gets examples in the
+STAR order (situation, task, action, result) against its behaviours, an NHS form follows the person
+specification, an academic CV keeps its publications and grants, a creative CV puts the portfolio link at
+the top. When Hal cannot tell the field from the advert or your goal, it uses general advice rather than
+another field's. It uses only your facts and never invents a number: where a result has none, it says who
+the work served instead. A first draft that breaks one of Hal's writing rules (a stock phrase, an invented
+number, "not just X but Y") is rewritten once, and anything still wrong is listed under **Check before
+sending**. Before it writes a letter, Hal picks the facts it will rest on: up to eight short quotes
+from your CV, the facts you checked and your own documents, each with where the work was done and your part
+in it when your files say so. The letter's notes list them under **Evidence**.
+
+Hal then tells each piece of work in a paragraph of its own. Each paragraph in the middle of a letter is
+about one of your projects or jobs, told once, and is written on its own from that work's facts alone:
+what it is, where you did it, your part, its tools and what came of it. It ends on why that work
+matters for the job only when one of its facts clearly fits. The message to the person hiring
+tells one piece of work in a sentence or two and asks one question about the employer's own work, something
+the advert or the company brief names, rather than about your project's subject. Each form answer
+tells one piece of work, or two when the question asks for more than one example, and the message and the
+answers take work the letter, the message and earlier answers have not told first where your record has
+enough, also in the answer to "Why do you want to work here?". An answer to "Why do
+you want to work here?" opens with what draws you to the employer, in your own words rather than the
+advert's, then ties it in a sentence to one piece of your work that fits the job well. Each paragraph is
+checked against its own work's facts: a number or tool they do not give (a tool you used on a project must
+be in that project's own facts, as a list of your skills says what you know, not where you used it), a tool
+or name that belongs to another of your projects, a tool given a job your facts give another tool, the project placed somewhere else (your degree instead of
+your own time), a team's work written as yours alone, or a sentence that ties the work to the job with
+stock words such as "aligns with" or "meets the requirement for". A paragraph with such a problem is
+written once more. If it is still wrong, Hal takes out the whole sentence at fault when the rest still
+reads, or leaves the paragraph out and says so under **Check before sending**, and then tells your next
+best piece of work instead. When only Hal's AI check doubts a paragraph, in a letter, a message or an answer, Hal keeps
+it, without the doubted sentence when the rest still reads, or whole and listed under **Check before sending**
+for you to check. The letter opens with who you are, the
+role and one concrete thing about the employer that draws you, such as what it makes or its mission. It
+names none of your projects there, as the paragraphs tell them, and closes by asking for the next step. When Hal finds none of your
+work to tell, it writes the letter, the message and the answers whole, and checks what each says about you
+against your CV, the facts you checked and your own documents: a claim it cannot find there is taken out or
+toned down once, and only what is left is listed. What a draft says about the employer, taken from the
+advert, is never listed.
+A draft may say what one of your modules covered only when your CV, the facts you checked or your own
+documents say it too, as a module's name alone does not say what it taught.
+Each module and its mark is a fact of its own, even when your CV lists them all on one line, so a draft
+cannot tie one module's mark to a project or a piece of work that only another module's line names.
+The reason you give for wanting the job, in the letter's first paragraph and in answers to "Why do you want
+to work here?", should be your own. Before writing a letter, Hal pairs one specific thing about the employer,
+in the company's or the advert's own words, the company brief first (a product, a project, a place; never
+"innovation" or "a great culture", never a duty of the job such as "write SQL queries", and never an
+employee's quote), with one of the facts it picked from work that fits the job, and
+the letter's reason comes from that pairing. When nothing of yours connects to it, the letter names the role
+and gives no reason rather than invent one. A sentence
+that only repeats the advert or what the company says about itself is rewritten once to link something of
+yours (a project, a module, an interest) to something about the employer, and listed if it still repeats
+the advert. On a form, an answer with a claim or a number Hal cannot find in your facts is marked **Check this**. When you
+ask Hal for changes, the new letter, message and answers get the same checks as the first drafts.
+
+The message to the person hiring goes to the person the advert names as your contact for the job. An
+address the advert gives only for questions about applying, or a careers or recruitment mailbox, is never
+used; with no named contact, Hal suggests a LinkedIn search for the person hiring instead. Every message
+opens the same way, written by Hal from **Settings** and the course you checked on Your record, never by the
+AI: "Hello <your contact, or Hiring Manager>, I'm <your name>, a <grade> <subject> graduate from <university>
+(<year>), applying for the <role> role." A grade is given only as a class (first-class, 2:1, 2:2, or with
+Distinction), and a course still running says "final-year ... student" in its last year. The AI writes only
+what follows.
+
+Hal tells the writer today's date and where you are: still studying or finished, from **When your course
+ends or ended** and the course you checked on Your record, and when you can start, from **When you can
+start** in Settings. A draft never talks about finishing a course that has already ended, says you are
+still completing it (or on track for a grade), or calls you a student once it has. Each project says where it was done (part of your degree, a university team project, at work, or in your own time), and
+a draft keeps it that way. A sentence that calls a project something else, such as "my degree included"
+for a project you did in your own time, is rewritten once, and listed under **Check before sending** if it
+is still there. This also works when the draft calls the project by a shorter name or its folder's name.
+When two of your projects have similar names, Hal adds a few words of each one's own description to its
+name in what the writer reads, and a sentence that gives one of them a tool or a purpose only the other has
+is rewritten the same way. The pack's fit table and the letter's **Evidence** note name each with those few
+words too, and lose a tool given to the wrong one. Each row of the fit table says where its evidence comes
+from, such as "from the code project" or "from your current CV". A tool that only an older CV gives a
+project is never said to be used in it.
+
+The pack's **Company check** names a registered company as the employer only when the advert's own
+website is on its record, or it is registered in the advert's town and trade at an address that is not a
+flat. A company with the employer's exact name that Hal cannot tie to the advert that firmly is shown as
+"Possible match: ... (check it is the same company)", and any other is left out.
+
+Every pack has a **Check before sending** section, which says "Nothing to check." when nothing needs
+you. It lists only what you should act on: a paragraph Hal left out and why, a paragraph Hal kept although
+its check doubted it, a question your facts could not answer, a letter well under the length you prefer, and a paragraph that starts with "This", "It" or
+"That" pointing at something the paragraph before does not say. Something Hal already fixed is never
+listed.
+
+Drafts speak as you, in the first person. A paragraph with a sentence that opens with the advert's
+wording ("For the requirement to ...", "The role asks for ...", "Regarding teamwork, ..."), points at your
+CV ("My CV lists ...") or calls you "the applicant" is written once more, and your right to work is said in
+plain words rather than as the choice in Settings. Quotes and apostrophes are kept plain, and each project
+is spelt as it is on Your record.
+
+Everything Hal writes for you uses the spelling in **Settings**, **CV and documents**, **Spelling**: UK
+English unless you choose US English. That covers CVs and CV suggestions, letters, the message to the
+person hiring, form answers and interview notes. Hal changes a word spelt the other way (organize to
+organise, color to colour, traveled to travelled) before you see the draft. In your own CV lines, it
+offers the same change as a suggestion. Words that are right in both spellings are left alone, such as
+"program" for software, "disk", "analog" and "dialog box". So are names (the Kennedy Center), quotations
+and web addresses.
+
+On the Documents step, press **Critique as a recruiter** for a hiring manager's read of your CV and cover
+letter against the advert, saved as they are now. It shows the three changes that would help most, what a
+recruiter sees in the first six seconds, each requirement of the advert with the line that shows it (or
+"not shown yet"), a grade from 1 to 5 for each part of each document with why, and comments on the lines
+they quote. Your name and contact details are taken out before the AI reads them, and the read never
+comments on your age, gaps or background. It is Hal's opinion, and nothing is changed. Without Hal's AI,
+you still get the writing rules' comments, line by line.
 
 ### When Hal gets stuck before the form
 
@@ -135,6 +250,214 @@ behaved before it could be changed.
 
 Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts** for the keys.
 
+## Sorting a big folder into your record
+
+If you have a folder of everything from your studies and jobs (an old laptop's Documents, a university
+account downloaded as a zip), Hal can suggest where each file goes. It never adds anything until you say so.
+
+- **On Your record, Overview**, under **Sort a big folder for me**, type or paste where a folder on this
+  computer is and press **Sort this folder**, or press **Upload a zip or files to sort** (up to 256 MB at a
+  time). The folder box only shows on the computer Hal runs on.
+- **In the setup guide**, the **Your record** step has the same.
+- **From a terminal** on the computer Hal runs on, `python -m jobhunt sort FOLDER` prints what Hal proposes
+  for each part of your record, and `python -m jobhunt sort --accept-all` adds everything ticked.
+  `python -m jobhunt ingest FOLDER` now does the same as `sort`.
+- **The drop folder.** Files you put in the **+Inbox** folder inside your record (or the folder set in
+  **Drop folder for your record**, Settings, CV and documents) are sorted the next time Hal reads your
+  record, every 10 minutes unless you changed it. They wait on Overview for you to check, and stay where you
+  put them.
+
+Hal proposes a part of your record for each file: your CVs, your coursework and lecture notes by course,
+your code projects and project folders, your certificates and other papers. When it is ready, the list opens
+by itself if you are on Your record; otherwise Overview shows a banner and **Your record** in the menu a
+small number. Press **Check the list** to see the proposals on a page of their own, in six steps: your
+courses, CVs and official papers, coursework, lecture material, projects, and done. Change where a file
+goes, what it is or which course or job it is for, or untick it, then press **Add the ticked ...** in each
+step, or **Add everything ticked** in the last. Lecture notes start unticked, as they only teach Hal what you
+studied and take a long time to read. Before adding more than 50 files, Hal asks and says how long reading
+them should take. While Hal reads, **Stop reading** keeps what it has read and puts the rest back in the
+list, and **Undo this add** takes everything one add put in your record back out. Each file you add is
+read by that part of your record, as if you had added it there yourself.
+
+Hal leaves out what it is not sure about, with the reason: pictures and recordings, code outside a project,
+files only stored online, files that look private (such as a medical letter or a bank statement), and
+anything neither Hal's rules nor the AI could place. Older copies of a file or project are set aside, and
+only the newest is proposed. You can still give any of them a place by hand. Coursework and lecture notes
+wait for their course until your CV, once added, gives Hal your courses, or until you choose one. The steps
+are in [Sort a big folder into your record](../howto/sort-a-big-folder.md).
+
+## A record from an older Hal
+
+An older Hal read whole folders into your record at once and guessed what each file was. Those notes and the
+facts Hal took from them stay until you change them. While the last such read runs, or after it, the
+Overview shows how it went. **Read them with the AI** reads the notes it filed by their words alone, and
+**Tidy my record** holds them to today's rules (below). From a terminal, `python -m jobhunt ingest --again`
+and `python -m jobhunt ingest --tidy` do the same.
+
+To bring such a record into the parts of Your record, press **Move my record to sections** on Overview,
+under **Sort a big folder for me**. Hal proposes a part for each file the older Hal read, in the same list
+as a sorted folder, using what the older Hal noted about it and where the file came from. Nothing changes
+until you add what is right. Each file you add is read again by its part of your record, and cards you
+checked or edited keep what you said. When you are done, press **Finish the move**: what the other files
+gave is set aside, not deleted. **Undo the move** puts everything back as it was before the move.
+
+### Tidying your record
+
+Press **Tidy my record** on the Overview (or run `jobhunt ingest --tidy`). Hal first saves a copy of your record and its database in Hal's backups folder.
+Then it holds every note to the rules above: it takes out notes of other people's files and private files,
+settings files, notes about people and places, lecturers' emails and older copies of your projects, and
+facts that came from the wrong kind of file. Slides and documents only the AI can judge are read again,
+which can take a while for a large record; a second tidy skips what the first one already read. Files
+kept out as private are checked again, and any the check now lets through are read in. A project folder an
+older Hal split into many projects, one for each note, becomes one project again: the other cards are
+hidden with "Part of" and the project's name, unless you checked them. Cards an older Hal folded or merged
+by rules it no longer follows come back on their own first, and are merged again only when today's rules
+and the AI agree. Cards you checked, and cards inside a card you checked, stay as they are. Notes you wrote yourself are never
+changed.
+
+## Your record
+
+Your record has a tab for each part of your profile: **Work history**, **Education**, **Skills**,
+**Projects**, **Certificates and achievements** and **About you and links**. **Overview** shows how many
+things of each kind Hal found and how many are left to check (skills only your course material names are
+counted apart, as "studied in your course"), and is where you add your CVs. Each tab has
+its own place to add files: a job's documents, a course's coursework and papers, your projects, and
+**Documents**, which also lists the folder's contents and has **Ask your record**. See
+[Add your CVs, education, projects and documents](../howto/add-to-your-record.md).
+
+Hal only uses the facts you have checked. A fact Hal found stays out of your CV, letters and answers until
+you confirm it or edit it. While some are waiting, My CV and each application's documents say how many,
+with a **Check them** button. Your CV and letters lead with your best experiences, the ones closest to the
+job first, and never use an archived one.
+
+Each job, qualification or skill is a card:
+
+- **Found by Hal**, **Checked by you**, **Edited by you** or **Hidden** says where it stands.
+- **From:** names each file it came from, with the words Hal took from it. Click the name to open the
+  file. **Quote not found in the file** means those words are not in the file, so check the fact.
+- **only in an older CV** beside a tool, duty or other detail of a project or job means only an older
+  version of your CV gives it. Your newest CV (the one covering the latest dates, else the newest file)
+  speaks for your CVs, so Hal leaves that detail out of your letters, messages and answers unless your
+  newest CV, a repository or another document of your own gives it too. **Edit** the card and remove it,
+  or add it to your newest CV if it is still true.
+- **planned in** and a document's name beside a tool or a skill means only a plan gives it: a design
+  document, a specification or a proposal, or words such as "we will use". Hal leaves it out of your
+  letters, messages and answers, which never say you used it, as a plan is not what was built. If you did
+  use it, add it to a document that says so, such as your CV or the project's README.
+- **Confirm** says it is right. **Edit** lets you change any field, and **Save** keeps your words; Hal never
+  changes them when it reads your files again. **Hide** keeps it out of your letters and CVs; hidden cards
+  are folded away at the end of the tab, with **Show again**.
+- **Add a job** (or a qualification, skill and so on) adds one by hand. Only those can be deleted: a fact
+  Hal found would come back the next time it reads the file, so hide it instead.
+
+When your files disagree, the card shows each value and the files that give it, for example a start date of
+September 2023 in your CV and October 2023 in a letter. Hal lists dates, grades, employers, job titles and
+qualifications that differ, not the same thing in other words ("Thirty units" and "30 units") or with less
+detail ("1st" and "Year 1: 81.5% (1st)"). Press
+**Use** on the right one, or **Keep it as it is**. Two jobs at once can be **Both are right**, or you can
+keep one and Hal hides the other. The **Inconsistencies** tab lists everything still to sort out, with the
+settled ones folded away below.
+
+### Checking your record
+
+**Check your record** shows what Hal found one card at a time, so you can go through it quickly. Open it
+from **Check your record** on Your record's Overview, or from **Check them** on My CV or an application.
+
+The page opens with **Your best experiences**: the jobs, courses, projects, achievements and certificates
+Hal would tell an employer about first, with a few words on why each one is there. Hal sorts them after it
+reads your files, putting what you would lead with first, then what is useful when a job asks for it. It
+shows about 25, so you can check them in one sitting.
+
+Each one also says where it was done: **Part of my degree**, **University team project**, **At work** or
+**In my own time**. Hal fills this in from your files; if it is wrong, pick the right one. Hal writes about
+the experience that way and never changes your choice.
+
+Each has three buttons:
+
+- **Confirm** says it is right, and Hal can use it.
+- **Edit** lets you fix it.
+- **Move to archive** keeps it out of your CV and letters. Use it for things not worth telling an employer,
+  such as a hobby tool or a short online course anyone can click through.
+
+Archived experiences are folded away under **Archived**. Hal puts there what you hid and what it found only
+in files that are not your own, such as course material. **Move up a tier** brings one back. Hal never
+changes a choice you made. **Sort them again** asks Hal to sort them afresh, for example after you change
+the roles you want in your goal. Without Hal's AI, only those simple rules sort them.
+
+Below, under **Check the rest**, Hal goes through everything else it found:
+
+1. When two of your files disagree, Hal asks **Which is right?** first. Press the right value, or say it
+   is right as it is.
+2. Then each fact comes on its own card: your name and contact details, then jobs, education,
+   certificates, achievements, projects and links. The card shows the words Hal found in your file and the
+   file's name, which opens the file.
+   - **Yes, that's right** means Hal can use it.
+   - **Fix it** lets you change it. **Save** keeps your words, and Hal uses them as they are.
+   - **Not me** hides it. Hal never uses it, and it stays hidden even when another file says the same.
+3. Skills come last, in groups from one file, such as one module or one project. Every skill is ticked.
+   Untick any that are not yours, then press **Keep these**, or press **None of these**.
+
+The bar at the top shows how many you have checked, for example "23 of 80 checked". You can stop at any
+time: when you come back, Hal starts where you left off. When nothing is left, Hal says **Your record is
+ready**.
+
+Skills Hal is less sure of wait under **Show more** at the end. These are most often found in only one
+file that is not your own writing, such as a lecture's list of topics. Hal never uses them unless you keep
+them.
+
+Skills that only your course material names, such as the topics of a lecture, are listed apart under
+**Studied in your course**, on **Check your record** and at the end of the **Skills** tab, grouped by the
+module that taught them when Hal knows it. They show what you studied, not what you have done, so Hal leaves them off your
+CV and out of your letters. If you have used one in your own work, press **I have used this** beside it.
+Under **From:**, each skill says where it was shown: "Done in your coursework: ..." for a piece of your
+coursework, or "Studied in ..." with the module or course it was taught in.
+
+Letters and answers follow the same line. A skill shown in your own work or done in your coursework can be
+told as something you did ("I used ..."). A skill on your CV can be listed. A skill you only studied is told
+as knowledge ("I studied ...", "covered in my degree"), and Hal drafts a sentence again when it says you
+used one. On **CV**, when a skills line lists a skill you only studied, Hal suggests leaving it out or
+adding "(studied)". If you have used it, leave the line as it is and Hal will not ask again.
+
+Hal only asks about skills you can stand behind: skills on your CV, skills you checked, and the tools of a
+project Hal would tell an employer about (one it would lead with, or one useful when a job asks). Any
+other skill your files name, such as a word in your notes or plans, is folded away under **Mentioned in
+your files**, with **I have used this** in the same way. Hal leaves them off your CV and out of your
+letters. When a read ends, the Overview says how many of each it found.
+One skill written several ways ("python-scripting", "Python scripting") is one entry, shown in normal case.
+
+After reading your files, Hal looks for a project, course or achievement it found more than once under
+different names, such as a project's working title and its final title, or the name on your CV and the
+name of its folder. It keeps one card with all their files, named as your CV names it when your CV has it,
+and lists what it merged under **Hal merged these**. If two of them are really different, press **Undo**:
+Hal shows them apart again and never merges them on its own after that. Hal never merges a card you
+confirmed or edited, and never two whose dates are years apart unless one file names both, or two projects
+that each have a folder or repository of their own. A project with its own folder or repository joins a
+card without one only when their names share a telling word, such as "sniffer" in "probe_sniffer" and
+"Probe Request Sniffer". The AI also sees each card's web address and repository, so one website found
+as "Portfolio", as its address and as the repository it is built from can become one card, while two
+repositories stay two. A repository named after a site's address, such as "name.github.io", shares the
+telling word "name" with a card that links to that site. Without its AI, Hal merges only cards that share a
+project link: two cards found in one file can still be two pieces of work. A link to the front page of a
+site, or to the website in your settings, is not a project link, as many projects point to it.
+
+You can merge two cards yourself. When a project or job shows up twice, for example once under the name of
+its repository and once under the name from a list of your projects, press **Same as...** on one of them.
+This button is on the project and job cards under **Your best experiences** and **Check the rest**.
+
+1. Under **Which card is the same as this one?**, pick the other card. Cards you hid are listed too, marked
+   "(hidden)".
+2. Under **Which name should Hal keep?**, pick the name you want.
+3. Press **Merge them**.
+
+Hal keeps the card whose name you picked, with the files of both, so the tools and quotes of both are on it.
+It keeps where you said that card's work was done and how Hal sorted it. Hiding a duplicate
+instead would hide its files too, and Hal could not write about that project. Your merges are listed under
+**You merged these**, and **Undo** puts both cards back as they were, checked or not.
+
+When you hid a card that comes only from the same repository or project files as a card you can see, Hal
+lists it under **Hidden cards from the same files**. If it is the same piece of work, press **Same as**
+beside it. Hal never merges it unless you do.
+
 ## What Hal remembers
 
 - **Waiting for you**: suggestions from your choices, for example a smaller travel distance after you hide
@@ -147,7 +470,24 @@ Press **Ctrl K** anywhere to search or jump to a page, and **Help and shortcuts*
 - **Saved answers**: answers Hal reuses on forms. Each says where Hal may use it; one marked **Choose where
   to use it** is never used until you pick.
 
-To stop the suggestions, open **Settings**, **Advanced**, **Suggestions from your choices**.
+### How Hal learns your writing
+
+- **Your voice.** With **Match my own writing** on (**Settings**, **CV and documents**), Hal measures how
+  you write from your own words: the letters, statements, essays and CVs in your record (never a private
+  folder), the answers you rewrote and your edits of its drafts. It tells the writer your usual sentence
+  length, whether you use contractions, your spelling and your usual words, and shows it two or three
+  short passages of yours as examples of style, never of facts. A word Hal would normally avoid stays
+  yours if you use it yourself. When you have added cover letters or personal statements on Your record,
+  each letter Hal writes also gets a short passage from one or two of them, to match your tone and
+  sentence length. Nothing in them is used as a fact about you: a detail found only there is flagged if a
+  draft uses it.
+- **Your edits.** When you change a letter, an answer, the message or a CV line Hal wrote, Hal keeps both
+  versions. A word you take out of three drafts becomes the suggestion **Never use "word"?**, and letters
+  you cut short become **Write letters of about 150 words?**. Like every suggestion, nothing changes until
+  you press **Yes, do this**. An answer to a private question is never kept.
+
+To stop the suggestions, open **Settings**, **Advanced**, **Suggestions from your choices**; **Your writing**
+there covers the ones from your edits.
 
 ## When something goes wrong
 

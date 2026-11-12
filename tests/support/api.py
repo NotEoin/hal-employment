@@ -16,8 +16,10 @@ from dataclasses import dataclass
 from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any
+from unittest import mock
 from urllib.parse import urlparse
 
+from jobhunt import record
 from jobhunt.core import paths
 from jobhunt.core.settings import store
 from jobhunt.web import app, auth
@@ -107,6 +109,10 @@ class HalServer:
         tmp = self._stack.enter_context(tempfile.TemporaryDirectory(prefix="hal-api-"))
         self.home = Path(tmp).resolve()
         self._stack.enter_context(paths.set_override(self.home))
+        if "VAULT" in vars(record):
+            # an older module's record folder for the whole process (support/legacy.py) became every server's,
+            # and a CV one module added was found by the next (2026-11-12): each server gets its home's own
+            self._stack.enter_context(mock.patch.object(record, "VAULT", paths.record_default()))
         # runs after the server stops and before the home goes: Windows cannot remove a file an action holds open
         self._stack.callback(wait_for_actions)
         store.drop_cache()

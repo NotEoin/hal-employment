@@ -18,6 +18,7 @@ if not exist "%HELPER%" mkdir "%HELPER%"
 taskkill /fi "WINDOWTITLE eq Hal tunnel*" >nul 2>&1
 :port
 netstat -an | findstr /c:"127.0.0.1:%LPORT% " >nul && (set /a LPORT+=1 & goto port)
+echo Connecting to %HOST%. This can take a minute; Hal opens in your browser when it is ready.
 %SSH% %OPTS% %HOST% "%HAL% helper-files --tar" | tar -x -C "%HELPER%" || echo Could not copy the browser helper
 start "Hal tunnel" /min %SSH% %OPTS% -o ExitOnForwardFailure=yes -N -L 127.0.0.1:%LPORT%:127.0.0.1:%PORT% %HOST%
 set "URL="

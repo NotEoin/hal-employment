@@ -25,11 +25,23 @@ class PreparingAhead(unittest.TestCase):
         with World() as w, fixtures.goal(values), \
                 mock.patch.object(gpu, "busy", lambda: None), \
                 mock.patch.object(screen, "screen_one", lambda con, job: (True, "fits")), \
+                mock.patch.object(pack, "has_facts", lambda con: True), \
                 mock.patch.object(pack, "build", lambda con, jid: (built.append(jid), ready(con, jid))):
             rules.rescore_all(w.con)
             for _ in range(3):
                 replenish.step(w.con)
         return built
+
+    def test_nothing_is_drafted_while_there_is_nothing_of_yours_to_write_from(self):
+        # regression: with nothing checked, each job's pack failed in turn and left an error (2026-11-12)
+        built = []
+        with World() as w, fixtures.goal(fixtures.TODAYS_GOAL), mock.patch.object(gpu, "busy", lambda: None), \
+                mock.patch.object(pack, "has_facts", lambda con: False), \
+                mock.patch.object(pack, "build", lambda con, jid: built.append(jid)):
+            rules.rescore_all(w.con)
+            worked, said = replenish.step(w.con)
+        self.assertEqual((worked, built), (False, []))
+        self.assertIn("check your record", said)
 
     def test_the_queue_prepares_internships_when_wanted(self):
         self.assertEqual(self.picks(fixtures.TODAYS_GOAL)[0], INTERN)

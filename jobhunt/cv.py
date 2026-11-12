@@ -242,17 +242,24 @@ def facts_text() -> str:
     return facts_text_of(load())
 
 
-def status_line() -> str:
-    """When the course ends or ended, and the right to work, as the settings say them; "" when unsaid."""
-    from .core import settings
+# The right to work in plain words, for drafts and forms alike. A setting's own label, or how a form should word
+# it (`you.work_status`), reached the letter as it stood: "as a British or Irish citizen" for a person who is a
+# UK and Irish citizen (2026-11-07), so drafts get the person's plain values instead.
+WORK_WORDS = {"uk_no_visa": "I have the right to work in the UK", "uk_visa": "I have a UK visa",
+              "need_sponsorship": "I need a visa sponsored to work in the UK"}
 
+
+def status_line() -> str:
+    """When the course ends or ended, the right to work in plain words (`WORK_WORDS`) and the nationality the
+    person gave, as the settings say them; "" when unsaid."""
     parts = []
     if _you("goal.study_end"):
         parts.append(f"Course ends or ended: {_you('goal.study_end')}.")
-    labels = dict(settings.setting("you.right_to_work").choices or ())
-    work = _you("you.work_status") or labels.get(_you("you.right_to_work"), "")
+    work = WORK_WORDS.get(_you("you.right_to_work"), "")
     if work:
         parts.append(f"Right to work: {work}.")
+    if _you("you.nationality"):
+        parts.append(f"Nationality: {_you('you.nationality')}.")
     return " ".join(parts)
 
 

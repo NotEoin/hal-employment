@@ -72,8 +72,9 @@ same steps with this computer's name, your user name and Copy buttons. In the co
 
 ## Every time
 
-6. Open **Hal Employment (desktop)** from the laptop's menu. A small window opens and holds the connection;
-   Hal opens in your default browser. Close the small window when you have finished.
+6. Open **Hal Employment (desktop)** from the laptop's menu. A small window opens, says it is connecting
+   and holds the connection; Hal opens in your default browser, which can take a minute. Close the small
+   window when you have finished.
 7. The first time, load the browser helper in the laptop's browser from the folder
    `Hal Employment/Browser helper` in your home folder (the launcher copies it, and refreshes it whenever the
    desktop's Hal is updated). Press **Connect** in the helper step and open the link it shows in that browser.

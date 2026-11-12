@@ -317,6 +317,18 @@ class Upload(unittest.TestCase):
         self.assertEqual(self.versions()[-1]["what"], "You corrected 2 things Hal misread")
         self.assertEqual(settings.get("you.name"), "Marnie Q. Quillfeather")
 
+    def test_an_uploaded_cv_is_in_your_record_once(self):
+        """A person who gave Hal their CV in setup found Your record saying "No CVs yet" (2026-11-12)."""
+        name, data = fixture("humanities", "docx")
+        self.read(name, data)
+        self.read(name, data)
+        con = db.connect()
+        try:
+            cvs = con.execute("SELECT section, doc_kind FROM record_sources").fetchall()
+        finally:
+            con.close()
+        self.assertEqual([tuple(r) for r in cvs], [("cv", "cv")])
+
     def test_a_scanned_pdf_is_explained_when_it_is_uploaded(self):
         status, body = upload(self.hal, self.client, "Scanned-CV.pdf", (FOLDER / "Scanned-CV.pdf").read_bytes())
         self.assertEqual(status, 400)

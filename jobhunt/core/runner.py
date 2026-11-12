@@ -39,6 +39,7 @@ import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -536,6 +537,24 @@ class Ctx:
                            WHERE id = ?""", (n, step_total, words, aid))
         self._write(op, status=True)
 
+    def progress(self, done: int, total: int, text: str = "") -> None:
+        """Says how many items of `total` are done (files read, pages fetched), beside the steps.
+
+        The steps stay as they are: an action of a few steps can work through thousands of items, and a
+        step row per item would bury the steps. `text` names the item in hand and becomes the message.
+        """
+        self.checkpoint()
+        done, total = max(0, int(done)), max(0, int(total))
+        live, aid = self._live, self._live.id
+        words = _guarded(text[:1].upper() + text[1:]) if text else None
+        if text:
+            live.entry["message"] = text
+
+        def op(con: sqlite3.Connection) -> None:
+            con.execute("UPDATE actions SET done_n = ?, done_total = ?, message = COALESCE(?, message) WHERE id = ?",
+                        (done, total, words, aid))
+        self._write(op, status=True)
+
     def used(self, kind: str, label: str, ref: str = "") -> None:
         """Notes something Hal used to decide ("Your CV, version 5"), shown under Why."""
         self._used.append({"kind": kind, "label": _guarded(label), "ref": ref})
@@ -839,8 +858,20 @@ def _steps(con: sqlite3.Connection, action_id: str) -> list[dict]:
                                  (action_id,))]
 
 
+def eta_s(row: sqlite3.Row | dict, now: datetime | None = None) -> int | None:
+    """Seconds left for a running action that reports items: the time per item so far, times those left.
+
+    None until the first item is done, or when the action is not running or reports no items.
+    """
+    done, total, started = row["done_n"], row["done_total"], row["started"]
+    if row["state"] != "running" or not done or not total or not started or done >= total:
+        return None
+    elapsed = ((now or clock.now_utc()) - clock.parse(started)).total_seconds()
+    return max(0, round(elapsed / done * (total - done)))
+
+
 def shape(con: sqlite3.Connection, row: sqlite3.Row) -> dict:
-    """An `actions` row as the API's Action, plus `waiting`, `activity_id` and `can_carry_on`."""
+    """An `actions` row as the API's Action, plus `waiting`, `activity_id`, `can_carry_on` and its items done."""
     result = json.loads(row["result"]) if row["result"] else None
     waiting = None
     if isinstance(result, dict) and "waiting_for_you" in result:
@@ -851,7 +882,8 @@ def shape(con: sqlite3.Connection, row: sqlite3.Row) -> dict:
             "step_total": row["step_total"], "steps": _steps(con, row["id"]), "result": result,
             "error": row["error"], "waiting": waiting, "activity_id": row["activity_id"],
             "priority": row["priority"], "created": row["created"], "started": row["started"],
-            "ended": row["ended"], "can_carry_on": row["state"] in CARRY_ON_FROM and row["kind"] in KINDS}
+            "ended": row["ended"], "can_carry_on": row["state"] in CARRY_ON_FROM and row["kind"] in KINDS,
+            "done_n": row["done_n"], "done_total": row["done_total"], "eta_s": eta_s(row)}
 
 
 def get(action_id: str, con: sqlite3.Connection | None = None) -> dict:

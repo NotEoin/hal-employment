@@ -1,17 +1,23 @@
 """The "This computer" backend: Ollama's HTTP API on `ai.ollama_url`.
 
 From the old `llm.chat`: `think` is off, and a JSON request asks for `format: "json"` at temperature 0.1
-(extraction wants determinism; prose keeps the model's own settings). `num_ctx` is sent only when a caller
-asks for a wider window. Nothing leaves this computer, so `online` is false and the GPU gate applies.
+(extraction wants determinism; prose keeps the model's own settings unless the request names a temperature).
+`num_ctx` is sent only when a caller asks for a wider window. Every answer is capped at `num_predict` and one
+cut off there is asked once more, warmer, then refused, as `openai_compat` does for the same runaway answers.
+Nothing leaves this computer, so `online` is false and the GPU gate applies.
 """
 from __future__ import annotations
 
 import json
+import logging
 import time
 import urllib.error
 import urllib.request
 
 from .base import ChatRequest, ChatResult, LLMUnavailable, Status
+from .openai_compat import MAX_TOKENS, RAN_ON, RETRY_TEMPERATURE, TRIES
+
+log = logging.getLogger(__name__)
 
 STATUS_TIMEOUT_S = 3            # a running Ollama answers /api/tags in milliseconds
 DEFAULT_TIMEOUT_S = 300
@@ -54,20 +60,30 @@ class OllamaBackend:
 
     def chat(self, req: ChatRequest, model: str) -> ChatResult:
         """Asks `model` through /api/chat."""
-        payload: dict = {"model": model, "stream": False, "think": False,
+        payload: dict = {"model": model, "stream": False, "think": False, "options": {},
                          "messages": [{"role": "system", "content": req.system}, {"role": "user", "content": req.user}]}
+        options = payload["options"]
         if req.json_out:
             payload["format"] = "json"
-            payload["options"] = {"temperature": JSON_TEMPERATURE}
+            options["temperature"] = JSON_TEMPERATURE
+        if req.temperature is not None:
+            options["temperature"] = req.temperature
         if req.ctx:
-            payload["options"] = {**payload.get("options", {}), "num_ctx": req.ctx}
+            options["num_ctx"] = req.ctx
+        options["num_predict"] = MAX_TOKENS
         start = time.monotonic()
-        out = self._post("/api/chat", payload, req.timeout or DEFAULT_TIMEOUT_S)
-        try:
-            text = out["message"]["content"]
-        except (KeyError, TypeError) as e:
-            raise LLMUnavailable("The AI on this computer sent an answer Hal could not read.") from e
-        return ChatResult(text=text, provider=self.name, model=model, ms=int((time.monotonic() - start) * 1000))
+        for attempt in range(TRIES):
+            out = self._post("/api/chat", payload, req.timeout or DEFAULT_TIMEOUT_S)
+            try:
+                text = out["message"]["content"]
+            except (KeyError, TypeError) as e:
+                raise LLMUnavailable("The AI on this computer sent an answer Hal could not read.") from e
+            if out.get("done_reason") != "length":
+                return ChatResult(text=text, provider=self.name, model=model,
+                                  ms=int((time.monotonic() - start) * 1000))
+            log.warning("%s ran on to %d tokens (try %d)", model, MAX_TOKENS, attempt + 1)
+            options["temperature"] = max(options.get("temperature", 0), RETRY_TEMPERATURE)
+        raise LLMUnavailable(RAN_ON)
 
     def status(self) -> Status:
         """Ready when /api/tags answers within three seconds."""

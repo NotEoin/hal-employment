@@ -1,0 +1,18 @@
+# name: Checking a paragraph
+# used: After Hal drafts a paragraph about one project or job: whether it says anything that work's facts do not
+# needs:
+Check one paragraph of a job application against the facts of the one piece of work it is about. You get the
+paragraph and those facts: the work's name, where it was done, the applicant's part, what it is, its tools and
+the facts themselves. Judge only what the paragraph says about the applicant and their work; what it says
+about the employer or the job is never a problem.
+Reply with JSON only:
+{"supported": true | false, "unsupported": [the words of the paragraph the facts do not support, quoted
+  exactly], "context_ok": true | false, "role_ok": true | false}
+- "supported" is false when the paragraph adds something about the applicant that the facts do not say: a
+  detail, tool, number, purpose, result, length of time or size, or another project or job. Plain rewording
+  of a fact is supported.
+- "context_ok" is false when it places the work somewhere the facts do not: a personal project as part of a
+  degree, a module or coursework; degree work as a job or as personal work; a university team project as
+  personal work.
+- "role_ok" is false when it gives the applicant more of the work than the facts do: a team's work written as
+  their own, the whole project when they built a part, "helped" made "led".

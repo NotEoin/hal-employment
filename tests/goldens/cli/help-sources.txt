@@ -1,0 +1,14 @@
+$ jobhunt sources --help
+usage: jobhunt sources [-h] [--section SECTION] [--kind KIND] [--card CARD]
+                       {list,add,read} [words ...]
+
+positional arguments:
+  {list,add,read}
+  words              add: the section and a file, folder, link or name; read: its number, or
+                     `waiting` for everything still to read
+
+options:
+  -h, --help         show this help message and exit
+  --section SECTION  list only this section (cv, coursework, project, document, ...)
+  --kind KIND        add: what it is within the section (essay, transcript, repo, ...)
+  --card CARD        add: the course or job card it is for, by its number

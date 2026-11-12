@@ -6,12 +6,15 @@ Three patterns are built:
 - `ROLE_MIN` or more saved or applied-to jobs whose titles share a word that is not in the roles you want ->
   "Add '<word>' to the roles you want?".
 - Two "Keep my wording" answers on the same CV line -> "Keep this line exactly as written?" (a lock).
+- The person's edits of Hal's drafts (`writing.edits`) -> "Never use <word>?" for a word they took out of
+  three drafts, and "Write letters of about N words?" when they cut Hal's letters.
 
 A pattern only ever calls `items.offer`: it never changes a setting, a note or the CV (tested for
 every pattern). A waiting suggestion whose pattern no longer holds, because the person changed the setting by
 hand or put the jobs back, is withdrawn on the next run.
 
-Not built here (cut 7): letter length, phrases to never use, voice examples, site notes and outcomes.
+Not built here (cut 7): site notes and outcomes. Voice examples come from the same edits, in
+`writing.voice`, with no suggestion to answer.
 """
 from __future__ import annotations
 
@@ -38,7 +41,7 @@ KEEP_REASON = "Keep my wording"
 SENT = ("applied", "assessment", "interview", "offer", "rejected")
 OPEN = ("new", "shortlisted", "ready")
 # The area of `learn.enabled` (learn/settings.py) each pattern belongs to.
-SOURCES = {"too_far": "finding", "roles": "finding", "keep_wording": "cv"}
+SOURCES = {"too_far": "finding", "roles": "finding", "keep_wording": "cv", "writing_edits": "writing"}
 # Words in job titles that name a level, a contract or a job type, never a kind of work.
 NOT_ROLE_WORDS = frozenset("""
     officer assistant manager coordinator co-ordinator administrator executive associate specialist advisor
@@ -230,7 +233,14 @@ def keep_wording(con: sqlite3.Connection) -> list[dict]:
     return out
 
 
-PATTERNS = {"too_far": too_far, "roles": roles, "keep_wording": keep_wording}
+def writing_edits(con: sqlite3.Connection) -> list[dict]:
+    """"Never use <word>?" and "Write letters of about N words?" from the person's edits of Hal's drafts."""
+    from jobhunt.writing import edits
+
+    return edits.learned(con)
+
+
+PATTERNS = {"too_far": too_far, "roles": roles, "keep_wording": keep_wording, "writing_edits": writing_edits}
 
 
 def run(con: sqlite3.Connection, only: tuple[str, ...] | None = None) -> dict:

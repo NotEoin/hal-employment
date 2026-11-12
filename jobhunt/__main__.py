@@ -49,6 +49,7 @@ if os.environ.get("HAL_EMPLOYMENT_NO_TRAMPOLINE") != "1" and sys.prefix == sys.b
 import argparse  # noqa: E402 - after the venv trampoline
 
 from . import db  # noqa: E402 - after the venv trampoline
+from .ai.base import LLMUnavailable  # noqa: E402 - after the venv trampoline
 from .cli import register_all  # noqa: E402 - after the venv trampoline
 from .cli.docs import cmd_check, cmd_contacts, cmd_letter, cmd_pack  # noqa: E402 - after the venv trampoline
 from .cli.find import (  # noqa: E402 - after the venv trampoline
@@ -65,7 +66,7 @@ from .cli.find import (  # noqa: E402 - after the venv trampoline
     cmd_stats,
 )
 from .cli.mail import cmd_digest, cmd_inbox, cmd_mail, cmd_todo  # noqa: E402 - after the venv trampoline
-from .cli.record import cmd_record  # noqa: E402 - after the venv trampoline
+from .cli.record import cmd_ingest, cmd_record  # noqa: E402 - after the venv trampoline
 from .cli.system import cmd_serve, cmd_vault  # noqa: E402 - after the venv trampoline
 from .core import tls  # noqa: E402 - after the venv trampoline
 
@@ -87,6 +88,16 @@ def main():
     s = sub.add_parser("record", help="read, search or ask the employment record vault")
     s.add_argument("op", nargs="?", default="status", choices=["status", "sync", "search", "ask"])
     s.add_argument("text", nargs="*"); s.set_defaults(fn=cmd_record)
+    s = sub.add_parser("ingest", help="sort whole folders into the record in the running Hal, as `sort` does")
+    s.add_argument("folders", nargs="*", help="folders to sort; Hal proposes where each file goes")
+    s.add_argument("--mine", action="append", default=[], metavar="DIR", help="a folder of your own work, sorted too")
+    s.add_argument("--course", action="append", default=[], metavar="DIR",
+                   help="a folder of course material you were given, sorted too")
+    s.add_argument("--again", action="store_true",
+                   help="read with the AI the documents an earlier ingest filed by rules alone")
+    s.add_argument("--tidy", action="store_true",
+                   help="back up, then hold everything already in the record to today's rules")
+    s.set_defaults(fn=cmd_ingest)
     sub.add_parser("queue").set_defaults(fn=cmd_queue)
     s = sub.add_parser("contacts"); s.add_argument("id"); s.set_defaults(fn=cmd_contacts)
     s = sub.add_parser("todo"); s.add_argument("op", nargs="?", choices=["add", "done"])
@@ -135,7 +146,10 @@ def main():
 
     register_all(sub)
     args = p.parse_args()
-    args.fn(args)
+    try:
+        args.fn(args)
+    except LLMUnavailable as e:        # the AI is off or busy: a plain line, not a traceback
+        sys.exit(f"jobhunt {args.cmd}: {e}")
 
 
 if __name__ == "__main__":

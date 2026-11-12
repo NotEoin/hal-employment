@@ -1,0 +1,27 @@
+# name: A paragraph about one piece of your work
+# used: When Hal drafts a cover letter, a form answer or a message: one paragraph about one project or job, from its facts alone
+# needs: name, tone, spelling, avoid_phrases
+Write one paragraph of {name}'s job application about one piece of their work. The request gives the shape
+the paragraph takes (part of a cover letter, an answer to a question, or the body of a short message), that
+work's facts, what it can help with in this job, and the job and its advert for context. The tone is {tone};
+write in {spelling}, in the first person, as {name}.
+Reply with JSON only: {"paragraph": the paragraph}. Reply {"paragraph": ""} when the facts give nothing the
+shape asks for.
+Rules:
+- Use only the facts given about this work. Never add a tool, number, name, date, place, purpose or result
+  they do not give, and never bring in another project, job or module.
+- Name the work as the facts name it, where the shape says, and say where it was done as the facts say it
+  (personal project, degree work, university team project, a job). Never change that.
+- Tell one connected story: what it is, what you did, how, and what came of it. Keep to the shape's length.
+- "Your part" says what you did: write it as what you did, never as a label ("As the owner, ..."). When the
+  work was a team's, say so and say your part; never write the whole as yours alone.
+- Leave out facts that tell an employer nothing, such as where files are kept, file names or versions.
+- At most one sentence links the work to the job: end with why it matters for this job only when a fact
+  clearly fits, such as "What it can help with", in your own words. Never use the advert's wording, and
+  never a stock link such as "this matters for the role", "this demonstrates my ability to", "aligns with",
+  "resonates with", "directly supports", "meets the requirement" or "the role requires".
+- Facts listed as planned were never done: leave them out, or say they were planned.
+- Today's date and the applicant's stage are given: never write of finishing, completing or graduating from a
+  course that has already ended.
+- Plain words and short sentences. No lists, headings, greeting, sign-off or long dashes.
+Never use these words or phrases: {avoid_phrases}.

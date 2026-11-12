@@ -1,0 +1,528 @@
+"""The pipeline of one source: keep what the person added, read it, write its note, and file its facts.
+
+`add_uploads` and `add_link` keep a new source (`sections.store`); `read` runs its section's reader
+(`sections.readers`), writes its note in the record under the section's folder, and replaces its facts in the
+profile in one transaction (`profile.store.swap_source`); `remove` takes it out with its note and facts.
+Reading is slow, so routes start the `record.sources` action (`sections.actions`), which calls `read`.
+
+Design decisions, each with its reason:
+
+- Uploads are kept in Hal's data folder (`store.files_dir`), never only in the record, so a source can be read
+  again when its reader improves or the person moves it, and removing it removes the copy too.
+- A zip, or files sent with a `relative_path` (a folder chosen in the browser), are one source of several
+  files: a project folder or a portfolio is one thing, not a hundred.
+- The same content in any section is one source (`store.by_hash`): the person is told where it is already.
+- The note goes in `Sources/<section folder>/` of the record, with `{target}` the title of the card the source
+  belongs to (`Sources/Education/BSc History/Coursework/`), so the record's folders mirror the sections. A
+  source read again keeps its note's path while its folder stays the same, so links to it still work.
+- Every fact carries the section's role and the kind of document's type (which sets its rank), its source's id,
+  and the place and line it came from; a fact of a kind the section may not create is left out. A reader may
+  give a fact another role (`Fact.role`): a referee's words are `others`, never the person's own claims.
+- The privacy check of the bulk read applies (`ingest.privacy.held_back`): a source that looks private gets no
+  note and no facts until the person lets it in (`read(..., allow_private=True)`).
+- Reading or removing a CV may change which CV is current (`profile.cvs`), so every card the CVs give is
+  worked out again (`cv.settle`).
+- A reader not written yet (`readers.NotReadYet`) leaves the source waiting, state `new`, with the words saying
+  so; it is not a failure.
+- A read the AI cannot answer now (`ai.LLMUnavailable`) also leaves the source waiting, never read by rules
+  instead: with Hal's model stopped, the rules read every CV into junk cards (2026-11-11). The read is
+  `waiting_ai`, so the caller can wait for the AI and try again. A source the privacy guard stops from going
+  to the AI (`ai.PrivateLeak`) fails, as waiting would not change it.
+- Official papers added with no card are given the education cards (`readers.Source.cards`); the reader names
+  the one the papers are about, and the source is put on that card. A sorted folder added a transcript and a
+  HEAR with no card, and each made a card of its own from its headers (2026-11-11).
+- Adding a source makes the record folder when it is missing (`ensure_record`), as setup makes it: on a fresh
+  install where setup was skipped, accepting a sort failed when the folder was read, with "no employment
+  record at ..." (2026-11-09).
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import shutil
+import sqlite3
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+
+from jobhunt import ai, db, record
+from jobhunt.evidence.routes import make_default
+from jobhunt.ingest import notes, privacy, roles
+from jobhunt.ingest import sources as ingest_sources
+from jobhunt.profile import store as profile_store
+from jobhunt.sections import (
+    coursework,
+    documents,
+    folders,
+    github,
+    lecture,
+    letters,
+    manual,
+    pages,
+    readers,
+    registry,
+    repo,
+    revisions,
+    store,
+    wrong_place,
+)
+from jobhunt.sections import cv as cv_reader
+
+log = logging.getLogger(__name__)
+# The sections' own reader modules: each puts its readers in place (`readers.register`) when it is imported.
+READER_MODULES = (cv_reader, coursework, documents, folders, github, lecture, letters, manual, pages, repo)
+CHUNK = 1 << 20            # files are hashed 1 MiB at a time
+SKIPPED_PARTS = {"__MACOSX", ".git", ".DS_Store", "Thumbs.db", "desktop.ini"}
+ZIP = ".zip"
+
+
+@dataclass(frozen=True)
+class Incoming:
+    """One uploaded file: its name, its bytes, and its path inside a folder the person chose ("" for none)."""
+
+    name: str
+    data: bytes
+    relative_path: str = ""
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _file_sha(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(CHUNK):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def set_hash(files: list[tuple[str, int, str]]) -> str:
+    """The content hash of a source of several files: their paths and hashes, in order, so a renamed or changed
+    file makes another source."""
+    return _sha("\n".join(f"{rel}\0{digest}" for rel, _, digest in sorted(files)).encode("utf-8"))
+
+
+def _clean_rel(raw: str) -> str:
+    """A path inside an uploaded folder, safe to write under the source's folder; ValueError when it is not."""
+    rel = ingest_sources.safe_member(raw or "")
+    if rel is None:
+        raise ValueError(f"{raw} is not a path inside the folder you chose.")
+    return rel.as_posix()
+
+
+def _skipped(rel: str) -> bool:
+    return any(part in SKIPPED_PARTS or part.startswith(".") for part in PurePosixPath(rel).parts)
+
+
+def _groups(uploads: list[Incoming]) -> list[tuple[str, list[Incoming]]]:
+    """The uploads as sources: a zip each, each folder by its top name, and every other file on its own."""
+    singles, folders = [], {}
+    for up in uploads:
+        if up.relative_path:
+            rel = _clean_rel(up.relative_path)
+            if not _skipped(rel):
+                folders.setdefault(rel.split("/")[0], []).append(Incoming(up.name, up.data, rel))
+        else:
+            name = Path(up.name).name.strip()
+            if not name or name.startswith("."):
+                raise ValueError("Files whose names start with a dot cannot be added.")
+            singles.append((name, [Incoming(name, up.data)]))
+    return singles + sorted(folders.items())
+
+
+def _unpack(zip_name: str, data: bytes, into: Path) -> list[str]:
+    """Unpacks a zip into `into` with the bulk read's guards; returns what it refused, in plain words."""
+    held = into.parent / f".{into.name}.zip"
+    held.write_bytes(data)
+    try:
+        report = ingest_sources.unpack(held, into, label=zip_name)
+    finally:
+        held.unlink(missing_ok=True)
+    for path in sorted(into.rglob("*"), reverse=True):
+        if path.is_file() and _skipped(path.relative_to(into).as_posix()):
+            path.unlink()
+    return report.problems()
+
+
+def _listed(folder: Path) -> list[tuple[str, int, str]]:
+    return [(p.relative_to(folder).as_posix(), p.stat().st_size, _file_sha(p))
+            for p in sorted(folder.rglob("*")) if p.is_file()]
+
+
+def add_uploads(con: sqlite3.Connection, section_id: str, uploads: list[Incoming], *, doc_kind: str | None = None,
+                target_id=None) -> dict:
+    """Keeps uploaded files as new sources of a section; returns {"added": [ids], "duplicates": [{name, id,
+    section_label}], "problems": [words]}.
+
+    ValueError for a kind of document or card that does not fit the section, a name or path that is not safe,
+    or nothing to add; LookupError for an unknown section or card.
+    """
+    section = registry.get(section_id)
+    kind = registry.doc_kind(section, doc_kind)
+    target = store.target_card(con, section, target_id)
+    if not uploads:
+        raise ValueError("Choose one or more files to add.")
+    ensure_record()
+    store.check_dissertation(con, section.id, kind.id, target, adding=len(_groups(uploads)))
+    out: dict = {"added": [], "duplicates": [], "problems": []}
+    work = store.files_root()
+    work.mkdir(parents=True, exist_ok=True)
+    for name, group in _groups(uploads):
+        with tempfile.TemporaryDirectory(dir=work, prefix=".new-") as tmp:
+            staged = Path(tmp) / "files"
+            staged.mkdir()
+            if len(group) == 1 and not group[0].relative_path and Path(name).suffix.lower() == ZIP:
+                out["problems"] += _unpack(name, group[0].data, staged)
+                held = registry.FILES
+            else:
+                for up in group:
+                    target_path = staged / (up.relative_path or name)
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    target_path.write_bytes(up.data)
+                held = registry.FILES if group[0].relative_path else registry.UPLOAD
+            if group[0].relative_path:     # the folder's own name is the source's, not a level inside it
+                staged = staged / name
+            files = _listed(staged)
+            if not files:
+                out["problems"].append(f"{name} had no files Hal could keep.")
+                continue
+            digest = files[0][2] if held == registry.UPLOAD else set_hash(files)
+            if (same := store.by_hash(con, digest)) is not None:
+                out["duplicates"].append({"name": name, "id": same["id"],
+                                          "section_label": registry.get(same["section"]).label})
+                continue
+            with con:
+                source_id = store.add(con, section.id, held=held, doc_kind=kind.id,
+                                      locator=name if held == registry.FILES else "", sha256=digest,
+                                      target_id=target, files=files)
+            dest = store.files_dir(source_id)
+            shutil.rmtree(dest, ignore_errors=True)
+            shutil.move(str(staged), dest)
+        out["added"].append(source_id)
+    return out
+
+
+def add_link(con: sqlite3.Connection, section_id: str, locator: str, *, doc_kind: str | None = None,
+             target_id=None) -> dict:
+    """Keeps a link, account, folder path or hand-added name as a new source; returns {"added": [id]} or
+    {"added": [], "duplicates": [...]} when the same one is in the record already.
+
+    The route checks a folder is on this computer and outside the record; this checks the words fit the kind.
+    ValueError for a kind of document that is not a link, a link that is not a web address, or no words.
+    """
+    section = registry.get(section_id)
+    kind = registry.doc_kind(section, doc_kind)
+    if kind.held not in (registry.LINK, registry.ACCOUNT, registry.FOLDER, registry.MANUAL):
+        raise ValueError(f"Add a {kind.label.lower()} as a file.")
+    words = " ".join(str(locator or "").split())
+    if not words:
+        raise ValueError("Type or paste what to add.")
+    if kind.held == registry.LINK and not words.lower().startswith(("http://", "https://")):
+        raise ValueError("Paste a web address that starts with http:// or https://.")
+    if kind.held == registry.ACCOUNT:
+        words = words.rstrip("/").rsplit("/", 1)[-1].lstrip("@")
+    target = store.target_card(con, section, target_id)
+    ensure_record()
+    if kind.held != registry.MANUAL and (same := store.by_locator(con, kind.held, words)) is not None:
+        return {"added": [], "duplicates": [{"name": words, "id": same["id"],
+                                             "section_label": registry.get(same["section"]).label}]}
+    with con:
+        source_id = store.add(con, section.id, held=kind.held, doc_kind=kind.id, locator=words, target_id=target)
+    return {"added": [source_id], "duplicates": []}
+
+
+def attach(con: sqlite3.Connection, source_id, uploads: list[Incoming]) -> dict:
+    """Attaches files and pictures to a project added by hand; returns {"added": [names], "problems": [words]}.
+
+    A file with the name of one already attached replaces it. ValueError for a source that is not a project
+    added by hand, or nothing to attach; LookupError for a source that is not there.
+    """
+    r = store.row(con, source_id)
+    if r["kind"] != registry.MANUAL:
+        raise ValueError("Files are attached only to a project added by hand.")
+    if not uploads:
+        raise ValueError("Choose one or more files to attach.")
+    folder = store.files_dir(r["id"])
+    folder.mkdir(parents=True, exist_ok=True)
+    out: dict = {"added": [], "problems": []}
+    for up in uploads:
+        name = Path(up.name).name.strip()
+        if not name or name.startswith(".") or _skipped(name):
+            out["problems"].append(f"{up.name or 'A file'} cannot be attached: its name starts with a dot.")
+            continue
+        (folder / name).write_bytes(up.data)
+        with con:
+            con.execute("INSERT OR REPLACE INTO record_source_files (source_id, rel, size, sha256) VALUES (?, ?, ?, ?)",
+                        (r["id"], name, len(up.data), _sha(up.data)))
+        out["added"].append(name)
+    return out
+
+
+def source_of(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
+    """A source's row as its reader is given it (`readers.Source`)."""
+    return _source(con, r)
+
+
+def _source(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
+    folder = store.files_dir(r["id"])
+    files = tuple(readers.SourceFile(rel, folder / rel) for rel in store.file_rels(con, r["id"]))
+    target = None
+    if r["target_id"] is not None:
+        try:
+            target = profile_store.item(con, r["target_id"])
+        except LookupError:
+            target = None
+    cards = tuple(profile_store.items(con, "education", hidden=False)) if target is None and \
+        r["section"] == documents.OFFICIAL else ()
+    return readers.Source(id=r["id"], section=r["section"], doc_kind=r["doc_kind"], title=r["title"],
+                          held=r["kind"], locator=r["locator"], files=files, target=target,
+                          starred=bool(r["starred"]), module=r["module"], details=store.details(r),
+                          meta=store.meta(con, r["id"]), cards=cards)
+
+
+def vault() -> Path:
+    """The record folder the notes go in."""
+    return Path(record._live("VAULT"))
+
+
+def ensure_record() -> Path:
+    """The record folder, made with its starter folders (`evidence.routes.make_default`) when it is missing."""
+    folder = vault()
+    if not folder.is_dir():
+        make_default()
+    return folder
+
+
+def note_folder(section: registry.Section, target: dict | None) -> str:
+    """The folder inside the record where a source's note goes: the section's, with its card's title."""
+    name = notes.slug(target["title"]) if target and target.get("title") else "Not linked"
+    return f"{notes.SOURCES}/" + "/".join(notes.slug(part) for part in section.folder.format(target=name).split("/"))
+
+
+def _drop_note(note_rel: str | None) -> None:
+    if not note_rel:
+        return
+    root = vault().resolve()
+    path = (root / note_rel).resolve()
+    if root in path.parents:
+        path.unlink(missing_ok=True)
+
+
+# Typographic dashes and quotes the AI writes plainly, and Markdown emphasis it leaves out of a quote.
+_PLAIN = str.maketrans({**dict.fromkeys("\u2010\u2011\u2012\u2013\u2014\u2212", "-"),
+                        **dict.fromkeys("\u2018\u2019", "'"), **dict.fromkeys("\u201c\u201d", '"'),
+                        **dict.fromkeys("*_`", None)})
+
+
+def _plain(text: str) -> str:
+    return "".join(text.translate(_PLAIN).lower().split())
+
+
+def _found_in(quote: str, text: str) -> bool:
+    """True when `quote` is in `text`, whatever the spaces, dashes, curly quotes and Markdown emphasis: a CV's
+    "**September 2023 - Present**" and a PDF's "8%n ationally" left true quotes marked to be checked
+    (2026-11-11)."""
+    return _plain(quote) in _plain(text)
+
+
+def _evidence(section: registry.Section, kind: registry.DocKind, source_id: int, note_rel: str,
+              reading: readers.Reading) -> list[tuple[str, dict, dict]]:
+    """The reading's facts as (kind, fields, evidence) for the profile; kinds the section may not create are
+    left out."""
+    out = []
+    for fact in reading.facts:
+        if fact.kind not in section.creates:
+            log.info("left out a %s from source %s: %s gives no such facts", fact.kind, source_id, section.id)
+            continue
+        out.append((fact.kind, fact.fields, {
+            "source_rel": note_rel, "quote": fact.quote.quote, "field": fact.quote.field, "doc_type": kind.doc_type,
+            "verified": _found_in(fact.quote.quote, reading.text), "role": fact.role or section.evidence_role,
+            "source_id": source_id, "place": fact.quote.place, "line": fact.quote.line}))
+    return out
+
+
+def _write_note(r: sqlite3.Row, section: registry.Section, kind: registry.DocKind, source: readers.Source,
+                reading: readers.Reading, name: str) -> str:
+    """Writes the source's note under its section's folder; returns its path inside the record."""
+    root = vault()
+    folder = root / note_folder(section, source.target)
+    folder.mkdir(parents=True, exist_ok=True)
+    title = r["title"] or reading.title or readers.title_in(reading.text, name)
+    old = r["note_rel"]
+    at = root / old if old and (root / old).parent == folder and (root / old).exists() else \
+        notes.free_note(folder, title, r["sha256"])
+    role = section.evidence_role
+    desc = {"category": section.label, "doc_type": kind.doc_type, "title": title, "tags": [section.id],
+            "period": reading.date, "entities": {"organisations": [], "skills": [], "courses": []},
+            "role": role, "about_owner": roles.ABOUT_OWNER[role], "summary": reading.summary,
+            "facts": [{"kind": f.kind, "fields": f.fields, "quote": f.quote.quote, "field": f.quote.field,
+                       "verified": _found_in(f.quote.quote, reading.text)} for f in reading.facts
+                      if f.kind in section.creates], "by": "rules"}
+    rel = notes.write_source(root, desc, text=reading.text, source=source.locator or name, sha256=r["sha256"],
+                             original=None, at=at)
+    if old and old != rel:
+        _drop_note(old)
+    return rel
+
+
+@dataclass(frozen=True)
+class Begun:
+    """A source taken up for reading (`begin`): what its reader needs, and what `finish` files."""
+
+    row: sqlite3.Row
+    section: registry.Section
+    kind: registry.DocKind
+    source: readers.Source
+    name: str
+    reader: readers.Reader
+
+
+def read(con: sqlite3.Connection, source_id, *, allow_private: bool = False) -> dict:
+    """Reads one source with its section's reader, writes its note and puts its facts in the profile.
+
+    Returns {"id", "state", "facts", "left_out", "hidden", "suggestion", "children"} (the ids of sources the read
+    found inside this one, added under it and still to read); a reader not written yet leaves the
+    source waiting (state `new`), as does an AI that cannot answer now (state `waiting_ai`, with `kind` from
+    `ai.UNAVAILABLE_KINDS`); one that cannot read it marks it failed with the reason. LookupError for a source
+    that is not there. It is `begin`, `run` and `finish` in turn; a caller reading several at once runs `run`
+    on worker threads and the other two on its own.
+    """
+    begun = begin(con, source_id)
+    return finish(con, begun, run(begun), allow_private=allow_private)
+
+
+def begin(con: sqlite3.Connection, source_id) -> Begun:
+    """Marks the source as being read and gathers what its reader needs; LookupError when it is not there."""
+    r = store.row(con, source_id)
+    section = registry.get(r["section"])
+    begun = Begun(row=r, section=section, kind=registry.DOC_KINDS[r["doc_kind"]], source=_source(con, r),
+                  name=store.shape(con, r)["name"], reader=readers.get(section.reader_of(r["doc_kind"])))
+    store.set_state(con, r["id"], "reading")
+    return begun
+
+
+def run(begun: Begun) -> readers.Reading | Exception:
+    """The reader's reading of the source, or the error it raised; touches no database, so it may run on a
+    worker thread."""
+    try:
+        return begun.reader.read(begun.source)
+    except Exception as e:  # `finish` files it, or raises it again on the caller's thread
+        return e
+
+
+def finish(con: sqlite3.Connection, begun: Begun, reading: readers.Reading | Exception, *,
+           allow_private: bool = False) -> dict:
+    """Files what `run` gave: the source's note, facts and state, as `read` returns them."""
+    r, section, kind, source, name = begun.row, begun.section, begun.kind, begun.source, begun.name
+    out = {"id": r["id"], "state": "", "facts": 0, "left_out": 0, "hidden": [], "suggestion": ""}
+    if isinstance(reading, readers.NotReadYet):
+        store.set_state(con, r["id"], "new", str(reading))
+        return {**out, "state": "new"}
+    if isinstance(reading, ai.LLMUnavailable):
+        log.info("source %s waits for the AI: %s", r["id"], reading)
+        store.set_state(con, r["id"], "new", f"Waiting for Hal's AI: {reading}")
+        return {**out, "state": "waiting_ai", "kind": reading.kind}
+    if isinstance(reading, ai.PrivateLeak):
+        store.set_state(con, r["id"], "failed", f"Hal kept it from the AI: {reading}")
+        return {**out, "state": "failed"}
+    if isinstance(reading, readers.NotTheirs):
+        gone = profile_store.swap_source(con, r["id"], [])
+        _drop_note(r["note_rel"])
+        with con:
+            con.execute("UPDATE record_sources SET note_rel = NULL, details = ? WHERE id = ?",
+                        (json.dumps({"not_yours": True, "someone_else": reading.whose}), r["id"]))
+        store.set_state(con, r["id"], "kept_out", str(reading))
+        return {**out, "state": "kept_out", "hidden": gone["hidden"]}
+    if isinstance(reading, (OSError, ValueError)):
+        log.warning("could not read source %s: %s", r["id"], reading)
+        store.set_state(con, r["id"], "failed", f"Hal could not read it: {reading}")
+        return {**out, "state": "failed"}
+    if isinstance(reading, Exception):
+        raise reading
+    why = "" if allow_private else privacy.held_back({"allowed": False, "rel": name}, reading.text)
+    if why:
+        gone = profile_store.swap_source(con, r["id"], [])
+        _drop_note(r["note_rel"])
+        with con:
+            con.execute("UPDATE record_sources SET note_rel = NULL WHERE id = ?", (r["id"],))
+        store.set_state(con, r["id"], "kept_out", why)
+        return {**out, "state": "kept_out", "hidden": gone["hidden"]}
+    note_rel = _write_note(r, section, kind, source, reading, name)
+    facts = _evidence(section, kind, r["id"], note_rel, reading)
+    swapped = profile_store.swap_source(con, r["id"], facts)
+    suggestion = wrong_place.suggest(section.id, name, reading.text) or \
+        wrong_place.suggest_kind(section.id, r["doc_kind"], name, reading.text)
+    now = db.now()
+    card = reading.details.pop(documents.CARD, None)
+    if card is not None and r["target_id"] is None:
+        with con:
+            con.execute("UPDATE record_sources SET target_id = ? WHERE id = ?", (card, r["id"]))
+    with con:
+        con.execute("""UPDATE record_sources SET title = CASE WHEN title = '' THEN ? ELSE title END, dated = ?,
+                       note_rel = ?, revision = revision + 1, last_checked = ?,
+                       last_changed = CASE WHEN ? OR revision = 0 THEN ? ELSE last_changed END,
+                       state = 'read', error = '', suggestion = ?, details = ? WHERE id = ?""",
+                    (reading.title or readers.title_in(reading.text, name), reading.date, note_rel, now,
+                     int(swapped["changed"]), now, suggestion, json.dumps(reading.details), r["id"]))
+    if section.id == cv_reader.SECTION:
+        cv_reader.settle(con)
+    readers.settle(begun.reader, con)
+    revisions.record(con, r["id"], facts, reading.details, before=store.details(r))
+    return {**out, "state": "read", "facts": swapped["added"], "left_out": len(reading.facts) - len(facts)
+            + len(swapped["left_out"]), "hidden": swapped["hidden"], "suggestion": suggestion,
+            "children": add_children(con, r["id"], reading.children)}
+
+
+def add_children(con: sqlite3.Connection, parent_id: int, children: list[readers.Child]) -> list[int]:
+    """Adds the sources a read found inside a source (an account's repositories, a folder's projects) under it;
+    returns the ids of the new ones, to be read next.
+
+    One already in the record anywhere, or one the person removed from this parent (`meta.dropped`), is not
+    added again, so removing one project of an account keeps it out after the next read.
+    """
+    if not children:
+        return []
+    parent = store.row(con, parent_id)
+    dropped = set(store.meta(con, parent_id).get("dropped") or [])
+    new = []
+    with con:
+        for child in children:
+            if child.locator in dropped or store.by_locator(con, child.held, child.locator) is not None:
+                continue
+            child_id = store.add(con, parent["section"], held=child.held, doc_kind=child.doc_kind,
+                                 locator=child.locator, target_id=parent["target_id"])
+            con.execute("UPDATE record_sources SET parent_id = ?, title = ? WHERE id = ?",
+                        (parent_id, child.title, child_id))
+            new.append(child_id)
+    return new
+
+
+def remove(con: sqlite3.Connection, source_id) -> dict:
+    """Takes a source out of the record: its facts, its note and Hal's copy of its files, and the sources found
+    inside it; returns {"hidden": [ids of the cards Hal found that no source names any more, now hidden]}.
+
+    A source found inside another is remembered on that parent as removed, so its next read does not add it
+    back. LookupError when it is not there.
+    """
+    r = store.row(con, source_id)
+    hidden = []
+    for (child_id,) in con.execute("SELECT id FROM record_sources WHERE parent_id = ?", (r["id"],)).fetchall():
+        hidden += remove(con, child_id)["hidden"]
+    gone = profile_store.swap_source(con, r["id"], [])
+    _drop_note(r["note_rel"])
+    shutil.rmtree(store.files_dir(r["id"]), ignore_errors=True)
+    forget = getattr(readers.get(registry.get(r["section"]).reader_of(r["doc_kind"])), "forget", None)
+    if forget is not None:
+        forget(_source(con, r))
+    if r["parent_id"] is not None and con.execute("SELECT 1 FROM record_sources WHERE id = ?",
+                                                  (r["parent_id"],)).fetchone():
+        dropped = store.meta(con, r["parent_id"]).get("dropped") or []
+        store.set_meta(con, r["parent_id"], dropped=sorted({*dropped, r["locator"]}))
+    with con:
+        con.execute("DELETE FROM record_sources WHERE id = ?", (r["id"],))
+    if r["section"] == cv_reader.SECTION:
+        cv_reader.settle(con)
+    readers.settle(readers.get(registry.get(r["section"]).reader_of(r["doc_kind"])), con)
+    return {"hidden": hidden + gone["hidden"]}

@@ -6,6 +6,10 @@ writes the whole folder at once (`docs.folders.publish`), so the folder always m
 
 A job drafted before application folders existed still has its `pack.md` in the old shared folder; it is
 read from there only when that file names this job, because one old folder could belong to two jobs.
+
+The CV follows My CV's choices: while it is set to send the person's original file, that file goes out byte
+for byte under the CV's file name with its own extension, and while "Adjust your CV for each job" is No the
+main CV goes as it is. Both were shown on My CV but not followed here before 2026-11-12.
 """
 import contextvars
 import json
@@ -14,7 +18,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import cv, db, gpu, letter, llm, pack
-from .core import naming
+from .core import naming, settings
 from .docs import folders
 
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
@@ -136,18 +140,41 @@ def save(con, job, docs: dict) -> None:
         render(job, docs)
 
 
+def original_file() -> str | None:
+    """The kept file id of the person's own CV while My CV is set to send it unchanged, else None."""
+    from .cvstudio import store
+
+    d = store.doc()
+    return d["baseline_file_id"] if d["send"] == "original" and d["baseline_file_id"] else None
+
+
+def cv_file_name() -> str:
+    """The CV's file name employers see: the template's, with the original file's extension while it is sent."""
+    name = naming.file_name("cv")
+    fid = original_file()
+    if fid is None:
+        return name
+    from .cvstudio import store
+
+    ext = Path(store.file_row(fid)["name"]).suffix.lower()
+    return Path(name).stem + ext if ext else name
+
+
 def files(job, con=None) -> dict:
     """Returns the paths of the documents to upload, where they exist."""
     with _connection(con) as c:
         d = pack_dir(job, c, create=False)
     if d is None:
         return {}
-    return {k: str(p) for k, p in (("cv", d / naming.file_name("cv")),
+    return {k: str(p) for k, p in (("cv", d / cv_file_name()),
                                     ("letter", d / naming.file_name("letter"))) if p.exists()}
 
 
 def tailored(job, docs: dict) -> dict:
-    """The CV Hal makes for this job from the base CV, with any title or summary given for it."""
+    """The CV Hal makes for this job from the base CV, with any title or summary given for it; the base CV as it
+    is while adjusting for each job is No or the original file is sent."""
+    if settings.get("cvdocs.tailor") == "no" or original_file() is not None:
+        return cv.load()
     variant = cv.tailor(pack._job_text(job))[0]
     for key in ("title", "summary"):    # a CV may have neither
         given = docs.get(f"cv_{key}") or variant.get(key)
@@ -180,12 +207,19 @@ def render(job, docs: dict, out: Path | None = None) -> dict:
     d.mkdir(parents=True, exist_ok=True)
     made = {}
     sent = current_cv(job, docs)
-    pdf = cv.render(sent, d)
-    want = d / naming.file_name("cv")
-    if pdf and Path(pdf).exists():
-        if Path(pdf) != want:
-            Path(pdf).replace(want)
+    want = d / cv_file_name()
+    fid = original_file()
+    if fid is not None:
+        from .cvstudio import store
+
+        want.write_bytes(store.file_bytes(fid))
         made["cv"] = str(want)
+    else:
+        pdf = cv.render(sent, d)
+        if pdf and Path(pdf).exists():
+            if Path(pdf) != want:
+                Path(pdf).replace(want)
+            made["cv"] = str(want)
     body = _ascii(docs.get("letter", ""))
     if body.strip():
         target = d / naming.file_name("letter")

@@ -18,7 +18,7 @@ export const DIALOGS = {
   secret: () => import("../dialogs/secret.js"), restart: () => import("../dialogs/restart.js"),
   update: () => import("../dialogs/update.js"), confirm: () => import("../dialogs/confirm.js"),
   why: () => import("../dialogs/why.js"), keys: () => import("../dialogs/keys.js"),
-  palette: () => import("../dialogs/palette.js"),
+  palette: () => import("../dialogs/palette.js"), critique: () => import("../dialogs/critique.js"),
 };
 const TITLE_ID = "dlg-title";
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), '

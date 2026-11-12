@@ -10,8 +10,8 @@ from __future__ import annotations
 from jobhunt.core.settings.catalog._shared import choices, safe
 from jobhunt.core.settings.registry import Setting, register
 
-TAILOR_HELP = ("No: the same CV for every job. A little: reorder and adjust the profile line. "
-               "More: also rewrite bullets from your evidence.")
+TAILOR_HELP = ("No: the same CV for every job. A little: the projects and skill groups that fit the job go "
+               "first. More: the same as A little in this version.")
 
 register(
     Setting("cvdocs.route", "link", None, "How your CV is made", to="cv", order=10),
@@ -33,7 +33,8 @@ register(
     Setting("cvdocs.never_use", "tags", ["passionate", "team player", "go-getter"], "Never use", order=100,
             help="Words and phrases Hal must avoid."),
     Setting("cvdocs.voice", "bool", True, "Match my own writing", order=110,
-            help="Uses answers you rewrote as examples of your voice."),
+            help="Uses your own writing as a guide to your voice: your edits, answers you rewrote, and the "
+                 "letters and CVs in your record."),
     Setting("cvdocs.folder", "path", "", "Where documents are saved", machine=True, remote="local_only", order=120,
             help="Leave empty for Documents, Hal Employment, Applications."),
     Setting("record.folder", "path", "", "Your record folder", group="cvdocs", machine=True, remote="local_only",
@@ -44,4 +45,26 @@ register(
                 ("words", "By words"), ("meaning", "By meaning (needs the AI on this computer)"))),
     Setting("record.private_folders", "tags", ["Private"], "Folders in your record never sent to the AI",
             group="cvdocs", order=160),
+    Setting("record.drop_folder", "path", "", "Drop folder for your record", group="cvdocs", machine=True,
+            remote="local_only", order=170,
+            help="Anything you put here is read into your record. Leave empty for the +Inbox folder in it."),
+    Setting("record.drop_origin", "choice", "mixed", "What you put in your drop folder", group="cvdocs",
+            order=175, choices=choices(("mixed", "A mix of both"), ("mine", "My own work"),
+                                       ("course", "Course material I was given")),
+            help="Hal counts your own work as yours even when it does not name you, and course material as "
+                 "what you studied."),
+    Setting("record.copy_originals", "bool", True, "Keep a copy of each file Hal reads in", group="cvdocs",
+            order=180, help="Copies go in Attachments in your record. Very large files are linked, not copied."),
+    Setting("record.privacy_check", "bool", True, "Keep private documents out of your record", group="cvdocs",
+            order=185, help="Hal leaves out files that look like bank details, passports and ID cards, payslips "
+                            "and tax forms, medical letters, or passwords and keys. They are not filed, not sent "
+                            "to the AI and give Hal no facts. Hal lists them by name only, each with Add it "
+                            "anyway."),
+    Setting("record.ingest_vision", "bool", False, "Read certificates and artwork in pictures with the AI",
+            group="cvdocs", advanced=True, order=190,
+            help="The words in them are read first. Other pictures are listed by name and date only."),
+    Setting("record.read_all", "bool", False, "Read every document with the AI", group="cvdocs", advanced=True,
+            order=195, help="Hal reads CVs, transcripts, coursework and other rich documents with the AI, and files "
+                            "notes and slides by their headings and words. Turn this on to have the AI read and "
+                            "summarise those too. Reading takes much longer."),
 )
