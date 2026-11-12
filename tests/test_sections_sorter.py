@@ -724,6 +724,22 @@ class Sorter(unittest.TestCase):
         self.assertEqual([(found[n].section, found[n].doc_kind) for n in sorted(found)],
                          [("coursework", "dissertation"), ("coursework", "essay")])
 
+    def test_a_dissertations_poster_and_proposal_are_reports_and_the_dissertation_is_itself(self):
+        """Regression: the newer "Dissertation Poster" was taken as the course's one dissertation, so the
+        submitted Dissertation.pdf failed to add and the record never read it (2026-11-12)."""
+        body = " ".join(["Tide prediction from made-up harbour gauges, with a model of the surge."] * 20)
+        with home() as (con, _vault, files), fake_ai():
+            degree = self.education(con, "BSc", "Computing")
+            thesis = "Uni/BSc Computing/Year 3/Dissertation"
+            dated(put(files, f"{thesis}/submission/Dissertation.md", f"# Tide prediction\n\n{body}\n"), OLD)
+            dated(put(files, f"{thesis}/Avery Quillon Dissertation Poster.md", f"# Poster\n\n{body}\n"), NEW)
+            dated(put(files, f"{thesis}/Dissertation Project Proposal.md", f"# Proposal\n\n{body}\n"), NEW)
+            found = by_rel(sorter.propose(con, files / "Uni", local=True, prefix=""))
+        kinds = {rel.rsplit("/", 1)[-1]: (p.doc_kind, p.target_id) for rel, p in found.items()}
+        self.assertEqual(kinds, {"Dissertation.md": ("dissertation", degree),
+                                 "Avery Quillon Dissertation Poster.md": ("report", degree),
+                                 "Dissertation Project Proposal.md": ("report", degree)})
+
     def test_a_zips_code_project_is_proposed_as_its_files(self):
         with home() as (con, _vault, files), fake_ai():
             put(files, "unpacked/tidewatch/README.md", README)

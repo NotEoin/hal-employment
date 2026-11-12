@@ -116,6 +116,10 @@ TAUGHT_FOLDER = re.compile(r"(?<![a-z])(?:lectures?|slides|handouts?|readings?|s
 WORK_KINDS = ("report", "writing", "project")
 STUDIED_KINDS = ("notes", "slides", *WORK_KINDS)     # what a course folder's file is when not handed in
 DISSERTATION_NAME = re.compile(r"(?<![a-z])(?:dissertation|thesis)(?![a-z])", re.I)
+# A file about the dissertation, not the dissertation: the newer "Dissertation Poster" took the course's one
+# dissertation and the submitted Dissertation.pdf was never read (2026-11-12)
+ABOUT_THE_WORK = re.compile(r"(?<![a-z])(?:poster|proposal|brief|plan|abstract|presentation|slides|outline|ideas?|"
+                            r"feedback|marking|rubric|guidance|template|audit)(?![a-z])", re.I)
 ESSAY_NAME = re.compile(r"(?<![a-z])essays?(?![a-z])", re.I)
 STATEMENT_NAME = re.compile(r"(?<![a-z])(?:personal|supporting)[ _-]?statement|statement[ _-]?of[ _-]?purpose", re.I)
 CONTRACT_NAME = re.compile(r"(?<![a-z])(?:contract|offer[ _-]?letter)(?![a-z])", re.I)
@@ -255,7 +259,7 @@ def _nearest(rel: str, pattern: re.Pattern) -> bool:
 
 
 def _work_kind(stem: str, suffix: str) -> str:
-    if DISSERTATION_NAME.search(stem):
+    if DISSERTATION_NAME.search(stem) and not ABOUT_THE_WORK.search(stem):
         return "dissertation"
     if ESSAY_NAME.search(stem):
         return "essay"

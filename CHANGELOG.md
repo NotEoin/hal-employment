@@ -23,6 +23,11 @@ What changed in each version, in plain words.
   An answer cut off at the cap is asked for once more, then Hal says plainly that it ran on; it is never used
   half-written.
 
+- **Your dissertation is read, not its poster.** When a folder held a dissertation's poster or proposal
+  beside the dissertation, the newest of them was taken as the course's one dissertation, and the
+  dissertation itself could not be added. A poster, proposal, brief, plan or abstract is now coursework of
+  its own.
+
 - **Your transcripts set your modules and marks, even on a course you made.** A course made from a sorted
   folder took its module folders' names as modules, wrong ones and a student number among them, and never
   took the transcripts' true modules and marks. Now an official paper's modules replace them, and the
