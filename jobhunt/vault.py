@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 NOTE_PATH = Path("Areas") / "Job Search" / "Pipeline.md"
+_UPDATED = re.compile(r"^updated: .*\n", re.M)
 # What VAULT reads as while the add-on is off or has no vault: a path that never exists, so old callers that
 # test `VAULT.exists()` before writing (pack.py) write nothing.
 NO_VAULT = Path(os.devnull) / "no-hal-vault"
@@ -107,5 +108,20 @@ def write_note(con, folder: Path) -> Path | None:
                             WHERE status IN ('new','shortlisted','ready') AND active=1 AND score >= 60
                             ORDER BY score DESC LIMIT 15"""):
         lines.append(f"- **{r['score']:.0f}** [{r['company']} - {r['title']}]({r['url']}) | {r['location']}")
-    note.write_text("\n".join(lines) + "\n")
+    text = "\n".join(lines) + "\n"
+    if not _same_note(note, text):
+        note.write_text(text)
     return note
+
+
+def _same_note(note: Path, text: str) -> bool:
+    """True when `note` already says `text` apart from its `updated:` line and what Hal appended below it.
+
+    Hal's vault index re-reads a note whenever its file changes, and its tidier appends a `Related:` line, so
+    rewriting an unchanged note every email check kept Hal re-reading it twice an hour (2026-11-12).
+    """
+    try:
+        old = note.read_text()
+    except FileNotFoundError:
+        return False
+    return _UPDATED.sub("", old).startswith(_UPDATED.sub("", text))

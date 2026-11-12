@@ -51,6 +51,19 @@ class AddOn(unittest.TestCase):
         note.write_text(text.replace(line, line.replace("- [ ]", "- [x]")))
         self.assertIn(line.replace("- [ ]", "- [x]"), vault.write(self.con).read_text())
 
+    def test_an_unchanged_note_is_not_rewritten(self):
+        # regression: the note was rewritten every email check, so Hal re-read it twice an hour
+        self.switch_on()
+        note = vault.write(self.con)
+        note.write_text(note.read_text().replace("updated: ", "updated: 1999") + "\nRelated: [[Applications]]\n")
+        kept = note.read_text()
+        vault.write(self.con)
+        self.assertEqual(note.read_text(), kept)
+        self.con.execute("""INSERT INTO emails (msgid, date, sender, subject, kind, company)
+                            VALUES ('e1', datetime('now'), 'jo@example.org', 'Quick question', 'human', 'Riverside')""")
+        self.con.commit()
+        self.assertIn("Quick question", vault.write(self.con).read_text())
+
     def test_the_jobs_command_template_names_no_one(self):
         template = hal.TEMPLATE.read_text()
         self.assertEqual(set(re.findall(r"\{(\w+)\}", template)), {"first_name", "vault_note", "code_dir"})

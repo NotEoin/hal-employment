@@ -2,6 +2,14 @@
 
 What changed in each version, in plain words.
 
+## Unreleased
+
+### Fixed
+
+- **The Pipeline note changes only when its contents do.** Each email check rewrote it with a new time,
+  so Hal re-read the unchanged note twice an hour. It is now left alone, with any links Hal added to
+  it, until a task, application or match changes.
+
 ## 2.1.0 (2026-11-12)
 
 ### What's new
