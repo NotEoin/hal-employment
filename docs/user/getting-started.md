@@ -48,7 +48,9 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    Your record later.
 6. **How Hal thinks.** Choose **On this computer** if your computer runs a local model through Ollama, or
    **Your Claude subscription** (Claude Pro or Max). For Claude, press **Install**, then **Sign in**, then
-   **Test**. Hal never sees your Claude password.
+   **Test**. Hal never sees your Claude password. If the Hal assistant is installed, **Use Hal's own AI**
+   uses its models through the Hal gateway. **Use another local server instead** takes a server such as
+   LM Studio or llama.cpp; put its address in **Settings**, **Hal's brain**. Then press **Test**.
 7. **Browser helper.** The helper lets Hal fill in forms in your own browser, where you are already signed
    in. Pick your browser and follow the steps on the screen, or see
    [Load the browser helper](../howto/load-the-browser-helper.md).
