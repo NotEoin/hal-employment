@@ -11,6 +11,7 @@ import { html, useState } from "../core/html.js";
 import { post, put, del } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
 import { Chip, Empty } from "../ui/controls.js";
+import { ask } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
 import { KIND_FIELDS, KIND_WORDS, ItemForm, basicKey, shown } from "./fields.js";
 import { EducationSources, JobSources, StarButton, WhatChanged } from "./sections.js";
@@ -127,7 +128,12 @@ function ItemCard({ item, conflicts, names }) {
         onClick=${() => act(() => post("/profile/items/" + id + "/hide"), "Hidden. Hal leaves it out of your documents.")}>
         <${Icon} n="eye" c="s" />Hide</button>`}
       ${item.can_delete && html`<button type="button" class="btn danger small" aria-label=${"Delete: " + what}
-        onClick=${() => act(() => del("/profile/items/" + id), "Deleted.")}><${Icon} n="trash" c="s" />Delete</button>`}</div>`}
+        onClick=${async () => {
+          // a card the person made has no file behind it to read it back from, so a stray press loses it
+          if (await ask({ title: "Delete " + what + "?", danger: true, yes: "Delete", no: "Keep it",
+            text: "You added this yourself, so nothing brings it back. To leave it out of your documents for now, press Hide instead." }))
+            await act(() => del("/profile/items/" + id), "Deleted.");
+        }}><${Icon} n="trash" c="s" />Delete</button>`}</div>`}
   </article>`;
 }
 

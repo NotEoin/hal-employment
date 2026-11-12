@@ -38,7 +38,8 @@ the same for any subject: history essays, design portfolios, lab reports, busine
    certificate gets its own card. A reference is kept on its job as the referee's words, not yours.
 6. Each place lists what you added, with its state (**Waiting to be read**, **Read**, **Could not be read**
    or **Kept out: it looks private**) and when Hal last read it. Press **Read again** after you change a
-   file's kind, or **Remove** to take it out with everything Hal took from it.
+   file's kind, or **Remove** to take it out with everything Hal took from it. Hal asks first, as Remove also deletes
+   Hal's copy of the file; your own file stays where you keep it.
 
 To add many files at once, see [Sort a big folder into your record](sort-a-big-folder.md): Hal suggests
 where each file goes, and adds only what you accept.

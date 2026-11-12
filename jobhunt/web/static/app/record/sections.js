@@ -5,7 +5,7 @@
    A panel lists its section's sources with their kind, state and when they were last read, and the person's
    choices: "Showcase" (coursework; the app's word for a star, as "STAR" names a way to tell examples),
    "Make this my current CV" (the newest-dated CV is current until the person picks another; the others show
-   "Older CV, fills gaps"), "Read again", "Remove", and a hint to move one
+   "Older CV, fills gaps"), "Read again", "Remove" (after a yes, as nothing brings it back), and a hint to move one
    that looks like it belongs elsewhere, or (in Documents) looks like another kind of document (Hal never
    moves or changes it on its own). Documents may name the card they are about: a course, a job or a
    certificate. Coursework and lecture material say which of the course's modules they are for: Hal suggests
@@ -21,6 +21,7 @@ import { useApi, toast, invalidate } from "../core/store.js";
 import { plural, agoWords } from "../core/format.js";
 import { isRemote } from "../core/remote.js";
 import { Chip, Note } from "../ui/controls.js";
+import { ask } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
 
 const SOURCES = "/record/sources";
@@ -91,6 +92,15 @@ function ModuleChoice({ s, path }) {
         <option value="">Not for one module</option></select></div></div>`;
 }
 
+/** Takes a source out once the person says yes: it goes with Hal's copy of the file and every fact it gave, and
+    no Undo brings it back, so one stray press must not do it. */
+async function remove(s, path) {
+  const yes = await ask({ title: "Remove " + s.title + "?", danger: true, yes: "Remove", no: "Keep it",
+    text: "Hal takes it out of your record with everything it found in it, and deletes its own copy of the file. "
+      + "Your own file, where you keep it, is not touched." });
+  if (yes) await act(() => del(path), "Removed, with what Hal took from it.");
+}
+
 /** One source: its title, kind, state and last read, with the person's choices. */
 function SourceRow({ s }) {
   const id = encodeURIComponent(s.id);
@@ -136,7 +146,7 @@ function SourceRow({ s }) {
       <button type="button" class="btn quiet small" aria-label=${"Read again: " + s.title}
         onClick=${() => act(() => post(path + "/reread"), "Hal is reading it again.")}><${Icon} n="refresh" c="s" />Read again</button>
       <button type="button" class="btn danger small" aria-label=${"Remove: " + s.title}
-        onClick=${() => act(() => del(path), "Removed, with what Hal took from it.")}><${Icon} n="trash" c="s" />Remove</button></div></li>`;
+        onClick=${() => remove(s, path)}><${Icon} n="trash" c="s" />Remove</button></div></li>`;
 }
 
 /** The pieces a portfolio lists, to tick the ones to add as projects; each ticked piece becomes its own project. */

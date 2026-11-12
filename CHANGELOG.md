@@ -375,6 +375,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Remove and Delete ask first.** **Remove** on a file in Your record took it out at once, with everything
+  Hal found in it and Hal's copy of the file, and **Delete** on a card you made yourself deleted it at once;
+  nothing could bring either back. Hal now asks, and **Keep it** leaves it as it was.
+
 - **No error before your record exists.** Until you first added something, Activity showed Hal's regular
   read of your record folder as an error naming a folder path. It now says there is nothing to read yet.
 

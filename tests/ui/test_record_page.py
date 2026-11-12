@@ -275,6 +275,10 @@ class RecordPage(unittest.TestCase):
         self.assertIn("Oral history", card.inner_text())
         self.clean(p)
         card.get_by_role("button", name="Delete: Dissertation: letters of a made-up mill town").click()
+        # a card made by hand went at one press, with nothing to read it back from (2026-11-12)
+        asked = p.page.get_by_role("dialog")
+        p.shows(asked.get_by_text("You added this yourself"), "the question before deleting")
+        asked.get_by_role("button", name="Delete", exact=True).click()
         p.shows(p.page.get_by_text("Nothing here yet"), "the empty list")
         with closing(db.connect()) as con:
             self.assertEqual(store.items(con, "project"), [])
