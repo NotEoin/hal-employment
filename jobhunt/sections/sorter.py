@@ -309,6 +309,10 @@ def place_kind(p: Proposal, rule: rank.Rule, text: str, in_course: bool, *, vaul
                 "Your own work in a course folder.")
     elif in_course and (kind in STUDIED_KINDS or _nearest(p.rel, WORK_FOLDER)):
         p.place("lecture", taught, "Notes or slides in a course folder: what you studied.")
+    elif kind in WORK_KINDS and (DISSERTATION_NAME.search(stem) or ESSAY_NAME.search(stem)) \
+            and sort_kinds.submitted_work(p.rel, text):
+        # files added one by one have no course folder; a dissertation added on its own was left out (2026-11-12)
+        p.place("coursework", _work_kind(stem, suffix), "Named as your dissertation or an essay, with its own words.")
     elif vault and kind in ("notes", "slides"):
         p.place("lecture", taught, "A note in your notes app: what you studied.")
     elif kind == "project":

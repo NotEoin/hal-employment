@@ -713,6 +713,17 @@ class Sorter(unittest.TestCase):
         self.assertEqual(found["zine.md"].state, "left_out")
         self.assertIn("Hal's AI did not answer", found["zine.md"].why)
 
+    def test_a_dissertation_or_essay_added_on_its_own_is_coursework(self):
+        """A dissertation uploaded on its own, with no course folder, was left out (2026-11-12)."""
+        body = " ".join(["The overseers' accounts of three made-up parishes show relief in kind giving way to cash."]
+                        * 20)
+        with home() as (con, _vault, files), fake_ai():
+            put(files, "up/Dissertation - Poor relief.docx.md", f"# Poor relief\n\n{body}\n")
+            put(files, "up/Essay - Reform petitions.md", f"# Reform petitions\n\n{body}\n")
+            found = by_rel(sorter.propose(con, files / "up", local=False, prefix=""))
+        self.assertEqual([(found[n].section, found[n].doc_kind) for n in sorted(found)],
+                         [("coursework", "dissertation"), ("coursework", "essay")])
+
     def test_a_zips_code_project_is_proposed_as_its_files(self):
         with home() as (con, _vault, files), fake_ai():
             put(files, "unpacked/tidewatch/README.md", README)

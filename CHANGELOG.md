@@ -375,6 +375,10 @@ What changed in each version, in plain words.
 - **LibreOffice files are read.** An essay or notes saved as `.odt` (or slides and sheets as `.odp` and
   `.ods`) showed "Hal found no words it could read in it". Hal now reads their headings and paragraphs.
 
+- **A dissertation added on its own goes to Coursework.** A dissertation or essay uploaded by itself, outside
+  a course folder, was left out as "Hal could not tell where it goes". Named as such and with its own
+  words, it now goes to Coursework and waits for you to choose its course.
+
 - **A sort says when the AI did not answer.** A file the AI should have placed, while it was busy or
   stopped, was left out as if Hal had looked and found nothing. Now it says the AI did not answer, so
   you can choose where it goes or sort again later.
