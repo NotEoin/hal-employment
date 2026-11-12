@@ -19,7 +19,8 @@ What changed in each version, in plain words.
 
 - **Someone else's CV gives you nothing.** A CV headed by another person's name that never names you, such
   as a classmate's CV in a folder you sorted, is kept out with whose it is. It no longer gives you their
-  jobs and projects. A CV in a name you also go by (**Other names you go by** in **Settings**) is still yours.
+  jobs and projects. A CV in a name you also go by (**Other names you go by** in **Settings**) is still yours,
+  and so is one that writes your name with accents you left out, or the other way round.
 
 - **A transcript is dated by the transcript, not your birthday.** Hal skips a date of birth when it dates a
   document, so a transcript with your date of birth at the top no longer shows that year.

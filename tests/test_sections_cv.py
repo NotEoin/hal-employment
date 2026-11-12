@@ -139,6 +139,13 @@ class SomeoneElsesCv(unittest.TestCase):
         irish = "Siobh\u00e1n N\u00ed Bhriain"
         self.assertEqual(cv.someone_else(f"{irish}\nArchivist", "Avery Quillon"), irish)
         self.assertEqual(cv.someone_else(f"{irish}\nArchivist", irish), "")
+
+    def test_a_name_typed_without_its_accents_still_finds_your_own_cv(self):
+        # matching was exact, so "Siobhan" in setup kept out a CV headed "Ren\u00e9e" as someone else's
+        accented = "Ren\u00e9e Mu\u00f1oz"
+        self.assertEqual(cv.someone_else(f"{accented}\nArchivist", "Renee Munoz"), "")
+        self.assertEqual(cv.someone_else("Renee Munoz\nArchivist", accented), "")
+        self.assertEqual(cv.someone_else("Quentin Arbuckle\nStudent", "Renee Munoz"), "Quentin Arbuckle")
         self.assertEqual(cv.someone_else("Quentin Arbuckle\nStudent", "Avery Quillon Arbuckle"), "",
                          "a CV in a name the person also goes by is theirs")
 

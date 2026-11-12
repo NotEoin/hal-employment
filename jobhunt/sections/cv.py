@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+import unicodedata
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -99,13 +100,18 @@ def _name_line(line: str) -> str:
     return " ".join(words)
 
 
+def _folded(text: str) -> str:
+    """Lower case without accents, so a name typed as "Renee" finds the CV headed with its accent."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)).lower()
+
+
 def someone_else(text: str, names: str) -> str:
     """The name heading a CV when it is plainly another person's: a name in its first lines, with no word of
-    `names` (the person's own, space-separated) anywhere in it; "" when it may be the person's."""
-    own = re.findall(r"[^\W\d_]{2,}", names.lower())
+    `names` (the person's own, space-separated) anywhere in it, accents aside; "" when it may be the person's."""
+    own = re.findall(r"[^\W\d_]{2,}", _folded(names))
     if not own:
         return ""
-    plain = text.lower()
+    plain = _folded(text)
     if any(re.search(rf"(?<![^\W\d_]){re.escape(w)}(?![^\W\d_])", plain) for w in own):
         return ""
     head = [line for line in text.splitlines() if line.strip()
