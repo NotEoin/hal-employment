@@ -372,6 +372,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A file is read once.** Asking Hal to read what is waiting while it was already reading those files,
+  for example after Hal restarted and carried its read on, read every file a second time beside it. Hal now
+  leaves files to the read that already has them.
+
 - **One course for one diploma.** A CV that wrote "Diploma, Computing" at the college where another CV
   wrote "Access to Higher Education Diploma" made two course cards. A plain diploma now joins the named
   one at the same place when the subject or the dates agree.

@@ -200,6 +200,21 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual((r["waiting"], ended(r["action_id"])["state"]), (1, "done"))
         self.assertEqual(self.c.post("/api/v2/record/read-waiting", {}).json(), {"waiting": 0, "action_id": None})
 
+    def test_reading_what_waits_leaves_a_read_under_way_to_it(self):
+        """Asked while a read carried on after a restart, it read every file a second time beside it
+        (2026-11-11)."""
+        _, first = form(self.hal, self.c, "/document", [("Avery Quillon CV.md", CV, "")])
+        ended(first["action_id"])
+        source_id = first["added"][0]["id"]
+        with db.connect() as con:
+            con.execute("UPDATE record_sources SET state = 'new'")
+            con.execute("INSERT INTO actions (id, kind, state, params, created) VALUES ('made-up-read', "
+                        "'record.sources', 'running', ?, '2026-11-11T23:43:54Z')", (json.dumps({"ids": [source_id]}),))
+        r = self.c.post("/api/v2/record/read-waiting", {}).json()
+        with closing(db.connect()) as con:
+            reads = con.execute("SELECT count(*) FROM actions WHERE kind = 'record.sources'").fetchone()[0]
+        self.assertEqual((r["waiting"], r["action_id"], reads), (1, "made-up-read", 2))
+
     def test_the_upload_takes_the_same_size_as_the_record_upload(self):
         found = router.find("POST", "/api/v2/record/sources/document")
         self.assertEqual(found[0].max_body, UPLOAD_MAX_BODY)

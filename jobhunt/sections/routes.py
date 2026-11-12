@@ -230,10 +230,15 @@ def reread(req: Request) -> dict:
 
 @route("POST", "/api/v2/record/read-waiting", auth="session_or_local")
 def read_waiting(req: Request) -> dict:
-    """Starts reading every source still waiting to be read, such as those that waited for Hal's AI."""
+    """Starts reading every source still waiting to be read, such as those that waited for Hal's AI; one a read
+    already under way holds is left to it, and with nothing else waiting the reply names that read. Asked again
+    while a read carried on after a restart, it read every file a second time beside it (2026-11-11)."""
     ids = [r["id"] for r in req.con.execute(
         "SELECT id FROM record_sources WHERE state IN ('new', 'reading') ORDER BY id").fetchall()]
-    return {"waiting": len(ids), "action_id": _start(req, ids, why="You asked Hal to read what is waiting")}
+    held = actions.being_read(req.con)
+    rest = [i for i in ids if i not in held]
+    started = _start(req, rest, why="You asked Hal to read what is waiting")
+    return {"waiting": len(ids), "action_id": started or next((held[i] for i in ids if i in held), None)}
 
 
 @route("POST", PREFIX + "/{source_id}/back")

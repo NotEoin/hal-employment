@@ -11,6 +11,7 @@ background, so it waits behind what the person asked for (priority 2), one at a 
 from __future__ import annotations
 
 import contextvars
+import json
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 
@@ -190,6 +191,23 @@ class _Reading:
         while time.monotonic() < self.resume_at:
             self.ctx.checkpoint()
             time.sleep(min(CHECK_S, max(0.0, self.resume_at - time.monotonic())))
+
+
+def being_read(con) -> dict[int, str]:
+    """The sources a `record.sources` action not yet ended is reading, with that action's id: {source id: id}.
+    A source found inside one of them counts too, as a read carried on reads those (`_still_waiting`)."""
+    runner.flush()
+    held: dict[int, str] = {}
+    marks = ",".join("?" * len(runner.ACTIVE))
+    for row in con.execute(f"SELECT id, params FROM actions WHERE kind = ? AND state IN ({marks}) ORDER BY created",
+                           (KIND, *runner.ACTIVE)):
+        for source_id in json.loads(row["params"] or "{}").get("ids", []):
+            held.setdefault(int(source_id), row["id"])
+    if held:
+        marks = ",".join("?" * len(held))
+        for row in con.execute(f"SELECT id, parent_id FROM record_sources WHERE parent_id IN ({marks})", list(held)):
+            held.setdefault(row["id"], held[row["parent_id"]])
+    return held
 
 
 def _still_waiting(con, ids: list[int]) -> list[int]:
