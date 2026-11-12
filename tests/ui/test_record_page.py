@@ -171,6 +171,17 @@ class RecordPage(unittest.TestCase):
             self.assertIn(words, body)
         self.assertEqual(self.errors(p), [])
 
+    def test_an_empty_record_says_what_to_do_first(self) -> None:
+        """A first visit said "Everything is checked." beside nothing at all, and "No CVs yet." twice
+        (2026-11-12)."""
+        p = self.page()
+        summary = p.page.locator("section", has=p.page.locator("h2", has_text="Your profile"))
+        p.shows(summary.get_by_text("Nothing yet. Add your CV and Hal fills this in from it."), "the first step")
+        self.assertNotIn("Everything is checked", summary.inner_text())
+        cvs = p.page.locator("section", has=p.page.locator("h2", has_text="Your CVs"))
+        p.shows(cvs.get_by_text("No CVs yet."), "the empty CV list")
+        self.assertEqual(cvs.get_by_text("No CVs yet.").count(), 1)
+
     def test_the_overview_counts_each_kind_and_what_is_left_to_check(self) -> None:
         self.profile()
         p = self.page()

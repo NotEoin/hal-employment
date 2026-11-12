@@ -91,7 +91,8 @@ function Summary({ profile, onTab }) {
   const kinds = profile.kinds.filter(k => k.kind !== "basic" && k.kind !== "link");
   const open = (profile.conflicts || []).length;
   return html`<section class="card stack s" aria-labelledby="rec-sum-h"><h2 class="h2" id="rec-sum-h">Your profile</h2>
-    <p class="small sub rec-line">What Hal found about you in your files. ${profile.to_check ? plural(profile.to_check, "thing") + " to check." : "Everything is checked."}</p>
+    <p class="small sub rec-line">${!kinds.some(k => k.n) ? "Nothing yet. Add your CV and Hal fills this in from it."
+      : "What Hal found about you in your files. " + (profile.to_check ? plural(profile.to_check, "thing") + " to check." : "Everything is checked.")}</p>
     ${(profile.to_check > 0 || open > 0) && html`<div><button type="button" class="btn primary" onClick=${() => go("check")}>
       <${Icon} n="check" c="s" />Check your record</button>
       <p class="small sub rec-line">Hal only uses the facts you have checked.</p></div>`}

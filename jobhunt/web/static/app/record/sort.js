@@ -55,6 +55,13 @@ const PAGE = 50;            // jobhunt/sections/sorts.py PAGE
 const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden";
 const STATE_WORDS = { new: "Waiting to start", sorting: "Sorting", ready: "Ready for you to check", failed: "Could not be sorted",
   undone: "Undone" };
+/** A sort's state in words; a ready sort with nothing left to check says so, not "Ready for you to check. 0 to
+    check" (2026-11-12). */
+function stateWords(s) {
+  if (s.state === "ready" && s.counts && !s.counts.proposed) return "All checked";
+  return STATE_WORDS[s.state] || s.state;
+}
+
 const PATH_SHOWN = 90;      // characters of a path shown in full; a longer one keeps its start and its end
 const CONFIRM_OVER = 50;    // an add of more files than this asks first: a few minutes' reading at most
 const MINUTE_S = 60, HOUR_S = 3600;
@@ -336,7 +343,7 @@ export function SortReview({ id }) {
   const table = current.id !== "courses" && !running;
   return html`<section class="card stack s rec-sort" aria-labelledby="rec-sort-h" data-sort=${id}>
     <div class="row rec-head"><h2 class="h2 grow" id="rec-sort-h">${data.kind === "move" ? "Moving your record to sections" : "Sorting " + data.label}</h2></div>
-    <p class="small sub rec-line">${STATE_WORDS[data.state] || data.state}. Nothing goes into your record until you add it.
+    <p class="small sub rec-line">${stateWords(data)}. Nothing goes into your record until you add it.
       ${data.error && " " + data.error}</p>
     ${running && html`<${Bar} pct=${0} label="Sorting" />`}
     <${Adds} id=${id} data=${data} />
@@ -438,7 +445,7 @@ export function SortCard() {
         all at once. Move them into the parts of your record they belong in: you check each one first, and one click undoes it.</p>
         <button type="button" class="btn" onClick=${moveRecord}>Move my record to sections</button></div>`}
       ${sorts.length > 0 && html`<ul class="rec-paths">${sorts.map(s => html`<li class="row wrap" key=${s.id}>
-        <span class="grow"><b>${s.label || "Your files"}</b>: ${STATE_WORDS[s.state] || s.state}.
+        <span class="grow"><b>${s.label || "Your files"}</b>: ${stateWords(s)}.
           ${s.counts.proposed} to check, ${s.counts.added} added, ${s.counts.left_out} left out.</span>
         <button type="button" class="btn small" onClick=${() => openSort(s.id)}>Check the list</button>
         <button type="button" class="btn quiet small" aria-label=${"Forget " + (s.label || "this sort")} onClick=${() => forget(s)}>

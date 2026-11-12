@@ -375,6 +375,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **Clearer words on an empty record.** Your profile said "Everything is checked." before Hal had found
+  anything; it now says to add your CV first. A sorted folder with nothing left to check says "All
+  checked" instead of "Ready for you to check. 0 to check".
+
 - **The CV you give in setup is in Your record.** After adding a CV in setup or on My CV, Your record
   said "No CVs yet." (twice). The file now also goes into Your record's CVs, once, and Hal reads your
   courses and jobs from it there.
