@@ -352,7 +352,10 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(away.calls, 3)
 
     def test_an_ai_that_is_not_set_up_ends_the_read_with_the_rest_still_waiting(self):
-        with home() as (con, _, _), reader("document", made=AiAway("document", 99, "not_installed")) as away:
+        # one read at a time: two at once both start before either learns the AI is missing (passed only where
+        # this computer's Ollama made the default one call at a time, 2026-11-12)
+        with home() as (con, _, _), reader("document", made=AiAway("document", 99, "not_installed")) as away, \
+                mock.patch.object(ai, "at_once", lambda role="checker": 1):
             ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode()),
                                                          Incoming("essay.md", ESSAY.encode())])["added"]
             done = runner.run(actions.KIND, params={"ids": ids})

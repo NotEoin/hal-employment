@@ -2,6 +2,7 @@
 as the Settings page's design shows it, and the legacy-key map points at real settings.
 """
 
+import os
 import sys
 import unittest
 from unittest import mock
@@ -258,12 +259,21 @@ class Defaults(unittest.TestCase):
         self.assertEqual(registry.default_of(REGISTRY["ai.model.writer"], claude), "sonnet")
 
     def test_the_suggested_ai_is_local_only_when_ollama_answers_on_linux(self):
+        # the probes are faked here; outside this test a test run never asks this computer's Ollama
+        self.enterContext(mock.patch.dict(os.environ, {"HAL_TEST_REAL_AI": "1"}))
+        self.enterContext(mock.patch.object(ai_catalog, "hal_answers", return_value=False))
         with mock.patch.object(sys, "platform", "linux"):
             with mock.patch.object(ai_catalog, "ollama_answers", return_value=True):
                 self.assertEqual(ai_catalog.suggested_provider(fake_get()), "local")
             with mock.patch.object(ai_catalog, "ollama_answers", return_value=False):
                 self.assertEqual(ai_catalog.suggested_provider(fake_get()), "claude_cli")
         with mock.patch.object(sys, "platform", "win32"):
+            self.assertEqual(ai_catalog.suggested_provider(fake_get()), "claude_cli")
+
+    def test_a_test_run_never_asks_this_computers_ollama(self):
+        # regression: tests passed here only because this computer's Ollama answered, and failed on CI (2026-11-12)
+        with mock.patch.object(sys, "platform", "linux"), \
+                mock.patch.object(ai_catalog, "ollama_answers", side_effect=AssertionError("asked Ollama")):
             self.assertEqual(ai_catalog.suggested_provider(fake_get()), "claude_cli")
 
     def test_the_simple_menu_is_off_in_developer_mode(self):

@@ -49,10 +49,12 @@ def hal_answers(get) -> bool:
 
 
 def suggested_provider(get) -> str:
-    """Hal when its gateway answers; else Claude on Windows; on Linux this computer if Ollama answers, else Claude."""
+    """Hal when its gateway answers; else Claude on Windows; on Linux this computer if Ollama answers, else Claude.
+    A test run never asks this computer's Ollama, as it never asks a live Hal: tests passed here only because
+    Ollama answered, and failed on CI (2026-11-12)."""
     if hal_answers(get):
         return "hal"
-    if sys.platform == "win32":
+    if sys.platform == "win32" or (os.environ.get("HAL_TEST_MODE") == "1" and not os.environ.get("HAL_TEST_REAL_AI")):
         return "claude_cli"
     return "local" if ollama_answers(safe(get, "ai.ollama_url") or OLLAMA_URL) else "claude_cli"
 

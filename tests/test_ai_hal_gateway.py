@@ -232,6 +232,7 @@ class Gateway(InHome):
 
     def test_hal_keeps_as_many_calls_with_the_gateway_as_its_model_serves(self):
         """Hal read the record one file at a time while Hal's writer served two at once."""
+        settings.set("ai.provider", "hal", by="you")   # the checker model is then the gateway's, not Claude's
         settings.set("ai.parallel", 1, by="you")
         _Gateway.slots = 2
         with ai.use(GatewayBackend(self.url, self.token)):
