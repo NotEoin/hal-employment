@@ -155,8 +155,8 @@ class Review(unittest.TestCase):
     def test_stop_reading_stops_the_add_action_cleanly(self):
         read_all = actions.read_all
 
-        def read_one_then_stop(ctx, ids, allowed):
-            out = read_all(ctx, ids[:1], allowed)
+        def read_one_then_stop(ctx, ids, allowed, **kw):
+            out = read_all(ctx, ids[:1], allowed, **kw)
             runner.stop(ctx.action_id)
             ctx.checkpoint()
             return out

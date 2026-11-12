@@ -79,7 +79,7 @@ def accept_sort(ctx, sort_id: int, add_id: int | None = None) -> dict:
         states = move.before_accept(ctx.con, int(sort_id))
     try:
         ids = sorts.add_accepted(ctx.con, int(sort_id), add_id, checkpoint=ctx.checkpoint)
-        out = actions.read_all(ctx, ids, set())
+        out = actions.read_all(ctx, ids, set(), batch=len(ids) > actions.BULK_FILES)
     except runner.Stopped:
         if add_id is not None:
             sorts.stop_add(ctx.con, int(add_id))

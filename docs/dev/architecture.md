@@ -299,7 +299,8 @@ comes from their settings.
 
 Backends: `ai/ollama.py` (a local model through Ollama), `ai/openai_compat.py` (any local server that speaks
 the OpenAI format), `ai/hal_gateway.py` (the Hal suite's model gateway: the same format plus the owner token
-read from `ai.hal_token_file` at each call; inside `as_batch()`, which `record.sources` wraps its reads in,
+read from `ai.hal_token_file` at each call; inside `as_batch()`, which a bulk or background record read
+(`read_all(batch=True)`: read-waiting, more than `BULK_FILES` files, the project refresh) wraps its reads in,
 the batch token from `ai.hal_batch_token_file`, and a 503 `gpu_busy` is `LLMUnavailable(kind="gpu_busy")`) and `ai/claude_cli.py` (Claude Code on the person's own subscription: prompt on stdin,
 system prompt in a file deleted after the call, tools off). The default is Hal's gateway when it answers
 with the stored token, else the local model on Linux when Ollama answers, else Claude. With Hal chosen a

@@ -359,8 +359,26 @@ class Pipeline(unittest.TestCase):
                 done = runner.run(actions.KIND, params={"ids": ids, "_carry_on_from": "an-earlier-read"})
         self.assertEqual((done["result"]["read"], again.calls), (1, 1))
 
-    def test_the_action_reads_as_batch_work_so_it_gives_the_card_up(self):
+    def test_a_bulk_read_is_batch_work_so_it_gives_the_card_up(self):
         """Regression: the read held Hal's gateway as a service, which kept gpu-light's batch jobs off the card."""
+        seen = []
+
+        class Watching(AiAway):
+            def read(self, source):
+                seen.append(hal_gateway._batch.get())
+                return super().read(source)
+
+        with home() as (con, _, _), reader("document", made=Watching("document", fails=0)):
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode()),
+                                                         Incoming("essay.md", ESSAY.encode())])["added"]
+            runner.run(actions.KIND, params={"ids": ids[:1], "batch": True})
+            with mock.patch.object(actions, "BULK_FILES", 1):
+                runner.run(actions.KIND, params={"ids": ids})
+        self.assertEqual(seen, [True, True, True])
+
+    def test_a_few_files_added_on_the_page_are_not_batch_work(self):
+        """A person who added three files waited behind every other request while their reads were batch work
+        (2026-11-12)."""
         seen = []
 
         class Watching(AiAway):
@@ -371,7 +389,7 @@ class Pipeline(unittest.TestCase):
         with home() as (con, _, _), reader("document", made=Watching("document", fails=0)):
             ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])["added"]
             runner.run(actions.KIND, params={"ids": ids})
-        self.assertEqual(seen, [True])
+        self.assertEqual(seen, [False])
 
     def test_the_action_keeps_as_many_reads_with_the_ai_as_it_serves(self):
         """Hal read the record one file at a time while Hal's writer served two at once (2026-11-11)."""

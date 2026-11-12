@@ -60,9 +60,10 @@ the gateway's address and token from two settings, so nothing else is needed.
    ```
 
 The gateway claims the graphics card itself, through gpu-light when that is installed, so Hal Employment
-does not claim it a second time. With the batch token, the gateway holds that claim as batch work while
-it reads your record: it gives the model to a chat or voice question first, and the read waits until the
-card is free again. Without one, a read holds the gateway's service claim, which keeps gpu-light's batch
+does not claim it a second time. With the batch token, the gateway holds that claim as batch work during a
+big read of your record (reading what waits, an add of more than 50 files, the regular check of your
+projects): it gives the model to a chat or voice question first, and the read waits until the card is free
+again. A few files you add yourself are read straight away, not as batch work. Without one, a read holds the gateway's service claim, which keeps gpu-light's batch
 jobs waiting. If the gateway also fronts an online model (`allow_remote = true`),
 Hal Employment does not list that model and refuses to use it, so your data stays on this computer. To let Hal Employment fall back to Claude, pick **Claude subscription**
 yourself; it never switches by itself.

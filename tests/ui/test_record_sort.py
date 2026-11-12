@@ -284,7 +284,7 @@ class SortAFolder(unittest.TestCase):
     def test_reading_can_be_stopped_and_the_add_undone(self) -> None:
         read_all = source_actions.read_all
 
-        def read_one_then_wait(ctx, ids, allowed):
+        def read_one_then_wait(ctx, ids, allowed, **kw):
             """Reads the first file, then waits as a slow AI would, until the person stops it."""
             out = read_all(ctx, ids[:1], allowed)
             ctx.progress(1, len(ids))

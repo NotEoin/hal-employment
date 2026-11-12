@@ -7,9 +7,12 @@ after a restart it reads the same sources again, which gives the same result. Wh
 out), it publishes a `profile` event naming them, as a read changes the cards: the profile tabs follow those
 events, not the action's, and kept showing the cards from before a read (2026-11-09). The refresh runs in the
 background, so it waits behind what the person asked for (priority 2), one at a time (`exclusive="kind"`).
+Bulk and background reads (read-waiting, more than `BULK_FILES` files, the refresh) are batch work for Hal's
+gateway; a few files added on the page are not, as batch work waits behind every other request.
 """
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import json
 import time
@@ -26,6 +29,7 @@ AI_RETRY_S = 30            # a model parked for a voice question is back within 
 AI_RETRY_MAX_S = 300       # the longest wait between two tries
 AI_WAIT_S = 12 * 3600      # a model away longer than a night is not coming back by itself
 CHECK_S = 1                # how often a wait looks for a stop
+BULK_FILES = 50            # an add of more files is bulk work (as the page asks first past this: sort.js CONFIRM_OVER)
 AI_GONE = ("signed_out", "free_plan", "local_only", "not_installed")   # waiting does not bring these back
 EXAMPLE_TEXT = ("# Volunteer award\n\nAwarded to Robin Testwell on 5 March 2025 for work at the Made-up Heritage "
                 "Trust.\n")
@@ -47,12 +51,13 @@ def _example(_world) -> dict:
 @runner.action(KIND, area="documents", label="Reading what you added to your record",
                why="You added files or links to your record", priority=1, exclusive="none", resumable=True,
                example=_example)
-def read_sources(ctx, ids: list, allow: list | None = None) -> dict:
-    """Reads each source in `ids` (those in `allow` even when they look private); says what each gave."""
-    return read_all(ctx, ids, {int(i) for i in allow or []})
+def read_sources(ctx, ids: list, allow: list | None = None, batch: bool = False) -> dict:
+    """Reads each source in `ids` (those in `allow` even when they look private); says what each gave. `batch`
+    reads them as batch work (`read_all`)."""
+    return read_all(ctx, ids, {int(i) for i in allow or []}, batch=batch or len(ids) > BULK_FILES)
 
 
-def read_all(ctx, ids: list, allowed: set[int]) -> dict:
+def read_all(ctx, ids: list, allowed: set[int], *, batch: bool = False) -> dict:
     """Reads each source in `ids` and the sources found inside them, once each; says what each gave.
 
     As many sources are with the AI at once as it serves (`ai.at_once`: Hal's writer has two slots), on worker
@@ -61,9 +66,10 @@ def read_all(ctx, ids: list, allowed: set[int]) -> dict:
     tried again, after `AI_RETRY_S` and then longer waits up to `AI_RETRY_MAX_S`, for up to `AI_WAIT_S` in all,
     so a model that stops for a while (another program took the graphics card) holds the read up instead of
     failing it; an AI that is not set up (`AI_GONE`) ends the read with the rest still waiting. Carried on after
-    a restart, it reads only what is still waiting, and the sources found inside those read before. The reads
-    are batch work for Hal's gateway (`as_batch`), so they give the graphics card up to the person's chat and
-    voice.
+    a restart, it reads only what is still waiting, and the sources found inside those read before. With
+    `batch` the reads are batch work for Hal's gateway (`as_batch`), so they give the graphics card up to the
+    person's chat and voice: a bulk or background read is, and a few files the person just added on the page
+    are not, as batch work waits behind every other request (2026-11-12).
     """
     out = {"read": 0, "waiting": 0, "failed": 0, "kept_out": 0, "facts": 0, "missing": 0, "waiting_ai": 0}
     todo = list(dict.fromkeys(int(i) for i in ids))   # grows by the sources a read finds inside one
@@ -72,7 +78,7 @@ def read_all(ctx, ids: list, allowed: set[int]) -> dict:
     else:
         with ctx.con:
             ctx.con.executemany("UPDATE record_sources SET state = 'new' WHERE id = ?", [(i,) for i in todo])
-    with as_batch():
+    with as_batch() if batch else contextlib.nullcontext():
         reading = _Reading(ctx, out, todo, allowed)
         workers = max(1, ai.at_once())
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="record-read") as pool:
@@ -240,7 +246,7 @@ def refresh_projects(ctx) -> dict:
 
     ctx.step("Checking your projects")
     ids = refresh.changed(ctx.con)
-    out = {**read_all(ctx, ids, set()), "checked": ctx.con.execute(
+    out = {**read_all(ctx, ids, set(), batch=True), "checked": ctx.con.execute(
         "SELECT count(*) FROM record_sources WHERE section = ?", (refresh.SECTION,)).fetchone()[0]}
     if not ids:
         ctx.changed("Nothing in your projects changed.")
@@ -248,11 +254,14 @@ def refresh_projects(ctx) -> dict:
 
 
 def queue(ids: list[int], *, allow: list[int] = (), session_id: str | None = None, remote: bool = False,
-          why: str | None = None) -> str | None:
-    """Starts reading these sources and returns the action's id; None when there is nothing to read."""
+          why: str | None = None, batch: bool = False) -> str | None:
+    """Starts reading these sources and returns the action's id; None when there is nothing to read. `batch`
+    reads them as batch work, as a bulk read from the command line is."""
     if not ids:
         return None
     params = {"ids": [int(i) for i in ids]}
     if allow:
         params["allow"] = [int(i) for i in allow]
+    if batch:
+        params["batch"] = True
     return runner.start(KIND, params=params, session_id=session_id, remote=remote, why=why)

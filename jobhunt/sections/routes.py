@@ -96,8 +96,8 @@ def _body(req: Request) -> dict:
     return req.body if isinstance(req.body, dict) else {}
 
 
-def _start(req: Request, ids: list[int], *, allow: list[int] = (), why: str) -> str | None:
-    return actions.queue(ids, allow=allow, session_id=_session(req), remote=req.remote, why=why)
+def _start(req: Request, ids: list[int], *, allow: list[int] = (), why: str, batch: bool = False) -> str | None:
+    return actions.queue(ids, allow=allow, session_id=_session(req), remote=req.remote, why=why, batch=batch)
 
 
 def _section(req: Request) -> registry.Section:
@@ -237,7 +237,7 @@ def read_waiting(req: Request) -> dict:
         "SELECT id FROM record_sources WHERE state IN ('new', 'reading') ORDER BY id").fetchall()]
     held = actions.being_read(req.con)
     rest = [i for i in ids if i not in held]
-    started = _start(req, rest, why="You asked Hal to read what is waiting")
+    started = _start(req, rest, why="You asked Hal to read what is waiting", batch=True)
     return {"waiting": len(ids), "action_id": started or next((held[i] for i in ids if i in held), None)}
 
 

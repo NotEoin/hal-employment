@@ -198,6 +198,9 @@ class SourceRoutes(unittest.TestCase):
             con.execute("UPDATE record_sources SET state = 'new'")
         r = self.c.post("/api/v2/record/read-waiting", {}).json()
         self.assertEqual((r["waiting"], ended(r["action_id"])["state"]), (1, "done"))
+        with closing(db.connect()) as con:
+            params = json.loads(con.execute("SELECT params FROM actions WHERE id = ?", (r["action_id"],)).fetchone()[0])
+        self.assertTrue(params["batch"], "reading what waits is bulk work")
         self.assertEqual(self.c.post("/api/v2/record/read-waiting", {}).json(), {"waiting": 0, "action_id": None})
 
     def test_reading_what_waits_leaves_a_read_under_way_to_it(self):
