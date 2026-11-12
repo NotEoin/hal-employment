@@ -37,6 +37,9 @@ REASON_CHARS = 200              # the server's own reason, shown to the person, 
 # at the 78-93 tok/s Hal's writer gives, the cap ends a runaway in about 3 minutes, inside the 300 s wait.
 MAX_TOKENS = 16384
 RETRY_TEMPERATURE = 0.7         # a second try at an answer that ran on
+TRIES = 2                       # an answer that ran on is asked once more, never more
+RAN_ON = ("The AI's answer ran on without finishing, twice. Try again; if it keeps happening, choose another "
+          "model in Settings, Hal's brain.")
 
 
 def _address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -104,7 +107,7 @@ class OpenAICompatBackend:
         optional = [keys for keys in (tuple(self.EXTRA), ("response_format",)) if keys and keys[0] in payload]
         timeout = req.timeout or DEFAULT_TIMEOUT_S
         start = time.monotonic()
-        for attempt in range(2):
+        for attempt in range(TRIES):
             out = self._post_chat(payload, optional, timeout)
             try:
                 choice = out["choices"][0]
@@ -116,8 +119,7 @@ class OpenAICompatBackend:
                                   ms=int((time.monotonic() - start) * 1000))
             log.warning("%s ran on to %d tokens (try %d)", model, MAX_TOKENS, attempt + 1)
             payload["temperature"] = max(payload["temperature"], RETRY_TEMPERATURE)
-        raise LLMUnavailable("The AI's answer ran on without finishing, twice. Try again; if it keeps happening, "
-                             "choose another model in Settings, Hal's brain.")
+        raise LLMUnavailable(RAN_ON)
 
     def _post_chat(self, payload: dict, optional: list[tuple[str, ...]], timeout: float) -> dict:
         """The server's reply to `payload`; a 400 or 422 is asked again without each `optional` step in turn

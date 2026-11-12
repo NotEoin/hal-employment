@@ -304,7 +304,8 @@ read from `ai.hal_token_file` at each call; inside `as_batch()`, which a bulk or
 the batch token from `ai.hal_batch_token_file`, a 503 `gpu_busy` is `LLMUnavailable(kind="gpu_busy")`, and
 every call carries `EXTRA`, `thinking_budget_tokens: THINKING_BUDGET_TOKENS`). Every OpenAI-format call asks
 for at most `openai_compat.MAX_TOKENS`; an answer with `finish_reason` "length" is asked once more at
-`RETRY_TEMPERATURE`, then raises `LLMUnavailable`, and a 400 or 422 is asked again without `EXTRA`, then
+`RETRY_TEMPERATURE`, then raises `LLMUnavailable` (`ai/ollama.py` does the same with `num_predict` and
+`done_reason`), and a 400 or 422 is asked again without `EXTRA`, then
 without `response_format` and `ai/claude_cli.py` (Claude Code on the person's own subscription: prompt on stdin,
 system prompt in a file deleted after the call, tools off). The default is Hal's gateway when it answers
 with the stored token, else the local model on Linux when Ollama answers, else Claude. With Hal chosen a

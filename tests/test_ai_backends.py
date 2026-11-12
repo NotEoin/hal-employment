@@ -16,7 +16,7 @@ from jobhunt import ai, llm
 from jobhunt.ai import gpu, provider
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.ai.ollama import OllamaBackend
-from jobhunt.ai.openai_compat import OpenAICompatBackend, classify
+from jobhunt.ai.openai_compat import MAX_TOKENS, RETRY_TEMPERATURE, OpenAICompatBackend, classify
 from jobhunt.core import paths, settings
 from jobhunt.core.settings import store
 from jobhunt.core.settings.catalog import ai as ai_catalog
@@ -156,6 +156,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     seen: ClassVar[list] = []
     refuse_format = False
     off = False
+    ran_on = 0          # how many /api/chat answers still to cut off at the cap
 
     def log_message(self, *args):
         pass
@@ -178,8 +179,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         type(self).seen.append((self.path, body))
-        if self.path == "/api/chat":
-            self._send(200, {"message": {"content": '{"ok": true}'}})
+        if self.path == "/api/chat" and type(self).ran_on:
+            type(self).ran_on -= 1
+            self._send(200, {"message": {"content": "and so on and so on"}, "done_reason": "length"})
+        elif self.path == "/api/chat":
+            self._send(200, {"message": {"content": '{"ok": true}'}, "done_reason": "stop"})
         elif self.path == "/api/embed":
             self._send(200, {"embeddings": [[0.1, 0.2] for _ in body["input"]]})
         elif type(self).off:
@@ -204,8 +208,8 @@ class Servers(unittest.TestCase):
         out = be.chat(ai.ChatRequest(system="s", user="u", json_out=True, ctx=8192, timeout=5), "big:30b")
         self.assertEqual(out.text, '{"ok": true}')
         body = _Handler.seen[0][1]
-        self.assertEqual((body["think"], body["format"], body["options"]), (False, "json", {"temperature": 0.1,
-                                                                                          "num_ctx": 8192}))
+        self.assertEqual((body["think"], body["format"], body["options"]),
+                         (False, "json", {"temperature": 0.1, "num_ctx": 8192, "num_predict": MAX_TOKENS}))
         self.assertEqual((be.default_model("writer"), be.default_model("quick")), ("big:30b", "small:1b"))
         self.assertTrue(be.status().ready)
         self.assertEqual(be.embed(["a", "b"], "made-up-embed"), [[0.1, 0.2], [0.1, 0.2]])
@@ -215,8 +219,24 @@ class Servers(unittest.TestCase):
         OpenAICompatBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5, temperature=0.4), "m")
         OpenAICompatBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "m")
         bodies = [b for _, b in _Handler.seen]
-        self.assertEqual(bodies[0]["options"], {"temperature": 0.4})
+        self.assertEqual(bodies[0]["options"], {"temperature": 0.4, "num_predict": MAX_TOKENS})
         self.assertEqual([b["temperature"] for b in bodies[1:]], [0.4, 0.7], "other prose keeps 0.7")
+
+    def test_an_ollama_answer_that_runs_on_is_asked_once_more_warmer(self):
+        # Gemma wrote until its context was full, 508 s and 594 s, and timed a pack out (2026-11-12)
+        _Handler.ran_on = 1
+        self.addCleanup(setattr, _Handler, "ran_on", 0)
+        out = OllamaBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "big:30b")
+        self.assertEqual(out.text, '{"ok": true}')
+        self.assertEqual([b["options"] for _, b in _Handler.seen],
+                         [{"num_predict": MAX_TOKENS}, {"num_predict": MAX_TOKENS, "temperature": RETRY_TEMPERATURE}])
+
+    def test_an_ollama_answer_that_runs_on_twice_is_refused_in_words(self):
+        _Handler.ran_on = 2
+        self.addCleanup(setattr, _Handler, "ran_on", 0)
+        with self.assertRaises(ai.LLMUnavailable) as caught:
+            OllamaBackend(self.url).chat(ai.ChatRequest(system="s", user="u", timeout=5), "big:30b")
+        self.assertIn("ran on without finishing, twice", str(caught.exception))
 
     def test_a_stopped_ollama_is_reported_in_words(self):
         status = OllamaBackend("http://127.0.0.1:9").status()
