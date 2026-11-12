@@ -37,6 +37,9 @@ DATE_CHARS = 4000          # a document's own date is near its start: a letter's
 DATE = re.compile(r"\b(\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?"
                   r"\s+(?:19|20)\d\d|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d\d"
                   r"|(?:19|20)\d\d-\d\d-\d\d)\b", re.I)
+# A date this follows in its line or sentence is a birthday, never the document's: a transcript's date of birth
+# at its top dated three transcripts 2002 (2026-11-12).
+BIRTH = re.compile(r"\b(?:birth|born|d\.?o\.?b)\b", re.I)
 HEADING = re.compile(r"^#{1,3}\s+(.+?)\s*#*\s*$", re.M)
 
 
@@ -183,8 +186,12 @@ def title_in(text: str, fallback: str) -> str:
 
 
 def date_in(text: str) -> str:
-    """The first date near the start of `text` as `YYYY-MM`, or "" when it gives none."""
-    m = DATE.search(text[:DATE_CHARS])
+    """The first date near the start of `text` as `YYYY-MM`, or "" when it gives none; a date of birth is passed
+    over."""
+    head = text[:DATE_CHARS]
+    m = next((m for m in DATE.finditer(head)
+              if not BIRTH.search(head[max(head.rfind("\n", 0, m.start()), head.rfind(". ", 0, m.start())) + 1:
+                                       m.start()])), None)
     if not m:
         return ""
     found = m.group(1)

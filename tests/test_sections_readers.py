@@ -29,6 +29,13 @@ class Readers(unittest.TestCase):
         self.assertEqual((got.title, got.date, got.facts), ("First aid at work", "2024-01", []))
         self.assertIn("Avery Quillon", got.text)
 
+    def test_a_date_of_birth_is_never_a_documents_date(self):
+        """Regression: three transcripts were dated by the date of birth at their top (2026-11-12)."""
+        for text in ("Date of Birth   6th October 2002\nStudied From September 2023 To June 2026",
+                     "DOB: 06/10/2002\nIssued September 2023", "Born 6 October 2002. Awarded September 2023."):
+            with self.subTest(text=text):
+                self.assertEqual(readers.date_in(text), "2023-09")
+
     def test_a_document_with_no_heading_is_named_by_its_file_and_one_with_no_date_has_none(self):
         src, tmp = source(("dbs_check-letter.txt", "A made-up basic check, no date given."))
         self.addCleanup(tmp.cleanup)
