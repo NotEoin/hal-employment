@@ -50,10 +50,16 @@ function nextWords(next) {
   return next.slice(0, 2).map(n => "Next " + n.what + " at " + (/^\d\d:\d\d$/.test(n.at) ? n.at : clock(n.at)) + ".").join(" ");
 }
 
+// More steps than this get one bar filled to the share done: reading 285 files drew 285 dots, 4,842 px wide,
+// and every page scrolled sideways while it ran (2026-11-12).
+const STEP_DOTS_MAX = 12;
+
 function Steps({ n, total }) {
   if (!total) return null;
-  return html` Step ${n} of ${total} <span class="stepsm" aria-hidden="true">${Array.from({ length: total },
-    (_, i) => html`<i class=${i < n ? "on" : ""}></i>`)}</span>`;
+  const marks = total <= STEP_DOTS_MAX
+    ? Array.from({ length: total }, (_, i) => html`<i class=${i < n ? "on" : ""}></i>`)
+    : html`<i class="bar"><b style=${"width:" + Math.round(100 * Math.min(n, total) / total) + "%"}></b></i>`;
+  return html` Step ${n} of ${total} <span class="stepsm" aria-hidden="true">${marks}</span>`;
 }
 
 async function stop(id) {

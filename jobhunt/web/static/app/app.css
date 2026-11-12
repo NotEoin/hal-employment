@@ -102,6 +102,8 @@ kbd { white-space: nowrap; font-family: var(--mono); font-size: 12px; padding: 1
 .stepsm { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 4px; }
 .stepsm i { width: 14px; height: 5px; border-radius: 3px; background: var(--line-strong); }
 .stepsm i.on { background: var(--hal); }
+.stepsm i.bar { width: 80px; overflow: hidden; }
+.stepsm i.bar b { display: block; height: 100%; background: var(--hal); }
 .health { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13.5px; background: none; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
 .health:hover { background: var(--sunk); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; display: inline-block; }

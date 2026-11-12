@@ -18,6 +18,10 @@ What changed in each version, in plain words.
 - **A transcript is dated by the transcript, not your birthday.** Hal skips a date of birth when it dates a
   document, so a transcript with your date of birth at the top no longer shows that year.
 
+- **A long job no longer pushes the page sideways.** The line at the top that says what Hal is doing showed
+  a dot for every step, so reading a few hundred files made every page scroll sideways. Past 12 steps it
+  shows one bar that fills as Hal goes.
+
 - **Reading your record gives the graphics card up.** With a batch token from Hal's gateway in
   `~/.config/hal-employment/gateway-batch-token` (new setting `ai.hal_batch_token_file`), Hal does big reads
   of your record as batch work: reading what waits, adding more than 50 files at once, and the regular check
