@@ -737,6 +737,19 @@ def _modules(sources: list[dict]) -> list[dict]:
     return out
 
 
+SHARE = re.compile(r"\((\d+)% of commits")
+SOLE_SHARE = 101           # "sole author" above any contributor's share
+
+
+def _share(role: str) -> int:
+    """How much of a repository's work a role says was the person's: a repository's "sole author" most, its
+    "contributor (N% of commits ...)" N, and other words -1, so they keep their order."""
+    if role == "sole author":
+        return SOLE_SHARE
+    m = SHARE.search(role)
+    return int(m.group(1)) if m else -1
+
+
 def fold(sources: list[tuple[int, dict]]) -> dict:
     """A found item's fields from its sources' (rank, fields): best rank first, earlier sources on a tie."""
     ranked = [pair for _, pair in sorted(enumerate(sources), key=lambda p: (-p[1][0], p[0]))]
@@ -754,6 +767,11 @@ def fold(sources: list[tuple[int, dict]]) -> dict:
         joined = _modules(_module_sources(ranked)) if field == "modules" else _join(lists)
         if joined:
             out[field] = joined
+    roles = [(rank, said["role"]) for rank, said in ranked if said.get("role")]
+    if roles:
+        # a card of two repositories said "contributor (12% of commits)" from the one read first, though the
+        # person wrote the other alone (2026-11-12): among the best-ranked, the part where they did most
+        out["role"] = max((role for rank, role in roles if rank == roles[0][0]), key=_share)
     if out.get("current") and ended(out):
         # an old CV's "2023 - present" beside the transcript's June 2026 end showed "to now" (2026-11-05)
         del out["current"]

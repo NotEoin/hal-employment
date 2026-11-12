@@ -23,6 +23,10 @@ What changed in each version, in plain words.
   An answer cut off at the cap is asked for once more, then Hal says plainly that it ran on; it is never used
   half-written.
 
+- **A project of two repositories says the part you did most.** A project with a first repository made
+  with a friend and a rewrite you made alone said you were a "contributor (12% of commits)", from the one
+  read first. It now says "sole author", and drafts no longer say you "helped".
+
 - **No more "useful for the challenges at ..." endings.** A letter's paragraphs each closed by calling the
   work "useful for the technical challenges at" the employer, which says nothing. Hal now drafts such a
   paragraph again, as it does for other stock phrases.

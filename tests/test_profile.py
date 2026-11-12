@@ -473,6 +473,17 @@ class Store(unittest.TestCase):
             {"name": "Computer Systems Design and Architectures (CSC1032)", "mark": "71"},
             {"name": "CSC1033 Databases", "mark": "58"}, {"name": "Year 2023 Group Project", "mark": "66"}])
 
+    def test_a_project_of_two_repos_takes_the_part_where_the_person_did_most(self):
+        # an autopilot card held a first repo with a friend (1 of 8 commits) and the rewrite the person made
+        # alone; it said "contributor (12% of commits)" as that repo was read first (2026-11-12)
+        friend = {"name": "Tide autopilot", "role": "contributor (12% of commits, 2 contributors)"}
+        alone = {"name": "Tide autopilot", "role": "sole author"}
+        half = {"name": "Tide autopilot", "role": "contributor (50% of commits, 2 contributors)"}
+        self.assertEqual(merge.fold([(5, friend), (5, alone)])["role"], "sole author")
+        self.assertEqual(merge.fold([(5, friend), (5, half)])["role"], half["role"])
+        self.assertEqual(merge.fold([(6, {"role": "Team lead"}), (5, alone)])["role"], "Team lead",
+                         "a better-ranked source's own words still lead")
+
     def test_modules_without_codes_merge_by_close_name_and_two_codes_stay_two(self):
         self.assertEqual(merge.fold([(5, {"modules": [{"name": "Oral History in Practice"},
                                                       {"name": "Oral history in practise", "mark": "68"},
