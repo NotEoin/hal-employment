@@ -146,11 +146,18 @@ def _distinct(name: str) -> bool:
     return bool(DISTINCT.search(name.strip()))
 
 
+# A university's module code before a module's name or in brackets after it: a letter opened "85 in my CSC1034
+# Programming Portfolio" (2026-11-12), and an employer does not know the codes; standards keep theirs
+MODULE_CODE_RX = re.compile(r"\b(?!(?:ISO|BS|EN|IEC|IEEE)\b)[A-Z]{2,4} ?\d{4}\s+(?=[A-Z][a-z])|"
+                            r"\s*\((?!(?:ISO|BS|EN|IEC|IEEE)\b)[A-Z]{2,4} ?\d{4}\)")
+
+
 def tidy(text: str, cards: list[dict] = ()) -> str:
-    """A draft as it is saved: no stray evidence id (`STRAY_ID`), curly quotes and apostrophes straight, no space
-    before a line's first word (a bullet's indent aside), and each distinctive project name spelt as its card
-    spells it."""
-    out = LEADING.sub("", CURLY_RX.sub(lambda m: CURLY[m.group(0)], STRAY_ID.sub("", text or "")))
+    """A draft as it is saved: no stray evidence id (`STRAY_ID`), no module code (`MODULE_CODE_RX`), curly
+    quotes and apostrophes straight, no space before a line's first word (a bullet's indent aside), and each
+    distinctive project name spelt as its card spells it."""
+    out = MODULE_CODE_RX.sub("", STRAY_ID.sub("", text or ""))
+    out = LEADING.sub("", CURLY_RX.sub(lambda m: CURLY[m.group(0)], out))
     for card in cards:
         name = str(card.get("name") or "").strip()
         if name and _distinct(name):

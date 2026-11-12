@@ -27,6 +27,9 @@ What changed in each version, in plain words.
   with a friend and a rewrite you made alone said you were a "contributor (12% of commits)", from the one
   read first. It now says "sole author", and drafts no longer say you "helped".
 
+- **No module codes in letters.** A letter opened with "85 in my CSC1034 Programming Portfolio". Letters,
+  answers and messages now give a module's name without its code, which an employer would not know.
+
 - **No more "useful for the challenges at ..." endings.** A letter's paragraphs each closed by calling the
   work "useful for the technical challenges at" the employer, which says nothing. Hal now drafts such a
   paragraph again, as it does for other stock phrases.

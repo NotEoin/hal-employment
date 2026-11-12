@@ -92,6 +92,19 @@ class Saved(unittest.TestCase):
         self.assertEqual(plain.tidy("Lists [like this] stay."), "Lists [like this] stay.")
 
 
+    def test_a_module_code_is_taken_out_of_a_draft_and_its_name_kept(self):
+        # a letter opened "having achieved 85 in my CSC1034 Programming Portfolio and 81 in my CSC1035
+        # Programming Portfolio": an employer does not know a university's codes (2026-11-12)
+        self.assertEqual(plain.tidy("I scored 85 in my CSC1034 Programming Portfolio."),
+                         "I scored 85 in my Programming Portfolio.")
+        self.assertEqual(plain.tidy("My Distributed Systems module (CSC3121) taught me consensus."),
+                         "My Distributed Systems module taught me consensus.")
+        self.assertEqual(plain.tidy("In HIS 2040 Parish Records I read vestry minutes."),
+                         "In Parish Records I read vestry minutes.")
+        for kept in ("I wrote it in C++ for Python 3.11.", "The A320 crew used it.", "I passed CSC1034."):
+            self.assertEqual(plain.tidy(kept), kept, "a code with no name after it stays")
+
+
 class Tidy(unittest.TestCase):
     def test_quotes_are_straight_and_no_line_starts_with_a_space(self):
         curly = " I\u2019m glad to apply. \u201cTide gauge\u201d ran for a year.\n  - a bullet keeps its indent"
