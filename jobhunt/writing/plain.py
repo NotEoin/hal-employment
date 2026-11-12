@@ -150,6 +150,20 @@ def _distinct(name: str) -> bool:
 # Programming Portfolio" (2026-11-12), and an employer does not know the codes; standards keep theirs
 MODULE_CODE_RX = re.compile(r"\b(?!(?:ISO|BS|EN|IEC|IEEE)\b)[A-Z]{2,4} ?\d{4}\s+(?=[A-Z][a-z])|"
                             r"\s*\((?!(?:ISO|BS|EN|IEC|IEEE)\b)[A-Z]{2,4} ?\d{4}\)")
+# The module name a code stands before ("CSC1034 Programming Portfolio"): its capitalised words
+CODED_NAME_RX = re.compile(r"\b[A-Z]{2,4} ?\d{4}\s+((?:[A-Z][\w&-]*)(?:\s+(?:[A-Z][\w&-]*|-|and|of|for|in|to))*)")
+
+
+def _without_codes(text: str) -> str:
+    """`text` without its module codes (`MODULE_CODE_RX`), except where two modules share a name and only their
+    codes tell them apart: "85 in CSC1034 Programming Portfolio and 81 in CSC1035 Programming Portfolio" read as
+    one module said twice without them (2026-11-12)."""
+    names = [re.sub(r"(?:\s+(?:-|and|of|for|in|to))+$", "", m.group(1)) for m in CODED_NAME_RX.finditer(text)]
+    shared = {n for n in names if names.count(n) > 1}
+    if not shared:
+        return MODULE_CODE_RX.sub("", text)
+    return MODULE_CODE_RX.sub(lambda m: m.group(0) if any(text[m.end():].startswith(n) for n in shared) else "",
+                              text)
 
 # A title or employer copied in capitals from a CV heading ("VOLUNTEER ASSISTANT DRAMA INSTRUCTOR at SAINT FRANCIS
 # XAVIER CENTRE", 2026-11-12): two or more capitalised words with at least `SHOUTED_MIN` letters and one long word,
@@ -171,7 +185,7 @@ def tidy(text: str, cards: list[dict] = ()) -> str:
     """A draft as it is saved: no stray evidence id (`STRAY_ID`), no module code (`MODULE_CODE_RX`), no title in
     capitals (`SHOUTED_RX`), curly quotes and apostrophes straight, no space before a line's first word (a
     bullet's indent aside), and each distinctive project name spelt as its card spells it."""
-    out = SHOUTED_RX.sub(_unshout, MODULE_CODE_RX.sub("", STRAY_ID.sub("", text or "")))
+    out = SHOUTED_RX.sub(_unshout, _without_codes(STRAY_ID.sub("", text or "")))
     out = LEADING.sub("", CURLY_RX.sub(lambda m: CURLY[m.group(0)], out))
     for card in cards:
         name = str(card.get("name") or "").strip()

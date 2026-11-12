@@ -101,6 +101,9 @@ class Saved(unittest.TestCase):
                          "My Distributed Systems module taught me consensus.")
         self.assertEqual(plain.tidy("In HIS 2040 Parish Records I read vestry minutes."),
                          "In Parish Records I read vestry minutes.")
+        # two modules of one name told apart only by their codes read as one module said twice (2026-11-12)
+        both = "I scored 85 in CSC1034 Programming Portfolio and 81 in CSC1035 Programming Portfolio."
+        self.assertEqual(plain.tidy(both), both)
         for kept in ("I wrote it in C++ for Python 3.11.", "The A320 crew used it.", "I passed CSC1034."):
             self.assertEqual(plain.tidy(kept), kept, "a code with no name after it stays")
 

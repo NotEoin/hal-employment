@@ -46,6 +46,7 @@ What changed in each version, in plain words.
 
 - **No module codes in letters.** A letter opened with "85 in my CSC1034 Programming Portfolio". Letters,
   answers and messages now give a module's name without its code, which an employer would not know.
+  Two modules with the same name keep their codes, so they do not read as one module said twice.
 
 - **No more "useful for the challenges at ..." endings.** A letter's paragraphs each closed by calling the
   work "useful for the technical challenges at" the employer, which says nothing. Hal now drafts such a
