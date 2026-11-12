@@ -85,7 +85,12 @@ STOCK = re.compile(
     r" (?:well |closely |directly |perfectly )?(?:with )?my|"
     r"(?:is|are|was|will be|would be|could be) (?:\w+ ){0,2}(?:useful|applicable|relevant|valuable|helpful|"
     r"transferable|beneficial) (?:to|for|in|at) (?:[\w'-]+[ -]){0,4}?(?:challenges?|environment|demands|setting)|"
-    r"meet the challenges of (?:the|this|your) (?:role|job|position|post|team))\b", re.I)
+    r"meet the challenges of (?:the|this|your) (?:role|job|position|post|team)|"
+    # a closing line that says only that the work helps: "This helps me write Python code." (2026-11-12)
+    r"^(?:this|that)\b(?: [\w-]+){0,6}? (?:(?:will|would|could|can) help|helps) me|"
+    r"^(?:this|that)\b(?: [\w-]+){0,6}? (?:will|would|could|can) help you|"
+    r"^I (?:can|could|will|would) (?:use|apply|bring) (?:this|that|these|those|my) (?:[\w-]+ )?"
+    r"(?:experience|skills?|knowledge))\b", re.I)
 # What the person is looking for, as a CV's summary or the search settings say it: "seeking a role in ...".
 GOAL = re.compile(r"\b(?:seeking|looking for|searching for|hoping to find|aiming for)\s+(?:an?\s+|my\s+)?"
                   r"(?:[\w-]+\s+){0,3}?(?:roles?|positions?|jobs?|posts?|opportunit(?:y|ies)|placements?|"

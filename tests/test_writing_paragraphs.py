@@ -627,6 +627,19 @@ class Stock(unittest.TestCase):
                      "I found the library useful for parsing packets."):
             self.assertEqual(plain.problems(fine), [], fine)
 
+    def test_a_closing_line_saying_only_that_the_work_helps_is_stock(self):
+        # graded letters closed paragraphs with "This helps me write Python code.", "This will help me when
+        # processing medical images." and "I can use this experience to build a local knowledge-base assistant."
+        # (2026-11-12)
+        for said in ("This helps me write Python code.", "This will help me when processing medical images.",
+                     "This skill in WiFi frame fingerprinting could help you identify devices.",
+                     "I can use this experience to build a local knowledge-base assistant.",
+                     "That work would help me contribute to your team."):
+            self.assertTrue(plain.problems(said), said)
+        for fine in ("This helped the team cut build times by half.", "This tool helps you search notes.",
+                     "I used this experience to train two new staff."):
+            self.assertEqual(plain.problems(fine), [], fine)
+
 
 class Motive(unittest.TestCase):
     """Openings gave "matches my experience", led in with the advert's requirements, and told a project that a

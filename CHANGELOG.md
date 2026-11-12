@@ -55,7 +55,8 @@ What changed in each version, in plain words.
 
 - **No more "useful for the challenges at ..." endings.** A letter's paragraphs each closed by calling the
   work "useful for the technical challenges at" the employer, which says nothing. Hal now drafts such a
-  paragraph again, as it does for other stock phrases.
+  paragraph again, as it does for other stock phrases. The same goes for closing lines that only say the work helps:
+  "This helps me write Python code." or "I can use this experience to ...".
 
 - **Your dissertation is read, not its poster.** When a folder held a dissertation's poster or proposal
   beside the dissertation, the newest of them was taken as the course's one dissertation, and the
