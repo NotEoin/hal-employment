@@ -138,10 +138,18 @@ def _resolve_watched(con, sources):
 
 
 def cmd_add(args):
-    """Handles `jobhunt add`: adds a job from its page address."""
-    from .. import research
+    """Handles `jobhunt add`: adds a job from its page address; a page that cannot be read (no network, a dead
+    link) adds the job without its advert, with one line saying so."""
+    import urllib.error
+
+    from .. import http, research
     con = db.connect()
-    text = research.page_text(args.url, limit=20000)
+    try:
+        text = research.page_text(args.url, limit=20000)
+    except (urllib.error.URLError, http.NotFound, TimeoutError, OSError) as e:
+        print(f"Hal could not read the advert at {args.url} ({getattr(e, 'reason', e)}), so the job is added "
+              "without it and its pack has less to go on.")
+        text = ""
     job = {"id": f"manual:{re.sub(r'[^a-z0-9]+', '-', (args.company + '-' + args.title).lower()).strip('-')}",
            "source": "manual", "company": args.company, "title": args.title, "location": args.location,
            "url": args.url, "description": text, "salary": args.salary, "posted_at": None, "board_size": None}
