@@ -32,6 +32,18 @@ What changed in each version, in plain words.
   other project out, and letters filled with less relevant work. **Projects** now says so: showcase all
   your best work.
 
+- **Titles in capitals are written normally.** A CV that headed a job "VOLUNTEER ASSISTANT DRAMA
+  INSTRUCTOR" had the capitals copied into every letter. Letters, answers and messages now write such a
+  title or employer in ordinary case ("Volunteer Assistant Drama Instructor"); acronyms such as "NHS" stay.
+
+- **A left-out paragraph says why plainly.** When Hal leaves work out of a letter because nothing in it
+  fits the job, "Check before sending" now says that, not "your facts gave nothing", which read as if the
+  work had no facts at all.
+
+- **"Make" in a sentence is not a tool.** A letter saying an employer helps "make loans fairer" was checked
+  as naming Make, a build tool from another of your projects, and drafted again. Tools named like ordinary
+  words (Make, React, Swift, Spark and others) now count only when written with their capital.
+
 - **No module codes in letters.** A letter opened with "85 in my CSC1034 Programming Portfolio". Letters,
   answers and messages now give a module's name without its code, which an employer would not know.
 
