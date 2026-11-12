@@ -158,7 +158,7 @@ NOT_SUPPORTED = 'its facts do not say: "{span}"'
 NOT_SUPPORTED_ANY = "says something its facts do not"
 WRONG_PLACE = "places the work where its facts do not"
 TOO_MUCH = "gives you more of the work than its facts do"
-NOTHING = "your facts gave nothing to say here"
+NOTHING = "nothing in its facts fits what this job asks for"   # the writer drafted nothing for the shape
 DROPPED = "Hal left out the paragraph about {card}: {why}. Add it yourself if it is true"
 DOUBTED = "Check the paragraph about {card}: Hal's check of it found that {why}"
 

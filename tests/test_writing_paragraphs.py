@@ -565,6 +565,13 @@ class Listed(unittest.TestCase):
         self.assertTrue(paragraphs.Paragraph(QUILL_STORY, dropped=paragraphs.NOTHING).listed)
         self.assertTrue(paragraphs.Paragraph(Story("m", "Oral History", "", kind="module"), dropped="x").listed)
 
+    def test_a_story_left_out_as_off_the_job_does_not_say_its_facts_are_empty(self):
+        # "Hal left out the paragraph about Bartender at The Old George Inn: your facts gave nothing" for a job whose
+        # confirmed facts say 400+ customers a shift: the writer found nothing in them for a data role (2026-11-12)
+        line = paragraphs.Paragraph(QUILL_STORY, dropped=paragraphs.NOTHING).listed
+        self.assertNotIn("gave nothing", line)
+        self.assertIn("this job", line)
+
 
 class Stock(unittest.TestCase):
     def test_plain_finds_a_stock_link_but_never_a_plain_sentence(self):
