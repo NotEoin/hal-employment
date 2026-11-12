@@ -63,6 +63,14 @@ class RecordRoutes(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
 
+    def test_reading_a_record_folder_not_made_yet_is_no_error(self):
+        """A fresh install showed every hourly read of the record as an error naming a path (2026-11-12)."""
+        import shutil
+
+        shutil.rmtree(self.folder, ignore_errors=True)
+        done = runner.run("record.sync")
+        self.assertEqual((done["state"], done["result"]), ("done", {"converted": [], "changed": 0, "removed": 0}))
+
     def test_making_the_folder_gives_the_starter_folders_and_a_start_note(self):
         c = self.hal.signed_in()
         self.assertFalse(c.get("/api/v2/record").json()["exists"])

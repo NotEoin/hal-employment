@@ -375,6 +375,9 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **No error before your record exists.** Until you first added something, Activity showed Hal's regular
+  read of your record folder as an error naming a folder path. It now says there is nothing to read yet.
+
 - **An add carries on after a restart.** If Hal restarted while it read files you added from a sorted
   folder, the files added before the restart stayed "Waiting to be read" for good. Hal now reads them
   when it carries the add on.
