@@ -931,6 +931,8 @@ def _shape(row: sqlite3.Row, evidence: list[dict], open_conflicts: list[dict]) -
            "can_delete": row["origin"] == "you", "created": row["created"], "updated": row["updated"],
            "merged_into": row["merged_into"], "merged_why": row["merged_why"],
            "star": bool(row["star"]), "star_by": row["star_by"], "can_star": row["kind"] in STAR_KINDS}
+    if row["kind"] == "skill":
+        out["studied"] = is_studied(out)
     return {**out, **tiers.shown(out, row), **contexts.shown(out, row)}
 
 

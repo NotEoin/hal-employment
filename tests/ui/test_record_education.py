@@ -175,7 +175,10 @@ class RecordEducation(unittest.TestCase):
         p.open("record-skills")
         p.shows(p.page.get_by_text("Done in your coursework: The parish registers of Harrowgate Vale"),
                 "the coursework strength")
-        p.shows(p.page.get_by_text("Studied in Rivers and Trade (HIST2110)"), "the studied strength")
+        studied = p.page.locator("details.rec-check-studied")
+        studied.locator("summary").click()
+        p.shows(studied.get_by_role("heading", name="Studied in Rivers and Trade (HIST2110)"), "the module")
+        p.shows(studied.get_by_text("Port books as sources"), "the studied skill, folded apart")
         self.clean(p)
 
 

@@ -405,7 +405,8 @@ file that is not your own writing, such as a lecture's list of topics. Hal never
 them.
 
 Skills that only your course material names, such as the topics of a lecture, are listed apart under
-**Studied in your course**. They show what you studied, not what you have done, so Hal leaves them off your
+**Studied in your course**, on **Check your record** and at the end of the **Skills** tab, grouped by the
+module that taught them when Hal knows it. They show what you studied, not what you have done, so Hal leaves them off your
 CV and out of your letters. If you have used one in your own work, press **I have used this** beside it.
 Under **From:**, each skill says where it was shown: "Done in your coursework: ..." for a piece of your
 coursework, or "Studied in ..." with the module or course it was taught in.

@@ -123,21 +123,36 @@ export function MentionedSkills({ items }) {
     about="Your files mention these, for example in notes or plans, but they are not on your CV and not tools of a project Hal would tell an employer about. Hal leaves them off your CV and out of your letters." />`;
 }
 
-/** A folded list of skills kept apart, each with "I have used this", which confirms it. */
+/** A folded list of skills kept apart, each with "I have used this", which confirms it. The list is only drawn
+    once opened, as it can run to thousands. */
 function SkillsApart({ items, cls, title, about }) {
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   const claim = async it => {
     setBusy(true);
     await act(() => post("/profile/items/" + encodeURIComponent(it.id) + "/confirm"), "Thanks. Hal can use " + it.title + " now.");
     setBusy(false);
   };
-  return html`<details class=${"rec-hidden " + cls}>
+  return html`<details class=${"rec-hidden " + cls} onToggle=${e => setOpen(e.currentTarget.open)}>
     <summary>${title} (${items.length} ${items.length === 1 ? "skill" : "skills"})</summary>
     <p class="small sub rec-line">${about} If you have used one in your own work, press <b>I have used this</b>.</p>
-    <ul class="rec-check-studied-list">${items.map(it => html`<li key=${it.id}>
+    ${open && byWhere(items).map(([where, group]) => html`<div key=${where}>
+      ${where && html`<h3 class="rec-apart-where">${where}</h3>`}
+      <ul class="rec-check-studied-list">${group.map(it => html`<li key=${it.id}>
       <span>${it.title}</span>
-      <button type="button" class="btn small" disabled=${busy} aria-label=${"I have used this: " + it.title} onClick=${() => claim(it)}>I have used this</button></li>`)}</ul>
+      <button type="button" class="btn small" disabled=${busy} aria-label=${"I have used this: " + it.title} onClick=${() => claim(it)}>I have used this</button></li>`)}</ul></div>`)}
   </details>`;
+}
+
+/** Skills grouped by where their first source puts them ("Studied in <module>"), groups by name; one group
+    with no words when none say. */
+function byWhere(items) {
+  const groups = new Map();
+  for (const it of items) {
+    const where = ((it.evidence || [])[0] || {}).strength_words || "";
+    groups.set(where, [...(groups.get(where) || []), it]);
+  }
+  return [...groups].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
 // The words over each list of merges: Hal's after a read, and the person's own ("Same as...").

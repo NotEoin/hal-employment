@@ -344,6 +344,15 @@ class Store(unittest.TestCase):
         self.assertFalse(store.is_studied(with_role(flink, "taught")), "confirmed, it is the person's own")
         self.assertFalse(store.is_studied(with_role(self.job(CV_A), "taught")), "only skills are studied")
 
+    def test_each_skill_says_whether_it_is_only_studied(self):
+        # the Skills tab drew 6,800 cards, 6,300 of them lecture topics, before the person's own (2026-11-12)
+        lecture = store.add_found(self.con, "skill", {"name": "Two-phase commit"}, {**ev(NOTES, "notes"),
+                                                                                   "role": "taught"})
+        theirs = store.add_found(self.con, "skill", {"name": "Python"}, ev(CV_A, "cv"))
+        studied = {i["id"]: i["studied"] for i in store.items(self.con, "skill")}
+        self.assertEqual((studied[lecture], studied[theirs]), (True, False))
+        self.assertNotIn("studied", store.item(self.con, self.job(CV_A)), "only skills say it")
+
     def test_a_transcripts_modules_replace_the_cvs_and_keep_their_marks(self):
         course = {"qualification": "BA (Hons)", "subject": HUMANITIES.you["education.subject"],
                   "institution": HUMANITIES.you["education.university"]}

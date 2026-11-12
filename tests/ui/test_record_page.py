@@ -267,6 +267,23 @@ class RecordPage(unittest.TestCase):
         p.shows(p.page.get_by_text("You chose 2023-10."), "the settled conflict")
         self.clean(p)
 
+    def test_skills_only_lectures_name_are_folded_under_your_own(self) -> None:
+        # a degree's lecture notes drew 6,300 topic cards in the Skills tab, above the person's own (2026-11-12)
+        with closing(db.connect()) as con:
+            store.add_found(con, "skill", {"name": "Two-phase commit"},
+                            {"source_rel": "Courses/Week 9.md", "quote": "two-phase commit", "doc_type": "notes",
+                             "role": "taught"})
+        found("skill", {"name": "Python"}, quote="Python")
+        p = self.page("record-skills")
+        p.shows(self.card(p, "Python"), "the person's own skill as a card")
+        self.assertEqual(self.card(p, "Two-phase commit").count(), 0, "no card for a lecture topic")
+        studied = p.page.locator("details.rec-check-studied")
+        self.assertIn("Studied in your course (1 skill)", studied.inner_text())
+        self.assertEqual(studied.get_by_text("Two-phase commit").count(), 0, "the list is drawn when opened")
+        studied.locator("summary").click()
+        p.shows(studied.get_by_text("Two-phase commit"), "the lecture topic, folded apart")
+        self.clean(p)
+
     def test_a_long_keep_button_wraps_on_a_phone_and_the_page_never_scrolls_sideways(self) -> None:
         # "Keep Teams software project (degree module) (March 2025 to May 2025)" was 493 px wide on a 390 px
         # screen, so the whole Work history page scrolled sideways (2026-11-12)

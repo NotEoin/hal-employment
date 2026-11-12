@@ -143,7 +143,8 @@ def profile_item(n: int, kind: str, fields: dict, title: str, sub: str = "", whe
     tier_words = {"core": "Lead with this", "supporting": "Useful when a job asks", "archive": "Archived",
                   "": "Not sorted yet"}
     tiered = kind in ("job", "education", "project", "achievement", "certificate")
-    return {"id": n, "kind": kind, "state": state, "state_words": words[state], "origin": origin,
+    studied = {"studied": False} if kind == "skill" else {}
+    return {**studied, "id": n, "kind": kind, "state": state, "state_words": words[state], "origin": origin,
             "fields": fields, "title": title, "sub": sub, "when": when, "evidence": evidence or [],
             "conflicts": conflicts or [], "can_delete": origin == "you",
             "created": "2026-11-05T09:00:00Z", "updated": "2026-11-05T09:00:00Z",

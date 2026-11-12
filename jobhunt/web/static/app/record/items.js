@@ -15,6 +15,8 @@ import { ask } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
 import { KIND_FIELDS, KIND_WORDS, ItemForm, basicKey, shown } from "./fields.js";
 import { EducationSources, JobSources, StarButton, WhatChanged } from "./sections.js";
+// check.js imports this module too; StudiedSkills is only called while drawing, so the cycle is safe
+import { StudiedSkills } from "./check.js";
 
 const STATE_TONE = { hal: "warn", confirmed: "good", edited: "info", hidden: "line" };
 const FILE_PATH = "/api/v2/record/file/";
@@ -149,7 +151,8 @@ function AddItem({ kind }) {
     <${ItemForm} kind=${kind} uid=${"new-" + kind} onSave=${save} onCancel=${() => setOpen(false)} /></section>`;
 }
 
-/** Every item of one kind, its conflicts, "Add a ..." and the hidden items folded away. */
+/** Every item of one kind, its conflicts, "Add a ..." and the hidden items folded away. Skills only course
+    material names are folded into one list too: a degree's lecture notes gave 6,300 of them (2026-11-12). */
 export function KindSection({ kind, heading }) {
   const { data, error } = useApi("/profile/" + kind);
   if (error) return html`<p class="sub">${error.message}</p>`;
@@ -158,14 +161,17 @@ export function KindSection({ kind, heading }) {
   const shownIds = new Set(data.items.filter(i => i.state !== "hidden").map(i => i.id));
   const onItem = it => data.conflicts.filter(c => c.item_ids.find(x => shownIds.has(x)) === it.id);
   const loose = data.conflicts.filter(c => !c.item_ids.some(x => shownIds.has(x)));
-  const visible = data.items.filter(i => i.state !== "hidden");
+  const visible = data.items.filter(i => i.state !== "hidden" && !i.studied);
+  const studied = data.items.filter(i => i.state !== "hidden" && i.studied);
   const hidden = data.items.filter(i => i.state === "hidden");
   return html`<section class="stack s rec-kind" data-kind=${kind} aria-label=${data.label}>
     ${heading && html`<h2 class="h2">${data.label}</h2>`}
     ${loose.map(c => html`<div class="card"><${Conflict} key=${c.id} c=${c} names=${names} /></div>`)}
     ${visible.length ? visible.map(it => html`<${ItemCard} key=${it.id + ":" + it.updated} item=${it} conflicts=${onItem(it)} names=${names} />`)
+      : studied.length ? html`<${Empty}>None from your CV, work or projects yet. What you studied is below.<//>`
       : html`<${Empty}>Nothing here yet. Add your files on the Overview tab and Hal fills this in, or add one yourself.<//>`}
     <${AddItem} kind=${kind} />
+    ${studied.length > 0 && html`<${StudiedSkills} items=${studied} />`}
     ${hidden.length > 0 && html`<details class="rec-hidden"><summary>Hidden (${hidden.length})</summary>
       <div class="stack s">${hidden.map(it => html`<${ItemCard} key=${it.id + ":" + it.updated} item=${it} conflicts=${[]} names=${names} />`)}</div></details>`}
   </section>`;

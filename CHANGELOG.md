@@ -6,6 +6,11 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Your own skills come first.** On the **Skills** tab, skills that only your lecture notes and slides name
+  are folded into one list, **Studied in your course**, under the skills from your CVs, work and projects.
+  One degree's notes gave over six thousand of them, and they filled the tab before your own. Open the list
+  and press **I have used this** on any you have used in your own work.
+
 - **Reading your record keeps the AI busy, and no busier.** Hal reads as many files at once as the AI
   serves: with Hal's writer set to two slots, two files are read side by side. With Hal's gateway, Hal sends
   no more calls at once than the model serves, whatever **AI calls at once** says, so no call times out
