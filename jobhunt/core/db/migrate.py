@@ -26,7 +26,6 @@ import logging
 import os
 import re
 import sqlite3
-import sys
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass

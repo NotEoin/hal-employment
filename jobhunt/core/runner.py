@@ -29,7 +29,6 @@ import atexit
 import contextvars
 import json
 import logging
-import os
 import queue
 import sqlite3
 import string

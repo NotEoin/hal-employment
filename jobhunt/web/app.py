@@ -16,7 +16,6 @@ import json
 import logging
 import logging.handlers
 import mimetypes
-import os
 import re
 import socket
 import subprocess
