@@ -11,7 +11,7 @@ from email.utils import getaddresses
 
 from . import gmail
 from .core import settings
-from .vault import actions
+from .pipeline_note import actions
 
 
 def build(con) -> tuple[str, str]:

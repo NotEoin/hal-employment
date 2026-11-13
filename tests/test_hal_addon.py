@@ -10,7 +10,7 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from test_runner import fresh_home
 
-from jobhunt import vault
+from jobhunt import pipeline_note
 from jobhunt.addons import hal
 from jobhunt.addons.hal import mirror, models, pipeline
 from jobhunt.core import settings
@@ -29,14 +29,14 @@ class AddOn(unittest.TestCase):
 
     def test_the_pipeline_note_is_written_only_with_the_hal_addon(self):
         settings.set("addon.vault", str(self.vault))
-        self.assertIsNone(vault.write(self.con))
+        self.assertIsNone(pipeline_note.write(self.con))
         self.assertFalse((self.vault / "Areas").exists())
-        self.assertFalse(vault.folder().exists(), "a caller that tests folder().exists() writes nothing")
+        self.assertFalse(pipeline_note.folder().exists(), "a caller that tests folder().exists() writes nothing")
         settings.set("addon.enabled", True)
-        note = vault.write(self.con)
+        note = pipeline_note.write(self.con)
         self.assertEqual(note, self.vault / "Areas" / "Job Search" / "Pipeline.md")
         self.assertIn("# Job search pipeline", note.read_text())
-        self.assertEqual(vault.folder(), self.vault)
+        self.assertEqual(pipeline_note.folder(), self.vault)
         settings.set("addon.pipeline_note", False)
         self.assertIsNone(pipeline.write(self.con))
 
@@ -45,24 +45,24 @@ class AddOn(unittest.TestCase):
         self.con.execute("""INSERT INTO emails (msgid, date, sender, subject, kind, company)
                             VALUES ('e1', datetime('now'), 'jo@example.org', 'Quick question', 'human', 'Riverside')""")
         self.con.commit()
-        note = vault.write(self.con)
+        note = pipeline_note.write(self.con)
         text = note.read_text()
         line = next(x for x in text.splitlines() if "Quick question" in x)
         note.write_text(text.replace(line, line.replace("- [ ]", "- [x]")))
-        self.assertIn(line.replace("- [ ]", "- [x]"), vault.write(self.con).read_text())
+        self.assertIn(line.replace("- [ ]", "- [x]"), pipeline_note.write(self.con).read_text())
 
     def test_an_unchanged_note_is_not_rewritten(self):
         # regression: the note was rewritten every email check, so Hal re-read it twice an hour
         self.switch_on()
-        note = vault.write(self.con)
+        note = pipeline_note.write(self.con)
         note.write_text(note.read_text().replace("updated: ", "updated: 1999") + "\nRelated: [[Applications]]\n")
         kept = note.read_text()
-        vault.write(self.con)
+        pipeline_note.write(self.con)
         self.assertEqual(note.read_text(), kept)
         self.con.execute("""INSERT INTO emails (msgid, date, sender, subject, kind, company)
                             VALUES ('e1', datetime('now'), 'jo@example.org', 'Quick question', 'human', 'Riverside')""")
         self.con.commit()
-        self.assertIn("Quick question", vault.write(self.con).read_text())
+        self.assertIn("Quick question", pipeline_note.write(self.con).read_text())
 
     def test_the_jobs_command_template_names_no_one(self):
         template = hal.TEMPLATE.read_text()

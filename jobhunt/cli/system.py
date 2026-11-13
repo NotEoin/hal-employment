@@ -27,8 +27,8 @@ def cmd_serve(args):
 
 def cmd_vault(args):
     """Handles `jobhunt vault`: writes the pipeline note into the Hal vault."""
-    from .. import vault
-    print(vault.write(db.connect()) or f"vault not found: {vault.folder()}")
+    from .. import pipeline_note
+    print(pipeline_note.write(db.connect()) or f"vault not found: {pipeline_note.folder()}")
 
 
 def _start_server(port: int) -> None:

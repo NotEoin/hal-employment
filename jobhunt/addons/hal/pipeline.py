@@ -11,6 +11,6 @@ def write(con) -> Path | None:
     folder = vault()
     if not (enabled() and _get("addon.pipeline_note") and folder):
         return None
-    from jobhunt import vault as note
+    from jobhunt import pipeline_note as note
 
     return note.write_note(con, folder)

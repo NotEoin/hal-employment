@@ -16,8 +16,8 @@ def cmd_mail(args):
     tasks.sync(con)
     rows = con.execute("SELECT kind, COUNT(*) n FROM emails GROUP BY kind ORDER BY n DESC").fetchall()
     print("emails:", ", ".join(f"{r['kind']} {r['n']}" for r in rows))
-    from .. import vault
-    vault.write(con)
+    from .. import pipeline_note
+    pipeline_note.write(con)
     for a in attention:
         print(f"  NEEDS YOU  {a['kind']:10} {a['company'] or '?'} | {a['subject']}")
         if not args.quiet:

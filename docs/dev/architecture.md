@@ -31,9 +31,10 @@ folder; `tests/test_paths.py` fails on `ROOT / "data"` and similar outside `core
 platform folder when it holds `.hal-data`; an older checkout that still keeps `data/jobs.db` inside it; else
 the platform folder. A folder named `*.imported-*` is refused.
 
-Callers ask the live function (`paths.db_path()`, `paths.legacy_packs_dir()`, `vault.folder()`), not a module
-constant. `record` and `browser` still resolve their folders (`record.VAULT` and `INDEX`; `browser.PROFILE`,
-`SHOTS` and `SIGNED_IN`) through `_live(name)` on each use, which honours a value a test assigned to the module.
+Callers ask the live function (`paths.db_path()`, `paths.legacy_packs_dir()`, `pipeline_note.folder()`), not a
+module constant. `record` and `browser` still resolve their folders (`record.VAULT` and `INDEX`;
+`browser.PROFILE`, `SHOTS` and `SIGNED_IN`) through `_live(name)` on each use, which honours a value a test
+assigned to the module.
 
 **Test guard.** With `HAL_TEST_MODE=1`, or under the unittest runner, and no override, every data path
 raises `RealDataInTests`. Test modules import `support` before `jobhunt`
