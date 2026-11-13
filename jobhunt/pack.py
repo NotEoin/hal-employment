@@ -167,7 +167,8 @@ def slug(text: str) -> str:
 
 
 def _job_text(job) -> str:
-    return f"{job['title']}\n{job['company']} | {job['location'] or ''} | {job['salary'] or ''}\n\n{job['description'] or ''}"
+    return (f"{job['title']}\n{job['company']} | {job['location'] or ''} | {job['salary'] or ''}\n\n"
+            f"{job['description'] or ''}")
 
 
 def unsupported_numbers(draft: str, *sources: str) -> list[str]:
@@ -178,7 +179,7 @@ def unsupported_numbers(draft: str, *sources: str) -> list[str]:
 def _research(company: str) -> tuple[str, list[str]]:
     try:
         pages = research.company_pages(company)
-    except Exception:  # noqa: BLE001 - offline or blocked search still yields a pack
+    except Exception:  # offline or blocked search still yields a pack
         pages = []
     sources = "\n\n".join(f"[{url}]\n{text}" for url, text in pages)
     return sources, [url for url, _ in pages]
