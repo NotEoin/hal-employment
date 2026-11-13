@@ -8,7 +8,7 @@ import unittest
 from support.world import World, job_id
 
 from jobhunt import pack
-from jobhunt.core import settings
+from jobhunt.core import paths, settings
 from jobhunt.core.db import tasks
 from jobhunt.docs import folders, relayout
 
@@ -24,14 +24,14 @@ class Relayout(unittest.TestCase):
                             SELECT 'lever:sorrel-again', source, company, title, first_seen, last_seen, 'ready'
                             FROM jobs WHERE id = ?""", (self.owner["id"],))
         self.con.commit()
-        self.old = pack.PACKS / pack.slug(f"{self.owner['company']}-{self.owner['title']}")
+        self.old = paths.legacy_packs_dir() / pack.slug(f"{self.owner['company']}-{self.owner['title']}")
         self.old.mkdir(parents=True)
         (self.old / "pack.md").write_text(f"# Sorrel Payments: Software Engineer, Graduate\n\n"
                                           f"- Drafted: 2026-10-01 | Job id: `{self.owner['id']}`\n\n"
                                           "## Cover letter\n\nThe first draft, not the edit.\n")
         (self.old / "Made-Up-Person-CV.pdf").write_bytes(b"%PDF-1.4 cv\n%%EOF\n")
         (self.old / "Made-Up-Person-Cover-Letter.pdf").write_bytes(b"%PDF-1.4 letter\n%%EOF\n")
-        (pack.PACKS / "_base-cv").mkdir()
+        (paths.legacy_packs_dir() / "_base-cv").mkdir()
         self.before = sorted(p.name for p in self.old.iterdir())
 
     def test_old_folders_shared_by_two_jobs_are_resolved_by_job_id(self):

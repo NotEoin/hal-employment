@@ -89,7 +89,7 @@ class Folders(unittest.TestCase):
         self.assertEqual([p.name for p in folder.parent.iterdir() if p.name.startswith(".")], [])
 
     def test_an_old_shared_pack_is_read_only_by_the_job_it_names(self):
-        old = pack.PACKS / pack.slug(f"{self.job['company']}-{self.job['title']}")
+        old = paths.legacy_packs_dir() / pack.slug(f"{self.job['company']}-{self.job['title']}")
         old.mkdir(parents=True)
         (old / "pack.md").write_text("# Sorrel: x\n\n- Drafted: 2026-10-01 | Job id: `lever:someone-else`\n\n"
                                      "## Role\n\nNot this job.\n")

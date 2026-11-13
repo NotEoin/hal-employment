@@ -214,11 +214,11 @@ SCREEN_OPENING = "Decide whether this person could realistically be hired for th
 
 def fake_chat_json(system: str, user: str, **kw) -> dict:
     """Canned answers for the pack's prompts; any other prompt finds the model away."""
-    canned = {pack.ANALYSE: ANALYSIS,
-              pack.FIT: {"matches": [{"requirement": "Python", "evidence": "a made-up project", "strength": "strong"}],
-                         "gaps": ["SQL"], "eligible": True, "eligibility_notes": "No conditions."},
-              pack.ANSWERS: {"answers": [{"question": "Why do you want this role?", "answer": "A made-up answer."}]},
-              pack.VERIFY: {"unsupported": []},
+    fit = {"matches": [{"requirement": "Python", "evidence": "a made-up project", "strength": "strong"}],
+           "gaps": ["SQL"], "eligible": True, "eligibility_notes": "No conditions."}
+    answers = {"answers": [{"question": "Why do you want this role?", "answer": "A made-up answer."}]}
+    canned = {pack.prompt("analyse"): ANALYSIS, pack.prompt("fit"): fit, pack.prompt("answers"): answers,
+              pack.prompt("verify"): {"unsupported": []},
               prompts.text(plan.PROMPT): {"evidence": []}}
     if system in canned:
         return json.loads(json.dumps(canned[system]))
@@ -229,7 +229,7 @@ def fake_chat_json(system: str, user: str, **kw) -> dict:
 
 def fake_chat(system: str, user: str, **kw) -> str:
     """Canned prose for the pack's brief, letter and message."""
-    if system in (pack.BRIEF, pack.LETTER, pack.MESSAGE):
+    if system in (pack.prompt("brief"), pack.prompt("letter"), pack.prompt("message")):
         return "A short made-up paragraph."
     raise llm.LLMUnavailable("the made-up world has no model for this prompt")
 
@@ -264,9 +264,6 @@ class World:
             mock.patch.object(gmail, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "PASSWORD_FILE", self.root / "config" / "no-gmail-password"),
             mock.patch.object(record, "VAULT", self.root / "no-record", create=True),
-            mock.patch.object(pack, "PACKS", self.root / "packs"),
-            mock.patch.object(pack, "VAULT", self.root / "no-hal-vault"),
-            mock.patch.object(pack, "APPLICATIONS", self.root / "no-hal-vault" / "Applications"),
             mock.patch.object(replenish, "TARGET", QUEUE_SIZE),
             mock.patch.object(replenish, "MIN_SCORE", float(QUEUE_MIN_SCORE)),
             mock.patch.object(llm, "available", lambda: True),

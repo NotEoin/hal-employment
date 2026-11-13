@@ -85,8 +85,7 @@ def legacy_folder(job) -> Path | None:
     """The old shared pack folder for `job`, only when its `pack.md` says it belongs to this job."""
     from .. import pack
 
-    # pack.PACKS is the legacy packs folder, or the folder a test pointed it at.
-    folder = pack.PACKS / pack.slug(f"{job['company']}-{job['title']}")
+    folder = paths.legacy_packs_dir() / pack.slug(f"{job['company']}-{job['title']}")
     owner = job_id_in_pack(folder / PACK_MD)
     return folder if owner == job["id"] else None
 

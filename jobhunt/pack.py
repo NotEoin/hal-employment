@@ -8,9 +8,8 @@ folder (`addon.applications_mirror`). Nothing is sent or submitted.
 
 Design notes:
 - The prompts live in `ai/prompts/*.txt` and name no one: `cvstudio.context.build` fills them from the
-  `you.*`, `goal.*` and `cvdocs.*` settings and the CV type. The old constants
-  (`pack.LETTER` and the rest) are rendered when read, so callers that pass them to the model, and tests
-  that match on them, see the text the person's edits and settings give.
+  `you.*`, `goal.*` and `cvdocs.*` settings and the CV type. `prompt(id)` renders
+  the text when it is called, so callers see what the person's edits and settings give.
 - One letter path: `write_letter` reads the advert, the record and the fit map, writes the letter and checks
   it, for a pack and for a letter a form asks for (`documents.draft_letter`), so every letter is checked
   the same way.
@@ -92,26 +91,8 @@ from .writing import plan as planning
 
 log = logging.getLogger(__name__)
 
-# PACKS, the old application packs, is resolved when used until application folders replace it.
-_LIVE = {"PACKS": paths.legacy_packs_dir}
-# Old constant name -> prompt id; each is the prompt's text filled in for the person (see `prompt`).
-PROMPTS = {"ANALYSE": "analyse", "BRIEF": "brief", "FIT": "fit", "LETTER": "letter", "MESSAGE": "message",
-           "ANSWERS": "answers", "VERIFY": "verify"}
-# The vault mirror moved to the Hal add-on; these answer None only so the made-up world's patches
-# (tests/support/world.py) still apply until its owner drops them.
-RETIRED = ("VAULT", "APPLICATIONS")
 SOMEONE = cv_context.SOMEONE  # what a prompt calls the person before they have given a name
 PREPARED = "docs.prepared"    # the event the Hal add-on's Applications mirror listens for
-
-
-def __getattr__(name):  # old path constants and prompts, read live (PEP 562)
-    if name in _LIVE:
-        return _LIVE[name]()
-    if name in PROMPTS:
-        return prompt(PROMPTS[name])
-    if name in RETIRED:
-        return None
-    raise AttributeError(name)
 
 
 def person(job=None) -> dict:

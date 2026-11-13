@@ -16,7 +16,7 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from ..core import activity, clock, naming
+from ..core import activity, clock, naming, paths
 from . import folders
 
 log = logging.getLogger(__name__)
@@ -68,9 +68,7 @@ def _docs(con: sqlite3.Connection, job) -> dict:
 
 def run(con: sqlite3.Connection, report: Callable[[str], None] = lambda text: None) -> dict:
     """Moves every old pack folder that a job owns; returns counts. Safe to run again: moved ones are skipped."""
-    from .. import pack
-
-    source = pack.PACKS
+    source = paths.legacy_packs_dir()
     counts = {"moved": 0, "redraft": 0, "skipped": 0}
     if not source.is_dir():
         report("No old document folders to move")
