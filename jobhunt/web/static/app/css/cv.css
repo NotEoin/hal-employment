@@ -2,3 +2,10 @@
 .cv-employers { margin: -4px 0 18px; align-items: center; }
 .cv-changes .ba { margin-top: 6px; }
 .cv-changes .h3 { margin: 0 0 6px; }
+.cv-edit-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; position: sticky; top: 0; z-index: 2; }
+.cv-entry { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cv-entry-head .grow { flex: 1 1 160px; min-width: 0; }
+.cv-lines { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.cv-line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px 10px; align-items: center; width: 100%; }
+.cv-line .grow { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cv-from-record { margin-top: 8px; }

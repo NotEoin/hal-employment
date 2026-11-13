@@ -1,11 +1,13 @@
-/* My CV and its five tabs. The "employers get" line is always on top, so the
+/* My CV and its six tabs. The "employers get" line is always on top, so the
    person never has to wonder which CV an employer will receive. The tab is part of the address
    (#cv-versions), written with replaceState so moving between tabs does not fill the Back history. */
 import { html, useState } from "../core/html.js";
 import { useApi, openDialog } from "../core/store.js";
 import { Head, Tabs, Note } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
+import { mustStay } from "../core/router.js";
 import { CvTab } from "../cv/cv-tab.js";
+import { EditTab } from "../cv/edit-tab.js";
 import { previewUrl } from "../ui/doc-preview.js";
 import { SuggTab } from "../cv/sugg-tab.js";
 import { StyleTab } from "../cv/style-tab.js";
@@ -13,7 +15,7 @@ import { ChecksTab } from "../cv/checks-tab.js";
 import { VersionsTab } from "../cv/versions-tab.js";
 import { UncheckedNote } from "../ui/unchecked-note.js";
 
-const TABS = ["cv", "sugg", "style", "checks", "versions"];
+const TABS = ["cv", "edit", "sugg", "style", "checks", "versions"];
 
 function writeTab(t) {
   try { history.replaceState(null, "", "#" + (t === "cv" ? "cv" : "cv-" + t)); } catch (err) { /* a sandboxed frame may refuse */ }
@@ -22,7 +24,8 @@ function writeTab(t) {
 /** The page: header, the employers-get line, and the tabs. */
 export function CvStudio({ arg }) {
   const [t, setTab] = useState(TABS.includes(arg) ? arg : "cv");
-  const setT = next => { setTab(next); writeTab(next); };
+  const move = next => { setTab(next); writeTab(next); };
+  const setT = next => { if (next !== t && !mustStay(() => move(next))) move(next); };
   const { data: cv, error } = useApi("/cv");
   const { data: versions } = useApi("/cv/versions");
   const pending = cv && cv.glance ? cv.glance.pending : 0;
@@ -37,9 +40,11 @@ export function CvStudio({ arg }) {
         target="_blank" rel="noopener">${cv.send === "original" ? "Your file" : "Preview"}</a>
       <button type="button" class="btn small" onClick=${() => setT("cv")}>Change</button></div>`}
     <${UncheckedNote} />
-    <${Tabs} label="My CV" value=${t} onChange=${setT} tabs=${[["cv", "Your CV", ""], ["sugg", "Suggestions", pending || ""],
+    <${Tabs} label="My CV" value=${t} onChange=${setT} tabs=${[["cv", "Your CV", ""], ["edit", "Edit your CV", ""],
+      ["sugg", "Suggestions", pending || ""],
       ["style", "Type and look", ""], ["checks", "Checks", ""], ["versions", "Versions", shown || ""]]} />
     ${t === "cv" && html`<${CvTab} cv=${cv} setT=${setT} />`}
+    ${t === "edit" && html`<${EditTab} setT=${setT} />`}
     ${t === "sugg" && html`<${SuggTab} />`}
     ${t === "style" && html`<${StyleTab} />`}
     ${t === "checks" && html`<${ChecksTab} />`}

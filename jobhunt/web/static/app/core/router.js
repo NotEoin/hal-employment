@@ -4,7 +4,8 @@
    ROUTES lists every page from the start. Pages load on first visit, so one page that fails to load
    shows an error card instead of stopping the whole app. A page module exports its component under
    `name`. The rail, the palette and deep links in pop-ups and emails all use this table. A page with `wide`
-   fills the window: the shell lifts the page's width cap for it (shell/app.js). */
+   fills the window: the shell lifts the page's width cap for it (shell/app.js). A page with unsaved changes
+   sets `guardLeave`, so a link, the rail or Back asks before leaving it. */
 import { store, openSetup } from "./store.js";
 
 export const APP_NAME = "Hal Employment";
@@ -29,7 +30,7 @@ export const ROUTES = {
 
 /** Every deep link the app knows, with example args for the ones that take an id (used by the tests). */
 export const ROUTE_EXAMPLES = [
-  "home", "jobs", "jobs-saved", "jobs-hidden", "jobs-where", "job-<id>", "apps", "app-<id>", "inbox", "cv", "cv-sugg",
+  "home", "jobs", "jobs-saved", "jobs-hidden", "jobs-where", "job-<id>", "apps", "app-<id>", "inbox", "cv", "cv-edit", "cv-sugg",
   "cv-style", "cv-checks", "cv-versions", "docs", "docs-<id>", "docs-details", "record", "record-work",
   "record-inconsistencies", "record-files", "sort-<id>", "check", "activity", "memory",
   "memory-learned", "memory-sites", "memory-answers", "settings", "settings-<group>", "setup", "setup-<step>",
@@ -75,8 +76,21 @@ function writeHash(r, replace) {
   } catch (err) { /* a sandboxed frame may refuse; the page still works */ }
 }
 
+let leaveGuard = null;   // { fn, hash }: a page with unsaved changes, and the address it was set at
+
+/** Sets the check run before the page changes, or clears it with null. `fn(next)` returns true to stay;
+    it may ask the person, then call `next()` to leave after all. */
+export function guardLeave(fn) { leaveGuard = fn ? { fn, hash: location.hash } : null; }
+
+/** True when the guard keeps the page; `next` leaves it after all, with the guard cleared. */
+export function mustStay(next) {
+  if (!leaveGuard) return false;
+  return leaveGuard.fn(() => { leaveGuard = null; next(); });
+}
+
 /** Goes to a route: "#setup" or "setup-<step>" opens the guide over the current page. */
 export function go(r, { replace = false } = {}) {
+  if (mustStay(() => go(r, { replace }))) return;
   const { page, arg } = parse(r);
   if (page === "setup") { openSetup(arg || 0); return; }
   const raw = String(r).replace(/^#/, "");
@@ -90,6 +104,8 @@ export function go(r, { replace = false } = {}) {
 export function followHash() {
   const r = (location.hash || "").slice(1);
   if (!r) return;
+  const back = leaveGuard && leaveGuard.hash;
+  if (mustStay(() => go(r))) { try { history.replaceState(null, "", back); } catch (err) { /* a sandboxed frame */ } return; }
   const { page, arg } = parse(r);
   if (page === "setup") { openSetup(arg || 0); return; }
   const next = ROUTES[r.split("-")[0]] ? r : "home";
