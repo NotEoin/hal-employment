@@ -285,6 +285,7 @@ def reset() -> None:
         _kept.clear()
         _told_reload.clear()
         _still_older.clear()
+        _last_url.clear()
 
 
 def _read(job_id: str, banners: bool = True, options: bool = False, front: bool = True) -> dict:

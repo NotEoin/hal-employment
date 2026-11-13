@@ -197,6 +197,14 @@ class Versions(HelperTest):
         self.assertRegex(helpers.manifest_id(), r"^[a-p]{32}$")
 
 
+class Reset(unittest.TestCase):
+    def test_reset_forgets_the_last_address_of_every_tab(self):
+        # regression: `reset` left `_last_url` behind, so a later test class chose site notes from it
+        extension._last_url["test:job"] = "https://example.org/apply"
+        extension.reset()
+        self.assertEqual(extension._last_url, {})
+
+
 class Browsers(unittest.TestCase):
     def setUp(self):
         with (ROOT / "jobhunt" / "apply" / "browsers.toml").open("rb") as f:
