@@ -375,6 +375,15 @@ class Guards(CvCase):
         self.assertTrue(all("Show the dissertation as a research project" in " ".join(a["field_conventions"])
                             for a in asked), "the humanities type's field conventions reach every request")
 
+    def test_a_line_in_your_own_words_is_never_told_to_the_ai_as_a_writing_problem(self):
+        doc = model.apply(store.current()[1], model.Change("replace", VISITORS, {"sources": [model.YOUR_WORDS]}))
+        store.new_version(doc, origin="manual", what="You edited your CV", by="you")
+        with fake_ai({"cv_suggest": json.dumps({"none": True})}) as backend:
+            suggest.look_again(self.con)
+        asked = [json.loads(r.user) for r in backend.requests("cv_suggest")]
+        self.assertTrue(any(VISITORS in a["lines"] for a in asked), "the line is still read")
+        self.assertFalse([p for a in asked for p in a["writing_problems"] if p.startswith(VISITORS)])
+
 
 class TryAnother(CvCase):
     def test_try_another_way_gives_new_wording(self):

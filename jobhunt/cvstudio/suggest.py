@@ -16,6 +16,8 @@ Design decisions:
   another suggestion's `before` stale, and "Accept all" can apply a kind in one version.
 - The AI's wordings are respelt to the person's spelling (`writing.spelling`) before the guards, so a
   suggestion never brings in the other spelling; the person's own lines get a spelling suggestion instead.
+- A line the person typed or reworded on Edit your CV (`model.YOUR_WORDS`) is in their own words: the AI is
+  never told it breaks a writing rule (`writing_problems`), so Hal does not push to rewrite it.
 - `before` and each `after` are what the card shows. For a reorder they are the names in order, which
   are resolved back to ids against the version being changed, so a renamed part is caught by the guard.
 - The store's functions open their own connection, so this module commits its own rows before and after
@@ -589,8 +591,9 @@ def spelling_words() -> str:
     return spelling.WORDS[spelling.chosen()]
 
 
-def writing_problems(block: str, type_) -> list[str]:
-    """What the writing checker finds in a section's bullet lines, as "<target>: <problem>" lines."""
+def writing_problems(block: str, type_, yours: set[str] | frozenset[str] = frozenset()) -> list[str]:
+    """What the writing checker finds in a section's bullet lines, as "<target>: <problem>" lines; the lines in
+    `yours` are the person's own words and are never listed."""
     from jobhunt.writing import check as writing_check
     from jobhunt.writing import spelling as spelling_mod
 
@@ -598,7 +601,7 @@ def writing_problems(block: str, type_) -> list[str]:
     spelling = spelling_mod.chosen()   # the setting, as the prompt is told; the type's own is only a default
     for row in block.splitlines():
         target, _, text = row.partition("\t")
-        if "/b:" not in target:
+        if "/b:" not in target or target in yours:
             continue
         out += [f"{target}: {h.flag}. {h.message}" for h in writing_check.flagged(writing_check.check(text, "cv",
                                                                                            spelling=spelling))]
@@ -631,7 +634,8 @@ def ask_ai(con: sqlite3.Connection, doc, type_, sids: list[str], failing: list[D
     user = json.dumps({
         "today": now.today.isoformat(), "stage": now.words,
         "cv_type": type_.name, "writing": type_.writing, "lines": block,
-        "failing_checks": [d.title for d in failing], "writing_problems": writing_problems(block, type_),
+        "failing_checks": [d.title for d in failing],
+        "writing_problems": writing_problems(block, type_, _model().your_words(doc)),
         "field_conventions": field_conventions(job), "preferences": _prefs_words(con),
         "record": [{"label": f"{p.get('path', '')} > {p.get('heading', '')}", "text": p.get("text", "")}
                    for p in passages],

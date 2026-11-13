@@ -56,6 +56,7 @@ V1_FIELDS = {"education": ("qualification", "grade", "meta", "detail", "modules"
 V1_AS_EXPERIENCE = ("volunteering", "research", "teaching")
 DATE_JOIN = " - "
 META_JOIN = " | "
+YOUR_WORDS = "you"             # in `Bullet.sources`: the person typed or reworded this line themselves
 
 
 class CVError(ValueError):
@@ -68,7 +69,8 @@ class Bullet:
 
     id: str
     text: str
-    sources: list[str] = field(default_factory=list)   # record passages ("Volunteering/agreement.pdf > Role")
+    # record passages ("Volunteering/agreement.pdf > Role"), record cards ("card:12"), or `YOUR_WORDS`
+    sources: list[str] = field(default_factory=list)
     locked: bool = False                               # "Lines Hal must not touch"
 
 
@@ -422,6 +424,12 @@ def apply(doc: CVDoc, change: Change) -> CVDoc:
     by_id = {x.id: x for x in items}
     setattr(obj, pool, [by_id[i] for i in order])
     return out
+
+
+def your_words(doc: CVDoc) -> set[Target]:
+    """The targets of the lines the person typed or reworded themselves (`YOUR_WORDS` in their sources)."""
+    return {target_of(s, e, b) for s in doc.sections for e in s.entries for b in e.bullets
+            if YOUR_WORDS in b.sources}
 
 
 # ------------------------------------------------------------------------------------------------ diff
