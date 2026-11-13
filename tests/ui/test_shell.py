@@ -197,7 +197,7 @@ class ShellTest(unittest.TestCase):
         self.assertEqual([n[0] for n in nav], FULL_MENU)
         counts = {n[0]: (n[1], n[2]) for n in nav if n[1]}
         self.assertEqual(counts, {"Jobs": ("3", False), "Applications": ("1", True), "Messages": ("2", True),
-                                  "My CV": ("4", False), "What Hal remembers": ("1", False)})
+                                  "Your record": ("4", False), "What Hal remembers": ("1", False)})
         groups = p.page.eval_on_selector_all("nav.rail .navgroup", "els => els.map(e => e.textContent)")
         self.assertEqual(groups, ["Your materials", "Hal"])
         p.page.get_by_role("button", name="Jobs").click()
@@ -209,7 +209,7 @@ class ShellTest(unittest.TestCase):
         nav = p.page.evaluate(NAV_TEXTS)
         self.assertEqual([n[0] for n in nav], ["Home", "Jobs", "Applications", "My CV", "Documents", "More",
                                                "Help and shortcuts"])
-        self.assertEqual(nav[5][1:], ["3", True], "More carries the count of what it hides")
+        self.assertEqual(nav[5][1:], ["7", True], "More carries the count of what it hides")
         p.page.get_by_role("button", name="More").click()
         nav = p.page.evaluate(NAV_TEXTS)
         self.assertEqual([n[0] for n in nav][6:11], ["Messages", "Your record", "Activity", "What Hal remembers",

@@ -63,9 +63,9 @@ def made_up_status(**over: Any) -> dict:
 
 MADE_UP_HOME = {"date_words": "Thursday 22 October", "greeting": "Good morning, Robin", "summary": "",
                 "needs": [{"id": "n1", "icon": "file", "tone": "hal", "title": "Check a cover letter", "detail": "",
-                           "due": None, "act": {"label": "Open", "route": "apps"}}],
-                "new_matches": [], "first_search": None,
-                "counts": {"jobs": 3, "apps": 1, "inbox": 2, "cv": 4, "memory": 1}}
+                           "due": None, "act": {"label": "Open", "route": "apps"}, "urgency": 15}],
+                "new_matches": [], "first_search": None, "week": None, "goal": None, "setup": None, "today": [],
+                "counts": {"jobs": 3, "apps": 1, "inbox": 2, "record": 4, "memory": 1}}
 
 MADE_UP_SEARCH = [{"label": "Museum Assistant, Riverside Trust", "kind": "Job", "route": "job-demo%3A1"},
                   {"label": "Search for jobs now", "kind": "Action", "action": "/jobs/search"}]
@@ -76,8 +76,10 @@ MADE_UP_STEPS = [{"name": "Documents", "note": "Approved", "state": "done"},
                  {"name": "Sent", "note": "", "state": "later"}, {"name": "Interview", "note": "", "state": "later"}]
 MADE_UP_APP = {
     "id": "demo:1", "number": 1, "step": 2, "steps": MADE_UP_STEPS, "first_time": True, "column": "form",
+    "action_id": None, "closed": None,
     "job": {"id": "demo:1", "title": "Museum Assistant", "org": "Riverside Trust", "place": "Leeds", "pay": "",
-            "url": "https://jobs.example.org/riverside/1", "status": "applying", "score": 80, "source": "greenhouse"},
+            "url": "https://jobs.example.org/riverside/1", "status": "applying", "score": 80, "source": "greenhouse",
+            "closes": None},
     "nav": {"index": 1, "total": 2, "prev": None, "next": "demo:2"},
     "docs": {"state": "approved", "writing": None, "approved_at": "2026-10-22T09:00:00Z",
              "cv": {"changes": [], "preview_url": None, "version_n": None, "look": None, "sent_as": "hal_copy"},
@@ -362,7 +364,7 @@ MADE_UP_PAGES = {
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,
                        "not_downloaded_paths": [], "not_mine": 0, "not_mine_paths": [], "errors": [],
-                       "left_out": {}, "by_rules": 0, "again": False, "tidy": False, "private": [], "skipped": {},
+                       "left_out": {}, "by_rules": 0, "private": [], "skipped": {},
                        "skills": {}},
     "/profile": MADE_UP_PROFILE,
     **MADE_UP_PROFILE_KINDS,
