@@ -3,7 +3,6 @@
 `connect()` finds the database through `core.paths` when it is called, never at import, so tests, the
 importer and worktrees each open their own file. The schema is made and upgraded only by the migration runner
 (`core.db.migrate`); migration 0001 holds the tables this module used to create itself.
-`DB_PATH` is kept as a live alias of `paths.db_path()` for code and tests that read it.
 """
 import json
 import sqlite3
@@ -13,12 +12,6 @@ from .core import clock, paths
 from .core.db import migrate
 
 BUSY_TIMEOUT_S = 30  # the web server, its worker and the CLI share the file; each waits out the others' writes
-
-
-def __getattr__(name):  # old constant, read live (PEP 562)
-    if name == "DB_PATH":
-        return paths.db_path()
-    raise AttributeError(name)
 
 # Pipeline order. Anything from 'applied' on is an application in flight.
 STATUSES = [

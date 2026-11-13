@@ -258,7 +258,6 @@ class World:
 
         patches = [
             mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_HOME": str(self.root)}),
-            mock.patch.object(db, "DB_PATH", self.db_path),
             mock.patch.object(db, "connect", world_connect),
             mock.patch.object(config, "BOARDS_PATH", self.root / "boards.toml"),
             mock.patch.object(tasks, "ADDRESS", INBOX_ADDRESS),
