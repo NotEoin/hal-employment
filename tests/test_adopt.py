@@ -8,7 +8,8 @@ from pathlib import Path
 
 from support import legacy
 
-from jobhunt import adopt, db
+from jobhunt import db
+from jobhunt.apply import adopt
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule

@@ -13,10 +13,11 @@ import traceback
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .. import adopt, autofill, browser, db, documents, pack
+from .. import autofill, browser, db, documents, pack
 from ..apply import guard
 from ..apply.queries import AGGREGATORS, form_stuck, load_app, load_job, mark_applied, record_form_state, set_app
 from ..core import runner, settings
+from . import adopt
 
 MINUTE_S = 60
 # How long Hal waits on a page only the applicant can pass is `applying.wait_minutes`; the setting was shown but

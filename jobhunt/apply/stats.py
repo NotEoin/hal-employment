@@ -77,7 +77,7 @@ INTERVIEWS = ("assessment", "interview")
 def week(con, now: datetime | None = None) -> dict:
     """Home's "This week": new matches, applications sent, replies and interviews in the last 7 days, and
     where every application stands. Old (+00:00) and new (Z) times compare on their first 19 characters."""
-    from .docs.routes import column
+    from ..docs.routes import column
 
     now = now or datetime.now().astimezone()
     since_utc = (now - timedelta(days=WEEK_DAYS)).astimezone(UTC).isoformat()[:19]
@@ -90,7 +90,7 @@ def week(con, now: datetime | None = None) -> dict:
 
     # only jobs that Matches or Saved shows: counting hidden jobs said "255 new matches" beside an empty
     # Matches tab after the first search
-    from .find import routes as find_routes
+    from ..find import routes as find_routes
 
     matches = 0
     for tab in ("matches", "saved"):

@@ -70,7 +70,7 @@ class Home(unittest.TestCase):
     def test_this_weeks_new_matches_count_only_jobs_matches_and_saved_show(self):
         # Home said "255 new matches" while Matches showed none, as the goal
         # hid every job the first search found
-        from jobhunt import stats
+        from jobhunt.apply import stats
         from jobhunt.find import routes as find_routes
 
         self.con.execute("UPDATE jobs SET first_seen = ?", (clock.iso(),))

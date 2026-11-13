@@ -160,7 +160,7 @@ def adopt_tab(ctx, job_id: str, url: str = "") -> str:
 
 def matched_tab(con, page: dict) -> dict:
     """The job a tab the person opened belongs to, made when no known job matches."""
-    from .. import adopt
+    from . import adopt
 
     job, made = adopt.adopt(con, page)
     return {"job": job["id"], "made": made, "company": job["company"], "title": job["title"]}
