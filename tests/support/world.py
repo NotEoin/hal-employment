@@ -264,7 +264,7 @@ class World:
             mock.patch.object(tasks, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "PASSWORD_FILE", self.root / "config" / "no-gmail-password"),
-            mock.patch.object(record, "VAULT", self.root / "no-record"),
+            mock.patch.object(record, "VAULT", self.root / "no-record", create=True),
             mock.patch.object(pack, "PACKS", self.root / "packs"),
             mock.patch.object(pack, "VAULT", self.root / "no-hal-vault"),
             mock.patch.object(pack, "APPLICATIONS", self.root / "no-hal-vault" / "Applications"),

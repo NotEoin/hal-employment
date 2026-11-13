@@ -77,7 +77,7 @@ class Sources(unittest.TestCase):
             (root / "Private").mkdir()
             (root / "Private" / "Cover letter draft.md").write_text("A made-up private letter.", encoding="utf-8")
             (root / "Notes on a made-up film.md").write_text("Not writing of the person's own kind.", encoding="utf-8")
-            with mock.patch.object(record, "VAULT", root):
+            with mock.patch.object(record, "VAULT", root, create=True):
                 found = voice.record_samples()
         self.assertEqual(sorted((s.kind, s.source) for s in found),
                          [("letter", "Letters/Cover letter for a made-up trust.md"),

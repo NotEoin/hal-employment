@@ -69,12 +69,6 @@ _LIVE = {"VAULT": lambda: Path(_setting("record.folder") or paths.record_default
          "INDEX": lambda: paths.data_dir() / "record-index" / "index.json"}
 
 
-def __getattr__(name):  # old constants, read live (PEP 562)
-    if name in _LIVE:
-        return _LIVE[name]()
-    raise AttributeError(name)
-
-
 def _live(name: str):
     """An old constant: the value a test assigned to the module, else the live value."""
     return globals()[name] if name in globals() else _LIVE[name]()
