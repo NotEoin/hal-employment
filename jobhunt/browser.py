@@ -185,6 +185,15 @@ class TabGone(RuntimeError):
         super().__init__(GONE)
 
 
+# Playwright words a closed page, context or browser this way; its errors share one type, so the text is the test.
+CLOSED_MARKER = "has been closed"
+
+
+def _tab_closed(e: BaseException) -> bool:
+    """True when `e` says the tab or browser window was closed, so the work cannot go on."""
+    return CLOSED_MARKER in str(e)
+
+
 @contextlib.contextmanager
 def _guarded(page, job_id: str):
     """Holds the page-world submit block on every frame of the page while Hal acts on it."""
@@ -350,7 +359,7 @@ class Browser:
                     fut.set_result(fn(self, *args))
                 except Exception as e:  # errors are re-raised in the caller's thread
                     # A closed tab is reported as such, whichever step it interrupted.
-                    fut.set_exception(TabGone() if "has been closed" in str(e) else e)
+                    fut.set_exception(TabGone() if _tab_closed(e) else e)
 
     def _pump(self) -> None:
         """Lets Playwright read the browser while no work is queued.
@@ -613,7 +622,7 @@ def _read(page, options: bool = True) -> tuple[object, list[dict]]:
     try:
         frame, fields = _extract(page)
     except Exception as e:  # the page moved to another address mid-read
-        if "has been closed" in str(e):
+        if _tab_closed(e):
             raise
         page.wait_for_timeout(1_500)
         _settle(page)
@@ -629,7 +638,7 @@ def _survey(frame) -> dict:
     try:
         return frame.evaluate(SURVEY_JS)
     except Exception as e:  # mid-navigation; an empty survey is retried by the caller's loop
-        if "has been closed" in str(e):
+        if _tab_closed(e):
             raise
         return {"url": frame.url, "title": "", "controls": [], "headings": [], "text": "", "alerts": [],
                 "password": False, "invalid": 0, "captcha": False, "challenge": False, "stayed": False}
@@ -1170,7 +1179,7 @@ def _fill_page(page, job_id: str, fields: list[dict], shot: str) -> dict:
             _fill_one(page, frame, f, now, value)
             filled.append(f)
         except Exception as e:  # report the field and carry on with the rest
-            if "has been closed" in str(e):
+            if _tab_closed(e):
                 raise
             if isinstance(e, guard.WouldSubmit):
                 guard.record(job_id, page.url, e.reason)
@@ -1199,7 +1208,7 @@ def _page_text(frame) -> str:
     try:
         return frame.evaluate(PAGE_TEXT_JS)
     except Exception as e:  # a frame mid-navigation shows no words yet
-        if "has been closed" in str(e):
+        if _tab_closed(e):
             raise
         return ""
 
@@ -1209,7 +1218,7 @@ def _shoot_form(page, shot: str) -> None:
     try:
         page.screenshot(path=shot, full_page=True)
     except Exception as e:  # a page taller than the browser allows falls back to what is on screen
-        if "has been closed" in str(e):
+        if _tab_closed(e):
             raise
         page.screenshot(path=shot)
 
