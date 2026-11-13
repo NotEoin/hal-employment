@@ -12,8 +12,8 @@ Design decisions, each with its reason:
 
 - An application's `mode`, `session_id` and `helper_id` are fixed when its documents are approved,
   so an application started from the laptop keeps using the laptop's browser.
-- G9 runs every kind from its example without a browser, so the examples stand a recording stand-in in
-  for the driver call for the life of the made-up world; the kind's own steps and Activity row are real.
+- G9 runs every kind from its example without a browser: each example names the driver call in `_stub`, and
+  the gate's harness stands a recording stand-in in for it; the kind's own steps and Activity row are real.
 """
 from __future__ import annotations
 
@@ -48,23 +48,12 @@ _APPROVING_GUARD = threading.Lock()
 
 # ------------------------------------------------------------------------------------------- action kinds
 
-def _stand_in(world: Any, owner: Any, name: str) -> None:
-    """For gate G9: replaces one slow call with a stand-in that takes a step, for the world's life."""
-    from unittest import mock
-
-    def stand_in(con, job_id: str, *args, **kw) -> str:
-        runner.say(job_id, "the made-up form was filled")
-        return "done"
-
-    world._stack.enter_context(mock.patch.object(owner, name, stand_in))
-
-
 def _example(name: str | None, owner: Any = driver, **extra: Any):
+    """An example for gate G9; `_stub` names the one slow call that gate's harness stands a recording fake in for."""
     def example(world: Any) -> dict:
         row = world.con.execute("SELECT id FROM jobs WHERE status = 'ready' ORDER BY id LIMIT 1").fetchone()
-        if name:
-            _stand_in(world, owner, name)
-        return {"job_id": row["id"], "_subject": row["id"], **extra}
+        stub = {"_stub": (owner, name)} if name else {}
+        return {"job_id": row["id"], "_subject": row["id"], **stub, **extra}
     return example
 
 

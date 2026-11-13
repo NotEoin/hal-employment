@@ -5,6 +5,7 @@ Each area registers its kinds with an `example(world) -> params`; this harness f
 `runner.load_kinds()`, so a new kind is covered the moment it lands.
 """
 import unittest
+from unittest import mock
 
 from support.world import World
 
@@ -17,6 +18,16 @@ def problems(kind: runner.ActionKind, world: World) -> list[str]:
     if kind.example is None:
         return [f"{kind.kind} has no example for gate G9"]
     params = kind.example(world)
+    stub = params.pop("_stub", None)
+    if stub:
+        # A kind's example names its one slow call; the stand-in takes a step so the kind still has steps to show.
+        owner, name = stub
+
+        def stand_in(con, job_id: str, *args, **kw) -> str:
+            runner.say(job_id, "the made-up form was filled")
+            return "done"
+
+        world._stack.enter_context(mock.patch.object(owner, name, stand_in))
     done = runner.run(kind.kind, params=params, subject=params.pop("_subject", None) if params else None)
     out = []
     if done["state"] != "done":
