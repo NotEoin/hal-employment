@@ -20,6 +20,8 @@ from jobhunt.core import clock, paths, settings
 from jobhunt.core.settings import store
 
 MORNING = "2026-10-22T10:00:00Z"        # 11:00 in London (summer time until 25 October)
+QUEUED_WAIT_S = 10      # a waiting call reaching the queue
+QUEUED_POLL_S = 0.005
 
 
 def claude_like() -> FakeBackend:
@@ -109,7 +111,10 @@ class Allowance(InHome):
             for priority in (2, 1, 0):
                 threads.append(threading.Thread(target=call, args=(priority,)))
                 threads[-1].start()
-                time.sleep(0.05)            # each waiter is queued before the next arrives
+                deadline = time.monotonic() + QUEUED_WAIT_S
+                while len(turns._queue) < len(threads) and time.monotonic() < deadline:   # queued before the next
+                    time.sleep(QUEUED_POLL_S)
+                self.assertEqual(len(turns._queue), len(threads))
         for t in threads:
             t.join(5)
         self.assertEqual(order, [0, 1, 2])

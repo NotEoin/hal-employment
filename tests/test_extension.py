@@ -20,7 +20,7 @@ from pathlib import Path
 from unittest import mock
 
 from support import legacy
-from support.legacy import EXTENSION, PROSE, Practice
+from support.legacy import EXTENSION, PROSE, Practice, Quiet
 from support.practice_site import HelperBrowser
 
 from jobhunt import db, extension
@@ -34,6 +34,7 @@ setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
 CONNECT_WAIT_S = 30
 SHORT_POLL_S = 2          # keeps the reload test quick: a held poll ends this soon
 STEP_S = 0.25
+SLOW_REQUEST_WAIT_S = 30  # the helper's browser reaching the practice site's `/slow` page
 ADOPT_WAIT_S = 60         # finding a handed-over tab's job and filling it
 
 
@@ -93,10 +94,11 @@ class InYourBrowser(PairedHelper, Practice):
         """2026-10-15 10:25: with six applications open, one timed out queued behind another tab's page load."""
         quick, slow = self.job("ext-quick", "form.html"), self.job("ext-slow", "form.html")
         extension._ask("open", timeout=60, job=quick, url=f"{self.base}/form.html")
+        Quiet.slow_requested.clear()
         opening = threading.Thread(target=extension._ask, args=("open",),
                                    kwargs={"timeout": 60, "job": slow, "url": f"{self.base}/slow"})
         opening.start()
-        time.sleep(0.5)
+        self.assertTrue(Quiet.slow_requested.wait(SLOW_REQUEST_WAIT_S), "the slow page was never requested")
         started = time.time()
         extension._ask("read", timeout=4, job=quick, patterns={**extension.PATTERNS, "banners": None, "options": False})
         self.assertLess(time.time() - started, 4)

@@ -62,12 +62,15 @@ def fake_model(job, fields, docs, con=None, problems=None, notes=None):
 
 
 class Quiet(http.server.SimpleHTTPRequestHandler):
+    slow_requested = threading.Event()      # set when a `/slow` request arrives, so a test need not guess when
+
     def log_message(self, fmt, *args):  # noqa: D102 - keep the test output to the results
         pass
 
     def do_GET(self):
         """/slow is the practice form, six seconds late, as a busy employer's site can be."""
         if self.path.startswith("/slow"):
+            self.slow_requested.set()
             time.sleep(6)
             self.path = "/form.html"
         super().do_GET()
