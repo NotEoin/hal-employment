@@ -1,11 +1,11 @@
 """The `privacy.export` action kind: the zip of everything Hal keeps, without secrets or private answers.
 
-Kept apart from `privacy_routes.py` so `runner.load_kinds()`, which imports only `actions` modules, finds it
-(gate G9) without loading the routes. The zip itself is `privacy_routes.export`.
+Kept apart from `routes.py` so `runner.load_kinds()`, which imports only `actions` modules, finds it
+(gate G9) without loading the routes. The zip itself is `routes.export`.
 """
 from __future__ import annotations
 
-from . import clock, runner
+from ..core import clock, runner
 
 KIND = "privacy.export"
 
@@ -14,8 +14,8 @@ KIND = "privacy.export"
                why="You pressed Export everything", exclusive="kind", example=lambda world: {})
 def export_everything(ctx: runner.Ctx) -> dict:
     """Writes the zip into the exports folder and registers it for download."""
-    from . import helpfile
-    from .privacy_routes import export
+    from ..core import helpfile
+    from .routes import export
 
     folder = helpfile.exports_dir()
     folder.mkdir(parents=True, exist_ok=True)

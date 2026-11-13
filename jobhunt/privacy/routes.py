@@ -25,8 +25,9 @@ import threading
 import zipfile
 from pathlib import Path
 
+from ..core import clock, paths, runner
 from ..web.router import BadRequest, Conflict, Request, route
-from . import clock, paths, privacy_actions, runner
+from . import actions
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ ALWAYS_LEAVES = ("Searches sent to job sites", "Checks for updates on GitHub")
 
 
 def _secret_values() -> list[str]:
-    from .settings import secrets
+    from ..core.settings import secrets
 
     out = []
     for name in secrets.NAMES:
@@ -64,8 +65,8 @@ def _secret_values() -> list[str]:
 
 def leaves() -> list[str]:
     """What leaves this computer, worked out from the settings."""
-    from . import settings
-    from .settings import secrets
+    from ..core import settings
+    from ..core.settings import secrets
 
     out = [ALWAYS_LEAVES[0]]
     if secrets.status("email.app_password") == "saved":
@@ -79,7 +80,7 @@ def leaves() -> list[str]:
 
 
 def _record_folder() -> Path:
-    from . import settings
+    from ..core import settings
 
     chosen = settings.get("record.folder")
     return Path(chosen).expanduser() if chosen else paths.record_default()
@@ -88,7 +89,7 @@ def _record_folder() -> Path:
 @route("GET", "/api/v2/privacy")
 def privacy(req: Request) -> dict:
     """Where your data is kept, whether this window can open it, and what leaves this computer."""
-    from .settings import secrets
+    from ..core.settings import secrets
 
     where = {"data": str(paths.data_dir()), "config": str(paths.config_dir()),
              "documents": str(paths.applications_dir()), "record": str(_record_folder())}
@@ -172,7 +173,7 @@ def export(target: Path, step=lambda words: None) -> list[str]:
 def start_export(req: Request) -> dict:
     """Starts making the zip; the action's result names the file."""
     try:
-        aid = runner.start(privacy_actions.KIND, subject="_export", session_id=req.session_id,
+        aid = runner.start(actions.KIND, subject="_export", session_id=req.session_id,
                            remote=req.remote)
     except RuntimeError as e:
         raise Conflict("Hal is already making a zip.") from e
@@ -208,7 +209,7 @@ def folders_to_delete() -> list[Path]:
 
 def delete_everything() -> list[str]:
     """Deletes Hal's data, settings, cache, documents and saved secrets; returns what could not be deleted."""
-    from .settings import secrets
+    from ..core.settings import secrets
 
     folders = folders_to_delete()
     failed = []
@@ -249,7 +250,7 @@ def delete(req: Request) -> dict:
 def open_folder(folder: Path) -> None:
     """Opens `folder` in the file manager of this computer."""
     try:
-        from . import platform as plat
+        from ..core import platform as plat
         plat.current().open_path(folder)
         return
     except (ImportError, AttributeError, NotImplementedError):

@@ -8,8 +8,9 @@ import support  # noqa: F401 - sets the test home before jobhunt is imported
 from support.api import HalServer
 from support.private_answers import saved
 
-from jobhunt.core import helpfile, paths, privacy_routes, runner
+from jobhunt.core import helpfile, paths, runner
 from jobhunt.core.settings import secrets
+from jobhunt.privacy import routes as privacy_routes
 from jobhunt.web.router import Conflict
 
 CANARY = "SYNTH-PRIVATE-5521 made-up adjustment"

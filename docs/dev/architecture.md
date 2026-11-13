@@ -2007,7 +2007,7 @@ desktop pop-ups.
   `apply/helper_mirror.py`), because snap and flatpak browsers cannot read hidden folders and Windows hides
   AppData in its folder picker.
 
-## Privacy and help files (`core/privacy_routes.py`, `core/helpfile.py`)
+## Privacy and help files (`jobhunt/privacy/`, `core/helpfile.py`)
 
 "Privacy and data" builds its rows from `GET /privacy`. Export everything (`privacy.export`) leaves out
 `private.toml`, the config folder, the browser profile, form pictures and logs by folder, and drops any
