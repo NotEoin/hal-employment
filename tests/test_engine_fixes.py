@@ -17,7 +17,7 @@ from support.legacy import Practice
 from support.practice_site import HelperBrowser, PracticeSite
 
 from jobhunt import browser, db, extension
-from jobhunt.apply import driver, queries
+from jobhunt.apply import driver
 from jobhunt.sites import notes
 
 # unittest runs these for this module: no salary research, and no private answers.

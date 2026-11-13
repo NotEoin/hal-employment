@@ -15,7 +15,6 @@ import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path
 
 from . import ai
 from .ai.base import LLMUnavailable

@@ -6,7 +6,6 @@ the advert's skills the CV names, and `requirements` asks the model for the adve
 CV's evidence for each, keeping only quotes that really are in the text.
 """
 import re
-from pathlib import Path
 
 from . import ai, record
 

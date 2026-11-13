@@ -65,7 +65,7 @@ from pathlib import Path
 
 from . import cv, db, llm, record, reputation, research
 from .ai import prompts
-from .core import events, paths
+from .core import events
 from .cvstudio import context as cv_context
 from .profile import writing as profile_writing
 from .writing import check as writing_check
