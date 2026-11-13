@@ -134,7 +134,7 @@ class Practice(unittest.TestCase):
         return job_id
 
     def form(self, job_id: str) -> dict:
-        return queries._app(self.con, job_id)["form"]
+        return queries.load_app(self.con, job_id)["form"]
 
     def status(self, job_id: str) -> str:
         return self.con.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()["status"]

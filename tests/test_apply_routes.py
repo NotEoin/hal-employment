@@ -283,7 +283,7 @@ class Routes(unittest.TestCase):
                  "site": "jobs.example.org"}
         with mock.patch.object(driver.time, "time", lambda: next(clock)), \
                 mock.patch.object(driver.time, "sleep", lambda s: None), \
-                mock.patch.object(driver, "_checkpoint", lambda job: None), \
+                mock.patch.object(driver.runner, "checkpoint", lambda job: None), \
                 mock.patch.object(browser, "show", lambda job: True), \
                 mock.patch.object(browser, "peek", lambda job: looks.append(job) or {"needs": "sign-in"}):
             with self.assertRaisesRegex(RuntimeError, "gave up waiting"):

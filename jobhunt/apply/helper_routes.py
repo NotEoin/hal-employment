@@ -197,11 +197,12 @@ def adopt(req: Request) -> dict:
 def fill_empty(req: Request) -> dict:
     """The panel's "Fill empty boxes": fills what the job's tab shows that is still empty."""
     from .driver import act_page
+    from .queries import form_stuck
 
     job_id = str(json_body(req).get("job_id") or "")
     if not job_id:
         raise BadRequest("The helper did not say which job this tab is for.")
-    entry = runner.run_action(job_id, "filling this page", act_page, job_id)
+    entry = runner.run_action(job_id, "filling this page", act_page, job_id, on_stuck=form_stuck)
     return {"ok": True, "state": entry.get("state")}
 
 
@@ -209,12 +210,12 @@ def fill_empty(req: Request) -> dict:
 def file(req: Request) -> FileResponse:
     """A document to upload, from that application's own documents only."""
     from .. import documents
-    from .queries import _job
+    from .queries import load_job
 
     job_id = req.query.get("job_id") or ""
     con = req.con
     try:
-        job = _job(con, job_id)
+        job = load_job(con, job_id)
     except LookupError as e:
         raise NotFound("There is no such job.") from e
     files = documents.files(job)

@@ -14,7 +14,7 @@ from support.world import World, job_id
 
 from jobhunt import autofill, browser, db, documents
 from jobhunt.apply import driver
-from jobhunt.apply.queries import _app
+from jobhunt.apply.queries import load_app
 from jobhunt.core import runner, settings
 
 JOB = "sorrel-ready"
@@ -106,7 +106,7 @@ class Flow(unittest.TestCase):
             return driver.act_auto(self.con, self.job_id)
 
     def form(self) -> dict:
-        return _app(self.con, self.job_id)["form"]
+        return load_app(self.con, self.job_id)["form"]
 
     def test_the_approval_words_are_the_same_in_both_modes(self):
         said = {}

@@ -25,7 +25,7 @@ from typing import Any
 from .. import browser, db, documents
 from ..core import runner, settings
 from . import driver
-from .queries import _app, _job, _set_app, _site_of, column_of, mark_applied
+from .queries import column_of, load_app, load_job, mark_applied, set_app, site_of
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def _stand_in(world: Any, owner: Any, name: str) -> None:
     from unittest import mock
 
     def stand_in(con, job_id: str, *args, **kw) -> str:
-        driver._say(job_id, "the made-up form was filled")
+        runner.say(job_id, "the made-up form was filled")
         return "done"
 
     world._stack.enter_context(mock.patch.object(owner, name, stand_in))
@@ -85,7 +85,7 @@ def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
     """
     from .. import pack
 
-    job = _job(ctx.con, job_id)
+    job = load_job(ctx.con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(ctx.con, job_id, "applying", "chosen from the queue")
         ctx.con.commit()
@@ -248,7 +248,7 @@ def approve_documents(con, job_id: str, body: dict | None = None, *, session_id:
 
 def _approve_documents(con, job_id: str, body: dict | None, *, session_id: str | None, helper_id: str | None,
                        remote: bool, priority: int | None) -> str:
-    job = _job(con, job_id)
+    job = load_job(con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "chosen from the queue")
     from ..writing import edits
@@ -259,8 +259,8 @@ def _approve_documents(con, job_id: str, body: dict | None, *, session_id: str |
     documents.save(con, job, docs)
     edits.from_documents(con, job, before, docs)   # an approval carries the person's last edits
     # The Form step starts now, not when the page has loaded: the application page follows it at once.
-    stage = {} if _app(con, job_id)["stage"] in ("form", "filled") else {"stage": "form"}
-    _set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id, **stage)
+    stage = {} if load_app(con, job_id)["stage"] in ("form", "filled") else {"stage": "form"}
+    set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id, **stage)
     db.log(con, job_id, "note", "documents approved")
     con.commit()
     if not settings.get("setup.first_app_seen"):
@@ -275,14 +275,14 @@ def reopen_documents(con, job_id: str) -> None:
     Hal stops filling. The employer's tab stays open, so approving again fills the form on show there with
     the changed documents.
     """
-    job = _job(con, job_id)
+    job = load_job(con, job_id)
     if job["status"] != "applying":
         raise ValueError("Only an application in progress can go back to its documents.")
     runner.stop_action(job_id)
     docs = documents.load(con, job)
     docs.pop("approved", None)
     documents.save(con, job, docs)
-    _set_app(con, job_id, stage="documents", approved_at=None)
+    set_app(con, job_id, stage="documents", approved_at=None)
     db.log(con, job_id, "note", "documents reopened to change them")
     con.commit()
 
@@ -295,23 +295,23 @@ def save_documents(con, job_id: str, body: dict, *, by_you: bool = False) -> dic
     """
     from ..writing import edits
 
-    job = _job(con, job_id)
+    job = load_job(con, job_id)
     before = documents.load(con, job)
     after = _merge_edits(before, body)
     documents.save(con, job, after)
     if by_you:
         edits.from_documents(con, job, before, after)
-    form = _app(con, job_id)["form"]
+    form = load_app(con, job_id)["form"]
     stale = bool(form and form.get("filled"))
     if stale:
         form["stale"] = True
-        _set_app(con, job_id, form=form)
+        set_app(con, job_id, form=form)
     return {"ok": True, "form_out_of_date": stale}
 
 
 def set_change(con, job_id: str, change_id: str, on: bool) -> list[str]:
     """Undo (`on` False) or Redo one per-job CV change; returns the changes now undone."""
-    job = _job(con, job_id)
+    job = load_job(con, job_id)
     docs = documents.load(con, job)
     undone = [c for c in docs.get("undone_changes") or [] if c != change_id]
     if not on:
@@ -330,7 +330,7 @@ def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") 
     """
     if reason not in DISCARD_REASONS:
         raise ValueError(f"Choose why: one of {', '.join(DISCARD_REASONS)}.")
-    job = _job(con, job_id)
+    job = load_job(con, job_id)
     stopped = runner.stop_action(job_id)
     started = job["status"] == "applying"
     if started or stopped:
@@ -341,7 +341,7 @@ def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") 
     db.set_status(con, job_id, "closed" if reason == "advert_closed" else "skipped",
                   f"discarded {where}{': ' + said if said else ''}")
     if reason == "too_much_effort":
-        db.log(con, job_id, "effort", _site_of(con, job))
+        db.log(con, job_id, "effort", site_of(con, job))
     if started and not stopped:
         # An application with no row yet (Getting ready) gets one, so Closed can list it with its reason.
         # After a stopped run nothing new is written: that run's work is dropped whole.
@@ -377,7 +377,7 @@ def restore(con, job_id: str) -> None:
 
 def sent_myself(con, job_id: str) -> str:
     """I sent it myself: works at any step; Hal stops and the application moves to Sent."""
-    job = _job(con, job_id)
+    job = load_job(con, job_id)
     runner.stop_action(job_id)
     mark_applied(con, job, "you said you sent it yourself", sent_how="you_said")
     return "sent"
@@ -387,12 +387,12 @@ def change_status(con, job_id: str, status: str, words: str = "") -> str | None:
     """Moves an application by hand (interview booked, rejected, ...); returns its board column."""
     if status not in CHANGEABLE:
         raise ValueError(f"An application can be moved to {', '.join(CHANGEABLE)}.")
-    _job(con, job_id)
+    load_job(con, job_id)
     db.set_status(con, job_id, status, (words or "").strip())
     if status in STATUS_REASONS:
-        _set_app(con, job_id, closed_reason=STATUS_REASONS[status], closed_detail=(words or "").strip() or None)
+        set_app(con, job_id, closed_reason=STATUS_REASONS[status], closed_detail=(words or "").strip() or None)
     con.commit()
-    return column_of(status, _app(con, job_id)["stage"])
+    return column_of(status, load_app(con, job_id)["stage"])
 
 
 def add_note(con, job_id: str, text: str) -> None:
@@ -400,6 +400,6 @@ def add_note(con, job_id: str, text: str) -> None:
     text = (text or "").strip()
     if not text:
         raise ValueError("Write the note first.")
-    _job(con, job_id)
+    load_job(con, job_id)
     db.log(con, job_id, "note", text)
     con.commit()

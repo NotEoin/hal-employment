@@ -15,9 +15,8 @@ from urllib.parse import urlparse
 
 from .. import adopt, autofill, browser, db, documents, pack
 from ..apply import guard
-from ..apply.queries import AGGREGATORS, _app, _job, _set_app, mark_applied
-from ..core import settings
-from ..core.runner import ACTIONS, _carry_out, _checkpoint, _note, _say
+from ..apply.queries import AGGREGATORS, form_stuck, load_app, load_job, mark_applied, record_form_state, set_app
+from ..core import runner, settings
 
 MINUTE_S = 60
 # How long Hal waits on a page only the applicant can pass is `applying.wait_minutes`; the setting was shown but
@@ -56,8 +55,9 @@ def _past_walls(con, job, found: dict) -> dict:
         need, wall = found["needs"], found["url"]
         typed = need == "code" and _type_code(con, job, found.get("boxes") or [])
         ask = ASKS["code-typed" if typed else need].format(site=found["site"])
-        _say(job_id, f"waiting for you to {ask} in {browser.where()}; Hal carries on by itself")
-        _note(con, job_id, "needs", f"Hal needs you to {ask} in {browser.where()}. It carries on by itself afterwards.")
+        runner.say(job_id, f"waiting for you to {ask} in {browser.where()}; Hal carries on by itself")
+        record_form_state(con, job_id, "needs",
+                          f"Hal needs you to {ask} in {browser.where()}. It carries on by itself afterwards.")
         browser.show(job_id)
         db.alert(con, "urgent", f"Hal needs you: {job['company']}", f"{ask[0].upper()}{ask[1:]} in {browser.where()}.", job_id)
         con.commit()
@@ -65,7 +65,7 @@ def _past_walls(con, job, found: dict) -> dict:
             if time.time() > deadline:
                 raise RuntimeError(f"gave up waiting for you to {ask}; do that in {browser.where()}, then press \"Fill in the form\"")
             time.sleep(3)
-            _checkpoint(job_id)
+            runner.checkpoint(job_id)
             now = browser.peek(job_id)
             if now.get("gone"):
                 raise browser.TabGone()
@@ -78,7 +78,7 @@ def _past_walls(con, job, found: dict) -> dict:
                 continue
             if now["form"] or now["sent"] or now["needs"] != need:
                 break
-        _say(job_id, "carrying on to the form")
+        runner.say(job_id, "carrying on to the form")
         found = browser.resume(job_id, need, wall)
     return found
 
@@ -117,9 +117,9 @@ def _reach(con, job, found: dict) -> dict:
         if found["needs"] == "check" and not searched and any(a in found["site"] for a in AGGREGATORS):
             # A job board's human check is not Hal's to pass; the employer's own page rarely has one.
             searched = True
-            _say(job_id, f"{found['site']} wants a human check; looking for the employer's own page instead")
+            runner.say(job_id, f"{found['site']} wants a human check; looking for the employer's own page instead")
             url = _find_posting(job, found["site"])
-            _checkpoint(job_id)
+            runner.checkpoint(job_id)
             if url:
                 found = browser.open_form(job_id, url)
                 continue
@@ -128,15 +128,15 @@ def _reach(con, job, found: dict) -> dict:
             return found
         if not searched and (found["blocked"] or not found["controls"]):
             searched = True
-            _say(job_id, f"{found['site']} would not show the advert; looking for the employer's own page")
+            runner.say(job_id, f"{found['site']} would not show the advert; looking for the employer's own page")
             url = _find_posting(job, found["site"])
-            _checkpoint(job_id)
+            runner.checkpoint(job_id)
             if url:
                 found = browser.open_form(job_id, url)
                 continue
         if len(tried) >= 3:
             return found
-        _say(job_id, "no Apply button recognised; working out the way to the form")
+        runner.say(job_id, "no Apply button recognised; working out the way to the form")
         # Submit-like controls are never offered to the model, and never pressed if it names one anyway.
         page = {"form": bool(found["fields"]), "final": bool(found["fields"])}
         safe = [c for c in found["controls"] if c["name"] not in tried and not guard.never_press(c, page)]
@@ -146,7 +146,7 @@ def _reach(con, job, found: dict) -> dict:
         picked = next((c for c in found["controls"] if c["name"] == name), {"name": name})
         guard.check(job_id, found["url"], picked, page)
         tried.append(name)
-        _say(job_id, f"pressing \"{name}\"")
+        runner.say(job_id, f"pressing \"{name}\"")
         found = browser.press_control(job_id, name)
 
 
@@ -158,10 +158,10 @@ def _answer(con, job, found: dict, step: int, done: list) -> dict:
             (f["kind"] == "file" and re.search(r"cover", f"{f.get('label')} {f.get('context', '')}", re.I))
             or (f["kind"] in ("text", "textarea") and re.search(r"cover letter", f.get("label") or "", re.I))
             for f in found["fields"]):
-        _say(job_id, "writing a cover letter, which this form asks for")
+        runner.say(job_id, "writing a cover letter, which this form asks for")
         if documents.draft_letter(con, job):
             docs = documents.load(con, job)
-    _say(job_id, f"answering {len(found['fields'])} questions" + (f" on step {step}" if step > 1 else ""))
+    runner.say(job_id, f"answering {len(found['fields'])} questions" + (f" on step {step}" if step > 1 else ""))
     notes = browser.notes_for(found["url"], job_id)
     fields = autofill.propose(job, found["fields"], docs, documents.files(job), con, notes=notes)
     # Answers its owner gave on an earlier run at this form stand.
@@ -175,7 +175,7 @@ def _answer(con, job, found: dict, step: int, done: list) -> dict:
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": fields,
             "model": waiting or "", "filled": None, "submit": None, "step": step, "done": done,
             "final": not found["next"], "state": "working", "message": "", "press": ""}
-    _set_app(con, job_id, stage="form", form=form)
+    set_app(con, job_id, stage="form", form=form)
     return form
 
 
@@ -194,7 +194,7 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
     docs = documents.load(con, job)
     fields = form["fields"]
     notes = browser.notes_for(form.get("url") or "", job_id)
-    _say(job_id, "filling in the form")
+    runner.say(job_id, "filling in the form")
     out = _fill_uploads_first(job_id, only if only is not None else fields)
     _note_uses(form, out)
     for _ in range(FIX_ROUNDS):
@@ -204,11 +204,11 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
         if not fresh and not retry:
             break
         if fresh:
-            _say(job_id, f"answering {len(fresh)} more questions the form has just shown")
+            runner.say(job_id, f"answering {len(fresh)} more questions the form has just shown")
             fields.extend(_one_cv(fields, autofill.propose(job, fresh, docs, documents.files(job), con,
                                                           notes=notes)))
         autofill.ask_model(job, fields, docs, con, problems=retry, notes=notes)
-        _checkpoint(job_id)
+        runner.checkpoint(job_id)
         out = browser.fill(job_id, fields, _shot(job_id))
         _note_uses(form, out)
     _pick_again(job_id, fields, out)
@@ -230,7 +230,7 @@ def _pick_again(job_id: str, fields: list[dict], out: dict) -> None:
     again = [f for f in fields if out["errors"].get(f["hid"], "").startswith("no option") and f.get("source") != "hal"]
     if not again:
         return
-    _checkpoint(job_id)
+    runner.checkpoint(job_id)
     second = browser.fill(job_id, again, _shot(job_id))
     for f in again:
         if f["hid"] in second["errors"]:
@@ -258,7 +258,7 @@ def _fill_uploads_first(job_id: str, todo: list[dict]) -> dict:
     seen: set[str] = set()
     for _ in range(UPLOAD_SETTLE_LOOKS):
         time.sleep(UPLOAD_SETTLE_S)
-        _checkpoint(job_id)
+        runner.checkpoint(job_id)
         now = browser.read_here(job_id)["fields"]
         sigs = {f["sig"] for f in now}
         if sigs == seen:
@@ -369,7 +369,7 @@ def _hold(con, job, form: dict) -> str:
     needs = bool(empty or refused or form["filled"].get("password"))
     state, message = ("needs" if needs else "ready"), form_words(form)
     form.update(state=state, message=message)
-    _set_app(con, job_id, stage="filled", form=form)
+    set_app(con, job_id, stage="filled", form=form)
     if browser.mode() == "extension":
         _mark(job, form)
     if form["final"] or needs:
@@ -452,9 +452,9 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
     Args:
         last: What the fields of the page before showed when last seen, by field, to learn the owner's changes from.
     """
-    job = _job(con, job_id)
-    form = _app(con, job_id)["form"] or {}
-    _say(job_id, "reading the page")
+    job = load_job(con, job_id)
+    form = load_app(con, job_id)["form"] or {}
+    runner.say(job_id, "reading the page")
     found = browser.read_here(job_id)
     known = {f.get("sig") for f in form.get("fields", [])}
     seen = {f["sig"] for f in found["fields"]}
@@ -479,7 +479,7 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
              if f.get("sig") in by_sig and shown.get(f["sig"]) in (None, "", [], False)
              and f.get("value") not in (None, "", [], False) and not f.get("skip")]
     if empty:
-        _say(job_id, f"filling in {len(empty)} empty answers")
+        runner.say(job_id, f"filling in {len(empty)} empty answers")
         out = browser.fill(job_id, empty, _shot(job_id))
         _note_uses(form, out)
         for f in form["fields"]:
@@ -493,18 +493,18 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
 
 def act_adopt(con, job_id: str, url: str) -> str:
     """Fills an application the applicant opened in a tab of their own and handed to Hal."""
-    job = _job(con, job_id)
+    job = load_job(con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "opened by you in your own browser")
         con.commit()
-    form = _app(con, job_id)["form"] or {}
+    form = load_app(con, job_id)["form"] or {}
     if form.get("fields") and adopt.address(form.get("url", "")) != adopt.address(url):
         # A form Hal filled elsewhere for this job is not this one; this tab starts afresh.
-        _set_app(con, job_id, stage="form", form={**form, "fields": [], "step": 1, "done": [], "url": url})
+        set_app(con, job_id, stage="form", form={**form, "fields": [], "step": 1, "done": [], "url": url})
     documents.render(job, documents.load(con, job))
-    if (_app(con, job_id)["form"] or {}).get("fields"):
+    if (load_app(con, job_id)["form"] or {}).get("fields"):
         return act_page(con, job_id)
-    _say(job_id, "reading your tab")
+    runner.say(job_id, "reading your tab")
     found = browser.read_here(job_id)
     if not found["fields"]:
         # An advert rather than its form: Hal finds the way on, as it does from a link.
@@ -515,7 +515,7 @@ def act_adopt(con, job_id: str, url: str) -> str:
 def _terminal(con, job, found: dict) -> str | None:
     """Deals with a page that ends the way to the form; returns what to tell the applicant, or None."""
     job_id = job["id"]
-    _checkpoint(job_id)
+    runner.checkpoint(job_id)
     if found["closed"]:
         db.set_status(con, job_id, "closed", f"the advert has gone from {found['site']}")
         db.alert(con, "info", f"No longer open: {job['company']}", job["title"], job_id)
@@ -535,7 +535,7 @@ def _terminal(con, job, found: dict) -> str | None:
                else f"no application form found on {found['site']}")
         form.update(state="stuck", message=f"{why}. Open the form in {browser.where()}, then press "
                                            "\"Fill in the form\".")
-        _set_app(con, job_id, stage="form", form=form)
+        set_app(con, job_id, stage="form", form=form)
         db.alert(con, "urgent", f"Hal needs you: {job['company']}", form["message"], job_id)
         con.commit()
         browser.show(job_id)
@@ -576,11 +576,11 @@ def _drive_steps(con, job, found: dict, step: int, done: list) -> str:
 def _refused(con, job, e: guard.WouldSubmit) -> str:
     """Stops where the guard refused a press, and leaves the page to the person."""
     job_id = job["id"]
-    form = _app(con, job_id)["form"] or {}
+    form = load_app(con, job_id)["form"] or {}
     message = (f"{guard.STOPPED}: {e.reason}. Check the page in {browser.where()}, then press Submit on the "
                "site yourself, or press Next there and Hal fills the next page.")
     form.update(state="needs", message=message)
-    _set_app(con, job_id, stage="filled" if form.get("fields") else "form", form=form)
+    set_app(con, job_id, stage="filled" if form.get("fields") else "form", form=form)
     db.alert(con, "urgent", f"Hal needs you: {job['company']}", message, job_id)
     con.commit()
     watch_tab(job_id)
@@ -600,7 +600,7 @@ def _move_on(con, job, form: dict) -> tuple[dict, int, list]:
     job_id = job["id"]
     docs = documents.load(con, job)
     for attempt in range(2):
-        _say(job_id, f"moving on from step {form['step']}")
+        runner.say(job_id, f"moving on from step {form['step']}")
         moved = browser.next_step(job_id)
         if not moved["stayed"]:
             return moved, form["step"] + 1, [*form["done"], _summary(form)]
@@ -611,9 +611,9 @@ def _move_on(con, job, form: dict) -> tuple[dict, int, list]:
                 f["error"] = problems.get(f["hid"], f.get("error", ""))
             form.update(state="needs", message=f"The form would not move on{': ' + said if said else ''}. "
                                                f"Put it right here or in {browser.where()}, then approve again.")
-            _set_app(con, job_id, stage="filled", form=form)
+            set_app(con, job_id, stage="filled", form=form)
             raise RuntimeError(form["message"])
-        _say(job_id, "the form refused some answers; trying again")
+        runner.say(job_id, "the form refused some answers; trying again")
         autofill.ask_model(job, form["fields"], docs, con, problems=problems)
         _enter(con, job, form, only=[f for f in form["fields"] if f["hid"] in problems])
     raise AssertionError("unreachable")
@@ -626,7 +626,7 @@ def act_auto(con, job_id: str, here: bool = False, fresh: bool = False) -> str:
         here: Fill the page the job's tab shows, and never press anything to get to a form.
         fresh: Open the application from the advert even when the job's tab already shows a form.
     """
-    job = _job(con, job_id)
+    job = load_job(con, job_id)
     if not here and not fresh:
         # A form already open in the job's tab is the one meant: opening the advert again would close it.
         try:
@@ -636,19 +636,19 @@ def act_auto(con, job_id: str, here: bool = False, fresh: bool = False) -> str:
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "chosen from the queue")
         con.commit()
-    form = _app(con, job_id)["form"] or {}
+    form = load_app(con, job_id)["form"] or {}
     step, done = (form.get("step", 1), form.get("done", [])) if here else (1, [])
     past = [*form.get("fields", []), *(f for s in form.get("done", []) for f in s["fields"])]
     KEPT[job_id] = {**KEPT.get(job_id, {}), **{f["sig"]: f["value"] for f in past if f.get("source") == "you"
                                                  and f.get("sig") and f.get("value") not in (None, "", [])}}
-    _set_app(con, job_id, stage="form", form={"url": "", "title": "", "captcha": False, "fields": [], "model": "",
+    set_app(con, job_id, stage="form", form={"url": "", "title": "", "captcha": False, "fields": [], "model": "",
                                               "filled": None, "submit": None, "step": step, "done": done,
                                               "final": False, "state": "working", "message": "", "press": ""})
     # The cover letter's PDF is drawn from the current text before any form asks for it.
     documents.render(job, documents.load(con, job))
     for attempt in range(2):
         try:
-            _say(job_id, "reading the page" if here else "opening the application")
+            runner.say(job_id, "reading the page" if here else "opening the application")
             found = browser.read_here(job_id) if here else browser.open_form(job_id, browser.application_url(job))
             if here and not found["fields"]:
                 raise RuntimeError(f"Hal cannot see a form in {browser.where()}. Open the form there (press the "
@@ -669,19 +669,19 @@ def act_approve(con, job_id: str, edits: list[dict]) -> str:
         return _approve(con, job_id, edits)
     except browser.TabGone:
         # The approval was of a form that is no longer on screen; a fresh one must be seen before it is sent.
-        _say(job_id, "the form's window had been closed; filling it in again")
+        runner.say(job_id, "the form's window had been closed; filling it in again")
         act_auto(con, job_id)
         raise RuntimeError("the form's window had been closed, so Hal has filled it in again and sent nothing; "
                            "check the form, then approve once more") from None
     except guard.WouldSubmit as e:
-        return _refused(con, _job(con, job_id), e)
+        return _refused(con, load_job(con, job_id), e)
 
 
 def _approve(con, job_id: str, edits: list[dict]) -> str:
-    job = _job(con, job_id)
-    form = _app(con, job_id)["form"]
+    job = load_job(con, job_id)
+    form = load_app(con, job_id)["form"]
     changed = _apply_edits(form, edits)
-    _set_app(con, job_id, form=form)
+    set_app(con, job_id, form=form)
     autofill.remember(con, form["fields"], job["company"], job=job)
     if form.get("press") == "apply":
         # A form stored before Hal stopped pressing Apply on signed-in sites.
@@ -723,9 +723,9 @@ def _hand_over(con, job, form: dict) -> str:
     job_id = job["id"]
     now = db.now()
     form.update(state="ready", message=HANDED_OVER, handed_over=now)
-    _set_app(con, job_id, stage="filled", form=form, handed_over_at=now)
+    set_app(con, job_id, stage="filled", form=form, handed_over_at=now)
     db.log(con, job_id, "note", "handed over to you to press Submit on the employer's site")
-    _say(job_id, "ready for you to send")
+    runner.say(job_id, "ready for you to send")
     if browser.mode() == "extension":
         _mark(job, form)
     browser.show(job_id)
@@ -747,16 +747,16 @@ def _type_code(con, job, boxes: list[str]) -> bool:
     boxes = boxes or browser.peek(job_id).get("code") or []
     if not boxes:
         return False
-    _say(job_id, "the site emailed a code; reading it from the job inbox")
+    runner.say(job_id, "the site emailed a code; reading it from the job inbox")
     since = time.time()
     for _ in range(CODE_TRIES):
-        _checkpoint(job_id)
+        runner.checkpoint(job_id)
         code = gmail.security_code(since - CODE_LOOKBACK)
         if code:
             try:
                 browser.type_code(job_id, code, boxes)
             except RuntimeError as e:
-                _say(job_id, f"could not type the code: {e}")
+                runner.say(job_id, f"could not type the code: {e}")
                 return False
             db.log(con, job_id, "note", "typed the code the site emailed; you press the button next to it")
             con.commit()
@@ -767,11 +767,11 @@ def _type_code(con, job, boxes: list[str]) -> bool:
 
 def act_draft_rest(con, job_id: str) -> str:
     """Drafts answers for the form fields that are still empty and returns a summary."""
-    job = _job(con, job_id)
-    form = _app(con, job_id)["form"]
+    job = load_job(con, job_id)
+    form = load_app(con, job_id)["form"]
     answered, waiting = autofill.ask_model(job, form["fields"], documents.load(con, job), con)
     form["model"] = waiting or ""
-    _set_app(con, job_id, form=form)
+    set_app(con, job_id, form=form)
     if waiting:
         raise RuntimeError(waiting)
     return f"Hal answered {answered} more"
@@ -779,8 +779,8 @@ def act_draft_rest(con, job_id: str) -> str:
 
 def act_refill(con, job_id: str, edits: list[dict]) -> str:
     """Enters the owner's changes into the form without sending anything."""
-    job = _job(con, job_id)
-    form = _app(con, job_id)["form"]
+    job = load_job(con, job_id)
+    form = load_app(con, job_id)["form"]
     changed = _apply_edits(form, edits)
     _enter(con, job, form, only=changed or None)
     return _hold(con, job, form) or "form filled"
@@ -826,7 +826,7 @@ def watch_tab(job_id: str) -> None:
             while time.time() < deadline:
                 if _WATCH_STOP.wait(WATCH_PAUSE):
                     return
-                busy = ACTIONS.get(job_id, {}).get("state") == "running"
+                busy = runner.ACTIONS.get(job_id, {}).get("state") == "running"
                 if busy:
                     deadline = time.time() + WATCH_FOR
                     continue
@@ -853,7 +853,7 @@ def _watch_step(con, job_id: str, seen: dict) -> bool:
     `seen` carries what the page's fields showed at the last look, which is what the
     owner sent once the page has gone.
     """
-    if _app(con, job_id)["stage"] == "submitted" or _job(con, job_id)["status"] != "applying":
+    if load_app(con, job_id)["stage"] == "submitted" or load_job(con, job_id)["status"] != "applying":
         return False
     try:
         now = browser.peek(job_id)
@@ -863,13 +863,13 @@ def _watch_step(con, job_id: str, seen: dict) -> bool:
         return False
     if now.get("busy"):
         return True
-    form = _app(con, job_id)["form"] or {}
+    form = load_app(con, job_id)["form"] or {}
     if not now["form"]:
         # A form's own wording can thank the applicant; only the page after it counts.
         if now["sent"] or now["applied"]:
-            job = _job(con, job_id)
+            job = load_job(con, job_id)
             if _learn(con, job, form, seen.get("values", {})):
-                _set_app(con, job_id, form=form)
+                set_app(con, job_id, form=form)
             mark_applied(con, job, "the site confirmed the application")
             return False
         return True
@@ -877,18 +877,17 @@ def _watch_step(con, job_id: str, seen: dict) -> bool:
     if now.get("code") and not seen.get("code"):
         # The site asks for the code it emailed once the person pressed Submit; Hal types it, they press.
         seen["code"] = now.get("code_sigs") or []
-        if _type_code(con, _job(con, job_id), now["code"]):
+        if _type_code(con, load_job(con, job_id), now["code"]):
             site = browser.site_key(now.get("url") or "")
             said = ASKS["code-typed"].format(site=site)
             form.update(state="ready", message=f"{said[0].upper()}{said[1:]}.")
-            _set_app(con, job_id, form=form)
+            set_app(con, job_id, form=form)
     known = {f.get("sig") for f in form.get("fields", [])}
     moved = len(known & set(values)) * 2 < len(known)
     added = [sig for sig in values if sig not in known and sig not in (seen.get("code") or [])]
     if moved or added:
-        ACTIONS[job_id] = {"name": "filling the next page" if moved else "answering new questions",
-                           "state": "running", "message": "", "at": db.now()}
-        _carry_out(con, job_id, act_page, job_id, seen.get("values") if moved else None)
+        runner.carry_out(con, job_id, "filling the next page" if moved else "answering new questions",
+                         act_page, job_id, seen.get("values") if moved else None, on_stuck=form_stuck)
         seen.clear()
         return True
     seen["values"] = values

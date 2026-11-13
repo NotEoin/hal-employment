@@ -316,13 +316,13 @@ class AppHandler(BaseHTTPRequestHandler):
             self._reply_bytes(200, target.read_bytes(), ctype)
             return
         from .. import documents
-        from ..apply.queries import _job
+        from ..apply.queries import load_job
 
         job_id, which = unquote(m.group(1)), m.group(2)
         con = db.connect()
         try:
             try:
-                found = documents.files(_job(con, job_id)).get(which)
+                found = documents.files(load_job(con, job_id)).get(which)
             except LookupError:
                 found = None
         finally:

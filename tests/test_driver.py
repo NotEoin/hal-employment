@@ -202,7 +202,7 @@ class Discarding(unittest.TestCase):
 
     def test_a_closed_job_leaves_the_applications_in_progress_and_stops_its_watch(self):
         self.discard("greenhouse:1", "advert_closed", "The job has closed")
-        self.assertEqual(queries._job(self.con, "greenhouse:1")["status"], "closed")
+        self.assertEqual(queries.load_job(self.con, "greenhouse:1")["status"], "closed")
         self.assertIn("greenhouse:1", [c["id"] for c in queries.board(self.con)["closed"]])
         self.assertIn("discarded mid-application: The job has closed",
                       self.con.execute("SELECT detail FROM events WHERE job_id = 'greenhouse:1' ORDER BY id DESC").fetchone()[0])
@@ -213,12 +213,12 @@ class Discarding(unittest.TestCase):
 
     def test_another_reason_skips_the_application(self):
         self.discard("greenhouse:1", words="Not eligible")
-        self.assertEqual(queries._job(self.con, "greenhouse:1")["status"], "skipped")
+        self.assertEqual(queries.load_job(self.con, "greenhouse:1")["status"], "skipped")
         self.assertIn("greenhouse:1", self.listed())
 
     def test_a_job_discarded_from_the_queue_is_not_listed_as_an_application(self):
         self.discard("greenhouse:2", words="Too senior")
-        self.assertEqual(queries._job(self.con, "greenhouse:2")["status"], "skipped")
+        self.assertEqual(queries.load_job(self.con, "greenhouse:2")["status"], "skipped")
         self.assertNotIn("greenhouse:2", self.listed())
 
     def test_an_application_sent_back_to_the_queue_and_discarded_there_is_not_listed(self):
@@ -233,8 +233,8 @@ class Discarding(unittest.TestCase):
         def act(con, job_id):
             reached.set()
             release.wait(10)
-            runner._say(job_id, "filling in the form")
-            queries._set_app(con, job_id, stage="filled", form={"state": "ready", "message": "", "fields": []})
+            runner.say(job_id, "filling in the form")
+            queries.set_app(con, job_id, stage="filled", form={"state": "ready", "message": "", "fields": []})
             return "filled"
 
         runner.run_action(job_id, name, act, job_id, replace=replace)
@@ -255,11 +255,11 @@ class Discarding(unittest.TestCase):
         began = time.monotonic()
         self.discard("greenhouse:1", "advert_closed", "The job has closed")
         self.assertLess(time.monotonic() - began, 1)
-        self.assertEqual(queries._job(self.con, "greenhouse:1")["status"], "closed")
+        self.assertEqual(queries.load_job(self.con, "greenhouse:1")["status"], "closed")
         self.assertNotIn("greenhouse:1", runner.ACTIONS)
         release.set()
         self.assertEqual(self.finished(entry), "stopped")
-        self.assertIsNone(queries._app(self.con, "greenhouse:1")["stage"])
+        self.assertIsNone(queries.load_app(self.con, "greenhouse:1")["stage"])
         runner.POOL.submit(lambda: None).result(5)
         self.assertEqual(self.closed, ["greenhouse:1"])
 
@@ -271,7 +271,7 @@ class Discarding(unittest.TestCase):
         release.set()
         self.assertEqual(self.finished(first), "stopped")
         self.assertIs(runner.ACTIONS["greenhouse:1"], second)
-        self.assertIsNone(queries._app(self.con, "greenhouse:1")["stage"])
+        self.assertIsNone(queries.load_app(self.con, "greenhouse:1")["stage"])
 
     def test_marking_applied_while_hal_works_stops_hal(self):
         entry, release = self.slow_action("greenhouse:1")
@@ -281,8 +281,8 @@ class Discarding(unittest.TestCase):
         actions.sent_myself(self.con, "greenhouse:1")
         release.set()
         self.assertEqual(self.finished(entry), "stopped")
-        self.assertEqual(queries._job(self.con, "greenhouse:1")["status"], "applied")
-        self.assertEqual(queries._app(self.con, "greenhouse:1")["stage"], "submitted")
+        self.assertEqual(queries.load_job(self.con, "greenhouse:1")["status"], "applied")
+        self.assertEqual(queries.load_app(self.con, "greenhouse:1")["stage"], "submitted")
 
     def test_too_much_effort_is_remembered_against_the_site(self):
         self.discard("greenhouse:1", "too_much_effort")

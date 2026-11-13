@@ -18,9 +18,10 @@ Design decisions, each with its reason:
   that ended, so a command-line run beside the server is never marked interrupted.
 - A stop is seen in two ways: in this process at once, and from another process through the row's state,
   read at a checkpoint at most every `STOP_POLL_S`.
-- The form driver keys its work by job (`run_action`, `stop_action`, `_checkpoint`, `_say`, `_note`,
+- The form driver keys its work by job (`run_action`, `stop_action`, `carry_out`, `checkpoint`, `say`,
   `ACTIONS`). `ACTIONS` mirrors every action with a subject as {name, state, message, at}; an action the
-  driver starts is persisted too (kind `form.<name>`), and `_say` adds a step to it.
+  driver starts is persisted too (kind `form.<name>`), and `say` adds a step to it. The runner knows nothing
+  of applications: a caller that wants a failed run recorded on its own page passes `on_stuck`.
 """
 from __future__ import annotations
 
@@ -89,6 +90,8 @@ class ActionKind:
     icon: str = "hal"
 
 
+# Records a failed job-keyed action where its caller keeps state: `(con, job_id, message)`.
+StuckHook = Callable[[sqlite3.Connection, str, str], None]
 KINDS: dict[str, ActionKind] = {}
 _FNS: dict[str, Callable[..., Any]] = {}
 ACTIONS: dict[str, dict] = {}
@@ -644,21 +647,23 @@ def _finish(live: _Live, state: str, *, message: str = "", result: Any = None, e
     live.finished.set()
 
 
-def _execute(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *, on_form: bool = False) -> None:
+def _execute(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *,
+             on_stuck: StuckHook | None = None) -> None:
     """Runs one action in this thread from start to end and records how it ended; never raises."""
     if live.state in FINAL:
         return
     with _lock:
         _executing[0] += 1
     try:
-        _execute_counted(live, fn, resumed_from, on_form=on_form)
+        _execute_counted(live, fn, resumed_from, on_stuck=on_stuck)
     finally:
         with _ended:
             _executing[0] -= 1
             _ended.notify_all()
 
 
-def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *, on_form: bool) -> None:
+def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | None, *,
+                     on_stuck: StuckHook | None) -> None:
     live.state, live.started = "running", time.monotonic()
     at, aid = clock.iso(), live.id
     _WRITER.put(live.connect, lambda con: con.execute(
@@ -695,8 +700,8 @@ def _execute_counted(live: _Live, fn: Callable[[Ctx], Any], resumed_from: str | 
             live.entry.update(state="error", message=f"{e}", at=db.now())
             _rollback_quietly(con)
             _finish(live, "error", message=f"{e}", error=f"{e}", tone="bad")
-            if on_form and live.subject:
-                _note(con, live.subject, "stuck", f"{e}")
+            if on_stuck and live.subject:
+                on_stuck(con, live.subject, f"{e}")
     finally:
         _CURRENT.reset(tokens[0])
         _PRIORITY.reset(tokens[1])
@@ -1000,7 +1005,7 @@ def _job_kind(name: str) -> ActionKind:
     return ActionKind(f"form.{slug}", "applying", "{name}", ASKED_WHY)
 
 
-def _checkpoint(job_id: str) -> None:
+def checkpoint(job_id: str) -> None:
     """Raises `Stopped` in an action whose application no longer wants it; a no-op in any other thread."""
     mine = getattr(_RUN, "actions", {}).get(job_id)
     if mine is not None and ACTIONS.get(job_id) is not mine:
@@ -1037,49 +1042,33 @@ def _job_begin(job_id: str, name: str, *, replace: bool, why: str) -> _Live:
                   params={}, why=why, priority=None, replace=True, session_id=None, helper_id=None, name=name)
 
 
-def run_action(job_id: str, name: str, fn, *args, replace: bool = False) -> dict:
+def run_action(job_id: str, name: str, fn, *args, replace: bool = False, on_stuck: StuckHook | None = None) -> dict:
     """Starts fn(con, *args) in the background, as a persisted action mirrored in `ACTIONS[job_id]`.
 
     Args:
         replace: Stop an action already running for the job in favour of this one, rather than refuse.
+        on_stuck: Called as `on_stuck(con, job_id, message)` when the action fails.
     """
     live = _job_begin(job_id, name, replace=replace, why=ASKED_WHY)
-    POOL.submit(_execute, live, lambda ctx: fn(ctx.con, *args), None, on_form=True)
+    POOL.submit(_execute, live, lambda ctx: fn(ctx.con, *args), None, on_stuck=on_stuck)
     return live.entry
 
 
-def _carry_out(con, job_id: str, fn, *args) -> None:
-    """Runs an action already set in `ACTIONS[job_id]` in this thread, and records how it ended.
+def carry_out(con, job_id: str, name: str, fn, *args, on_stuck: StuckHook | None = None) -> None:
+    """Runs fn(con, *args) as a persisted action for the job in this thread, and records how it ended.
 
-    The form watch sets the entry itself; this adopts it as a persisted action, so it has steps and Stop.
+    The form watch uses this for the page it fills by itself, so it has steps and Stop. The `ACTIONS` entry
+    is made here, under the runner's lock, and replaces any action still running for the job.
     """
-    entry = ACTIONS[job_id]
-    ACTIONS.pop(job_id, None)
-    live = _job_begin(job_id, entry["name"], replace=True, why=WATCH_WHY)
-    live.entry = entry
-    ACTIONS[job_id] = entry
-    _execute(live, lambda ctx: fn(con, *args), None, on_form=True)
+    live = _job_begin(job_id, name, replace=True, why=WATCH_WHY)
+    _execute(live, lambda ctx: fn(con, *args), None, on_stuck=on_stuck)
 
 
-def _say(job_id: str, text: str) -> None:
+def say(job_id: str, text: str) -> None:
     """Shows what Hal is doing for a job, on its page and in the queue, and adds it as a step."""
-    _checkpoint(job_id)
+    checkpoint(job_id)
     if job_id in ACTIONS:
         ACTIONS[job_id]["message"] = text
     ctx = getattr(_RUN, "ctx", {}).get(job_id)
     if ctx is not None:
         ctx.step(text)
-
-
-def _note(con, job_id: str, state: str, message: str) -> None:
-    """Records where an application stands, for its page: working, ready, needs, stuck or sent."""
-    try:
-        form = _app(con, job_id)["form"]
-        if form is not None:
-            form.update(state=state, message=message)
-            _set_app(con, job_id, form=form)
-    except Exception as e:  # the action's own message still reaches the page
-        log.debug("could not copy the action's state to job %s's form: %s", job_id, e)
-
-
-from ..apply.queries import _app, _set_app  # noqa: E402 - imported last; queries imports this module

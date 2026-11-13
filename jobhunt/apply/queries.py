@@ -1,6 +1,4 @@
 """Reading and writing one application: the job, its saved documents and form, its site, its place in the queue.
-
-`runner` and this module call each other, so each imports the other at its end, letting either load first.
 """
 import json
 import logging
@@ -12,6 +10,7 @@ from urllib.parse import quote
 
 from .. import browser, db, documents, tasks
 from ..core import clock, settings
+from ..core.runner import ACTIONS, ACTIVE, checkpoint
 
 log = logging.getLogger(__name__)
 
@@ -25,14 +24,16 @@ AGGREGATORS = ("indeed.", "adzuna.", "reed.co", "linkedin.", "glassdoor.", "tota
                "cv-library.", "monster.", "jooble.", "talent.com", "simplyhired.", "jobrapido.", "whatjobs.")
 
 
-def _job(con, job_id: str):
+def load_job(con, job_id: str):
+    """The `jobs` row for `job_id`; LookupError when there is none."""
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if job is None:
         raise LookupError(f"no job {job_id}")
     return job
 
 
-def _app(con, job_id: str) -> dict:
+def load_app(con, job_id: str) -> dict:
+    """An application's stage, form, prep and contacts; empty values when it has no row yet."""
     row = con.execute("SELECT * FROM applications WHERE job_id = ?", (job_id,)).fetchone()
     if row is None:
         return {"stage": None, "form": None, "prep": None, "contacts": None}
@@ -41,8 +42,9 @@ def _app(con, job_id: str) -> dict:
             "contacts": json.loads(row["contacts"]) if row["contacts"] else None}
 
 
-def _set_app(con, job_id: str, **cols) -> None:
-    _checkpoint(job_id)
+def set_app(con, job_id: str, **cols) -> None:
+    """Writes columns of a job's application row (made if missing); stops an action its application dropped."""
+    checkpoint(job_id)
     con.execute("INSERT OR IGNORE INTO applications (job_id, stage, updated) VALUES (?, 'documents', ?)",
                 (job_id, db.now()))
     for k, v in cols.items():
@@ -50,6 +52,22 @@ def _set_app(con, job_id: str, **cols) -> None:
             v = json.dumps(v)
         con.execute(f"UPDATE applications SET {k} = ?, updated = ? WHERE job_id = ?", (v, db.now(), job_id))
     con.commit()
+
+
+def record_form_state(con, job_id: str, state: str, message: str) -> None:
+    """Records where an application stands, for its page: working, ready, needs, stuck or sent."""
+    try:
+        form = load_app(con, job_id)["form"]
+        if form is not None:
+            form.update(state=state, message=message)
+            set_app(con, job_id, form=form)
+    except Exception as e:  # the action's own message still reaches the page
+        log.debug("could not copy the action's state to job %s's form: %s", job_id, e)
+
+
+def form_stuck(con, job_id: str, message: str) -> None:
+    """`runner` hook: a failed action shows on its application's page as stuck."""
+    record_form_state(con, job_id, "stuck", message)
 
 
 def _close_quietly(job_id: str) -> None:
@@ -68,9 +86,9 @@ def _platform(url: str) -> str:
     return notes.ATS_NAMES.get(ats, ats) if ats else ""
 
 
-def _site_of(con, job) -> str:
+def site_of(con, job) -> str:
     """The site that holds a job's application form: the form's own, once Hal has reached it."""
-    form = _app(con, job["id"])["form"] or {}
+    form = load_app(con, job["id"])["form"] or {}
     return browser.site_key(form.get("url") or browser.application_url(job))
 
 
@@ -81,10 +99,10 @@ def mark_applied(con, job, how: str, sent_how: str = "site_confirmed") -> None:
     """
     if sent_how not in SENT_HOW:
         raise ValueError(f"sent_how must be one of {', '.join(SENT_HOW)}, not {sent_how!r}")
-    _checkpoint(job["id"])
+    checkpoint(job["id"])
     db.set_status(con, job["id"], "applied", how)
     now = clock.now_utc()
-    _set_app(con, job["id"], stage="submitted", sent_at=clock.iso(now), sent_how=sent_how,
+    set_app(con, job["id"], stage="submitted", sent_at=clock.iso(now), sent_how=sent_how,
              follow_up_at=clock.iso(now + timedelta(days=settings.get("notify.follow_up_days"))))
     db.alert(con, "good", f"Applied: {job['company']}", f"{job['title']}. {MESSAGE_OFFER}", job["id"])
     tasks.after_sent(con, job)
@@ -136,7 +154,7 @@ def resolve(con, ref: str) -> str:
         if row is None:
             raise LookupError("There is no application with that number.")
         return row["job_id"]
-    _job(con, ref)
+    load_job(con, ref)
     return ref
 
 
@@ -191,7 +209,7 @@ def _stopped_why(con, job_id: str, form: dict | None) -> str | None:
 
 def _card_words(con, r, col: str) -> tuple[str, str, str]:
     """(next, tone, note) for one card on the board, in the board's own words."""
-    app = _app(con, r["id"])
+    app = load_app(con, r["id"])
     form = app["form"] or {}
     if col == "ready":
         if _busy(r["id"]):
@@ -396,8 +414,8 @@ def _letter_notes(job, docs: dict) -> dict:
 def application(con, ref: str) -> dict:
     """The application page."""
     job_id = resolve(con, ref)
-    r = _job(con, job_id)
-    app = _app(con, job_id)
+    r = load_job(con, job_id)
+    app = load_app(con, job_id)
     row = _app_row(con, job_id)
     col = column_of(r["status"], app["stage"])
     step, steps = _steps(con, job_id, col, app, row)
@@ -507,5 +525,3 @@ def driver_marks(form: dict) -> list[dict]:
 
     return _marks(form)
 
-
-from ..core.runner import ACTIONS, ACTIVE, _checkpoint  # noqa: E402 - imported last; runner imports this module

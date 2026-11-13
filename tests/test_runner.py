@@ -418,10 +418,10 @@ class ByJob(unittest.TestCase):
         self.addCleanup(release.set)
 
         def fill(con, job_id):
-            runner._say(job_id, "reading the page")
+            runner.say(job_id, "reading the page")
             reached.set()
             release.wait(WAIT_S)
-            runner._say(job_id, "filling in the form")
+            runner.say(job_id, "filling in the form")
             return "form filled"
         entry = runner.run_action("demo:1", "applying", fill, "demo:1")
         self.assertTrue(reached.wait(WAIT_S))
@@ -461,16 +461,30 @@ class ByJob(unittest.TestCase):
         self.assertEqual(runner.wait(action_id)["state"], "stopped")
 
     def test_a_watched_form_page_is_recorded_as_an_action(self):
-        runner.ACTIONS["demo:1"] = {"name": "filling the next page", "state": "running", "message": "", "at": db.now()}
-        runner._carry_out(self.con, "demo:1", lambda con, job_id: runner._say(job_id, "answering 2 questions") or "ok",
-                          "demo:1")
+        # regression: the watch used to write `ACTIONS` itself, outside the runner's lock; `carry_out` makes the entry.
+        seen = {}
+
+        def fill(con, job_id):
+            seen["entry"] = dict(runner.ACTIONS[job_id])
+            return runner.say(job_id, "answering 2 questions") or "ok"
+        self.assertNotIn("demo:1", runner.ACTIONS)
+        runner.carry_out(self.con, "demo:1", "filling the next page", fill, "demo:1")
         runner.flush()
+        self.assertEqual((seen["entry"]["name"], seen["entry"]["state"]), ("filling the next page", "running"))
         row = self.con.execute("SELECT * FROM actions WHERE subject = 'demo:1'").fetchone()
         self.assertEqual((row["state"], row["step_n"]), ("done", 1))
         why = self.con.execute("SELECT why FROM activity WHERE action_id = ?", (row["id"],)).fetchone()[0]
         self.assertEqual(why, runner.WATCH_WHY)
         self.assertEqual(runner.ACTIONS["demo:1"]["state"], "done")
 
+    def test_a_failed_job_action_calls_on_stuck_with_its_message(self):
+        stuck = []
+
+        def fail(con, job_id):
+            raise RuntimeError("the site went away")
+        runner.carry_out(self.con, "demo:1", "filling the next page", fail, "demo:1",
+                         on_stuck=lambda con, job_id, message: stuck.append((job_id, message)))
+        self.assertEqual(stuck, [("demo:1", "the site went away")])
 
 if __name__ == "__main__":
     unittest.main()

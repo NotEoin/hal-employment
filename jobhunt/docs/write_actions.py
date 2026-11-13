@@ -25,7 +25,7 @@ from typing import Any
 
 from .. import contacts, cv, documents, pack, prep
 from ..apply import actions as apply_actions
-from ..apply.queries import _job
+from ..apply.queries import load_job
 from ..core import runner
 from ..writing import critique as writing_critique
 from ..writing import fields
@@ -97,7 +97,7 @@ def change(ctx, job_id: str, words: str) -> dict:
     words = (words or "").strip()[:WORDS_SHOWN]
     if not words:
         raise ValueError("Say what you want changed first.")
-    job = _job(ctx.con, job_id)
+    job = load_job(ctx.con, job_id)
     who, facts = pack.person(job), cv.facts_text()
     ctx.step("Reading the advert and your evidence")
     read, about = pack.read_job(job, who, facts), documents.summary(job).get("company", "")
@@ -114,7 +114,7 @@ def change(ctx, job_id: str, words: str) -> dict:
                why="You asked: {words}", priority=1, example=_letter_example)
 def rewrite_letter(ctx, job_id: str, words: str = "") -> dict:
     """Rewrites the cover letter alone, in the way the person asked, and checks it like any other."""
-    job = _job(ctx.con, job_id)
+    job = load_job(ctx.con, job_id)
     written = rewrite_letter_now(ctx, job, (words or "").strip()[:WORDS_SHOWN])
     ctx.changed("Hal rewrote the cover letter. Read it before you approve.")
     return {"letter": written["text"], "flags": written["flags"], "notes": written["notes"]}
@@ -135,7 +135,7 @@ def _critique_example(world: Any) -> dict:
                example=_critique_example)
 def critique(ctx, job_id: str) -> dict:
     """Grades the CV and letter against the advert, with line comments and the top three fixes; changes nothing."""
-    job = _job(ctx.con, job_id)
+    job = load_job(ctx.con, job_id)
     ctx.step("Reading your CV and letter against the advert, as a recruiter would")
     ctx.used("application", "Your CV and cover letter for this job", job_id)
     out = writing_critique.critique(ctx.con, job)
@@ -148,7 +148,7 @@ def critique(ctx, job_id: str) -> dict:
                example=_stand_in_example(prep, "build", "## What they will test\n\nA made-up note."))
 def prepare_for_interview(ctx, job_id: str) -> dict:
     """Drafts notes for the next stage of one application: what they will test, questions, stories."""
-    job = _job(ctx.con, job_id)
+    job = load_job(ctx.con, job_id)
     ctx.step("Reading the advert, your fit map and your record")
     notes = prep.build(ctx.con, job)
     ctx.changed("Hal wrote notes to get you ready for the next stage.")
@@ -160,7 +160,7 @@ def prepare_for_interview(ctx, job_id: str) -> dict:
                example=_stand_in_example(contacts, "find", {"people": [], "by": "rules", "note": ""}))
 def find_contacts(ctx, job_id: str) -> dict:
     """Finds people worth messaging about one application; Hal sends nothing."""
-    job = _job(ctx.con, job_id)
+    job = load_job(ctx.con, job_id)
     ctx.step("Looking for the people who hire for this role")
     found = contacts.find(ctx.con, job)
     count = len(found["people"])

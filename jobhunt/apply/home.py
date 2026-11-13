@@ -15,7 +15,7 @@ from datetime import timedelta
 from urllib.parse import quote
 
 from ..core import clock
-from .queries import _app, _busy, _form_counts, column_of
+from .queries import _busy, _form_counts, column_of, load_app
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def needs(con) -> list[dict]:
             out.append(_item(r, "approve", "file", "info", f"Approve documents for {title}",
                              f"{org}. Hal has your CV and letter ready.", "Open", now))
         elif col == "form":
-            form = _app(con, r["id"])["form"] or {}
+            form = load_app(con, r["id"])["form"] or {}
             _, _, to_check = _form_counts(form)
             if to_check:
                 need = "1 answer needs you" if to_check == 1 else f"{to_check} answers need you"
