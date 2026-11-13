@@ -46,7 +46,7 @@ from jobhunt.ingest import discover, group, items, notes, rank, roles
 log = logging.getLogger(__name__)
 
 KIND = "project"
-RULE = rank.RULES[7]           # a project's rank, kind and folder in the record
+RULE = rank.PROJECT_RULE           # a project's rank, kind and folder in the record
 README_CHARS = 4000            # the title is the first heading, near the top
 NAME_MAX = 80                  # a heading longer than this is a sentence, not a project's name
 GENERIC_TITLES = {"readme", "overview", "introduction", "about", "index", "contents", "notes"}

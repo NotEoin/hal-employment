@@ -543,11 +543,11 @@ def propose(con: sqlite3.Connection, root: Path, *, local: bool, prefix: str | N
             fill_card(con, p)
             continue
         if suffix not in rank.DOC_SUFFIXES and suffix not in rank.SLIDE_SUFFIXES:
-            p.leave_out(LEFT_OUT_WORDS[{"media": "media", "code": "code", "email": "email"}.get(rule.doc_type,
-                                                                                              "other")])
+            key = rule.doc_type if rule.doc_type in ("media", "code", "email") else "other"
+            p.leave_out(LEFT_OUT_WORDS[key])
             continue
         try:
-            text = convert.text_of(f.path, rank.RULES[9] if suffix == ".pdf" else rule)
+            text = convert.text_of(f.path, rank.NOTES_RULE if suffix == ".pdf" else rule)
         except Exception as e:  # a converter can fail any way; one broken file is left out, not the sort
             log.info("could not read %s to sort it: %s", f.rel, e)
             text = ""

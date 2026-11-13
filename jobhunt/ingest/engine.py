@@ -178,7 +178,7 @@ class _Finder:
         for n, page in enumerate(found, start=1):
             path = folder / f"{n}.md"
             path.write_text(f"# {page.title or page.url}\n\n{page.text}", encoding="utf-8")
-            rule = rank.REPO if page.kind == "repo" else (rank.RULES[7] if page.kind == "profile"
+            rule = rank.REPO if page.kind == "repo" else (rank.PROJECT_RULE if page.kind == "profile"
                                                          else rank.rule_for(page.title or page.url))
             items.add(self.con, self.batch, path=str(path), rel=page.url, kind="page", size=path.stat().st_size,
                       magic="text", rank=rule.rank, category=rule.category, doc_type=rule.doc_type)

@@ -323,7 +323,7 @@ def _ask_again(row: sqlite3.Row, role: str, doc_type: str, fm: dict) -> bool:
     coursework in a course folder, which older reads filed by rules (`rank.in_unit`)."""
     if row["kind"] == "page" or not Path(row["path"]).exists():
         return False
-    if row["unit"] and rank.in_unit(row["rel"], rank.RULES[9]).rich and fm.get("read_by") != "ai":
+    if row["unit"] and rank.in_unit(row["rel"], rank.NOTES_RULE).rich and fm.get("read_by") != "ai":
         return True
     if role == roles.TAUGHT:
         return not lectures.is_typed(row["rel"]) and row["kind"] == "file" and fm.get("lecture_note") != "true"

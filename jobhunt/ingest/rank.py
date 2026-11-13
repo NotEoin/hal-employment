@@ -82,6 +82,9 @@ RULES = (
                                        r"wk[ _-]?\d+|chapter|reading[ _-]?list|handout"), rich=False),
     Rule(10, "slides", "Slides", _w(r"slides?|presentation|deck"), rich=False),
 )
+# The rules the code names, bound once so no caller depends on the order of `RULES`.
+(CV_RULE, TRANSCRIPT_RULE, LETTER_RULE, CERTIFICATE_RULE, REFERENCE_RULE, _JOB_DESCRIPTION_RULE, REPORT_RULE,
+ PROJECT_RULE, WRITING_RULE, NOTES_RULE, SLIDES_RULE) = RULES
 EMAIL = Rule(11, "email", "Email", _w(r"email|mail"), rich=False)
 ARTWORK = Rule(12, "artwork", "Creative work", _w(r"art|artwork|drawing|painting|illustration|poster|design|"
                                                    r"sketch|photography|portfolio"), rich=False)
@@ -115,7 +118,8 @@ NOT_DOCUMENTS = re.compile(r"(?:licen[cs]e|copying|notice|third[ _-]?party[ _-]?
 
 # The kinds of work a person makes, as a file's or folder's own name says them: coursework and reports,
 # projects, essays. The writing rule's other words (articles, reviews, stories) name a module's readings too.
-WORK_NAMES = ((RULES[6], RULES[6].words), (RULES[7], RULES[7].words), (RULES[8], _w(r"essays?|writing")))
+WORK_NAMES = ((REPORT_RULE, REPORT_RULE.words), (PROJECT_RULE, PROJECT_RULE.words),
+              (WRITING_RULE, _w(r"essays?|writing")))
 # Names of course material, which a work word beside them does not make work: "Lecture 5 writing reports".
 MATERIAL_NAMES = _w(r"lectures?|lecs?|slides?|handouts?|seminars?|tutorials?|reading[ _-]?lists?|"
                     r"presentation|deck")
@@ -139,7 +143,7 @@ def in_unit(rel: str, rule: Rule) -> Rule:
     p = Path(rel)
     if p.suffix.lower() in DOC_SUFFIXES and not NOT_DOCUMENTS.fullmatch(p.stem) and (work := work_named(p.stem)):
         return work
-    return RULES[9] if rule.rich else rule
+    return NOTES_RULE if rule.rich else rule
 
 
 def _peek(path: Path, chars: int = PEEK_CHARS) -> str:
@@ -154,7 +158,7 @@ def by_suffix(suffix: str) -> Rule:
     """The rule for a file whose name says nothing, by its kind."""
     suffix = suffix.lower()
     if suffix in SLIDE_SUFFIXES:
-        return RULES[10]
+        return SLIDES_RULE
     if suffix in EMAIL_SUFFIXES:
         return EMAIL
     if suffix in IMAGE_SUFFIXES:
@@ -164,7 +168,7 @@ def by_suffix(suffix: str) -> Rule:
     if suffix in CODE_SUFFIXES:
         return CODE
     if suffix in TEXT_SUFFIXES:
-        return RULES[9]
+        return NOTES_RULE
     return OTHER
 
 
@@ -196,10 +200,11 @@ def rule_for(rel: str, path: Path | None = None) -> Rule:
     suffix = p.suffix.lower()
     name = p.stem
     if suffix in IMAGE_SUFFIXES:
-        hit = next((r for r in (RULES[3],) if r.words.search(name)), None)
-        return hit or (ARTWORK if ARTWORK.words.search(rel) else IMAGE)
+        if CERTIFICATE_RULE.words.search(name):
+            return CERTIFICATE_RULE
+        return ARTWORK if ARTWORK.words.search(rel) else IMAGE
     if suffix in SLIDE_SUFFIXES:
-        return RULES[10]        # a deck is never read in full by the model, whatever its name says
+        return SLIDES_RULE        # a deck is never read in full by the model, whatever its name says
     if suffix not in DOC_SUFFIXES and suffix not in EMAIL_SUFFIXES:
         return by_suffix(suffix)
     if NOT_DOCUMENTS.fullmatch(name):
@@ -207,22 +212,22 @@ def rule_for(rel: str, path: Path | None = None) -> Rule:
     hit = _named(name, p.parent.parts, suffix in BINARY_DOCS)
     if hit is None and suffix in BINARY_DOCS and TRANSCRIPT_WORD.search(name) \
             and (ACADEMIC_NAME.search(name) or TRANSCRIPT_WORD.fullmatch(name.strip())):
-        hit = RULES[1]
+        hit = TRANSCRIPT_RULE
     start = _peek(path) if path is not None and suffix in TEXT_SUFFIXES else None
-    if hit is RULES[0] and start is not None and len(PEEK_CV_SECTIONS.findall(_peek(path, CV_PEEK_CHARS))) \
+    if hit is CV_RULE and start is not None and len(PEEK_CV_SECTIONS.findall(_peek(path, CV_PEEK_CHARS))) \
             < CV_SECTIONS_MIN:
         hit = None
-    if hit is RULES[3] and suffix in TEXT_SUFFIXES and not PEEK_CERTIFICATE.search(f"{name}\n{start or ''}"):
+    if hit is CERTIFICATE_RULE and suffix in TEXT_SUFFIXES and not PEEK_CERTIFICATE.search(f"{name}\n{start or ''}"):
         hit = None
-    if hit is RULES[4] and suffix in TEXT_SUFFIXES and not (start and PEEK_REFERENCE.search(start)):
+    if hit is REFERENCE_RULE and suffix in TEXT_SUFFIXES and not (start and PEEK_REFERENCE.search(start)):
         hit = None      # "12. Reference Types" was a programming lecture, not a referee's letter
     if start is not None and (hit is None or not hit.rich):
         if PEEK_CV.search(start):
-            return RULES[0]
+            return CV_RULE
         if PEEK_TRANSCRIPT.search(start):
-            return RULES[1]
+            return TRANSCRIPT_RULE
         if PEEK_LETTER.search(start):
-            return RULES[2]
+            return LETTER_RULE
     if hit is not None and suffix in EMAIL_SUFFIXES and hit.rank > EMAIL.rank:
         return EMAIL
     return hit or by_suffix(suffix)

@@ -16,11 +16,11 @@ from pathlib import Path
 from jobhunt.ingest import rank
 from jobhunt.sections import registry
 
-CV_RULE, TRANSCRIPT_RULE, LETTER_RULE = rank.RULES[0], rank.RULES[1], rank.RULES[2]
+CV_RULE, TRANSCRIPT_RULE, LETTER_RULE = rank.CV_RULE, rank.TRANSCRIPT_RULE, rank.LETTER_RULE
 # Each hint: the section it suggests, and the sections where such a file is already in its place (a reference
 # starts "Dear ..." like a letter; a transcript is one of the person's documents too).
 HINTS = (("cv", ("cv",)), ("official", ("official", "document")), ("letter", ("letter", "job_doc", "document")))
-CERTIFICATE_RULE, REFERENCE_RULE = rank.RULES[3], rank.RULES[4]
+CERTIFICATE_RULE, REFERENCE_RULE = rank.CERTIFICATE_RULE, rank.REFERENCE_RULE
 KIND_PREFIX = "kind:"
 # Each kind of document suggested within a section: the words at the start of its text, then its file's name.
 KIND_HINTS = (("transcript", rank.PEEK_TRANSCRIPT, TRANSCRIPT_RULE),
