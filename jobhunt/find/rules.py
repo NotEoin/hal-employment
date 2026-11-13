@@ -673,7 +673,7 @@ def score(job: dict, goal: Goal | None = None, weights: Weights | None = None) -
 
 
 def as_legacy(scored: Scored) -> tuple[float, str]:
-    """`(score, score_notes)` in the shape `jobhunt.score.score` has always returned."""
+    """`(score, score_notes)` in the shape `jobhunt.find.score.score` has always returned."""
     return scored.score, scored.notes
 
 

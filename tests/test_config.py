@@ -5,8 +5,8 @@ from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt import config
 from jobhunt.core import paths
+from jobhunt.find import boards
 
 
 class Boards(unittest.TestCase):
@@ -24,8 +24,8 @@ class Boards(unittest.TestCase):
         imported = paths.data_dir() / "import" / "boards.toml"
         imported.parent.mkdir(parents=True, exist_ok=True)
         imported.write_text('[[board]]\nname = "Made-up Board"\nats = "greenhouse"\nslug = "madeup"\n')
-        self.assertEqual(config.boards_path(), imported)
-        self.assertEqual([b["name"] for b in config.boards()], ["Made-up Board"])
+        self.assertEqual(boards.boards_path(), imported)
+        self.assertEqual([b["name"] for b in boards.boards()], ["Made-up Board"])
 
 
 if __name__ == "__main__":

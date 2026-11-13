@@ -33,7 +33,7 @@ from pathlib import Path
 
 from .. import ai, db
 from ..ai import prompts
-from ..score import score
+from ..find.score import score
 
 log = logging.getLogger(__name__)
 

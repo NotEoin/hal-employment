@@ -76,9 +76,9 @@ def cv_type():
 
 
 def _person() -> dict:
-    from .. import screen
     from ..core import settings
     from ..find import goal as goal_mod
+    from ..find import screen
 
     goal = goal_mod.current()
     name = (settings.get("you.name") or "").strip()

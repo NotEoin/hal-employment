@@ -25,9 +25,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from jobhunt import ai, config, db, pack, record, replenish, reputation, research, tasks
+from jobhunt import ai, db, pack, record, reputation, research, tasks
 from jobhunt.ai import prompts
 from jobhunt.cvstudio import cv
+from jobhunt.find import boards, replenish
 from jobhunt.mail import gmail
 from jobhunt.writing import plan
 
@@ -113,7 +114,7 @@ def iso(at: datetime) -> str:
 
 def seed(con, now: datetime) -> None:
     """Fills an empty legacy database with the made-up jobs, history, emails, to-dos and an application."""
-    from jobhunt.score import score
+    from jobhunt.find.score import score
 
     rows = {r[0]: r for r in JOB_ROWS}
     for job in jobs():
@@ -264,7 +265,7 @@ class World:
         patches = [
             mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_HOME": str(self.root)}),
             mock.patch.object(db, "connect", world_connect),
-            mock.patch.object(config, "BOARDS_PATH", self.root / "boards.toml"),
+            mock.patch.object(boards, "BOARDS_PATH", self.root / "boards.toml"),
             mock.patch.object(tasks, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "PASSWORD_FILE", self.root / "config" / "no-gmail-password"),

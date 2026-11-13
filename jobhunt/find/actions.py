@@ -49,7 +49,7 @@ def _screen_example(world) -> dict:
                example=_screen_example)
 def screen_job(ctx, job_id: str, score: int | None = None) -> dict:
     """The AI check on one job."""
-    from jobhunt import screen
+    from jobhunt.find import screen
 
     row = ctx.con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if row is None:
@@ -69,7 +69,7 @@ def _prepare_example(world) -> dict:
                example=_prepare_example)
 def prepare(ctx, n: int = 1, target: int | None = None) -> dict:
     """One unit of preparing ahead: the next screen or pack."""
-    from jobhunt import replenish
+    from jobhunt.find import replenish
 
     ctx.step("Looking for the next best match to prepare")
     worked, message = replenish.step(ctx.con, report=ctx.step)

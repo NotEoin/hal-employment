@@ -82,7 +82,7 @@ or CV choices by itself. The registry and catalogue are `core/settings/registry.
 - **Private answers** (`private.py`): the `[applicant]` table of `private.toml`, rewritten atomically with
   mode 0600. Every reply says only saved or not saved. `value_for_form` (only in `autofill.py`) and
   `values_for_guard` (only in `ai/guard.py`) return values; an AST test holds them there.
-- **Board list** (`jobhunt/config.py`): `boards()` and `boards_path()` read `boards.toml`. The old `CONFIG`
+- **Board list** (`jobhunt/find/boards.py`): `boards()` and `boards_path()` read `boards.toml`. The old `CONFIG`
   mapping is gone; `tests/test_settings_registry.py` checks that every key read is registered and that `CONFIG`
   is never read.
 

@@ -28,7 +28,7 @@ SCORES = ROOT / "tests" / "goldens" / "score.json"
 
 def scores() -> dict[str, list]:
     """Today's `score()` and score notes for every made-up job, by job id."""
-    from jobhunt.score import score
+    from jobhunt.find.score import score
 
     return {job["id"]: list(score(job)) for job in jobs()}
 

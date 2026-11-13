@@ -8,8 +8,8 @@ import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 from support import jobs as fixtures
 from support.world import World, job_id
 
-from jobhunt import ai, screen
-from jobhunt.find import rules
+from jobhunt import ai
+from jobhunt.find import rules, screen
 
 FERNHILL = job_id("fernhill-grad")
 

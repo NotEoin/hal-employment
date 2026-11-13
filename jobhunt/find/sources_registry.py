@@ -261,13 +261,13 @@ def add_board(con: sqlite3.Connection, name: str, ats: str, slug: str, *, added_
 
 
 def _companies_file() -> Path | None:
-    from jobhunt import config
     from jobhunt.core import paths
+    from jobhunt.find import boards as board_list
 
     imported = paths.data_dir() / "import" / "companies.txt"
     if imported.exists():
         return imported
-    beside = Path(config.boards_path()).with_name("companies.txt")
+    beside = Path(board_list.boards_path()).with_name("companies.txt")
     return beside if beside.exists() else None
 
 
@@ -277,11 +277,11 @@ def import_boards(con: sqlite3.Connection) -> dict:
     Names already on a board are not watched twice. The flag in `meta` stops a board the person removed from
     coming back at the next search; the caller commits.
     """
-    from jobhunt import config
+    from jobhunt.find import boards as board_list
     from jobhunt.find.goal import company_key
 
     boards = 0
-    for b in config.boards():
+    for b in board_list.boards():
         if b.get("ats") and b.get("slug") and b.get("name"):
             before = con.total_changes
             add_board(con, b["name"], b["ats"], b["slug"], added_by="import")

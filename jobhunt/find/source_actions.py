@@ -87,7 +87,7 @@ def _result(found: detect.Detected) -> dict:
 
 
 def _look_at_company(ctx, company: str) -> dict:
-    from jobhunt.score import prefilter
+    from jobhunt.find.score import prefilter
 
     ctx.step(f"Looking for {company}'s job board on every application system Hal knows")
     best = detect.probe([company], in_scope=prefilter).get(company.split("=")[0])

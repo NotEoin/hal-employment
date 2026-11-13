@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import tomllib
 
-from .core import paths
+from ..core import paths
 
 ROOT = paths.code_dir()
 BOARDS_PATH = ROOT / "boards.toml"

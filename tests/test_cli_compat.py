@@ -19,7 +19,7 @@ from pathlib import Path
 from support import cli
 from support.world import jobs
 
-from jobhunt.score import score
+from jobhunt.find.score import score
 
 
 class CommandLine(unittest.TestCase):

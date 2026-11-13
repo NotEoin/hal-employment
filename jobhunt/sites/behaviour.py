@@ -45,7 +45,7 @@ def application_url(job, notes: NoteSet, boards: list[dict] | None = None) -> st
     to = rewrite.get("to", "")
     if "{board}" in to:
         if boards is None:
-            from jobhunt.config import boards as listed
+            from jobhunt.find.boards import boards as listed
 
             boards = listed()
         slug = next((b["slug"] for b in boards if b.get("ats") == act.get("board") and b.get("name") == job["company"]),

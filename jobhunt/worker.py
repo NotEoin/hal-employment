@@ -9,8 +9,9 @@ on Your record, and never reads them straight in (`sections.sort_actions.queue_i
 import logging
 import time
 
-from . import db, record, replenish, tasks
+from . import db, record, tasks
 from .docs import contacts
+from .find import replenish
 
 log = logging.getLogger(__name__)
 

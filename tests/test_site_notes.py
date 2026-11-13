@@ -71,7 +71,7 @@ class BuiltInNotes(Home):
                 ({"id": "manual:2", "company": "Quayside Books", "url": "https://quaysidebooks.example.org/jobs/2"},
                  "https://quaysidebooks.example.org/jobs/2"),
                 ({"id": "manual:3", "company": "Quayside Books", "url": ""}, "")]
-        with mock.patch("jobhunt.config.boards", return_value=boards):
+        with mock.patch("jobhunt.find.boards.boards", return_value=boards):
             for job, today in jobs:
                 with self.subTest(url=job["url"]):
                     self.assertEqual(hal.application_url(job, page(job["url"], job["id"])), today)

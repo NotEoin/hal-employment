@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import json
 
-from . import ai
-from .ai import prompts
-from .find import goal as goal_mod
+from .. import ai
+from ..ai import prompts
+from . import goal as goal_mod
 
 ADVERT_CHARS = 8000        # what fits the local model's context with the instructions
 REASON_CHARS = 160

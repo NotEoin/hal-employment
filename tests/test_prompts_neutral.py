@@ -13,9 +13,10 @@ from pathlib import Path
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import people
 
-from jobhunt import pack, screen
+from jobhunt import pack
 from jobhunt.ai import prompts
 from jobhunt.find import goal as goal_mod
+from jobhunt.find import screen
 
 PRONOUN = re.compile(r"\b(he|him|his)\b", re.I)
 TESTS = Path(__file__).resolve().parent

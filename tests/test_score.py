@@ -14,10 +14,9 @@ import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 from support import jobs as fixtures
 from support.world import World, jobs
 
-from jobhunt import score
 from jobhunt.core import runner
 from jobhunt.core.db import tasks
-from jobhunt.find import actions, rules  # actions registers the find kinds
+from jobhunt.find import actions, rules, score  # actions registers the find kinds
 
 RESCORE_LIMIT_S = 60
 MANY_JOBS = 10_000
