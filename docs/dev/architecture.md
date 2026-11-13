@@ -1153,8 +1153,8 @@ a results, output, data or figures folder), diffs and patches, logs, circuit, CA
 (a camera's file name such as `IMG_` or `DSC_`, or a camera maker in the Exif) and pictures Hal reads no
 words from are never converted, sent to the AI or written as notes: `engine.run` leaves them out of the
 reading, and a certificate or artwork picture whose OCR comes back empty stays pending. After `_courses`,
-`attach.settle` finds each one's unit (`attach.Units`): the nearest folder below the one given that is a course
-unit, or holds a repository or a document of a work type (`roles.WORK_TYPES`); a folder named as work
+`attach.attach_pending` finds each one's unit (`attach.Units`): the nearest folder below the one given that is
+a course unit, or holds a repository or a document of a work type (`roles.WORK_TYPES`); a folder named as work
 (`rank.work_named`) reaches work documents anywhere below it. The file becomes `attached` (`dup_of` the unit's
 item, `note` its note), and its path inside the unit is listed under "## Files" in the unit's note (above
 "## Original"; in a course note, its own list), which `engine._kept` carries over when the note is read again.

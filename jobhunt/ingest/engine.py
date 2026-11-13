@@ -16,7 +16,7 @@ item's `origin`). Someone else's document is not filed at all and gives
 nothing; the others give only the facts their role may. A project fact from a document inside a project
 folder is a fact about that folder's project (`projects.facts_in`), so its notes make one project card.
 Supporting files (data, figures, logs, models, camera photos) are never read: once the documents and the
-course and project notes are written, `attach.settle` lists each
+course and project notes are written, `attach.attach_pending` lists each
 in the note of the unit it belongs to, or skips it. An empty note is skipped, and a note made from slides is
 course material by rules (`vaultnotes`).
 
@@ -677,7 +677,7 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     step("Reading each file, your CV and other rich documents first")
     drop_root = sources.drop_folder().resolve() if drop else None
     versions.settle(con, batch, vault())
-    # supporting files are never read: `attach.settle` lists them with their unit once it is written
+    # supporting files are never read: `attach.attach_pending` lists them with their unit once it is written
     todo = [r for r in items.pending(con, batch) if r["kind"] not in UNITS and not attach.supporting(r)]
     # Within a rank, typed notes before converted decks and handouts, so a lecture's notes are in the record
     # when its slides come up and cover them (`lectures.Covered`); the sort keeps the rest in their order.
@@ -690,7 +690,7 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     written += _courses(con, batch)
     vault_dir = vault()
     written += projects.write_notes(con, batch, vault_dir)
-    attach.settle(con, batch, vault_dir)
+    attach.attach_pending(con, batch, vault_dir)
     notes.link_pass(vault_dir, written)
     if tidy and not items.pending(con, batch):
         tidied.update(tidy_pass.finish(con, vault_dir))

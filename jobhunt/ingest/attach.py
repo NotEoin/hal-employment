@@ -9,10 +9,11 @@ converted, never sent to the AI and give no facts:
 - diffs and patches, logs, and circuit, CAD and 3D files (`DIFF_SUFFIXES`, `LOG_SUFFIXES`, `DESIGN_SUFFIXES`);
 - pictures and recordings Hal reads no words from: every picture that does not rank as a certificate or
   artwork (`convert.text_of` reads no others), every camera photo (`camera_photo`) whatever its folder, and
-  a certificate or artwork picture whose words came back empty (`engine._finish` leaves it to `settle`).
+  a certificate or artwork picture whose words came back empty (`engine._finish` leaves it to
+  `attach_pending`).
 
-`settle` runs once a batch's documents and course notes are written. A supporting file inside a unit gets
-state `attached`: `dup_of` the unit's item, `note` the unit's note, and its path inside the unit listed
+`attach_pending` runs once a batch's documents and course notes are written. A supporting file inside a unit
+gets state `attached`: `dup_of` the unit's item, `note` the unit's note, and its path inside the unit listed
 under "## Files" in that note (`list_in`). A unit (`Units.find`) is the nearest folder above the file, and
 below the folder the person gave (or that folder, when it is a project folder), that is a course unit, a
 project folder (`group.projects`) or a repository, or holds a document of a kind of work (`roles.WORK_TYPES`)
@@ -217,7 +218,7 @@ def place(con: sqlite3.Connection, vault: Path, row: sqlite3.Row, units: Units) 
     return STATE
 
 
-def settle(con: sqlite3.Connection, batch: str, vault: Path) -> dict[str, int]:
+def attach_pending(con: sqlite3.Connection, batch: str, vault: Path) -> dict[str, int]:
     """Attaches or skips the batch's files still pending once its documents and units are written: the
     supporting files, and pictures read with no words. Returns how many got each state."""
     left = con.execute("SELECT * FROM ingest_items WHERE batch = ? AND state = 'pending' AND kind = 'file' "
