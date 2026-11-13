@@ -41,11 +41,11 @@ from .browser import (
     UPLOAD_FAILED,
     _closed,
     _is_form,
-    _site,
     code_boxes,
     note_signed_in,
     only_code_boxes,
     signed_in_at,
+    site_key,
 )
 from .core import settings
 
@@ -343,7 +343,7 @@ def _report(facts: dict, needs: str, pressed: bool) -> dict:
     form = _is_form(facts["fields"])
     text = "" if form else facts["text"]
     return {"url": facts["url"], "title": facts["title"], "fields": [] if needs else facts["fields"],
-            "needs": needs, "sent": pressed and SUCCESS.search(text) is not None, "site": _site(facts["url"]),
+            "needs": needs, "sent": pressed and SUCCESS.search(text) is not None, "site": site_key(facts["url"]),
             "closed": not form and _closed({"title": facts["title"], "headings": [facts["headings"]],
                                             "url": facts["url"], "text": facts["text"],
                                             "apply": facts.get("apply", False)}, None),

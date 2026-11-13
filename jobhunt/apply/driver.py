@@ -878,7 +878,7 @@ def _watch_step(con, job_id: str, seen: dict) -> bool:
         # The site asks for the code it emailed once the person pressed Submit; Hal types it, they press.
         seen["code"] = now.get("code_sigs") or []
         if _type_code(con, _job(con, job_id), now["code"]):
-            site = browser._site(now.get("url") or "")
+            site = browser.site_key(now.get("url") or "")
             said = ASKS["code-typed"].format(site=site)
             form.update(state="ready", message=f"{said[0].upper()}{said[1:]}.")
             _set_app(con, job_id, form=form)

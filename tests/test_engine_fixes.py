@@ -60,9 +60,9 @@ class SiteKeys(unittest.TestCase):
                          "boards.greenhouse.io/fernvale")
 
     def test_a_site_is_named_by_its_domain_and_shared_systems_keep_the_employer(self):
-        self.assertEqual(queries._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
-        self.assertEqual(queries._site("https://secure.reed.co.uk/apply"), "reed.co.uk")
-        self.assertEqual(queries._site("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"),
+        self.assertEqual(browser.site_key("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
+        self.assertEqual(browser.site_key("https://secure.reed.co.uk/apply"), "reed.co.uk")
+        self.assertEqual(browser.site_key("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"),
                          "acme.wd3.myworkdayjobs.com")
 
     def test_google_forms_are_read_and_the_rest_of_google_is_not(self):

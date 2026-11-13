@@ -555,8 +555,6 @@ def site_key(url: str) -> str:
     return notes.site_key(url)
 
 
-_site = site_key   # the old name, kept for callers
-
 
 def signed_in_at(url: str) -> bool:
     """True when the person has said they signed in to this page's site (its employer, on a shared system)."""
@@ -800,7 +798,7 @@ def _report(page, frame, fields: list[dict], survey: dict, needs: str, pressed: 
     form = _is_form(fields)
     text = "" if form else survey["text"]
     nxt, sub, _ = _buttons(page, frame) if form else (None, None, None)
-    return {"url": page.url, "title": page.title(), "site": _site(page.url),
+    return {"url": page.url, "title": page.title(), "site": site_key(page.url),
             # A sign-in page's inputs are not questions to answer; the applicant signs in by hand.
             "fields": [] if needs else fields, "needs": needs,
             "sent": pressed and SUCCESS.search(text) is not None,
@@ -1246,7 +1244,7 @@ def _after_press(b: Browser, job_id: str, page) -> dict:
     if boxes or needs == "code":
         # The site wants the code it has just emailed before it goes on.
         return {"stayed": stayed, "sent": False, "problems": [], "challenge": False, "url": page.url,
-                "needs": "code", "code": True, "fields": [], "site": _site(page.url)}
+                "needs": "code", "code": True, "fields": [], "site": site_key(page.url)}
     if stayed and not needs:
         return {"stayed": True, "sent": False, "problems": _problems(fields, survey),
                 "challenge": whole["challenge"] or survey["challenge"], "url": page.url, "needs": ""}

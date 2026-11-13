@@ -60,12 +60,6 @@ def _close_quietly(job_id: str) -> None:
         traceback.print_exc()
 
 
-def _site(url: str) -> str:
-    """The site a page belongs to (`browser.site_key`): careers.acme.co.uk is acme.co.uk, and on a system that
-    hosts many employers each keeps its own, so acme.wd3.myworkdayjobs.com is not every Workday employer."""
-    return browser.site_key(url)
-
-
 def _platform(url: str) -> str:
     """The application system's name for "Something wrong here?" ("Workable"), or "" for an employer's own site."""
     from ..sites import notes
@@ -77,7 +71,7 @@ def _platform(url: str) -> str:
 def _site_of(con, job) -> str:
     """The site that holds a job's application form: the form's own, once Hal has reached it."""
     form = _app(con, job["id"])["form"] or {}
-    return _site(form.get("url") or browser.application_url(job))
+    return browser.site_key(form.get("url") or browser.application_url(job))
 
 
 def mark_applied(con, job, how: str, sent_how: str = "site_confirmed") -> None:
@@ -442,7 +436,7 @@ def application(con, ref: str) -> dict:
         form_url = form.get("url") or r["url"] or ""
         out["form"] = {"state": form.get("state") or "", "message": form.get("message") or "", "filled": filled,
                        "total": total, "to_check": to_check, "fields": _fields(form),
-                       "notes_used": form.get("notes_used") or [], "site": _site(form_url),
+                       "notes_used": form.get("notes_used") or [], "site": browser.site_key(form_url),
                        "platform": form.get("platform") or _platform(form_url),
                        "mode": (row["mode"] if row is not None else None) or browser.mode(),
                        "last_page": bool(form.get("final")),

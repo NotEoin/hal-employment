@@ -93,14 +93,14 @@ def never_press(control: dict, page: dict, kind: str = "named") -> str | None:
 def record(job_id: str | None, url: str, reason: str, con=None) -> None:
     """Writes a `site_events` row `would_submit` for a press Hal refused or a submit it cancelled."""
     from .. import db
-    from .queries import _site
+    from ..browser import site_key
 
     log.warning("would_submit on %s: %s", url, reason)
     own = con is None
     con = con or db.connect()
     try:
         con.execute("INSERT INTO site_events (at, job_id, site, url, what, detail) VALUES (?, ?, ?, ?, ?, ?)",
-                    (db.now(), job_id, _site(url) if url else "", url, "would_submit", reason[:300]))
+                    (db.now(), job_id, site_key(url) if url else "", url, "would_submit", reason[:300]))
         con.commit()
     finally:
         if own:

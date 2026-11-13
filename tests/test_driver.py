@@ -289,9 +289,9 @@ class Discarding(unittest.TestCase):
         self.assertEqual([r["detail"] for r in found], ["example.org"])
 
     def test_a_site_is_named_by_its_domain_and_a_shared_system_by_its_employer(self):
-        self.assertEqual(queries._site("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"),
+        self.assertEqual(browser.site_key("https://acme.wd3.myworkdayjobs.com/en-GB/careers/job/1"),
                          "acme.wd3.myworkdayjobs.com")
-        self.assertEqual(queries._site("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
+        self.assertEqual(browser.site_key("https://careers.acme.co.uk/jobs/2"), "acme.co.uk")
 
 
 class OpenForms(unittest.TestCase):
