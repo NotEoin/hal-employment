@@ -407,6 +407,12 @@ runs: tests use `tests/support/fake_claude/`.
   `applications.cv_version_id` and the manifest's `cv_version` name it. "Change the documents" takes that
   approval back (`tailor.reopen`). The job's CV stays on its base version: a later change on My CV does not
   reach it.
+- The documents step edits the job's CV with My CV's editor in job mode (`cv/edit-tab.js` with `job`,
+  `GET` and `PATCH /api/v2/applications/{id}/cv`). `tailor.save_edits` appends each save of the person's
+  edits to the same change list with `by` "you", after Hal's, and refuses a save made on an older copy with 409
+  (`tailor._rev`: the base version and how many edits it had). `tailor.editor` marks what Hal's changes
+  still on did and what the person's edits did, each by `model.diff`. `POST .../cv/copy` copies one entry's
+  lines into the main CV through `edit.save`, the same base-checked save as My CV's editor.
 - An application whose documents were written before has no `job_cvs` row (`tailor.kept`), and keeps the
   cv.json path until it is sent: `documents.tailored` reorders the main CV with `cv.tailor`, and Undo is
   `docs["undone_changes"]`. Both paths send the main CV as it is while the setting is No, and the person's

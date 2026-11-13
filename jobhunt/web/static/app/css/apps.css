@@ -2,7 +2,10 @@
 
 /* The Documents step: what Hal changed or wrote beside the PDF it will send, side by side on a wide screen. */
 .docs-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 960px) { .docs-split { grid-template-columns: minmax(0, 1fr); } }
+.docs-split[hidden] { display: none; }
+.docs-split.cv-job { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.docs-pdf { position: sticky; top: 0; min-width: 0; }
+@media (max-width: 960px) { .docs-split, .docs-split.cv-job { grid-template-columns: minmax(0, 1fr); } .docs-pdf { position: static; } }
 .pdfview { display: block; width: 100%; height: 78vh; min-height: 480px; border: 1px solid var(--line); border-radius: 10px;
   background: #fff; }
 .ba > div { white-space: pre-line; }

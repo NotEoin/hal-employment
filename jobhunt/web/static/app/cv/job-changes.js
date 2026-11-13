@@ -11,7 +11,7 @@ export function JobChanges({ changes = [], onToggle, why }) {
   if (why) return html`<p class="sub" style="margin:0">${why}</p>`;
   if (!changes.length) return html`<p class="sub" style="margin:0">Hal used your main CV as it is for this job.</p>`;
   return html`<div class="stack s">
-    <p class="sub" style="margin:0">Hal changed ${changes.length} things from your CV for this job. Changed parts are highlighted in the preview.</p>
+    <p class="sub" style="margin:0">Hal changed ${changes.length} things from your CV for this job. Each changed part is marked in your CV below.</p>
     ${changes.map(c => html`<article class=${c.on ? "sugg" : "sugg done"} data-change=${c.id}>
       <div class="row tight"><span class="chip info">${c.kind}</span><span class="small sub">${c.where}</span><span class="sp"></span>
         ${c.on ? html`<button type="button" class="btn quiet small" onClick=${() => onToggle(c, false)}><${Icon} n="undo" c="s" />Undo</button>`

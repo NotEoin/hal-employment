@@ -360,6 +360,16 @@ def _cv_changes(job, docs: dict) -> list[dict]:
              "after": c.get("after", ""), "why": "", "on": c["id"] not in undone} for c in found]
 
 
+def _cv_kept(con, job_id: str) -> dict:
+    """`schema` 2 when the application's CV can be edited line by line (`tailor.kept`), else 1, and the number
+    of the version it was approved as."""
+    from jobhunt.cvstudio import store, tailor
+
+    vid = tailor.version_of(job_id, con)
+    return {"schema": 2 if tailor.kept(job_id, con) else 1,
+            "version_n": store.version(vid, con=con)["n"] if vid else None}
+
+
 def _fields(form: dict | None) -> list[dict]:
     """The form's answers as the API's Field, with the words each source shows as."""
     if not form or not form.get("fields"):
@@ -444,7 +454,7 @@ def application(con, ref: str) -> dict:
                  "writing": writing, "approved_at": (row["approved_at"] if row is not None else None)
                  or docs.get("approved") or None,
                  "cv": {"changes": _cv_changes(r, docs), "preview_url": _file_url(files.get("cv")),
-                        "version_n": None, "look": None,
+                        **_cv_kept(con, job_id), "look": None,
                         "sent_as": (row["cv_sent_as"] if row is not None else None)
                         or ("original" if documents.original_file() else "hal_copy")},
                  "letter": {"text": letter, "words": len(letter.split()), "tone": notes.get("tone"),

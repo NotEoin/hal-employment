@@ -6,7 +6,12 @@
 
    The CV and the letter are each shown beside the PDF Hal will upload, so the person sees the document
    itself and not only the words. An Undo, a Redo or saved letter edits make the PDF again, and its address
-   changes with it, so the preview follows. */
+   changes with it, so the preview follows.
+
+   A CV Hal made with its change list (`docs.cv.schema` 2) is edited in place with My CV's editor in job
+   mode (cv/edit-tab.js); it stays mounted while another tab shows, so unsaved changes survive a tab switch,
+   and Approve waits until they are saved or discarded. An older application's CV keeps the change list
+   with Undo. */
 import { html, cx, useState } from "../core/html.js";
 import { post, put } from "../core/api.js";
 import { toast, openDialog, invalidate } from "../core/store.js";
@@ -16,6 +21,7 @@ import { Icon } from "../ui/icons.js";
 import { copyText } from "../ui/clipboard.js";
 import { plural } from "../core/format.js";
 import { UncheckedNote } from "../ui/unchecked-note.js";
+import { EditTab } from "../cv/edit-tab.js";
 
 const appPath = a => "/applications/" + encodeURIComponent(a.id);
 
@@ -69,11 +75,12 @@ export function DocsStep({ a, reload, onApproved }) {
   const [letter, setLetter] = useState(d.letter.text);
   const [answers, setAnswers] = useState(d.answers);
   const [message, setMessage] = useState(d.message.text);
+  const [cvDirty, setCvDirty] = useState(false);
   if (d.state === "writing") return html`<${Writing} a=${a} />`;
   if (a.step > 1) {
     return html`<section class="card"><div class="row"><div class="ic good"><${Icon} n="check" /></div><div class="grow" style="flex:1">
       <b>You approved these documents${d.approved_at ? " on " + new Date(d.approved_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}.</b>
-      <div class="small sub">Cover letter of ${d.letter.words} words.</div></div>
+      <div class="small sub">Cover letter of ${d.letter.words} words.${d.cv.version_n ? " Your CV for this job is saved as version " + d.cv.version_n + "." : ""}</div></div>
       ${a.column === "form" && html`<button type="button" class="btn small" onClick=${() => reopen(a, reload)}>Change the documents</button>`}
       <button type="button" class="btn small" onClick=${() => go("docs-" + (a.number || ""))}>Open in Documents</button></div></section>`;
   }
@@ -88,16 +95,20 @@ export function DocsStep({ a, reload, onApproved }) {
   };
   const changes = d.cv.changes || [];
   const original = d.cv.sent_as === "original";
+  const editable = d.cv.schema === 2 && !original;
   return html`
     <div class="approve"><div class="ic info"><${Icon} n="file" /></div><div class="grow"><b>Check what Hal made for this job, then approve it.</b>
-      <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div></div>
-      <button type="button" class="btn primary" onClick=${onApprove}>Approve and fill in the form</button>
+      <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div>
+      ${cvDirty && html`<div class="small" role="status">Save or discard your changes to the CV before you approve.</div>`}</div>
+      <button type="button" class="btn primary" disabled=${cvDirty} onClick=${onApprove}>Approve and fill in the form</button>
       <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button>
       <button type="button" class="btn quiet" onClick=${() => openDialog("critique", { app: a })}><${Icon} n="eye" c="s" />Critique as a recruiter</button></div>
     <${UncheckedNote} />
     <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
-    ${tab === "cv" && html`<div class="docs-split"><div class="stack s">
+    ${editable && html`<div class="docs-split cv-job" hidden=${tab !== "cv"}><${EditTab} job=${{ path: appPath(a) + "/cv", appPath: appPath(a),
+      onSaved: reload, onDirty: setCvDirty }} /><div class="docs-pdf"><${Pdf} url=${d.cv.preview_url} label="CV preview" /></div></div>`}
+    ${tab === "cv" && !editable && html`<div class="docs-split"><div class="stack s">
       <p class="sub" style="margin:0">${original ? "Hal sends your own CV file, unchanged, as you chose on My CV." : changes.length ? "Hal changed " + plural(changes.length, "thing") + " from your CV for this job." : "Hal used your main CV as it is for this job."}</p>
       ${changes.map(c => html`<article class=${cx("sugg", !c.on && "done")}><div class="row tight"><span class="chip info">${c.kind}</span><span class="small sub">${c.where}</span><span class="sp"></span>
         ${c.on ? html`<button type="button" class="btn quiet small" onClick=${() => toggle(c, false)}><${Icon} n="undo" c="s" />Undo</button>`

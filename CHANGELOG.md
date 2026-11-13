@@ -20,6 +20,12 @@ What changed in each version, in plain words.
   as its own version of your CV, kept with the application. The PDF looks the same as before. Applications
   Hal had already written keep their CV as it was made until they are sent.
 
+- **Edit your CV for one job.** An application's **CV** tab now shows the CV Hal made for the job in the
+  same editor as **Edit your CV**, with the PDF beside it. What Hal changed is marked **Hal: Reworded**,
+  **Moved** or **Added**, with **Undo** on each, and what you changed is marked **Your edit**. **Save
+  changes** makes the PDF again. **Copy to my main CV** on an entry copies its lines into your main CV as
+  one new version; nothing else on your main CV changes.
+
 ## 2.1.1 (2026-11-13)
 
 ### Fixed

@@ -18,6 +18,7 @@ from support.world import World, job_id
 from jobhunt import browser, db, documents
 from jobhunt.apply import actions, driver, helpers, queries
 from jobhunt.core import naming, paths, runner
+from jobhunt.cvstudio import model, store, tailor
 
 WAIT_S = 10.0
 
@@ -422,6 +423,125 @@ class Routes(unittest.TestCase):
         found = self.c.get(queries._file_url(str(odd)))
         self.assertEqual((found.status, found.headers["Content-Type"]), (200, "application/pdf"))
         self.assertIsNone(queries._file_url(None))
+
+
+PROFILE = "s:summary/text"
+SHOP = "s:experience/e:ex-shop"
+TABLE = SHOP + "/b:b-table"
+FOR_THE_JOB = "History graduate who catalogued parish letters for a records office."
+MINE = "Ran the local history table and chose its stock each week"
+
+
+class JobCv(unittest.TestCase):
+    """The application's CV in Edit your CV: Hal's changes and yours apart, Undo, the 409 and Copy to my main CV."""
+
+    def setUp(self):
+        from test_cv_suggest import made_up_cv
+
+        self.world = World().__enter__()
+        self.addCleanup(self.world.__exit__, None, None, None)
+        self.hal = HalServer().__enter__()
+        self.addCleanup(self.hal.__exit__, None, None, None)
+        self.c = self.hal.signed_in()
+        self.con = self.world.con
+        for p in (mock.patch.object(documents, "render", lambda job, docs: {}),
+                  mock.patch.object(driver, "act_auto", lambda con, job_id, here=False, fresh=False: "filled")):
+            p.start()
+            self.addCleanup(p.stop)
+        self.main = store.new_version(made_up_cv(), origin="imported", what="A made-up CV", by="baseline")
+        self.job = job_id("sorrel-ready")
+        db.set_status(self.con, self.job, "applying", "chosen from the queue")
+        hal = [{"id": "c1", "kind": "Reworded", "where": "Profile", "op": "replace", "target": PROFILE,
+                "value": FOR_THE_JOB, "before": made_up_cv().sections[0].text, "after": FOR_THE_JOB,
+                "why": "The advert asks for archive work.", "ev": "", "undone": False}]
+        self.con.execute("INSERT INTO job_cvs (job_id, base_version_id, level, changes) VALUES (?, ?, 'little', ?)",
+                         (self.job, self.main, json.dumps(hal)))
+        self.con.commit()
+
+    def url(self, rest: str = "") -> str:
+        return f"/api/v2/applications/{quote(self.job, safe='')}{rest}"
+
+    def save(self, base: str, *changes: dict):
+        return self.c.request("PATCH", self.url("/cv"), {"base": base, "changes": list(changes)})
+
+    def test_hals_changes_and_yours_are_marked_apart_and_your_save_reaches_the_cv_sent(self):
+        opened = self.c.get(self.url("/cv")).json()
+        self.assertIn({"target": PROFILE, "kind": "Reworded", "by": "hal", "change": "c1"}, opened["marks"])
+        self.assertEqual(opened["sections"][0]["text"], FOR_THE_JOB)
+        self.assertEqual(opened["main_version_id"], self.main)
+        reply = self.save(opened["version_id"], {"op": "replace", "target": TABLE + "/text", "value": MINE})
+        self.assertEqual(reply.status, 200, reply.text)
+        self.assertIn({"target": TABLE, "kind": "Reworded", "by": "you"}, reply.json()["marks"])
+        sent = documents.current_cv(queries.load_job(self.con, self.job), {})
+        self.assertIn(MINE, sent["experience"][0]["body"])
+        self.assertEqual(sent["summary"], FOR_THE_JOB)
+        line = model.find(tailor.document(self.job), TABLE)
+        self.assertIn(model.YOUR_WORDS, line.sources)
+        self.assertEqual(store.current()[0], self.main, "the main CV stays as it is")
+        cv = self.c.get(self.url()).json()["docs"]["cv"]
+        self.assertEqual((cv["schema"], [c["id"] for c in cv["changes"]]), (2, ["c1"]))
+
+    def test_a_save_on_what_the_editor_no_longer_shows_is_refused_and_saves_nothing(self):
+        opened = self.c.get(self.url("/cv")).json()["version_id"]
+        self.assertEqual(self.save(opened, {"op": "replace", "target": TABLE + "/text", "value": MINE}).status, 200)
+        late = self.save(opened, {"op": "delete", "target": SHOP + "/b:b-events"})
+        self.assertEqual((late.status, late.json()["error"]["code"]), (409, "conflict"))
+        self.assertIn("changed since you started editing", late.json()["error"]["message"])
+        self.assertEqual(tailor.shown(self.job)["edits"], 1)
+        self.assertEqual(self.save("", {"op": "show", "target": SHOP}).status, 400)
+
+    def test_undo_of_hals_change_keeps_your_own_edit(self):
+        opened = self.c.get(self.url("/cv")).json()["version_id"]
+        self.save(opened, {"op": "replace", "target": TABLE + "/text", "value": MINE})
+        self.assertEqual(self.c.post(self.url("/documents/changes/c1"), {"on": False}).status, 200)
+        doc = tailor.document(self.job)
+        self.assertNotEqual(model.find(doc, PROFILE), FOR_THE_JOB)
+        self.assertEqual(model.find(doc, TABLE).text, MINE)
+        self.assertEqual(self.c.post(self.url("/documents/changes/y1"), {"on": False}).status, 404,
+                         "your own edits are not Hal's to undo")
+
+    def test_copy_to_my_main_cv_copies_one_entrys_lines_as_one_new_version(self):
+        opened = self.c.get(self.url("/cv")).json()["version_id"]
+        self.save(opened, {"op": "replace", "target": TABLE + "/text", "value": MINE})
+        n = len(store.versions())
+        copied = self.c.post(self.url("/cv/copy"), {"base": self.main, "target": SHOP})
+        self.assertEqual(copied.status, 200, copied.text)
+        self.assertEqual(len(store.versions()), n + 1)
+        vid, doc = store.current()
+        self.assertEqual(copied.json()["version_id"], vid)
+        self.assertEqual([b.text for b in model.find(doc, SHOP).bullets],
+                         [MINE, "Organized author events for the shop"])
+        self.assertEqual(model.find(doc, PROFILE), made_up_cv_text(), "only that entry's lines are copied")
+        again = self.c.post(self.url("/cv/copy"), {"base": vid, "target": SHOP})
+        self.assertEqual(again.status, 400)
+        self.assertIn("already has these lines", again.json()["error"]["message"])
+        stale = self.c.post(self.url("/cv/copy"), {"base": self.main, "target": SHOP})
+        self.assertEqual(stale.status, 409)
+
+    def test_approving_saves_the_jobs_version_with_your_edits_and_then_it_cannot_change(self):
+        opened = self.c.get(self.url("/cv")).json()["version_id"]
+        self.save(opened, {"op": "replace", "target": TABLE + "/text", "value": MINE})
+        approved = self.c.post(self.url("/documents/approve"), {})
+        self.assertEqual(approved.status, 200, approved.text)
+        runner.wait(approved.json()["action_id"], WAIT_S)
+        vid = tailor.version_of(self.job)
+        self.assertEqual(model.find(store.get(vid), TABLE).text, MINE)
+        self.assertEqual(self.c.get(self.url()).json()["docs"]["cv"]["version_n"], store.version(vid)["n"])
+        late = self.save(tailor.shown(self.job)["rev"], {"op": "delete", "target": SHOP + "/b:b-events"})
+        self.assertEqual(late.status, 409)
+
+    def test_an_application_written_before_has_no_line_editor(self):
+        self.con.execute("DELETE FROM job_cvs WHERE job_id = ?", (self.job,))
+        self.con.commit()
+        self.assertEqual(self.c.get(self.url("/cv")).status, 404)
+        self.assertEqual(self.c.get(self.url()).json()["docs"]["cv"]["schema"], 1)
+
+
+def made_up_cv_text() -> str:
+    """The made-up CV's profile, as the main CV has it."""
+    from test_cv_suggest import made_up_cv
+
+    return made_up_cv().sections[0].text
 
 
 class Providers(unittest.TestCase):

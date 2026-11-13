@@ -72,8 +72,9 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    for it, a cover letter, and answers to the form's questions. To choose several jobs first, press
    **Add to queue** on each instead (or Q): they wait under **Getting ready** on the **Applications**
    board while Hal writes, and **Approve all** there approves them together.
-4. Read the documents. Change anything you like, or ask Hal for changes. When you are happy, press
-   **Approve and fill in the form**.
+4. Read the documents. Change anything you like, the CV line by line
+   ([how](../howto/edit-your-cv.md#edit-your-cv-for-one-job)), or ask Hal for changes. When you are happy,
+   press **Approve and fill in the form**.
 5. Hal opens the employer's form in a new window of your browser and fills it in, and the application
    moves on to its **Form** step. Later forms open in that same window until you close it. Each answer is
    marked "Fine" or "Check this", and **Why this answer?** under each one says where it came from.

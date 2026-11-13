@@ -23,10 +23,17 @@ Applications: `pack.build` calls `prepare` and prints `v1(job_id)` through the s
 written before keeps the older `cv.tailor` until it is sent, as nothing is stored to rebuild it here. The
 job's CV stays on the version it was made from, so a later change on My CV does not reach it. A title line
 chosen by the advert's words (`cv.TRACKS`, `cv.track_for`) is a change like the others.
+
+The application's CV step edits the job's CV with the same editor as My CV (`editor`, `save_edits`): each
+save of the person's edits is appended to the same list with `by` "you", after Hal's changes, so the CV is
+still base plus changes and Undo of one of Hal's changes keeps the person's edits. Where both changed one line,
+the person's words stand. `copy_to_main` copies one entry's lines into the main CV through `edit.save`, the
+same base-checked save as My CV's editor.
 """
 from __future__ import annotations
 
 import contextlib
+import copy
 import json
 import logging
 import re
@@ -48,6 +55,8 @@ REWRITE_KINDS = ("experience", "volunteering", "projects")
 ADDS_FACTS = ("Results", "Add", "Gap")   # suggestion kinds that add what came of the work; a job's CV only rewords
 STOP = frozenset("and the for with you your our will who are this that from have has can able into any all "
                  "role team work working job jobs using use including such other strong good".split())
+YOU = "you"                         # `by` of a change the person made in the job's CV editor
+APPROVED = "You approved this CV already. Make the documents again to change it."
 ORIGINAL_WHY = ("Adjusting for each job is off while you send your original file. Employers get it exactly as "
                 "you uploaded it.")
 LEVEL_WORDS = {"little": "Adjusting a little", "more": "Adjusting more"}
@@ -201,8 +210,21 @@ def build(base, changes: list[dict]):
     doc = base
     for c in changes:
         if not c.get("undone"):
-            doc = model.apply(doc, model.Change(c["op"], c["target"], c["value"]))
+            doc = model.apply(doc, model.Change(c["op"], c["target"], c.get("value"), c.get("position")))
     return doc
+
+
+def _split(changes: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(Hal's changes, the person's own edits), each in the order they were made."""
+    return [c for c in changes if c.get("by") != YOU], [c for c in changes if c.get("by") == YOU]
+
+
+def _rev(row: sqlite3.Row) -> str:
+    """What the editor opened: the base version and how many of the person's edits were on it then.
+
+    Undo and Redo of Hal's changes leave it alone: Hal only rewords and reorders, so the person's edits
+    still fit either way."""
+    return f"{row['base_version_id']}+{len(_split(json.loads(row['changes']))[1])}"
 
 
 def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None = None,
@@ -237,11 +259,11 @@ def shown(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     """The job's change list with each change's state, for the documents step."""
     with _conn(con) as c:
         row = _row(c, job_id)
-    changes = json.loads(row["changes"])
+    hal, yours = _split(json.loads(row["changes"]))
     return {"job_id": job_id, "level": row["level"], "base_version_id": row["base_version_id"],
-            "version_id": row["version_id"], "approved": row["approved"],
+            "version_id": row["version_id"], "approved": row["approved"], "edits": len(yours), "rev": _rev(row),
             "changes": [{k: c.get(k, "") for k in ("id", "kind", "where", "target", "before", "after", "why", "ev")}
-                        | {"on": not c.get("undone")} for c in changes]}
+                        | {"on": not c.get("undone")} for c in hal]}
 
 
 def set_change(job_id: str, change_id: str, on: bool, con: sqlite3.Connection | None = None) -> dict:
@@ -249,9 +271,9 @@ def set_change(job_id: str, change_id: str, on: bool, con: sqlite3.Connection | 
     with _conn(con) as c:
         row = _row(c, job_id)
         if row["approved"]:
-            raise RuntimeError("You approved this CV already. Make the documents again to change it.")
+            raise RuntimeError(APPROVED)
         changes = json.loads(row["changes"])
-        found = next((x for x in changes if x["id"] == change_id), None)
+        found = next((x for x in _split(changes)[0] if x["id"] == change_id), None)
         if found is None:
             raise LookupError("That change is not in this job's CV.")
         found["undone"] = not on
@@ -261,12 +283,22 @@ def set_change(job_id: str, change_id: str, on: bool, con: sqlite3.Connection | 
     return shown(job_id, con)
 
 
-def document(job_id: str, con: sqlite3.Connection | None = None):
-    """The job's CV as it stands: the base version with the changes still on."""
+def _made(job_id: str, con: sqlite3.Connection | None) -> tuple[sqlite3.Row, object, object]:
+    """(the row, the base version, the base with Hal's changes still on)."""
     with _conn(con) as c:
         row = _row(c, job_id)
         base = _store().get(row["base_version_id"], con=c)
-    return build(base, json.loads(row["changes"]))
+    return row, base, build(base, _split(json.loads(row["changes"]))[0])
+
+
+def document(job_id: str, con: sqlite3.Connection | None = None):
+    """The job's CV as it stands: the base version with Hal's changes still on, then the person's edits, whose
+    new and reworded lines are marked as their own words (`edit.mark_your_words`)."""
+    from jobhunt.cvstudio import edit
+
+    row, _, made = _made(job_id, con)
+    yours = _split(json.loads(row["changes"]))[1]
+    return edit.mark_your_words(made, build(made, yours)) if yours else made
 
 
 def v1(job_id: str, con: sqlite3.Connection | None = None) -> dict:
@@ -304,4 +336,93 @@ def approve(job_id: str, job: dict | None = None, con: sqlite3.Connection | None
             vid = _store().new_version(document(job_id, c), origin="tailored", what=what, by="you",
                                        parent=row["base_version_id"], job_id=job_id, con=c)
         c.execute("UPDATE job_cvs SET version_id = ?, approved = ? WHERE job_id = ?", (vid, clock.iso(), job_id))
+    return vid
+
+
+# ------------------------------------------------------------------------------- the job's CV editor
+
+def save_edits(job_id: str, base: str, changes: list, con: sqlite3.Connection | None = None) -> dict:
+    """Keeps one save of the person's edits (`model.Change`s) to the job's CV, after Hal's changes.
+
+    `store.StaleVersion` when `base` is not what the editor opened (`_rev`); RuntimeError once approved;
+    CVError when a change does not fit or nothing changed.
+    """
+    model = _model()
+    with _conn(con) as c:
+        row = _row(c, job_id)
+        if row["approved"]:
+            raise RuntimeError(APPROVED)
+        if base != _rev(row):
+            raise _store().StaleVersion("This job's CV changed since you started editing. Your changes are not saved.")
+        before = document(job_id, c)
+        after = before
+        for change in changes:
+            after = model.apply(after, change)
+        if model.to_json(after) == model.to_json(before):
+            raise model.CVError("changes: they leave this job's CV as it was")
+        listed = json.loads(row["changes"])
+        n = len(_split(listed)[1])
+        listed += [{"id": f"y{n + i}", "by": YOU, "op": x.op, "target": x.target, "value": x.value,
+                    "position": x.position} for i, x in enumerate(changes, 1)]
+        c.execute("UPDATE job_cvs SET changes = ? WHERE job_id = ?", (json.dumps(listed), job_id))
+        c.commit()
+    events.publish("application", id=job_id)
+    return shown(job_id, con)
+
+
+def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
+    """The job's CV for Edit your CV in job mode, with what changed marked by `model.diff`.
+
+    `marks` lists each part Hal changed (`by` "hal", with its change's id; only changes still on) and each part
+    the person changed after them (`by` "you"). `version_id` is what a save sends back as `base`, and
+    `main_version_id` the main CV's version in use, for Copy to my main CV.
+    """
+    model = _model()
+    row, base, made = _made(job_id, con)
+    hal, _ = _split(json.loads(row["changes"]))
+    marks = []
+    for c in hal:
+        if not c.get("undone"):
+            one = build(base, [c])
+            marks += [{"target": d["target"], "kind": d["kind"], "by": "hal", "change": c["id"]}
+                      for d in model.diff(base, one)]
+    doc = document(job_id, con)
+    marks += [{"target": d["target"], "kind": d["kind"], "by": YOU} for d in model.diff(made, doc)]
+    return {**model.to_dict(doc), "version_id": _rev(row), "n": None, "job_id": job_id,
+            "main_version_id": _store().current(con)[0], "approved": row["approved"],
+            "changes": shown(job_id, con)["changes"], "marks": marks}
+
+
+def copy_to_main(job_id: str, target: str, base: str, con: sqlite3.Connection, job: dict | None = None) -> str:
+    """Copies the lines of one entry of the job's CV into the main CV, made on version `base`, as one new main
+    version (`edit.save`); returns its id. An entry the main CV does not have is added to its section.
+
+    `store.StaleVersion` when `base` is no longer the main version in use; CVError when `target` is not an
+    entry, its section is gone from the main CV, or the main CV already has these lines.
+    """
+    from jobhunt.cvstudio import edit as editing
+
+    model = _model()
+    entry = model.find(document(job_id, con), target)
+    if not isinstance(entry, model.Entry):
+        raise model.CVError("target: choose an entry of this job's CV to copy")
+    main = _store().get(base, con=con)
+    section = target.split("/")[0]
+    try:
+        there = model.find(main, target)
+    except model.CVError:
+        there = None
+    if there is None:
+        try:
+            model.find(main, section)
+        except model.CVError as e:
+            raise model.CVError("target: your main CV no longer has this section, so there is nowhere to copy "
+                                "these lines") from e
+        change = model.Change("insert", section, copy.deepcopy(entry))
+    elif [b.text for b in there.bullets] == [b.text for b in entry.bullets]:
+        raise model.CVError("target: your main CV already has these lines")
+    else:
+        change = model.Change("replace", f"{target}/bullets", copy.deepcopy(entry.bullets))
+    title = (job or {}).get("title") or "one job"
+    vid, _, _ = editing.save(con, base, [change], f"Copied {entry.heading or 'an entry'} from your CV for {title}")
     return vid
