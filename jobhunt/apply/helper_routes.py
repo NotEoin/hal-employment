@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .. import extension
 from ..core import platform, runner
-from ..web.router import BadRequest, Conflict, FileResponse, NotFound, Request, route
+from ..web.router import BadRequest, Conflict, FileResponse, NotFound, Request, json_body, route
 from . import helper_mirror, helpers  # noqa: F401 - helper_mirror registers its start task on import
 
 log = logging.getLogger(__name__)
@@ -33,14 +33,6 @@ def browsers_table() -> dict:
     """browsers.toml: per browser its extensions page, its steps and their pictures."""
     with BROWSERS_FILE.open("rb") as f:
         return tomllib.load(f)["browsers"]
-
-
-def _body(req: Request) -> dict:
-    if req.body is None:
-        return {}
-    if not isinstance(req.body, dict):
-        raise BadRequest("The request should be a JSON object.")
-    return req.body
 
 
 def _found() -> dict[str, platform.Browser]:
@@ -101,7 +93,7 @@ def open_extensions_page(req: Request) -> dict:
     Neither a web page nor the browser's command line can open an address such as `edge://extensions`
     (the browser drops it and shows a new tab), so the person pastes it; `address` is what to paste.
     """
-    b = _browser(_body(req))
+    b = _browser(json_body(req))
     platform.current().open_browser_window(b)
     return {"ok": True, "address": b.extensions_url}
 
@@ -111,7 +103,7 @@ def pairing_code(req: Request) -> dict:
     """A one-time code for the helper in the chosen browser, and the pairing page's address."""
     from ..web import auth
 
-    browser = str(_body(req).get("browser") or "") or None
+    browser = str(json_body(req).get("browser") or "") or None
     code = helpers.new_code(req.con, req.session, browser)
     return {"code": code, "pair_url": pair_url(auth.server_port(), code), "pair_path": f"/pair#code={code}",
             "expires_in": helpers.CODE_S}
@@ -122,7 +114,7 @@ def open_pair_page(req: Request) -> dict:
     """Opens the pairing page in the chosen browser, where the helper reads the code."""
     from ..web import auth
 
-    body = _body(req)
+    body = json_body(req)
     code = str(body.get("code") or "")
     if not code:
         raise BadRequest("Press Connect again.", field="code")
@@ -134,7 +126,7 @@ def open_pair_page(req: Request) -> dict:
 @route("POST", PREFIX + "/pair", auth="pairing")
 def pair(req: Request) -> dict:
     """Swaps the pairing code for this helper's id and key."""
-    body = _body(req)
+    body = json_body(req)
     try:
         protocol = int(body.get("protocol") or 0)
     except (TypeError, ValueError) as e:
@@ -150,7 +142,7 @@ def pair(req: Request) -> dict:
 @route("POST", PREFIX + "/poll", auth="helper")
 def poll(req: Request) -> dict:
     """The helper's long poll: up to 20 s for a command, or a request to reload itself."""
-    body = _body(req)
+    body = json_body(req)
     try:
         protocol = int(body.get("protocol") or 0)
     except (TypeError, ValueError):
@@ -164,7 +156,7 @@ def poll(req: Request) -> dict:
 @route("POST", PREFIX + "/result", auth="helper")
 def result(req: Request) -> dict:
     """A command's result; one for a command given to another helper is ignored."""
-    body = _body(req)
+    body = json_body(req)
     if "id" not in body or "ok" not in body:
         raise BadRequest("A result needs its command id and whether it worked.")
     extension.deliver(body, req.helper.id)
@@ -180,7 +172,7 @@ def adopt(req: Request) -> dict:
     """
     from . import actions
 
-    body = _body(req)
+    body = json_body(req)
     action_id = body.get("action_id")
     if not action_id:
         tab = body.get("tab")
@@ -206,7 +198,7 @@ def fill_empty(req: Request) -> dict:
     """The panel's "Fill empty boxes": fills what the job's tab shows that is still empty."""
     from .driver import act_page
 
-    job_id = str(_body(req).get("job_id") or "")
+    job_id = str(json_body(req).get("job_id") or "")
     if not job_id:
         raise BadRequest("The helper did not say which job this tab is for.")
     entry = runner.run_action(job_id, "filling this page", act_page, job_id)

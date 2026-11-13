@@ -10,14 +10,14 @@ from __future__ import annotations
 from ..apply import actions as apply_actions
 from ..apply import queries
 from ..apply import routes as apply_routes
-from ..apply.routes import PREFIX, _body, _who
+from ..apply.routes import PREFIX
 from ..core import runner
-from ..web.router import BadRequest, Request, route
+from ..web.router import BadRequest, Request, json_body, route, who
 from .write_actions import WORDS_SHOWN, critique_subject
 
 
 def _words(req: Request, *, needed: bool) -> str:
-    words = _body(req).get("words")
+    words = json_body(req).get("words")
     if words is not None and not isinstance(words, str):
         raise BadRequest("Write what you want changed as text.", field="words")
     words = (words or "").strip()
@@ -28,7 +28,7 @@ def _words(req: Request, *, needed: bool) -> str:
 
 def _start(req: Request, kind: str, params: dict | None = None) -> dict:
     job_id = queries.resolve(req.con, req.params["app_id"])
-    return {"action_id": apply_actions.start(kind, job_id, params=params, **_who(req))}
+    return {"action_id": apply_actions.start(kind, job_id, params=params, **who(req))}
 
 
 @route("POST", PREFIX + "/{app_id}/documents/change")
@@ -48,11 +48,9 @@ def rewrite_letter(req: Request) -> dict:
 def critique(req: Request) -> dict:
     """Critique as a recruiter: grades, line comments and the top three fixes for the CV and the letter."""
     job_id = queries.resolve(req.con, req.params["app_id"])
-    who = _who(req)
     return {"action_id": runner.start("docs.critique", subject=critique_subject(job_id), job_id=job_id,
                                       params={"job_id": job_id}, replace=True, priority=apply_routes.NOW,
-                                      session_id=who["session_id"], helper_id=who["helper_id"],
-                                      remote=who["remote"])}
+                                      **who(req))}
 
 
 @route("POST", PREFIX + "/{app_id}/prep")

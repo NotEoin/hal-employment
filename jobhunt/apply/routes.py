@@ -6,26 +6,12 @@ and rewriting the letter are `docs/write_routes.py`'s.
 """
 from __future__ import annotations
 
-from ..web.router import BadRequest, NotHere, Request, route
+from ..web.router import BadRequest, NotHere, Request, json_body, route, who
 from . import actions, queries
 
 PREFIX = "/api/v2/applications"
 NOW = 0   # runner priority for a button the person just pressed on one application and is watching
 TAB_CLOSED = "The form's tab is closed. Press \"Fill it in again\" to open it."
-
-
-def _who(req: Request) -> dict:
-    """Who asked, so an application keeps the browser of the computer it was started from."""
-    return {"session_id": req.session_id,
-            "helper_id": req.helper.id if getattr(req, "helper", None) else None, "remote": req.remote}
-
-
-def _body(req: Request) -> dict:
-    if req.body is None:
-        return {}
-    if not isinstance(req.body, dict):
-        raise BadRequest("The request should be a JSON object.")
-    return req.body
 
 
 def _id(req: Request) -> str:
@@ -38,7 +24,7 @@ def _for_each(req: Request, flag: str, missing: str, start) -> dict:
     Returns {started: {job id: action id}, skipped: [the ids left out]}; a card that changed since the page
     drew it is skipped rather than acted on.
     """
-    ids = _body(req).get("ids")
+    ids = json_body(req).get("ids")
     if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
         raise BadRequest(missing, field="ids")
     marked = {c["id"] for col in queries.board(req.con)["columns"] for c in col["items"] if c.get(flag)}
@@ -65,7 +51,7 @@ def approve_ready(req: Request) -> dict:
     Only applications the board shows as ready to approve are taken; any other id is left out and listed.
     """
     return _for_each(req, "approvable", "Send the applications to approve.",
-                     lambda job_id: actions.approve_documents(req.con, job_id, {}, **_who(req)))
+                     lambda job_id: actions.approve_documents(req.con, job_id, {}, **who(req)))
 
 
 @route("POST", PREFIX + "/remake-missing")
@@ -76,7 +62,7 @@ def remake_missing(req: Request) -> dict:
     applications the board shows as `remakeable` are taken; any other id is left out and listed.
     """
     return _for_each(req, "remakeable", "Send the applications whose documents to make.",
-                     lambda job_id: actions.start("docs.prepare", job_id, **_who(req)))
+                     lambda job_id: actions.start("docs.prepare", job_id, **who(req)))
 
 
 @route("GET", PREFIX + "/{app_id}")
@@ -88,20 +74,19 @@ def application(req: Request) -> dict:
 @route("POST", PREFIX + "/{app_id}/documents/approve")
 def approve(req: Request) -> dict:
     """Approve and fill in the form."""
-    who = _who(req)
-    return {"action_id": actions.approve_documents(req.con, _id(req), _body(req), **who, priority=NOW)}
+    return {"action_id": actions.approve_documents(req.con, _id(req), json_body(req), **who(req), priority=NOW)}
 
 
 @route("PUT", PREFIX + "/{app_id}/documents")
 def save_documents(req: Request) -> dict:
     """Keeps edits to the letter, the answers or the message."""
-    return actions.save_documents(req.con, _id(req), _body(req), by_you=True)
+    return actions.save_documents(req.con, _id(req), json_body(req), by_you=True)
 
 
 @route("POST", PREFIX + "/{app_id}/documents/changes/{change_id}")
 def change(req: Request) -> dict:
     """Undo or Redo one change Hal made to the CV for this job."""
-    on = _body(req).get("on")
+    on = json_body(req).get("on")
     if not isinstance(on, bool):
         raise BadRequest("Say whether the change is on (true) or undone (false).", field="on")
     job_id = _id(req)
@@ -112,7 +97,7 @@ def change(req: Request) -> dict:
 @route("POST", PREFIX + "/{app_id}/documents/redo")
 def redo(req: Request) -> dict:
     """Make the documents again."""
-    return {"action_id": actions.start("docs.prepare", _id(req), **_who(req))}
+    return {"action_id": actions.start("docs.prepare", _id(req), **who(req))}
 
 
 @route("POST", PREFIX + "/{app_id}/documents/reopen")
@@ -128,32 +113,32 @@ def reopen(req: Request) -> dict:
 @route("POST", PREFIX + "/{app_id}/form/fill")
 def fill(req: Request) -> dict:
     """Fill it in again: from the advert (`fresh`), or from the page the job's tab shows now (`here`)."""
-    body = _body(req)
+    body = json_body(req)
     params = {"fresh": bool(body.get("fresh")), "here": bool(body.get("here"))}
-    return {"action_id": actions.start("apply.fill", _id(req), params=params, **_who(req), priority=NOW)}
+    return {"action_id": actions.start("apply.fill", _id(req), params=params, **who(req), priority=NOW)}
 
 
 @route("POST", PREFIX + "/{app_id}/form/edits")
 def edits(req: Request) -> dict:
     """Put my changes in the form."""
-    raw = _body(req).get("edits")
+    raw = json_body(req).get("edits")
     if not isinstance(raw, list):
         raise BadRequest("Send the changed answers as a list.", field="edits")
     changed = [{"hid": str(e.get("hid")), "value": e.get("value"), "skip": bool(e.get("skip")), "edited": True}
                for e in raw if isinstance(e, dict) and e.get("hid") is not None]
-    return {"action_id": actions.start("apply.apply_edits", _id(req), params={"edits": changed}, **_who(req))}
+    return {"action_id": actions.start("apply.apply_edits", _id(req), params={"edits": changed}, **who(req))}
 
 
 @route("POST", PREFIX + "/{app_id}/form/next")
 def next_page(req: Request) -> dict:
     """Carry on to the next page (on the last page, hand the form over)."""
-    return {"action_id": actions.start("apply.next_page", _id(req), **_who(req))}
+    return {"action_id": actions.start("apply.next_page", _id(req), **who(req))}
 
 
 @route("POST", PREFIX + "/{app_id}/form/draft-rest")
 def draft_rest(req: Request) -> dict:
     """Ask Hal to answer the rest."""
-    return {"action_id": actions.start("apply.draft_rest", _id(req), **_who(req))}
+    return {"action_id": actions.start("apply.draft_rest", _id(req), **who(req))}
 
 
 @route("POST", PREFIX + "/{app_id}/form/show")
@@ -198,7 +183,7 @@ def sent(req: Request) -> dict:
 @route("POST", PREFIX + "/{app_id}/discard")
 def discard(req: Request) -> dict:
     """Discard, with one of the reasons the dialog offers."""
-    body = _body(req)
+    body = json_body(req)
     reason = body.get("reason") or "skipped_for_now"
     if reason not in actions.DISCARD_REASONS:
         raise BadRequest("Choose one of the reasons offered.", field="reason")
@@ -216,7 +201,7 @@ def restore(req: Request) -> dict:
 @route("POST", PREFIX + "/{app_id}/status")
 def status(req: Request) -> dict:
     """Change status by hand."""
-    body = _body(req)
+    body = json_body(req)
     return {"column": actions.change_status(req.con, _id(req), str(body.get("status") or ""),
                                             str(body.get("words") or ""))}
 
@@ -224,5 +209,5 @@ def status(req: Request) -> dict:
 @route("POST", PREFIX + "/{app_id}/note")
 def note(req: Request) -> dict:
     """Add a note."""
-    actions.add_note(req.con, _id(req), str(_body(req).get("text") or ""))
+    actions.add_note(req.con, _id(req), str(json_body(req).get("text") or ""))
     return {"ok": True}

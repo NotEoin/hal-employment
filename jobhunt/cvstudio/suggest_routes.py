@@ -15,18 +15,10 @@ from jobhunt.cvstudio import (
     suggest_actions,  # noqa: F401 - registers the cv.* kinds before a route starts one
     tailor,
 )
-from jobhunt.web.router import BadRequest, Request, route
+from jobhunt.web.router import BadRequest, Request, json_body, route
 
 log = logging.getLogger(__name__)
 PREFIX = "/api/v2/cv"
-
-
-def _body(req: Request) -> dict:
-    if req.body is None:
-        return {}
-    if not isinstance(req.body, dict):
-        raise BadRequest("Send a JSON object.")
-    return req.body
 
 
 def _review_next() -> str | None:
@@ -53,7 +45,7 @@ def look_again(req: Request) -> dict:
 @route("POST", PREFIX + "/suggestions/accept-kind")
 def accept_kind(req: Request) -> dict:
     """Accept all of a kind (Consistency, Symbols, Dates)."""
-    kind = _body(req).get("kind")
+    kind = json_body(req).get("kind")
     if kind not in suggest.DETERMINISTIC_KINDS:
         raise BadRequest(f"Accept all works for {', '.join(suggest.DETERMINISTIC_KINDS)} only.", field="kind")
     out = suggest.accept_kind(req.con, kind)
@@ -65,7 +57,7 @@ def accept_kind(req: Request) -> dict:
 @route("POST", PREFIX + "/suggestions/{sugg_id}/accept")
 def accept(req: Request) -> dict:
     """Accept, optionally with the person's own wording."""
-    body = _body(req)
+    body = json_body(req)
     alt, text = body.get("alt"), body.get("text")
     if alt is not None and not isinstance(alt, int):
         raise BadRequest("Say which wording to use by its number.", field="alt")
@@ -79,7 +71,7 @@ def accept(req: Request) -> dict:
 @route("POST", PREFIX + "/suggestions/{sugg_id}/leave")
 def leave(req: Request) -> dict:
     """Leave it as it is, with an optional reason."""
-    body = _body(req)
+    body = json_body(req)
     return suggest.leave(req.con, req.params["sugg_id"], reason=str(body.get("reason") or ""),
                          words=str(body.get("words") or ""), remember=bool(body.get("remember")))
 
@@ -109,7 +101,7 @@ def questions(req: Request) -> list:
 @route("POST", PREFIX + "/fresh")
 def build_fresh(req: Request) -> dict:
     """Build a fresh CV from the interview answers."""
-    body = _body(req)
+    body = json_body(req)
     answers, type_id = body.get("answers"), body.get("type_id")
     if not isinstance(answers, dict):
         raise BadRequest("Send the answers to the questions.", field="answers")

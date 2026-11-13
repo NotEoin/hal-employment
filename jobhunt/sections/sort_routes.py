@@ -89,16 +89,12 @@ from jobhunt.core import events, paths
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
 from jobhunt.ingest import sources as ingest_sources
 from jobhunt.sections import sort_actions, sort_review, sorts
-from jobhunt.web.router import BadRequest, NotHere, Request, route
+from jobhunt.web.router import BadRequest, NotHere, Request, json_body, route
 
 PREFIX = "/api/v2/record/sort"
 FOLDERS_MAX = 20           # folders in one sort; a longer list is a mistake, not a person's choice
 FILE_FIELD, PATH_FIELD = "file", "path"
 ZIP = ".zip"
-
-
-def _body(req: Request) -> dict:
-    return req.body if isinstance(req.body, dict) else {}
 
 
 def _inside(path: Path, folder: Path) -> bool:
@@ -139,7 +135,7 @@ def start_folders(req: Request, folders: list, why: str) -> dict:
 def start_upload(req: Request, why: str, *, kind: str = "upload") -> dict:
     """Keeps the uploaded files and zips in Hal's data folder and starts sorting them; {"sort", "action_id",
     "added": [names], "problems": [words]}."""
-    fields = _body(req)
+    fields = json_body(req)
     uploads = [(key, up) for key, up in sorted(req.files.items()) if key.startswith(FILE_FIELD)]
     if not uploads:
         raise BadRequest("Choose one or more files or a zip to sort.")
@@ -182,7 +178,7 @@ def listing(req: Request) -> dict:
 @route("POST", PREFIX, auth="session_or_local", local_only=True)
 def sort_folders(req: Request) -> dict:
     """Starts sorting folders on this computer."""
-    return start_folders(req, _body(req).get("folders"), "You asked Hal to sort a big folder")
+    return start_folders(req, json_body(req).get("folders"), "You asked Hal to sort a big folder")
 
 
 @route("POST", PREFIX + "/upload", auth="session_or_local", max_body=UPLOAD_MAX_BODY)
@@ -216,7 +212,7 @@ def one(req: Request) -> dict:
 @route("POST", PREFIX + "/{sort_id}/courses", auth="session_or_local")
 def accept_course(req: Request) -> dict:
     """Makes the education card for a course Hal found in the sort's folders, as the person named it."""
-    body = _body(req)
+    body = json_body(req)
     if not isinstance(body.get("key"), str) or not body["key"]:
         raise BadRequest("Say which course: its key from the list.", field="key")
     try:
@@ -231,7 +227,7 @@ def accept_course(req: Request) -> dict:
 @route("POST", PREFIX + "/{sort_id}/groups", auth="session_or_local")
 def change_group(req: Request) -> dict:
     """Ticks, moves or gives a card to every file of a module group at once."""
-    body = _body(req)
+    body = json_body(req)
     if not isinstance(body.get("group"), str) or not body["group"]:
         raise BadRequest("Say which group of files: its group from the list.", field="group")
     try:
@@ -247,7 +243,7 @@ def change_group(req: Request) -> dict:
 def change_row(req: Request) -> dict:
     """Changes one proposal's section, kind, card, tick or showcase guess."""
     try:
-        return sorts.change_row(req.con, req.params["row_id"], _body(req))
+        return sorts.change_row(req.con, req.params["row_id"], json_body(req))
     except ValueError as e:
         raise BadRequest(str(e)) from e
 
@@ -264,7 +260,7 @@ def keep_copy(req: Request) -> dict:
 @route("POST", PREFIX + "/{sort_id}/tick", auth="session_or_local")
 def tick(req: Request) -> dict:
     """Ticks or unticks every proposal of a sort, or of one section."""
-    body = _body(req)
+    body = json_body(req)
     if not isinstance(body.get("ticked"), bool):
         raise BadRequest("Say whether to tick them: true or false.", field="ticked")
     try:
@@ -277,7 +273,7 @@ def tick(req: Request) -> dict:
 def accept(req: Request) -> dict:
     """Accepts the ticked proposals, or one section's, and starts adding them to the record."""
     try:
-        out = sorts.accept(req.con, req.params["sort_id"], _body(req).get("section") or None)
+        out = sorts.accept(req.con, req.params["sort_id"], json_body(req).get("section") or None)
     except ValueError as e:
         raise BadRequest(str(e)) from e
     sort_id = int(req.params["sort_id"])

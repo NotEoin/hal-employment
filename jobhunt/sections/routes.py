@@ -81,15 +81,11 @@ from jobhunt import record
 from jobhunt.core import events, paths
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
 from jobhunt.sections import actions, pipeline, readers, registry, revisions, store
-from jobhunt.web.router import BadRequest, NotFound, NotHere, Request, route
+from jobhunt.web.router import BadRequest, NotFound, NotHere, Request, json_body, route
 
 PREFIX = "/api/v2/record/sources"
 FILE_FIELD, PATH_FIELD = "file", "path"
 REREAD_ON = ("section", "doc_kind", "target_id", "module", "starred", "dissertation", "theirs", "picked", "form")
-
-
-def _body(req: Request) -> dict:
-    return req.body if isinstance(req.body, dict) else {}
 
 
 def _start(req: Request, ids: list[int], *, allow: list[int] = (), why: str, batch: bool = False) -> str | None:
@@ -133,7 +129,7 @@ def listing(req: Request) -> list[dict]:
 def upload(req: Request) -> dict:
     """Keeps the uploaded files as sources of the section and starts reading them."""
     section = _section(req)
-    fields = _body(req)
+    fields = json_body(req)
     uploads = [pipeline.Incoming(up.name, up.data, str(fields.get(PATH_FIELD + key[len(FILE_FIELD):]) or ""))
                for key, up in sorted(req.files.items()) if key.startswith(FILE_FIELD)]
     if not uploads:
@@ -168,7 +164,7 @@ def _folder(req: Request, raw: str) -> str:
 def link(req: Request) -> dict:
     """Keeps a link, account, folder on this computer or a project typed in as a source, and starts reading it."""
     section = _section(req)
-    body = _body(req)
+    body = json_body(req)
     locator = str(body.get("locator") or "")
     try:
         kind = registry.doc_kind(section, body.get("doc_kind") or None)
@@ -205,7 +201,7 @@ def attach(req: Request) -> dict:
 @route("PUT", PREFIX + "/{source_id}")
 def change(req: Request) -> dict:
     """Changes a source's title, kind of document, card, star, current mark or section."""
-    body = _body(req)
+    body = json_body(req)
     try:
         got = store.change(req.con, req.params["source_id"], body)
     except ValueError as e:
@@ -220,7 +216,7 @@ def change(req: Request) -> dict:
 def reread(req: Request) -> dict:
     """Starts reading a source again; with `allow`, one kept out as private is read anyway."""
     got = store.get(req.con, req.params["source_id"])
-    allow = [got["id"]] if _body(req).get("allow") is True else []
+    allow = [got["id"]] if json_body(req).get("allow") is True else []
     return {"action_id": _start(req, [got["id"]], allow=allow, why="You asked Hal to read a source again")}
 
 

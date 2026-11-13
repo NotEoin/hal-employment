@@ -180,6 +180,20 @@ class Request:
             self._con = None
 
 
+def json_body(req: Request) -> dict:
+    """The request's JSON object body; `{}` when none was sent, a 400 when it is not an object."""
+    if req.body is None:
+        return {}
+    if not isinstance(req.body, dict):
+        raise BadRequest("The request should be a JSON object.")
+    return req.body
+
+
+def who(req: Request) -> dict:
+    """Who asked, as the `session_id`, `helper_id` and `remote` an action is started with."""
+    return {"session_id": req.session_id, "helper_id": req.helper.id if req.helper else None, "remote": req.remote}
+
+
 @dataclass(frozen=True)
 class Route:
     """One registered route."""
