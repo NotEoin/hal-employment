@@ -21,7 +21,7 @@ Design decisions, each with its reason:
 - The privacy check of the bulk read applies (`ingest.privacy.held_back`): a source that looks private gets no
   note and no facts until the person lets it in (`read(..., allow_private=True)`).
 - Reading or removing a CV may change which CV is current (`profile.cvs`), so every card the CVs give is
-  worked out again (`cv.settle`).
+  worked out again (`cv.refold_cv_cards`).
 - A reader not written yet (`readers.NotReadYet`) leaves the source waiting, state `new`, with the words saying
   so; it is not a failure.
 - A read the AI cannot answer now (`ai.LLMUnavailable`) also leaves the source waiting, never read by rules
@@ -463,7 +463,7 @@ def finish(con: sqlite3.Connection, begun: Begun, reading: readers.Reading | Exc
                     (reading.title or readers.title_in(reading.text, name), reading.date, note_rel, now,
                      int(swapped["changed"]), now, suggestion, json.dumps(reading.details), r["id"]))
     if section.id == cv_reader.SECTION:
-        cv_reader.settle(con)
+        cv_reader.refold_cv_cards(con)
     readers.settle(begun.reader, con)
     revisions.record(con, r["id"], facts, reading.details, before=store.details(r))
     return {**out, "state": "read", "facts": swapped["added"], "left_out": len(reading.facts) - len(facts)
@@ -519,6 +519,6 @@ def remove(con: sqlite3.Connection, source_id) -> dict:
     with con:
         con.execute("DELETE FROM record_sources WHERE id = ?", (r["id"],))
     if r["section"] == cv_reader.SECTION:
-        cv_reader.settle(con)
+        cv_reader.refold_cv_cards(con)
     readers.settle(readers.get(registry.get(r["section"]).reader_of(r["doc_kind"])), con)
     return {"hidden": hidden + gone["hidden"]}

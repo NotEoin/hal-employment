@@ -1281,7 +1281,7 @@ people). Readers only take facts out of a source, within that frame.
   below the current CV's 3 and documents' 2, above notes), and `merge.fold` joins its lists only when no
   source above gives one, so it only fills gaps. `conflicts` leaves out an older CV's value of a field another
   source gives, and `writing.CvAuthority` takes the same current CV, so folding and writing agree. Reading,
-  removing or choosing a CV calls `cv.settle`, which refolds every card the CVs give
+  removing or choosing a CV calls `cv.refold_cv_cards`, which refolds every card the CVs give
   (`profile.store.refold_sources`). The profile's `GET /api/v2/profile/{kind}` marks each source
   `from_older_cv` and a project card that only CVs give `cv_only` ("from your CV only" on the page).
   `refold` leaves a card the person checked or made alone, except a course (`store._refill`): its empty

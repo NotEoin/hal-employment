@@ -20,7 +20,7 @@ Design decisions, each with its reason:
   says it is theirs (`meta.theirs`, "This is mine"). A heading that only names a role ("Software Engineer") is
   no name, and with no name set every CV is the person's.
 - Which CV is current is `profile.cvs`'s answer, so the card, the letters and the list of CVs agree; reading,
-  removing or choosing a CV works out again every card the CVs give (`settle`).
+  removing or choosing a CV works out again every card the CVs give (`refold_cv_cards`).
 """
 from __future__ import annotations
 
@@ -179,7 +179,7 @@ def cv_date(text: str, facts: list[readers.Fact], files: tuple[readers.SourceFil
     return datetime.fromtimestamp(max(stamps), UTC).strftime("%Y-%m") if stamps else ""
 
 
-def settle(con: sqlite3.Connection) -> list[int]:
+def refold_cv_cards(con: sqlite3.Connection) -> list[int]:
     """Works out again every card the CVs give, after the current CV may have changed; returns their ids."""
     return profile_store.refold_sources(con, cvs.cv_sources(con))
 
