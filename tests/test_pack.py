@@ -26,8 +26,8 @@ from support import people
 from support.actions import finished
 from support.world import World
 
-from jobhunt import cv, db, documents, letter, llm, pack, record
-from jobhunt.ai import gpu
+from jobhunt import ai, cv, db, documents, letter, pack, record
+from jobhunt.ai import counting, gpu
 from jobhunt.core import runner, settings
 from jobhunt.writing import flow, paragraphs
 
@@ -62,7 +62,7 @@ OPENINGS = {   # the first words of each document prompt, to tell the fake which
     "frame": "Write the first and the last",
     "paragraph_verify": "Check one paragraph", "rank": "Rank the applicant's work",
 }
-REAL_CHAT, REAL_CHAT_JSON = llm.chat, llm.chat_json   # the counting shim, for the test of the count
+REAL_CHAT_JSON = ai.chat_json   # reads the reply of `ai.chat`, which counts, for the test of the count
 WAIT_S = 10.0
 POLL_S = 0.05
 
@@ -107,6 +107,18 @@ def frame_opening(user: str) -> str:
     who = user.split("Who is writing: ", 1)[1].split("\n", 1)[0]
     role = user.split("The role: ", 1)[1].split("\n", 1)[0]
     return f"I am {who}. I am applying for the {role.split(' at ', 1)[0]} role."
+
+
+def documents_only(fake, other):
+    """`fake` for the document prompts and `other` for any prompt the fake writer does not know, so a read made
+    by another part of the app (a recruiter's critique) finds the AI as it was before the writer came."""
+    def ask(system: str, user: str, **kw):
+        try:
+            prompt_id(system)
+        except AssertionError:
+            return other(system, user, **kw)
+        return fake(system, user, **kw)
+    return ask
 
 
 def prompt_id(system: str) -> str:
@@ -201,7 +213,8 @@ def as_applicant(person: people.Person, writer: FakeWriter | None = None,
     `length_floor`."""
     writer = writer or FakeWriter()
     with World() as w, people.as_person(person), people.cv_type(person.key), contextlib.ExitStack() as stack:
-        for p in (mock.patch.object(llm, "chat", writer.chat), mock.patch.object(llm, "chat_json", writer.chat_json),
+        for p in (mock.patch.object(ai, "chat", documents_only(writer.chat, ai.chat)),
+                  mock.patch.object(ai, "chat_json", documents_only(writer.chat_json, ai.chat_json)),
                   mock.patch.object(cv, "facts_text", lambda: FACTS[person.key]),
                   mock.patch.object(record, "context", lambda queries, per_query=3, limit=6000: RECORD),
                   mock.patch.object(flow, "LENGTH_FLOOR", length_floor)):
@@ -1208,11 +1221,15 @@ class Others(unittest.TestCase):
 
     def test_each_pack_logs_how_many_model_calls_it_made(self):
         # the count per pack is how the cut from about 55 calls is measured (2026-11-08); the fake answers below
-        # the counting shim, as the real AI would
+        # the fake answers below the counting in `ai.chat`, as the real AI would
         writer = QuillWriter()
-        with quill_world(writer) as a, mock.patch.object(llm, "chat", REAL_CHAT), \
-                mock.patch.object(llm, "chat_json", REAL_CHAT_JSON), mock.patch.object(llm.ai, "chat", writer.chat), \
-                self.assertLogs("jobhunt.pack", "INFO") as logged:
+
+        def counting_chat(system, user, **kw):
+            counting.count()
+            return writer.chat(system, user, **kw)
+
+        with quill_world(writer) as a, mock.patch.object(ai, "chat", counting_chat), \
+                mock.patch.object(ai, "chat_json", REAL_CHAT_JSON), self.assertLogs("jobhunt.pack", "INFO") as logged:
             pack.build(a.con, a.job["id"], use_web=False)
         self.assertIn(f"pack for job {a.job['id']}: {len(writer.log)} model calls", "\n".join(logged.output))
         self.assertEqual(len(writer.log), 17)

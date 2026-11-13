@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from . import llm
+from . import ai
 from .ai import prompts
 from .find import goal as goal_mod
 
@@ -58,7 +58,7 @@ def screen_one(con, job) -> tuple[bool, str]:
     goal = goal_mod.current()
     system = prompts.text("screen", con=con, **values(goal, job))
     advert = (job["description"] or "")[:ADVERT_CHARS]
-    verdict = llm.chat_json(system, f"{job['title']} at {job['company']}\n\n{advert}", role="main",
+    verdict = ai.chat_json(system, f"{job['title']} at {job['company']}\n\n{advert}", role="checker",
                             timeout=SCREEN_TIMEOUT, purpose="screen")
     eligible = verdict.get("eligible") is True
     reason = str(verdict.get("reason", ""))[:REASON_CHARS]

@@ -21,9 +21,9 @@ from unittest import mock
 from support import graduates, people
 from support.fake_ai import fake_ai
 from support.world import World
-from test_pack import FakeWriter, add_job, prompt_id, section
+from test_pack import FakeWriter, add_job, documents_only, prompt_id, section
 
-from jobhunt import cv, llm, pack, record
+from jobhunt import ai, cv, pack, record
 from jobhunt.core import settings
 from jobhunt.profile import writing as profile_writing
 from jobhunt.sections import coursework, lecture, letters
@@ -69,7 +69,8 @@ def graduate_world(who: graduates.Graduate, person: people.Person,
         settings.set("you.email", "avery@example.org" if who is graduates.AVERY else person.you["email"])
         with fake_ai({k: json.dumps(v) for k, v in READS[who].items()}):
             graduates.sectioned(w.con, who, Path(tmp))
-        with mock.patch.object(llm, "chat", writer.chat), mock.patch.object(llm, "chat_json", writer.chat_json), \
+        with mock.patch.object(ai, "chat", documents_only(writer.chat, ai.chat)), \
+                mock.patch.object(ai, "chat_json", documents_only(writer.chat_json, ai.chat_json)), \
                 mock.patch.object(cv, "facts_text", lambda: who.cv), \
                 mock.patch.object(record, "context", lambda *q, **k: ""):
             yield SimpleNamespace(con=w.con, writer=writer, job=add_job(w.con, person.key))

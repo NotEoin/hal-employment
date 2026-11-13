@@ -14,7 +14,7 @@ Design notes:
   it, for a pack and for a letter a form asks for (`documents.draft_letter`), so every letter is checked
   the same way.
 - Every draft the AI writes is respelt to the person's spelling (`spelt`, `writing.spelling`) before it is
-  checked, as dashes are taken out (`llm.undash`): a spelling has one right form, so it needs no revision.
+  checked, as dashes are taken out (`ai.undash`): a spelling has one right form, so it needs no revision.
 - Every draft goes through the writing checker (`writing.check`). A high-severity break (an invented number,
   a machine-made word, a staged contrast) makes the writer revise once with the problems quoted; what is
   left is listed under "Check before sending", never fixed in a loop.
@@ -54,7 +54,7 @@ Design notes:
   answer or a message with nothing after its introduction, as a dropped paragraph left nothing. The next
   story is tried, up to `STORY_TRIES`, and what is still empty is written by the whole-draft path.
 - The pack's checklist names no command: every action is a button on the Documents page.
-- Each pack logs how many model calls it made (`build`, `llm.counted`): a pack made about 55 with sentence
+- Each pack logs how many model calls it made (`build`, `ai.counted`): a pack made about 55 with sentence
   checks, and the stories aim for about 30 at most (2026-11-08), so the count is logged to be measured.
 """
 import logging
@@ -63,7 +63,7 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from . import cv, db, llm, record, reputation, research
+from . import ai, cv, db, record, reputation, research
 from .ai import prompts
 from .core import events
 from .cvstudio import context as cv_context
@@ -171,7 +171,7 @@ def _research(company: str) -> tuple[str, list[str]]:
 
 def _analyse(job, who: dict) -> dict:
     text = _job_text(job)[:12000]
-    analysis = llm.chat_json(prompt("analyse", who), text, role="main", purpose="analyse")
+    analysis = ai.chat_json(prompt("analyse", who), text, role="checker", timeout=ai.LONG_TIMEOUT_S, purpose="analyse")
     analysis["questions"] = written_out(analysis.get("questions") or [], text)
     resolved = fields.resolve(job["title"], text, who)
     analysis.update(field=resolved.field, background=resolved.background)
@@ -236,11 +236,11 @@ def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:
     shown = profile_writing.cards_block(cards)
 
     def ask(requirements: list[str]) -> dict:
-        return with_card_tools(without_reasoning(llm.chat_json(
+        return with_card_tools(without_reasoning(ai.chat_json(
             prompt("fit", who), "Requirements:\n" + "\n".join(f"- {r}" for r in requirements)
             + f"\n\nConditions:\n{conditions}\n\n{stage.today_lines()}\n\nCV:\n{facts}"
-            + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept), role="main",
-            purpose="fit")), cards)
+            + (f"\n\n{shown}" if shown else "") + _record_part("Employment record", kept), role="checker",
+            timeout=ai.LONG_TIMEOUT_S, purpose="fit")), cards)
 
     fit = complete_fit(ask(_requirements(analysis)), analysis.get("must_have") or [], ask)
     fit = consistent_fit(fit, eligibility.person(), reputation.towns(reputation.advert_of(job)), facts)
@@ -513,9 +513,9 @@ def _draft(who: dict, prompt_id: str, user: str, trimmed: set[str]) -> str:
     reply stops mid-sentence (`drafts.cut_off`); when that one stops too it is kept to its last full sentence
     and added to `trimmed`, so "Check before sending" can say so if it is the draft that is kept."""
     def ask(text: str, ctx: int | None = None) -> str:
-        said = llm.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx, temperature=DRAFT_TEMPERATURE,
-                        purpose=prompt_id).strip()
-        return spelt(drop_notes(llm.undash(said)), who)
+        said = ai.chat(prompt(prompt_id, who), text, role="writer", ctx=ctx, temperature=DRAFT_TEMPERATURE,
+                       timeout=ai.LONG_TIMEOUT_S, purpose=prompt_id).strip()
+        return spelt(drop_notes(ai.undash(said)), who)
 
     draft = ask(user)
     if not drafts.cut_off(draft):
@@ -590,7 +590,8 @@ def unsupported_claims(who: dict, written: str, *, facts: str, kept: str, employ
                f"them.\n<<<EMPLOYER\n{words}\nEMPLOYER>>>\n\nFacts about the applicant:\n{stage.today_lines(now)}\n"
                f"CV:\n{facts}" + (f"\n\n{shown}" if shown else "")
                + _record_part(f"Employment record ({record.OWN_DOCUMENTS})", kept) + f"\n\nDrafts:\n{written}")
-    found = llm.chat_json(prompt("verify", who), request, role="main", purpose="verify").get("unsupported", [])
+    found = ai.chat_json(prompt("verify", who), request, role="checker", timeout=ai.LONG_TIMEOUT_S,
+                        purpose="verify").get("unsupported", [])
     claims = [str(c).strip() for c in found if str(c).strip()] if isinstance(found, list) else []
     claims = [c for c in claims if not drafts.stated_in(c, facts)]
     known = known_tools(cards)
@@ -932,8 +933,9 @@ def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[s
     the facts do not support, after once more when a later answer repeats an earlier one (`fix_repeats`);
     returns (answers, the claims still unsupported, the sentences still restating the advert)."""
     def ask(text: str) -> list[dict]:
-        found = llm.chat_json(prompt("answers", who), text, role="writer", purpose="answers").get("answers", [])
-        return [{**a, "answer": spelt(llm.undash(a.get("answer", "")), who)}
+        found = ai.chat_json(prompt("answers", who), text, role="writer", timeout=ai.LONG_TIMEOUT_S,
+                            purpose="answers").get("answers", [])
+        return [{**a, "answer": spelt(ai.undash(a.get("answer", "")), who)}
                 for a in found if isinstance(a, dict)]
 
     def again(note: str) -> list[dict]:
@@ -1316,11 +1318,11 @@ def without_refusals(letter: str, message: str, answers: list[dict]) -> tuple[st
 
 def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
     """Drafts the pack for one job and returns the pack's Markdown path; the log says how many model calls it
-    made (`llm.counted`), the measure of a pack's cost on a local model.
+    made (`ai.counted`), the measure of a pack's cost on a local model.
 
     With `ctx` (a running action) the record passages used are noted under its Activity "Used".
     """
-    with llm.counted() as calls:
+    with ai.counted() as calls:
         pack_md = _build(con, job_id, use_web, ctx)
     log.info("pack for job %s: %d model calls", job_id, calls.n)
     return pack_md
@@ -1339,9 +1341,9 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
 
     analysis = _analyse(job, who)
     web, urls = _research(job["company"]) if use_web else ("", [])
-    about = llm.chat(prompt("brief", who),
+    about = ai.chat(prompt("brief", who),
                      f"Company: {job['company']}\n\nJob advert:\n{job_text[:4000]}\n\nWeb sources:\n{web[:8000]}",
-                     role="main", purpose="brief")
+                     role="checker", timeout=ai.LONG_TIMEOUT_S, purpose="brief")
     kept = _kept(analysis)
     fit = _fit(who, analysis, facts, kept, job)
     plan = evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))

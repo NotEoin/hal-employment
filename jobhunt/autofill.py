@@ -35,7 +35,7 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from . import cv, db, llm, record, salary
+from . import ai, cv, db, record, salary
 from .ai import gpu, prompts
 from .writing import spelling, stage
 
@@ -1143,9 +1143,9 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
             # The employment record holds what the CV leaves out: certificates, the full story of each job.
             found = record.context([f"{f.get('label') or ''} {f.get('help') or ''}" for f in batch])
             kept = f"\n\nEmployment record ({record.OWN_DOCUMENTS}):\n{found}" if found else ""
-            reply = llm.chat_json(_prompt("form_fill"), f"Fields:\n{listing}\n\n{facts}{kept}{style}", role="main",
+            reply = ai.chat_json(_prompt("form_fill"), f"Fields:\n{listing}\n\n{facts}{kept}{style}", role="checker",
                                   timeout=300, purpose="form_fill")
-        except llm.LLMUnavailable as e:
+        except ai.LLMUnavailable as e:
             return answered, str(e)
         passages.append(found)
         by_hid = {f["hid"]: f for f in batch}
@@ -1168,7 +1168,7 @@ def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | No
             if f["kind"] == "checkbox":
                 value = str(value).lower() in ("true", "yes", "1")
             if isinstance(value, str) and not f.get("options"):
-                value = spelling.respell(llm.undash(value), spelt_in)
+                value = spelling.respell(ai.undash(value), spelt_in)
             if f.get("type") == "number" and not re.fullmatch(r"\s*-?[\d.,]+\s*", str(value)):
                 continue
             f.update(value=value, source="hal", skip=False, note="" if a.get("sure") else UNSURE_NOTE,
@@ -1217,7 +1217,7 @@ def check_written(job, answered: list[dict], facts: str, found: str) -> None:
     try:
         claims = pack.unsupported_claims(pack.person(), drafts, facts=facts, kept=found,
                                          employer=(str(_get(job, "description") or ""),))
-    except llm.LLMUnavailable:
+    except ai.LLMUnavailable:
         return   # the numbers check stands alone; each answer already says to read it
     for claim in claims:
         f = _answer_claiming(claim, prose)
@@ -1235,9 +1235,9 @@ def _review(job, fields: list[dict]) -> None:
     listing = "\n".join(f"- hid={f['hid']} section={f.get('section') or ''!r} question={f.get('label')!r} "
                         f"answer={f['value']!r}" for f in chosen)
     try:
-        reply = llm.chat_json(_prompt("form_review"), f"Job: {job['title']} at {job['company']}\n\nAnswers:\n{listing}",
-                              role="main", timeout=180, purpose="form_review")
-    except llm.LLMUnavailable:
+        reply = ai.chat_json(_prompt("form_review"), f"Job: {job['title']} at {job['company']}\n\nAnswers:\n{listing}",
+                              role="checker", timeout=180, purpose="form_review")
+    except ai.LLMUnavailable:
         return
     by_hid = {f["hid"]: f for f in chosen}
     for f in chosen:
@@ -1260,9 +1260,9 @@ def choose_control(job, found: dict) -> str:
     prompt = (f"Job: {job['title']} at {job['company']}\nPage title: {found['title']}\n"
               f"Page address: {found['url']}\nControls:\n" + "\n".join(f"- {n}" for n in names[:60]))
     try:
-        reply = llm.chat_json(prompts.text("choose_control"), prompt, role="main", timeout=120,
+        reply = ai.chat_json(prompts.text("choose_control"), prompt, role="checker", timeout=120,
                                purpose="choose_control")
-    except llm.LLMUnavailable:
+    except ai.LLMUnavailable:
         return ""
     press = str(reply.get("press") or "")
     return press if press in names else ""

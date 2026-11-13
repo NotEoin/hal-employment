@@ -83,7 +83,7 @@ PLAIN = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "
 def _drawable(value):
     """`value` with every string reduced to what the PDF fonts draw: ASCII and the Latin-1 letters."""
     if isinstance(value, str):
-        from .llm import undash
+        from .ai import undash
         text = "".join(PLAIN.get(c, c) for c in undash(value))
         return "".join(c for c in text if c in "\n" or " " <= c <= "~" or "\u00a0" <= c <= "\u00ff")
     if isinstance(value, list):

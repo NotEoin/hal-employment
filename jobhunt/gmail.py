@@ -31,7 +31,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import db, llm
+from . import ai, db
 from .ai import prompts
 from .score import score
 
@@ -247,9 +247,9 @@ def role_of(subject: str, body: str) -> str | None:
 def refine(sender, subject, body, kind, company, role):
     """Ask the local model when the rules are unsure. Rules win if it's down."""
     try:
-        out = llm.chat_json(prompts.text("email_refine"), f"From: {sender}\nSubject: {subject}\n\n{body[:3000]}",
-                            role="fast", timeout=REFINE_TIMEOUT_S, purpose="email_refine")
-    except llm.LLMUnavailable:
+        out = ai.chat_json(prompts.text("email_refine"), f"From: {sender}\nSubject: {subject}\n\n{body[:3000]}",
+                            role="quick", timeout=REFINE_TIMEOUT_S, purpose="email_refine")
+    except ai.LLMUnavailable:
         return kind, company, role
     k = out.get("kind")
     if k in STATUS_FOR or k in ("human", "other"):

@@ -8,7 +8,7 @@ import hashlib
 import re
 from urllib.parse import parse_qsl, urlparse
 
-from . import db, llm
+from . import ai, db
 from .ai import gpu, prompts
 from .browser import application_url
 from .find import goal
@@ -90,11 +90,11 @@ def describe(page: dict) -> tuple[str, str]:
     if gpu.busy():
         return company, title
     try:
-        reply = llm.chat_json(prompts.text("adopt_name"),
+        reply = ai.chat_json(prompts.text("adopt_name"),
                               f"Address: {page['url']}\nPage title: {page.get('title', '')}\n"
                               f"Heading: {page.get('heading', '')}\nSite name: {page.get('site', '')}\n\n"
-                              f"{page.get('text', '')[:2000]}", role="main", timeout=60, purpose="adopt_name")
-    except llm.LLMUnavailable:
+                              f"{page.get('text', '')[:2000]}", role="checker", timeout=60, purpose="adopt_name")
+    except ai.LLMUnavailable:
         return company, title
     named = str(reply.get("company") or "").strip()
     called = str(reply.get("title") or "").strip()

@@ -91,7 +91,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from jobhunt import llm
+from jobhunt import ai
 from jobhunt.ai import prompts
 from jobhunt.writing import check as writing_check
 from jobhunt.writing import drafts, flow, motive, plain, planned, purpose, repeats, spelling, stage, strengths, taught
@@ -664,7 +664,8 @@ def verify(text: str, story: Story, scope: Scope) -> list[Problem]:
     """What the AI finds a paragraph says that its story's facts do not (prompt `paragraph_verify`); quoted
     words the facts or the employer's words hold are dropped (`_dropped`); [] for a reply that is not JSON."""
     request = f"Paragraph:\n{text}\n\nThe facts of the work it is about:\n{story.block()}"
-    reply = llm.chat_json(prompts.text(VERIFY_PROMPT), request, role="main", purpose=VERIFY_PROMPT)
+    reply = ai.chat_json(prompts.text(VERIFY_PROMPT), request, role="checker", timeout=ai.LONG_TIMEOUT_S,
+                         purpose=VERIFY_PROMPT)
     if not isinstance(reply, dict):
         return []
     said, where = writing_check.sentences(text), f"{story.words()}\n{scope.allowed}\n{' '.join(scope.names)}"
@@ -686,8 +687,8 @@ def verify(text: str, story: Story, scope: Scope) -> list[Problem]:
 def ask(prompt_id: str, request: str, scope: Scope, key: str = "paragraph") -> dict | str:
     """One draft from the AI: the `key` of its JSON reply, undashed and respelt ("" for none), or the whole reply
     when `key` is ""."""
-    reply = llm.chat_json(prompts.text(prompt_id, **scope.values), request, role="writer",
-                          temperature=DRAFT_TEMPERATURE, purpose=prompt_id)
+    reply = ai.chat_json(prompts.text(prompt_id, **scope.values), request, role="writer",
+                         temperature=DRAFT_TEMPERATURE, timeout=ai.LONG_TIMEOUT_S, purpose=prompt_id)
     if not key:
         return reply if isinstance(reply, dict) else {}
     return clean(reply.get(key) if isinstance(reply, dict) else "", scope)
@@ -695,7 +696,7 @@ def ask(prompt_id: str, request: str, scope: Scope, key: str = "paragraph") -> d
 
 def clean(said, scope: Scope) -> str:
     text = " ".join(str(said or "").split())
-    return spelling.respell(llm.undash(text), scope.values.get("spelling_code")) if text else ""
+    return spelling.respell(ai.undash(text), scope.values.get("spelling_code")) if text else ""
 
 
 VOICE_HEADING = ("How this person writes (from their own letters; match the tone and sentence length, never copy "

@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from jobhunt import config, cv, db, gmail, llm, pack, record, replenish, reputation, research, tasks
+from jobhunt import ai, config, cv, db, gmail, pack, record, replenish, reputation, research, tasks
 from jobhunt.ai import prompts
 from jobhunt.writing import plan
 
@@ -212,8 +212,11 @@ ANALYSIS = {"summary": "Builds internal tools for a made-up company.", "must_hav
 SCREEN_OPENING = "Decide whether this person could realistically be hired for this job."
 
 
+REAL_CHAT, REAL_CHAT_JSON = ai.chat, ai.chat_json   # any other prompt finds the AI of the test run, which is away
+
+
 def fake_chat_json(system: str, user: str, **kw) -> dict:
-    """Canned answers for the pack's prompts; any other prompt finds the model away."""
+    """Canned answers for the pack's prompts; any other prompt goes to the AI of the test run."""
     fit = {"matches": [{"requirement": "Python", "evidence": "a made-up project", "strength": "strong"}],
            "gaps": ["SQL"], "eligible": True, "eligibility_notes": "No conditions."}
     answers = {"answers": [{"question": "Why do you want this role?", "answer": "A made-up answer."}]}
@@ -224,14 +227,14 @@ def fake_chat_json(system: str, user: str, **kw) -> dict:
         return json.loads(json.dumps(canned[system]))
     if system.startswith(SCREEN_OPENING):
         return {"eligible": True, "reason": "A made-up reason: the role fits the goal."}
-    raise llm.LLMUnavailable("the made-up world has no model for this prompt")
+    return REAL_CHAT_JSON(system, user, **kw)
 
 
 def fake_chat(system: str, user: str, **kw) -> str:
     """Canned prose for the pack's brief, letter and message."""
     if system in (pack.prompt("brief"), pack.prompt("letter"), pack.prompt("message")):
         return "A short made-up paragraph."
-    raise llm.LLMUnavailable("the made-up world has no model for this prompt")
+    return REAL_CHAT(system, user, **kw)
 
 
 class World:
@@ -266,9 +269,9 @@ class World:
             mock.patch.object(record, "VAULT", self.root / "no-record", create=True),
             mock.patch.object(replenish, "TARGET", QUEUE_SIZE),
             mock.patch.object(replenish, "MIN_SCORE", float(QUEUE_MIN_SCORE)),
-            mock.patch.object(llm, "available", lambda: True),
-            mock.patch.object(llm, "chat", fake_chat),
-            mock.patch.object(llm, "chat_json", fake_chat_json),
+            mock.patch.object(ai, "available", lambda: True),
+            mock.patch.object(ai, "chat", fake_chat),
+            mock.patch.object(ai, "chat_json", fake_chat_json),
             mock.patch.object(cv, "facts_text", lambda: "Robin Testwell. BSc Made-up Studies. Python projects."),
             mock.patch.object(cv, "tailor", lambda text: ({}, None)),
             mock.patch.object(cv, "render", self._render_cv),

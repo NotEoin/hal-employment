@@ -6,7 +6,7 @@ from unittest import mock
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
-from jobhunt import llm
+from jobhunt import ai
 from jobhunt.writing import plan
 
 TIDE = {"kind": "project (personal project)", "name": "Tide gauge", "tools": ["Lua"], "summary": "Logs river levels.",
@@ -183,7 +183,7 @@ class Picks(unittest.TestCase):
             asked.append(user)
             return {"evidence": [{"source": "S7", "quote": "We measured the river at three sites"}]}
 
-        with mock.patch.object(llm, "chat_json", reply):
+        with mock.patch.object(ai, "chat_json", reply):
             items = plan.make(["Field work"], ["Why this role?"], FACTS, KEPT, CARDS)
         self.assertEqual(len(asked), 1)
         self.assertIn("Requirements:\n- Field work\n", asked[0])

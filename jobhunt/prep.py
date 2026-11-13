@@ -5,7 +5,7 @@ applications table. The notes prepare the person for the stage; they are not ans
 to send on their behalf. The prompt (`ai/prompts/prep.txt`) names no one: `cvstudio.context.build` fills it
 with the person and the CV type's `prep_topics`, and the tests the advert names go in the request.
 """
-from . import cv, db, documents, llm, pack, record
+from . import ai, cv, db, documents, pack, record
 from .writing import stage as person_stage
 
 PREP_TIMEOUT = 600   # seconds; the notes are long, and a local model on a busy graphics card is slow
@@ -31,7 +31,7 @@ def request(job, who: dict) -> str:
 def build(con, job) -> str:
     """Drafts the preparation notes for a job, stores them, and returns them."""
     who = pack.person(job)
-    notes = pack.spelt(llm.chat(pack.prompt("prep", who), request(job, who), role="main",
+    notes = pack.spelt(ai.chat(pack.prompt("prep", who), request(job, who), role="checker",
                                 timeout=PREP_TIMEOUT, purpose="prep").strip(), who)
     con.execute("""INSERT INTO applications (job_id, stage, prep, updated) VALUES (?, 'submitted', ?, ?)
                    ON CONFLICT(job_id) DO UPDATE SET prep = excluded.prep, updated = excluded.updated""",

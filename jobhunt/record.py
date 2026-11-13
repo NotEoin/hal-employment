@@ -712,7 +712,7 @@ def ask(question: str) -> dict:
                          role="checker", timeout=ASK_TIMEOUT_S, purpose="record_ask", priority=0)
     except ai.LLMUnavailable as e:
         return {"answer": "", "sources": sources, "passages": hits, "by": "search", "note": str(e)}
-    from .llm import undash
+    from .ai import undash
 
     return {"answer": undash(answer.strip()), "sources": sources, "passages": hits, "by": "model"}
 

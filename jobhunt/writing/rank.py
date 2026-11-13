@@ -44,7 +44,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from jobhunt import llm
+from jobhunt import ai
 from jobhunt.ai import prompts
 from jobhunt.profile import tiers
 from jobhunt.writing import plan as planning
@@ -178,8 +178,9 @@ def make(job: Job, cards: list[dict], found: list[Story]) -> list[Ranked]:
     if not offered:
         return []
     try:
-        reply = llm.chat_json(prompts.text(PROMPT), request(job, offered), role="main", purpose=PROMPT)
-    except llm.LLMUnavailable as e:
+        reply = ai.chat_json(prompts.text(PROMPT), request(job, offered), role="checker", timeout=ai.LONG_TIMEOUT_S,
+                             purpose=PROMPT)
+    except ai.LLMUnavailable as e:
         log.warning("story ranking: the AI could not rank the work (%s); the job's words choose it", e)
         return []
     ranked = checked(reply, offered)

@@ -11,7 +11,7 @@ from unittest import mock
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
-from jobhunt import llm
+from jobhunt import ai
 from jobhunt.writing import drafts, frame, motive, paragraphs, plain, purpose, stage
 from jobhunt.writing.motive import Pairing
 from jobhunt.writing.plan import Item, Story
@@ -158,7 +158,7 @@ class Fixture(unittest.TestCase):
         for s in FLAGS["ai_only"]:
             story = FIXTURE_STORIES[s["story"]]
             self.assertEqual(paragraphs.sentence_problems(s["text"], story, FIXTURE_SCOPE), [], s["text"])
-            with mock.patch.object(llm, "chat_json", lambda system, user, reply=s["reply"], **kw: reply):
+            with mock.patch.object(ai, "chat_json", lambda system, user, reply=s["reply"], **kw: reply):
                 self.assertTrue(paragraphs.verify(s["text"], story, FIXTURE_SCOPE), s["text"])
 
 
@@ -186,7 +186,7 @@ GOOD = "Quill is my offline assistant over personal notes, in Lua. It answers qu
 
 class Settle(unittest.TestCase):
     def settle(self, fake: FakeAI, story: Story = QUILL_STORY) -> paragraphs.Paragraph:
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             return paragraphs.settle(story, paragraphs.LETTER, SCOPE)
 
     def test_a_paragraph_saying_only_its_facts_needs_no_check_and_no_redraft(self):
@@ -285,7 +285,7 @@ class Ending(unittest.TestCase):
     def test_a_letter_paragraph_ending_on_its_own_work_is_kept_with_no_redraft(self):
         # generic filler tie forced onto a paragraph's last sentence by a redraft
         fake = FakeAI([GOOD])
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             done = paragraphs.settle(QUILL_STORY, paragraphs.letter(250, 3), SCOPE)
         self.assertEqual((done.text, done.redrafted, len(fake.calls("Write"))), (GOOD, False, 1))
 
@@ -301,7 +301,7 @@ class Frame(unittest.TestCase):
                                      "both sort questions"), ("Quill",), "Made-up University")
 
     def settle(self, fake: FakeAI) -> frame.Framed:
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             return frame.settle(self.FACTS, SCOPE)
 
     def test_the_opening_is_drafted_from_who_is_writing_the_role_and_the_reason(self):
@@ -348,7 +348,7 @@ class Reframed(unittest.TestCase):
                         sources=("Year 2 modules: Algorithm Design 70, Ferry Studies 64",))
         claim = "Quill answers questions over my notes offline. Algorithm Design gave me the C++ knowledge for it."
         fake = FakeAI([claim, GOOD])
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             done = paragraphs.settle(QUILL_STORY, paragraphs.answer("Tell us about your skills."), scope)
         self.assertIn("nothing in your facts ties Algorithm Design to C++", fake.calls("Write")[1])
         self.assertEqual(done.text, GOOD)
@@ -401,7 +401,7 @@ class Retold(unittest.TestCase):
         retold = (f"{self.GOOD.split('. ')[0]}. Quill answers questions over my notes offline, which drew me to "
                   "your ticket triage service.")
         fake = FakeAI([retold, self.GOOD])
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             done = frame.settle(self.FACTS, SCOPE)
         asked = fake.calls("Write")
         self.assertIn(frame.RETOLD_SAID.format(work="Quill"), asked[1])
@@ -440,7 +440,7 @@ class Named(unittest.TestCase):
     def test_an_answer_not_naming_its_work_first_is_drafted_again_once(self):
         unnamed = "I wrote a 113-test suite. It was for Quill Employment."
         fake = FakeAI([unnamed, "Quill Employment has a 113-test suite."])
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             done = paragraphs.settle(EMPLOYMENT_STORY, paragraphs.answer("Tell us about testing."), SCOPE)
         self.assertIn("does not name Quill Employment in its first sentence", fake.calls("Write")[1])
         self.assertEqual((done.text, done.redrafted), ("Quill Employment has a 113-test suite.", True))
@@ -488,7 +488,7 @@ class WhyHere(unittest.TestCase):
                 "Quill Employment, my job-search helper, sorts requests with a 113-test suite behind it.")
         self.assertEqual(paragraphs.untied(good, EMPLOYMENT_STORY, SCOPE, shape), [])
         fake = FakeAI([untied, good])
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             done = paragraphs.settle(EMPLOYMENT_STORY, shape, SCOPE)
         self.assertIn(paragraphs.NOT_TIED.format(card="Quill Employment"), fake.calls("Write")[1])
         self.assertEqual(done.text, good)
@@ -546,7 +546,7 @@ class MessageBody(unittest.TestCase):
         own = "Quill answers questions over my notes offline, in Lua. How does your team keep notes offline?"
         theirs = "Quill answers questions over my notes offline, in Lua. How does your triage service sort tickets?"
         fake = FakeAI([own, theirs])
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             done = paragraphs.settle(QUILL_STORY, paragraphs.message("Hi."), SCOPE)
         self.assertIn(paragraphs.QUESTION_OFF, fake.calls("Write")[1])
         self.assertEqual(done.text, theirs)
@@ -694,7 +694,7 @@ class Voice(unittest.TestCase):
     def test_the_paragraph_and_frame_requests_carry_the_voice_and_the_check_never_does(self):
         fake = FakeAI([f"{GOOD} I rely on it each week."])
         scope = replace(SCOPE, voice=(VOICE,))
-        with mock.patch.object(llm, "chat_json", fake.chat_json):
+        with mock.patch.object(ai, "chat_json", fake.chat_json):
             paragraphs.settle(QUILL_STORY, paragraphs.LETTER, scope)
         request = fake.calls("Write")[0]
         self.assertIn(f"{paragraphs.VOICE_HEADING}\n<<<\n{VOICE}\n>>>", request)

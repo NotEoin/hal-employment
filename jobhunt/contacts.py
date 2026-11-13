@@ -15,7 +15,7 @@ import json
 import re
 import time
 
-from . import browser, db, documents, llm, pack
+from . import ai, browser, db, documents, pack
 from .ai import gpu
 
 SEARCH_PAUSE = 8  # seconds between queries, so the search engine does not refuse them
@@ -127,9 +127,9 @@ def _by_rules(people: list[dict]) -> list[dict]:
 def _by_model(job, people: list[dict]) -> list[dict]:
     listing = "\n".join(f"{n}. {p['name']} | {p['role']} | from: {p['source']} | {p.get('evidence', '')}"
                         for n, p in enumerate(people, 1))
-    reply = llm.chat_json(pack.prompt("contacts_pick"),
+    reply = ai.chat_json(pack.prompt("contacts_pick"),
                           f"Job: {job['title']} at {job['company']} ({job['location'] or 'UK'})\n\n"
-                          f"People:\n{listing}", role="main", timeout=180, purpose="contacts_pick")
+                          f"People:\n{listing}", role="checker", timeout=ai.LONG_TIMEOUT_S, purpose="contacts_pick")
     picked = {}
     for pick in reply.get("picks") or []:
         n = pick.get("n")
@@ -146,7 +146,7 @@ def rank(job, people: list[dict]) -> tuple[list[dict], str]:
     if not gpu.busy():
         try:
             return _by_model(job, people), "model"
-        except llm.LLMUnavailable:
+        except ai.LLMUnavailable:
             pass
     return _by_rules(people), "rules"
 

@@ -48,7 +48,7 @@ import logging
 import re
 from dataclasses import dataclass
 
-from jobhunt import llm
+from jobhunt import ai
 from jobhunt.ai import prompts
 from jobhunt.writing import check, drafts
 from jobhunt.writing.plan import Item, quoted
@@ -206,7 +206,7 @@ def make(names: tuple[str, ...], advert: str, brief: str, plan: list[Item],
     items = offered(plan, fitting)
     request = (f"Job: {title} at {company}\n\nCompany brief (look here first):\n{brief or 'none'}\n\n"
                f"Advert:\n{advert}\n\nEvidence plan:\n" + "\n".join(i.words() for i in items))
-    reply = llm.chat_json(prompts.text(PROMPT), request, role="main", purpose=PROMPT)
+    reply = ai.chat_json(prompts.text(PROMPT), request, role="checker", timeout=ai.LONG_TIMEOUT_S, purpose=PROMPT)
     return checked(reply, advert, brief, items, names)
 
 

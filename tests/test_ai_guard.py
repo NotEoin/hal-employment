@@ -8,7 +8,7 @@ from pathlib import Path
 from support import private_answers
 from support.fake_ai import fake_ai
 
-from jobhunt import ai, db, llm
+from jobhunt import ai, db
 from jobhunt.ai import guard
 from jobhunt.ai.base import PrivateLeak
 from jobhunt.core import paths
@@ -47,7 +47,7 @@ class Guard(InHome):
                 with self.assertRaises(PrivateLeak):
                     ai.chat(system, user, purpose="letter", job_id="job-3")
             with self.assertRaises(PrivateLeak):
-                llm.chat("You write.", hidden, role="writer")
+                ai.chat("You write.", hidden, role="writer")
         self.assertEqual(fake.log, [])
         stopped = self.rows("SELECT * FROM activity WHERE kind = 'ai.private_stopped'")
         self.assertEqual(len(stopped), 3)

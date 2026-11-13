@@ -8,7 +8,7 @@ import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 from support import jobs as fixtures
 from support.world import World, job_id
 
-from jobhunt import llm, screen
+from jobhunt import ai, screen
 from jobhunt.find import rules
 
 FERNHILL = job_id("fernhill-grad")
@@ -24,7 +24,7 @@ class Screen(unittest.TestCase):
             asked.append(system)
             return verdict
 
-        with World() as w, fixtures.goal(fixtures.TODAYS_GOAL), mock.patch.object(llm, "chat_json", fake):
+        with World() as w, fixtures.goal(fixtures.TODAYS_GOAL), mock.patch.object(ai, "chat_json", fake):
             rules.rescore_all(w.con)
             row = w.con.execute("SELECT * FROM jobs WHERE id = ?", (FERNHILL,)).fetchone()
             result = screen.screen_one(w.con, row)

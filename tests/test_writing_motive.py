@@ -6,7 +6,7 @@ from unittest import mock
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
-from jobhunt import llm
+from jobhunt import ai
 from jobhunt.writing import motive
 from jobhunt.writing.plan import Item
 
@@ -89,7 +89,7 @@ class Pairings(unittest.TestCase):
         brief = "Brightwater Tools builds flood sensors for river trusts in three made-up counties."
         found = motive.checked(reply("Flood sensors for river trusts"), ADVERT, brief, PLAN, NAMES)
         self.assertEqual(found.fact, "flood sensors for river trusts")
-        with mock.patch.object(llm, "chat_json", return_value={}) as asked:
+        with mock.patch.object(ai, "chat_json", return_value={}) as asked:
             motive.make(NAMES, ADVERT, brief, PLAN)
         request = asked.call_args.args[1]
         self.assertLess(request.index("Company brief"), request.index("Advert:"))
@@ -112,7 +112,7 @@ class Pairings(unittest.TestCase):
             self.assertEqual(motive.restated(own, advert, NAMES), "", own)
 
     def test_no_plan_means_no_call(self):
-        with mock.patch.object(llm, "chat_json", side_effect=AssertionError("no call")):
+        with mock.patch.object(ai, "chat_json", side_effect=AssertionError("no call")):
             self.assertIsNone(motive.make(NAMES, ADVERT, BRIEF, []))
 
 

@@ -312,12 +312,12 @@ class Answers(unittest.TestCase):
         f = self.propose(label="Phone number of your current manager")
         self.assertEqual(f["source"], "profile: phone")
         replies = iter([{"wrong": [{"hid": "h0", "why": "asks for the manager's number"}]}, {"answers": []}])
-        saved = autofill.llm.chat_json, autofill.gpu.busy
-        autofill.llm.chat_json, autofill.gpu.busy = lambda *a, **k: next(replies), lambda: None
+        saved = autofill.ai.chat_json, autofill.gpu.busy
+        autofill.ai.chat_json, autofill.gpu.busy = lambda *a, **k: next(replies), lambda: None
         try:
             autofill.ask_model(self.job, [f], {})
         finally:
-            autofill.llm.chat_json, autofill.gpu.busy = saved
+            autofill.ai.chat_json, autofill.gpu.busy = saved
         self.assertIsNone(f["value"])
         self.assertIn("manager's number", f["note"])
 
@@ -330,12 +330,12 @@ class Answers(unittest.TestCase):
             asked.append(system)
             return {"answers": [{"hid": "h0", "value": "I organized the color catalog of a made-up archive.",
                                  "sure": True}]}
-        saved = autofill.llm.chat_json, autofill.gpu.busy
-        autofill.llm.chat_json, autofill.gpu.busy = model, lambda: None
+        saved = autofill.ai.chat_json, autofill.gpu.busy
+        autofill.ai.chat_json, autofill.gpu.busy = model, lambda: None
         try:
             autofill.ask_model(self.job, [f], {})
         finally:
-            autofill.llm.chat_json, autofill.gpu.busy = saved
+            autofill.ai.chat_json, autofill.gpu.busy = saved
         self.assertEqual(f["value"], "I organised the colour catalogue of a made-up archive.")
         self.assertIn("in UK English, with UK spelling", " ".join(asked[0].split()))
 
@@ -350,7 +350,7 @@ class Answers(unittest.TestCase):
             if system.startswith("Check drafts"):
                 return {"unsupported": unsupported}
             return {"answers": [{"hid": "h0", "value": answer, "sure": True}]}
-        with mock.patch.object(autofill.llm, "chat_json", model), mock.patch.object(autofill.gpu, "busy", lambda: None):
+        with mock.patch.object(autofill.ai, "chat_json", model), mock.patch.object(autofill.gpu, "busy", lambda: None):
             autofill.ask_model(self.job, [f], docs or {})
         return f, asked
 

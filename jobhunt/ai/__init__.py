@@ -28,23 +28,29 @@ from ..core import plugins
 from . import budget, gpu, guard
 from .base import Backend, ChatRequest, ChatResult, Limited, LLMUnavailable, PrivateLeak, Role, Status, role_for
 from .budget import at_priority, current_priority
+from .counting import Calls, count, counted
 
 __all__ = [
     "Backend",
+    "Calls",
     "ChatRequest",
     "ChatResult",
+    "LONG_TIMEOUT_S",
     "LLMUnavailable",
     "Limited",
     "PrivateLeak",
     "Role",
     "Status",
     "at_priority",
+    "available",
     "backend",
     "chat",
     "chat_json",
+    "counted",
     "current_priority",
     "model_for",
     "ready",
+    "undash",
     "use",
 ]
 
@@ -55,6 +61,7 @@ REAL_AI_ENV = "HAL_TEST_REAL_AI"
 OLD_ROLE_ENV = {"checker": "MAIN", "writer": "WRITER", "quick": "FAST"}   # JOBHUNT_<ROLE>_MODEL, as `llm.py` read it
 FENCE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n?(.*?)\n?```\s*$", re.S)
 SECRETS_MODULE = "jobhunt.core.settings.secrets"
+LONG_TIMEOUT_S = 180   # seconds; what the callers that moved from the old `llm.chat` have always waited
 NOT_IN_TESTS = "The made-up AI in the tests has no answer for this."
 
 _override: list[Backend] = []
@@ -222,6 +229,7 @@ def chat(system: str, user: str, *, role: str = "checker", json_out: bool = Fals
          temperature: float | None = None) -> str:
     """Asks the AI and returns its reply; raises `LLMUnavailable` when it cannot answer now. `temperature`
     overrides the backend's own for this request."""
+    count()
     settings = _settings()
     req = ChatRequest(system=system, user=user, role=role_for(role), json_out=json_out,
                       timeout=float(timeout or settings.get("ai.timeout")), ctx=ctx, purpose=purpose,
@@ -266,6 +274,20 @@ def parse_json(text: str) -> dict:
 def chat_json(system: str, user: str, **kw) -> dict:
     """Asks for JSON and returns the object; a reply that is not JSON gives {} rather than an error."""
     return parse_json(chat(system, user, json_out=True, **kw))
+
+
+def undash(text: str) -> str:
+    """Rewrites the long dashes models favour: a hyphen in number ranges, a comma elsewhere."""
+    text = re.sub(r"(?<=\d)\s*[\u2013\u2014]\s*(?=\d)", "-", text)
+    return re.sub(r"\s*[\u2013\u2014]\s*", ", ", text)
+
+
+def available() -> bool:
+    """True when the chosen AI can answer now."""
+    try:
+        return backend().status().ready
+    except LLMUnavailable:
+        return False
 
 
 def ready(priority: int = budget.BACKGROUND, purpose: str = "") -> str | None:

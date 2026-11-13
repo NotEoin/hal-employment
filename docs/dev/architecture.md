@@ -317,7 +317,7 @@ down gateway is an error in words, never a call to Claude. Local calls also hold
 never changes by itself, because which AI sees the person's data is their choice. In a test run the
 backend is a made-up AI that is never ready. One classifier, `autofill.private_question(field)`, keeps
 private questions out of every AI request. A request's `temperature` (`ChatRequest.temperature`, through
-`ai.chat` and `llm.chat`) replaces the backend's own: 0.1 for JSON and 0.7 for prose on a local server,
+`ai.chat`) replaces the backend's own: 0.1 for JSON and 0.7 for prose on a local server,
 the model's own prose setting on Ollama; the Claude CLI takes none.
 
 ### Claude Code (`ai/claude_setup.py`)
@@ -616,7 +616,7 @@ runs: tests use `tests/support/fake_claude/`.
   `tests/test_pack.py` (`test_a_whole_pack_keeps_each_projects_tools_to_itself_within_about_thirty_calls`:
   two look-alike projects, a letter, a message and two answers, no fix needed): 17, the ranking among them. A real pack made about
   55 with sentence checks. `pack.build` logs each pack's count ("pack for job <id>: <n> model calls",
-  through `llm.counted`, a context variable that counts this thread's `llm.chat` and `llm.chat_json`
+  through `ai.counted`, a context variable that counts this thread's `ai.chat` and `ai.chat_json`
   calls; blocks nest), so the count on a real model can be measured. "Check before sending" lists the paragraphs left out, the questions no story
   answers, the eligibility lines, cut-offs and the checks with no AI on style; the verify call is not made
   for a draft told by stories. The section is in every pack, saying `pack.NOTHING_TO_CHECK` when it lists

@@ -12,7 +12,7 @@ from unittest import mock
 
 from support.fake_ai import FakeBackend
 
-from jobhunt import ai, llm
+from jobhunt import ai
 from jobhunt.ai import gpu, provider
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.ai.ollama import OllamaBackend
@@ -35,11 +35,11 @@ class InHome(unittest.TestCase):
 
 
 class Roles(InHome):
-    def test_old_llm_roles_still_work(self):
+    def test_old_role_names_still_work(self):
         with ai.use(FakeBackend(default="fine")) as fake:
-            self.assertEqual(llm.chat("You sort email.", "A made-up email.", role="main"), "fine")
-            llm.chat("You write.", "A made-up letter.", role="writer")
-            llm.chat("You sort.", "A made-up email.", role="fast")
+            self.assertEqual(ai.chat("You sort email.", "A made-up email.", role="main"), "fine")
+            ai.chat("You write.", "A made-up letter.", role="writer")
+            ai.chat("You sort.", "A made-up email.", role="fast")
         self.assertEqual([r.role for r in fake.requests()], ["checker", "writer", "quick"])
 
     def test_chat_json_survives_code_fences(self):
@@ -47,14 +47,14 @@ class Roles(InHome):
                    "broken": "not JSON at all", "list": "[1, 2]"}
         with ai.use(FakeBackend(replies)):
             self.assertEqual(ai.chat_json("s", "u", purpose="fenced"), {"fit": True})
-            self.assertEqual(llm.chat_json("s", "u", purpose="chatty"), {"fit": False})
+            self.assertEqual(ai.chat_json("s", "u", purpose="chatty"), {"fit": False})
             self.assertEqual(ai.chat_json("s", "u", purpose="broken"), {})
             self.assertEqual(ai.chat_json("s", "u", purpose="list"), {})
 
     def test_a_test_run_never_reaches_a_real_model(self):
         with self.assertRaises(LLMUnavailable):
             ai.chat("s", "u")
-        self.assertFalse(llm.available())
+        self.assertFalse(ai.available())
         self.assertEqual(ai.backend().name, "fake")
 
     def test_every_call_leaves_a_usage_row_with_sizes_only(self):
@@ -268,37 +268,30 @@ class Servers(unittest.TestCase):
         self.assertEqual(classify("https://models.example.com/v1"), (True, False))
 
 
-class Counted(unittest.TestCase):
+class Counted(InHome):
     """A pack's model calls are counted so the cut from about 55 can be measured (2026-11-08)."""
 
     def test_calls_inside_a_block_are_counted_and_an_outer_block_counts_the_inner(self):
-        with mock.patch.object(ai, "chat", lambda *a, **k: "{}"):
-            llm.chat("s", "u")
-            with llm.counted() as outer:
-                llm.chat("s", "u")
-                with llm.counted() as inner:
-                    llm.chat_json("s", "u")
-            llm.chat("s", "u")
+        with ai.use(FakeBackend(default="{}")):
+            ai.chat("s", "u")
+            with ai.counted() as outer:
+                ai.chat("s", "u")
+                with ai.counted() as inner:
+                    ai.chat_json("s", "u")
+            ai.chat("s", "u")
         self.assertEqual((outer.n, inner.n), (2, 1))
 
 
 class Purposes(unittest.TestCase):
     """Every pack and writing call was logged as "unnamed" in the AI usage log (2026-11-12)."""
 
-    def test_the_old_chat_passes_its_purpose_on(self):
-        seen = []
-        with mock.patch.object(ai, "chat", lambda *a, **k: seen.append(k["purpose"]) or "{}"):
-            llm.chat("s", "u", purpose="brief")
-            llm.chat_json("s", "u", purpose="fit")
-        self.assertEqual(seen, ["brief", "fit"])
-
-    def test_every_call_through_the_old_chat_names_its_purpose(self):
+    def test_every_ai_call_names_its_purpose(self):
         unnamed = []
-        for path in sorted(Path(llm.__file__).parent.rglob("*.py")):
+        for path in sorted(Path(ai.__file__).parent.parent.rglob("*.py")):
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                 if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                         and node.func.attr in ("chat", "chat_json") and isinstance(node.func.value, ast.Name)
-                        and node.func.value.id == "llm" and not any(k.arg == "purpose" for k in node.keywords)):
+                        and node.func.value.id == "ai" and not any(k.arg == "purpose" for k in node.keywords)):
                     unnamed.append(f"{path.name}:{node.lineno}")
         self.assertEqual(unnamed, [])
 

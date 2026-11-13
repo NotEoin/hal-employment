@@ -27,7 +27,7 @@ def _pack_md(job):
 
 def cmd_pack(args):
     """Handles `jobhunt pack`: drafts the CV and cover letter for a job."""
-    from .. import ai, cv, llm, pack
+    from .. import ai, cv, pack
     if args.cv_only:
         con = db.connect()
         for r in con.execute("SELECT * FROM jobs WHERE status = 'ready'"):
@@ -37,7 +37,7 @@ def cmd_pack(args):
                 cv.render(variant, found.parent)
                 print(f"  {found.parent.name}")
         return
-    if not llm.available():
+    if not ai.available():
         why = ai.backend().status().why or "the AI is not ready"
         sys.exit(f"Packs need the AI: {why}")
     con = db.connect()

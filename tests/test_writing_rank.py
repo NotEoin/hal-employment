@@ -7,7 +7,7 @@ from unittest import mock
 
 import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
-from jobhunt import llm
+from jobhunt import ai
 from jobhunt.writing import plan, rank
 
 
@@ -51,7 +51,7 @@ class Ranking(unittest.TestCase):
                 raise answer
             return answer
 
-        with mock.patch.object(llm, "chat_json", chat_json):
+        with mock.patch.object(ai, "chat_json", chat_json):
             return rank.make(JOB, CARDS, []), asked
 
     def test_one_call_offers_every_visible_card_with_its_tier_and_the_jobs_own_words(self):
@@ -105,7 +105,7 @@ class Ranking(unittest.TestCase):
     def test_a_reply_with_no_ranking_or_no_ai_gives_none(self):
         self.assertEqual(self.ask({})[0], [])
         with self.assertLogs("jobhunt.writing.rank", "WARNING") as logged:
-            self.assertEqual(self.ask(llm.LLMUnavailable("the AI is busy"))[0], [])
+            self.assertEqual(self.ask(ai.LLMUnavailable("the AI is busy"))[0], [])
         self.assertIn("the AI could not rank the work (the AI is busy)", logged.output[0])
 
 

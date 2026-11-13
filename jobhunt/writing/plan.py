@@ -102,7 +102,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from jobhunt import llm
+from jobhunt import ai
 from jobhunt.ai import prompts
 from jobhunt.profile import owners, tiers
 from jobhunt.writing import atoms, drafts, plain, planned, stage
@@ -311,7 +311,8 @@ def make(requirements: list[str], questions: list[str], facts: str, kept: str, c
     found = sources(facts, kept, cards, listings)
     if not found:
         return []
-    reply = llm.chat_json(prompts.text(PROMPT), request(requirements, questions, found), role="main", purpose=PROMPT)
+    reply = ai.chat_json(prompts.text(PROMPT), request(requirements, questions, found), role="checker",
+                         timeout=ai.LONG_TIMEOUT_S, purpose=PROMPT)
     return checked(reply, found)
 
 

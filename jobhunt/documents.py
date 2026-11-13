@@ -17,7 +17,7 @@ import re
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import cv, db, letter, llm, pack
+from . import ai, cv, db, letter, pack
 from .ai import gpu
 from .core import naming, settings
 from .docs import folders
@@ -107,10 +107,10 @@ def drafts(job) -> dict:
         variant = json.loads((md.parent / "cv.json").read_text())
     return {
         # Packs drafted before long dashes were removed at the source still hold them.
-        "letter": llm.undash(s.get("Cover letter", "")),
+        "letter": ai.undash(s.get("Cover letter", "")),
         "message_to": to.group(1) if to else "",
-        "message": llm.undash(msg[to.end():].strip() if to else msg),
-        "answers": [{"question": q.strip(), "answer": llm.undash(_unwrap(a))} for q, a in answers],
+        "message": ai.undash(msg[to.end():].strip() if to else msg),
+        "answers": [{"question": q.strip(), "answer": ai.undash(_unwrap(a))} for q, a in answers],
         "cv_title": variant.get("title", ""),
         "cv_summary": variant.get("summary", ""),
         "approved": False,
@@ -255,7 +255,7 @@ def draft_letter(con, job) -> str:
         return ""
     try:
         written = pack.write_letter(con, job)
-    except llm.LLMUnavailable:
+    except ai.LLMUnavailable:
         return ""
     docs = {**load(con, job), "letter": written["text"], "letter_notes": written["notes"],
             "letter_flags": written["flags"]}
