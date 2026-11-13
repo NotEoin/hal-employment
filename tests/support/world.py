@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from jobhunt import config, cv, db, gmail, llm, pack, record, replenish, reputation, research, tasks, vault
+from jobhunt import config, cv, db, gmail, llm, pack, record, replenish, reputation, research, tasks
 from jobhunt.ai import prompts
 from jobhunt.writing import plan
 
@@ -264,8 +264,6 @@ class World:
             mock.patch.object(tasks, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "PASSWORD_FILE", self.root / "config" / "no-gmail-password"),
-            mock.patch.object(vault, "VAULT", self.root / "no-hal-vault"),
-            mock.patch.object(vault, "NOTE", self.root / "no-hal-vault" / "Pipeline.md"),
             mock.patch.object(record, "VAULT", self.root / "no-record"),
             mock.patch.object(pack, "PACKS", self.root / "packs"),
             mock.patch.object(pack, "VAULT", self.root / "no-hal-vault"),

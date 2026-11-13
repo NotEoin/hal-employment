@@ -12,24 +12,16 @@ from pathlib import Path
 
 NOTE_PATH = Path("Areas") / "Job Search" / "Pipeline.md"
 _UPDATED = re.compile(r"^updated: .*\n", re.M)
-# What VAULT reads as while the add-on is off or has no vault: a path that never exists, so old callers that
-# test `VAULT.exists()` before writing (pack.py) write nothing.
+# What `folder()` answers while the add-on is off or has no vault: a path that never exists, so a caller that
+# tests `folder().exists()` before writing writes nothing.
 NO_VAULT = Path(os.devnull) / "no-hal-vault"
 
 
-def _vault() -> Path:
+def folder() -> Path:
+    """The Hal vault folder, or `NO_VAULT` while the add-on is off or has none."""
     from .addons import hal
 
     return hal.vault() or NO_VAULT
-
-
-_LIVE = {"VAULT": _vault, "NOTE": lambda: _vault() / NOTE_PATH}
-
-
-def __getattr__(name):  # old path constants, read live (PEP 562)
-    if name in _LIVE:
-        return _LIVE[name]()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _follow_up_days() -> int:
