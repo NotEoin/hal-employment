@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from . import updates
+from .. import updates
 
 READY_URGENCY = 60          # after what waits for you, the emails and the to-dos
 SIGN_IN_URGENCY = 40

@@ -18,9 +18,11 @@ from unittest import mock
 import support  # noqa: F401 - must come before jobhunt
 from support.api import HalServer
 
-from jobhunt.core import paths, update_routes, updates
+from jobhunt import updates
+from jobhunt.core import paths
 from jobhunt.core.platform import linux as linux_platform
 from jobhunt.core.platform import windows as windows_platform
+from jobhunt.updates import routes as update_routes
 
 GIT_TIMEOUT_S = 30
 EXIT_WAIT_S = 5      # the server ends itself half a second after replying
@@ -403,7 +405,8 @@ class Signatures(UpdaterCase):
 class SignIn(UpdaterCase):
     @unittest.skipIf(os.name == "nt", "Windows signs in through Git Credential Manager, not a terminal")
     def test_sign_in_again_opens_the_github_sign_in_in_a_window_on_linux(self):
-        from jobhunt.core import runner, update_actions  # noqa: F401 - registers the kinds
+        from jobhunt.core import runner
+        from jobhunt.updates import actions  # noqa: F401 - registers the kinds
 
         tools = self.repos.app.parent / "tools"
         tools.mkdir()

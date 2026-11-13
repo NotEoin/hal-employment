@@ -8,8 +8,9 @@ from unittest import mock
 
 import support  # noqa: F401 - must come before jobhunt
 
+from jobhunt import updates
 from jobhunt.cli import install
-from jobhunt.core import paths, updates
+from jobhunt.core import paths
 
 
 class FakePlatform:

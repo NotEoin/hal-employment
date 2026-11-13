@@ -17,9 +17,9 @@ of `main`, and an update is a fast-forward of that clone. The steps a person fol
 names (`web/auth.py`). On Windows `git` is always the bundled PortableGit's `cmd\git.exe`, even when another
 git is on PATH, so its version and Git Credential Manager are known.
 
-## The updater (`scripts/updater.py`, `jobhunt/core/updates.py`)
+## The updater (`scripts/updater.py`, `jobhunt/updates/__init__.py`)
 
-`scripts/updater.py` runs `jobhunt.core.updates.main()` under uv's managed Python, outside `.venv`, so
+`scripts/updater.py` runs `jobhunt.updates.main()` under uv's managed Python, outside `.venv`, so
 `uv sync` can replace `.venv` while it runs:
 
 ```bash
@@ -28,7 +28,7 @@ git is on PATH, so its version and Git Credential Manager are known.
 <tools>/uv run --no-project --python 3.13 scripts/updater.py --rollback   # go back to the previous version
 ```
 
-`core/updates.py` uses the standard library and `core.paths` only (`tests/test_updater.py` holds it to
+`updates/__init__.py` uses the standard library and `core.paths` only (`tests/test_updater.py` holds it to
 that), and reaches git, uv and the server through one `World` object, so tests run the real steps against
 local bare repositories. Its steps, each written to `logs/update-<UTC>Z.log`:
 
@@ -49,7 +49,7 @@ local bare repositories. Its steps, each written to `logs/update-<UTC>Z.log`:
    migration had started, start the old version, and hold the commit so it is not offered again.
 
 The result goes to `state/update-status.json` with `recorded: false`. At its next start the server
-(`core/update_routes.py`) turns it into an Activity row ("Updated Hal from 2.0.1 to 2.0.2") whose What's new
+(`updates/routes.py`) turns it into an Activity row ("Updated Hal from 2.0.1 to 2.0.2") whose What's new
 is the commit subjects, newest first. Commit subjects are written in plain words for that reason.
 
 Update Hal and Go back start the updater with `platform.spawn_detached(..., unit="hal-employment-update")`:

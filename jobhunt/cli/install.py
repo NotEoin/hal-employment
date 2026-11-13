@@ -22,7 +22,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from ..core import paths, updates
+from .. import updates
+from ..core import paths
 
 MARK = "made by hal-employment install"
 SHIM = "hal-employment-cli"

@@ -1,7 +1,7 @@
 """Action kinds for updates and the stick import: `updates.check`, `updates.sign_in`, `setup.import_usb`.
 
 The update itself never runs as an action inside the server: it stops the server, so it is spawned as its
-own process (`update_routes.start_updater`). The check and the sign-in only fetch, so they run here with
+own process (`routes.start_updater`). The check and the sign-in only fetch, so they run here with
 steps and an Activity row like any other action.
 
 Design decisions, each with its reason:
@@ -18,8 +18,8 @@ import logging
 import os
 from pathlib import Path
 
-from .. import db
-from . import clock, runner, updates
+from .. import db, updates
+from ..core import clock, runner
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def sign_in(ctx: runner.Ctx) -> dict:
     gh = Path(inst.tools) / "gh" if inst.tools else None
     if os.name != "nt" and gh is not None and gh.is_file():
         # Linux signs in through the GitHub CLI, whose browser sign-in needs a terminal to show its code
-        from . import platform
+        from ..core import platform
 
         platform.current().open_console([str(gh), "auth", "login", "--web", "--hostname", "github.com",
                                          "--git-protocol", "https"], "Sign in to GitHub")
@@ -93,7 +93,7 @@ def sign_in(ctx: runner.Ctx) -> dict:
 
 def import_usb(ctx: runner.Ctx, path: str, dry_run: bool = False) -> dict:
     """Copies the old stick install into this Hal and retires it."""
-    from . import importer, importer_usb
+    from ..core import importer, importer_usb
 
     ctx.step("Looking at the older Hal on this computer")
     try:
@@ -105,7 +105,7 @@ def import_usb(ctx: runner.Ctx, path: str, dry_run: bool = False) -> dict:
 
 def _fake_stick(world) -> dict:
     """G9's example: a made-up stick install inside the made-up world, imported as a dry run."""
-    from . import importer_usb
+    from ..core import importer_usb
 
     folder = importer_usb.make_example(Path(world.root) / "stick-example")
     return {"path": str(folder), "dry_run": True}

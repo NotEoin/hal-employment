@@ -1977,7 +1977,7 @@ value changed in Settings; the steps save their own fields through the settings 
 step from `static/app/setup/steps/<id>.js` (default export `Step`), so an area adds or changes its step
 without touching the frame. Only Email, Phone alerts and Updates can be skipped.
 
-## Install and updates (`cli/install.py`, `core/updates.py`, `scripts/updater.py`)
+## Install and updates (`cli/install.py`, `jobhunt/updates/`, `scripts/updater.py`)
 
 The install files clone Hal, run `uv sync`, then `jobhunt install --windows|--linux`, which makes the
 shortcuts, the start-at-login entry and the install record; `install --dev` is a developer's clone. Updates

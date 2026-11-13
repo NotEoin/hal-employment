@@ -2,7 +2,7 @@
 
 Times are the person's local clock times; each `next_after` reads live settings, so a change applies at the
 next tick. `goal.mode` shapes searching: "Getting ready" keeps only the first search time and "Just
-watching" searches on Mondays only. The update check is in `core/update_schedule.py`.
+watching" searches on Mondays only. The update check is in `updates/schedule.py`.
 
 The three command-line jobs name the owner's old systemd timers, so they never run twice while those timers
 are still enabled.

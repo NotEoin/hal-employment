@@ -24,7 +24,8 @@ FINAL = ("done", "error", "stopped", "interrupted")
 
 def address() -> tuple[str, int]:
     """The local API key and the port of the running Hal on this computer."""
-    from ..core import paths, settings, updates
+    from .. import updates
+    from ..core import paths, settings
 
     key = (paths.config_dir() / "local-api-key").read_text(encoding="utf-8").strip()
     raw = os.environ.get("HAL_EMPLOYMENT_PORT", "").strip()
@@ -33,7 +34,7 @@ def address() -> tuple[str, int]:
 
 def _hal(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
     """Calls the running Hal on this computer with the local API key."""
-    from ..core import updates
+    from .. import updates
 
     key, port = address()
     con = http.client.HTTPConnection(updates.BIND, port, timeout=HTTP_TIMEOUT_S)

@@ -105,7 +105,7 @@ def cmd_sort(args):
 
 def _form(path: str, files: list[tuple[str, bytes, str]], fields: dict) -> tuple[int, dict]:
     """POSTs a multipart form to the running Hal with the local API key, as the page uploads files."""
-    from ..core import updates
+    from .. import updates
     from .record import address
 
     key, port = address()

@@ -234,7 +234,7 @@ class SettingsPage(unittest.TestCase):
     def test_a_user_install_sees_each_updates_row_once_and_update_hal_opens_its_dialog(self) -> None:
         # seen on a fresh Windows 11 install (2026-10-23): the catalogue's rows came first with an empty
         # Version and an Update Hal button that only said "This part is being built", above the real panel
-        from jobhunt.core import updates
+        from jobhunt import updates
 
         updates.write_install(updates.Install(kind="user", code=str(paths.code_dir())))
         updates.write_check({"available": True, "behind": 1, "newest": "f" * 40, "version": "2.0.1",
@@ -251,7 +251,7 @@ class SettingsPage(unittest.TestCase):
         self.assertNotIn("being built", p.page.inner_text("body"))
 
     def test_the_github_sign_in_row_shows_only_when_github_refused_the_check(self) -> None:
-        from jobhunt.core import updates
+        from jobhunt import updates
 
         updates.write_install(updates.Install(kind="user", code=str(paths.code_dir())))
         updates.write_check({"state": "sign_in", "words": updates.SIGN_IN_AGAIN})
