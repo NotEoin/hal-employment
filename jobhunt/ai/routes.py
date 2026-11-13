@@ -1,6 +1,6 @@
 """Routes for Hal's AI: which AI fits, whether it is ready, Claude's install and sign-in, Test, model lists.
 
-Install, sign-in and Test start actions (`ai/ai_actions.py`) and return their id at once. Sign-in and sign-out
+Install, sign-in and Test start actions (`ai/actions.py`) and return their id at once. Sign-in and sign-out
 are refused in a window opened from another computer, because the sign-in window would open on the computer
 Hal runs on, where nobody is looking. The allowance is counts Hal can know (`budget.today`), never a share of
 Claude's limit, which Claude Code does not report.
@@ -11,7 +11,7 @@ from typing import Any
 
 from ..core import clock, runner
 from ..web.router import Conflict, Request, route
-from . import ai_actions, budget, claude_setup, health
+from . import actions, budget, claude_setup, health
 from .base import LLMUnavailable
 
 CLAUDE_MODELS = {"writer": ["opus", "sonnet", "haiku"], "checker": ["opus", "sonnet", "haiku"],
@@ -105,13 +105,13 @@ def recommend(req: Request) -> dict:
 @route("POST", "/api/v2/ai/claude/install")
 def install(req: Request) -> dict:
     """Starts installing Claude Code (no admin prompt)."""
-    return _start(req, ai_actions.INSTALL, "Install", "Hal is already installing Claude.")
+    return _start(req, actions.INSTALL, "Install", "Hal is already installing Claude.")
 
 
 @route("POST", "/api/v2/ai/claude/sign-in", local_only=True)
 def sign_in(req: Request) -> dict:
     """Opens Claude's own sign-in window and follows it until Claude Code says signed in."""
-    return _start(req, ai_actions.SIGN_IN, "Sign in", "The Claude sign-in window is already open.")
+    return _start(req, actions.SIGN_IN, "Sign in", "The Claude sign-in window is already open.")
 
 
 @route("POST", "/api/v2/ai/claude/sign-out", local_only=True)
@@ -127,7 +127,7 @@ def sign_out(req: Request) -> dict:
 @route("POST", "/api/v2/ai/test")
 def test(req: Request) -> dict:
     """Starts the AI test: one short question; the action's result is {ok, seconds, words}."""
-    return _start(req, ai_actions.TEST, "Test now", "Hal is already testing its AI.")
+    return _start(req, actions.TEST, "Test now", "Hal is already testing its AI.")
 
 
 @route("GET", "/api/v2/ai/models", slow=True)

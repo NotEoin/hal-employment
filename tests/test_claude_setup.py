@@ -21,7 +21,7 @@ from support.actions import wait_for_actions
 from support.api import HalServer
 
 from jobhunt import ai, db
-from jobhunt.ai import ai_actions, ai_home, budget, claude_setup
+from jobhunt.ai import actions, budget, claude_setup, home
 from jobhunt.ai import health as ai_health
 from jobhunt.ai.base import ChatResult, LLMUnavailable
 from jobhunt.ai.claude_cli import ClaudeCLIBackend
@@ -32,7 +32,7 @@ FAKE = fake_claude.FOLDER / "claude"
 AI_FOLDER = Path(ai.__file__).resolve().parent
 STEP_FILES = [AI_FOLDER.parent / "web" / "static" / "app" / "setup" / "steps" / "ai.js",
               AI_FOLDER.parent / "web" / "static" / "app" / "settings" / "ai.js"]
-OUR_MODULES = ["claude_setup.py", "ai_actions.py", "routes.py", "health.py", "ai_home.py"]
+OUR_MODULES = ["claude_setup.py", "actions.py", "routes.py", "health.py", "home.py"]
 BANNED = re.compile(r"command prompt|terminal|run:", re.I)
 ADMIN = ("runas", "-verb", "winget", "start-process", "sudo", "elevat")
 NOW = "2026-10-23T10:00:00Z"
@@ -124,7 +124,7 @@ class Install(InHome):
                 mock.patch.object(claude_setup, "_windows", lambda: True), \
                 mock.patch.object(claude_setup, "add_to_user_path", lambda folder: added.append(folder) or True):
             self.assertIsNone(claude_setup.version())
-            done = runner.run(ai_actions.INSTALL, params={"button": "Install"})
+            done = runner.run(actions.INSTALL, params={"button": "Install"})
         self.assertEqual(done["state"], "done", done["error"])
         self.assertEqual(done["result"], {"ok": True, "version": "2.1.293"})
         (args, kw), = installer.calls
@@ -155,7 +155,7 @@ class Install(InHome):
     def test_a_failed_install_says_so_and_offers_to_try_again(self):
         with mock.patch.object(claude_setup, "_popen", FakeInstaller(self.tmp, code=1)), \
                 mock.patch.object(claude_setup, "_windows", lambda: False):
-            done = runner.run(ai_actions.INSTALL, params={"button": "Install"})
+            done = runner.run(actions.INSTALL, params={"button": "Install"})
         self.assertEqual(done["state"], "error")
         self.assertIn("Download failed", [s["text"] for s in done["steps"]])
         self.assertEqual(done["error"], claude_setup.INSTALL_FAILED)
@@ -172,7 +172,7 @@ class Install(InHome):
 
     def test_an_installed_claude_is_not_installed_again(self):
         self.fake()
-        done = runner.run(ai_actions.INSTALL, params={"button": "Install"})
+        done = runner.run(actions.INSTALL, params={"button": "Install"})
         self.assertEqual(done["result"], {"ok": True, "version": "2.1.293"})
         self.assertIn("Claude is already installed (version 2.1.293)", [s["text"] for s in done["steps"]])
 
@@ -201,7 +201,7 @@ class SignIn(InHome):
     def test_signing_in_when_already_signed_in_opens_no_window(self):
         self.fake(FAKE_CLAUDE_PLAN="max")
         console = self.console()
-        done = runner.run(ai_actions.SIGN_IN, params={"button": "Sign in"})
+        done = runner.run(actions.SIGN_IN, params={"button": "Sign in"})
         self.assertEqual(done["result"]["account"], "Signed in as robin.example@example.com (Claude Max)")
         self.assertEqual(console.opened, [])
 
@@ -291,14 +291,14 @@ class Plans(InHome):
     def test_a_plan_claude_refuses_shows_the_same_words_after_the_call(self):
         fake = self.fake("free_plan")
         with ai.use(ClaudeCLIBackend()):
-            done = runner.run(ai_actions.TEST, params={"button": "Test now"})
+            done = runner.run(actions.TEST, params={"button": "Test now"})
         self.assertEqual(done["result"]["words"], claude_setup.FREE_PLAN)
         self.assertEqual(len(fake.calls()), 1)
 
     def test_the_test_says_how_long_claude_took(self):
         fake = self.fake()
         with ai.use(ClaudeCLIBackend()):
-            done = runner.run(ai_actions.TEST, params={"button": "Test now"})
+            done = runner.run(actions.TEST, params={"button": "Test now"})
         self.assertTrue(done["result"]["ok"])
         self.assertRegex(done["result"]["words"], r"^Claude answered in \d+\.\d seconds?$")
         call, = fake.calls()
@@ -308,7 +308,7 @@ class Plans(InHome):
     def test_a_plan_hal_does_not_know_goes_on_to_the_test(self):
         self.fake(FAKE_CLAUDE_PLAN="claude_studio")
         with ai.use(ClaudeCLIBackend()):
-            done = runner.run(ai_actions.TEST, params={"button": "Test now"})
+            done = runner.run(actions.TEST, params={"button": "Test now"})
         self.assertTrue(done["result"]["ok"])
         self.assertEqual(claude_setup.plan_words("claude_studio"), "Claude Studio")
 
@@ -393,7 +393,7 @@ class Expiry(InHome):
                       purpose="ai_test", chars_in=10, chars_out=5)
         self.assertEqual(ai_health.ai_check().text, "Signed in. Last answer took 2.1 seconds.")
         with contextlib.closing(db.connect()) as con:
-            self.assertIsNone(ai_home.signed_out_since(con))
+            self.assertIsNone(home.signed_out_since(con))
 
 
 class Words(unittest.TestCase):
