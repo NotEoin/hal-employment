@@ -251,7 +251,7 @@ class Tidy(unittest.TestCase):
     def test_older_copies_of_a_project_keep_only_the_newest_note(self):
         with home() as (con, vault, files):
             settings.set("you.name", OWNER)
-            with fake_ai({}), mock.patch.object(engine.versions, "settle", return_value=0):
+            with fake_ai({}), mock.patch.object(engine.versions, "set_aside_old_copies", return_value=0):
                 for name, day in (("tide-gauge", 1), ("tide-gauge (2)", 9)):
                     repo = files / name
                     put(repo, "README.md", "# Tide gauge\n\nReads a made-up sensor.")

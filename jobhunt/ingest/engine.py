@@ -22,8 +22,8 @@ course material by rules (`vaultnotes`).
 
 Duplicates are found by SHA-256 against every item read before, in this batch or an earlier one: the copy
 gets no note of its own, and its path is added once to the first copy's note under "Also at".
-Copies of one code project are found by `versions.settle` before reading: only the newest is read, and a
-newer copy than one read before rewrites that project's note in place.
+Copies of one code project are found by `versions.set_aside_old_copies` before reading: only the newest is
+read, and a newer copy than one read before rewrites that project's note in place.
 
 Up to `ai.parallel` items are with worker threads at once, which only convert and ask the AI; this thread
 alone writes, in the items' order, so SQLite and the record each have one writer. A read `again` puts notes
@@ -400,7 +400,8 @@ def _kept(note_text: str) -> str:
 
 def _again(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, vault_dir: Path, batch: str) -> str | None:
     """Writes a new reading over a note at the same path: the AI's reading of a note first written by
-    rules, or a newer copy of a project (`versions.settle`), whose note then names the newer copy."""
+    rules, or a newer copy of a project (`versions.set_aside_old_copies`), whose note then names the newer
+    copy."""
     from jobhunt.profile import store
 
     path = vault_dir / row["note"]
@@ -676,7 +677,7 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
         tidied = tidy_pass.prepare(con, batch, vault())
     step("Reading each file, your CV and other rich documents first")
     drop_root = sources.drop_folder().resolve() if drop else None
-    versions.settle(con, batch, vault())
+    versions.set_aside_old_copies(con, batch, vault())
     # supporting files are never read: `attach.attach_pending` lists them with their unit once it is written
     todo = [r for r in items.pending(con, batch) if r["kind"] not in UNITS and not attach.supporting(r)]
     # Within a rank, typed notes before converted decks and handouts, so a lecture's notes are in the record

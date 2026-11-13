@@ -5,8 +5,8 @@ repository under two folders, a copy inside a zip). Only the newest copy is read
 `older_version` items with no note and no facts, named under "Earlier versions" in the newest copy's note.
 A newer copy found by a later ingest rewrites the project's note in place, so links to it still hold.
 
-`settle` runs before a batch's repositories are read and `record_earlier` after; the engine calls nothing
-else here.
+`set_aside_old_copies` runs before a batch's repositories are read and `record_earlier` after; the engine
+calls nothing else here.
 
 Design decisions, each with its reason:
 
@@ -278,7 +278,7 @@ def _earlier_rows(con: sqlite3.Connection) -> list[sqlite3.Row]:
                           ORDER BY id""").fetchall()
 
 
-def settle(con: sqlite3.Connection, batch: str, vault: Path) -> int:
+def set_aside_old_copies(con: sqlite3.Connection, batch: str, vault: Path) -> int:
     """Leaves only the newest copy of each project in `batch` to be read; returns how many copies were set
     aside.
 
