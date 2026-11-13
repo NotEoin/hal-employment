@@ -36,7 +36,7 @@ in with a key cannot use Windows' data protection (DPAPI), so the secrets tests 
 denied".
 
 CI (`.github/workflows/ci.yml`) runs every test, browser tests on, on Linux with Python 3.11 and 3.13 and on
-Windows with Python 3.13, in shares of the suite, one job each (seven on Windows, the slowest), and
+Windows with Python 3.13, in shares of the suite, one job each (eight on Windows, the slowest), and
 `scripts/dev/run_tests.py` spreads a share over the runner's CPUs in processes of a few tests. To run the
 whole suite that way here, one process per CPU, slowest chunks first from the last run's times
 (`--share 2/5` runs one share):

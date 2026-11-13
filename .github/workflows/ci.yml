@@ -3,8 +3,8 @@
 # findings that are fixed line by line as it is edited.
 # Run one test at a time, the suite took 27 minutes on Linux and 38 on Windows (run 43266048071): it now runs
 # in shares, one job each, spread over the runner's CPUs (scripts/dev/run_tests.py). Windows, the slowest, gets
-# the most shares; with WSL2's three, the 19 jobs stay under the 20 a free account runs at once (run 43400046701:
-# 7 min in all, the longest test job 5 min 14 s).
+# the most shares; with WSL2's three, the 19 jobs stay under the 20 a free account runs at once. Run 43400046701
+# took 7 min with 7 Windows, 4 Linux 3.11 and 2 WSL2 shares: Windows tests 165 to 279 s, Linux 3.11 under 200 s.
 # The Windows-only checks must pass, not skip, in whichever share holds them: Windows is the one place they
 # can run. They are: the install file's PowerShell parses under Windows PowerShell 5.1, CVs print with
 # Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser.
@@ -22,22 +22,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-2025, python: "3.13", share: 1/7 }
-          - { os: windows-2025, python: "3.13", share: 2/7 }
-          - { os: windows-2025, python: "3.13", share: 3/7 }
-          - { os: windows-2025, python: "3.13", share: 4/7 }
-          - { os: windows-2025, python: "3.13", share: 5/7 }
-          - { os: windows-2025, python: "3.13", share: 6/7 }
-          - { os: windows-2025, python: "3.13", share: 7/7 }
+          - { os: windows-2025, python: "3.13", share: 1/8 }
+          - { os: windows-2025, python: "3.13", share: 2/8 }
+          - { os: windows-2025, python: "3.13", share: 3/8 }
+          - { os: windows-2025, python: "3.13", share: 4/8 }
+          - { os: windows-2025, python: "3.13", share: 5/8 }
+          - { os: windows-2025, python: "3.13", share: 6/8 }
+          - { os: windows-2025, python: "3.13", share: 7/8 }
+          - { os: windows-2025, python: "3.13", share: 8/8 }
           - { os: ubuntu-24.04, python: "3.13", share: 1/5 }
           - { os: ubuntu-24.04, python: "3.13", share: 2/5 }
           - { os: ubuntu-24.04, python: "3.13", share: 3/5 }
           - { os: ubuntu-24.04, python: "3.13", share: 4/5 }
           - { os: ubuntu-24.04, python: "3.13", share: 5/5 }
-          - { os: ubuntu-24.04, python: "3.11", share: 1/4 }
-          - { os: ubuntu-24.04, python: "3.11", share: 2/4 }
-          - { os: ubuntu-24.04, python: "3.11", share: 3/4 }
-          - { os: ubuntu-24.04, python: "3.11", share: 4/4 }
+          - { os: ubuntu-24.04, python: "3.11", share: 1/3 }
+          - { os: ubuntu-24.04, python: "3.11", share: 2/3 }
+          - { os: ubuntu-24.04, python: "3.11", share: 3/3 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     # uv run would otherwise make a fresh venv on .python-version's Python, without the extras
