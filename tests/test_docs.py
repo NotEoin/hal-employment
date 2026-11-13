@@ -273,10 +273,10 @@ class Ci(unittest.TestCase):
         self.body = text(CI / "ci.yml")
 
     def test_ci_runs_linux_on_two_pythons_and_windows(self):
-        for row in ('os: ubuntu-24.04, python: "3.11"', 'os: ubuntu-24.04, python: "3.13"',
-                    'os: windows-2025, python: "3.13"'):
+        for row in ('os: ubuntu-24.04, python: "3.11"', 'os: ubuntu-24.04, python: "3.13"'):
             self.assertIn(row, self.body)
-        self.assertIn("unittest discover tests", self.body)
+        self.assertRegex(self.body, r'os: windows-2025\s+python: "3.13"')
+        self.assertIn("scripts/dev/run_tests.py", self.body)
         self.assertIn('HAL_TEST_BROWSER: "1"', self.body)
 
     def test_every_action_is_pinned_to_a_commit(self):
@@ -292,8 +292,8 @@ class Ci(unittest.TestCase):
         self.assertIn("netsh int ipv4 set dynamicport tcp start=32768 num=32768", self.body)
 
     def test_the_windows_job_proves_its_own_checks_ran(self):
-        named = re.search(r"for t in ([\w ]+); do", self.body)
-        self.assertIsNotNone(named, "the Windows step lists the tests that must say ok")
+        named = re.search(r"--must-pass((?:\s+test_\w+)+)", self.body)
+        self.assertIsNotNone(named, "the Windows job lists the tests that must pass")
         tests = named.group(1).split()
         self.assertIn("test_the_powershell_part_parses", tests)
         self.assertIn("test_accented_names_print_in_every_look", tests)

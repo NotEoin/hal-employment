@@ -1,28 +1,40 @@
 # Tests on Linux (two Pythons) and Windows for every push.
 # Ruff and the ASCII check run on lines added since the push's parent, because older code still has
-# findings that are fixed line by line as it is edited. The test output is kept in tests.log so the Windows
-# job can prove its own checks ran: a skip there would hide the one place they can run.
+# findings that are fixed line by line as it is edited.
+# Run one test at a time, the suite took 27 minutes on Linux and 38 on Windows (run 43266048071): each
+# platform now runs it in five shares, each spread over the runner's CPUs (scripts/dev/run_tests.py).
+# The Windows-only checks must pass, not skip, in whichever share holds them: Windows is the one place they
+# can run.
 name: ci
 on: [push, pull_request]
 jobs:
   test:
+    name: test (${{ matrix.target.os }}, ${{ matrix.target.python }}, share ${{ matrix.share }} of 5)
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: ubuntu-24.04, python: "3.11", extras: "--extra browser --extra documents" }
-          - { os: ubuntu-24.04, python: "3.13", extras: "--extra browser --extra documents" }
-          - { os: windows-2025, python: "3.13", extras: "--extra browser" }
-    runs-on: ${{ matrix.os }}
-    # Windows ran 1274 tests in about 28 minutes (run 39958993847) and Linux in about 15
-    timeout-minutes: 45
+        target:
+          - { os: ubuntu-24.04, python: "3.11", extras: "--extra browser --extra documents", must: "" }
+          - { os: ubuntu-24.04, python: "3.13", extras: "--extra browser --extra documents", must: "" }
+          # The Windows-only checks: the install file's PowerShell parses under Windows PowerShell 5.1, CVs
+          # print with Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser
+          - os: windows-2025
+            python: "3.13"
+            extras: "--extra browser"
+            must: >-
+              --must-pass test_the_powershell_part_parses test_accented_names_print_in_every_look
+              test_hal_opens_in_the_default_browser_on_windows_not_an_edge_app_window
+              test_browsers_are_found_from_app_paths_and_install_folders
+        share: [1, 2, 3, 4, 5]     # the 5 in the job name and the run step
+    runs-on: ${{ matrix.target.os }}
+    timeout-minutes: 20
     # uv run would otherwise make a fresh venv on .python-version's Python, without the extras
-    env: { UV_PYTHON: "${{ matrix.python }}" }
+    env: { UV_PYTHON: "${{ matrix.target.python }}" }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with: { fetch-depth: 2 }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
-      - run: uv sync --frozen ${{ matrix.extras }} --python ${{ matrix.python }}
+      - run: uv sync --frozen ${{ matrix.target.extras }} --python ${{ matrix.target.python }}
       # poppler is only the reference the PDF reader is compared with (tests/test_pdfread.py); Hal never needs it
       - if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -y -q poppler-utils
@@ -43,33 +55,20 @@ jobs:
       # (net::ERR_NO_BUFFER_SPACE). This doubles its default 16384 client ports, above the tests' 20000-29999.
       - if: runner.os == 'Windows'
         run: netsh int ipv4 set dynamicport tcp start=32768 num=32768
-      # bash runs with pipefail, so a failing test still fails the step through tee
       - name: Tests, browser on
-        shell: bash
-        run: uv run python -m unittest discover tests -v 2>&1 | tee tests.log
-        env: { HAL_TEST_MODE: "1", HAL_TEST_BROWSER: "1", PYTHONUNBUFFERED: "1" }
-      # The Windows-only checks: the install file's PowerShell parses under Windows PowerShell 5.1,
-      # CVs print with Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser.
-      # unittest prints a test's docstring on the line after its name, so the result may be one line down, and
-      # Python on Windows ends the lines with CR LF.
-      - if: runner.os == 'Windows'
-        name: The Windows-only checks ran and passed
-        shell: bash
-        run: |
-          for t in test_the_powershell_part_parses test_accented_names_print_in_every_look test_hal_opens_in_the_default_browser_on_windows_not_an_edge_app_window test_browsers_are_found_from_app_paths_and_install_folders; do
-            awk -v t="$t" '{ sub(/\r$/, "") }
-              found { ok = /\.\.\. ok$/; exit }
-              index($0, t " (") == 1 { if (/ \.\.\. /) { ok = /\.\.\. ok$/; exit } found = 1 }
-              END { exit !ok }' tests.log || { echo "::error::$t was skipped or failed"; exit 1; }
-          done
+        run: uv run python scripts/dev/run_tests.py --share ${{ matrix.share }}/5 ${{ matrix.target.must }}
+        env: { HAL_TEST_MODE: "1", HAL_TEST_BROWSER: "1" }
 
-  # The Linux install inside WSL2. Never run yet: it stays advisory until the first green run shows the
-  # suite passes under WSL2, so an unproven runner cannot block a merge. It runs the hermetic suite with
-  # the browser tests off; the browser and the GPU are not set up on the runner.
+  # The Linux install inside WSL2. Advisory until the first green run shows the suite passes under WSL2,
+  # so an unproven runner cannot block a merge. It runs the hermetic suite with the browser tests off, in two
+  # shares; the browser and the GPU are not set up on the runner.
   wsl:
-    name: wsl2 (ubuntu 24.04)
+    name: wsl2 (ubuntu 24.04, share ${{ matrix.share }} of 2)
+    strategy:
+      fail-fast: false
+      matrix: { share: [1, 2] }
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     continue-on-error: true
     env:
       # WSL does not inherit the runner environment: WSLENV names what to pass in (/p converts a path)
@@ -114,4 +113,4 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH" UV_PYTHON_DOWNLOADS=never UV_PYTHON=3.12
           cd "$HOME/hal-employment"
           uv sync --frozen
-          HAL_TEST_MODE=1 PYTHONUNBUFFERED=1 uv run python -m unittest discover tests
+          HAL_TEST_MODE=1 uv run python scripts/dev/run_tests.py --share ${{ matrix.share }}/2

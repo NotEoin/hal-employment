@@ -36,7 +36,13 @@ in with a key cannot use Windows' data protection (DPAPI), so the secrets tests 
 denied".
 
 CI (`.github/workflows/ci.yml`) runs every test, browser tests on, on Linux with Python 3.11 and 3.13 and on
-Windows with Python 3.13.
+Windows with Python 3.13. Each platform runs the suite in five shares, one job each, and
+`scripts/dev/run_tests.py` spreads a share over the runner's CPUs in processes of a few tests. To run the
+whole suite that way here, one process per CPU:
+
+```sh
+HAL_TEST_MODE=1 HAL_TEST_BROWSER=1 uv run python scripts/dev/run_tests.py   # --share 2/5 runs one share
+```
 
 ## What the checks prove
 
@@ -72,6 +78,8 @@ the lines added since a commit.
   stream connection to a public address raises `NoRoute`, so code under test sees what it sees on a computer
   with no network, at once instead of after a timeout. Loopback, private addresses and Unix sockets still work.
   A browser or other child process is not covered; serve its pages from `127.0.0.1`.
+- A test passes in any company: CI runs a few tests per process, so a test never counts on an earlier one
+  having imported a module or loaded an action kind.
 - Shared helpers live in `tests/support/`; import them as `from support import ...`, because
   `unittest discover tests` puts `tests/` on the import path.
 - Every test passes on Linux and Windows. Windows cannot remove a file that is still open, so a test closes
