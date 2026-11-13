@@ -400,8 +400,14 @@ runs: tests use `tests/support/fake_claude/`.
 - `fresh.py` builds a CV of the chosen type from interview answers and turns failing checks into
   suggestions.
 
-## Documents (`cvstudio/context.py`, `pack.py`, `docs/write_*.py`)
+## Documents (`cvstudio/context.py`, `pack/`, `docs/write_*.py`)
 
+- `pack/` is split by concern: `reading` (the advert reading, the record passages, the evidence plan),
+  `fitmap`, `checks` (what every draft is checked against), `drafting` (shared requests, the paragraph
+  scope, the story ranking), `hiring` (contacts), `letter`, `others` (the message and the answers) and
+  `markdown`. `jobhunt.pack` exports every name of its parts, so callers and the `pack.<name>` references
+  below need no submodule. The drafts share one frozen `pack.Brief` (the job, `person`, the advert
+  reading, the company brief, the CV facts and the record passages) instead of passing them one by one.
 - `cvstudio.context.build(job=None)` is the one source of every document prompt's placeholders: the person
   (`you.*`, `goal.*`), the CV type's `[documents]` and `[writing]`, `cvdocs.*`, the profile block
   (`profile`, see Profile below) and the person's voice. Job facts are never placeholders, so a prompt
