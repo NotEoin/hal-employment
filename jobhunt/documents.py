@@ -17,9 +17,10 @@ import re
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import ai, cv, db, letter, pack
+from . import ai, db, letter, pack
 from .ai import gpu
 from .core import naming, settings
+from .cvstudio import cv
 from .docs import folders
 
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)

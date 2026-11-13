@@ -114,7 +114,7 @@ def _seed(con: sqlite3.Connection) -> None:
 
     if import_v1.import_into(con)["versions"]:
         return
-    from jobhunt import cv
+    from jobhunt.cvstudio import cv
 
     new_version(model.from_v1(cv.starter()), origin="generated", what="A starting CV made from your settings",
                 by="hal", con=con)

@@ -7,7 +7,7 @@ CV's evidence for each, keeping only quotes that really are in the text.
 """
 import re
 
-from . import ai, record
+from .. import ai, record
 
 # Section names parsers know; a heading outside these may not be recognised as a section at all.
 STANDARD_HEADINGS = {"education", "experience", "work experience", "employment", "projects", "skills",
@@ -49,7 +49,7 @@ AI_CTX = 16384     # a two-page CV, an advert and the record's passages fit in t
 
 def _ask(prompt_id: str, user: str) -> dict:
     """One JSON request with prompt `prompt_id`; raises `ai.LLMUnavailable` when the AI cannot answer now."""
-    from .ai import prompts
+    from ..ai import prompts
 
     return ai.chat_json(prompts.text(prompt_id), user, role="checker", timeout=AI_TIMEOUT_S, ctx=AI_CTX,
                         purpose=prompt_id)

@@ -27,7 +27,8 @@ def _pack_md(job):
 
 def cmd_pack(args):
     """Handles `jobhunt pack`: drafts the CV and cover letter for a job."""
-    from .. import ai, cv, pack
+    from .. import ai, pack
+    from ..cvstudio import cv
     if args.cv_only:
         con = db.connect()
         for r in con.execute("SELECT * FROM jobs WHERE status = 'ready'"):

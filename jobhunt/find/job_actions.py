@@ -124,7 +124,8 @@ def _requirements_example(world) -> dict:
                why="You opened this job", priority=0, example=_requirements_example)
 def check_requirements(ctx, job_id: str) -> dict:
     """Lists the advert's requirements and what the person has for each."""
-    from jobhunt import cv, cvscore
+    from jobhunt.cvstudio import cv
+    from jobhunt.cvstudio import score as cvscore
 
     job = _job(ctx.con, job_id)
     ctx.step("Reading the advert and your CV")

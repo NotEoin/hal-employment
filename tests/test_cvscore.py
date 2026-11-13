@@ -13,8 +13,8 @@ from support import legacy
 from support.fake_ai import fake_ai
 from test_pdfread import PEOPLE, Person, made_up_cvs
 
-from jobhunt import cv, cvscore
-from jobhunt.cvstudio import pdfread
+from jobhunt.cvstudio import cv, pdfread
+from jobhunt.cvstudio import score as cvscore
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule

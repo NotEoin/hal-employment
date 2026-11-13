@@ -14,8 +14,7 @@ from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt import cv, pdfdraw
-from jobhunt.cvstudio import pdfread
+from jobhunt.cvstudio import cv, pdfdraw, pdfread
 
 POPPLER_TIMEOUT_S = 30
 WORD_TOLERANCE = 0.02      # the same words within 2% of characters

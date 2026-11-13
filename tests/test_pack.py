@@ -26,9 +26,10 @@ from support import people
 from support.actions import finished
 from support.world import World
 
-from jobhunt import ai, cv, db, documents, letter, pack, record
+from jobhunt import ai, db, documents, letter, pack, record
 from jobhunt.ai import counting, gpu
 from jobhunt.core import runner, settings
+from jobhunt.cvstudio import cv
 from jobhunt.writing import flow, paragraphs
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.

@@ -2,7 +2,7 @@
 the Tone, Length, Evidence and Checked notes beside it."""
 import logging
 
-from .. import cv
+from ..cvstudio import cv
 from ..profile import writing as profile_writing
 from ..writing import (
     drafts,

@@ -6,8 +6,8 @@ from pathlib import Path
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from test_pdfread import PEOPLE, Person, draw, made_up_cvs
 
-from jobhunt import cvpdf, pdfdraw
-from jobhunt.cvstudio import pdfread
+from jobhunt.cvstudio import pdf as cvpdf
+from jobhunt.cvstudio import pdfdraw, pdfread
 
 
 class Drawing(unittest.TestCase):

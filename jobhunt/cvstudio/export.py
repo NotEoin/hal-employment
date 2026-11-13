@@ -49,7 +49,7 @@ def file_name(fmt: str) -> str:
 
 def fold_for_simple_pdf(text: str) -> str:
     """What Hal's simple PDF can hold of `text` (it draws ASCII and Latin-1 letters only)."""
-    from .. import cvpdf
+    from . import pdf as cvpdf
 
     return cvpdf._drawable(text)
 
@@ -57,7 +57,7 @@ def fold_for_simple_pdf(text: str) -> str:
 def cv_pdf(doc: Any, type_: Any, look_id: str, profile: dict, out: Path, *, layout: dict | None = None,
            why: str = "") -> dict:
     """Prints a CV to `out` with the printer, falling back to the simple PDF; the printer's result."""
-    from .. import cvpdf
+    from . import pdf as cvpdf
 
     v = render.view(doc, type_, profile, layout=layout)
     html = render.html_of(v, look_id)

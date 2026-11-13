@@ -19,7 +19,7 @@ folder beside each file.
 | Source Sans 3 (font for CVs and letters, from @fontsource/source-sans-3) | 5.3.0 | OFL-1.1 | Adobe, Reserved Font Name "Source" | `jobhunt/web/static/app/fonts/cv/` (`OFL.txt`) |
 | Source Serif 4 (font for CVs and letters, from @fontsource/source-serif-4) | 5.3.0 | OFL-1.1 | Adobe, Reserved Font Name "Source" | `jobhunt/web/static/app/fonts/cv/` (`OFL.txt`) |
 | axe-core (accessibility checks, tests only; never shipped in the app) | 4.10.3 | MPL-2.0 | 2015-2025 Deque Systems, Inc. | `tests/vendor/axe.min.js` (notice at the top of the file) |
-| Helvetica character widths (Adobe Core14 AFM files) | | Adobe's AFM notice | 1985, 1987, 1989, 1990, 1997 Adobe Systems Incorporated | `jobhunt/pdfdraw.py` (only the width numbers; notice in the file's header) |
+| Helvetica character widths (Adobe Core14 AFM files) | | Adobe's AFM notice | 1985, 1987, 1989, 1990, 1997 Adobe Systems Incorporated | `jobhunt/cvstudio/pdfdraw.py` (only the width numbers; notice in the file's header) |
 
 The AFM notice, as the files give it: "Copyright (c) 1985, 1987, 1989, 1990, 1997 Adobe Systems
 Incorporated. All rights reserved. Adobe permits the AFM files to be used, copied and distributed for any

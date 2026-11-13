@@ -333,8 +333,8 @@ runs: tests use `tests/support/fake_claude/`.
 - `cvstudio/model.py` gives every section, entry and line a stable id. `apply` changes a document by
   target (`""` is the whole document), `diff` compares by id (a swap counts as one move), and
   `to_v1`/`from_v1` keep the printable `cv.json`.
-- `jobhunt/cv.py` is the reader of the store in the `cv.json` shape: `load()` returns the version in use as
-  the PDF builder, the packs and the matching code expect it, so none of them needs the store itself.
+- `jobhunt/cvstudio/cv.py` is the reader of the store in the `cv.json` shape: `load()` returns the version in
+  use as the PDF builder, the packs and the matching code expect it, so none of them needs the store itself.
 - Versions never change after they are written. `store.new_version` adds one under `BEGIN IMMEDIATE`, so two
   saves at once get two numbers, and publishes the event `cv`. A version made with `job_id=` belongs to that
   job: it is kept out of the main list and never becomes Hal's main copy.
@@ -375,7 +375,7 @@ runs: tests use `tests/support/fake_claude/`.
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
   Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser, which cannot
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF
-  is checked (opens, page count, name, first section title). When no browser can print, `cvpdf.draw_view`
+  is checked (opens, page count, name, first section title). When no browser can print, `pdf.draw_view`
   draws a simple PDF itself and Activity says why.
 - `export.py` gives PDF, Word (WordprocessingML written with the standard library), plain text, JSON Resume
   1.0.0 and `cv.json`. PDFs are cached in `cache/cv-print/` by the page's hash.

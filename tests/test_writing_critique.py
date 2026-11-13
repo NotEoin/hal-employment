@@ -12,8 +12,9 @@ from support import people
 from support.fake_ai import fake_ai
 from test_pack import FACTS, add_job, as_applicant
 
-from jobhunt import cv, documents, pack
+from jobhunt import documents, pack
 from jobhunt.ai.base import LLMUnavailable
+from jobhunt.cvstudio import cv
 from jobhunt.writing import critique
 
 CV_READ = {"screen": {"who": "A history graduate", "wants": "collections work", "read_on": True,

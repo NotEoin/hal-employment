@@ -110,7 +110,8 @@ class Tailored(unittest.TestCase):
     """Regression: a base CV with no title (the made-up world's) raised KeyError, so no CV changes showed."""
 
     def test_a_cv_without_a_title_or_summary_is_tailored(self):
-        from jobhunt import cv, documents
+        from jobhunt import documents
+        from jobhunt.cvstudio import cv
 
         with mock.patch.object(cv, "tailor", lambda text: ({"skills": ["Cataloguing"]}, None)):
             self.assertEqual(documents.tailored(JOB, {}), {"skills": ["Cataloguing"]})
@@ -128,7 +129,8 @@ class SentAsChosen(unittest.TestCase):
         settings.set("you.name", "Robin Testwell")
 
     def test_no_adjusting_sends_the_main_cv_as_it_is(self):
-        from jobhunt import cv, documents
+        from jobhunt import documents
+        from jobhunt.cvstudio import cv
 
         base = {"title": "Archivist", "projects": [{"name": "A"}, {"name": "B"}]}
         moved = {"title": "Data Analyst", "projects": [{"name": "B"}, {"name": "A"}]}
@@ -141,8 +143,8 @@ class SentAsChosen(unittest.TestCase):
     def test_the_original_file_is_uploaded_unchanged_with_its_own_kind(self):
         import tempfile
 
-        from jobhunt import cv, documents
-        from jobhunt.cvstudio import store
+        from jobhunt import documents
+        from jobhunt.cvstudio import cv, store
 
         for name, data in (("Robin-CV.pdf", b"%PDF-1.4\n% a made-up CV\n%%EOF\n"), ("Robin-CV.docx", b"PK made-up")):
             store.set_baseline_file(store.add_file(data, name, role="baseline"))
@@ -161,7 +163,8 @@ class Letter(unittest.TestCase):
     def test_the_letter_is_drawn_with_the_cv_sent_with_it(self):
         import tempfile
 
-        from jobhunt import cv, documents, letter
+        from jobhunt import documents, letter
+        from jobhunt.cvstudio import cv
 
         sent = {"title": "Archivist", "contact": {"location": "Leeds"}}
         drawn = {}

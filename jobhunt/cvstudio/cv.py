@@ -4,7 +4,7 @@ Hal keeps the CV in the CV store (`cvstudio/store.py`): numbered versions that n
 reads the version in use in the older cv.json shape, so the modules that draw or score a CV need no store
 of their own. The store's first version is imported once from the importer's copy of the website CV and
 its old overrides (`cvstudio/import_v1.py`), or made from the settings by `starter()`. A variant for one
-job reorders projects and skill groups by relevance to the advert. The PDF is drawn by cvpdf.py.
+job reorders projects and skill groups by relevance to the advert. The PDF is drawn by `pdf.py`.
 """
 import copy
 import json
@@ -22,7 +22,7 @@ PAIRS = ("skills", "additional")  # entries written as [name, value]; only the v
 
 
 def _you(key: str) -> str:
-    from .core import settings
+    from ..core import settings
 
     return str(settings.get(key) or "").strip()
 
@@ -54,14 +54,14 @@ def profile() -> dict:
 
 def printable(data: dict) -> dict:
     """The CV as the PDF builder takes it: entries left out are dropped, and the editor's bookkeeping removed."""
-    from .cvstudio import import_v1
+    from . import import_v1
 
     return import_v1.printable(data)
 
 
 def load() -> dict:
     """Hal's base CV in cv.json shape: the version in use, entries left out dropped."""
-    from .cvstudio import model, store
+    from . import model, store
 
     data = model.to_v1(store.current()[1], profile())
     for section in NAMED_BY:
@@ -231,7 +231,7 @@ def tailor(job_text: str) -> tuple[dict, str | None]:
 
 def render(variant: dict, out_dir: Path) -> Path:
     """Writes the variant's JSON and its PDF, in Hal's layout for applications, into `out_dir`."""
-    from . import cvpdf
+    from . import pdf as cvpdf
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "cv.json").write_text(json.dumps(printable(variant), indent=2) + "\n")
     return cvpdf.render(variant, out_dir)

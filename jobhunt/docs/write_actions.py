@@ -23,10 +23,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import contacts, cv, documents, pack, prep
+from .. import contacts, documents, pack, prep
 from ..apply import actions as apply_actions
 from ..apply.queries import load_job
 from ..core import runner
+from ..cvstudio import cv
 from ..writing import critique as writing_critique
 from ..writing import fields
 

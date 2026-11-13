@@ -23,8 +23,9 @@ from support.fake_ai import fake_ai
 from support.world import World
 from test_pack import FakeWriter, add_job, documents_only, prompt_id, section
 
-from jobhunt import ai, cv, pack, record
+from jobhunt import ai, pack, record
 from jobhunt.core import settings
+from jobhunt.cvstudio import cv
 from jobhunt.profile import writing as profile_writing
 from jobhunt.sections import coursework, lecture, letters
 from jobhunt.writing import plan, strengths

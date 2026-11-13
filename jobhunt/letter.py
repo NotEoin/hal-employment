@@ -2,7 +2,7 @@
 
 With a look, the letter is an HTML page in that look (`cvstudio.render.render_letter_html`), printed by the
 same browser printer as the CV, so its header matches a CV printed in the same look; Hal's own PDF writer
-(`pdfdraw.py`) is the printer's fallback. Without a look, it is drawn with that writer as before. The drawn
+(`cvstudio/pdfdraw.py`) is the printer's fallback. Without a look, it is drawn with that writer as before. The drawn
 header (name, title, contact line, location) is exactly the one on the CV sent with the letter, then the
 date, recipient, subject line and letter body. The caller passes that CV; without one the header comes
 from the person's main CV, never from a file outside Hal.
@@ -10,8 +10,8 @@ from the person's main CV, never from a file outside Hal.
 from datetime import date
 from pathlib import Path
 
-from . import cv, pdfdraw
-from .cvpdf import _drawable
+from .cvstudio import cv, pdfdraw
+from .cvstudio.pdf import _drawable
 
 BODY_GAP = 7.0      # space between paragraphs
 BLOCK_GAP = 14.0    # space between the address block, subject and body

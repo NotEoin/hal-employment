@@ -76,8 +76,8 @@ def summary(con) -> dict:
 
 def _profile() -> dict:
     """The name and contact line a CV prints above its body, from your details (never from the CV)."""
-    from jobhunt import cv
     from jobhunt.core import settings
+    from jobhunt.cvstudio import cv
 
     contact = cv.contact()
     return {"name": str(settings.get("you.name") or "").strip(),

@@ -11,12 +11,13 @@ from __future__ import annotations
 import json
 import logging
 
-from jobhunt import cvscore, db
+from jobhunt import db
 from jobhunt.core import runner, settings
 from jobhunt.cvstudio import (
     checks,
     checks_actions,  # noqa: F401 - registers cv.recruiter before a route starts it
 )
+from jobhunt.cvstudio import score as cvscore
 from jobhunt.web.router import BadRequest, NotFound, Request, route
 
 log = logging.getLogger(__name__)

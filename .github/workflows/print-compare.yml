@@ -5,7 +5,7 @@
 name: print-compare
 on:
   push:
-    paths: ["jobhunt/cvstudio/**", "jobhunt/cvpdf.py", "jobhunt/pdfdraw.py", ".github/workflows/print-compare.yml"]
+    paths: ["jobhunt/cvstudio/**", ".github/workflows/print-compare.yml"]
   workflow_dispatch:
 jobs:
   print:

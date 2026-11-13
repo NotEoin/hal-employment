@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jobhunt import cvscore
 from jobhunt.cvstudio import pdfread
+from jobhunt.cvstudio import score as cvscore
 from jobhunt.cvstudio import types as cvtypes
 
 log = logging.getLogger(__name__)

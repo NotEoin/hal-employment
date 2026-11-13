@@ -9,9 +9,9 @@ from support import legacy
 from test_cv_import import lay_out
 from test_cv_store import cv_home
 
-from jobhunt import cv, documents
+from jobhunt import documents
 from jobhunt.core import settings
-from jobhunt.cvstudio import import_v1
+from jobhunt.cvstudio import cv, import_v1
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule

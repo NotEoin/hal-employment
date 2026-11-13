@@ -22,10 +22,11 @@ from support import people, scanner
 from support.ui import browser_tests_on
 from test_cv_render import ACCENTED, made_up_cv, profile_of, type_for
 
-from jobhunt import cvpdf, db
+from jobhunt import db
 from jobhunt.core.platform import found
 from jobhunt.core.platform.windows import CREATE_NO_WINDOW, WindowsPlatform
 from jobhunt.cvstudio import export, model, pdfread, printer, render
+from jobhunt.cvstudio import pdf as cvpdf
 
 GOLDENS = Path(__file__).parent / "goldens" / "scanner"
 SCANNER_TOLERANCE = 0.05    # scores of the fixed CVs are asserted within a tolerance

@@ -11,8 +11,8 @@ from support.ui import browser_tests_on
 from test_cv_printer import NoBrowsersHere
 from test_pdfread import PEOPLE, Person, draw, made_up_cvs
 
-from jobhunt import cv, letter
-from jobhunt.cvstudio import pdfread, printer
+from jobhunt import letter
+from jobhunt.cvstudio import cv, pdfread, printer
 
 BODY = "Dear Hiring Team,\n\nI catalogued 400 items for a record office.\n\nKind regards,\nZo\u00eb M\u00fcller"
 

@@ -133,8 +133,9 @@ def _top_fixes(reads: list[dict], rule_lines: list[dict]) -> list[str]:
 def critique(con, job) -> dict:
     """A recruiter's read of one application's CV and letter against its advert (see the module notes)."""
     from jobhunt import ai as ai_mod
-    from jobhunt import cv, documents, pack
+    from jobhunt import documents, pack
     from jobhunt.cvstudio import checks as cv_checks
+    from jobhunt.cvstudio import cv
 
     docs = documents.load(con, job)
     who = pack.person(job)

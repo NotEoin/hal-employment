@@ -343,7 +343,7 @@ def _steps(con, job_id: str, col: str | None, app: dict, row) -> tuple[int, list
 
 def _cv_changes(job, docs: dict) -> list[dict]:
     """The per-job CV changes, each with whether it is on, compared with the main CV."""
-    from .. import cv
+    from ..cvstudio import cv
 
     try:
         found = cv.changes(cv.load(), documents.proposed_cv(job, docs))

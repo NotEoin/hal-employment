@@ -8,9 +8,9 @@ import unittest
 import support  # noqa: F401 - the temporary home, before any jobhunt import
 from test_cv_store import cv_home
 
-from jobhunt import cv, db
+from jobhunt import db
 from jobhunt.core.db import tasks
-from jobhunt.cvstudio import import_v1, model, store
+from jobhunt.cvstudio import cv, import_v1, model, store
 
 SITE = {"_comment": ["Made-up CV for tests"], "title": "Computing graduate",
         "contact": {"location": "Exampleton", "github": "github.com/made-up", "site": "made-up.example"},
