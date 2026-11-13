@@ -334,150 +334,177 @@ def _age_days(posted_at: str | None) -> int | None:
     return (clock.now_utc() - posted).days
 
 
-def score(job: dict, goal: Goal | None = None, weights: Weights | None = None) -> Scored:
-    """Every rule's verdict on one job; pure, no database and no network."""
-    if goal is None:
-        from jobhunt.find.goal import current
-        goal = current()
-    w = weights or current_weights()
-    c = compiled(goal, w)
-    title = job.get("title") or ""
-    text = job.get("description") or ""
+def _hide(reasons: list[Reason], rule, stage, label, note, quote="", data=None) -> None:
+    """Appends a reason that hides the job."""
+    reasons.append(Reason(rule, stage, 0, label, note, quote, True, data))
+
+
+def _employer_rules(job: dict, goal: Goal, w: Weights, c: _Compiled, reasons: list[Reason]) -> int:
+    """Closed, screened-out, avoided-employer and training-scheme rules; returns the training scheme's points."""
     company = job.get("company") or ""
+    text = job.get("description") or ""
     location = job.get("location") or ""
-    source = job.get("source") or ""
-    kind = kinds_mod.classify(title, text, job.get("salary"))
-    reasons: list[Reason] = []
-    add = reasons.append
-
-    def hide(rule, stage, label, note, quote="", data=None):
-        add(Reason(rule, stage, 0, label, note, quote, True, data))
-
     if job.get("open_state") == "closed":
-        hide("closed", "closed", "The advert had closed before Hal could show it", "advert closed")
+        _hide(reasons, "closed", "closed", "The advert had closed before Hal could show it", "advert closed")
     if job.get("screen_state") == "out":
         why = job.get("screen_why") or ""
-        hide("screen_out", "screen", f"Hal's AI check: {why}", f"screened out: {why}")
+        _hide(reasons, "screen_out", "screen", f"Hal's AI check: {why}", f"screened out: {why}")
 
     key = company_key(company)
     if key and key in goal.avoid_employers:
-        hide("excluded_employer", "filter", "Employers you avoid", "excluded employer", company)
+        _hide(reasons, "excluded_employer", "filter", "Employers you avoid", "excluded employer", company)
     elif DEFENCE in goal.avoid_sectors and DEFENCE_NAME.search(company):
-        hide("excluded_employer", "filter", f"Sectors you avoid: {DEFENCE}", "excluded employer", company)
+        _hide(reasons, "excluded_employer", "filter", f"Sectors you avoid: {DEFENCE}", "excluded employer", company)
 
     scheme = (key in goal.training_providers or TRAINING_PROVIDER.search(company) or TRAINING_BOND.search(text))
-    training_points = 0
-    if scheme and goal.training_schemes != "allow":
-        in_ok = c.ok_places is not None and c.ok_places.search(location.lower())
-        if c.ok_places is not None and not in_ok:
-            hide("training_scheme", "filter", "Makes you repay training costs",
-                 f"train-and-place outside {', '.join(goal.training_ok_places)}")
-        elif goal.training_schemes == "hide":
-            hide("training_scheme", "filter", "Makes you repay training costs", "train-and-place scheme")
-        else:
-            training_points = w["training_scheme"]
+    if not scheme or goal.training_schemes == "allow":
+        return 0
+    in_ok = c.ok_places is not None and c.ok_places.search(location.lower())
+    if c.ok_places is not None and not in_ok:
+        _hide(reasons, "training_scheme", "filter", "Makes you repay training costs",
+              f"train-and-place outside {', '.join(goal.training_ok_places)}")
+    elif goal.training_schemes == "hide":
+        _hide(reasons, "training_scheme", "filter", "Makes you repay training costs", "train-and-place scheme")
+    else:
+        return w["training_scheme"]
+    return 0
 
+
+def _clearance_and_place_rules(job: dict, goal: Goal, w: Weights, c: _Compiled,
+                               reasons: list[Reason]) -> tuple[object, int, str]:
+    """The clearance and distance rules; returns the matched place, its points and its note."""
+    title = job.get("title") or ""
+    text = job.get("description") or ""
+    location = job.get("location") or ""
     m = CLEARANCE_HELD.search(f"{title}\n{text}")
     if m and not goal.has_clearance:
-        hide("clearance", "filter", "Needs a security clearance you do not hold", "needs existing security clearance",
-             m.group(0))
+        _hide(reasons, "clearance", "filter", "Needs a security clearance you do not hold",
+              "needs existing security clearance", m.group(0))
 
     where, place_points, place_note = (None, 0, "")
     if goal.places:
         where, place_points, place_note = place(c, w, location, text)
         if where is None:
-            hide("too_far", "filter", "Too far from your places", f"location: {location or 'unknown'}")
+            _hide(reasons, "too_far", "filter", "Too far from your places", f"location: {location or 'unknown'}")
+    return where, place_points, place_note
 
-    title_rules = source not in TITLE_RULES_SKIP
-    role_points: Reason | None = None
-    if title_rules:
-        avoided = c.avoid.search(title) if c.avoid is not None else None
-        wanted = c.roles.search(title) if c.roles is not None else None
-        if w.role_filter and c.roles is not None and (avoided or not wanted):
-            hide("avoid_role" if avoided else "role_title", "filter",
-                 f"Roles you avoid: {avoided.group(0)}" if avoided else "Not one of the roles you want",
-                 f"{w.role_miss_note}: {title}", avoided.group(0) if avoided else "")
-        elif avoided:
-            hide("avoid_role", "filter", f"Roles you avoid: {avoided.group(0).lower()}",
-                 f"role to avoid: {avoided.group(0).lower()}", avoided.group(0))
-        elif (off := c.off_field.search(title) if c.off_field is not None else None) and not wanted:
-            hide("off_field", "filter", f"Outside your field: {off.group(0).lower()}",
-                 f"outside your field: {off.group(0).lower()}", off.group(0))
-        elif c.roles is not None and not w.role_filter:
-            if wanted:
-                role_points = Reason("role_title", "points", w["role_title"],
-                                     f"\"{wanted.group(0)}\" is a role you want", f"role: {wanted.group(0).lower()}",
-                                     wanted.group(0))
-            else:
-                in_text = c.roles.search(text[:TEXT_WINDOW])
-                role_points = Reason("role_text_only", "points", w["role_text_only"],
-                                     f"\"{in_text.group(0)}\" is only in the advert text" if in_text
-                                     else "None of your roles is in the title", "role only in text" if in_text
-                                     else "not one of your roles", in_text.group(0) if in_text else "")
-        senior = SENIORITY.search(title)
-        if senior and "experienced" not in goal.kinds:
-            hide("kind_not_chosen:experienced", "filter",
-                 f"{kinds_mod.LABELS['experienced']}: not a kind of role you chose", "too senior", senior.group(0))
-        elif kind.kind not in ("other", "experienced") and kind.kind not in goal.kinds and kind.kind != "graduate_job":
-            hide(f"kind_not_chosen:{kind.kind}", "filter",
-                 f"{kinds_mod.LABELS[kind.kind]}: not a kind of role you chose",
-                 NOT_FOR_GRADS_NOTE, kind.kind_quote)
-        elif kind.kind == "experienced" and "experienced" not in goal.kinds:
-            hide("kind_not_chosen:experienced", "filter",
-                 f"{kinds_mod.LABELS['experienced']}: not a kind of role you chose", NOT_FOR_GRADS_NOTE,
-                 kind.kind_quote)
-        elif kind.kind == "graduate_job" and "graduate_job" not in goal.kinds and goal.kinds - set(FLAGS):
-            hide("kind_not_chosen:graduate_job", "filter",
-                 f"{kinds_mod.LABELS['graduate_job']}: not a kind of role you chose", "graduate or entry-level role",
-                 kind.kind_quote)
 
-    student = goal.is_student()
+def _role_title_rules(title: str, text: str, goal: Goal, w: Weights, c: _Compiled,
+                      reasons: list[Reason]) -> Reason | None:
+    """Avoided, unwanted and off-field role titles; returns the points for a wanted title, if any."""
+    avoided = c.avoid.search(title) if c.avoid is not None else None
+    wanted = c.roles.search(title) if c.roles is not None else None
+    if w.role_filter and c.roles is not None and (avoided or not wanted):
+        if avoided:
+            _hide(reasons, "avoid_role", "filter", f"Roles you avoid: {avoided.group(0)}",
+                  f"{w.role_miss_note}: {title}", avoided.group(0))
+        else:
+            _hide(reasons, "role_title", "filter", "Not one of the roles you want", f"{w.role_miss_note}: {title}")
+        return None
+    if avoided:
+        _hide(reasons, "avoid_role", "filter", f"Roles you avoid: {avoided.group(0).lower()}",
+              f"role to avoid: {avoided.group(0).lower()}", avoided.group(0))
+        return None
+    off = c.off_field.search(title) if c.off_field is not None else None
+    if off and not wanted:
+        _hide(reasons, "off_field", "filter", f"Outside your field: {off.group(0).lower()}",
+              f"outside your field: {off.group(0).lower()}", off.group(0))
+        return None
+    if c.roles is None or w.role_filter:
+        return None
+    if wanted:
+        return Reason("role_title", "points", w["role_title"], f"\"{wanted.group(0)}\" is a role you want",
+                      f"role: {wanted.group(0).lower()}", wanted.group(0))
+    in_text = c.roles.search(text[:TEXT_WINDOW])
+    if in_text:
+        label, note, quote = f"\"{in_text.group(0)}\" is only in the advert text", "role only in text", in_text.group(0)
+    else:
+        label, note, quote = "None of your roles is in the title", "not one of your roles", ""
+    return Reason("role_text_only", "points", w["role_text_only"], label, note, quote)
+
+
+def _kind_filter_rules(title: str, kind: kinds_mod.Kind, goal: Goal, reasons: list[Reason]) -> None:
+    """Hides a seniority or kind of role the person did not choose."""
+    senior = SENIORITY.search(title)
+    if senior and "experienced" not in goal.kinds:
+        _hide(reasons, "kind_not_chosen:experienced", "filter",
+              f"{kinds_mod.LABELS['experienced']}: not a kind of role you chose", "too senior", senior.group(0))
+    elif kind.kind not in ("other", "experienced") and kind.kind not in goal.kinds and kind.kind != "graduate_job":
+        _hide(reasons, f"kind_not_chosen:{kind.kind}", "filter",
+              f"{kinds_mod.LABELS[kind.kind]}: not a kind of role you chose", NOT_FOR_GRADS_NOTE, kind.kind_quote)
+    elif kind.kind == "experienced" and "experienced" not in goal.kinds:
+        _hide(reasons, "kind_not_chosen:experienced", "filter",
+              f"{kinds_mod.LABELS['experienced']}: not a kind of role you chose", NOT_FOR_GRADS_NOTE,
+              kind.kind_quote)
+    elif kind.kind == "graduate_job" and "graduate_job" not in goal.kinds and goal.kinds - set(FLAGS):
+        _hide(reasons, "kind_not_chosen:graduate_job", "filter",
+              f"{kinds_mod.LABELS['graduate_job']}: not a kind of role you chose", "graduate or entry-level role",
+              kind.kind_quote)
+
+
+def _eligibility_sector_and_unpaid_rules(text: str, kind: kinds_mod.Kind, goal: Goal, student: bool,
+                                      reasons: list[Reason]) -> None:
+    """Hides adverts the person cannot apply to, sectors they avoid and unpaid work."""
     verdict, why = kinds_mod.eligible(kind.eligibility, student=student, end_year=goal.finished_year())
     if verdict is False:
-        rule = "grad_year" if kind.eligibility.get("requires") == "graduating_in" and student else "students_only"
-        label = ("For current students only" if rule == "students_only"
-                 else f"For people finishing in {', '.join(map(str, kind.eligibility.get('years', [])))}")
-        hide(rule, "eligibility", label, "for current students only" if rule == "students_only" else label.lower(),
-             kind.eligibility.get("quote", ""), {"why": why})
+        if kind.eligibility.get("requires") == "graduating_in" and student:
+            rule = "grad_year"
+            label = f"For people finishing in {', '.join(map(str, kind.eligibility.get('years', [])))}"
+            note = label.lower()
+        else:
+            rule = "students_only"
+            label = "For current students only"
+            note = "for current students only"
+        _hide(reasons, rule, "eligibility", label, note, kind.eligibility.get("quote", ""), {"why": why})
 
     for name in SECTOR_ORDER:
         rx, note = SECTORS[name]
         m = rx.search(text)
         if m and name in goal.avoid_sectors:
-            hide(f"avoid_sector:{name}", "filter", f"Sectors you avoid: {name}", note, m.group(0))
+            _hide(reasons, f"avoid_sector:{name}", "filter", f"Sectors you avoid: {name}", note, m.group(0))
     for word in goal.avoid_sectors:
         if word in SECTORS or word == DEFENCE:
             continue
         m = re.search(rf"\b{re.escape(word)}\b", text, re.I)
         if m:
-            hide(f"avoid_sector:{word}", "filter", f"Sectors you avoid: {word}", "excluded sector", m.group(0))
+            _hide(reasons, f"avoid_sector:{word}", "filter", f"Sectors you avoid: {word}", "excluded sector",
+                  m.group(0))
 
     if kind.paid == 0 and not goal.unpaid_ok:
-        hide("unpaid", "filter", "Unpaid or expenses only", "unpaid", kind.pay.quote)
+        _hide(reasons, "unpaid", "filter", "Unpaid or expenses only", "unpaid", kind.pay.quote)
 
+
+def _place_reason(where, points: int, note: str) -> Reason:
+    """The points reason for the place an advert matched."""
+    if where.remote:
+        return Reason("remote_uk", "points", points, "Remote within the UK", note)
+    first = where.rank == 0
+    return Reason("place_first" if first else "place_other", "points", points,
+                  f"In {where.name}, your {'first choice of' if first else 'other'} place", note)
+
+
+def _pattern_and_place_reasons(location: str, text: str, goal: Goal, w: Weights, where,
+                               place_points: int, place_note: str, reasons: list[Reason]) -> None:
+    """The working-pattern filter and the place and pattern points, in that order."""
     pattern, fully_remote = _workplace(location, text)
     pattern_points = 0
     if goal.pattern != "any" and pattern:
         if fully_remote and goal.pattern in ("office", "hybrid"):
-            hide("pattern", "filter", f"Fully remote, and you chose {goal.pattern}",
-                 "fully remote")
+            _hide(reasons, "pattern", "filter", f"Fully remote, and you chose {goal.pattern}", "fully remote")
         elif PATTERN_OF[goal.pattern] == pattern:
             pattern_points = w["pattern_match"]
         else:
             pattern_points = w["pattern_other"]
     if place_note:
-        add(Reason(f"place_{'first' if getattr(where, 'rank', 1) == 0 else 'other'}"
-                   if not getattr(where, "remote", False) else "remote_uk", "points", place_points,
-                   f"In {where.name}, your {'first choice of' if where.rank == 0 else 'other'} place"
-                   if not where.remote else "Remote within the UK", place_note))
+        reasons.append(_place_reason(where, place_points, place_note))
     if pattern:
-        add(Reason("pattern", "points", pattern_points, f"Working pattern: {pattern}", pattern))
+        reasons.append(Reason("pattern", "points", pattern_points, f"Working pattern: {pattern}", pattern))
 
-    if training_points:
-        add(Reason("training_scheme", "points", training_points, "Makes you repay training costs",
-                   "train-and-place: check bond and repayment terms"))
-    if role_points is not None:
-        add(role_points)
+
+def _kind_points(title: str, text: str, kind: kinds_mod.Kind, goal: Goal, w: Weights, student: bool,
+                 title_rules: bool, reasons: list[Reason]) -> None:
+    """Points for a chosen kind of role, part-time and fixed-term work, seniority and entry level."""
+    add = reasons.append
     if kind.kind in goal.kinds and kind.kind not in ("graduate_job", "other", "experienced"):
         note = ("graduate internship" if kind.kind == "internship" and not student
                 else kinds_mod.LABELS[kind.kind].lower())
@@ -495,49 +522,59 @@ def score(job: dict, goal: Goal | None = None, weights: Weights | None = None) -
     if m:
         add(Reason("entry_level", "points", w["entry_level"], "Graduate or entry-level role", "entry-level title",
                    m.group(0)))
-    else:
-        m = ENTRY.search(text[:TEXT_WINDOW])
-        if m:
-            add(Reason("entry_level", "points", w["entry_level_text"], "Open to graduates", "open to grads",
-                       m.group(0)))
+        return
+    m = ENTRY.search(text[:TEXT_WINDOW])
+    if m:
+        add(Reason("entry_level", "points", w["entry_level_text"], "Open to graduates", "open to grads",
+                   m.group(0)))
 
+
+def _agency_and_source_rules(company: str, source: str, goal: Goal, w: Weights, reasons: list[Reason]) -> None:
+    """The recruitment-agency rule and the alert-only source note."""
     if AGENCY.search(company):
         if goal.agencies == "hide":
-            hide("agency", "filter", "Recruitment agency; employer not named", "recruitment agency")
+            _hide(reasons, "agency", "filter", "Recruitment agency; employer not named", "recruitment agency")
         else:
-            add(Reason("agency", "points", w["agency_lower"] if goal.agencies == "lower" else 0,
-                       "Recruitment agency; employer not named", "recruitment agency, employer unnamed"))
+            reasons.append(Reason("agency", "points", w["agency_lower"] if goal.agencies == "lower" else 0,
+                                  "Recruitment agency; employer not named", "recruitment agency, employer unnamed"))
     if source in ALERT_ONLY_SOURCES:
-        add(Reason("alert_only", "points", w["alert_only"], "Known only from an alert email",
-                   "alert only, find the advert"))
+        reasons.append(Reason("alert_only", "points", w["alert_only"], "Known only from an alert email",
+                              "alert only, find the advert"))
 
+
+def _requirement_rules(text: str, goal: Goal, w: Weights, reasons: list[Reason]) -> None:
+    """Years of experience, earlier experience and postgraduate degree an advert asks for."""
+    add = reasons.append
     yrs = min_years(text)
     over = (yrs or 0) - goal.experience_years
     if yrs is not None and over >= 1:
+        label = f"Asks for {yrs} years of experience; you have {goal.experience_years}"
         if w.experience == "hide" or over >= 2:
-            hide("years_required", "filter", f"Asks for {yrs} years of experience; you have {goal.experience_years}",
-                 f"asks {yrs}+ years", data={"years": yrs})
+            _hide(reasons, "years_required", "filter", label, f"asks {yrs}+ years", data={"years": yrs})
         else:
-            add(Reason("years_required", "points", w["years_required"],
-                       f"Asks for {yrs} years of experience; you have {goal.experience_years}", f"asks {yrs}+ years"))
+            add(Reason("years_required", "points", w["years_required"], label, f"asks {yrs}+ years"))
     if goal.experience_years == 0:
         m = EXPERIENCE_REQUIRED.search(text)
         if m and not NO_EXPERIENCE_NEEDED.search(text):
             if w.experience == "hide":
-                hide("experience_required", "filter", "Asks for earlier experience", "asks for prior experience",
-                     m.group(0))
+                _hide(reasons, "experience_required", "filter", "Asks for earlier experience",
+                      "asks for prior experience", m.group(0))
             else:
                 add(Reason("experience_required", "points", w["years_required"], "Asks for earlier experience",
                            "asks for prior experience", m.group(0)))
     m = POSTGRAD_REQUIRED.search(text)
     if m and not UNDERGRAD_OK.search(text):
         if w.experience == "hide":
-            hide("postgrad_required", "filter", "Asks for a postgraduate degree", "asks for a postgraduate degree",
-                 m.group(0))
+            _hide(reasons, "postgrad_required", "filter", "Asks for a postgraduate degree",
+                  "asks for a postgraduate degree", m.group(0))
         else:
             add(Reason("postgrad_required", "points", w["years_required"], "Asks for a postgraduate degree",
                        "asks for a postgraduate degree", m.group(0)))
 
+
+def _interest_and_skill_points(title: str, text: str, w: Weights, c: _Compiled, reasons: list[Reason]) -> None:
+    """Points for the person's interests and skills mentioned in the advert."""
+    add = reasons.append
     if c.interests:
         hits = [name for name, rx in c.interests if rx.search(f"{title}\n{text}")]
         if hits:
@@ -550,19 +587,28 @@ def score(job: dict, goal: Goal | None = None, weights: Weights | None = None) -
         capped = min(skill_points, w.skill_cap)
         add(Reason("skill", "points", capped, "Skills you have", f"skills +{capped}"))
 
+
+def _pay_rules(kind: kinds_mod.Kind, goal: Goal, w: Weights, reasons: list[Reason]) -> None:
+    """Pay under the person's lowest, or the pay an advert states."""
     floor = goal.min_pay
     top = kind.pay.max
     if top and floor and top < floor:
+        label = f"Pay is under your lowest ({pay_mod.words(floor)})"
         if w.pay_far_under_hide and top < floor * FAR_UNDER:
-            hide("pay_far_under", "filter", f"Pay is well under your lowest ({pay_mod.words(floor)})",
-                 f"pay <= GBP {top:,}", kind.pay.quote)
+            _hide(reasons, "pay_far_under", "filter", f"Pay is well under your lowest ({pay_mod.words(floor)})",
+                  f"pay <= GBP {top:,}", kind.pay.quote)
         else:
-            add(Reason("pay_under", "points", w["pay_under"], f"Pay is under your lowest ({pay_mod.words(floor)})",
-                       f"pay <= GBP {top:,}", kind.pay.quote))
+            reasons.append(Reason("pay_under", "points", w["pay_under"], label, f"pay <= GBP {top:,}",
+                                  kind.pay.quote))
     elif top:
-        add(Reason("pay", "points", 0, f"Pays up to {pay_mod.words(top)} a year", f"pay to GBP {top:,}",
-                   kind.pay.quote))
+        reasons.append(Reason("pay", "points", 0, f"Pays up to {pay_mod.words(top)} a year", f"pay to GBP {top:,}",
+                              kind.pay.quote))
 
+
+def _board_and_age_points(job: dict, w: Weights, reasons: list[Reason]) -> None:
+    """Points for a small or specialist source and for how recently the advert was posted."""
+    add = reasons.append
+    source = job.get("source") or ""
     size = job.get("board_size")
     if source in NICHE_SOURCES:
         add(Reason("niche_source", "points", w["niche_source"], "Found on a small, specialist site", "niche source"))
@@ -573,13 +619,52 @@ def score(job: dict, goal: Goal | None = None, weights: Weights | None = None) -
         add(Reason("small_employer", "points", w["small_employer_mid"], f"Smaller employer: {size} open roles", ""))
 
     age = _age_days(job.get("posted_at"))
-    if age is not None:
-        if age <= FRESH_DAYS:
-            add(Reason("fresh", "points", w["fresh"], f"Posted {age} days ago", "fresh"))
-        elif age > STALE_DAYS:
-            add(Reason("stale", "points", w["stale"], f"Posted {age} days ago", f"{age}d old"))
-        elif age > OLD_DAYS:
-            add(Reason("old", "points", w["old"], f"Posted {age} days ago", f"{age}d old"))
+    if age is None:
+        return
+    if age <= FRESH_DAYS:
+        add(Reason("fresh", "points", w["fresh"], f"Posted {age} days ago", "fresh"))
+    elif age > STALE_DAYS:
+        add(Reason("stale", "points", w["stale"], f"Posted {age} days ago", f"{age}d old"))
+    elif age > OLD_DAYS:
+        add(Reason("old", "points", w["old"], f"Posted {age} days ago", f"{age}d old"))
+
+
+def score(job: dict, goal: Goal | None = None, weights: Weights | None = None) -> Scored:
+    """Every rule's verdict on one job; pure, no database and no network."""
+    if goal is None:
+        from jobhunt.find.goal import current
+        goal = current()
+    w = weights or current_weights()
+    c = compiled(goal, w)
+    title = job.get("title") or ""
+    text = job.get("description") or ""
+    company = job.get("company") or ""
+    location = job.get("location") or ""
+    source = job.get("source") or ""
+    kind = kinds_mod.classify(title, text, job.get("salary"))
+    student = goal.is_student()
+    title_rules = source not in TITLE_RULES_SKIP
+    reasons: list[Reason] = []
+
+    training_points = _employer_rules(job, goal, w, c, reasons)
+    where, place_points, place_note = _clearance_and_place_rules(job, goal, w, c, reasons)
+    role_points: Reason | None = None
+    if title_rules:
+        role_points = _role_title_rules(title, text, goal, w, c, reasons)
+        _kind_filter_rules(title, kind, goal, reasons)
+    _eligibility_sector_and_unpaid_rules(text, kind, goal, student, reasons)
+    _pattern_and_place_reasons(location, text, goal, w, where, place_points, place_note, reasons)
+    if training_points:
+        reasons.append(Reason("training_scheme", "points", training_points, "Makes you repay training costs",
+                              "train-and-place: check bond and repayment terms"))
+    if role_points is not None:
+        reasons.append(role_points)
+    _kind_points(title, text, kind, goal, w, student, title_rules, reasons)
+    _agency_and_source_rules(company, source, goal, w, reasons)
+    _requirement_rules(text, goal, w, reasons)
+    _interest_and_skill_points(title, text, w, c, reasons)
+    _pay_rules(kind, goal, w, reasons)
+    _board_and_age_points(job, w, reasons)
 
     points = w["base"] + sum(r.points for r in reasons if not r.hide)
     base = max(SCORE_RANGE[0], min(SCORE_RANGE[1], points))
