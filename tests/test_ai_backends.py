@@ -80,6 +80,9 @@ class Roles(InHome):
 
 class Provider(InHome):
     def test_the_ai_provider_never_changes_because_ollama_stopped(self):
+        # the probes are faked, so the suggestion may look; a test run otherwise never asks Ollama (26c9a1cc)
+        self.enterContext(mock.patch.dict("os.environ", {"HAL_TEST_REAL_AI": "1"}))
+        self.enterContext(mock.patch.object(ai_catalog, "hal_answers", return_value=False))
         with mock.patch.object(ai_catalog, "ollama_answers", return_value=True), \
                 mock.patch.object(ai_catalog.sys, "platform", "linux"):
             self.assertEqual(provider.current(), "local")
