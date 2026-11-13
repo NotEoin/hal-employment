@@ -12,7 +12,9 @@ Design decisions, each with its reason:
   react-dom is React). A package not in it keeps its own name: guessing a name would be the AI adding
   tools, which the plan forbids (sections plan, 2026-11-09).
 - Files that are a tool by themselves (a Dockerfile, a Godot or Unity project) are listed in `FILE_TOOLS`;
-  their quote is the file's first line.
+  their quote is the file's first line. A Dockerfile counts however deep it is and when named for its image
+  (`Dockerfile.box`, `app.dockerfile`), since a project with packages keeps one beside each: Docker was told
+  as a gap for a project that runs its agent in a Docker box (eval, 2026-11-12).
 - Every manifest is read with a size cap (`MANIFEST_MAX`) and a broken one gives no tools, never an error:
   one unreadable file must not stop the rest of the project being read.
 """
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import tomllib
 import xml.etree.ElementTree as ET
@@ -82,7 +85,7 @@ TOOLS: dict[str, str] = {
     "flux": "Flux.jl",
 }
 # Files that are a tool themselves (lower-case name -> tool).
-FILE_TOOLS = {"dockerfile": "Docker", "docker-compose.yml": "Docker Compose", "docker-compose.yaml": "Docker Compose",
+FILE_TOOLS = {"docker-compose.yml": "Docker Compose", "docker-compose.yaml": "Docker Compose",
               "compose.yml": "Docker Compose", "compose.yaml": "Docker Compose", "project.godot": "Godot",
               "cmakelists.txt": "CMake", "makefile": "Make", "terraform.tf": "Terraform", "main.tf": "Terraform"}
 FILE_SUFFIX_TOOLS = {".prj": "MATLAB", ".mlx": "MATLAB", ".slx": "Simulink", ".uproject": "Unreal Engine",
@@ -299,6 +302,24 @@ def _folders(folder: Path) -> Iterator[Path]:
         yield from (p for p in subs if p.name not in SKIP_DIRS and not p.name.startswith("."))
 
 
+def _is_dockerfile(lower: str) -> bool:
+    return lower == "dockerfile" or lower.startswith("dockerfile.") or lower.endswith(".dockerfile")
+
+
+def _first_line(path: Path) -> str:
+    return next((ln.strip() for ln in _text(path).splitlines() if ln.strip()), path.name)[:120]
+
+
+def _deep_dockerfile(folder: Path) -> Path | None:
+    """The first Dockerfile anywhere in the project, outside skipped and hidden folders."""
+    for here, dirs, names in os.walk(folder):
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
+        for name in sorted(names):
+            if _is_dockerfile(name.lower()) and not Path(here, name).is_symlink():
+                return Path(here, name)
+    return None
+
+
 def read(folder: Path) -> list[Dep]:
     """Every direct dependency the project's manifests declare, and the files that are tools, as `Dep`s."""
     out: list[Dep] = []
@@ -315,10 +336,13 @@ def read(folder: Path) -> list[Dep]:
                 if Path(lower).match(pattern) and not (pattern == "description" and here != folder):
                     text = _text(path)
                     out += _found(text, rel, parse(text)) if text else []
-            tool = FILE_TOOLS.get(lower) or FILE_SUFFIX_TOOLS.get(path.suffix.lower())
+            tool = ("Docker" if _is_dockerfile(lower) else
+                    FILE_TOOLS.get(lower) or FILE_SUFFIX_TOOLS.get(path.suffix.lower()))
             if tool:
-                first = next((ln.strip() for ln in _text(path).splitlines() if ln.strip()), path.name)
-                out.append(Dep(tool, first[:120], rel, 1))
+                out.append(Dep(tool, _first_line(path), rel, 1))
+    deep = None if any(d.tool == "Docker" for d in out) else _deep_dockerfile(folder)
+    if deep:
+        out.append(Dep("Docker", _first_line(deep), deep.relative_to(folder).as_posix(), 1))
     if (folder / UNITY_MARKER).is_file():
         first = next(iter(_text(folder / UNITY_MARKER).strip().splitlines()), "Unity")
         out.append(Dep("Unity", first[:120], UNITY_MARKER, 1))

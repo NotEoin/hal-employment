@@ -10,6 +10,10 @@ What changed in each version, in plain words.
   so Hal re-read the unchanged note twice an hour. It is now left alone, with any links Hal added to
   it, until a task, application or match changes.
 
+- **Docker counts when your project builds a Docker image.** A project whose Dockerfiles sat in a package's
+  folder, or were named for their image (`Dockerfile.box`), did not list Docker in its tools, so a job asking
+  for Docker called it a gap. A Dockerfile anywhere in the project now adds Docker to its tools and skills.
+
 - **Removing a GitHub project on Windows removes Hal's copy of it.** Git keeps some of its files read-only,
   and Windows would not delete them, so the copy stayed on disk.
 

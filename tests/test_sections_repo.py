@@ -78,6 +78,15 @@ class Stack(unittest.TestCase):
         self.assertNotIn("testthat", got)
         self.assertNotIn("python", {t.lower() for t in got})
 
+    def test_a_dockerfile_deep_in_a_package_or_named_for_its_image_is_docker(self):
+        """A project that runs its agent in a Docker box was told Docker was a gap: its Dockerfiles were
+        `packages/sandbox/images/Dockerfile.box.in`, too deep and not named `Dockerfile` (eval, 2026-11-12)."""
+        got = self.tools({"packages/sandbox/images/Dockerfile.box.in": "FROM debian:12-slim\n",
+                          "packages/sandbox/node_modules/x/Dockerfile": "FROM node:22\n"})
+        self.assertEqual((got["Docker"].said, got["Docker"].file),
+                         ("FROM debian:12-slim", "packages/sandbox/images/Dockerfile.box.in"))
+        self.assertEqual(self.tools({"web/app.dockerfile": "FROM nginx\n"})["Docker"].file, "web/app.dockerfile")
+
 
 class Folder(unittest.TestCase):
     def test_languages_are_counted_by_size_without_vendored_generated_or_lfs_files(self):
