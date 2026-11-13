@@ -25,7 +25,7 @@ repository, not a collection of projects). This module gives each its name, its 
   merges two projects that each hold one.
 - Each folder gets one note (`write_notes`) listing its files' notes, which link back to it under "Part of",
   as a course's do; its data files and figures are listed in it (`attach`).
-- A tidy (`find_in_record`, `fold_cards`) holds a record an older read filed to the same rules: it finds the
+- A tidy (`refile_projects`, `fold_cards`) holds a record an older read filed to the same rules: it finds the
   project folders of the files read before, takes them out of the course units they were split into, and
   files each project fact from inside again on the folder's project card, hiding a card left with nothing
   as "Part of <project>" (`store.fold_away`). Before that it takes apart what older rules folded and merged
@@ -341,7 +341,7 @@ def _root(path: Path, rel: str) -> Path | None:
     return path.parents[depth - 1] if 0 < depth <= len(path.parents) else None
 
 
-def find_in_record(con: sqlite3.Connection, batch: str, vault: Path) -> int:
+def refile_projects(con: sqlite3.Connection, batch: str, vault: Path) -> int:
     """Finds the project folders of the files older reads filed and puts them in the batch, to get their notes;
     their files leave the course units they were split into, whose notes go. Returns how many were found."""
     from jobhunt.ingest import tidy

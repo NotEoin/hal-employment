@@ -1117,7 +1117,7 @@ already covers, copies of one project via `versions`), facts its role may not gi
 scrubbed, code text fenced, and the notes only the AI can settle (converted course material, unsure rich
 documents) moved into the batch to be read again in place, unless the note's `read_by: ai` (and
 `lecture_note`, for course material) says the AI already read it under these rules. Before that,
-`projects.find_in_record` walks the folders older reads came from again, adds each project folder to the
+`projects.refile_projects` walks the folders older reads came from again, adds each project folder to the
 batch for its note, takes its files out of their course units (`unit` cleared) and drops those units' notes.
 `tidy.finish` runs when nothing is pending:
 source notes no item points at are deleted with their facts and copied originals, entity notes outside

@@ -15,7 +15,7 @@ The person presses **Tidy my record** (or runs `jobhunt record tidy`); the `reco
    project keep only the newest copy's note (`versions`). An empty note goes, and a note made from slides is
    course material (`vaultnotes`). Each project folder of the person's own work (`group.projects`) is found
    and put in the batch for its note, and the course units an older read split it into go
-   (`projects.find_in_record`).
+   (`projects.refile_projects`).
 3. Notes the AI should read again are put back in the batch, to be rewritten in place (`engine._again`):
    converted course material, for a lecture note, and documents whose role the rules cannot settle, such
    as a report no AI has judged as the person's or someone else's. Each is read once: a note the AI wrote
@@ -225,7 +225,7 @@ def prepare(con: sqlite3.Connection, batch: str, vault: Path) -> dict:
     templates = vaultnotes.Templates.of(con.execute("SELECT DISTINCT path, rel FROM ingest_items "
                                                     "WHERE kind = 'file'").fetchall())
     done["older_version"] = _versions(con, vault)
-    done["projects"] = projects.find_in_record(con, batch, vault)
+    done["projects"] = projects.refile_projects(con, batch, vault)
     rows = con.execute("""SELECT * FROM ingest_items WHERE state = 'done' AND note IS NOT NULL
                           AND kind IN ('file', 'repo', 'page') ORDER BY rank, kind = 'file', rel""").fetchall()
     for row in rows:
