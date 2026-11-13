@@ -169,11 +169,11 @@ def _story_answer(question: str, found: list[planning.Story], used: dict[str, in
         if drafts.why_question(question):
             story = _why_story(left, used, pairing, ranking)
             tied = pairing is not None and story is _story_of(pairing.item, [story])
-            said = [paragraphs.settle(story, paragraphs.why(question, pairing, tied), scope)]
+            said = [paragraphs.write_paragraph(story, paragraphs.why(question, pairing, tied), scope)]
         else:
             pool = _fitting(left, list(ranking)) if drafts.fit_question(question) else left
             chosen = planning.choose(pool, planning.examples_wanted(question), used)
-            said = [paragraphs.settle(s, paragraphs.answer(question, k, len(chosen)), scope)
+            said = [paragraphs.write_paragraph(s, paragraphs.answer(question, k, len(chosen)), scope)
                     for k, s in enumerate(chosen)]
         out += said
         if any(p.text for p in said):
@@ -191,7 +191,7 @@ def _story_message(found: list[planning.Story], scope: paragraphs.Scope, after: 
     out: list[paragraphs.Paragraph] = []
     for story in sorted(found, key=lambda s: used.get(s.key, 0))[:STORY_TRIES]:   # stable: best first at a tie
         shape = paragraphs.message(after, rank.fits(story.name, list(ranking)))
-        out.append(paragraphs.settle(story, shape, scope))
+        out.append(paragraphs.write_paragraph(story, shape, scope))
         if out[-1].text:
             used[story.key] = used.get(story.key, 0) + 1
             break

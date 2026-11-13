@@ -50,7 +50,7 @@ class InAParagraph(unittest.TestCase):
         good = "Quill is my offline assistant over personal notes, in Lua. It answers questions over my notes offline."
         fake = FakeAI([f"{good} I used Haskell to write its parser.", good])
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            done = paragraphs.settle(QUILL_STORY, paragraphs.LETTER, replace(SCOPE, studied=("Haskell",)))
+            done = paragraphs.write_paragraph(QUILL_STORY, paragraphs.LETTER, replace(SCOPE, studied=("Haskell",)))
         again = fake.calls("Write")[1]
         self.assertIn('- "I used Haskell to write its parser.": Haskell was only studied in your course', again)
         self.assertEqual((done.text, done.redrafted, done.listed), (good, True, ""))

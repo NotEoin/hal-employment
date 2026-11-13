@@ -115,13 +115,13 @@ def _letter_bodies(chosen: list[planning.Story], spare: list[planning.Story], sh
     """The letter's paragraphs: one per `chosen` story, then, while one was dropped or the letter is under half
     its length setting (`_short_middle`), the next `spare` project or job story with facts, up to
     `LETTER_TRIES` of them. A letter came out at 56 words when three paragraphs were dropped (2026-11-08)."""
-    bodies = [paragraphs.settle(s, shape, scope) for s in chosen]
+    bodies = [paragraphs.write_paragraph(s, shape, scope) for s in chosen]
     left = [s for s in spare if s not in chosen and s.kind in (planning.PROJECT, planning.JOB) and s.facts]
     for story in left[:LETTER_TRIES]:
         if not _short_middle(bodies, len(chosen), words):
             break
         log.info("letter: one more story, %s, as the letter is short of paragraphs or words", story.name or story.key)
-        bodies.append(paragraphs.settle(story, shape, scope))
+        bodies.append(paragraphs.write_paragraph(story, shape, scope))
     return bodies
 
 
@@ -143,7 +143,7 @@ def _story_letter(con, brief: Brief, scope: paragraphs.Scope, *, plan: list[plan
                                         "\n".join(b.story.words() for b in bodies if b.text))
     middle = tuple((b.story.name, b.text) for b in bodies if b.text)
     facts_said = letter_frame(brief, scope, pairing, told, modules, middle)
-    framed = frame.settle(facts_said, scope)
+    framed = frame.write_frame(facts_said, scope)
     cards = list(scope.cards)
     text = "\n\n".join(p for p in (framed.opening, *(b.text for b in bodies), framed.closing) if p)
     letter = plain.tidy(relocation.without_own_move(text, eligibility.person(con)), cards)

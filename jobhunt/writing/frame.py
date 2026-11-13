@@ -1,7 +1,7 @@
 """A letter's opening and closing: drafted by the model from the fixed facts of who is writing, the role and the
 reason for this employer, and checked like a paragraph.
 
-`Facts` holds what the two paragraphs say (`pack.letter_frame` fills it), `settle(facts, scope)` asks the AI once
+`Facts` holds what the two paragraphs say (`pack.letter_frame` fills it), `write_frame(facts, scope)` asks the AI once
 for both (prompt `letter_frame`), checks each with no AI (`problems`), asks once more when either fails, and
 returns them (`Framed`).
 
@@ -201,7 +201,7 @@ def motive_problems(text: str, facts: Facts, cards: list[dict] = ()) -> list[str
     return out
 
 
-def settle(facts: Facts, scope: Scope) -> Framed:
+def write_frame(facts: Facts, scope: Scope) -> Framed:
     """A letter's opening and closing (prompt `letter_frame`), each checked with no AI and the pair drafted once
     more when either fails; an opening still failing is the built sentence of `writing.opening`, a closing still
     failing is left out."""

@@ -1,7 +1,7 @@
 """One paragraph about one piece of work: drafted from that work's facts alone, checked against them alone, and
 drafted again once when something is wrong.
 
-`settle(story, shape, scope)` asks the AI (prompt `story_paragraph`) for one paragraph about one story of the
+`write_paragraph(story, shape, scope)` asks the AI (prompt `story_paragraph`) for one paragraph about one story of the
 evidence plan (`writing.plan.Story`) in a shape (`Shape`: a letter's middle, an answer, a message's body), finds
 with no AI what is wrong with it against that story (`problems`), asks the AI once whether it says anything the
 story's facts do not (`verify`, prompt `paragraph_verify`), drafts it once more with the problems stated, and
@@ -643,7 +643,7 @@ def question_problems(text: str, story: Story, scope: Scope, shape: Shape) -> li
 def untied(text: str, story: Story, scope: Scope, shape: Shape) -> list[Problem]:
     """What a "why here" answer (`Shape.employer`) lacks: its first sentence restates the advert
     (`motive.restated`), or no later sentence names its work (`NOT_TIED`); [] else, and [] for other shapes.
-    It asks for a redraft but never cuts or drops a paragraph (`settle`)."""
+    It asks for a redraft but never cuts or drops a paragraph (`write_paragraph`)."""
     said = writing_check.sentences(text)
     if not shape.employer or not said:
         return []
@@ -767,7 +767,7 @@ def _doubted(out: Paragraph, text: str, found: list[Problem], story: Story, scop
     return out
 
 
-def settle(story: Story, shape: Shape, scope: Scope) -> Paragraph:
+def write_paragraph(story: Story, shape: Shape, scope: Scope) -> Paragraph:
     """One paragraph about `story` in `shape`: drafted, checked (`problems`, then `verify`), drafted once more
     with what is wrong, then kept, kept without its failing sentences, or dropped; never dropped for the AI
     check alone (see the module notes)."""

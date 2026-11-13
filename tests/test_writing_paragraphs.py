@@ -187,7 +187,7 @@ GOOD = "Quill is my offline assistant over personal notes, in Lua. It answers qu
 class Settle(unittest.TestCase):
     def settle(self, fake: FakeAI, story: Story = QUILL_STORY) -> paragraphs.Paragraph:
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            return paragraphs.settle(story, paragraphs.LETTER, SCOPE)
+            return paragraphs.write_paragraph(story, paragraphs.LETTER, SCOPE)
 
     def test_a_paragraph_saying_only_its_facts_needs_no_check_and_no_redraft(self):
         fake = FakeAI([GOOD])
@@ -286,7 +286,7 @@ class Ending(unittest.TestCase):
         # generic filler tie forced onto a paragraph's last sentence by a redraft
         fake = FakeAI([GOOD])
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            done = paragraphs.settle(QUILL_STORY, paragraphs.letter(250, 3), SCOPE)
+            done = paragraphs.write_paragraph(QUILL_STORY, paragraphs.letter(250, 3), SCOPE)
         self.assertEqual((done.text, done.redrafted, len(fake.calls("Write"))), (GOOD, False, 1))
 
     def test_a_letter_paragraph_ties_to_the_job_only_when_a_fact_clearly_fits(self):
@@ -302,7 +302,7 @@ class Frame(unittest.TestCase):
 
     def settle(self, fake: FakeAI) -> frame.Framed:
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            return frame.settle(self.FACTS, SCOPE)
+            return frame.write_frame(self.FACTS, SCOPE)
 
     def test_the_opening_is_drafted_from_who_is_writing_the_role_and_the_reason(self):
         good = ("I am Avery Quillon, a first-class History graduate from Made-up University, and I am applying "
@@ -349,7 +349,7 @@ class Reframed(unittest.TestCase):
         claim = "Quill answers questions over my notes offline. Algorithm Design gave me the C++ knowledge for it."
         fake = FakeAI([claim, GOOD])
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            done = paragraphs.settle(QUILL_STORY, paragraphs.answer("Tell us about your skills."), scope)
+            done = paragraphs.write_paragraph(QUILL_STORY, paragraphs.answer("Tell us about your skills."), scope)
         self.assertIn("nothing in your facts ties Algorithm Design to C++", fake.calls("Write")[1])
         self.assertEqual(done.text, GOOD)
 
@@ -402,7 +402,7 @@ class Retold(unittest.TestCase):
                   "your ticket triage service.")
         fake = FakeAI([retold, self.GOOD])
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            done = frame.settle(self.FACTS, SCOPE)
+            done = frame.write_frame(self.FACTS, SCOPE)
         asked = fake.calls("Write")
         self.assertIn(frame.RETOLD_SAID.format(work="Quill"), asked[1])
         self.assertIn(frame.NAMES_WORK.format(work="Quill"), asked[1])
@@ -441,7 +441,7 @@ class Named(unittest.TestCase):
         unnamed = "I wrote a 113-test suite. It was for Quill Employment."
         fake = FakeAI([unnamed, "Quill Employment has a 113-test suite."])
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            done = paragraphs.settle(EMPLOYMENT_STORY, paragraphs.answer("Tell us about testing."), SCOPE)
+            done = paragraphs.write_paragraph(EMPLOYMENT_STORY, paragraphs.answer("Tell us about testing."), SCOPE)
         self.assertIn("does not name Quill Employment in its first sentence", fake.calls("Write")[1])
         self.assertEqual((done.text, done.redrafted), ("Quill Employment has a 113-test suite.", True))
 
@@ -489,7 +489,7 @@ class WhyHere(unittest.TestCase):
         self.assertEqual(paragraphs.untied(good, EMPLOYMENT_STORY, SCOPE, shape), [])
         fake = FakeAI([untied, good])
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            done = paragraphs.settle(EMPLOYMENT_STORY, shape, SCOPE)
+            done = paragraphs.write_paragraph(EMPLOYMENT_STORY, shape, SCOPE)
         self.assertIn(paragraphs.NOT_TIED.format(card="Quill Employment"), fake.calls("Write")[1])
         self.assertEqual(done.text, good)
 
@@ -547,7 +547,7 @@ class MessageBody(unittest.TestCase):
         theirs = "Quill answers questions over my notes offline, in Lua. How does your triage service sort tickets?"
         fake = FakeAI([own, theirs])
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            done = paragraphs.settle(QUILL_STORY, paragraphs.message("Hi."), SCOPE)
+            done = paragraphs.write_paragraph(QUILL_STORY, paragraphs.message("Hi."), SCOPE)
         self.assertIn(paragraphs.QUESTION_OFF, fake.calls("Write")[1])
         self.assertEqual(done.text, theirs)
 
@@ -695,7 +695,7 @@ class Voice(unittest.TestCase):
         fake = FakeAI([f"{GOOD} I rely on it each week."])
         scope = replace(SCOPE, voice=(VOICE,))
         with mock.patch.object(ai, "chat_json", fake.chat_json):
-            paragraphs.settle(QUILL_STORY, paragraphs.LETTER, scope)
+            paragraphs.write_paragraph(QUILL_STORY, paragraphs.LETTER, scope)
         request = fake.calls("Write")[0]
         self.assertIn(f"{paragraphs.VOICE_HEADING}\n<<<\n{VOICE}\n>>>", request)
         self.assertIn(VOICE, frame.Facts("Avery Quillon", "a graduate", "Graduate Developer", "Brightwater Tools")

@@ -514,7 +514,7 @@ runs: tests use `tests/support/fake_claude/`.
   `story_paragraph`, shape `paragraphs.letter(cvdocs.letter_words, n)`: 3 to 4 sentences, a share of the
   letter's length after `paragraphs.FRAME_WORDS` (70) and never under 60 to 90 words, the work named in the
   first) and settled
-  by `paragraphs.settle`. The checks with no AI (`paragraphs.problems`, `sentence_problems`) read the
+  by `paragraphs.write_paragraph`. The checks with no AI (`paragraphs.problems`, `sentence_problems`) read the
   paragraph against its story only, through `paragraphs.Scope` (`pack.paragraph_scope`: every story and
   card, `pack.known_tools`, the employer's words and the stage line, the person's names and settings
   wording): a number or a known tool its facts lack (numbers in words read whole by `paragraphs.numbers`:
@@ -561,7 +561,7 @@ runs: tests use `tests/support/fake_claude/`.
   project or job story with facts of `rank.Told.others`, up to `pack.LETTER_TRIES` (3), while fewer
   paragraphs stand than were chosen or they and `paragraphs.FRAME_WORDS` come to under `pack.SHORT_MIDDLE`
   (half) of `cvdocs.letter_words` (`pack._short_middle`). The
-  opening and closing are one call (`writing/frame.py`, `frame.settle`, prompt `letter_frame`) from `frame.Facts`
+  opening and closing are one call (`writing/frame.py`, `frame.write_frame`, prompt `letter_frame`) from `frame.Facts`
   (`pack.letter_frame`: the name, `opening.described`, the role, the motivation pairing, the stories the
   middle tells and today), checked the same way with the role and the institution required. The opening's
   reason is one concrete thing about the employer: the request gives the pairing's employer fact alone, never
