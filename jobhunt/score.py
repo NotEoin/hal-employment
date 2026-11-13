@@ -38,9 +38,3 @@ def prefilter(job: dict) -> bool:
     where, _points, _note = rules.place(c, w, job.get("location"), "")
     return where is not None
 
-
-def __getattr__(name: str):
-    # old constants, read live
-    if name == "SALARY_FLOOR":
-        return goal_mod.current().min_pay
-    raise AttributeError(name)

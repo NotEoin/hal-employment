@@ -5,9 +5,6 @@
 Callers move to `jobhunt.ai.chat` with a `purpose` as their owners touch them. `LLMUnavailable` is the new
 one, so `except llm.LLMUnavailable` catches every kind. `undash` and `available` stay here.
 
-`HAL_ROOT` (Hal's own folder, for its retrieval library) is read from the `addon.hal_root` setting when used;
-it has no built-in default, because the folder is the owner's and other installs have none.
-
 `counted()` counts the calls made through `chat` and `chat_json` inside a block, so a caller can log how many
 one piece of work took: a pack made about 55 calls before its drafts were told one paragraph per piece of work
 (2026-11-08), and the count per pack is how the change is measured. It is a context variable, so it counts
@@ -26,15 +23,6 @@ from .ai.base import LLMUnavailable
 __all__ = ["Calls", "LLMUnavailable", "available", "chat", "chat_json", "counted", "undash"]
 
 OLD_TIMEOUT_S = 180       # what the old chat() waited when a caller named no timeout
-
-
-def __getattr__(name):  # old constant, read live (PEP 562)
-    if name == "HAL_ROOT":
-        from .core import settings
-
-        root = settings.get("addon.hal_root") or ""
-        return Path(root).expanduser() if root else Path("hal-not-configured")
-    raise AttributeError(name)
 
 
 @dataclass
