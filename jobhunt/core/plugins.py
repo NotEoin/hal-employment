@@ -18,8 +18,10 @@ KINDS = ("routes", "settings", "actions", "health", "home", "search", "schedule"
 PACKAGE = "jobhunt"
 SKIP_DIRS = {"static", "__pycache__", "prompts", "templates"}   # data folders, never code to import
 # Code found another way: migrations run in order through `core.db.migrate`, and commands through
-# `cli.register_all`. Without this `0003_settings.py` and `cli/settings.py` would load as settings.
-SKIP_PACKAGES = (("core", "db", "migrations"), ("cli",))
+# `cli.register_all`, and the settings catalogue by `core.settings`. Without this `0003_settings.py` and
+# `cli/settings.py` would load as settings, and the catalogue's `health.py` and `schedule.py` as health
+# checks and schedule jobs.
+SKIP_PACKAGES = (("core", "db", "migrations"), ("cli",), ("core", "settings", "catalog"))
 
 log = logging.getLogger(__name__)
 FAILED: dict[str, str] = {}             # dotted module name -> the error, for the health check
