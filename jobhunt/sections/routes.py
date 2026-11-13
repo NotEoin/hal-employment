@@ -154,7 +154,7 @@ def _folder(req: Request, raw: str) -> str:
     path = Path(raw.strip()).expanduser().resolve()
     if not path.is_dir():
         raise BadRequest(f"{raw} is not a folder. Choose a folder that exists.", field="locator")
-    if _inside(path, Path(record._live("VAULT"))) or _inside(path, paths.data_dir()):
+    if _inside(path, record.folder()) or _inside(path, paths.data_dir()):
         raise BadRequest(f"{raw} is inside your record or Hal's own folder, so Hal already has it.",
                          field="locator")
     return str(path)

@@ -21,7 +21,7 @@ def _count_files(folder: Path) -> int:
 
 def ensure() -> dict:
     """Makes or finds the record folder; says which, where, and how many files it already holds."""
-    folder = Path(record._live("VAULT"))
+    folder = record.folder()
     existed = folder.is_dir()
     files_before = _count_files(folder) if existed else 0
     evidence.make_default()

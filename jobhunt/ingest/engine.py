@@ -86,7 +86,7 @@ def new_batch() -> str:
 
 def vault() -> Path:
     """The record folder, made when it is not there yet: the person asked for files to go into it."""
-    folder = Path(record._live("VAULT"))
+    folder = record.folder()
     folder.mkdir(parents=True, exist_ok=True)
     return folder
 

@@ -109,7 +109,7 @@ def checked_folder(raw: str) -> Path:
     path = Path(raw.strip()).expanduser().resolve()
     if not path.exists():
         raise ValueError(f"{raw} is not there. Choose a folder that exists.")
-    if _inside(path, Path(record._live("VAULT"))) or _inside(path, paths.data_dir()):
+    if _inside(path, record.folder()) or _inside(path, paths.data_dir()):
         raise ValueError(f"{raw} is inside your record or Hal's own folder, so Hal already has it.")
     return path
 

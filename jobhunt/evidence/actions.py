@@ -17,7 +17,7 @@ EXAMPLE_NOTE = "# First Aid\n\nEmergency first aid at work, completed 5 March 20
 
 def _example_record(world) -> Path:
     """A one-note record inside the made-up world, for gate G9."""
-    folder = Path(record._live("VAULT"))
+    folder = record.folder()
     (folder / "Certificates").mkdir(parents=True, exist_ok=True)
     (folder / "Certificates" / "First Aid.md").write_text(EXAMPLE_NOTE, encoding="utf-8")
     return folder
@@ -40,7 +40,7 @@ def sync(ctx) -> dict:
     """Turns new documents into notes and re-reads changed ones; says what changed. With no record folder yet
     there is nothing to read: a fresh install showed every hourly read as an error naming a path (2026-11-12)."""
     ctx.step("Reading the files in your record")
-    if not Path(record._live("VAULT")).exists():
+    if not record.folder().exists():
         ctx.changed("Nothing to read yet: Hal makes your record folder when you first add something.")
         return {"converted": [], "changed": 0, "removed": 0}
     out = record.sync()

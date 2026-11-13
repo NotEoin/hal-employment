@@ -280,7 +280,7 @@ def source_of(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
 
 def vault() -> Path:
     """The record folder the notes go in."""
-    return Path(record._live("VAULT"))
+    return record.folder()
 
 
 def ensure_record() -> Path:

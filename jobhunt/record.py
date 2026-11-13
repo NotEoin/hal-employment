@@ -74,6 +74,11 @@ def _live(name: str):
     return globals()[name] if name in globals() else _LIVE[name]()
 
 
+def folder() -> Path:
+    """The record folder: the setting `record.folder`, or the default in Documents."""
+    return Path(_live("VAULT"))
+
+
 # What is converted to notes; Markdown notes themselves are indexed as they are.
 DOCUMENTS = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".epub", ".msg", ".txt")
 OPENDOCUMENT = (".odt", ".odp", ".ods")   # LibreOffice's own formats, read from their XML (`_opendocument`)

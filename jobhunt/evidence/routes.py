@@ -82,6 +82,8 @@ def _group(f: dict) -> str:
 @route("GET", "/api/v2/record")
 def overview(req) -> dict:
     """The page: where the folder is, what is in it by group, and when Hal last read it."""
+    from jobhunt.core import settings
+
     st = record.status()
     found = record.files()
     groups: dict[str, list[dict]] = {}
@@ -92,7 +94,7 @@ def overview(req) -> dict:
                         "sample": ", ".join(Path(f["name"]).stem for f in items[:SAMPLE_NAMES])}
                        for name, items in sorted(groups.items(), key=lambda kv: (kv[0] == OTHER_GROUP, kv[0]))],
             "last_read": st["read"], "files": len(found), "notes": st["notes"],
-            "private_folders": sorted(record._setting("record.private_folders") or [])}
+            "private_folders": sorted(settings.get("record.private_folders") or [])}
 
 
 @route("GET", "/api/v2/record/files")
@@ -164,7 +166,7 @@ def open_folder(folder: Path) -> None:
 @route("POST", "/api/v2/record/open-folder", local_only=True)
 def open_record(req) -> None:
     """Opens the record folder on this computer."""
-    folder = Path(record._live("VAULT"))
+    folder = record.folder()
     if not folder.exists():
         raise NotFound("Your record folder is not there yet. Make it first.")
     open_folder(folder)
@@ -184,7 +186,7 @@ def choose(req) -> dict:
 
 def make_default() -> Path:
     """Makes the record folder with its starter folders and "Start Here.md"; leaves anything there alone."""
-    folder = Path(record._live("VAULT"))
+    folder = record.folder()
     for name in STARTER_FOLDERS:
         (folder / name).mkdir(parents=True, exist_ok=True)
     start = folder / "Start Here.md"

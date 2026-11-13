@@ -75,7 +75,7 @@ def drop_folder() -> Path:
     from jobhunt.core import settings
 
     chosen = str(settings.get("record.drop_folder") or "").strip()
-    return Path(chosen).expanduser() if chosen else Path(record._live("VAULT")) / DROP_DEFAULT
+    return Path(chosen).expanduser() if chosen else record.folder() / DROP_DEFAULT
 
 
 def drop_origin() -> str:
