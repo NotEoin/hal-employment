@@ -14,8 +14,9 @@ from urllib.parse import quote
 from support import people
 from test_pack import POLL_S, WAIT_S, add_job, as_applicant
 
-from jobhunt import pack, prep, record
+from jobhunt import pack, record
 from jobhunt.core import runner
+from jobhunt.docs import prep
 
 
 class Notes(unittest.TestCase):

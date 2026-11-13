@@ -14,9 +14,10 @@ from urllib.parse import quote
 from support import people
 from test_pack import POLL_S, WAIT_S, add_job, as_applicant, section
 
-from jobhunt import browser, contacts, documents, pack
+from jobhunt import browser, documents, pack
 from jobhunt.core import runner
 from jobhunt.cvstudio import types as cvtypes
+from jobhunt.docs import contacts
 
 
 def profile(name: str, role: str, company: str) -> dict:

@@ -23,13 +23,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import contacts, documents, pack, prep
+from .. import documents, pack
 from ..apply import actions as apply_actions
 from ..apply.queries import load_job
 from ..core import runner
 from ..cvstudio import cv
 from ..writing import critique as writing_critique
 from ..writing import fields
+from . import contacts, prep
 
 WORDS_SHOWN = 200   # characters of the person's request kept in the action's parameters and its why
 

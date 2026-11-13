@@ -15,8 +15,8 @@ import json
 import re
 import time
 
-from . import ai, browser, db, documents, pack
-from .ai import gpu
+from .. import ai, browser, db, documents, pack
+from ..ai import gpu
 
 SEARCH_PAUSE = 8  # seconds between queries, so the search engine does not refuse them
 _last_query = 0.0
@@ -31,7 +31,7 @@ SUFFIX = re.compile(r"[\s,]+(ltd|limited|plc|llp|inc)\.?$", re.I)
 
 def hiring_titles() -> list[str]:
     """The job titles of the people who hire for this person's kind of role (the CV type's)."""
-    from .cvstudio import context
+    from ..cvstudio import context
 
     return list(context.build()["hiring_titles"])
 

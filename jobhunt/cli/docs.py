@@ -87,7 +87,7 @@ def cmd_check(args):
 
 def cmd_contacts(args):
     """Handles `jobhunt contacts`: finds people to contact for a job."""
-    from .. import contacts
+    from ..docs import contacts
     con = db.connect()
     found = contacts.find(con, _find(con, args.id))
     for p in found["people"]:
