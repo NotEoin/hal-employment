@@ -29,6 +29,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import time
 import urllib.error
@@ -152,6 +153,18 @@ def _git(args: list[str], token: str) -> None:
         raise OSError(out.stderr.strip()[-300:] or "git failed")
 
 
+def _remove(folder: Path) -> None:
+    """Removes a clone, or what is left of one. Git keeps its objects read-only, and Windows will not delete a
+    read-only file: removing an account left its clones behind there (CI, 2026-11-12)."""
+    for p in folder.rglob("*"):
+        if p.is_file() and not p.is_symlink():
+            try:
+                p.chmod(stat.S_IREAD | stat.S_IWRITE)
+            except OSError as e:     # rmtree below leaves what it cannot remove, as it did before
+                log.debug("could not make %s writable: %s", p, e)
+    shutil.rmtree(folder, ignore_errors=True)
+
+
 def _clone(owner: str, name: str, token: str) -> Path:
     """A fresh partial clone, or the existing one brought up to date; OSError when git fails."""
     dest = clone_dir(owner, name)
@@ -163,13 +176,13 @@ def _clone(owner: str, name: str, token: str) -> Path:
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(f".{name}.part")
-    shutil.rmtree(tmp, ignore_errors=True)
+    _remove(tmp)
     try:
         _git(["clone", "-q", f"--filter=blob:limit={BLOB_LIMIT}", f"--depth={CLONE_DEPTH}", "--no-tags", source,
               str(tmp)], token)
         tmp.rename(dest)
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _remove(tmp)
     return dest
 
 
@@ -201,7 +214,7 @@ def forget(url: str) -> None:
         owner, name = parse_url(url)
     except ValueError:
         return
-    shutil.rmtree(clone_dir(owner, name), ignore_errors=True)
+    _remove(clone_dir(owner, name))
     _meta_path(owner, name).unlink(missing_ok=True)
 
 

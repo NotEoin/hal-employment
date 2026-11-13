@@ -10,6 +10,9 @@ What changed in each version, in plain words.
   so Hal re-read the unchanged note twice an hour. It is now left alone, with any links Hal added to
   it, until a task, application or match changes.
 
+- **Removing a GitHub project on Windows removes Hal's copy of it.** Git keeps some of its files read-only,
+  and Windows would not delete them, so the copy stayed on disk.
+
 ## 2.1.0 (2026-11-12)
 
 ### What's new
