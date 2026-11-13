@@ -57,10 +57,10 @@ older rows end in `+00:00` and compare the same on 19 characters.
 `db.connect(path=None)` opens `paths.db_path()` with WAL, foreign keys and a 30 s busy timeout, then runs
 `core.db.migrate.migrate` when `PRAGMA user_version` is below `LATEST`, and raises `DataTooNew` when above.
 Only migrations make the schema: 0001 is the baseline, so `db.py` holds no `CREATE` statement. A migration
-backs up `jobs.db` first. `LATEST` is 23. Migration 0018 (`0018_old_answers`) is the one destructive
-migration: it drops the old `answers` table, because the saved answers live in `answers2` alone; every other
-migration only adds. Migration 0021 adds `writing_edits`, the person's edits of Hal's drafts (How Hal learns,
-below).
+backs up `jobs.db` first. `LATEST` is the number of the highest file in `core/db/migrations/`. Migration 0018
+(`0018_old_answers`) is the one destructive migration: it drops the old `answers` table, because the saved
+answers live in `answers2` alone; every other migration only adds. Migration 0021 adds `writing_edits`, the
+person's edits of Hal's drafts (How Hal learns, below).
 
 ## Settings (`core/settings/`)
 
