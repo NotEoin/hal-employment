@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from jobhunt import cvscore
+from jobhunt.cvstudio import pdfread
 from jobhunt.cvstudio import types as cvtypes
 
 log = logging.getLogger(__name__)
@@ -172,7 +173,7 @@ def scanner(doc: Any, profile: dict, *, pdf: Path | bytes | None = None, columns
     parts = {p.id: p for p in SCANNER}
     lines = doc_lines(doc, profile)
     text = "\n".join(lines)
-    raw = cvscore.pdf_text(pdf) if pdf is not None else text
+    raw = pdfread.text(pdf) if pdf is not None else text
     words = raw.split()
     odd = cvscore.ODD_CHAR.findall(raw)
     share = sum(1 for c in raw if not (c.isalnum() or c.isspace() or c in ".,;:-()&/%'+#@|")) / max(1, len(raw))
@@ -207,7 +208,7 @@ def scanner(doc: Any, profile: dict, *, pdf: Path | bytes | None = None, columns
 
     wide = 0
     if pdf is not None:
-        wide = sum(1 for line in cvscore.pdf_text(pdf, layout=True).splitlines() if re.search(r"\S\s{6,}\S", line))
+        wide = sum(1 for line in pdfread.text(pdf, layout=True).splitlines() if re.search(r"\S\s{6,}\S", line))
     one = columns == 1 and wide < WIDE_LINES
     out.append(_part(parts["columns"], 10 if one else 0,
                      "One column, read in order." if one else
@@ -503,7 +504,7 @@ def for_version(con: sqlite3.Connection, version_id: str, doc: Any, t: cvtypes.C
         cached = json.loads(row["type_checks"])
         if cached.get("key") == key:
             return {"scanner": json.loads(row["scanner"]), "type": cached["result"]}
-    pages = cvscore.pdf_pages(pdf) if pdf is not None else None
+    pages = pdfread.pages(pdf) if pdf is not None else None
     scan = scanner(doc, profile, pdf=pdf, columns=columns)
     checked = type_checks(doc, t, profile, pages=pages, spelling=spelling)
     con.execute("INSERT INTO cv_checks (version_id, look_id, pdf_sha, scanner, type_checks, at)"

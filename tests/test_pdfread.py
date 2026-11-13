@@ -14,7 +14,7 @@ from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt import cv, cvscore, pdfdraw
+from jobhunt import cv, pdfdraw
 from jobhunt.cvstudio import pdfread
 
 POPPLER_TIMEOUT_S = 30
@@ -155,12 +155,12 @@ class Checks(unittest.TestCase):
     def test_cv_checks_need_no_poppler(self):
         """The CV checks read the PDF themselves: with no poppler on the path they read the same text and pages."""
         pdf = draw(self, made_up_cvs()[0])
-        with_path = (cvscore.pdf_text(pdf), cvscore.pdf_text(pdf, layout=True), cvscore.pdf_pages(pdf))
+        with_path = (pdfread.text(pdf), pdfread.text(pdf, layout=True), pdfread.pages(pdf))
         empty = tempfile.mkdtemp()
         from unittest import mock
         with mock.patch.dict("os.environ", {"PATH": empty}), \
                 mock.patch.object(subprocess, "run", side_effect=FileNotFoundError("no programs")):
-            without = (cvscore.pdf_text(pdf), cvscore.pdf_text(pdf, layout=True), cvscore.pdf_pages(pdf))
+            without = (pdfread.text(pdf), pdfread.text(pdf, layout=True), pdfread.pages(pdf))
         self.assertEqual(without, with_path)
         self.assertGreater(len(without[0].split()), 30)   # a real text layer, not an empty read
 

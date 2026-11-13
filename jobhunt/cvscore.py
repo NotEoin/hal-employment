@@ -1,16 +1,14 @@
 """The CV patterns Hal's CV checks share, and a CV matched against one job's advert.
 
-`cvstudio.checks` reads its patterns (headings parsers know, cliches, weak openings, contact details) and
-the PDF readers from here; spelling lives in `writing.spelling`. Against a job, `keywords` finds which of
+`cvstudio.checks` reads its patterns (headings parsers know, cliches, weak openings, contact details) from
+here; spelling lives in `writing.spelling`. Against a job, `keywords` finds which of
 the advert's skills the CV names, and `requirements` asks the model for the advert's requirements and the
-CV's evidence for each, keeping only quotes that really are in the text. The PDF is read with pypdfium2
-(`cvstudio/pdfread.py`), so nothing here needs poppler.
+CV's evidence for each, keeping only quotes that really are in the text.
 """
 import re
 from pathlib import Path
 
 from . import ai, record
-from .cvstudio import pdfread
 
 # Section names parsers know; a heading outside these may not be recognised as a section at all.
 STANDARD_HEADINGS = {"education", "experience", "work experience", "employment", "projects", "skills",
@@ -32,16 +30,6 @@ PRIVATE = re.compile(r"\b(date of birth|d\.o\.b|dob|born on|age:|marital status|
                      r"national insurance|ni number|passport number|driving licence number)\b", re.I)
 MODULE_CODE = re.compile(r"\b[A-Z]{3,4}\d{3,4}\b")
 ODD_CHAR = re.compile("[\ufb00-\ufb06\ue000-\uf8ff\ufffd]|\\(cid:\\d+\\)")
-
-
-def pdf_text(pdf: Path, layout: bool = False) -> str:
-    """The PDF's text as a parser reads it; "" when it cannot be read."""
-    return pdfread.text(pdf, layout=layout)
-
-
-def pdf_pages(pdf: Path) -> int:
-    """How many pages the PDF has; 0 when it cannot be read."""
-    return pdfread.pages(pdf)
 
 
 def lines_of(text: str) -> list[str]:

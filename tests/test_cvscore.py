@@ -14,6 +14,7 @@ from support.fake_ai import fake_ai
 from test_pdfread import PEOPLE, Person, made_up_cvs
 
 from jobhunt import cv, cvscore
+from jobhunt.cvstudio import pdfread
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
@@ -30,7 +31,7 @@ class ReadBack(unittest.TestCase):
         data["projects"] = [{**data["projects"][0],
                              "body": "- Built a thing that answers from notes.\n- Wrote 113 tests that run anywhere."}]
         data["experience"] = []
-        text = cvscore.pdf_text(cv.render(data, Path(tempfile.mkdtemp())))
+        text = pdfread.text(cv.render(data, Path(tempfile.mkdtemp())))
         self.assertIn("- Built a thing that answers from notes.", text)
         self.assertRegex(text, r"Selected modules \(out of 100\): [^\n]*\d")
 
