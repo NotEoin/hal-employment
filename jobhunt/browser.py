@@ -32,6 +32,7 @@ import os
 import queue
 import re
 import threading
+import typing
 from pathlib import Path
 from urllib.parse import quote_plus, urlparse
 
@@ -1299,11 +1300,6 @@ def _press_step(b: Browser, job_id: str, shot: str | None = None) -> dict:
     return out
 
 
-def _next_step(b: Browser, job_id: str) -> dict:
-    """The task `next_step` runs; `_via` finds the extension's `next_step` by this name."""
-    return _press_step(b, job_id)
-
-
 # A box for the code a site emails: a visible, empty one-line box labelled as a code.
 CODE_FIELD = re.compile(r"\bcode\b|\botp\b|one[- ]time|passcode|verification", re.I)
 NOT_CODE_TYPES = ("email", "date", "url", "search")
@@ -1422,17 +1418,42 @@ def where() -> str:
     return "the job's tab" if mode() == "extension" else "Hal's window"
 
 
-def _via(task, *args):
-    """Runs a task in Hal's own browser, or in the applicant's through the extension."""
-    if mode() == "extension":
-        from . import extension
-        return getattr(extension, task.__name__.lstrip("_"))(*args)
-    return BROWSER.call(task, *args)
+class ExtensionSteps(typing.NamedTuple):
+    """The steps of the applicant's own browser (`extension.py`), one for each of Hal's own steps above."""
+
+    open_form: typing.Callable[..., dict]
+    fill: typing.Callable[..., dict]
+    read_here: typing.Callable[..., dict]
+    resume: typing.Callable[..., dict]
+    type_code: typing.Callable[..., dict]
+    press_control: typing.Callable[..., dict]
+    peek: typing.Callable[..., dict]
+    next_step: typing.Callable[..., dict]
+    search: typing.Callable[..., tuple[list[list[dict]], bool]]
+    show: typing.Callable[..., bool]
+    mark: typing.Callable[..., None]
+
+
+_extension_steps: ExtensionSteps | None = None
+
+
+def use_extension(**steps) -> None:
+    """Registers the extension's steps; a missing or renamed one fails when `extension.py` is imported."""
+    global _extension_steps
+    _extension_steps = ExtensionSteps(**steps)
+
+
+def _steps() -> ExtensionSteps:
+    """The extension's steps; importing `extension` registers them (it needs this module, so it loads late)."""
+    from . import extension  # noqa: F401 - the import registers the steps
+    return _extension_steps
 
 
 def open_form(job_id: str, url: str) -> dict:
     """Opens the application form for a job."""
-    return _via(_open_form, job_id, url)
+    if mode() == "extension":
+        return _steps().open_form(job_id, url)
+    return BROWSER.call(_open_form, job_id, url)
 
 
 def fill(job_id: str, fields: list[dict], shot: Path) -> dict:
@@ -1440,54 +1461,71 @@ def fill(job_id: str, fields: list[dict], shot: Path) -> dict:
 
     The result's `notes_used` lists the trace line of each note used, for the Form step.
     """
-    return _via(_fill, job_id, fields, str(shot))
+    if mode() == "extension":
+        return _steps().fill(job_id, fields, str(shot))
+    return BROWSER.call(_fill, job_id, fields, str(shot))
 
 
 def read_here(job_id: str) -> dict:
     """Reads the form on the page the browser is on."""
-    return _via(_read_here, job_id)
+    if mode() == "extension":
+        return _steps().read_here(job_id)
+    return BROWSER.call(_read_here, job_id)
 
 
 def resume(job_id: str, passed: str, wall: str) -> dict:
     """Continues after the person passed a sign-in or other wall by hand."""
-    return _via(_resume, job_id, passed, wall)
+    if mode() == "extension":
+        return _steps().resume(job_id, passed, wall)
+    return BROWSER.call(_resume, job_id, passed, wall)
 
 
 def type_code(job_id: str, code: str, boxes: list[str]) -> dict:
     """Types an emailed code into its boxes; the person presses the site's button."""
-    return _via(_type_code, job_id, code, boxes)
+    if mode() == "extension":
+        return _steps().type_code(job_id, code, boxes)
+    return BROWSER.call(_type_code, job_id, code, boxes)
 
 
 def press_control(job_id: str, name: str) -> dict:
     """Presses a control by name; raises `guard.WouldSubmit` when it could send the application."""
-    return _via(_press_control, job_id, name)
+    if mode() == "extension":
+        return _steps().press_control(job_id, name)
+    return BROWSER.call(_press_control, job_id, name)
 
 
 def peek(job_id: str) -> dict:
     """Reads the page without changing it."""
-    return _via(_peek, job_id)
+    if mode() == "extension":
+        return _steps().peek(job_id)
+    return BROWSER.call(_peek, job_id)
 
 
 def next_step(job_id: str) -> dict:
     """Moves to the form's next step."""
-    return _via(_next_step, job_id)
+    if mode() == "extension":
+        return _steps().next_step(job_id)
+    return BROWSER.call(_press_step, job_id)
 
 
 def search(queries: list[str], pause: float = 0) -> tuple[list[list[dict]], bool]:
     """Runs searches in the browser and returns the result pages and whether a site refused."""
-    return _via(_search, queries, pause)
+    if mode() == "extension":
+        return _steps().search(queries, pause)
+    return BROWSER.call(_search, queries, pause)
 
 
 def show(job_id: str) -> bool:
     """Brings a job's tab or window to the front."""
-    return _via(_show, job_id)
+    if mode() == "extension":
+        return _steps().show(job_id)
+    return BROWSER.call(_show, job_id)
 
 
 def mark(job_id: str, fields: list[dict], panel: dict) -> None:
     """Outlines the filled answers in the applicant's tab; Hal's own window shows them in the web interface."""
     if mode() == "extension":
-        from . import extension
-        extension.mark(job_id, fields, panel)
+        _steps().mark(job_id, fields, panel)
 
 
 def close(job_id: str) -> None:

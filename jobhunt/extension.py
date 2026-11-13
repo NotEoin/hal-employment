@@ -507,3 +507,9 @@ def search(queries: list[str], pause: float = 0) -> tuple[list[list[dict]], bool
     """Runs searches in the applicant's browser and returns the result pages and whether a site refused."""
     out = _ask("search", timeout=60 + (pause + 20) * len(queries), queries=queries, pause=pause)
     return out["pages"], out["refused"]
+
+
+browser.use_extension(
+    open_form=open_form, fill=fill, read_here=read_here, resume=resume, type_code=type_code,
+    press_control=press_control, peek=peek, next_step=next_step, search=search, show=show, mark=mark,
+)
