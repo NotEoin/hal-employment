@@ -38,10 +38,11 @@ denied".
 CI (`.github/workflows/ci.yml`) runs every test, browser tests on, on Linux with Python 3.11 and 3.13 and on
 Windows with Python 3.13, in shares of the suite, one job each (seven on Windows, the slowest), and
 `scripts/dev/run_tests.py` spreads a share over the runner's CPUs in processes of a few tests. To run the
-whole suite that way here, one process per CPU:
+whole suite that way here, one process per CPU, slowest chunks first from the last run's times
+(`--share 2/5` runs one share):
 
 ```sh
-HAL_TEST_MODE=1 HAL_TEST_BROWSER=1 uv run python scripts/dev/run_tests.py   # --share 2/5 runs one share
+HAL_TEST_MODE=1 HAL_TEST_BROWSER=1 uv run python scripts/dev/run_tests.py --timings ~/.cache/hal-test-times.json
 ```
 
 ## What the checks prove
