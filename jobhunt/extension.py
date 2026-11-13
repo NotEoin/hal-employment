@@ -20,7 +20,6 @@ import re
 import threading
 import time
 import uuid
-from urllib.parse import urlparse
 
 from . import browser
 from .apply import guard
@@ -36,7 +35,6 @@ from .browser import (
     MAX_PRESSES,
     NEXT_BUTTON,
     REGISTER_FIELDS,
-    SIGN_IN,
     SIGN_OUT,
     SUBMIT_BUTTON,
     SUCCESS,
