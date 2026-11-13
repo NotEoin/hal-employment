@@ -14,6 +14,10 @@ folders of `core/paths.py`, never in the code folder. Each area is a subpackage 
 `cvstudio/`, `docs/`, `setup/`, `remote/`, `ai/` and so on) that plugs in through module names (Discovery,
 below), so adding an area edits no core file.
 
+The root of `jobhunt/` holds only the entry points (`__main__.py`, `worker.py`) and modules that several areas
+share with no one owner (`db.py`, `http.py`, `record.py`, `browser.py`); code that one area owns lives in that
+area's subpackage, however many others import it, and `core/` holds only the shared kernel.
+
 ## Folders (`jobhunt/core/paths.py`)
 
 Every folder is a function, resolved when called. Nothing in `jobhunt/` builds a data path from the code
