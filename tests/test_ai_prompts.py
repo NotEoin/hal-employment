@@ -50,24 +50,24 @@ class Store(unittest.TestCase):
 
     def test_an_edited_prompt_is_used_and_reset_puts_back_the_original(self):
         self.assertIn("You write cover letters for Robin", self.text())
-        prompts.save("letter", "Write warmly for {first_name}, aiming at {target_roles}.", self.con, self.folder)
+        prompts.save(self.con, "letter", "Write warmly for {first_name}, aiming at {target_roles}.", self.folder)
         self.assertEqual(self.text(), "Write warmly for Robin, aiming at museum work.")
-        shown = prompts.detail("letter", self.con, self.folder)
+        shown = prompts.detail(self.con, "letter", self.folder)
         self.assertEqual((shown["changed"], shown["placeholders"]), (True, ["first_name", "target_roles"]))
         self.assertIn("You write cover letters", shown["default_text"])
-        prompts.reset("letter", self.con, self.folder)
+        prompts.reset(self.con, "letter", self.folder)
         self.assertIn("You write cover letters for Robin", self.text())
-        self.assertFalse(prompts.detail("letter", self.con, self.folder)["changed"])
+        self.assertFalse(prompts.detail(self.con, "letter", self.folder)["changed"])
 
     def test_an_edit_that_drops_a_placeholder_is_refused_and_nothing_is_kept(self):
         with self.assertRaises(prompts.PromptError) as caught:
-            prompts.save("letter", "Write warmly for {first_name}.", self.con, self.folder)
+            prompts.save(self.con, "letter", "Write warmly for {first_name}.", self.folder)
         self.assertEqual(str(caught.exception),
                          "This instruction needs {target_roles}; Hal fills it in from your settings.")
-        self.assertFalse(prompts.detail("letter", self.con, self.folder)["changed"])
+        self.assertFalse(prompts.detail(self.con, "letter", self.folder)["changed"])
 
     def test_an_update_to_an_edited_prompt_says_hals_original_changed(self):
-        prompts.save("letter", "Write for {first_name}: {target_roles}.", self.con, self.folder)
+        prompts.save(self.con, "letter", "Write for {first_name}: {target_roles}.", self.folder)
         self.assertFalse(prompts.listing(self.con, self.folder)[0]["default_changed"])
         (self.folder / "letter.txt").write_text(LETTER + "Keep it short.\n", encoding="utf-8")
         row = next(p for p in prompts.listing(self.con, self.folder) if p["id"] == "letter")

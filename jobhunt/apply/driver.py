@@ -163,13 +163,13 @@ def _answer(con, job, found: dict, step: int, done: list) -> dict:
             docs = documents.load(con, job)
     runner.say(job_id, f"answering {len(found['fields'])} questions" + (f" on step {step}" if step > 1 else ""))
     notes = browser.notes_for(found["url"], job_id)
-    fields = autofill.propose(job, found["fields"], docs, documents.files(job), con, notes=notes)
+    fields = autofill.propose(job, found["fields"], docs, documents.files(job), con=con, notes=notes)
     # Answers its owner gave on an earlier run at this form stand.
     for f in fields:
         mine = KEPT.get(job_id, {}).get(f["sig"])
         if mine is not None and f["kind"] != "file":
             autofill.by_you(f, mine)
-    _answered, waiting = autofill.ask_model(job, fields, docs, con, notes=notes)
+    _answered, waiting = autofill.ask_model(job, fields, docs, con=con, notes=notes)
     if settings.get("applying.keep_site_answers"):
         autofill.keep_site_answers(fields)
     form = {"url": found["url"], "title": found["title"], "captcha": found["captcha"], "fields": fields,
@@ -205,9 +205,9 @@ def _enter(con, job, form: dict, only: list | None = None) -> dict:
             break
         if fresh:
             runner.say(job_id, f"answering {len(fresh)} more questions the form has just shown")
-            fields.extend(_one_cv(fields, autofill.propose(job, fresh, docs, documents.files(job), con,
+            fields.extend(_one_cv(fields, autofill.propose(job, fresh, docs, documents.files(job), con=con,
                                                           notes=notes)))
-        autofill.ask_model(job, fields, docs, con, problems=retry, notes=notes)
+        autofill.ask_model(job, fields, docs, con=con, problems=retry, notes=notes)
         runner.checkpoint(job_id)
         out = browser.fill(job_id, fields, _shot(job_id))
         _note_uses(form, out)
@@ -471,9 +471,9 @@ def act_page(con, job_id: str, last: dict | None = None) -> str:
     docs = documents.load(con, job)
     notes = browser.notes_for(found["url"], job_id)
     new = [f for f in found["fields"] if f["sig"] not in known]
-    fresh = _one_cv(form["fields"], autofill.propose(job, new, docs, documents.files(job), con, notes=notes))
+    fresh = _one_cv(form["fields"], autofill.propose(job, new, docs, documents.files(job), con=con, notes=notes))
     form["fields"].extend(fresh)
-    autofill.ask_model(job, form["fields"], docs, con, notes=notes)
+    autofill.ask_model(job, form["fields"], docs, con=con, notes=notes)
     by_sig = {f["sig"]: f for f in found["fields"]}
     empty = [{**f, "hid": by_sig[f["sig"]]["hid"]} for f in form["fields"]
              if f.get("sig") in by_sig and shown.get(f["sig"]) in (None, "", [], False)
@@ -614,7 +614,7 @@ def _move_on(con, job, form: dict) -> tuple[dict, int, list]:
             set_app(con, job_id, stage="filled", form=form)
             raise RuntimeError(form["message"])
         runner.say(job_id, "the form refused some answers; trying again")
-        autofill.ask_model(job, form["fields"], docs, con, problems=problems)
+        autofill.ask_model(job, form["fields"], docs, con=con, problems=problems)
         _enter(con, job, form, only=[f for f in form["fields"] if f["hid"] in problems])
     raise AssertionError("unreachable")
 
@@ -769,7 +769,7 @@ def act_draft_rest(con, job_id: str) -> str:
     """Drafts answers for the form fields that are still empty and returns a summary."""
     job = load_job(con, job_id)
     form = load_app(con, job_id)["form"]
-    answered, waiting = autofill.ask_model(job, form["fields"], documents.load(con, job), con)
+    answered, waiting = autofill.ask_model(job, form["fields"], documents.load(con, job), con=con)
     form["model"] = waiting or ""
     set_app(con, job_id, form=form)
     if waiting:

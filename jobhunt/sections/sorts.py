@@ -459,7 +459,7 @@ def set_add_action(con: sqlite3.Connection, add_id: int, action_id: str) -> None
 def _action_active(con: sqlite3.Connection, action_id: str) -> bool:
     """True while the action is queued, running or waiting for the person; False once it ended or is gone."""
     try:
-        return runner.get(action_id, con)["state"] in runner.ACTIVE
+        return runner.get(action_id, con=con)["state"] in runner.ACTIVE
     except LookupError:
         return False
 

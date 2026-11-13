@@ -27,7 +27,7 @@ def all_prompts(req: Request) -> list:
 @route("GET", "/api/v2/prompts/{prompt_id}")
 def one(req: Request) -> dict:
     """One instruction with the person's text and Hal's original."""
-    return prompts.detail(_prompt(req), req.con)
+    return prompts.detail(req.con, _prompt(req))
 
 
 @route("PUT", "/api/v2/prompts/{prompt_id}")
@@ -38,7 +38,7 @@ def change(req: Request) -> dict:
     if not isinstance(text, str):
         raise BadRequest("Write the instruction first.", field="text")
     try:
-        prompts.save(pid, text, req.con)
+        prompts.save(req.con, pid, text)
     except prompts.PromptError as e:
         raise BadRequest(str(e), field="text") from e
     return {"changed": True}
@@ -47,6 +47,6 @@ def change(req: Request) -> dict:
 @route("DELETE", "/api/v2/prompts/{prompt_id}")
 def reset(req: Request) -> dict:
     """Puts back Hal's original."""
-    prompts.reset(_prompt(req), req.con)
+    prompts.reset(req.con, _prompt(req))
     return {"changed": False}
 

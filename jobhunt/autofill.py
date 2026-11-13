@@ -769,7 +769,7 @@ def _prompt(prompt_id: str) -> str:
     return pack.prompt(prompt_id)
 
 
-def profile_for(job, con=None) -> dict:
+def profile_for(job, *, con=None) -> dict:
     """Returns the profile with the answers that depend on the job settled for this one."""
     prof = profile()
     prof["how_heard"] = HOW_HEARD.get(job["source"], "Company careers page")
@@ -782,7 +782,7 @@ def profile_for(job, con=None) -> dict:
     return prof
 
 
-def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: NoteSet | None = None) -> list[dict]:
+def propose(job, fields: list[dict], docs: dict, files: dict, *, con=None, notes: NoteSet | None = None) -> list[dict]:
     """Fills in `value`, `source`, `note` and `why` on each field and returns the list.
 
     Args:
@@ -793,7 +793,7 @@ def propose(job, fields: list[dict], docs: dict, files: dict, con=None, notes: N
         con: Database connection, for the answers the person has given before.
         notes: The notes for this page, as the engine read them; None reads them for the job's address.
     """
-    prof = profile_for(job, con)
+    prof = profile_for(job, con=con)
     notes = page_notes(job, notes)
     answers = docs.get("answers") or []
     uploads = [f for f in fields if f["kind"] == "file"]
@@ -996,7 +996,7 @@ def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
     """What the AI may know when it fills a form: the profile, the CV, saved answers this job may use, and the
     free-words notes about this job site."""
     hidden = ("salary_figure", "salary_basis", "preferred_name", *PRIVATE_KEYS)
-    prof = {k: v for k, v in profile_for(job, con).items() if k not in hidden and v not in ("", None)}
+    prof = {k: v for k, v in profile_for(job, con=con).items() if k not in hidden and v not in ("", None)}
     parts = [stage.today_lines(stage.current(con)),
              f"Job: {job['title']} at {job['company']} ({job['location'] or 'location not stated'}).",
              f"Applicant profile: {prof}",
@@ -1098,7 +1098,7 @@ def _shortlist(options: list[str], facts: str, limit: int = 60) -> list[str]:
     return [o for o in options if o in keep]
 
 
-def ask_model(job, fields: list[dict], docs: dict, con=None, problems: dict | None = None,
+def ask_model(job, fields: list[dict], docs: dict, *, con=None, problems: dict | None = None,
               notes: NoteSet | None = None) -> tuple[int, str | None]:
     """Asks the local model for the fields still without a value.
 

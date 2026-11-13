@@ -876,7 +876,7 @@ def shape(con: sqlite3.Connection, row: sqlite3.Row) -> dict:
             "done_n": row["done_n"], "done_total": row["done_total"], "eta_s": eta_s(row)}
 
 
-def get(action_id: str, con: sqlite3.Connection | None = None) -> dict:
+def get(action_id: str, *, con: sqlite3.Connection | None = None) -> dict:
     """One action and its steps; LookupError when there is none."""
     flush()
     own = con is None
@@ -901,7 +901,7 @@ def running_for(subject: str) -> dict | None:
     con = db.connect()
     try:
         row = _held_elsewhere(con, "subject", subject, db.connect)
-        return get(row["id"], con) if row else None
+        return get(row["id"], con=con) if row else None
     finally:
         con.close()
 

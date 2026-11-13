@@ -110,7 +110,7 @@ def record(area: str, kind: str, text: str, why: str, *, used: list[dict] | None
 UPDATABLE = ("text", "why", "used", "ai", "took_ms", "changed", "undo", "undone", "icon", "tone", "running", "detail")
 
 
-def update(activity_id: int, con: sqlite3.Connection | None = None, **fields: Any) -> None:
+def update(activity_id: int, *, con: sqlite3.Connection | None = None, **fields: Any) -> None:
     """Changes fields of one row; `why` may never become empty."""
     bad = set(fields) - set(UPDATABLE)
     if bad:

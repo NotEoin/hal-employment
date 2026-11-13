@@ -78,12 +78,12 @@ class FakeEngine:
             mock.patch.object(driver, "watch_tab", lambda job_id: None)]
 
 
-def answer_all(job, fields, docs, files, con, notes=None):
+def answer_all(job, fields, docs, files, *, con=None, notes=None):
     """`autofill.propose` for a person whose profile answers every question."""
     return [{**f, "value": f"made-up answer to {f['label']}", "source": "profile"} for f in fields]
 
 
-def answer_page_one(job, fields, docs, files, con, notes=None):
+def answer_page_one(job, fields, docs, files, *, con=None, notes=None):
     """Answers the profile questions; the essay is written by Hal, so the person should read it."""
     return [{**f, "value": "A made-up essay.", "source": "hal", "written": True} if f["kind"] == "textarea"
             else {**f, "value": "Robin Testwell", "source": "profile"} for f in fields]

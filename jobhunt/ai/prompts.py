@@ -72,7 +72,7 @@ def get(prompt_id: str, folder: Path | None = None) -> Prompt:
     return parse(prompt_id, file.read_text(encoding="utf-8"))
 
 
-def override(prompt_id: str, con: sqlite3.Connection | None = None) -> str | None:
+def override(prompt_id: str, *, con: sqlite3.Connection | None = None) -> str | None:
     """The person's edit of a prompt, or None."""
     from .. import db
 
@@ -109,7 +109,7 @@ def fill(template: str, needs: tuple[str, ...], values: dict[str, object]) -> st
 def text(prompt_id: str, *, con: sqlite3.Connection | None = None, folder: Path | None = None, **values: object) -> str:
     """The prompt's text, the person's edit first, with its placeholders filled in."""
     prompt = get(prompt_id, folder)
-    return fill(override(prompt_id, con) or prompt.text, prompt.needs, values)
+    return fill(override(prompt_id, con=con) or prompt.text, prompt.needs, values)
 
 
 def _rows(con: sqlite3.Connection) -> dict[str, tuple[str, str]]:
@@ -128,7 +128,7 @@ def listing(con: sqlite3.Connection, folder: Path | None = None) -> list[dict]:
     return sorted(out, key=lambda p: (first.get(p["id"], len(first)), p["name"].lower()))
 
 
-def detail(prompt_id: str, con: sqlite3.Connection, folder: Path | None = None) -> dict:
+def detail(con: sqlite3.Connection, prompt_id: str, folder: Path | None = None) -> dict:
     """One prompt with the person's text, Hal's original and the placeholders it needs."""
     prompt = get(prompt_id, folder)
     edit = _rows(con).get(prompt_id)
@@ -137,7 +137,7 @@ def detail(prompt_id: str, con: sqlite3.Connection, folder: Path | None = None) 
             "changed": edit is not None, "default_changed": edit is not None and edit[1] != prompt.sha}
 
 
-def save(prompt_id: str, new_text: str, con: sqlite3.Connection, folder: Path | None = None) -> None:
+def save(con: sqlite3.Connection, prompt_id: str, new_text: str, folder: Path | None = None) -> None:
     """Stores the person's edit; refused in plain words when it drops a placeholder the prompt needs."""
     from ..core import clock
 
@@ -152,7 +152,7 @@ def save(prompt_id: str, new_text: str, con: sqlite3.Connection, folder: Path | 
                     (prompt_id, new_text, prompt.sha, clock.iso()))
 
 
-def reset(prompt_id: str, con: sqlite3.Connection, folder: Path | None = None) -> None:
+def reset(con: sqlite3.Connection, prompt_id: str, folder: Path | None = None) -> None:
     """Forgets the person's edit, so Hal's original is used again."""
     get(prompt_id, folder)
     with con:

@@ -24,7 +24,7 @@ def _first_search(con: sqlite3.Connection) -> dict | None:
     if not action_id:
         return None
     try:
-        a = runner.get(action_id, con)
+        a = runner.get(action_id, con=con)
     except LookupError:
         return None
     if a["state"] not in ("queued", "running") or not a["step_total"]:

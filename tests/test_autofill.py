@@ -306,7 +306,7 @@ class Answers(unittest.TestCase):
         mine = self.propose(label="Name", section="Your details")
         self.assertEqual(mine["value"], "Ada Lovelace")
         f = {"hid": "h0", "kind": "text", "type": "text", "label": "Name", "section": "Referee 1", "required": True}
-        self.assertEqual(autofill.propose(self.job, [f], {}, {}, con)[0]["value"], "Grace Hopper")
+        self.assertEqual(autofill.propose(self.job, [f], {}, {}, con=con)[0]["value"], "Grace Hopper")
 
     def test_a_keyword_answer_the_review_rejects_is_answered_again(self):
         f = self.propose(label="Phone number of your current manager")
@@ -413,7 +413,7 @@ class Answers(unittest.TestCase):
         nxt = {**self.job, "id": "test:3", "company": "Other Made-up Co"}
         f = {"hid": "h0", "kind": "textarea", "type": "text", "label": "Why do you want to work at Other Made-up Co?",
              "required": True}
-        self.assertEqual(autofill.propose(nxt, [f], {}, {}, con)[0]["value"], None)
+        self.assertEqual(autofill.propose(nxt, [f], {}, {}, con=con)[0]["value"], None)
         self.assertEqual(con.execute("SELECT scope FROM answers2").fetchone()["scope"], "never")
         self.assertIn("Made-up short reason.", autofill._facts(nxt, {}, con))   # only as an example of their voice
 
@@ -426,7 +426,7 @@ class Answers(unittest.TestCase):
                           "Practice Ltd", job=self.job)
         self.assertEqual(con.execute("SELECT COUNT(*) FROM answers2").fetchone()[0], 0)
         f = {"hid": "h0", "kind": "text", "type": "text", "label": label, "required": True}
-        filled = autofill.propose(self.job, [f], {}, {}, con)[0]
+        filled = autofill.propose(self.job, [f], {}, {}, con=con)[0]
         self.assertEqual((filled["value"], filled["skip"], filled["note"]), (None, True, autofill.CODE_NOTE))
 
     def test_a_number_ending_a_sentence_in_the_source_is_supported(self):
@@ -563,11 +563,11 @@ class PrivatePaths(unittest.TestCase):
         self.addCleanup(con.close)
         fields = [self.field(f"p{i}", label) for i, label in enumerate(PRIVATE_LABELS)]
         fields += [self.field("n1", "Full name"), self.field("n2", "What draws you to this team?")]
-        autofill.propose(self.job, fields, {}, {}, con)
+        autofill.propose(self.job, fields, {}, {}, con=con)
         typed = [dict(f, value=CANARY, source="you") for f in fields if f["hid"].startswith("p")]
         autofill.remember(con, typed, "Practice Ltd", job=self.job)
         with fake_ai({"re:You check answers": '{"wrong": []}'}, default='{"answers": []}') as fake:
-            autofill.ask_model(self.job, fields, {}, con)
+            autofill.ask_model(self.job, fields, {}, con=con)
             autofill.choose_control(self.job, {"title": "Jobs", "url": "https://jobs.example/1", "controls": [
                 {"name": label} for label in PRIVATE_LABELS] + [{"name": "Apply now"}]})
         sent = self.sent(fake)
@@ -639,9 +639,10 @@ class WhyThisAnswer(unittest.TestCase):
 
     def test_a_site_note_answer_is_used_only_on_that_site(self):
         self.note("how did you hear", "Company website")
-        here = autofill.propose(self.job, [self.field("h", "How did you hear about this role?")], {}, {}, self.con)[0]
+        question = "How did you hear about this role?"
+        here = autofill.propose(self.job, [self.field("h", question)], {}, {}, con=self.con)[0]
         elsewhere = {**self.job, "id": "test:2", "url": "https://othermadeup.example/jobs/2"}
-        there = autofill.propose(elsewhere, [self.field("h", "How did you hear about this role?")], {}, {}, self.con)[0]
+        there = autofill.propose(elsewhere, [self.field("h", question)], {}, {}, con=self.con)[0]
         self.assertEqual((here["value"], here["source"]), ("Company website", "note: field_answer"))
         self.assertEqual([n["text"] for n in here["notes_used"]],
                          ['Answer "how did you hear" with "Company website" here'])
@@ -655,7 +656,7 @@ class WhyThisAnswer(unittest.TestCase):
         self.saved("What is your favourite archive?", "Made-up Record Office", scope="review")
         fields = [self.field("d", "Do you hold a full driving licence?"),
                   self.field("a", "What is your favourite archive?")]
-        autofill.propose(self.job, fields, {}, {}, self.con)
+        autofill.propose(self.job, fields, {}, {}, con=self.con)
         self.assertEqual([(f["value"], f["source"]) for f in fields], [(None, "you"), (None, "you")])
         self.assertNotIn("Made-up Record Office", autofill._facts(self.job, {}, self.con))
         self.assertEqual(self.con.execute("SELECT SUM(uses) FROM answers2").fetchone()[0], 0)
@@ -669,14 +670,14 @@ class WhyThisAnswer(unittest.TestCase):
                   self.field("c", "Upload your CV", kind="file", type="file"),
                   self.field("p", "Do you need any adjustments for the interview?"),
                   self.field("w", "Why do you want this job?", kind="textarea")]
-        autofill.propose(self.job, fields, {}, {"cv": "Made-up CV.pdf"}, self.con)
+        autofill.propose(self.job, fields, {}, {"cv": "Made-up CV.pdf"}, con=self.con)
         reply = {"answers": [{"hid": "w", "value": "Cataloguing the made-up parish collection taught me patience "
                                                     "with records.", "sure": True}]}
         cv_text = "Archive Volunteer, Made-up Record Office (2025): cataloguing the parish collection records"
         with mock.patch.object(autofill.cv, "facts_text", lambda: cv_text), \
                 mock.patch.object(autofill.record, "context", lambda questions: ""), \
                 fake_ai({"re:You check answers": '{"wrong": []}'}, default=json.dumps(reply)):
-            autofill.ask_model(self.job, fields, {}, self.con)
+            autofill.ask_model(self.job, fields, {}, con=self.con)
         why = {f["hid"]: f["why"] for f in fields}
         self.assertEqual(why["n"], "From your profile (Settings, You): your name.")
         self.assertIn('because of your note for civicmadeup.example: "Answer \"location\"', why["l"])
@@ -694,7 +695,7 @@ class WhyThisAnswer(unittest.TestCase):
         fields = [self.field(f"p{i}", label) for i, label in enumerate(PRIVATE_LABELS)]
         fields.append(self.field("q", "Do you consider yourself to have a long-term health condition?",
                                  kind="radio", options=["Yes, limited a lot", "Yes, limited a little", "No"]))
-        autofill.propose(self.job, fields, {}, {}, self.con)
+        autofill.propose(self.job, fields, {}, {}, con=self.con)
         for f in fields:
             self.assertIn(f["why"], (autofill.PRIVATE_WHY, autofill.LEFT_PRIVATE_WHY), f["label"])
             self.assertEqual(f["notes_used"], [])
@@ -714,7 +715,7 @@ class WhyThisAnswer(unittest.TestCase):
         fields = [self.field("c", "Do you have any caring responsibilities?", kind="radio", options=["Yes", "No"]),
                   self.field("n", "What is your notice period?"),
                   self.field("d", "Do you hold a full driving licence?")]
-        autofill.propose(self.job, fields, {}, {}, self.con)
+        autofill.propose(self.job, fields, {}, {}, con=self.con)
         self.assertEqual([(f["value"], f["source"]) for f in fields],
                          [("No", "private: carer"), ("Two weeks", "note: field_answer"),
                           ("Yes", "your earlier answer")])
@@ -728,7 +729,7 @@ class WhyThisAnswer(unittest.TestCase):
 
     def test_a_skip_note_leaves_the_field_alone_and_says_so(self):
         self.note("referral code", "", kind="field_skip")
-        f = autofill.propose(self.job, [self.field("r", "Referral code")], {}, {}, self.con)[0]
+        f = autofill.propose(self.job, [self.field("r", "Referral code")], {}, {}, con=self.con)[0]
         self.assertEqual((f["skip"], f["source"]), (True, "note: field_skip"))
         self.assertTrue(f["why"].startswith("Left as it is because of your note for civicmadeup.example"))
 
