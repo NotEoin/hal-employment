@@ -4,8 +4,9 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .. import ai, research
+from .. import ai
 from ..ai import prompts
+from ..company import research
 from ..cvstudio import context as cv_context
 from ..profile import writing as profile_writing
 from ..writing import fields

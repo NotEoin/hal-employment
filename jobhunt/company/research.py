@@ -8,7 +8,7 @@ import logging
 import re
 import urllib.parse
 
-from .http import get
+from ..http import get
 
 log = logging.getLogger(__name__)
 

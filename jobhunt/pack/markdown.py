@@ -5,7 +5,7 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from .. import reputation
+from ..company import reputation
 from ..core import events
 from .hiring import message_to, salutation
 from .letter import NOTE_KEYS, NOTES_HEADING

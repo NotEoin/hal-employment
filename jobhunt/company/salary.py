@@ -24,8 +24,8 @@ import statistics
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 
-from . import db
-from .http import get
+from .. import db
+from ..http import get
 from .research import BROWSER_UA
 
 TECHNICAL_PRESET = "technical_grad"   # the only preset whose jobs ITJobsWatch describes
@@ -172,14 +172,14 @@ def _sources(con, job, name: str, phrases: list[str], london: bool, where: str) 
 
 def _technical() -> bool:
     """True when the person's jobs are technical ones, which ITJobsWatch's figures describe."""
-    from .core import settings
+    from ..core import settings
 
     return settings.get("scoring.preset") == TECHNICAL_PRESET
 
 
 def _floor() -> int:
     """The lowest pay the person will consider (`goal.min_pay`), 0 when they set none."""
-    from .core import settings
+    from ..core import settings
 
     return int(settings.get("goal.min_pay") or 0)
 

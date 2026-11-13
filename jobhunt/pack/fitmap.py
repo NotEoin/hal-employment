@@ -2,7 +2,8 @@
 with no AI after the one ask, and the eligibility flag it gives."""
 import re
 
-from .. import ai, reputation
+from .. import ai
+from ..company import reputation
 from ..cvstudio import cv
 from ..profile import writing as profile_writing
 from ..writing import check as writing_check

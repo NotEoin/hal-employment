@@ -142,7 +142,8 @@ def cmd_add(args):
     link) adds the job without its advert, with one line saying so."""
     import urllib.error
 
-    from .. import http, research
+    from .. import http
+    from ..company import research
     con = db.connect()
     try:
         text = research.page_text(args.url, limit=20000)

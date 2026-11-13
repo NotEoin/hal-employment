@@ -16,7 +16,8 @@ from support import legacy, people, private_answers
 from support.fake_ai import fake_ai
 from support.legacy import PROFILE
 
-from jobhunt import autofill, db, salary, tasks
+from jobhunt import autofill, db, tasks
+from jobhunt.company import salary
 from jobhunt.core import paths, settings
 from jobhunt.mail import gmail
 from jobhunt.sites import notes as site_notes

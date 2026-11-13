@@ -17,8 +17,9 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import autofill, browser, db, documents, record, salary
+from jobhunt import autofill, browser, db, documents, record
 from jobhunt.apply import queries
+from jobhunt.company import salary
 from jobhunt.core import runner
 from jobhunt.mail import gmail
 

@@ -25,8 +25,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from jobhunt import ai, db, pack, record, reputation, research, tasks
+from jobhunt import ai, db, pack, record, tasks
 from jobhunt.ai import prompts
+from jobhunt.company import reputation, research
 from jobhunt.cvstudio import cv
 from jobhunt.find import boards, replenish
 from jobhunt.mail import gmail

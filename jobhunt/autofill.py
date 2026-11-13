@@ -35,8 +35,9 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from . import ai, db, record, salary
+from . import ai, db, record
 from .ai import gpu, prompts
+from .company import salary
 from .cvstudio import cv
 from .writing import spelling, stage
 

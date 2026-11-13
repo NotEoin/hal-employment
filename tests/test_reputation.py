@@ -12,7 +12,7 @@ from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt import reputation
+from jobhunt.company import reputation
 
 EMPLOYER = "Riverside Heritage Trust"   # the made-up humanities advert's employer
 ADVERT = reputation.Advert(location="Made-up Town, UK",
@@ -190,7 +190,7 @@ class CompanyCheck(unittest.TestCase):
         said = reputation.article_verdicts(LIVE_LENDER_ADVERT, LENDER, summary, links, "Brightvale Solar")
         self.assertEqual(said, {"site": False, "adds_words": True, "trade": True, "town": False})
         self.assertFalse(reputation.plausible_article(LIVE_LENDER_ADVERT, LENDER, summary, links, "Brightvale Solar"))
-        with self.assertLogs("jobhunt.reputation", "INFO") as logged:
+        with self.assertLogs("jobhunt.company.reputation", "INFO") as logged:
             flags, md = self.check(LENDER, LIVE_LENDER_ADVERT, SOLAR_ARTICLE, {})
         self.assertIn("'adds_words': True, 'trade': True, 'town': False", "\n".join(logged.output))
         self.no_match(md, flags, "Solar")

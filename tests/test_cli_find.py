@@ -8,8 +8,9 @@ from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt import db, research
+from jobhunt import db
 from jobhunt.cli import find
+from jobhunt.company import research
 
 
 class AddByHand(unittest.TestCase):

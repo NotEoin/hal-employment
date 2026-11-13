@@ -70,7 +70,8 @@ Design notes:
 import logging
 from pathlib import Path
 
-from .. import ai, db, reputation
+from .. import ai, db
+from ..company import reputation
 from ..core import events
 from ..cvstudio import cv
 from ..profile import writing as profile_writing

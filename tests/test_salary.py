@@ -12,7 +12,8 @@ from unittest import mock
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt import db, http, salary
+from jobhunt import db, http
+from jobhunt.company import salary
 from jobhunt.core import settings
 
 PAGE = """<table><tr><td>Number of salaries quoted</td><td>{quotes}</td><td>9</td></tr>

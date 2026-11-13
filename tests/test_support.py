@@ -14,7 +14,7 @@ from support import offline
 from support.actions import finished, wait_for_actions
 from support.world import World
 
-from jobhunt import research
+from jobhunt.company import research
 from jobhunt.core import runner
 
 WAIT_S = 10
