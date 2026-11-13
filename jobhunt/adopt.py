@@ -8,9 +8,10 @@ import hashlib
 import re
 from urllib.parse import parse_qsl, urlparse
 
-from . import db, llm, score
+from . import db, llm
 from .ai import gpu, prompts
 from .browser import application_url
+from .find import goal
 
 # Applicant tracking systems that name the employer in the address: (host pattern, where the name is).
 ATS = [(re.compile(r"(^|\.)(job-boards|boards)\.(eu\.)?greenhouse\.io$"), "path"),
@@ -51,7 +52,7 @@ def match(con, page: dict):
     heading = _words(f"{page.get('title', '')} {page.get('heading', '')}")
     best, overlap = None, 0.0
     for r in rows:
-        key = score.company_key(r["company"])
+        key = goal.company_key(r["company"])
         wanted = _words(r["title"])
         if r["status"] not in OPEN or len(key) < 3 or key not in named or not wanted:
             continue

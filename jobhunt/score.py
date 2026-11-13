@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from jobhunt.find import goal as goal_mod
 from jobhunt.find import rules
-from jobhunt.find.goal import company_key  # noqa: F401 - re-exported; adopt.py and others import it here
 
 
 def score(job: dict) -> tuple[float, str]:
