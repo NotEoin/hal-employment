@@ -1,7 +1,7 @@
 """The sorter's rules for what is not the person's own work: libraries and build output, published papers,
 other people's posters and reports, and what a course gave out.
 
-`sections.sorter` proposes a section for each file and project folder of a dump. A sort of a real 10,000-file
+`sections.sorting.engine` proposes a section for each file and project folder of a dump. A sort of a real 10,000-file
 graduate dump proposed 6,931 rows, many of them wrong (2026-11-09), so these rules keep out what a person
 should never have to untick. When in doubt the sorter leaves a file out with a reason, or groups it, rather
 than proposing it.

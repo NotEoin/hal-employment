@@ -30,7 +30,7 @@ KIND_HINTS = (("transcript", rank.PEEK_TRANSCRIPT, TRANSCRIPT_RULE),
 
 def looks_like(name: str, text: str) -> list[str]:
     """The sections (cv, official, letter) a file with this name and text looks like it belongs in, most
-    telling first; [] when none. The sorter's first glance at a document (`sections.sorter`)."""
+    telling first; [] when none. The sorter's first glance at a document (`sections.sorting.engine`)."""
     stem = Path(name).stem
     head = text[:rank.PEEK_CHARS]
     found = []

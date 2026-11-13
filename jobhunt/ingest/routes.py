@@ -2,7 +2,7 @@
 
 New files never go through the bulk read any more, which guessed each file's kind and owner and crossed facts
 between people. `POST /api/v2/record/ingest` (folders on this computer, local only, and the local API key
-opens it, as `jobhunt ingest` uses) now starts "Sort a big folder for me" (`sections.sort_routes`), whose
+opens it, as `jobhunt ingest` uses) now starts "Sort a big folder for me" (`sections.sorting.routes`), whose
 proposals the person accepts; `POST /api/v2/record/links` adds each link to Projects as a source of its own
 (`pipeline.add_link`), a GitHub account, a GitHub project or a web page by its address. What stays on the bulk
 read is for records an older Hal built: how its last read went, "Read them with the AI" (`again`), "Tidy my
@@ -41,7 +41,7 @@ def _path(entry) -> str:
 def start(req) -> dict:
     """Starts sorting the folders at the given paths; {"action_id", "sort_id"}. Nothing is read in until the
     person accepts the proposals."""
-    from jobhunt.sections import sort_routes
+    from jobhunt.sections.sorting import routes as sort_routes
 
     given = (req.body or {}).get("folders")
     if not isinstance(given, list) or not given:

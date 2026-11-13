@@ -1,7 +1,7 @@
 """The `record.ingest` action (legacy): one bulk read into the record, now only for a record an older Hal built.
 
 Nothing new comes in this way: folders, zips, uploads and the drop folder are sorted instead
-(`sections.sort_actions`). The action stays for "Read them with the AI" (`again`), "Tidy my record" (`tidy`)
+(`sections.sorting.actions`). The action stays for "Read them with the AI" (`again`), "Tidy my record" (`tidy`)
 and a file kept out as private let in (`allow`); its other params are kept so an older queued run carries on.
 
 After the read, the experiences found twice under different names are merged (`profile.actions.dedupe`), then

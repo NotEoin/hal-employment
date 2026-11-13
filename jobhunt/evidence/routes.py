@@ -7,7 +7,7 @@
 - Reading the folder and asking it a question are actions (`evidence/actions.py`); the routes return their
   ids at once.
 - Uploaded files and zips are sorted, never read straight in: they start "Sort a big folder for me"
-  (`sections.sort_routes.start_upload`), whose proposals the person accepts. The bulk read that guessed each
+  (`sections.sorting.routes.start_upload`), whose proposals the person accepts. The bulk read that guessed each
   file's kind and owner is kept only for records an older Hal built (`ingest.engine`). This route and the
   sort's own upload take bodies past the router's usual cap, up to `UPLOAD_MAX_BODY`.
 """
@@ -117,12 +117,12 @@ def download(req) -> FileResponse:
 @route("POST", "/api/v2/record/files", max_body=UPLOAD_MAX_BODY)
 def add_files(req) -> dict:
     """Keeps uploaded files and zips for "Sort a big folder for me" and starts sorting them; nothing is read into
-    the record until the person accepts where Hal proposes each goes (`sections.sort_routes`).
+    the record until the person accepts where Hal proposes each goes (`sections.sorting.routes`).
 
     Returns {"added": [names], "sort": SORT, "action_id"}. The form's `origin`, which an older page sent, is
     not needed: the section the person accepts says whose each file is.
     """
-    from jobhunt.sections import sort_routes
+    from jobhunt.sections.sorting import routes as sort_routes
 
     if not req.files:
         raise BadRequest("Choose one or more files to add.")

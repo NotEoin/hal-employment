@@ -23,7 +23,10 @@ from test_sections_sorter import AVERY_CV, CERTIFICATE, history_dump, software_d
 from jobhunt import db, record
 from jobhunt.core import paths, runner
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import actions, pipeline, sort_actions, sorter, sorts, store
+from jobhunt.sections import actions, pipeline, store
+from jobhunt.sections.sorting import actions as sort_actions
+from jobhunt.sections.sorting import engine as sorter
+from jobhunt.sections.sorting import store as sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"}), "record_cv": reader_ai.cv_reply}
 WAIT_S = 30
@@ -454,7 +457,7 @@ class OldWaysIn(unittest.TestCase):
 class DropFolder(unittest.TestCase):
     def test_new_files_in_the_drop_folder_get_proposals_and_are_never_read_in(self):
         from jobhunt.ingest import sources as ingest_sources
-        from jobhunt.sections import sort_actions
+        from jobhunt.sections.sorting import actions as sort_actions
 
         with home() as (con, _vault, _files), fake_ai(NONE):
             drop = ingest_sources.drop_folder()

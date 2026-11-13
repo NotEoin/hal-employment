@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from jobhunt.sections import sorts
+from jobhunt.sections.sorting import store as sorts
 
 
 def sections(con: sqlite3.Connection) -> dict:

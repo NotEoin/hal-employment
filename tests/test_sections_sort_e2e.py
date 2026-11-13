@@ -33,7 +33,9 @@ from test_sections_sorter import (
 
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import move, pipeline, sort_review, sorts
+from jobhunt.sections import move, pipeline
+from jobhunt.sections.sorting import review as sort_review
+from jobhunt.sections.sorting import store as sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 STATES = ("proposed", "left_out", "copy")

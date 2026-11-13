@@ -359,7 +359,7 @@ MADE_UP_PAGES = {
          "doc_kinds": [{"id": "other", "label": "Something else", "held": "upload", "ready": True}]}],
     "/record/sources": [],
     "/record/sort": {"sorts": [], "cards": {"education": [], "job": []}, "can_move": False},
-    # One finished sort's review (`sections/sort_routes.py`), with a made-up long path to shorten
+    # One finished sort's review (`sections/sorting/routes.py`), with a made-up long path to shorten
     "/record/sort/1": MADE_UP_SORT,
     "/record/ingest": {"state": "none", "action_id": None, "done": 0, "total": 0, "eta_s": None, "stages": {},
                        "states": {}, "categories": {}, "current": "", "not_downloaded": 0,

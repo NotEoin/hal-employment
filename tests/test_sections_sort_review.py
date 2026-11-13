@@ -1,4 +1,4 @@
-"""The courses a sort's folders name, proposed first as education cards (`sections.sort_review`): accepted or
+"""The courses a sort's folders name, proposed first as education cards (`sections.sorting.review`): accepted or
 renamed by the person, after which the coursework and lecture notes waiting for them find their card.
 
 The dump is `test_sections_sorter`'s made-up Marnie Quillfeather (history); the AI is the fake one.
@@ -13,7 +13,8 @@ from test_sections_sort import sorted_folder
 from test_sections_sorter import history_dump, put
 
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import sort_review, sorts
+from jobhunt.sections.sorting import review as sort_review
+from jobhunt.sections.sorting import store as sorts
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 

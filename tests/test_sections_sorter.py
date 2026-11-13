@@ -20,7 +20,14 @@ from test_record import tiny_pdf
 from jobhunt import ai
 from jobhunt.core import settings
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import pipeline, sort_copies, sort_kinds, sort_review, sort_rules, sort_units, sorter, sorts
+from jobhunt.sections import pipeline
+from jobhunt.sections.sorting import copies as sort_copies
+from jobhunt.sections.sorting import engine as sorter
+from jobhunt.sections.sorting import kinds as sort_kinds
+from jobhunt.sections.sorting import review as sort_review
+from jobhunt.sections.sorting import rules as sort_rules
+from jobhunt.sections.sorting import store as sorts
+from jobhunt.sections.sorting import units as sort_units
 
 NONE = {"sort_pick": json.dumps({"choice": "none"})}
 DAY_S = 24 * 3600

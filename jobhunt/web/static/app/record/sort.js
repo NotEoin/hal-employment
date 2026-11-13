@@ -1,5 +1,5 @@
 /* Your record, "Sort a big folder for me": the person gives a folder on this computer, or uploads a zip or
-   files, and Hal proposes where each file goes (jobhunt/sections/sorter.py). Nothing is added until the
+   files, and Hal proposes where each file goes (jobhunt/sections/sorting/engine.py). Nothing is added until the
    person accepts it.
 
    The review (`SortReview`) is its own page, "sort-<id>" (pages/sort.js), so it fills the window; its table
@@ -11,7 +11,7 @@
    in one line what to do and has its own add button; "Add everything ticked" is only on the last.
    Lecture material starts unticked, and its step says once why. Any add of more than `CONFIRM_OVER` files
    asks first in an in-page dialog (`ask`), with the count and the reading time from the seconds a file
-   that the review reports for this computer (`read`, jobhunt/sections/sorts.py `read_estimate`).
+   that the review reports for this computer (`read`, jobhunt/sections/sorting/store.py `read_estimate`).
    Each add is listed above the steps (`Adds`): while it reads, its progress and "Stop reading" (the action's
    stop: what was read stays, the rest goes back in the list); after, "Undo this add", which takes out every
    file it added with what Hal found in them and puts its rows back in the list.
@@ -26,7 +26,7 @@
    their events and a `sort` event reload the table. The folder box is left out in a window from another
    computer, where a zip is uploaded instead.
 
-   "Courses Hal found" lists the courses the folders name (jobhunt/sections/sort_review.py), first, as
+   "Courses Hal found" lists the courses the folders name (jobhunt/sections/sorting/review.py), first, as
    coursework and lecture notes wait for their course: adding one makes its education card, and its files
    find it. Lecture material and coursework come one row a module, with its file count: ticking, moving or
    giving a card to that row changes all its files, and "Show the files" lists them one by one. A project's
@@ -51,7 +51,7 @@ import { useSections } from "./sections.js";
 
 const SORT = "/record/sort";
 const KINDS = new Set(["record.sort", "record.sort_accept"]);
-const PAGE = 50;            // jobhunt/sections/sorts.py PAGE
+const PAGE = 50;            // jobhunt/sections/sorting/store.py PAGE
 const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden";
 const STATE_WORDS = { new: "Waiting to start", sorting: "Sorting", ready: "Ready for you to check", failed: "Could not be sorted",
   undone: "Undone" };

@@ -20,7 +20,8 @@ from jobhunt import db, record
 from jobhunt.core import paths
 from jobhunt.ingest import frontmatter
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import move, pipeline, sorts
+from jobhunt.sections import move, pipeline
+from jobhunt.sections.sorting import store as sorts
 
 CV = ("# Marnie Quillfeather\n\nCurriculum vitae\n\n## Work experience\n\nVisitor guide, Fenwick Lantern Museum "
       "Trust, 2023 to 2024.\n\n## Education\n\nBA History, University of Nowhere Fen, 2021 to 2024.\n")

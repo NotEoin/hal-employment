@@ -1,6 +1,6 @@
 """Copies of one project in a dump: which project folders are the same project, and which copy the sorter keeps.
 
-`sections.sorter` proposes one row a project folder. A real 10,000-file dump (2026-11-09) held the same
+`sections.sorting.engine` proposes one row a project folder. A real 10,000-file dump (2026-11-09) held the same
 project as "repos/portfolio-repos/Hal", "personal projects/Hal" and "repos/unversioned/Hal-12gb", and pairs
 such as "canvas downloader" and "canvas-downloader", most of them with no git folder, so the git remote could
 not tell them apart and each was proposed. `mark` marks all copies but one.

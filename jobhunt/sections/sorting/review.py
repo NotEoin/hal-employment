@@ -38,7 +38,11 @@ from pathlib import Path, PurePosixPath
 from jobhunt.core import settings
 from jobhunt.ingest import convert, rank
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import registry, sort_courses, sort_units, sorter, sorts
+from jobhunt.sections import registry
+from jobhunt.sections.sorting import courses as sort_courses
+from jobhunt.sections.sorting import engine as sorter
+from jobhunt.sections.sorting import store as sorts
+from jobhunt.sections.sorting import units as sort_units
 
 log = logging.getLogger(__name__)
 

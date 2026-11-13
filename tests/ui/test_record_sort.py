@@ -26,8 +26,10 @@ from jobhunt.core import paths, runner
 from jobhunt.evidence import routes
 from jobhunt.profile import store as profile_store
 from jobhunt.sections import actions as source_actions
-from jobhunt.sections import sort_actions, sort_review, sorts
 from jobhunt.sections import store as sources
+from jobhunt.sections.sorting import actions as sort_actions
+from jobhunt.sections.sorting import review as sort_review
+from jobhunt.sections.sorting import store as sorts
 
 NOT_YET = ("/api/v2/home",)
 WAIT_S = 30

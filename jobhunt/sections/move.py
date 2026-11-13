@@ -4,7 +4,7 @@ An older Hal's bulk read wrote a note under `Sources/` for each file it read and
 names that note (`profile_evidence.source_rel`) and no source of a section (`source_id` NULL). `propose`
 proposes a section for each such note, from what its frontmatter says (`doc_type`, `role`, `category`, and
 `source`, where the file came from) and the sorter's rules (`sorter.place_kind`, `sorter.fill_card`); the
-person reviews them in the same table as a sorted folder (`sections.sorts`, a sort of kind `move`).
+person reviews them in the same table as a sorted folder (`sections.sorting.store`, a sort of kind `move`).
 
 Accepting makes each accepted note a source of its section with its original file (or, when Hal no longer has
 the file, the note's own text), read again by the section's reader through `profile.store.swap_source`. Then
@@ -37,7 +37,9 @@ from jobhunt import db
 from jobhunt.ingest import discover, frontmatter, notes, rank
 from jobhunt.profile import conflicts, index
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import pipeline, registry, sorter, sorts, store
+from jobhunt.sections import pipeline, registry, store
+from jobhunt.sections.sorting import engine as sorter
+from jobhunt.sections.sorting import store as sorts
 
 log = logging.getLogger(__name__)
 
@@ -224,7 +226,7 @@ def finish(con: sqlite3.Connection, sort_id) -> int:
 def _move(con: sqlite3.Connection, sort_id) -> sqlite3.Row:
     """The move's sort; ValueError for another kind of sort, one undone, or one still adding what was accepted
     (its sources would be read while they are taken out)."""
-    from jobhunt.sections import sort_actions
+    from jobhunt.sections.sorting import actions as sort_actions
 
     s = sorts.row_of(con, sort_id)
     if s["kind"] != "move":

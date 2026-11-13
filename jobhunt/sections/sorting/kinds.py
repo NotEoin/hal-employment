@@ -4,7 +4,7 @@ coursework.
 On a real 10,000-file dump (2026-11-09) the name or a stray phrase decided too much: "smart contract.md" was
 proposed as a contract, "UMLActivityAnswer.docx" (which mentions a module, credits and marks) as a
 transcript, "Lecture 9 Project Planning" as coursework, and Obsidian "Topics/<Concept>.md" notes as
-coursework. `sections.sorter.place_kind` asks these checks before it trusts such a guess.
+coursework. `sections.sorting.engine.place_kind` asks these checks before it trusts such a guess.
 
 Design decisions, each with its reason:
 
@@ -29,7 +29,7 @@ import re
 from pathlib import PurePosixPath
 
 from jobhunt.ingest import rank
-from jobhunt.sections import sort_rules
+from jobhunt.sections.sorting import rules as sort_rules
 
 # A transcript's row: a module code, then a mark at the end of the line (with a % or a grade letter, and a
 # table's closing bar).

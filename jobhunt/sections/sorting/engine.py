@@ -4,7 +4,7 @@ The person gives a folder on this computer, a zip or the drop folder; `propose` 
 discovery (`ingest.discover`, `group`, `versions`, `privacy`) and returns one `Proposal` for each file or
 project folder: a section and kind of document (`sections.registry`), the card it is for where the section
 needs one (an education period, a job), and a showcase guess for projects. Nothing here reads a fact: a
-proposal becomes a source only when the person accepts it (`sections.sorts`), and then its section's reader
+proposal becomes a source only when the person accepts it (`sections.sorting.store`), and then its section's reader
 reads it as if they had added it there by hand (sections plan, 2026-11-09).
 
 Design decisions, each with its reason:
@@ -64,18 +64,14 @@ from pathlib import Path, PurePosixPath
 
 from jobhunt.ingest import convert, discover, group, privacy, rank, versions
 from jobhunt.profile import merge
-from jobhunt.sections import (
-    registry,
-    sort_copies,
-    sort_courses,
-    sort_folders,
-    sort_kinds,
-    sort_rules,
-    sort_units,
-    store,
-    wrong_place,
-)
+from jobhunt.sections import registry, store, wrong_place
 from jobhunt.sections import repo as repo_reader
+from jobhunt.sections.sorting import copies as sort_copies
+from jobhunt.sections.sorting import courses as sort_courses
+from jobhunt.sections.sorting import folders as sort_folders
+from jobhunt.sections.sorting import kinds as sort_kinds
+from jobhunt.sections.sorting import rules as sort_rules
+from jobhunt.sections.sorting import units as sort_units
 
 log = logging.getLogger(__name__)
 

@@ -1,11 +1,11 @@
-"""Courses and modules from a dump's folders (`sections.sort_courses`): a degree folder, year folders and module
+"""Courses and modules from a dump's folders (`sections.sorting.courses`): a degree folder, year folders and module
 folders, for any subject. Every folder name is made up.
 """
 import unittest
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 
-from jobhunt.sections import sort_courses
+from jobhunt.sections.sorting import courses as sort_courses
 
 
 class CoursesFromFolders(unittest.TestCase):

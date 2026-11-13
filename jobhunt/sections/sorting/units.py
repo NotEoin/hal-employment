@@ -1,7 +1,7 @@
 """The sorter's rules for folders that are one proposal, or none: groups of note folders, practice-site
 folders, downloads, and a notes app's own folders.
 
-`sections.sorter` proposes a project for each code project and each folder with a README. On a real
+`sections.sorting.engine` proposes a project for each code project and each folder with a README. On a real
 10,000-file dump (2026-11-09) that gave 20 project rows for one folder of notes on known cyber attacks (one
 sub-folder a year), ten pre-starred first-year practicals, 3D-print downloads and a notes app's "Templates"
 folder as projects. These rules make such folders one row, or leave them out.

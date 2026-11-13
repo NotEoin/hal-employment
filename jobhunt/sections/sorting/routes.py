@@ -88,7 +88,9 @@ from jobhunt import record
 from jobhunt.core import events, paths
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
 from jobhunt.ingest import sources as ingest_sources
-from jobhunt.sections import sort_actions, sort_review, sorts
+from jobhunt.sections.sorting import actions as sort_actions
+from jobhunt.sections.sorting import review as sort_review
+from jobhunt.sections.sorting import store as sorts
 from jobhunt.web.router import BadRequest, NotHere, Request, json_body, route
 
 PREFIX = "/api/v2/record/sort"

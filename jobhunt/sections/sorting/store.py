@@ -44,7 +44,8 @@ from jobhunt.core import clock, paths, runner
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
 from jobhunt.ingest import discover
 from jobhunt.profile import store as profile_store
-from jobhunt.sections import pipeline, registry, sorter, store
+from jobhunt.sections import pipeline, registry, store
+from jobhunt.sections.sorting import engine as sorter
 
 log = logging.getLogger(__name__)
 

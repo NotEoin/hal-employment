@@ -4,7 +4,7 @@ Preparing ahead is a search-side job, so it stops while the person has paused Ha
 Hal is switched off and the Hal add-on respects that. Reading the record folder is the schedule's
 `record.sync` job, which calls `sync_record` every `schedule.record_every` minutes; that is also when files
 put in the drop folder (`record.drop_folder`) are sorted: Hal proposes a place for each, for the person to accept
-on Your record, and never reads them straight in (`sections.sort_actions.queue_inbox`).
+on Your record, and never reads them straight in (`sections.sorting.actions.queue_inbox`).
 """
 import logging
 import time
@@ -48,7 +48,7 @@ def sync_record() -> dict:
 
     An unreadable folder is reported, not raised.
     """
-    from .sections import sort_actions
+    from .sections.sorting import actions as sort_actions
 
     try:
         out = record.sync()

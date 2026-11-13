@@ -986,7 +986,7 @@ one `Page` with `error` in plain words. Every request has a 20 s timeout, a size
 
 Legacy (sections plan, 2026-11-09): nothing new is read this way, as guessing each file's kind and owner
 crossed facts between people. `POST /api/v2/record/ingest` (folders) and `POST /api/v2/record/files`
-(uploads and zips) now start a sort (`sections/sort_routes.py`: `start_folders`, `start_upload`), `POST
+(uploads and zips) now start a sort (`sections/sorting/routes.py`: `start_folders`, `start_upload`), `POST
 /api/v2/record/links` adds each link to Projects as its own source (`ingest/routes.link_kind`: a GitHub
 account, a GitHub project or a web page), the scheduled `record.sync` sorts new files in the drop folder
 (`sort_actions.queue_inbox`, `sorts.inbox_has_new`), and `jobhunt ingest FOLDER` sorts as `jobhunt sort`
@@ -1503,7 +1503,10 @@ Each education card takes three sections: `coursework`, `lecture` and `official`
   with `meta.git_root` the repository's root, so `repo.git_history(folder, root)` counts only the commits
   that touched it. The whole project stays beside its parts.
 
-### Sorting a big folder (`sections/sorter.py`)
+### Sorting a big folder (`sections/sorting/engine.py`)
+
+The sorter is the `sections/sorting/` package. Its modules are imported under the names this section uses:
+`engine` as `sorter`, `store` as `sorts`, and each other module `x` as `sort_x` (`rules` as `sort_rules`).
 
 `sorter.propose(con, root, local=, prefix=, known=)` walks a folder with the bulk read's discovery
 (`discover.walk`, `group.outermost`, `group.projects`, `group.courses`) and returns a `Sorted`: one
@@ -1513,18 +1516,18 @@ nothing. The person's steps are in [Sort a big folder into your record](../howto
 `tests/test_sections_sort_e2e.py` runs a software graduate's and a history graduate's made-up dumps from
 proposals to sources, and a record the bulk read built through a move and its undo.
 
-- `sections/sort_rules.py` keeps out what is not the person's own work. Nothing in a library or build folder
+- `sections/sorting/rules.py` keeps out what is not the person's own work. Nothing in a library or build folder
   (`VENDORED`: `_build`, `build`, `dist`, `vendor`, `node_modules`, `site-packages`, `venv`, `target`, `out`,
   `bin`, `obj`, `Pods` and the like) is proposed, nor a project found inside `lib` or `libs`
   (`vendored_project`); such files are counted in `skipped` as `VENDORED_SKIP`. A project is proposed at its
   top, so the libraries in its build folder stay part of it.
-- `sections/sort_units.py` makes some folders one row (`groups`, each taking every file below it): a folder
+- `sections/sorting/units.py` makes some folders one row (`groups`, each taking every file below it): a folder
   of `NOTE_FOLDERS_MIN` or more sibling note folders with a README, mostly text (`NOTES_SHARE`) and no code
   (`coursework` notes under a course folder, else a `project` upload); a practice site's folder
   (`PRACTICE_SITE`, an unstarred project said to be practice); and a download named "<Thing> - <6 or 7
   digits>" (`DOWNLOAD_ID`, left out). A notes app's own folders (`APP_FOLDER`: "+Inbox", "_Session-Logs",
   "Templates", "Attachments") are never projects, and files in its templates or attachments are left out
-  (`app_file`). `sections/sort_folders.py` (`not_a_unit`) also keeps a course's materials folder (`MATERIALS_NAME`, such as "Linked
+  (`app_file`). `sections/sorting/folders.py` (`not_a_unit`) also keeps a course's materials folder (`MATERIALS_NAME`, such as "Linked
   materials" or "Resources", at any depth) and a notes vault (`vaults`: a folder holding `.obsidian`,
   `.logseq`, `.foam`, `.zettlr`, `.ztr-directory` or `logseq/config.edn`, or a Notion export whose notes
   mostly end in a 32-hex id) from being a project, with every README folder inside a vault; their files go
@@ -1551,7 +1554,7 @@ proposals to sources, and a record the bulk read built through a move and its un
   `star` is guessed only for a project in no course or year folder, with the person's own commits
   (`repo.share` with `repo.person()`) and a README of `SHOWCASE_README_WORDS` (150) words or more; `cap_stars`
   keeps the newest `STARS_MAX` (8) a sort, also across a sort's folders (`sorts.run`). Copies of one project
-  (`sections/sort_copies.py`, `mark`) are found with or without git and whatever their content: the same
+  (`sections/sorting/copies.py`, `mark`) are found with or without git and whatever their content: the same
   remote; the same name once `copy_name` drops case, separators and copy marks ("-main", "-v3", "-final",
   "-12gb", "(2)", never a bare number); or README first headings (`heading`) that are one and whose words
   are all in each folder's name ("BOIN-Lidar-System" and "Lidar-System"). A generic name (`GENERIC`, or
@@ -1572,7 +1575,7 @@ proposals to sources, and a record the bulk read built through a move and its un
   with a degree word, else `document`; references and contracts go to `document`, or `job_doc` when a job's
   employer is named (`fill_card`). Only a document the rules cannot place goes to the AI (`sort_pick`
   prompt), which picks one of `CHOICES` (`section/kind`) or "none"; at most `AI_ASKS_MAX` a sort.
-- `sections/sort_kinds.py` checks a guess by the content before `place_kind` trusts it: a transcript shows
+- `sections/sorting/kinds.py` checks a guess by the content before `place_kind` trusts it: a transcript shows
   a module row ending in a mark, a classification, a student number or a certificate's words
   (`transcript_content`); a contract names two of its parties, pay and hours (`contract_content`); a file
   named "Lecture", "Week N", "Seminar" or "Workshop" is `lecture` unless its text shows a submission
@@ -1591,7 +1594,7 @@ proposals to sources, and a record the bulk read built through a move and its un
   a job by its employer in the folders or the text. `needs_card(section, target_id)` is true for a
   coursework, lecture or job_doc proposal with no card yet.
 
-The review (`sections/sorts.py`, migrations 0031 and 0032): `record_sorts` (one per sort: `kind` folder,
+The review (`sections/sorting/store.py`, migrations 0031 and 0032): `record_sorts` (one per sort: `kind` folder,
 upload, inbox or move; `roots`, `label`, `state` new | sorting | ready | failed | undone, `skipped`),
 `record_sort_rows` (one per proposal, `state` proposed | left_out | copy | accepted | added | failed,
 `ticked`, `by` rules | ai | you, `source_id` once added, `add_id` the add that took it) and
@@ -1620,10 +1623,10 @@ upload, inbox or move; `roots`, `label`, `state` new | sorting | ready | failed 
   again for rows still waiting (the cards an accepted CV gave).
 - Upload sorts keep their files in `data/record-sort/<id>/` (zips unpacked with `ingest.sources.unpack`'s
   guards) until `remove`.
-- Actions (`sections/sort_actions.py`): `record.sort` (priority 2, one at a time, resumable) runs `sorts.run`;
+- Actions (`sections/sorting/actions.py`): `record.sort` (priority 2, one at a time, resumable) runs `sorts.run`;
   `record.sort_accept` (priority 1) runs `add_accepted`, reads the new sources (`actions.read_all`), then
   `star_projects` and `rematch`. Both publish a `sort` event naming the sort.
-- Courses Hal found (`sections/sort_courses.py`, `sections/sort_review.py`): `sort_courses.course_of(rel)`
+- Courses Hal found (`sections/sorting/courses.py`, `sections/sorting/review.py`): `sort_courses.course_of(rel)`
   names a row's course from its folders (the first folder named as a qualification, by `merge.level` or
   `QUALIFICATION`; else the folder holding year folders or module folders, passing over a `CONTAINER` such
   as "Modules", or a `year_folder` such as "2023-24", "Year 1" or "Term 2", which is never a qualification)
@@ -1650,7 +1653,7 @@ upload, inbox or move; `roots`, `label`, `state` new | sorting | ready | failed 
 - Notes said once for the whole sort (`sort_review.notes`, shown above the list): `no_history` when a
   proposed project folder has no `.git`, so no commits showed whose it is and no showcase was guessed; and
   `github` when `you.links.github` is set and no `github_account` source is on Projects yet.
-- Routes (`sections/sort_routes.py`, shapes in its header): `GET/POST /api/v2/record/sort`, `POST
+- Routes (`sections/sorting/routes.py`, shapes in its header): `GET/POST /api/v2/record/sort`, `POST
   .../sort/upload`, `GET .../sort/{id}` (with `courses` and `notes`), `PUT /api/v2/record/sort-rows/{id}`, `POST .../sort-rows/{id}/keep`, `POST
   .../sort/{id}/tick`, `.../accept`, `.../courses`, `.../groups`, `.../again`, `DELETE .../sort/{id}`. All take the local API key; sorting a folder by its
   path is local only.

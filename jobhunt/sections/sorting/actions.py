@@ -1,5 +1,5 @@
 """The `record.sort` action, which proposes where everything in a big folder goes, and `record.sort_accept`,
-which makes the accepted proposals sources and reads them (`sections.sorts`).
+which makes the accepted proposals sources and reads them (`sections.sorting.store`).
 
 Sorting walks thousands of files, so it runs in the background (priority 2), one at a time
 (`exclusive="kind"`), and is resumable: run again it proposes afresh and keeps what was accepted. Accepting
@@ -16,7 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from jobhunt.core import events, runner
-from jobhunt.sections import actions, sorts
+from jobhunt.sections import actions
+from jobhunt.sections.sorting import store as sorts
 
 SORT, ACCEPT = "record.sort", "record.sort_accept"
 EXAMPLE_CV = ("# Robin Testwell\n\nCurriculum vitae\n\n## Work experience\n\nVisitor guide, Made-up Heritage "

@@ -1,7 +1,7 @@
 """The sorter's rules for folders that are never a project, whatever README, manifest or code they hold: a
 course's materials folder and a notes vault. Their files go by their own signals instead.
 
-`sections.sorter` proposes a project for each code project and each folder with a README. On a real
+`sections.sorting.engine` proposes a project for each code project and each folder with a README. On a real
 10,000-file dump (2026-11-09) a learning platform's "<Module> - <CODE>/Linked materials" folder was proposed
 as a code project for its README and code, and a whole Obsidian vault, "obsidian/Master", as one project for
 the README at its root.
@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from jobhunt.sections import sort_units
+from jobhunt.sections.sorting import units as sort_units
 
 MATERIALS_NAME = re.compile(r"^(?:(?:linked|course|module|class|lecture|teaching|learning|shared)[ _-]?)?"
                             r"(?:materials?|resources?|readings?|handouts?|reading[ _-]?lists?)$", re.I)
