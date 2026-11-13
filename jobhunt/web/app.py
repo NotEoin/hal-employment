@@ -30,7 +30,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .. import __version__, db
-from ..core import naming, paths, plugins
+from ..core import filelock, naming, paths, plugins
 from . import auth, router, sse
 
 BIND = "127.0.0.1"
@@ -405,20 +405,7 @@ def make_server(port: int) -> AppServer:
 
 def _hold_lock() -> Any | None:
     """Takes state/server.lock without waiting; returns the open file, or None when another server holds it."""
-    file = open(paths.state_dir() / LOCK_FILE, "a+")
-    try:
-        if os.name == "nt":
-            import msvcrt
-
-            msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        file.close()
-        return None
-    return file
+    return filelock.try_lock(paths.state_dir() / LOCK_FILE)
 
 
 def answering(port: int) -> bool:

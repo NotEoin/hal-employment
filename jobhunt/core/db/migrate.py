@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from jobhunt.core import backup
+from jobhunt.core import backup, filelock
 
 log = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ def file_lock(path: Path, timeout: float | None = None) -> Iterator[None]:
     try:
         while True:
             try:
-                _lock(handle)
+                filelock.lock(handle)
                 break
             except OSError:
                 if time.monotonic() >= deadline:
@@ -165,29 +165,9 @@ def file_lock(path: Path, timeout: float | None = None) -> Iterator[None]:
         try:
             yield
         finally:
-            _unlock(handle)
+            filelock.unlock(handle)
     finally:
         handle.close()
-
-
-if sys.platform == "win32":
-    import msvcrt
-
-    def _lock(handle) -> None:
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-
-    def _unlock(handle) -> None:
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-else:
-    import fcntl
-
-    def _lock(handle) -> None:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-    def _unlock(handle) -> None:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def lock_path(db_path: Path) -> Path:

@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import db
-from . import clock, events, paths, plugins
+from . import clock, events, filelock, paths, plugins
 
 log = logging.getLogger(__name__)
 
@@ -262,21 +262,7 @@ def _lock_path(action_id: str) -> Path:
 
 def _take(path: Path) -> Any | None:
     """Opens and locks `path` without waiting; None when another process holds it."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    file = open(path, "a+")
-    try:
-        if os.name == "nt":
-            import msvcrt
-
-            msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        file.close()
-        return None
-    return file
+    return filelock.try_lock(path)
 
 
 def _release(file: Any, path: Path) -> None:

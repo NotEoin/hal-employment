@@ -40,7 +40,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import paths
+from . import filelock, paths
 
 log = logging.getLogger(__name__)
 
@@ -241,19 +241,12 @@ def set_waiting(on: bool) -> None:
 @contextlib.contextmanager
 def _locked() -> Iterator[None]:
     """`state/update.lock`, taken without waiting; `UpdateError(BUSY)` when another updater holds it."""
-    file = paths.state_dir() / LOCK_FILE
-    file.parent.mkdir(parents=True, exist_ok=True)
-    handle = open(file, "a+")
+    path = paths.state_dir() / LOCK_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(path, "a+")
     try:
         try:
-            if os.name == "nt":
-                import msvcrt
-
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            filelock.lock(handle)
         except OSError as e:
             raise UpdateError(BUSY, str(e), state="refused") from e
         yield

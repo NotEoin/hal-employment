@@ -466,7 +466,7 @@ class Spawning(unittest.TestCase):
                 names = [a.name.split(".")[0] for a in node.names]
             elif isinstance(node, ast.ImportFrom):
                 if node.level:
-                    self.assertEqual([a.name for a in node.names], ["paths"])
+                    self.assertEqual([a.name for a in node.names], ["filelock", "paths"])
                     continue
                 names = [(node.module or "").split(".")[0]]
             else:
