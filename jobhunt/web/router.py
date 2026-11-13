@@ -319,17 +319,29 @@ def _error_body(e: HTTPError) -> dict:
 
 
 def _as_http_error(e: Exception) -> HTTPError | None:
-    """Today's mapping of plain exceptions, plus `SettingError` as a field problem."""
-    key = getattr(e, "key", None)
-    if isinstance(e, ValueError) and type(e).__name__ == "SettingError" and key:
-        return BadRequest(str(e), field=key)
+    """The reply for a refusal raised below the routes, or None for anything else.
+
+    A domain error says what is wrong in plain words and maps by type: `SettingError` is a 400 with its field,
+    `LookupError` a 404, `PermissionError` a 403, `RuntimeError` and `ValueError` a 409. `KeyError` and
+    `IndexError` are LookupErrors too, but code raises them by mistake, so they stay unmapped and are
+    recorded as unexpected. A mapped error is logged at debug level with its traceback.
+    """
+    from ..core.settings.registry import SettingError
+
+    if isinstance(e, SettingError):
+        return BadRequest(str(e), field=e.key)
+    if isinstance(e, (KeyError, IndexError)):
+        return None
+    mapped: HTTPError | None = None
     if isinstance(e, LookupError):
-        return NotFound(str(e).strip("'\""))
-    if isinstance(e, PermissionError):
-        return Forbidden(str(e))
-    if isinstance(e, (RuntimeError, ValueError)):
-        return Conflict(str(e))
-    return None
+        mapped = NotFound(str(e))
+    elif isinstance(e, PermissionError):
+        mapped = Forbidden(str(e))
+    elif isinstance(e, (RuntimeError, ValueError)):
+        mapped = Conflict(str(e))
+    if mapped is not None:
+        log.debug("%s mapped to %s", type(e).__name__, mapped.status, exc_info=e)
+    return mapped
 
 
 def _record_failure(req: Request, e: Exception) -> None:

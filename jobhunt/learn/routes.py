@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from jobhunt.learn import items
 from jobhunt.learn import undo as _undo  # noqa: F401 - registers the Undo of "Yes, do this" with the server
-from jobhunt.web.router import Request, route
+from jobhunt.web.router import BadRequest, Request, route
 
 PREFIX = "/api/v2/memory"
 
@@ -35,7 +35,7 @@ def switch(req: Request) -> dict:
     """Switches a learned item on or off."""
     body = req.body or {}
     if not isinstance(body.get("on"), bool):
-        raise ValueError("Say on or off.")
+        raise BadRequest("Say on or off.", field="on")
     return items.switch(req.con, req.params["item_id"], body["on"], session_id=req.session_id)
 
 

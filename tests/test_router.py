@@ -6,6 +6,7 @@ import unittest
 from support.api import HalServer
 
 from jobhunt import db
+from jobhunt.core.settings.registry import SettingError
 from jobhunt.web import router
 from jobhunt.web.router import BadRequest, NotFound, Request, route
 
@@ -35,6 +36,25 @@ def _bad(req: Request) -> None:
 @route("GET", f"{PREFIX}/missing")
 def _missing(req: Request) -> None:
     raise LookupError("no job made-up:1")
+
+
+@route("GET", f"{PREFIX}/lost-key")
+def _lost_key(req: Request) -> None:
+    return {}["a made-up key"]
+
+
+@route("GET", f"{PREFIX}/lost-item")
+def _lost_item(req: Request) -> None:
+    return [][0]
+
+
+class _FussySetting(SettingError):
+    """A subclass, to show the mapping follows the type and not its name."""
+
+
+@route("GET", f"{PREFIX}/fussy")
+def _fussy(req: Request) -> None:
+    raise _FussySetting("goal.min_pay", "Try 24000 or 24k.")
 
 
 @route("GET", f"{PREFIX}/busy")
@@ -126,6 +146,19 @@ class Routing(unittest.TestCase):
             con.close()
         self.assertEqual(row["area"], "system")
         self.assertTrue(row["why"])
+
+    def test_a_missing_key_or_index_in_a_handler_is_a_bug_and_not_a_404(self):
+        # regression: any KeyError or IndexError from code replied 404 or 409 and was never logged
+        for name in ("lost-key", "lost-item"):
+            with self.subTest(name), self.assertLogs("jobhunt.web.router", "ERROR"):
+                reply = self.c.get(f"{PREFIX}/{name}")
+            self.assertEqual(reply.status, 500)
+            self.assertEqual(reply.json()["error"]["message"], router.UNEXPECTED)
+
+    def test_a_setting_error_subclass_is_still_a_field_problem(self):
+        reply = self.c.get(f"{PREFIX}/fussy")
+        self.assertEqual(reply.status, 400)
+        self.assertEqual(reply.json()["error"]["field"], "goal.min_pay")
 
     def test_a_page_closed_mid_reply_is_not_recorded_as_a_failure(self):
         # regression: on Windows every closed page added "Something went wrong on a page" to Activity

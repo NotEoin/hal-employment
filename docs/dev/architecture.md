@@ -127,8 +127,10 @@ def job(req: Request) -> dict:
 
 A dict or list is sent as JSON and `None` as `{"ok": true}`. Errors become `{"error": {"code", "message",
 "field", "fix"}}`: `SettingError` 400 with `field`, `LookupError` 404, `PermissionError` 403, `RuntimeError`
-and `ValueError` 409, anything else 500 with plain words, the traceback in `logs/server.log` and an Activity
-row in area system. `local_only=True` answers 409 `remote` in a session from another computer.
+and `ValueError` 409, anything else (`KeyError` and `IndexError` included, since a handler raises them by
+mistake) 500 with plain words, the traceback in `logs/server.log` and an Activity row in area system. A
+handler that refuses on purpose raises the matching `BadRequest`, `NotFound` or `Conflict`. `local_only=True`
+answers 409 `remote` in a session from another computer.
 
 A browser that closes the page mid-reply is normal: any `ConnectionError` while replying (Linux
 `BrokenPipeError`, Windows `ConnectionAbortedError`) is dropped without a log line or an Activity row.

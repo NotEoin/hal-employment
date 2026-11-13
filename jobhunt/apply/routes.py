@@ -6,7 +6,7 @@ and rewriting the letter are `docs/write_routes.py`'s.
 """
 from __future__ import annotations
 
-from ..web.router import BadRequest, NotHere, Request, json_body, route, who
+from ..web.router import BadRequest, Conflict, NotHere, Request, json_body, route, who
 from . import actions, queries
 
 PREFIX = "/api/v2/applications"
@@ -150,7 +150,7 @@ def show(req: Request) -> dict:
     if req.remote:
         return _show_on_this_computer(job_id)
     if not browser.show(job_id):
-        raise RuntimeError("The form's tab is closed. Press \"Fill it in again\" to open it.")
+        raise Conflict("The form's tab is closed. Press \"Fill it in again\" to open it.")
     return {"ok": True}
 
 
@@ -166,11 +166,11 @@ def _show_on_this_computer(job_id: str) -> dict:
         shown = extension.show(job_id)
     except RuntimeError as e:
         if "closed" in str(e):
-            raise RuntimeError(TAB_CLOSED) from e
-        raise RuntimeError("The browser helper did not answer. Check the browser on this computer is still "
+            raise Conflict(TAB_CLOSED) from e
+        raise Conflict("The browser helper did not answer. Check the browser on this computer is still "
                            "open.") from e
     if not shown:
-        raise RuntimeError(TAB_CLOSED)
+        raise Conflict(TAB_CLOSED)
     return {"ok": True}
 
 

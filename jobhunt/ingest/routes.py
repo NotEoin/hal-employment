@@ -15,7 +15,7 @@ from pathlib import Path
 
 from jobhunt.core import events
 from jobhunt.ingest import actions, items, privacy
-from jobhunt.web.router import BadRequest, NotFound, route
+from jobhunt.web.router import BadRequest, Conflict, NotFound, route
 
 LINKS_MAX = 20             # links in one request
 GITHUB_HOSTS = ("github.com", "www.github.com")
@@ -59,7 +59,7 @@ def again(req) -> dict:
         action_id = actions.queue(again=True, session_id=req.session_id, remote=req.remote,
                                   why="You asked Hal to read the rest of your documents with the AI")
     except RuntimeError as e:
-        raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
+        raise Conflict("Hal is still reading other files into your record. Try again when it is done.") from e
     return {"action_id": action_id}
 
 
@@ -70,7 +70,7 @@ def tidy(req) -> dict:
         action_id = actions.queue(tidy=True, session_id=req.session_id, remote=req.remote,
                                   why="You asked Hal to tidy your record")
     except RuntimeError as e:
-        raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
+        raise Conflict("Hal is still reading other files into your record. Try again when it is done.") from e
     return {"action_id": action_id}
 
 
@@ -131,5 +131,5 @@ def allow_private(req) -> dict:
         action_id = actions.queue(allow=[item_id], session_id=req.session_id, remote=req.remote,
                                   why="You asked Hal to add a file it had kept out as private")
     except RuntimeError as e:
-        raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
+        raise Conflict("Hal is still reading other files into your record. Try again when it is done.") from e
     return {"action_id": action_id, "add_again": False}

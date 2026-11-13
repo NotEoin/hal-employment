@@ -14,7 +14,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from ...web.router import BadRequest, Conflict, NotHere, Request, route
+from ...web.router import BadRequest, Conflict, NotFound, NotHere, Request, route
 from .. import plugins, settings
 from . import private, secrets
 
@@ -52,7 +52,10 @@ def _body_value(req: Request, name: str = "value") -> Any:
 
 
 def _changeable(req: Request, key: str):
-    item = settings.setting(key)
+    try:
+        item = settings.setting(key)
+    except KeyError as e:
+        raise NotFound(e.args[0]) from None
     if req.remote and item.remote == "local_only":
         raise NotHere("Change this on the computer Hal runs on.", field=key)
     return item
@@ -93,7 +96,7 @@ def reset(req: Request) -> dict:
 def _secret_name(req: Request) -> str:
     name = req.params["name"]
     if name not in secrets.NAMES:
-        raise LookupError("Hal keeps no key or password by that name.")
+        raise NotFound("Hal keeps no key or password by that name.")
     return name
 
 
@@ -150,5 +153,5 @@ def clear_private(req: Request) -> dict:
     try:
         private.clear(req.params["key"])
     except private.PrivateAnswerError as e:
-        raise LookupError(str(e)) from None
+        raise NotFound(str(e)) from None
     return {"saved": False}

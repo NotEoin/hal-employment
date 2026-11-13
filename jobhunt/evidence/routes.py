@@ -26,7 +26,7 @@ from pathlib import Path
 from jobhunt import record
 from jobhunt.core import runner
 from jobhunt.evidence import actions  # noqa: F401 - registers record.sync and record.ask before a route starts one
-from jobhunt.web.router import MB, BadRequest, FileResponse, NotFound, route
+from jobhunt.web.router import MB, BadRequest, Conflict, FileResponse, NotFound, route
 
 log = logging.getLogger(__name__)
 INBOX = "Inbox"
@@ -157,7 +157,7 @@ def open_folder(folder: Path) -> None:
         return
     opener = "open" if sys.platform == "darwin" else "xdg-open"
     if not shutil.which(opener):
-        raise RuntimeError("This computer has no file manager Hal can open.")
+        raise Conflict("This computer has no file manager Hal can open.")
     subprocess.Popen([opener, str(folder)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

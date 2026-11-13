@@ -7,13 +7,13 @@ from __future__ import annotations
 
 from jobhunt.sites import cards, report
 from jobhunt.sites import notes as N
-from jobhunt.web.router import BadRequest, Request, route
+from jobhunt.web.router import BadRequest, NotFound, Request, route
 
 
 def _note(req: Request, note_id: str) -> dict:
     found = next((s for s in N.stored(req.con) if s.note.id == note_id), None)
     if found is None:
-        raise LookupError("That note is not in Hal's list.")
+        raise NotFound("That note is not in Hal's list.")
     return cards.note_dict(found)
 
 
@@ -39,7 +39,7 @@ def _rid(req: Request) -> int:
     try:
         return int(req.params["rid"])
     except ValueError as e:
-        raise LookupError("That report is not in Hal's list.") from e
+        raise NotFound("That report is not in Hal's list.") from e
 
 
 @route("POST", "/api/v2/sites/reports/{rid}/save")
