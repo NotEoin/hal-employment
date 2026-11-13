@@ -119,7 +119,16 @@ class Child:
 
 
 class Reader(Protocol):
-    """Reads one source; raises `NotReadYet` when it is a stub, OSError or ValueError when it cannot read it."""
+    """Reads one source. What it may raise, and what `pipeline.finish` does with each:
+
+    - `NotReadYet`: a stub; the source stays `new`.
+    - `ai.LLMUnavailable`: the AI is not there; the source waits for it.
+    - `ai.PrivateLeak`: the text would reach the AI while private; the source is `failed`.
+    - `NotTheirs`: the source is someone else's; it is kept out.
+    - `OSError` or `ValueError`: it could not be read; the source is `failed`.
+
+    Any other exception is not caught there: it propagates to the caller.
+    """
 
     name: str
 
