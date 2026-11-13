@@ -20,7 +20,7 @@ from unittest import mock
 from urllib.parse import urlparse
 
 from jobhunt import record
-from jobhunt.core import paths
+from jobhunt.core import paths, runner
 from jobhunt.core.settings import store
 from jobhunt.web import app, auth
 
@@ -118,6 +118,9 @@ class HalServer:
         store.drop_cache()
         self._stack.callback(store.drop_cache)
         paths.ensure()
+        # as the server's start does (`runner.at_start`): a route that starts an action of a kind no earlier test
+        # had loaded answered 404 when its test ran without the rest of the suite (2026-11-13)
+        runner.load_kinds()
         self.httpd = app.make_server(0)
         self.port = self.httpd.server_address[1]
         thread = threading.Thread(target=self.httpd.serve_forever, name="test-server", daemon=True)
