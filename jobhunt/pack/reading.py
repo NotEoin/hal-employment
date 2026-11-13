@@ -127,7 +127,7 @@ def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, .
 
 def previous_applications(con, job) -> str:
     """Summarises earlier applications to the same employer, from the tracker."""
-    from ..gmail import norm
+    from ..mail.gmail import norm
     rows = con.execute("SELECT id, company, title, status FROM jobs WHERE id != ? AND status IN "
                        "('applied','assessment','interview','offer','rejected','withdrawn')", (job["id"],)).fetchall()
     same = [r for r in rows if norm(r["company"]) and norm(r["company"]) == norm(job["company"])]

@@ -17,9 +17,10 @@ from pathlib import Path
 
 os.environ["JOBHUNT_APPLY_BROWSER"] = "headless"
 
-from jobhunt import autofill, browser, db, documents, gmail, record, salary
+from jobhunt import autofill, browser, db, documents, record, salary
 from jobhunt.apply import queries
 from jobhunt.core import runner
+from jobhunt.mail import gmail
 
 # An employment record that does not exist, so no test reads the real one or calls Ollama.
 record.VAULT = Path(tempfile.mkdtemp()) / "no-record"

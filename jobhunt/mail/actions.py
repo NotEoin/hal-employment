@@ -34,7 +34,8 @@ def _check_example(world) -> dict:
                priority=2, example=_check_example)
 def check(ctx, every: int | str = "few") -> dict:
     """Reads new emails, sorts them and makes to-dos for the ones that need you."""
-    from jobhunt import gmail, tasks
+    from jobhunt import tasks
+    from jobhunt.mail import gmail
 
     ctx.step("Reading new emails")
     ctx.used("email", "Your email inbox, read only")
@@ -61,7 +62,7 @@ def _digest_example(world) -> dict:
                priority=2, example=_digest_example)
 def digest(ctx, time: str = "the time you chose", dry_run: bool = False) -> dict:
     """Writes the daily summary and emails it to your own address."""
-    from jobhunt import digest as daily
+    from jobhunt.mail import digest as daily
 
     ctx.step("Writing your daily summary")
     subject = daily.send(ctx.con, dry_run=dry_run).splitlines()[0]

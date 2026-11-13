@@ -8,7 +8,8 @@ Every assessment invitation also brings the same neutral to-do, to read it befor
 timed tests rarely change once begun. It is the same for everyone, whatever private answers are saved,
 so its presence says nothing about them; it names no private answer or file.
 """
-from . import db, gmail
+from . import db
+from .mail import gmail
 
 # A fixed inbox for the made-up world of the tests (tests/support/world.py patches it); None means
 # `gmail.address()`.

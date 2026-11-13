@@ -9,7 +9,7 @@ from ..notify import notify
 
 def cmd_mail(args):
     """Handles `jobhunt mail`: reads recent job emails."""
-    from .. import gmail
+    from ..mail import gmail
     con = db.connect()
     attention = gmail.sync(con, args.days)
     from .. import tasks
@@ -26,7 +26,7 @@ def cmd_mail(args):
 
 def cmd_digest(args):
     """Handles `jobhunt digest`: sends or speaks the daily digest."""
-    from .. import digest
+    from ..mail import digest
     con = db.connect()
     print(digest.spoken(con) if args.spoken else digest.send(con, args.dry_run))
 

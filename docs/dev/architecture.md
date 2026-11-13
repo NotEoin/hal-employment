@@ -1916,7 +1916,7 @@ of kind `move`).
 - Detection (`find/detect.py`) is pure over the address and the page's text; a look is held in the server
   process for 30 minutes under `detected_id`. Saving a site is undone through `find/source_undo.py`.
 - Job alert emails from the senders in `find/seed/alert_senders.toml` (or `email.alert_senders`) go through
-  one generic parser in `gmail.py`: each linked job becomes a lead.
+  one generic parser in `mail/gmail.py`: each linked job becomes a lead.
 
 ## How Hal learns (`jobhunt/learn/`)
 

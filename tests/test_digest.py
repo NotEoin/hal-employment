@@ -10,8 +10,8 @@ from unittest import mock
 from support import people
 from support.world import World
 
-from jobhunt import digest
 from jobhunt.core import settings
+from jobhunt.mail import digest
 
 GREETING = re.compile(r"^Good (morning|afternoon|evening)(, [^.]+)?\.")
 

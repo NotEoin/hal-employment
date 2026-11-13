@@ -14,10 +14,11 @@ import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 from support.api import HalServer
 from support.fake_ai import fake_ai
 
-from jobhunt import db, gmail
+from jobhunt import db
 from jobhunt.core import settings
 from jobhunt.core.settings import store
 from jobhunt.find import sources_registry as registry
+from jobhunt.mail import gmail
 
 GOAL = {"goal.stage": "new_grad", "goal.kinds": ["graduate_job", "internship"], "goal.places": ["Fernvale"],
         "goal.roles": ["marketing"], "scoring.preset": "humanities_grad", "goal.avoid_sectors": []}

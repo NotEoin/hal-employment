@@ -24,9 +24,10 @@ from support.legacy import Practice
 from support.practice_site import HelperBrowser, PracticeSite
 from support.world import World
 
-from jobhunt import autofill, browser, digest, extension
+from jobhunt import autofill, browser, extension
 from jobhunt.apply import driver, guard
 from jobhunt.core import runner, settings
+from jobhunt.mail import digest
 
 # unittest runs these for this module: no salary research, and no private answers.
 setUpModule, tearDownModule = legacy.setUpModule, legacy.tearDownModule
@@ -96,7 +97,7 @@ class Email(unittest.TestCase):
     def test_the_only_email_hal_sends_is_your_own_summary_to_you(self):
         senders = sorted({p.relative_to(ROOT).as_posix() for p in CODE if p.suffix == ".py"
                           and self.SENDS.search(p.read_text(encoding="utf-8"))})
-        self.assertEqual(senders, ["jobhunt/digest.py"])
+        self.assertEqual(senders, ["jobhunt/mail/digest.py"])
         sent: list[EmailMessage] = []
 
         class FakeSmtp:

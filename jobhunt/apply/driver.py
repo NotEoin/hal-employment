@@ -741,7 +741,7 @@ def _type_code(con, job, boxes: list[str]) -> bool:
 
     Only with `email.codes` on. The person presses the button next to the code; Hal never does.
     """
-    from .. import gmail
+    from ..mail import gmail
     if not settings.get("email.codes"):
         return False
     job_id = job["id"]
