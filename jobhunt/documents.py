@@ -10,6 +10,10 @@ read from there only when that file names this job, because one old folder could
 The CV follows My CV's choices: while it is set to send the person's original file, that file goes out byte
 for byte under the CV's file name with its own extension, and while "Adjust your CV for each job" is No the
 main CV goes as it is. Both were shown on My CV but not followed here before 2026-11-12.
+
+The CV of an application Hal writes now is kept with its change list (`cvstudio/tailor.py`) and printed from
+there; an application written before keeps the cv.json path (`cv.tailor`, `undone_changes`) until it is sent,
+decided by whether `job_cvs` holds a row for it.
 """
 import contextvars
 import json
@@ -20,7 +24,7 @@ from pathlib import Path
 from jobhunt import ai, db, letter, pack
 from jobhunt.ai import gpu
 from jobhunt.core import naming, settings
-from jobhunt.cvstudio import cv
+from jobhunt.cvstudio import cv, tailor
 from jobhunt.docs import folders
 
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
@@ -134,7 +138,8 @@ def save(con, job, docs: dict) -> None:
     folders.number_for(con, job["id"])
     con.commit()
     if docs.get("approved"):
-        folders.publish(con, job, docs, render=lambda out: _render_into(job, docs, out))
+        folders.publish(con, job, docs, render=lambda out: _render_into(job, docs, out),
+                        cv_version_id=tailor.version_of(job["id"], con))
         con.commit()
     else:
         pack_dir(job, con)
@@ -173,8 +178,11 @@ def files(job, con=None) -> dict:
 
 
 def tailored(job, docs: dict) -> dict:
-    """The CV Hal makes for this job from the base CV, with any title or summary given for it; the base CV as it
-    is while adjusting for each job is No or the original file is sent."""
+    """The CV Hal made for this job: its kept CV (`tailor.v1`) when it has one; for an application written
+    before that, the base CV reordered for it (`cv.tailor`) with any title or summary given for it, or the
+    base CV as it is while adjusting for each job is No or the original file is sent."""
+    if tailor.kept(job["id"]):
+        return tailor.v1(job["id"])
     if settings.get("cvdocs.tailor") == "no" or original_file() is not None:
         return cv.load()
     variant = cv.tailor(pack._job_text(job))[0]
@@ -191,8 +199,11 @@ def proposed_cv(job, docs: dict) -> dict:
 
 
 def current_cv(job, docs: dict) -> dict:
-    """The CV this application sends: the applicant's own edit of it, else Hal's tailoring of the base CV,
-    with the changes the person undid put back as the base CV has them."""
+    """The CV this application sends: its kept CV, which holds its own Undo (`tailor.document`); for an older
+    application, the applicant's own edit of it, else Hal's tailoring of the base CV, with the changes the
+    person undid put back as the base CV has them."""
+    if tailor.kept(job["id"]):
+        return tailor.v1(job["id"])
     made = proposed_cv(job, docs)
     undone = docs.get("undone_changes")
     return cv.revert(cv.load(), made, undone) if undone else made
@@ -201,8 +212,9 @@ def current_cv(job, docs: dict) -> dict:
 def render(job, docs: dict, out: Path | None = None) -> dict:
     """Renders the CV and cover letter PDFs from the documents into `out`; returns their paths.
 
-    `out` defaults to the application's folder. A CV the applicant has not edited for this job is made
-    again from the base CV, so a change to the base reaches every application still to be sent. The CV
+    `out` defaults to the application's folder. A kept CV (`tailor.kept`) is printed from the version it was
+    made on with its changes. For an older application, a CV the applicant has not edited for this job is
+    made again from the base CV, so a change to the base reaches it while it waits to be sent. The CV
     takes the file name from the `cvdocs.file_name` setting, whatever name the PDF maker gave it.
     """
     d = out or _OUT.get() or pack_dir(job)

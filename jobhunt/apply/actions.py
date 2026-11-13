@@ -26,6 +26,7 @@ from jobhunt import browser, db, documents
 from jobhunt.apply import driver
 from jobhunt.apply.queries import column_of, load_app, load_job, mark_applied, set_app, site_of
 from jobhunt.core import runner, settings
+from jobhunt.cvstudio import tailor
 
 log = logging.getLogger(__name__)
 
@@ -245,11 +246,14 @@ def _approve_documents(con, job_id: str, body: dict | None, *, session_id: str |
     now = db.now()
     before = documents.load(con, job)
     docs = {**_merge_edits(before, body or {}), "approved": now}
+    # the job's CV is saved as its own version first, so the folder's manifest names it
+    cv = {"cv_version_id": tailor.approve(job_id, dict(job), con)} if tailor.kept(job_id, con) else {}
     documents.save(con, job, docs)
     edits.from_documents(con, job, before, docs)   # an approval carries the person's last edits
     # The Form step starts now, not when the page has loaded: the application page follows it at once.
     stage = {} if load_app(con, job_id)["stage"] in ("form", "filled") else {"stage": "form"}
-    set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id, **stage)
+    set_app(con, job_id, approved_at=now, mode=browser.mode(), session_id=session_id, helper_id=helper_id,
+            **stage, **cv)
     db.log(con, job_id, "note", "documents approved")
     con.commit()
     if not settings.get("setup.first_app_seen"):
@@ -268,6 +272,7 @@ def reopen_documents(con, job_id: str) -> None:
     if job["status"] != "applying":
         raise ValueError("Only an application in progress can go back to its documents.")
     runner.stop_action(job_id)
+    tailor.reopen(job_id, con)
     docs = documents.load(con, job)
     docs.pop("approved", None)
     documents.save(con, job, docs)
@@ -299,9 +304,13 @@ def save_documents(con, job_id: str, body: dict, *, by_you: bool = False) -> dic
 
 
 def set_change(con, job_id: str, change_id: str, on: bool) -> list[str]:
-    """Undo (`on` False) or Redo one per-job CV change; returns the changes now undone."""
+    """Undo (`on` False) or Redo one per-job CV change and makes the PDF again; returns the changes now undone."""
     job = load_job(con, job_id)
     docs = documents.load(con, job)
+    if tailor.kept(job_id, con):
+        tailor.set_change(job_id, change_id, on, con)
+        documents.save(con, job, docs)
+        return [c["id"] for c in tailor.shown(job_id, con)["changes"] if not c["on"]]
     undone = [c for c in docs.get("undone_changes") or [] if c != change_id]
     if not on:
         undone.append(change_id)

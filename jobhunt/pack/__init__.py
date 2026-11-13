@@ -1,8 +1,8 @@
 """Application packs: everything needed to apply for one job, drafted locally.
 
-A pack holds a company brief, a requirements-to-evidence map with honest gaps,
-a tailored CV, a cover letter, a short message for the person hiring, and
-answers to common form questions. It is written to the job's folder (`documents.pack_dir`), and a
+A pack holds a company brief, a requirements-to-evidence map with honest gaps, a CV adjusted for the job
+(`cvstudio.tailor.prepare`, kept with its change list), a cover letter, a short message for the person
+hiring, and answers to common form questions. It is written to the job's folder (`documents.pack_dir`), and a
 `docs.prepared` event says one is ready. With the Hal add-on on, a copy also goes into its Applications
 folder (`addon.applications_mirror`). Nothing is sent or submitted.
 
@@ -73,7 +73,7 @@ from pathlib import Path
 from jobhunt import ai, db
 from jobhunt.company import reputation
 from jobhunt.core import events
-from jobhunt.cvstudio import cv
+from jobhunt.cvstudio import cv, tailor
 from jobhunt.pack.checks import (
     CUT_FLAG,
     DANGLING_FLAG,
@@ -329,8 +329,9 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     message, answers = others["message"], others["answers"]
     letter, message, answers, refused = without_refusals(letter, message, answers)
 
-    variant, track = cv.tailor(job_text)
-    pdf = cv.render(variant, out_dir)
+    made = tailor.prepare(dict(job), con=con)
+    track = next((c["after"] for c in made["changes"] if c["target"] == "headline"), None)
+    pdf = cv.render(tailor.v1(job_id, con), out_dir)
     flagged = refused + written["flags"] + others["flags"]
     # The type's special cases: a KTP advert's employer is the host company, not the scheme.
     ktp = "ktp" in who["special_cases"] and job["company"] == "KTP"

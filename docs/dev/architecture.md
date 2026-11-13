@@ -339,6 +339,7 @@ runs: tests use `tests/support/fake_claude/`.
   `to_v1`/`from_v1` keep the printable `cv.json`.
 - `jobhunt/cvstudio/cv.py` is the reader of the store in the `cv.json` shape: `load()` returns the version in
   use as the PDF builder, the packs and the matching code expect it, so none of them needs the store itself.
+  `v1_of(doc)` gives any document in that shape, as an application's CV is printed.
 - Versions never change after they are written. `store.new_version` adds one under `BEGIN IMMEDIATE`, so two
   saves at once get two numbers, and publishes the event `cv`. A version made with `job_id=` belongs to that
   job: it is kept out of the main list and never becomes Hal's main copy.
@@ -397,10 +398,21 @@ runs: tests use `tests/support/fake_claude/`.
   and "Remember this" is a `cv_preferences` row.
 - `tailor.for_job` (No, A little, More) keeps each change for a job in `job_cvs` and rebuilds the job's CV
   from the base version plus the changes still on. An AI change for a job only rewords: one that adds a
-  result the CV does not have is dropped.
-  Applications do not call it yet: they take `documents.tailored` (the cv.json reorder of `cv.tailor`),
-  which sends the main CV as it is while the setting is No, and the person's own file byte for byte while My
-  CV is set to send the original (`documents.original_file`).
+  result the CV does not have is dropped. The title line `cv.track_for` picks from the advert is a change
+  in the same list.
+- Applications: `pack.build` calls `tailor.prepare`, which stores the version in use as the job's base and
+  the change list, and prints `tailor.v1` (`cv.v1_of`, the `to_v1` shape) through the same looks as My CV.
+  `documents.current_cv` and the Undo route read the kept CV, and `approve_documents` saves it as a
+  `tailored` version for the job (`tailor.approve`) before the folder is written, so
+  `applications.cv_version_id` and the manifest's `cv_version` name it. "Change the documents" takes that
+  approval back (`tailor.reopen`). The job's CV stays on its base version: a later change on My CV does not
+  reach it.
+- An application whose documents were written before has no `job_cvs` row (`tailor.kept`), and keeps the
+  cv.json path until it is sent: `documents.tailored` reorders the main CV with `cv.tailor`, and Undo is
+  `docs["undone_changes"]`. Both paths send the main CV as it is while the setting is No, and the person's
+  own file byte for byte while My CV is set to send the original (`documents.original_file`).
+- `cvdocs.pick_first` is not read: no application step asks for the person's picks yet, so `prepare` gets
+  no `priorities` and uses the requirements the person has not switched off.
 - `fresh.py` builds a CV of the chosen type from interview answers and turns failing checks into
   suggestions.
 

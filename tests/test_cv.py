@@ -37,7 +37,8 @@ class BaseCv(unittest.TestCase):
         self.assertEqual(cv.load()["summary"], "Builds things.")
 
     def test_an_application_keeps_its_own_edit_of_the_cv(self):
-        job = {"title": "Engineer", "company": "Acme", "location": "", "salary": "", "description": "Python"}
+        job = {"id": "job-acme", "title": "Engineer", "company": "Acme", "location": "", "salary": "",
+               "description": "Python"}
         self.assertEqual(documents.current_cv(job, {})["education"][0]["detail"], "New dissertation wording.")
         mine = {"cv": {**cv.load(), "summary": "For Acme."}}
         self.assertEqual(documents.current_cv(job, mine)["summary"], "For Acme.")

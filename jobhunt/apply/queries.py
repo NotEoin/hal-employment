@@ -342,9 +342,13 @@ def _steps(con, job_id: str, col: str | None, app: dict, row) -> tuple[int, list
 
 
 def _cv_changes(job, docs: dict) -> list[dict]:
-    """The per-job CV changes, each with whether it is on, compared with the main CV."""
-    from jobhunt.cvstudio import cv
+    """The per-job CV changes, each with whether it is on: the kept change list, or for an older application
+    the differences from the main CV."""
+    from jobhunt.cvstudio import cv, tailor
 
+    if tailor.kept(job["id"]):
+        return [{k: c[k] for k in ("id", "kind", "where", "before", "after", "why", "ev", "on")}
+                for c in tailor.shown(job["id"])["changes"]]
     try:
         found = cv.changes(cv.load(), documents.proposed_cv(job, docs))
     except Exception as e:  # a CV that cannot be read shows no changes, and the page still opens

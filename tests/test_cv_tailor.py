@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from support.fake_ai import fake_ai
 from test_cv_suggest import PROFILE, TABLE, CvCase
 
+from jobhunt import documents
+from jobhunt.apply import actions
 from jobhunt.core import settings
-from jobhunt.cvstudio import store, suggest, tailor
+from jobhunt.cvstudio import cv, store, suggest, tailor
 
 JOB = {"id": "job-archive-1", "title": "Archive Assistant", "company": "Fenmoor Heritage Trust",
        "requirements": ["Confident with Excel and NVivo for survey data", "Experience of archives"]}
@@ -34,7 +38,9 @@ def tailoring_ai(req) -> str:
     return json.dumps({"none": True})
 
 
-class Tailoring(CvCase):
+class JobCase(CvCase):
+    """The made-up CV and the made-up job it is adjusted for."""
+
     def setUp(self) -> None:
         super().setUp()
         self.con.execute("INSERT INTO jobs (id, source, company, title, first_seen, last_seen) "
@@ -42,6 +48,8 @@ class Tailoring(CvCase):
                          "'2026-10-20T09:00:00Z', '2026-10-20T09:00:00Z')", (JOB["id"], JOB["company"], JOB["title"]))
         self.con.commit()
 
+
+class Tailoring(JobCase):
     def bullets(self, doc) -> list[str]:
         return [b.text for s in doc.sections for e in s.entries for b in e.bullets]
 
@@ -149,6 +157,74 @@ class Tailoring(CvCase):
         with fake_ai({"cv_suggest": tailoring_ai}):
             _, changes = tailor.for_job(JOB, level="more")
         self.assertEqual([c["kind"] for c in changes], ["Moved"])
+
+    def test_the_title_line_chosen_by_the_advert_is_a_change_that_can_be_undone(self):
+        job = {**JOB, "description": "Catalogue the archive and answer archive enquiries."}
+        with mock.patch.object(cv, "TRACKS", {"archives": ("Archives graduate", r"\barchive")}):
+            shown = tailor.prepare(job, level="little")
+        title = next(c for c in shown["changes"] if c["target"] == "headline")
+        self.assertEqual((title["kind"], title["after"]), ("Reworded", "Archives graduate"))
+        self.assertEqual(tailor.document(JOB["id"]).headline, "Archives graduate")
+        self.assertEqual(tailor.v1(JOB["id"])["title"], "Archives graduate")
+        tailor.set_change(JOB["id"], title["id"], False)
+        self.assertEqual(tailor.document(JOB["id"]).headline, store.current()[1].headline)
+
+
+class Applications(JobCase):
+    """An application's CV through the documents and the approval, kept in `job_cvs`."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.printed: list[dict] = []
+        self.enterContext(mock.patch.object(cv, "render", self.draw))
+        self.enterContext(mock.patch.object(actions, "start", lambda *a, **kw: "action-made-up"))
+
+    def draw(self, variant: dict, out: Path) -> Path:
+        """A made-up PDF maker: keeps what it was asked to print."""
+        self.printed.append(variant)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "cv.pdf").write_bytes(b"%PDF-1.4 made-up\n%%EOF\n")
+        return out / "cv.pdf"
+
+    def job(self):
+        return self.con.execute("SELECT * FROM jobs WHERE id = ?", (JOB["id"],)).fetchone()
+
+    def test_a_new_application_prints_its_kept_cv_and_undo_prints_it_again(self):
+        with fake_ai({"cv_suggest": tailoring_ai}):
+            shown = tailor.prepare(JOB, level="little", con=self.con)
+        sent = documents.current_cv(self.job(), {})
+        self.assertEqual(sent, cv.v1_of(tailor.document(JOB["id"])))
+        self.assertEqual(sent["summary"], NEW_PROFILE)
+        reworded = next(c for c in shown["changes"] if c["kind"] == "Reworded")
+        undone = actions.set_change(self.con, JOB["id"], reworded["id"], False)
+        self.assertEqual(undone, [reworded["id"]])
+        self.assertNotEqual(self.printed[-1]["summary"], NEW_PROFILE, "the PDF is made again without it")
+        self.assertNotIn("undone_changes", documents.load(self.con, self.job()))
+
+    def test_approving_saves_the_jobs_version_on_the_application_and_its_folder(self):
+        with fake_ai({"cv_suggest": tailoring_ai}):
+            tailor.prepare(JOB, level="little", con=self.con)
+        actions.approve_documents(self.con, JOB["id"], {})
+        vid = tailor.version_of(JOB["id"], self.con)
+        self.assertEqual(self.con.execute("SELECT origin, job_id FROM cv_versions WHERE id = ?", (vid,)).fetchone()[:],
+                         ("tailored", JOB["id"]))
+        self.assertEqual(self.printed[-1], cv.v1_of(store.get(vid)))
+        found = self.con.execute("SELECT cv_version_id FROM applications WHERE job_id = ?", (JOB["id"],)).fetchone()
+        self.assertEqual(found["cv_version_id"], vid)
+        found = self.con.execute("SELECT cv_version_id FROM app_documents WHERE job_id = ? AND kind = 'cv_pdf'",
+                                 (JOB["id"],)).fetchone()
+        self.assertEqual(found["cv_version_id"], vid)
+        actions.reopen_documents(self.con, JOB["id"])
+        self.assertIsNone(tailor.version_of(JOB["id"], self.con), "taking the approval back lets the CV change")
+
+    def test_an_application_written_before_keeps_the_older_path_until_sent(self):
+        older = {"title": "Older", "summary": "Reordered the older way."}
+        with mock.patch.object(cv, "tailor", lambda text: (dict(older), None)):
+            self.assertEqual(documents.current_cv(self.job(), {})["summary"], "Reordered the older way.")
+            undone = actions.set_change(self.con, JOB["id"], "summary", False)
+        self.assertEqual(undone, ["summary"])
+        self.assertEqual(documents.load(self.con, self.job())["undone_changes"], ["summary"])
+        self.assertFalse(tailor.kept(JOB["id"]))
 
 
 if __name__ == "__main__":

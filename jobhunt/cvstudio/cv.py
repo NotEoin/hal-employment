@@ -3,8 +3,11 @@
 Hal keeps the CV in the CV store (`cvstudio/store.py`): numbered versions that never change. `load()`
 reads the version in use in the older cv.json shape, so the modules that draw or score a CV need no store
 of their own. The store's first version is imported once from the importer's copy of the website CV and
-its old overrides (`cvstudio/import_v1.py`), or made from the settings by `starter()`. A variant for one
-job reorders projects and skill groups by relevance to the advert. The PDF is drawn by `pdf.py`.
+its old overrides (`cvstudio/import_v1.py`), or made from the settings by `starter()`. `v1_of` gives any
+schema 2 document in that shape, so an application's CV (`cvstudio/tailor.py`) prints through the same
+looks. `tailor` reorders projects and skill groups for one job in this shape; only applications whose
+documents Hal wrote before `tailor.py` made them still use it (`documents.tailored`). The PDF is drawn by
+`pdf.py`.
 """
 import copy
 import json
@@ -61,9 +64,16 @@ def printable(data: dict) -> dict:
 
 def load() -> dict:
     """Hal's base CV in cv.json shape: the version in use, entries left out dropped."""
-    from jobhunt.cvstudio import model, store
+    from jobhunt.cvstudio import store
 
-    data = model.to_v1(store.current()[1], profile())
+    return v1_of(store.current()[1])
+
+
+def v1_of(doc) -> dict:
+    """A schema 2 document in cv.json shape, as `load` gives the version in use: entries left out dropped."""
+    from jobhunt.cvstudio import model
+
+    data = model.to_v1(doc, profile())
     for section in NAMED_BY:
         for item in data.get(section) or []:
             item["_key"] = item.get(NAMED_BY[section]) or ""

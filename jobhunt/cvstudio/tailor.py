@@ -17,13 +17,21 @@ change can be undone and redone before approval; `approve` saves the CV as a tai
 Design decision: a change list entry stores the model change that makes it (`op`, `target`, `value`), and
 the job's CV is always rebuilt from the base version plus the changes still on. Undo and Redo are then order
 free and can never drift from what the list shows.
+
+Applications: `pack.build` calls `prepare` and prints `v1(job_id)` through the same looks as My CV
+(`cv.v1_of`). An application is on this path when it has a `job_cvs` row (`kept`); one whose documents were
+written before keeps the older `cv.tailor` until it is sent, as nothing is stored to rebuild it here. The
+job's CV stays on the version it was made from, so a later change on My CV does not reach it. A title line
+chosen by the advert's words (`cv.TRACKS`, `cv.track_for`) is a change like the others.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
 import sqlite3
+from collections.abc import Iterator
 
 from jobhunt import db
 from jobhunt.core import clock, events
@@ -55,6 +63,20 @@ def _model():
     from jobhunt.cvstudio import model
 
     return model
+
+
+@contextlib.contextmanager
+def _conn(con: sqlite3.Connection | None) -> Iterator[sqlite3.Connection]:
+    """The caller's connection, which the caller commits, else one of our own, committed and closed here."""
+    if con is not None:
+        yield con
+        return
+    own = db.connect()
+    try:
+        yield own
+        own.commit()
+    finally:
+        own.close()
 
 
 def words(text: str) -> set[str]:
@@ -117,6 +139,19 @@ def _reorders(doc, type_, wanted: set[str]) -> list[dict]:
     return out
 
 
+def _track(doc, job: dict) -> list[dict]:
+    """The title line `cv.track_for` picks from the advert's words, as a change; none when it picks none."""
+    from jobhunt.cvstudio import cv
+
+    track = cv.track_for(f"{job.get('title') or ''}\n{job.get('description') or ''}")
+    title = cv.TRACKS[track][0] if track else ""
+    if not title or title == doc.headline:
+        return []
+    return [{"kind": "Reworded", "where": "The line under your name", "op": "replace", "target": "headline",
+             "value": title, "before": doc.headline, "after": title,
+             "why": f"The advert reads as a {track} role.", "ev": ""}]
+
+
 def _ai_change(con, doc, type_, sids: list[str], job: dict, ctx, *, bullets: bool) -> dict | None:
     draft = suggest.ask_ai(con, doc, type_, sids, [], suggest.passages_for(doc, sids), job=job)
     if draft is None or ("/b:" in draft.target) != bullets or (not bullets and not draft.evidence):
@@ -141,7 +176,7 @@ def for_job(job: dict, *, level: str | None = None, priorities: list[str] | None
     con = db.connect()
     try:
         wanted = words(" ".join(priorities or requirements(job, con)) + " " + str(job.get("title") or ""))
-        changes = _reorders(doc, type_, wanted)
+        changes = _track(doc, job) + _reorders(doc, type_, wanted)
         if suggest.ai_ready():
             ctx = suggest.context(con, doc, type_)
             summary = [s.id for s in doc.sections if s.kind == "summary" and s.visible]
@@ -170,22 +205,25 @@ def build(base, changes: list[dict]):
     return doc
 
 
-def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None = None) -> dict:
+def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None = None,
+            con: sqlite3.Connection | None = None) -> dict:
     """Works out the job's CV and keeps it in `job_cvs`; returns the row as the documents step shows it."""
-    base_vid, _ = _store().current()
+    base_vid, _ = _store().current(con)
     used, why = level_for(level)
     _, changes = for_job(job, level=level, priorities=priorities)
-    con = db.connect()
-    try:
-        con.execute("INSERT OR REPLACE INTO job_cvs (job_id, base_version_id, version_id, level, priorities, changes, "
-                    "approved) VALUES (?, ?, NULL, ?, ?, ?, NULL)",
-                    (job["id"], base_vid, used,
-                     json.dumps(priorities) if priorities else None, json.dumps(changes)))
-        con.commit()
-    finally:
-        con.close()
+    with _conn(con) as c:
+        c.execute("INSERT OR REPLACE INTO job_cvs (job_id, base_version_id, version_id, level, priorities, changes, "
+                  "approved) VALUES (?, ?, NULL, ?, ?, ?, NULL)",
+                  (job["id"], base_vid, used, json.dumps(priorities) if priorities else None, json.dumps(changes)))
+        c.commit()
     events.publish("application", id=job["id"])
-    return shown(job["id"]) | {"why_no": why}
+    return shown(job["id"], con) | {"why_no": why}
+
+
+def kept(job_id: str, con: sqlite3.Connection | None = None) -> bool:
+    """True when Hal made this job's CV here, so the application prints and approves it from `job_cvs`."""
+    with _conn(con) as c:
+        return c.execute("SELECT 1 FROM job_cvs WHERE job_id = ?", (job_id,)).fetchone() is not None
 
 
 def _row(con: sqlite3.Connection, job_id: str) -> sqlite3.Row:
@@ -195,13 +233,10 @@ def _row(con: sqlite3.Connection, job_id: str) -> sqlite3.Row:
     return row
 
 
-def shown(job_id: str) -> dict:
+def shown(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     """The job's change list with each change's state, for the documents step."""
-    con = db.connect()
-    try:
-        row = _row(con, job_id)
-    finally:
-        con.close()
+    with _conn(con) as c:
+        row = _row(c, job_id)
     changes = json.loads(row["changes"])
     return {"job_id": job_id, "level": row["level"], "base_version_id": row["base_version_id"],
             "version_id": row["version_id"], "approved": row["approved"],
@@ -209,54 +244,64 @@ def shown(job_id: str) -> dict:
                         | {"on": not c.get("undone")} for c in changes]}
 
 
-def set_change(job_id: str, change_id: str, on: bool) -> dict:
+def set_change(job_id: str, change_id: str, on: bool, con: sqlite3.Connection | None = None) -> dict:
     """Undo (`on` false) or Redo one change before approval."""
-    con = db.connect()
-    try:
-        row = _row(con, job_id)
+    with _conn(con) as c:
+        row = _row(c, job_id)
         if row["approved"]:
             raise RuntimeError("You approved this CV already. Make the documents again to change it.")
         changes = json.loads(row["changes"])
-        found = next((c for c in changes if c["id"] == change_id), None)
+        found = next((x for x in changes if x["id"] == change_id), None)
         if found is None:
             raise LookupError("That change is not in this job's CV.")
         found["undone"] = not on
-        con.execute("UPDATE job_cvs SET changes = ? WHERE job_id = ?", (json.dumps(changes), job_id))
-        con.commit()
-    finally:
-        con.close()
+        c.execute("UPDATE job_cvs SET changes = ? WHERE job_id = ?", (json.dumps(changes), job_id))
+        c.commit()
     events.publish("application", id=job_id)
-    return shown(job_id)
+    return shown(job_id, con)
 
 
-def document(job_id: str):
+def document(job_id: str, con: sqlite3.Connection | None = None):
     """The job's CV as it stands: the base version with the changes still on."""
-    con = db.connect()
-    try:
-        row = _row(con, job_id)
-    finally:
-        con.close()
-    return build(_store().get(row["base_version_id"]), json.loads(row["changes"]))
+    with _conn(con) as c:
+        row = _row(c, job_id)
+        base = _store().get(row["base_version_id"], con=c)
+    return build(base, json.loads(row["changes"]))
 
 
-def approve(job_id: str, job: dict | None = None) -> str:
+def v1(job_id: str, con: sqlite3.Connection | None = None) -> dict:
+    """The job's CV in cv.json shape, for its PDF, the letter's header and the critique (`cv.v1_of`)."""
+    from jobhunt.cvstudio import cv
+
+    return cv.v1_of(document(job_id, con))
+
+
+def version_of(job_id: str, con: sqlite3.Connection | None = None) -> str | None:
+    """The version the person approved for this job; None before approval, or for an older application."""
+    with _conn(con) as c:
+        row = c.execute("SELECT version_id FROM job_cvs WHERE job_id = ? AND approved IS NOT NULL",
+                        (job_id,)).fetchone()
+    return row["version_id"] if row else None
+
+
+def reopen(job_id: str, con: sqlite3.Connection | None = None) -> None:
+    """Takes the approval back, so the job's CV can change again; the version it saved is kept."""
+    with _conn(con) as c:
+        c.execute("UPDATE job_cvs SET approved = NULL WHERE job_id = ?", (job_id,))
+        c.commit()
+
+
+def approve(job_id: str, job: dict | None = None, con: sqlite3.Connection | None = None) -> str:
     """Saves the job's CV as a tailored version (or keeps the base when nothing changed); returns its id."""
-    con = db.connect()
-    try:
-        row = _row(con, job_id)
-    finally:
-        con.close()
-    changes = [c for c in json.loads(row["changes"]) if not c.get("undone")]
-    vid = row["base_version_id"]
-    if changes:
-        job = job or {}
-        what = f"Adjusted for {job.get('title') or 'one job'}" + (f" at {job['company']}" if job.get("company") else "")
-        vid = _store().new_version(document(job_id), origin="tailored", what=what, by="you",
-                                   parent=row["base_version_id"], job_id=job_id)
-    con = db.connect()
-    try:
-        con.execute("UPDATE job_cvs SET version_id = ?, approved = ? WHERE job_id = ?", (vid, clock.iso(), job_id))
-        con.commit()
-    finally:
-        con.close()
+    with _conn(con) as c:
+        row = _row(c, job_id)
+        on = [x for x in json.loads(row["changes"]) if not x.get("undone")]
+        vid = row["base_version_id"]
+        if on:
+            job = job or {}
+            what = (f"Adjusted for {job.get('title') or 'one job'}"
+                    + (f" at {job['company']}" if job.get("company") else ""))
+            vid = _store().new_version(document(job_id, c), origin="tailored", what=what, by="you",
+                                       parent=row["base_version_id"], job_id=job_id, con=c)
+        c.execute("UPDATE job_cvs SET version_id = ?, approved = ? WHERE job_id = ?", (vid, clock.iso(), job_id))
     return vid

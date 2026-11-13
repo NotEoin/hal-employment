@@ -13,6 +13,13 @@ What changed in each version, in plain words.
   before you leave with changes not saved. If your CV changed elsewhere meanwhile, Hal says so and saves
   nothing. Lines you typed are marked **Your words**, and Hal's suggestions never call them a writing problem.
 
+- **Hal's changes to your CV for a job are the ones you set on My CV.** Applications Hal writes from now on
+  follow **Adjust for each job**: **A little** puts the projects and skill groups that fit the job first and
+  may reword your profile, and **More** may also reword up to three lines of your jobs and projects, each
+  with its reason and evidence. Each change can be undone before you approve. Approving saves the job's CV
+  as its own version of your CV, kept with the application. The PDF looks the same as before. Applications
+  Hal had already written keep their CV as it was made until they are sent.
+
 ## 2.1.1 (2026-11-13)
 
 ### Fixed

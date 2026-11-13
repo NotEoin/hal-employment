@@ -29,7 +29,7 @@ from support.world import World
 from jobhunt import ai, db, documents, letter, pack, record
 from jobhunt.ai import counting, gpu
 from jobhunt.core import runner, settings
-from jobhunt.cvstudio import cv
+from jobhunt.cvstudio import cv, store, tailor
 from jobhunt.writing import flow, paragraphs
 
 # One made-up advert per person, in their own field, so the advert itself never holds another career's words.
@@ -1936,6 +1936,23 @@ class Advert(unittest.TestCase):
             md = pack.build(a.con, job["id"], use_web=False).read_text()
         self.assertIn("\nHello Ada Penhallow,\n\nI'm Marnie", section(md, "Message to the hiring manager"))
         self.assertNotIn("Ms Penhallow", md)
+
+
+class JobCv(unittest.TestCase):
+    def test_a_pack_keeps_the_jobs_cv_with_its_change_list_and_prints_that(self):
+        printed = []
+        with as_applicant(people.HUMANITIES) as a:
+            drawn = cv.render    # the world's made-up PDF maker
+            job = add_job(a.con, "humanities_grad")
+            with mock.patch.object(cv, "render", lambda variant, out: (printed.append(variant),
+                                                                      drawn(variant, out))[1]):
+                pack.build(a.con, job["id"], use_web=False)
+            row = a.con.execute("SELECT base_version_id, changes FROM job_cvs WHERE job_id = ?",
+                                (job["id"],)).fetchone()
+            self.assertEqual(row["base_version_id"], store.current()[0])
+            self.assertIsInstance(json.loads(row["changes"]), list)
+            self.assertEqual(printed, [tailor.v1(job["id"])])
+            self.assertEqual(documents.current_cv(job, documents.load(a.con, job)), tailor.v1(job["id"]))
 
 
 class CommandLine(unittest.TestCase):

@@ -11,7 +11,8 @@ from jobhunt.core.settings.catalog._shared import choices, safe
 from jobhunt.core.settings.registry import Setting, register
 
 TAILOR_HELP = ("No: the same CV for every job. A little: the projects and skill groups that fit the job go "
-               "first. More: the same as A little in this version.")
+               "first, and your profile may be reworded for it. More: also up to three lines of your jobs and "
+               "projects reworded.")
 
 register(
     Setting("cvdocs.route", "link", None, "How your CV is made", to="cv", order=10),

@@ -27,15 +27,14 @@ def _pack_md(job):
 
 def cmd_pack(args):
     """Handles `jobhunt pack`: drafts the CV and cover letter for a job."""
-    from jobhunt import ai, pack
+    from jobhunt import ai, documents, pack
     from jobhunt.cvstudio import cv
     if args.cv_only:
         con = db.connect()
         for r in con.execute("SELECT * FROM jobs WHERE status = 'ready'"):
             found = _pack_md(r)
             if found is not None:
-                variant, _ = cv.tailor(f"{r['title']}\n{r['description'] or ''}")
-                cv.render(variant, found.parent)
+                cv.render(documents.current_cv(r, documents.load(con, r)), found.parent)
                 print(f"  {found.parent.name}")
         return
     if not ai.available():

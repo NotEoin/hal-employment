@@ -115,7 +115,7 @@ class SuggestionsTab(unittest.TestCase):
         # regression: the card promised rewritten bullets and a "cares about first" step no application did
         self.assertNotIn("Ask me what the job cares about first", p.page.inner_text("#p34-TailorSetting"))
         p.page.click("#p34-TailorSetting [role=radio]:has-text('More')")
-        p.page.wait_for_selector("#p34-TailorSetting >> text=More: the same as A little in this version")
+        p.page.wait_for_selector("#p34-TailorSetting >> text=More: as A little, and Hal may also reword")
         p.page.evaluate(MOUNT, ["job-changes.js", "JobChanges", {"changes": CHANGES}])
         box = p.page.inner_text("#p34-JobChanges")
         self.assertIn("Hal changed 2 things from your CV for this job.", box)
