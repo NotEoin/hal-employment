@@ -1,7 +1,6 @@
 """Where each old config key lives now: as data.
 
-The config shim (`jobhunt/config.py`) answers `CONFIG.get(old_key)` from live settings through this map,
-and both importers (the owner's repo, the USB stick) use it to carry old values over. Old keys are
+Both importers (the owner's repo, the USB stick) use this map to carry old values over. Old keys are
 written as they appear in the old files: top-level keys bare (`alert_score`), table keys with their table
 (`applicant.city`, `claude.main_model`), environment variables as `env:NAME`.
 
@@ -117,9 +116,6 @@ LEGACY_KEYS: tuple[LegacyKey, ...] = (
 )
 
 BY_OLD: dict[str, LegacyKey] = {k.old: k for k in LEGACY_KEYS}
-
-# `CONFIG.get(section, {})` answers with a dict view of the settings under this prefix.
-SECTION_VIEWS: dict[str, str] = {"applicant": "you.", "search": "goal."}
 
 
 def lookup(old: str) -> LegacyKey:

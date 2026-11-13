@@ -39,8 +39,6 @@ INBOX_ADDRESS = "robin.jobs@example.org"
 # The legacy defaults of config.toml's queue settings, so the goldens do not depend on that file.
 QUEUE_SIZE = 10
 QUEUE_MIN_SCORE = 45
-CONFIG = {"alert_score": 70, "queue_size": QUEUE_SIZE, "queue_min_score": QUEUE_MIN_SCORE,
-          "applicant": {"city": PERSON["city"]}}
 
 GRAD = ("We are hiring a graduate software engineer to join our platform team. You will write Python and "
         "TypeScript, review code and learn from senior engineers. A degree in computer science or a related "
@@ -260,12 +258,9 @@ class World:
 
         patches = [
             mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_HOME": str(self.root)}),
-            mock.patch.dict(config.CONFIG, CONFIG, clear=True),
             mock.patch.object(db, "DB_PATH", self.db_path),
             mock.patch.object(db, "connect", world_connect),
             mock.patch.object(config, "BOARDS_PATH", self.root / "boards.toml"),
-            mock.patch.object(config, "PRIVATE_PATH", self.root / "data" / "no-private.toml"),
-            mock.patch.object(config, "private", dict),
             mock.patch.object(tasks, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "ADDRESS", INBOX_ADDRESS),
             mock.patch.object(gmail, "PASSWORD_FILE", self.root / "config" / "no-gmail-password"),

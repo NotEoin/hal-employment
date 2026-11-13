@@ -1,7 +1,7 @@
-"""Gate G7: code reads only registered settings, the old `CONFIG` only where a module has not
-been converted yet, and Hal never sets the goal, the scoring or the CV by itself.
+"""Gate G7: code reads only registered settings, never the old `CONFIG`, and Hal never sets the goal, the
+scoring or the CV by itself.
 
-`LEGACY_ALLOWED` is empty: every module reads `settings.get`. A `CONFIG` read outside the shim fails.
+`LEGACY_ALLOWED` is empty: every module reads `settings.get`. Any `CONFIG` read fails.
 """
 import ast
 import unittest
@@ -13,7 +13,6 @@ from jobhunt.core import paths, settings
 
 ROOT = Path(paths.code_dir())
 JOBHUNT = ROOT / "jobhunt"
-SHIM = "jobhunt/config.py"
 READS = ("get", "set", "reset")
 PERSON_ONLY = settings.PERSON_ONLY
 LEGACY_ALLOWED: set[tuple[str, str]] = set()   # every module reads settings; a new CONFIG read fails G7
@@ -26,7 +25,7 @@ def _modules():
 
 
 def _name(node: ast.AST) -> str:
-    """The last name of `settings`, `core.settings` or `config.CONFIG`, else ""."""
+    """The last name of `settings`, `core.settings` or `CONFIG`, else ""."""
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
@@ -40,10 +39,8 @@ def _key(node: ast.Call | ast.Subscript) -> str:
 
 
 def _config_reads():
-    """(file, old key, line) of every `CONFIG.get(...)` and `CONFIG[...]` outside the shim."""
+    """(file, old key, line) of every `CONFIG.get(...)` and `CONFIG[...]`."""
     for rel, tree in _modules():
-        if rel == SHIM:
-            continue
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get" \
                     and _name(node.func.value) == "CONFIG":

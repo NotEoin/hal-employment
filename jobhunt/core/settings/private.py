@@ -75,7 +75,7 @@ def _answers() -> dict[str, str]:
 
 
 def read_table() -> dict[str, Any]:
-    """The whole `[applicant]` table, for `config.private()`'s old callers."""
+    """The whole `[applicant]` table, in the data folder's private file."""
     return dict(_read_all().get(TABLE, {}))
 
 
