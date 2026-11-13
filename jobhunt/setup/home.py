@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from ..core import runner
 from . import state
 
 FIRST_SEARCH_ROW = "done"     # All set's row keeps the first search's action id in its data
@@ -22,8 +23,11 @@ def _first_search(con: sqlite3.Connection) -> dict | None:
         return None
     if not action_id:
         return None
-    a = con.execute("SELECT state, step_n, step_total FROM actions WHERE id = ?", (action_id,)).fetchone()
-    if a is None or a["state"] not in ("queued", "running") or not a["step_total"]:
+    try:
+        a = runner.get(action_id, con)
+    except LookupError:
+        return None
+    if a["state"] not in ("queued", "running") or not a["step_total"]:
         return None
     return {"checked": a["step_n"], "total": a["step_total"]}
 

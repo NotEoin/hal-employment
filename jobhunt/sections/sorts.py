@@ -40,7 +40,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from jobhunt import db
-from jobhunt.core import clock, paths
+from jobhunt.core import clock, paths, runner
 from jobhunt.evidence.routes import UPLOAD_MAX_BODY
 from jobhunt.ingest import discover
 from jobhunt.profile import store as profile_store
@@ -66,7 +66,6 @@ FOLDER_BYTES_MAX = UPLOAD_MAX_BODY
 CHANGEABLE = {"section", "doc_kind", "target_id", "ticked", "star"}
 UNTICKED = ("lecture",)    # sections whose proposals start unticked: the person ticks the modules they want
 UNREAD = ("new", "reading")  # source states of a file not read yet: a stopped add takes it out again
-ACTIVE_ACTIONS = ("queued", "running", "waiting_for_you")    # `core.runner.ACTIVE`
 READ_KINDS = ("record.sources", "record.sort_accept")   # the actions that read sources, timed for the estimate
 READ_SAMPLE = 10           # the latest reads averaged: recent enough to follow a change of AI or computer
 # Seconds to read one file when this computer has read none yet, replaced by the measured figure after the first
@@ -457,12 +456,20 @@ def set_add_action(con: sqlite3.Connection, add_id: int, action_id: str) -> None
         con.execute("UPDATE record_sort_adds SET action_id = ? WHERE id = ?", (action_id, int(add_id)))
 
 
+def _action_active(con: sqlite3.Connection, action_id: str) -> bool:
+    """True while the action is queued, running or waiting for the person; False once it ended or is gone."""
+    try:
+        return runner.get(action_id, con)["state"] in runner.ACTIVE
+    except LookupError:
+        return False
+
+
 def _add_state(r: sqlite3.Row) -> str:
     """An add's state from its action's: reading, done or stopped (an action that failed or was cut short by a
     restart stopped too), or undone."""
     if r["undone"]:
         return "undone"
-    if r["action_state"] in ACTIVE_ACTIONS or r["action_state"] is None:
+    if r["action_state"] in runner.ACTIVE or r["action_state"] is None:
         return "reading"
     return "done" if r["action_state"] == "done" else "stopped"
 
@@ -531,8 +538,7 @@ def undo_add(con: sqlite3.Connection, sort_id, add_id) -> dict:
         raise ValueError("Use Undo the move: it puts back what your older notes gave too.")
     if a["undone"]:
         raise ValueError("That add is undone already.")
-    if a["action_id"] and con.execute("SELECT 1 FROM actions WHERE id = ? AND state IN (?, ?, ?)",
-                                      (a["action_id"], *ACTIVE_ACTIONS)).fetchone():
+    if a["action_id"] and _action_active(con, a["action_id"]):
         raise ValueError("Hal is still reading what you added. Stop reading first, then undo it.")
     removed = 0
     rows = con.execute("SELECT id, state, source_id FROM record_sort_rows WHERE add_id = ?", (a["id"],)).fetchall()
