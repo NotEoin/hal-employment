@@ -3,7 +3,8 @@
 # findings that are fixed line by line as it is edited.
 # Run one test at a time, the suite took 27 minutes on Linux and 38 on Windows (run 43266048071): it now runs
 # in shares, one job each, spread over the runner's CPUs (scripts/dev/run_tests.py). Windows, the slowest, gets
-# the most shares; with WSL2's two, the 18 jobs stay under the 20 a free account runs at once.
+# the most shares; with WSL2's three, the 19 jobs stay under the 20 a free account runs at once (run 43400046701:
+# 7 min in all, the longest test job 5 min 14 s).
 # The Windows-only checks must pass, not skip, in whichever share holds them: Windows is the one place they
 # can run. They are: the install file's PowerShell parses under Windows PowerShell 5.1, CVs print with
 # Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser.
@@ -72,13 +73,13 @@ jobs:
         env: { HAL_TEST_MODE: "1", HAL_TEST_BROWSER: "1" }
 
   # The Linux install inside WSL2. Advisory until the first green run shows the suite passes under WSL2,
-  # so an unproven runner cannot block a merge. It runs the hermetic suite with the browser tests off, in two
+  # so an unproven runner cannot block a merge. It runs the hermetic suite with the browser tests off, in three
   # shares; the browser and the GPU are not set up on the runner.
   wsl:
-    name: wsl2 (ubuntu 24.04, share ${{ matrix.share }} of 2)
+    name: wsl2 (ubuntu 24.04, share ${{ matrix.share }} of 3)
     strategy:
       fail-fast: false
-      matrix: { share: [1, 2] }
+      matrix: { share: [1, 2, 3] }
     runs-on: windows-latest
     timeout-minutes: 20
     continue-on-error: true
@@ -125,4 +126,4 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH" UV_PYTHON_DOWNLOADS=never UV_PYTHON=3.12
           cd "$HOME/hal-employment"
           uv sync --frozen
-          HAL_TEST_MODE=1 uv run python scripts/dev/run_tests.py --share ${{ matrix.share }}/2
+          HAL_TEST_MODE=1 uv run python scripts/dev/run_tests.py --share ${{ matrix.share }}/3
