@@ -7,7 +7,8 @@ import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 from support import jobs as fixtures
 from support.world import World, job_id
 
-from jobhunt import gpu, pack, replenish, screen
+from jobhunt import pack, replenish, screen
+from jobhunt.ai import gpu
 from jobhunt.find import rules
 
 INTERN = job_id("quillon-intern")

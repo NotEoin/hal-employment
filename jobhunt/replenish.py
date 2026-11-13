@@ -7,7 +7,8 @@ and the other kinds are prepared like any job when the goal includes them; today
 graduate internship. Model work waits for the GPU, and nothing is drafted while the person has no checked
 card and no CV (`pack.has_facts`): every pack would fail in turn.
 """
-from . import db, gpu, pack, screen
+from . import db, pack, screen
+from .ai import gpu
 from .core import settings
 
 # A pack that failed is retried after this long, in case the cause was transient.

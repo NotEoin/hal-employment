@@ -17,7 +17,8 @@ import re
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import cv, db, gpu, letter, llm, pack
+from . import cv, db, letter, llm, pack
+from .ai import gpu
 from .core import naming, settings
 from .docs import folders
 

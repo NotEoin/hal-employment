@@ -16,8 +16,8 @@ from unittest import mock
 from support import people
 from test_pack import FakeWriter, add_job, as_applicant
 
-from jobhunt import contacts, documents, gpu, pack, prep
-from jobhunt.ai import prompts
+from jobhunt import contacts, documents, pack, prep
+from jobhunt.ai import gpu, prompts
 from jobhunt.cvstudio import types as cvtypes
 
 PRONOUN = re.compile(r"\b(he|him|his)\b", re.I)

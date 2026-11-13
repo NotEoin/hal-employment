@@ -148,11 +148,9 @@ class GpuGate(InHome):
             with ai.use(self.local()):
                 self.assertEqual(ai.chat("s", "u", priority=2), "ok")
 
-    def test_the_old_busy_check_names_the_program(self):
+    def test_the_busy_check_names_the_program(self):
         with mock.patch.object(gpu, "holders", return_value=[("made-up-trainer", 9000)]), ai.use(self.local()):
-            from jobhunt import gpu as old_gpu
-
-            self.assertEqual(old_gpu.busy(), "waiting for the GPU: made-up-trainer (9000 MiB)")
+            self.assertEqual(gpu.busy(), "waiting for the GPU: made-up-trainer (9000 MiB)")
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):

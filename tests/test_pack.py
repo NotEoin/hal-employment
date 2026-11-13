@@ -26,7 +26,8 @@ from support import people
 from support.actions import finished
 from support.world import World
 
-from jobhunt import cv, db, documents, gpu, letter, llm, pack, record
+from jobhunt import cv, db, documents, letter, llm, pack, record
+from jobhunt.ai import gpu
 from jobhunt.core import runner, settings
 from jobhunt.writing import flow, paragraphs
 

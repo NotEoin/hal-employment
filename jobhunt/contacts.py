@@ -15,7 +15,8 @@ import json
 import re
 import time
 
-from . import browser, db, documents, gpu, llm, pack
+from . import browser, db, documents, llm, pack
+from .ai import gpu
 
 SEARCH_PAUSE = 8  # seconds between queries, so the search engine does not refuse them
 _last_query = 0.0

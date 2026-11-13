@@ -144,7 +144,7 @@ def claim(priority: int) -> Iterator[None]:
 
 
 def busy() -> str | None:
-    """Why the AI cannot run now, or None when it can (the old `jobhunt.gpu.busy`)."""
+    """Why the AI cannot run now, or None when it can."""
     from . import backend
 
     be = backend()

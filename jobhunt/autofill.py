@@ -34,8 +34,8 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from . import cv, db, gpu, llm, record, salary
-from .ai import prompts
+from . import cv, db, llm, record, salary
+from .ai import gpu, prompts
 from .writing import spelling, stage
 
 if TYPE_CHECKING:
