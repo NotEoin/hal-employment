@@ -363,6 +363,34 @@ class Watching(unittest.TestCase):
             self.assertNotIn("test:watched", driver.WATCHING)
             self.assertEqual(driver._WATCHERS, {})
 
+    def test_two_calls_for_one_tab_start_one_watch(self):
+        # regression: `watch_tab` tested the set and added to it in two steps, so two action threads
+        # could each start a watcher for the same tab
+        class Slow(set):
+            def __contains__(self, item):
+                found = super().__contains__(item)
+                time.sleep(0.05)              # holds the gap between the test and the add open
+                return found
+
+        started = []
+        release = threading.Event()
+
+        def look(con, job_id, seen):
+            started.append(threading.current_thread())
+            release.wait(WAIT_S)
+            return False
+        with fresh_home(), mock.patch.object(driver, "_watch_step", look), \
+                mock.patch.object(driver, "WATCHING", Slow()), mock.patch.object(driver, "WATCH_PAUSE", 0.01):
+            callers = [threading.Thread(target=driver.watch_tab, args=("test:twice",)) for _ in range(4)]
+            for caller in callers:
+                caller.start()
+            for caller in callers:
+                caller.join(WAIT_S)
+            time.sleep(0.3)
+            release.set()
+            self.assertTrue(driver.stop_watching())
+        self.assertEqual(len(started), 1)
+
 
 class NotesAndYourAnswers(unittest.TestCase):
     """What the driver does with autofill's answers: notes counted, your own answers named and kept."""

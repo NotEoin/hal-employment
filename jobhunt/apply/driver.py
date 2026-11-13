@@ -791,6 +791,7 @@ WATCH_FOR = 3 * 60 * 60  # seconds a tab is watched after Hal last filled it
 WATCH_STOP_S = 30  # one look at a tab takes a few seconds at most; `stop_watching` waits this long in all
 _WATCH_STOP = threading.Event()   # set by `stop_watching`; every watch ends at its next look
 _WATCHERS: dict[str, threading.Thread] = {}
+_watch_lock = threading.Lock()   # `watch_tab` runs on action threads: the check and the add are one step
 
 
 def stop_watching(timeout: float = WATCH_STOP_S) -> bool:
@@ -812,9 +813,10 @@ def stop_watching(timeout: float = WATCH_STOP_S) -> bool:
 def watch_tab(job_id: str) -> None:
     """Watches the job's tab while its owner works through the form: fills each new page or question
     as it appears, and marks the job applied once the site confirms it."""
-    if job_id in WATCHING:
-        return
-    WATCHING.add(job_id)
+    with _watch_lock:
+        if job_id in WATCHING:
+            return
+        WATCHING.add(job_id)
 
     def watch():
         con = db.connect()
@@ -834,12 +836,14 @@ def watch_tab(job_id: str) -> None:
             traceback.print_exc()
         finally:
             con.close()
-            if _WATCHERS.get(job_id) is threading.current_thread():
-                del _WATCHERS[job_id]
-            WATCHING.discard(job_id)
+            with _watch_lock:
+                if _WATCHERS.get(job_id) is threading.current_thread():
+                    del _WATCHERS[job_id]
+                WATCHING.discard(job_id)
 
     thread = threading.Thread(target=watch, name="watch", daemon=True)
-    _WATCHERS[job_id] = thread
+    with _watch_lock:
+        _WATCHERS[job_id] = thread
     thread.start()
 
 
