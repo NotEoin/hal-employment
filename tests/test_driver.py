@@ -4,6 +4,7 @@ waiting for approval, discarding, and forms already open.
 Hal never presses Submit, so a test that reaches the last page ends with the form handed over, and the
 applicant presses Submit in the page.
 """
+import json
 import tempfile
 import threading
 import time
@@ -92,7 +93,7 @@ class Applying(Practice):
         # What he typed himself is kept for the next form that asks it.
         kept = self.con.execute("SELECT answer FROM answers2 WHERE question = 'date of birth' "
                                 "AND scope = 'everywhere'").fetchone()
-        self.assertEqual(db.json_value(kept["answer"]), "01/02/2003")
+        self.assertEqual(json.loads(kept["answer"]), "01/02/2003")
 
     def test_types_the_emailed_code_and_leaves_the_button_to_you(self):
         job_id = self.job("code", "form.html?code=1")

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import difflib
 import itertools
+import json
 import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -609,7 +610,7 @@ def remember(con, fields: list[dict], company: str = "", job=None) -> int:
                        VALUES (?, ?, ?, ?, ?, 'fixed', 'you', ?)
                        ON CONFLICT(question, scope, scope_key) DO UPDATE SET answer = excluded.answer,
                          label = excluded.label, updated = excluded.updated""",
-                    (question, _asked(f), db.json_text(value), scope, scope_key, db.now()))
+                    (question, _asked(f), json.dumps(value), scope, scope_key, db.now()))
         kept += 1
     con.commit()
     from .writing import edits
@@ -650,7 +651,7 @@ def _recall_row(con, f: dict, job=None) -> tuple[object, object] | None:
         if not close:
             return None
         found = by_question[close[0]]
-    value = db.json_value(found[1]["answer"])
+    value = json.loads(found[1]["answer"])
     if isinstance(value, str) and len(value) > ESSAY:
         return None  # an essay answers one employer's question; it shows the AI the person's voice instead
     fitted = _fit(f, value, [])
@@ -1009,10 +1010,10 @@ def _facts(job, docs: dict, con, notes: NoteSet | None = None) -> str:
         if before:
             parts.append("Earlier applications to this employer: "
                          + "; ".join(f"{r['title']} ({r['status']})" for r in before))
-        told = [(r["label"], db.json_value(r["answer"])) for r in _usable(con, job)[:SAVED_FACTS]
+        told = [(r["label"], json.loads(r["answer"])) for r in _usable(con, job)[:SAVED_FACTS]
                 if private_question({"label": r["label"]}) is None]
         short = [(q, a) for q, a in told if not (isinstance(a, str) and len(a) > ESSAY)]
-        voice = [(r["label"], db.json_value(r["answer"])) for r in con.execute(
+        voice = [(r["label"], json.loads(r["answer"])) for r in con.execute(
                      "SELECT label, answer FROM answers2 WHERE scope = 'never' ORDER BY length(answer) DESC LIMIT ?",
                      (VOICE_EXAMPLES,))
                  if private_question({"label": r["label"]}) is None]

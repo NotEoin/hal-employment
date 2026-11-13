@@ -22,6 +22,7 @@ Design decisions, each with its reason:
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import sqlite3
@@ -121,7 +122,7 @@ def record_samples() -> list[Sample]:
 
 def answer_samples(con) -> list[Sample]:
     """The answers the person rewrote themselves, never one to a private question."""
-    from jobhunt import autofill, db
+    from jobhunt import autofill
 
     rows = con.execute("SELECT label, question, answer FROM answers2 WHERE scope = 'never' "
                        "AND source IN ('you', 'learned') ORDER BY updated DESC").fetchall()
@@ -129,7 +130,7 @@ def answer_samples(con) -> list[Sample]:
     for row in rows:
         if autofill.private_question({"label": row["label"]}) or autofill.private_question({"label": row["question"]}):
             continue
-        value = db.json_value(row["answer"])
+        value = json.loads(row["answer"])
         if isinstance(value, str) and value.strip():
             out.append(Sample("answer", " ".join(value.split()), f"answer: {row['label']}"))
     return out

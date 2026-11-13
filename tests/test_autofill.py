@@ -634,7 +634,7 @@ class WhyThisAnswer(unittest.TestCase):
     def saved(self, label: str, answer: str, scope: str = "everywhere", key: str = "") -> None:
         self.con.execute("""INSERT INTO answers2 (question, label, answer, scope, scope_key, updated)
                             VALUES (?, ?, ?, ?, ?, ?)""",
-                         (autofill._norm(label), label, db.json_text(answer), scope, key, db.now()))
+                         (autofill._norm(label), label, json.dumps(answer), scope, key, db.now()))
         self.con.commit()
 
     def test_a_site_note_answer_is_used_only_on_that_site(self):

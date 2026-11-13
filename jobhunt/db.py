@@ -4,7 +4,6 @@
 importer and worktrees each open their own file. The schema is made and upgraded only by the migration runner
 (`core.db.migrate`); migration 0001 holds the tables this module used to create itself.
 """
-import json
 import sqlite3
 from pathlib import Path
 
@@ -33,16 +32,6 @@ STATUSES = [
 def now() -> str:
     """Now in UTC as `2026-10-22T09:00:00Z` (older rows end in `+00:00`; both compare on 19 characters)."""
     return clock.iso()
-
-
-def json_text(value) -> str:
-    """Returns a value as JSON text for a database column."""
-    return json.dumps(value)
-
-
-def json_value(text: str):
-    """Returns the value stored as JSON text."""
-    return json.loads(text)
 
 
 def _upgrade(con: sqlite3.Connection, path: Path) -> None:

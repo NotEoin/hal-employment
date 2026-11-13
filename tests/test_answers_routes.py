@@ -2,6 +2,7 @@
 
 Each test runs a server in its own temporary home with made-up saved answers and one made-up job.
 """
+import json
 import unittest
 from contextlib import closing
 
@@ -30,7 +31,7 @@ class SavedAnswers(unittest.TestCase):
             for label, answer, scope, key in rows:
                 con.execute("""INSERT INTO answers2 (question, label, answer, scope, scope_key, updated)
                                VALUES (?, ?, ?, ?, ?, ?)""",
-                            (autofill._norm(label), label, db.json_text(answer), scope, key, db.now()))
+                            (autofill._norm(label), label, json.dumps(answer), scope, key, db.now()))
             con.commit()
 
     def items(self) -> dict:
@@ -86,8 +87,8 @@ class SavedAnswers(unittest.TestCase):
         self.put(items["Which made-up tools do you use?"], {"a": "Quill, Abacus"})
         with closing(db.connect()) as con:
             stored = dict(con.execute("SELECT label, answer FROM answers2").fetchall())
-        self.assertEqual(db.json_value(stored["Do you hold a full driving licence?"]), False)
-        self.assertEqual(db.json_value(stored["Which made-up tools do you use?"]), ["Quill", "Abacus"])
+        self.assertEqual(json.loads(stored["Do you hold a full driving licence?"]), False)
+        self.assertEqual(json.loads(stored["Which made-up tools do you use?"]), ["Quill", "Abacus"])
         self.assertEqual(self.put(items["Which made-up tools do you use?"], {"a": "  "}).status, 400)
 
     def test_answers_hal_works_out_each_time_are_shown_but_cannot_be_changed(self):

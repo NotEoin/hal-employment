@@ -188,7 +188,7 @@ class InYourBrowser(PairedHelper, Practice):
         self.assertFalse(driver._watch_step(self.con, job_id, seen))
         self.assertEqual(self.status(job_id), "applied")
         rows = self.con.execute("SELECT * FROM answers2 WHERE scope = 'everywhere'")
-        kept = {r["question"]: db.json_value(r["answer"]) for r in rows}
+        kept = {r["question"]: json.loads(r["answer"]) for r in rows}
         self.assertEqual((kept["date of birth"], kept["last name"]), ("01/02/2003", "Byron"))
 
     def test_fills_a_tab_the_applicant_opened_and_handed_over(self):

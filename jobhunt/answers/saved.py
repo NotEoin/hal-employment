@@ -14,6 +14,7 @@ Design notes:
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from .. import autofill, db
@@ -92,7 +93,7 @@ def _private(row) -> bool:
 
 def _item(con: sqlite3.Connection, row) -> dict:
     review = row["scope"] == "review"
-    return {"id": str(row["id"]), "q": row["label"], "a": _shown(db.json_value(row["answer"])), "scope": row["scope"],
+    return {"id": str(row["id"]), "q": row["label"], "a": _shown(json.loads(row["answer"])), "scope": row["scope"],
             "scope_key": row["scope_key"], "scope_label": _scope_label(con, row["scope"], row["scope_key"]),
             "uses": row["uses"], "kind": row["kind"], "needs_choice": review, "auto": False,
             "choices": _choices(con, row)}
@@ -139,7 +140,7 @@ def change(con: sqlite3.Connection, answer_id: str, body: dict) -> dict | None:
         text = body.get("a")
         if not isinstance(text, str) or not text.strip():
             raise AnswerError("Write an answer, or delete this one.")
-        answer = db.json_text(_parsed(db.json_value(row["answer"]), text))
+        answer = json.dumps(_parsed(json.loads(row["answer"]), text))
     scope, key = row["scope"], row["scope_key"]
     if "scope" in body:
         scope, key = body.get("scope"), str(body.get("scope_key") or "").strip().lower()
