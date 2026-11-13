@@ -275,7 +275,7 @@ class Ci(unittest.TestCase):
     def test_ci_runs_linux_on_two_pythons_and_windows(self):
         for row in ('os: ubuntu-24.04, python: "3.11"', 'os: ubuntu-24.04, python: "3.13"'):
             self.assertIn(row, self.body)
-        self.assertRegex(self.body, r'os: windows-2025\s+python: "3.13"')
+        self.assertIn('os: windows-2025, python: "3.13"', self.body)
         self.assertIn("scripts/dev/run_tests.py", self.body)
         self.assertIn('HAL_TEST_BROWSER: "1"', self.body)
 

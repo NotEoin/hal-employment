@@ -1,9 +1,11 @@
 # Prints the made-up people's CVs on Linux (Playwright's Chromium) and Windows (Microsoft Edge) and compares
 # the words and page counts. Non-blocking until it has been stable for a week: a difference is
-# reported in the job summary, and the workflow never fails a push.
+# reported in the job summary, and the workflow never fails a push. It runs only when the printing code changes,
+# so its jobs do not hold runners the tests are waiting for.
 name: print-compare
 on:
   push:
+    paths: ["jobhunt/cvstudio/**", "jobhunt/cvpdf.py", "jobhunt/pdfdraw.py", ".github/workflows/print-compare.yml"]
   workflow_dispatch:
 jobs:
   print:

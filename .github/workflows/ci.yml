@@ -1,40 +1,52 @@
 # Tests on Linux (two Pythons) and Windows for every push.
 # Ruff and the ASCII check run on lines added since the push's parent, because older code still has
 # findings that are fixed line by line as it is edited.
-# Run one test at a time, the suite took 27 minutes on Linux and 38 on Windows (run 43266048071): each
-# platform now runs it in five shares, each spread over the runner's CPUs (scripts/dev/run_tests.py).
+# Run one test at a time, the suite took 27 minutes on Linux and 38 on Windows (run 43266048071): it now runs
+# in shares, one job each, spread over the runner's CPUs (scripts/dev/run_tests.py). Windows, the slowest, gets
+# the most shares; with WSL2's two, the 18 jobs stay under the 20 a free account runs at once.
 # The Windows-only checks must pass, not skip, in whichever share holds them: Windows is the one place they
-# can run.
+# can run. They are: the install file's PowerShell parses under Windows PowerShell 5.1, CVs print with
+# Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser.
 name: ci
 on: [push, pull_request]
+env:
+  WINDOWS_MUST_PASS: >-
+    --must-pass test_the_powershell_part_parses test_accented_names_print_in_every_look
+    test_hal_opens_in_the_default_browser_on_windows_not_an_edge_app_window
+    test_browsers_are_found_from_app_paths_and_install_folders
 jobs:
   test:
-    name: test (${{ matrix.target.os }}, ${{ matrix.target.python }}, share ${{ matrix.share }} of 5)
+    name: test (${{ matrix.os }}, ${{ matrix.python }}, share ${{ matrix.share }})
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - { os: ubuntu-24.04, python: "3.11", extras: "--extra browser --extra documents", must: "" }
-          - { os: ubuntu-24.04, python: "3.13", extras: "--extra browser --extra documents", must: "" }
-          # The Windows-only checks: the install file's PowerShell parses under Windows PowerShell 5.1, CVs
-          # print with Microsoft Edge, and the platform layer finds browsers and opens Hal in the default browser
-          - os: windows-2025
-            python: "3.13"
-            extras: "--extra browser"
-            must: >-
-              --must-pass test_the_powershell_part_parses test_accented_names_print_in_every_look
-              test_hal_opens_in_the_default_browser_on_windows_not_an_edge_app_window
-              test_browsers_are_found_from_app_paths_and_install_folders
-        share: [1, 2, 3, 4, 5]     # the 5 in the job name and the run step
-    runs-on: ${{ matrix.target.os }}
+        include:
+          - { os: windows-2025, python: "3.13", share: 1/7 }
+          - { os: windows-2025, python: "3.13", share: 2/7 }
+          - { os: windows-2025, python: "3.13", share: 3/7 }
+          - { os: windows-2025, python: "3.13", share: 4/7 }
+          - { os: windows-2025, python: "3.13", share: 5/7 }
+          - { os: windows-2025, python: "3.13", share: 6/7 }
+          - { os: windows-2025, python: "3.13", share: 7/7 }
+          - { os: ubuntu-24.04, python: "3.13", share: 1/5 }
+          - { os: ubuntu-24.04, python: "3.13", share: 2/5 }
+          - { os: ubuntu-24.04, python: "3.13", share: 3/5 }
+          - { os: ubuntu-24.04, python: "3.13", share: 4/5 }
+          - { os: ubuntu-24.04, python: "3.13", share: 5/5 }
+          - { os: ubuntu-24.04, python: "3.11", share: 1/4 }
+          - { os: ubuntu-24.04, python: "3.11", share: 2/4 }
+          - { os: ubuntu-24.04, python: "3.11", share: 3/4 }
+          - { os: ubuntu-24.04, python: "3.11", share: 4/4 }
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     # uv run would otherwise make a fresh venv on .python-version's Python, without the extras
-    env: { UV_PYTHON: "${{ matrix.target.python }}" }
+    env: { UV_PYTHON: "${{ matrix.python }}" }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with: { fetch-depth: 2 }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
-      - run: uv sync --frozen ${{ matrix.target.extras }} --python ${{ matrix.target.python }}
+      # magika and onnxruntime, under the documents extra, need the Microsoft C++ runtime: Linux only
+      - run: uv sync --frozen --extra browser ${{ runner.os == 'Linux' && '--extra documents' || '' }} --python ${{ matrix.python }}
       # poppler is only the reference the PDF reader is compared with (tests/test_pdfread.py); Hal never needs it
       - if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -y -q poppler-utils
@@ -56,7 +68,7 @@ jobs:
       - if: runner.os == 'Windows'
         run: netsh int ipv4 set dynamicport tcp start=32768 num=32768
       - name: Tests, browser on
-        run: uv run python scripts/dev/run_tests.py --share ${{ matrix.share }}/5 ${{ matrix.target.must }}
+        run: uv run python scripts/dev/run_tests.py --share ${{ matrix.share }} ${{ runner.os == 'Windows' && env.WINDOWS_MUST_PASS || '' }}
         env: { HAL_TEST_MODE: "1", HAL_TEST_BROWSER: "1" }
 
   # The Linux install inside WSL2. Advisory until the first green run shows the suite passes under WSL2,
