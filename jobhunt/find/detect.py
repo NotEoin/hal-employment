@@ -284,7 +284,7 @@ class Probed:
 def probe(names: list[str], *, fetchers: dict[str, Callable] | None = None,
           in_scope: Callable[[dict], bool] = lambda j: True) -> dict[str, Probed]:
     """The best board on any application system for each company name (most jobs in scope, then most jobs)."""
-    from jobhunt.http import NotFound
+    from jobhunt.http import PageGone
     from jobhunt.sources import ats
 
     table = fetchers if fetchers is not None else ats.FETCHERS
@@ -292,7 +292,7 @@ def probe(names: list[str], *, fetchers: dict[str, Callable] | None = None,
     def attempt(name: str, kind: str, slug: str) -> Probed | None:
         try:
             jobs, size = table[kind](slug, name.split("=")[0])
-        except NotFound:
+        except PageGone:
             return None
         except Exception:  # any failure on one system means "not there", as the old probe did
             return None

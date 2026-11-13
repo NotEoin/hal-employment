@@ -54,7 +54,7 @@ _TRUE = {"true", "yes", "on", "1", "y"}
 _FALSE = {"false", "no", "off", "0", "n", ""}
 
 
-class Unreadable(Exception):
+class UnreadableValue(Exception):
     """Raised by a reader; `check()` turns it into a `SettingError` for the field."""
 
 
@@ -65,7 +65,7 @@ def _text(raw: Any) -> str:
 def money(raw: Any) -> int:
     """Whole pounds a year from "24000", "24,000", "GBP 24k", "24 thousand" or "12.50 an hour"; 0 for none."""
     if isinstance(raw, bool):
-        raise Unreadable(MONEY_HELP)
+        raise UnreadableValue(MONEY_HELP)
     if isinstance(raw, int | float):
         value, per = float(raw), "year"
     else:
@@ -82,13 +82,13 @@ def money(raw: Any) -> int:
         text = re.sub(r"\b(gbp|pounds?|salary|about|around|at least|a year|per year|or more)\b", " ", text)
         m = _AMOUNT.match(text.strip())
         if not m:
-            raise Unreadable(MONEY_HELP)
+            raise UnreadableValue(MONEY_HELP)
         value = float(m["num"]) * (1000 if m["mult"] else 1)
     if value == 0:
         return 0
     yearly = round(value * _PER[per])
     if not MIN_PAY <= yearly <= MAX_PAY:
-        raise Unreadable(MONEY_HELP)
+        raise UnreadableValue(MONEY_HELP)
     return yearly
 
 
@@ -112,7 +112,7 @@ def miles(raw: Any) -> int:
     text = _text(raw).lower().replace(",", "")
     m = re.match(r"^(\d+(?:\.\d+)?)\s*(miles?|mi|km|kms|kilometres?|kilometers?)?$", text)
     if not m:
-        raise Unreadable("Hal could not read that distance. Try 15 or 15 miles.")
+        raise UnreadableValue("Hal could not read that distance. Try 15 or 15 miles.")
     number = float(m[1])
     return round(number / KM_PER_MILE) if (m[2] or "").startswith("k") else round(number)
 
@@ -120,14 +120,14 @@ def miles(raw: Any) -> int:
 def _clock(text: str) -> str:
     m = _TIME.match(text.strip())
     if not m:
-        raise Unreadable(f"Hal could not read the time {text.strip()!r}. Try 07:30.")
+        raise UnreadableValue(f"Hal could not read the time {text.strip()!r}. Try 07:30.")
     hour, minute = int(m["h"]), int(m["m"] or 0)
     if m["ampm"]:
         if not 1 <= hour <= 12:
-            raise Unreadable(f"Hal could not read the time {text.strip()!r}. Try 07:30.")
+            raise UnreadableValue(f"Hal could not read the time {text.strip()!r}. Try 07:30.")
         hour = hour % 12 + (12 if m["ampm"].lower() == "pm" else 0)
     if hour > 23 or minute > 59:
-        raise Unreadable(f"{text.strip()!r} is not a time of day. Try 07:30.")
+        raise UnreadableValue(f"{text.strip()!r} is not a time of day. Try 07:30.")
     return f"{hour:02d}:{minute:02d}"
 
 
@@ -136,7 +136,7 @@ def times(raw: Any) -> list[str]:
     parts = raw if isinstance(raw, list | tuple) else re.split(r"\s*(?:,|;|\band\b|&|\n)\s*", _text(raw))
     found = sorted({_clock(str(p)) for p in parts if str(p).strip()})
     if not found:
-        raise Unreadable("Give at least one time, such as 07:30.")
+        raise UnreadableValue("Give at least one time, such as 07:30.")
     return found
 
 
@@ -152,10 +152,10 @@ def hours(raw: Any) -> list[str] | None:
             return None
         parts = re.split(r"\s*(?:\bto\b|\buntil\b|\btill\b|-|\u2013)\s*", text, flags=re.I)
     if len(parts) != 2:
-        raise Unreadable("Hal could not read those hours. Try 22:00 to 07:30, or Off.")
+        raise UnreadableValue("Hal could not read those hours. Try 22:00 to 07:30, or Off.")
     start, end = _clock(parts[0]), _clock(parts[1])
     if start == end:
-        raise Unreadable("The start and end are the same time. Try 22:00 to 07:30, or Off.")
+        raise UnreadableValue("The start and end are the same time. Try 22:00 to 07:30, or Off.")
     return [start, end]
 
 
@@ -191,7 +191,7 @@ def date(raw: Any) -> str:
         m = re.match(r"^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$", text)
         day = Date(int(m[3]), int(m[2]), int(m[1])) if m else Date.fromisoformat(text)
     except ValueError as exc:
-        raise Unreadable("Hal could not read that date. Try 01/09/2026.") from exc
+        raise UnreadableValue("Hal could not read that date. Try 01/09/2026.") from exc
     return day.isoformat()
 
 
@@ -203,7 +203,7 @@ def phone(raw: Any) -> str:
         digits = "0" + digits[3:].lstrip("0")
     if not re.fullmatch(r"0\d{10}", digits):
         if text and not re.fullmatch(r"\+?[\d\s().-]{6,20}", text):
-            raise Unreadable("That does not look like a phone number.")
+            raise UnreadableValue("That does not look like a phone number.")
         return text
     if digits.startswith("02"):
         return f"{digits[:3]} {digits[3:7]} {digits[7:]}"
@@ -214,7 +214,7 @@ def email(raw: Any) -> str:
     """An email address, or "" for none."""
     text = _text(raw)
     if text and not _EMAIL.match(text):
-        raise Unreadable("That does not look like an email address. Check it has an @ and a dot after it.")
+        raise UnreadableValue("That does not look like an email address. Check it has an @ and a dot after it.")
     return text
 
 
@@ -227,21 +227,21 @@ def url(raw: Any) -> str:
         text = "https://" + text
     host = re.sub(r"^https?://", "", text, flags=re.I).split("/", 1)[0]
     if not _HOST.match(host):
-        raise Unreadable("That does not look like a web address. Try https://example.org.")
+        raise UnreadableValue("That does not look like a web address. Try https://example.org.")
     return text
 
 
 def integer(raw: Any) -> int:
     """A whole number from "12", "12 points" or 12."""
     if isinstance(raw, bool):
-        raise Unreadable("Give a whole number.")
+        raise UnreadableValue("Give a whole number.")
     if isinstance(raw, int):
         return raw
     if isinstance(raw, float) and raw.is_integer():
         return int(raw)
     m = re.match(r"^(-?\d+)(?:\s*[a-z ]+)?$", _text(raw).replace(",", ""), re.I)
     if not m:
-        raise Unreadable("Give a whole number.")
+        raise UnreadableValue("Give a whole number.")
     return int(m[1])
 
 
@@ -254,13 +254,13 @@ def boolean(raw: Any) -> bool:
         return True
     if text in _FALSE:
         return False
-    raise Unreadable("Choose on or off.")
+    raise UnreadableValue("Choose on or off.")
 
 
 def text_value(raw: Any) -> str:
     """Plain text, trimmed."""
     if isinstance(raw, dict | list | tuple):
-        raise Unreadable("Type plain words here.")
+        raise UnreadableValue("Type plain words here.")
     return _text(raw)
 
 
@@ -308,7 +308,7 @@ def read(setting: Setting, raw: Any) -> Any:
         if reader is None:
             raise SettingError(setting.key, "This setting cannot be changed here.")
         return reader(raw)
-    except Unreadable as exc:
+    except UnreadableValue as exc:
         raise SettingError(setting.key, str(exc)) from None
 
 

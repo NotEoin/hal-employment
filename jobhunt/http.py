@@ -13,7 +13,7 @@ from . import __version__
 PRODUCT = f"HalEmployment/{__version__}"
 
 
-class NotFound(Exception):
+class PageGone(Exception):
     """The page is gone (HTTP 404 or 410)."""
 
 
@@ -26,7 +26,7 @@ def user_agent() -> str:
 
 
 def get(url: str, timeout: float = 20, retries: int = 1, headers: dict | None = None) -> str:
-    """The page's text, retried once on a server error or a dropped connection; NotFound when it is gone."""
+    """The page's text, retried once on a server error or a dropped connection; PageGone when it is gone."""
     req = urllib.request.Request(url, headers={"User-Agent": user_agent(), **(headers or {})})
     for attempt in range(retries + 1):
         try:
@@ -34,7 +34,7 @@ def get(url: str, timeout: float = 20, retries: int = 1, headers: dict | None = 
                 return r.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as e:
             if e.code in (404, 410):
-                raise NotFound(url) from e
+                raise PageGone(url) from e
             if attempt == retries or e.code < 500 and e.code != 429:
                 raise
             if e.code == 429:

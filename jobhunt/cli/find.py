@@ -146,7 +146,7 @@ def cmd_add(args):
     con = db.connect()
     try:
         text = research.page_text(args.url, limit=20000)
-    except (urllib.error.URLError, http.NotFound, TimeoutError, OSError) as e:
+    except (urllib.error.URLError, http.PageGone, TimeoutError, OSError) as e:
         print(f"Hal could not read the advert at {args.url} ({getattr(e, 'reason', e)}), so the job is added "
               "without it and its pack has less to go on.")
         text = ""
