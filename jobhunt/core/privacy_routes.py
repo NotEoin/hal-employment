@@ -25,7 +25,7 @@ import threading
 import zipfile
 from pathlib import Path
 
-from ..web.router import BadRequest, Conflict, NotHere, Request, route
+from ..web.router import BadRequest, Conflict, Request, route
 from . import clock, paths, privacy_actions, runner
 
 log = logging.getLogger(__name__)
@@ -270,8 +270,6 @@ def open_folder(folder: Path) -> None:
 @route("POST", "/api/v2/privacy/open-data-folder", local_only=True)
 def open_data_folder(req: Request) -> dict:
     """Opens the data folder on this computer."""
-    if req.remote:
-        raise NotHere("Open the folder on the computer Hal runs on.")
     folder = paths.data_dir()
     folder.mkdir(parents=True, exist_ok=True)
     open_folder(folder)
