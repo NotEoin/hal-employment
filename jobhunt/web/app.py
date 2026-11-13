@@ -267,7 +267,8 @@ class AppHandler(BaseHTTPRequestHandler):
             row = auth.consume_open_token(con, token) if token else None
             if row is None:
                 remote = bool(token) and auth.token_was_remote(con, token)
-                return self.send_html(_page("Hal Employment", LINK_RAN_OUT_REMOTE if remote else LINK_RAN_OUT), 410)
+                self.send_html(_page("Hal Employment", LINK_RAN_OUT_REMOTE if remote else LINK_RAN_OUT), 410)
+                return
             cookies = auth.read_cookies(self.headers.get("Cookie"))
             known = cookies.get(auth.browser_cookie_name())
             value, browser_id, _ = auth.create_session(con, remote=bool(row["remote"]), remote_host=row["remote_host"],
@@ -303,14 +304,17 @@ class AppHandler(BaseHTTPRequestHandler):
     def _document(self, path: str, query: dict[str, list[str]]) -> None:
         """An application's file by its path (`/files`), or its CV or letter under the name employers see."""
         if not self._signed_in():
-            return self.send_json({"error": FROM_SHORTCUT}, 401)
+            self.send_json({"error": FROM_SHORTCUT}, 401)
+            return
         m = DOC_PATH.fullmatch(path)
         if m is None:
             target = Path(unquote((query.get("path") or [""])[0])).resolve()
             if not any(root in target.parents for root in servable()) or not target.is_file():
-                return self._reply_bytes(404, b"not found", "text/plain")
+                self._reply_bytes(404, b"not found", "text/plain")
+                return
             ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-            return self._reply_bytes(200, target.read_bytes(), ctype)
+            self._reply_bytes(200, target.read_bytes(), ctype)
+            return
         from .. import documents
         from ..apply.queries import _job
 
@@ -324,7 +328,8 @@ class AppHandler(BaseHTTPRequestHandler):
         finally:
             con.close()
         if not found:
-            return self._reply_bytes(404, f"no {which} for this job yet".encode(), "text/plain")
+            self._reply_bytes(404, f"no {which} for this job yet".encode(), "text/plain")
+            return
         # a saved copy carries the name employers see, never the name the file has in its folder
         self._reply_bytes(200, Path(found).read_bytes(), "application/pdf",
                           {"Content-Disposition": f'inline; filename="{naming.file_name(which)}"'})
@@ -333,14 +338,18 @@ class AppHandler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             index = APP_STATIC / "index.html"
             if not index.is_file():
-                return self.send_html(_page("Hal Employment", "The new screens are not installed in this copy."))
+                self.send_html(_page("Hal Employment", "The new screens are not installed in this copy."))
+                return
             text = index.read_text(encoding="utf-8")
-            return self.send_html(text, policy=csp(text))
+            self.send_html(text, policy=csp(text))
+            return
         if not path.startswith("/app/"):
-            return self._reply_bytes(404, b"not found", "text/plain")
+            self._reply_bytes(404, b"not found", "text/plain")
+            return
         target = (APP_STATIC / path.removeprefix("/app/")).resolve()
         if APP_STATIC.resolve() not in target.parents or not target.is_file():
-            return self._reply_bytes(404, b"not found", "text/plain")
+            self._reply_bytes(404, b"not found", "text/plain")
+            return
         ctype = MIME.get(target.suffix) or mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         self._reply_bytes(200, target.read_bytes(), ctype)
 
