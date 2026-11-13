@@ -35,7 +35,8 @@ ELSEWHERE_KINDS = frozenset(("secret", "private"))
 DISPLAY_KINDS = frozenset(KINDS) - STORED_KINDS - ELSEWHERE_KINDS
 CHOICE_KINDS = frozenset(("choice", "seg", "multi"))
 PLATFORMS = ("linux", "windows")
-REMOTE = ("ok", "label", "local_only")
+Remote = Literal["ok", "label", "local_only"]
+REMOTE: tuple[str, ...] = get_args(Remote)
 
 # (id, name on screen, icon), in page order.
 GROUPS: list[tuple[str, str, str]] = [
@@ -87,7 +88,7 @@ class Setting:
     advanced: bool = False                     # under "Show more" in its group
     dev_only: bool = False                     # only when advanced.developer_mode is on
     machine: bool = False                      # about this computer (port, start at login); not exported
-    remote: Literal["ok", "label", "local_only"] = "ok"   # label: shows "On <host>"; local_only: disabled
+    remote: Remote = "ok"   # label: shows "On <host>"; local_only: disabled
                                                            # in a session opened from another computer
     platforms: tuple[str, ...] = ()            # ("windows",), ("linux",) or () for all
     visible_if: str = ""                       # "ai.provider == 'claude_cli'"; parsed, never eval'd

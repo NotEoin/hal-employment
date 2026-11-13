@@ -27,8 +27,10 @@ SectionKind = Literal["summary", "education", "experience", "volunteering", "pro
                       "achievements", "publications", "certifications", "languages", "interests", "teaching",
                       "talks", "portfolio", "additional", "custom"]
 KINDS: tuple[str, ...] = get_args(SectionKind)
-STYLES = ("bullets", "paragraph")
-OPS = ("replace", "insert", "delete", "move", "hide", "show", "reorder", "retitle")
+Style = Literal["bullets", "paragraph"]
+Op = Literal["replace", "insert", "delete", "move", "hide", "show", "reorder", "retitle"]
+STYLES: tuple[str, ...] = get_args(Style)
+OPS: tuple[str, ...] = get_args(Op)
 # The id prefix of an entry in each kind of section: "ed-1a2b3c4d" is an education entry.
 PREFIX = {"summary": "su", "education": "ed", "experience": "ex", "volunteering": "vo", "projects": "pr",
           "research": "re", "skills": "sk", "achievements": "ac", "publications": "pu", "certifications": "ce",
@@ -92,7 +94,7 @@ class Entry:
     grade: str = ""
     meta: str = ""
     link: str = ""
-    style: Literal["bullets", "paragraph"] = "bullets"
+    style: Style = "bullets"
     text: str = ""
     bullets: list[Bullet] = field(default_factory=list)
     modules: list[Module] = field(default_factory=list)
@@ -138,7 +140,7 @@ Target = str   # "s:education", "s:education/e:ed-1a2b3c4d", ".../b:<bullet id>"
 class Change:
     """One edit to a document, by target."""
 
-    op: Literal["replace", "insert", "delete", "move", "hide", "show", "reorder", "retitle"]
+    op: Op
     target: Target
     value: Any = None
     position: int | None = None
