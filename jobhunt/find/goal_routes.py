@@ -201,7 +201,6 @@ def save_understood(req: Request) -> dict:
     if "goal.stage" in values and values["goal.stage"] != settings.get("goal.stage"):
         years = goal_mod.defaults_for(values["goal.stage"])["goal.experience_years"]
         values.setdefault("goal.experience_years", years)
-    session = req.session.id if req.session else None
-    results = settings.set_many(values, by="you", session_id=session)
+    results = settings.set_many(values, by="you", session_id=req.session_id)
     versions = [r.goal_version for r in results if r.goal_version]
     return {"version": max(versions) if versions else goal_mod.current().version}

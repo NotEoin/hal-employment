@@ -45,10 +45,6 @@ def _restart_needed() -> bool:
     return any(now.get(k) != v for k, v in started.items())
 
 
-def _session_id(req: Request) -> str | None:
-    return getattr(req.session, "id_hash", None)
-
-
 def _body_value(req: Request, name: str = "value") -> Any:
     if not isinstance(req.body, dict) or name not in req.body:
         raise BadRequest(f"Send the new {name}.")
@@ -83,7 +79,7 @@ def change(req: Request) -> dict:
     """Changes one setting; 400 with the field and words when the value cannot be used."""
     key = req.params["key"]
     _changeable(req, key)
-    return settings.set(key, _body_value(req), session_id=_session_id(req)).as_dict()
+    return settings.set(key, _body_value(req), session_id=req.session_id).as_dict()
 
 
 @route("DELETE", "/api/v2/settings/{key}")
@@ -91,7 +87,7 @@ def reset(req: Request) -> dict:
     """Puts one setting back to its default."""
     key = req.params["key"]
     _changeable(req, key)
-    return settings.reset(key, session_id=_session_id(req)).as_dict()
+    return settings.reset(key, session_id=req.session_id).as_dict()
 
 
 def _secret_name(req: Request) -> str:

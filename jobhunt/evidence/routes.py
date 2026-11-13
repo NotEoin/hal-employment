@@ -129,13 +129,9 @@ def add_files(req) -> dict:
 
 def _start_sync(req) -> str | None:
     try:
-        return runner.start("record.sync", subject="record", session_id=_session(req), remote=req.remote)
+        return runner.start("record.sync", subject="record", session_id=req.session_id, remote=req.remote)
     except RuntimeError:
         return None      # a read is already running and will see the new files
-
-
-def _session(req) -> str | None:
-    return getattr(req.session, "id", None)
 
 
 @route("POST", "/api/v2/record/sync")
@@ -150,7 +146,7 @@ def ask(req) -> dict:
     question = str((req.body or {}).get("question") or "").strip()
     if not question:
         raise BadRequest("Type a question first.", field="question")
-    return {"action_id": runner.start("record.ask", params={"q": question}, session_id=_session(req),
+    return {"action_id": runner.start("record.ask", params={"q": question}, session_id=req.session_id,
                                       remote=req.remote)}
 
 
@@ -182,7 +178,7 @@ def choose(req) -> dict:
     folder = Path(str((req.body or {}).get("path") or "")).expanduser()
     if not str(folder).strip() or not folder.is_dir():
         raise BadRequest("That folder is not there. Choose a folder that exists.", field="path")
-    settings.set("record.folder", str(folder.resolve()), by="you", session_id=_session(req))
+    settings.set("record.folder", str(folder.resolve()), by="you", session_id=req.session_id)
     return {"folder_words": _folder_words(folder.resolve())}
 
 

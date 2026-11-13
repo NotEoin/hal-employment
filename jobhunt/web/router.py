@@ -168,6 +168,11 @@ class Request:
         """True when the person is on another computer (an SSH tunnel)."""
         return bool((self.session and self.session.remote) or (self.helper and self.helper.remote))
 
+    @property
+    def session_id(self) -> str | None:
+        """The requesting window's session id, or None when the request has no session."""
+        return self.session.id if self.session else None
+
     def close(self) -> None:
         """Closes the connection, if one was opened."""
         if self._con is not None:
@@ -322,7 +327,7 @@ def _record_failure(req: Request, e: Exception) -> None:
         req.con.execute("""INSERT INTO activity (at, area, kind, icon, tone, text, why, detail, session_id)
                            VALUES (?, 'system', 'system.error', 'warn', 'bad', ?, ?, ?, ?)""",
                         (clock.iso(), "Something went wrong on a page", f"{req.method} {req.path} failed",
-                         f"{type(e).__name__}", req.session.id if req.session else None))
+                         f"{type(e).__name__}", req.session_id))
         req.con.commit()
     except sqlite3.Error:
         log.exception("could not record the failure in Activity")

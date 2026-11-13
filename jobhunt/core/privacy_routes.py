@@ -172,7 +172,7 @@ def export(target: Path, step=lambda words: None) -> list[str]:
 def start_export(req: Request) -> dict:
     """Starts making the zip; the action's result names the file."""
     try:
-        aid = runner.start(privacy_actions.KIND, subject="_export", session_id=getattr(req.session, "id_hash", None),
+        aid = runner.start(privacy_actions.KIND, subject="_export", session_id=req.session_id,
                            remote=req.remote)
     except RuntimeError as e:
         raise Conflict("Hal is already making a zip.") from e

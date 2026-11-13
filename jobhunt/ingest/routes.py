@@ -56,7 +56,7 @@ def again(req) -> dict:
     if not items.by_rules(req.con):
         raise BadRequest("Every document in your record has been read by the AI already.")
     try:
-        action_id = actions.queue(again=True, session_id=getattr(req.session, "id", None), remote=req.remote,
+        action_id = actions.queue(again=True, session_id=req.session_id, remote=req.remote,
                                   why="You asked Hal to read the rest of your documents with the AI")
     except RuntimeError as e:
         raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
@@ -67,7 +67,7 @@ def again(req) -> dict:
 def tidy(req) -> dict:
     """Starts tidying the record: a backup, then everything already filed held to the rules reads follow now."""
     try:
-        action_id = actions.queue(tidy=True, session_id=getattr(req.session, "id", None), remote=req.remote,
+        action_id = actions.queue(tidy=True, session_id=req.session_id, remote=req.remote,
                                   why="You asked Hal to tidy your record")
     except RuntimeError as e:
         raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e
@@ -106,7 +106,7 @@ def links(req) -> dict:
         added += out["added"]
         duplicates += out["duplicates"]
     events.publish("profile", sources=added)
-    return {"action_id": section_actions.queue(added, session_id=getattr(req.session, "id", None),
+    return {"action_id": section_actions.queue(added, session_id=req.session_id,
                                                remote=req.remote, why="You gave links to add to your projects"),
             "added": added, "duplicates": duplicates}
 
@@ -128,7 +128,7 @@ def allow_private(req) -> dict:
         req.con.commit()
         return {"action_id": None, "add_again": True}
     try:
-        action_id = actions.queue(allow=[item_id], session_id=getattr(req.session, "id", None), remote=req.remote,
+        action_id = actions.queue(allow=[item_id], session_id=req.session_id, remote=req.remote,
                                   why="You asked Hal to add a file it had kept out as private")
     except RuntimeError as e:
         raise RuntimeError("Hal is still reading other files into your record. Try again when it is done.") from e

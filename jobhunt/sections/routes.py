@@ -88,16 +88,12 @@ FILE_FIELD, PATH_FIELD = "file", "path"
 REREAD_ON = ("section", "doc_kind", "target_id", "module", "starred", "dissertation", "theirs", "picked", "form")
 
 
-def _session(req: Request) -> str | None:
-    return getattr(req.session, "id", None)
-
-
 def _body(req: Request) -> dict:
     return req.body if isinstance(req.body, dict) else {}
 
 
 def _start(req: Request, ids: list[int], *, allow: list[int] = (), why: str, batch: bool = False) -> str | None:
-    return actions.queue(ids, allow=allow, session_id=_session(req), remote=req.remote, why=why, batch=batch)
+    return actions.queue(ids, allow=allow, session_id=req.session_id, remote=req.remote, why=why, batch=batch)
 
 
 def _section(req: Request) -> registry.Section:

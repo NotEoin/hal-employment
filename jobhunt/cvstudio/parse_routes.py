@@ -28,10 +28,6 @@ NO_REPORT_WORDS = "Hal has not read a CV yet. Add your CV first."
 CORRECTED_WHAT = "You corrected {n} Hal misread"
 
 
-def _session(req) -> str | None:
-    return getattr(req.session, "id", None)
-
-
 def _upload(req) -> tuple[bytes, str]:
     if req.files:
         if len(req.files) > 1:
@@ -54,7 +50,7 @@ def upload(req) -> dict:
         raise BadRequest(str(e), field="file") from e
     file_id = store.add_file(data, name, role="baseline")
     action_id = runner.start("cv.parse", subject="cv.parse", params={"file_id": file_id, "file": name},
-                             replace=True, session_id=_session(req), remote=req.remote)
+                             replace=True, session_id=req.session_id, remote=req.remote)
     if req.files:
         _to_record(req, data, name)
     return {"action_id": action_id, "file_id": file_id}
@@ -66,7 +62,7 @@ def _to_record(req, data: bytes, name: str) -> None:
     from jobhunt.sections import actions, pipeline
 
     added = pipeline.add_uploads(req.con, "cv", [pipeline.Incoming(name, data)])["added"]
-    actions.queue(added, session_id=_session(req), remote=req.remote, why="You added your CV")
+    actions.queue(added, session_id=req.session_id, remote=req.remote, why="You added your CV")
 
 
 def latest(con: sqlite3.Connection) -> sqlite3.Row | None:

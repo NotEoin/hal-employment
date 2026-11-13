@@ -27,7 +27,7 @@ def _provider() -> str:
 def _start(req: Request, kind: str, button: str, busy: str) -> dict:
     try:
         aid = runner.start(kind, subject=kind, params={"button": button},
-                           session_id=getattr(req.session, "id_hash", None), remote=req.remote)
+                           session_id=req.session_id, remote=req.remote)
     except RuntimeError as e:
         raise Conflict(busy) from e
     return {"action_id": aid}

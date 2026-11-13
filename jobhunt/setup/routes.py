@@ -42,10 +42,6 @@ RIGHT_TO_WORK_WORDS = {"uk_no_visa": "Yes, no visa needed", "uk_visa": "Yes, wit
 FINDERS = {"usb_install": ("jobhunt.core.importer_usb", "find")}
 
 
-def _session_id(req: Request) -> str | None:
-    return req.session.id if req.session else None
-
-
 def _found() -> dict:
     out: dict[str, Any] = {}
     for key, (module, name) in FINDERS.items():
@@ -164,7 +160,7 @@ def save_about_fields(req: Request) -> dict:
     values, seen = body.get("values"), body.get("seen") or {}
     if not isinstance(values, dict) or not isinstance(seen, dict):
         raise BadRequest("Send the values to save.")
-    return {"saved": save_about(values, seen, session_id=_session_id(req))}
+    return {"saved": save_about(values, seen, session_id=req.session_id)}
 
 
 @route("POST", "/api/v2/setup/record")

@@ -11,10 +11,6 @@ from jobhunt.web.router import Request, route
 PREFIX = "/api/v2/memory"
 
 
-def _session(req: Request) -> str | None:
-    return req.session.id if req.session else None
-
-
 @route("GET", PREFIX + "/waiting")
 def waiting(req: Request) -> list[dict]:
     """The suggestions waiting for a yes or no."""
@@ -25,7 +21,7 @@ def waiting(req: Request) -> list[dict]:
 def decide(req: Request) -> dict:
     """"Yes, do this", "Not now" or "Never suggest this"."""
     decision = str((req.body or {}).get("decision") or "")
-    return items.decide(req.con, req.params["item_id"], decision, session_id=_session(req))
+    return items.decide(req.con, req.params["item_id"], decision, session_id=req.session_id)
 
 
 @route("GET", PREFIX + "/learned")
@@ -40,10 +36,10 @@ def switch(req: Request) -> dict:
     body = req.body or {}
     if not isinstance(body.get("on"), bool):
         raise ValueError("Say on or off.")
-    return items.switch(req.con, req.params["item_id"], body["on"], session_id=_session(req))
+    return items.switch(req.con, req.params["item_id"], body["on"], session_id=req.session_id)
 
 
 @route("DELETE", PREFIX + "/learned/{item_id}")
 def delete(req: Request) -> dict:
     """Forgets a learned item, putting back what it changed."""
-    return items.delete(req.con, req.params["item_id"], session_id=_session(req))
+    return items.delete(req.con, req.params["item_id"], session_id=req.session_id)

@@ -15,10 +15,6 @@ from jobhunt.web.router import BadRequest, Request, route
 SEARCH_JOB = "find.discover"
 
 
-def _session(req: Request) -> str | None:
-    return req.session.id if req.session else None
-
-
 @route("GET", "/api/v2/sources")
 def sources(req: Request) -> dict:
     """Every source with its health, what is missed without keys, and when Hal searches."""
@@ -65,7 +61,7 @@ def look(req: Request) -> dict:
     runner.load_kinds()
     params = {"url": url} if url else {"company": company}
     action_id = runner.start("find.detect_site", params=params, subject=f"detect:{url or company}", replace=True,
-                             session_id=_session(req), remote=req.remote,
+                             session_id=req.session_id, remote=req.remote,
                              why=f"You asked Hal to look at {url or company}")
     return {"action_id": action_id}
 
@@ -78,7 +74,7 @@ def save(req: Request) -> dict:
     if not isinstance(keep, list):
         raise BadRequest("keep_urls must be a list of addresses.", field="keep_urls")
     return source_actions.save(req.con, body.get("detected_id") or "", [str(u) for u in keep],
-                               session_id=_session(req))
+                               session_id=req.session_id)
 
 
 @route("POST", "/api/v2/sources/search-now")

@@ -136,7 +136,7 @@ def apply(req: Request) -> dict:
         watch_waiting()
         raise Conflict(updates.FILLING)
     activity.record("settings", "updates.apply", "Started updating Hal", "You pressed Update Hal",
-                    remote=req.remote, session_id=req.session.id if req.session else None)
+                    remote=req.remote, session_id=req.session_id)
     start_updater(*([] if not req.remote else ["--background"]))
     return {"started": True, "words": STARTED}
 

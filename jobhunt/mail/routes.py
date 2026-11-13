@@ -43,7 +43,7 @@ def mail_check(req: Request) -> dict:
     """Checks the email now, in the background."""
     try:
         action_id = runner.start("mail.check", subject=MAIL_SUBJECT, why="You pressed Check email",
-                                 session_id=req.session.id if req.session else None, remote=req.remote)
+                                 session_id=req.session_id, remote=req.remote)
     except RuntimeError as e:
         raise Conflict("Hal is already checking your email.") from e
     return {"action_id": action_id}

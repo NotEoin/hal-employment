@@ -282,7 +282,7 @@ def set_context(req: Request) -> dict:
 def sort_tiers(req: Request) -> dict:
     """Starts sorting the experiences again; {"action_id"}. 409 while a sort is already running."""
     try:
-        return {"action_id": runner.start(actions.KIND, session_id=getattr(req.session, "id", None),
+        return {"action_id": runner.start(actions.KIND, session_id=req.session_id,
                                           remote=req.remote)}
     except RuntimeError as e:
         raise Conflict("Hal is sorting your experiences already.") from e

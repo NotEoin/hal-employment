@@ -134,7 +134,7 @@ def fix(req: Request) -> dict:
     from . import runner
 
     return {"action_id": runner.start(row["fix"]["action"], why=f"You pressed {row['fix']['label']}",
-                                      priority=0, session_id=getattr(req.session, "id_hash", None),
+                                      priority=0, session_id=req.session_id,
                                       remote=req.remote)}
 
 

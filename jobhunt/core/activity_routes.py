@@ -38,7 +38,7 @@ def activity_one(req: Request) -> dict:
 def activity_undo(req: Request) -> dict:
     """Undoes one line; the undo is a line of its own."""
     new_id = activity.undo(_int(req.params["activity_id"], "activity_id"),
-                           session_id=req.session.id if req.session else None)
+                           session_id=req.session_id)
     return {"ok": True, "activity_id": new_id}
 
 
@@ -64,4 +64,4 @@ def actions_stop(req: Request) -> dict:
 @route("POST", "/api/v2/actions/{action_id}/carry-on")
 def actions_carry_on(req: Request) -> dict:
     """Starts an interrupted action again from where it was."""
-    return {"action_id": runner.carry_on(req.params["action_id"], session_id=req.session.id if req.session else None)}
+    return {"action_id": runner.carry_on(req.params["action_id"], session_id=req.session_id)}

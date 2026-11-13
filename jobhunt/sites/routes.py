@@ -10,10 +10,6 @@ from jobhunt.sites import notes as N
 from jobhunt.web.router import BadRequest, Request, route
 
 
-def _session(req: Request) -> str | None:
-    return req.session.id if req.session else None
-
-
 def _note(req: Request, note_id: str) -> dict:
     found = next((s for s in N.stored(req.con) if s.note.id == note_id), None)
     if found is None:
@@ -34,7 +30,7 @@ def report_problem(req: Request) -> dict:
     try:
         return report.start(req.con, job_id=body.get("job_id") or None, site=str(body.get("site") or ""),
                             what=str(body.get("what") or ""), words=str(body.get("words") or ""),
-                            session_id=_session(req), remote=req.remote)
+                            session_id=req.session_id, remote=req.remote)
     except ValueError as e:
         raise BadRequest(str(e), field="words") from e
 
@@ -60,7 +56,7 @@ def save_note(req: Request) -> dict:
 def what_now(req: Request) -> dict:
     """Try again with this note, I'll finish it myself, or Skip this job for now ({choice})."""
     body = req.body or {}
-    return report.next_step(req.con, _rid(req), str(body.get("choice") or ""), session_id=_session(req),
+    return report.next_step(req.con, _rid(req), str(body.get("choice") or ""), session_id=req.session_id,
                             remote=req.remote)
 
 

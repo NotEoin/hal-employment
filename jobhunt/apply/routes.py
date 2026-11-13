@@ -16,7 +16,7 @@ TAB_CLOSED = "The form's tab is closed. Press \"Fill it in again\" to open it."
 
 def _who(req: Request) -> dict:
     """Who asked, so an application keeps the browser of the computer it was started from."""
-    return {"session_id": req.session.id if req.session else None,
+    return {"session_id": req.session_id,
             "helper_id": req.helper.id if getattr(req, "helper", None) else None, "remote": req.remote}
 
 

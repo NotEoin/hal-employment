@@ -42,7 +42,7 @@ def launcher_file(req: Request) -> BytesResponse:
 @route("GET", PREFIX + "/sessions")
 def open_windows(req: Request) -> list[dict]:
     """The windows open from another computer, newest first."""
-    return sessions.listing(req.con, req.session.id if req.session else None)
+    return sessions.listing(req.con, req.session_id)
 
 
 @route("DELETE", PREFIX + "/sessions/{session_id}")

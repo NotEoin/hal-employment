@@ -112,7 +112,7 @@ def ask_recruiter(req: Request) -> dict:
     action_id = runner.start("cv.recruiter", subject="cv.recruiter", replace=True,
                              params={"version_id": version_id, "type_id": t.id, "look_id": row["look_id"],
                                      "text": text},
-                             session_id=req.session.id if req.session else None, remote=req.remote)
+                             session_id=req.session_id, remote=req.remote)
     return {"action_id": action_id}
 
 

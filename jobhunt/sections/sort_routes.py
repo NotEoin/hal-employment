@@ -97,10 +97,6 @@ FILE_FIELD, PATH_FIELD = "file", "path"
 ZIP = ".zip"
 
 
-def _session(req: Request) -> str | None:
-    return getattr(req.session, "id", None)
-
-
 def _body(req: Request) -> dict:
     return req.body if isinstance(req.body, dict) else {}
 
@@ -136,7 +132,7 @@ def start_folders(req: Request, folders: list, why: str) -> dict:
         raise BadRequest(str(e), field="folders") from e
     label = ", ".join(p.name for p in chosen)
     sort_id, action_id = sort_actions.start(req.con, "folder", [str(p) for p in chosen], label,
-                                            session_id=_session(req), remote=req.remote, why=why)
+                                            session_id=req.session_id, remote=req.remote, why=why)
     return {"sort": sorts.shape(req.con, sort_id), "action_id": action_id}
 
 
@@ -171,7 +167,7 @@ def start_upload(req: Request, why: str, *, kind: str = "upload") -> dict:
             target.write_bytes(up.data)
     label = names[0] if len(names) == 1 else f"{len(names)} files"
     sorts.set_roots(req.con, sort_id, [str(folder)], label)
-    action_id = sort_actions.begin(req.con, sort_id, session_id=_session(req), remote=req.remote, why=why)
+    action_id = sort_actions.begin(req.con, sort_id, session_id=req.session_id, remote=req.remote, why=why)
     return {"sort": sorts.shape(req.con, sort_id), "action_id": action_id, "added": names, "problems": problems}
 
 
@@ -286,7 +282,7 @@ def accept(req: Request) -> dict:
         raise BadRequest(str(e)) from e
     sort_id = int(req.params["sort_id"])
     events.publish("sort", sort_id=sort_id)
-    return {**out, "action_id": sort_actions.queue_accept(sort_id, out["add_id"], session_id=_session(req),
+    return {**out, "action_id": sort_actions.queue_accept(sort_id, out["add_id"], session_id=req.session_id,
                                                           remote=req.remote) if out["accepted"] else None}
 
 
@@ -306,7 +302,7 @@ def undo_add(req: Request) -> dict:
 def again(req: Request) -> dict:
     """Proposes again, keeping what was accepted."""
     s = sorts.row_of(req.con, req.params["sort_id"])
-    return {"action_id": sort_actions.begin(req.con, s["id"], session_id=_session(req), remote=req.remote,
+    return {"action_id": sort_actions.begin(req.con, s["id"], session_id=req.session_id, remote=req.remote,
                                             why="You asked Hal to sort a folder again")}
 
 
@@ -318,7 +314,7 @@ def move_record(req: Request) -> dict:
     if not move.can_move(req.con):
         raise BadRequest("Your record has nothing from an older Hal to move.")
     sort_id, action_id = sort_actions.start(req.con, "move", [], "Your record from an older Hal",
-                                            session_id=_session(req), remote=req.remote,
+                                            session_id=req.session_id, remote=req.remote,
                                             why="You asked Hal to move your record to sections")
     return {"sort": sorts.shape(req.con, sort_id), "action_id": action_id}
 

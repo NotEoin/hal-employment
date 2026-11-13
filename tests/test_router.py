@@ -155,6 +155,18 @@ class Routing(unittest.TestCase):
         self.assertIn("desktop", reply.json()["error"]["message"])
         self.assertEqual(self.c.post(f"{PREFIX}/here").status, 200)
 
+    def test_a_setting_changed_in_a_window_is_recorded_with_that_window_session(self):
+        # regression: four routes read a `Session.id_hash` that does not exist, so the session was always None
+        self.c.request("PUT", "/api/v2/settings/goal.min_pay", {"value": "\u00a324,000"})
+        con = db.connect()
+        try:
+            session = con.execute("SELECT id_hash FROM sessions ORDER BY created DESC").fetchone()["id_hash"]
+            row = con.execute("SELECT session_id FROM settings_history WHERE key = 'goal.min_pay' "
+                              "ORDER BY id DESC").fetchone()
+        finally:
+            con.close()
+        self.assertEqual(row["session_id"], session)
+
     def test_unknown_api_paths_are_404(self):
         self.assertEqual(self.c.get(f"{PREFIX}/no-such-thing").status, 404)
 

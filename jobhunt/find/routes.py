@@ -417,14 +417,10 @@ def job(req: Request) -> dict:
             "application_id": card["application_id"]}
 
 
-def _session(req: Request) -> str | None:
-    return req.session.id if req.session else None
-
-
 def _start(req: Request, kind: str, **kw) -> str:
     """Starts an action for this window; the area modules that define kinds are loaded on first use."""
     runner.load_kinds()
-    return runner.start(kind, session_id=_session(req), remote=req.remote, **kw)
+    return runner.start(kind, session_id=req.session_id, remote=req.remote, **kw)
 
 
 @route("POST", "/api/v2/jobs/{job_id}/apply")
@@ -450,7 +446,7 @@ def save(req: Request) -> dict:
     """Saves or unsaves a job."""
     _row(req.con, req.params["job_id"])
     saved = (req.body or {}).get("saved", True)
-    return feedback.save(req.con, req.params["job_id"], bool(saved), session_id=_session(req))
+    return feedback.save(req.con, req.params["job_id"], bool(saved), session_id=req.session_id)
 
 
 @route("POST", "/api/v2/jobs/{job_id}/not-for-me")
@@ -459,14 +455,14 @@ def not_for_me(req: Request) -> dict:
     _row(req.con, req.params["job_id"])
     body = req.body or {}
     return feedback.not_for_me(req.con, req.params["job_id"], body.get("reason"), body.get("words"),
-                               session_id=_session(req))
+                               session_id=req.session_id)
 
 
 @route("POST", "/api/v2/jobs/{job_id}/put-back")
 def put_back(req: Request) -> dict:
     """Brings a hidden job back to Matches."""
     _row(req.con, req.params["job_id"])
-    return feedback.put_back(req.con, req.params["job_id"], session_id=_session(req))
+    return feedback.put_back(req.con, req.params["job_id"], session_id=req.session_id)
 
 
 @route("POST", "/api/v2/jobs/{job_id}/requirements")
