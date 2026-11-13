@@ -1310,8 +1310,8 @@ class Progress(unittest.TestCase):
                        progress=lambda done, total, text: again.append((done, total, text)))
             self.assertEqual([a[:2] for a in again], [(2, 4), (3, 4), (4, 4)])
             self.assertEqual({r["state"] for r in rows(con).values()}, {"done"})
-            self.assertEqual(len(list((vault / "Sources").rglob("essay *.md"))) +
-                             len(list((vault / "Sources").rglob("Essay *.md"))), 4)
+            # one pattern: rglob ignores case on Windows, so "essay" and "Essay" counted each note twice
+            self.assertEqual(sum(p.name.lower().startswith("essay ") for p in (vault / "Sources").rglob("*.md")), 4)
 
     def test_time_left_counts_rich_and_light_documents_at_their_own_pace(self):
         # one pace for both kinds said 21 hours for an ingest that took two (2026-11-05)

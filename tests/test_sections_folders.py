@@ -4,6 +4,7 @@ and a folder that is one code project itself is one project.
 Every folder is made up in a temporary home; the person is Avery Quillon.
 """
 import unittest
+from pathlib import Path
 
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import repos
@@ -35,7 +36,7 @@ class LocalFolder(unittest.TestCase):
             children = [s for s in store.listing(con, "project") if s["parent_id"] == folder]
             cards = sorted(c["fields"]["name"] for c in profile_store.items(con, "project", hidden=False))
         self.assertEqual(done["result"]["read"], 3)
-        self.assertEqual(sorted(s["locator"].rsplit("/", 1)[-1] for s in children), ["Harbour posters", "tide-gauge"])
+        self.assertEqual(sorted(Path(s["locator"]).name for s in children), ["Harbour posters", "tide-gauge"])
         self.assertEqual(cards, ["Harbour posters", "tide-gauge"])
 
     def test_a_folder_that_is_one_code_project_is_read_as_that_project(self):

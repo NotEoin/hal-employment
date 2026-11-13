@@ -35,7 +35,7 @@ def write(folder: Path, files: dict[str, str | bytes]) -> None:
         if isinstance(data, bytes):
             path.write_bytes(data)
         else:
-            path.write_text(data, encoding="utf-8")
+            path.write_text(data, encoding="utf-8", newline="\n")   # as git checks out, not CR LF on Windows
 
 
 def make(folder: Path, files: dict[str, str | bytes] | None = None,

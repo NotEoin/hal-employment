@@ -41,7 +41,7 @@ class RepoLink(unittest.TestCase):
             config = (clone / ".git" / "config").read_text()
             shallow = (clone / ".git" / "shallow").exists() or "promisor" in config
         self.assertEqual(out["state"], "read")
-        self.assertTrue(str(clone).endswith("projects/averyq/tide"))
+        self.assertTrue(clone.as_posix().endswith("projects/averyq/tide"))
         self.assertEqual((card["fields"]["name"], card["fields"]["link"]), ("tide", "https://github.com/averyq/tide"))
         self.assertEqual(card["fields"]["role"], "sole author")
         self.assertIn("FastAPI", card["fields"]["tools"])

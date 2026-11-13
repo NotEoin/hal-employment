@@ -773,6 +773,9 @@ class Scale(unittest.TestCase):
         self.enterContext(mock.patch.dict(os.environ, {"HAL_EMPLOYMENT_FAKE_NOW": NOW}))
         self.con = db.connect(self.folder / "jobs.db")
         self.addCleanup(self.con.close)
+        # each fact commits, and a runner's disk took 7 s to sync 2,000 commits on Windows (2026-11-12): the bound
+        # is on the merge, not the disk
+        self.con.execute("PRAGMA synchronous = OFF")
 
     def test_two_thousand_facts_merge_in_a_few_seconds(self):
         started = time.monotonic()

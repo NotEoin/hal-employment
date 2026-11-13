@@ -194,7 +194,7 @@ class SourceRoutes(unittest.TestCase):
     def test_reading_what_waits_reads_every_source_still_waiting_and_nothing_else(self):
         _, first = form(self.hal, self.c, "/document", [("Avery Quillon CV.md", CV, "")])
         ended(first["action_id"])
-        with db.connect() as con:
+        with closing(db.connect()) as con, con:
             con.execute("UPDATE record_sources SET state = 'new'")
         r = self.c.post("/api/v2/record/read-waiting", {}).json()
         self.assertEqual((r["waiting"], ended(r["action_id"])["state"]), (1, "done"))
@@ -209,7 +209,7 @@ class SourceRoutes(unittest.TestCase):
         _, first = form(self.hal, self.c, "/document", [("Avery Quillon CV.md", CV, "")])
         ended(first["action_id"])
         source_id = first["added"][0]["id"]
-        with db.connect() as con:
+        with closing(db.connect()) as con, con:
             con.execute("UPDATE record_sources SET state = 'new'")
             con.execute("INSERT INTO actions (id, kind, state, params, created) VALUES ('made-up-read', "
                         "'record.sources', 'running', ?, '2026-11-11T23:43:54Z')", (json.dumps({"ids": [source_id]}),))
