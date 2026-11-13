@@ -280,22 +280,18 @@ def date_words(point: str) -> str:
 
 # Names ---------------------------------------------------------------------------------------------------
 
-def _plain(text: str) -> str:
+def text_key(text: str) -> str:
+    """A title or name as compared: no case, punctuation or extra spaces."""
     t = APOSTROPHES.sub("", (text or "").lower()).replace("&", " and ")
     return " ".join(re.sub(r"[^a-z0-9+#]+", " ", t).split())
 
 
 def org_key(name: str) -> str:
     """An employer's or institution's name as compared: no case, punctuation, "the", Ltd or word order."""
-    words = [w for w in _plain(name).replace("univ ", "university ").split() if w not in ORG_SKIP]
+    words = [w for w in text_key(name).replace("univ ", "university ").split() if w not in ORG_SKIP]
     while words and words[-1] in ORG_ENDINGS:
         words.pop()
     return " ".join(sorted(words))
-
-
-def text_key(text: str) -> str:
-    """A title or name as compared: no case, punctuation or extra spaces."""
-    return _plain(text)
 
 
 def skill_key(name: str) -> str:
@@ -365,7 +361,7 @@ def fact_key(text: str, grade: bool = False) -> str:
 
     With `grade`, UK degree classes in words are their figures and "class" or "honours" are left out.
     """
-    t = _plain(text)
+    t = text_key(text)
     if grade:
         for phrase, figure in GRADE_PHRASES:
             t = t.replace(phrase, figure)
@@ -402,7 +398,7 @@ def qualification_key(text: str) -> str:
     found = level(text)
     if not found:
         return fact_key(text)
-    number = re.search(r"\blevel (\d)", _plain(text))
+    number = re.search(r"\blevel (\d)", text_key(text))
     return f"{found} {number.group(1)}" if number else found
 
 
@@ -431,7 +427,7 @@ def value_key(field: str, value) -> str:
         return _phone_key(str(value))
     if isinstance(value, bool):
         return "yes" if value else "no"
-    return _plain(str(value or ""))
+    return text_key(str(value or ""))
 
 
 # Same item -----------------------------------------------------------------------------------------------
@@ -481,12 +477,12 @@ LISTING_NAMES = 3
 
 def level(qualification: str) -> str:
     """The level of a qualification ("bachelor", "gcse", ...), or "" when its name does not say."""
-    text = _plain(qualification)
+    text = text_key(qualification)
     return next((name for name, pattern in LEVELS if re.search(pattern, text)), "")
 
 
 def _subject_words(fields: dict) -> set[str]:
-    words = set(_plain(f"{fields.get('subject', '')} {fields.get('qualification', '')}").split())
+    words = set(text_key(f"{fields.get('subject', '')} {fields.get('qualification', '')}").split())
     return words - LEVEL_WORDS
 
 
@@ -519,7 +515,8 @@ def _same_education(a: dict, b: dict) -> bool:
         # "Diploma" there says less than the "Access to HE Diploma" there: one course when the subject or the
         # dates agree (a CV wrote "Diploma, Computing, Kingston College" beside the Access card, 2026-11-11)
         vague, named = (a, b) if la in VAGUE_LEVELS else (b, a)
-        said = re.search(LEVELS_BY_NAME[level(vague.get("qualification", ""))], _plain(named.get("qualification", "")))
+        said = re.search(LEVELS_BY_NAME[level(vague.get("qualification", ""))],
+                         text_key(named.get("qualification", "")))
         return bool(said) and (shared or shared_months(a, b) > 0)
     if la and lb:
         if la == lb and la in VAGUE_LEVELS and ia and ib:
@@ -581,7 +578,7 @@ def match_keys(kind: str, fields: dict) -> set[str] | None:
 
 def project_key(name: str) -> str:
     """A project's name as compared: no tagline after " - " or ":", no words such as "app" or "system"."""
-    words = _plain(TAGLINE.sub("", name or "")).split()
+    words = text_key(TAGLINE.sub("", name or "")).split()
     return " ".join(w for w in words if w not in PROJECT_WORDS) or " ".join(words)
 
 

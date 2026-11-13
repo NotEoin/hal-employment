@@ -28,8 +28,9 @@ KIND_HINTS = (("transcript", rank.PEEK_TRANSCRIPT, TRANSCRIPT_RULE),
               ("reference", rank.PEEK_REFERENCE, REFERENCE_RULE))
 
 
-def _looks_like(name: str, text: str) -> list[str]:
-    """The sections a file with this name and text looks like it belongs in, most telling first."""
+def looks_like(name: str, text: str) -> list[str]:
+    """The sections (cv, official, letter) a file with this name and text looks like it belongs in, most
+    telling first; [] when none. The sorter's first glance at a document (`sections.sorter`)."""
     stem = Path(name).stem
     head = text[:rank.PEEK_CHARS]
     found = []
@@ -45,7 +46,7 @@ def _looks_like(name: str, text: str) -> list[str]:
 
 def suggest(section: str, name: str, text: str) -> str:
     """The section a source named `name` with this text seems to belong in instead of `section`, or ""."""
-    looks = _looks_like(name, text)
+    looks = looks_like(name, text)
     for hint, at_home in HINTS:
         if hint in looks:
             return "" if section in at_home else hint
@@ -61,9 +62,3 @@ def suggest_kind(section: str, doc_kind: str, name: str, text: str) -> str:
         if kind in kinds and (peek.search(head) or rule.words.search(stem)):
             return "" if kind == doc_kind else KIND_PREFIX + kind
     return ""
-
-
-def looks_like(name: str, text: str) -> list[str]:
-    """The sections (cv, official, letter) a file with this name and text looks like it belongs in, most
-    telling first; [] when none. The sorter's first glance at a document (`sections.sorter`)."""
-    return _looks_like(name, text)

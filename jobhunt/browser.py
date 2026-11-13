@@ -1291,6 +1291,7 @@ def _press_step(b: Browser, job_id: str, shot: str | None = None) -> dict:
 
 
 def _next_step(b: Browser, job_id: str) -> dict:
+    """The task `next_step` runs; `_via` finds the extension's `next_step` by this name."""
     return _press_step(b, job_id)
 
 

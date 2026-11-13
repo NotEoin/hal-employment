@@ -262,10 +262,6 @@ def attach(con: sqlite3.Connection, source_id, uploads: list[Incoming]) -> dict:
 
 def source_of(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
     """A source's row as its reader is given it (`readers.Source`)."""
-    return _source(con, r)
-
-
-def _source(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
     folder = store.files_dir(r["id"])
     files = tuple(readers.SourceFile(rel, folder / rel) for rel in store.file_rels(con, r["id"]))
     target = None
@@ -397,7 +393,7 @@ def begin(con: sqlite3.Connection, source_id) -> Begun:
     """Marks the source as being read and gathers what its reader needs; LookupError when it is not there."""
     r = store.row(con, source_id)
     section = registry.get(r["section"])
-    begun = Begun(row=r, section=section, kind=registry.DOC_KINDS[r["doc_kind"]], source=_source(con, r),
+    begun = Begun(row=r, section=section, kind=registry.DOC_KINDS[r["doc_kind"]], source=source_of(con, r),
                   name=store.shape(con, r)["name"], reader=readers.get(section.reader_of(r["doc_kind"])))
     store.set_state(con, r["id"], "reading")
     return begun
@@ -515,7 +511,7 @@ def remove(con: sqlite3.Connection, source_id) -> dict:
     shutil.rmtree(store.files_dir(r["id"]), ignore_errors=True)
     forget = getattr(readers.get(registry.get(r["section"]).reader_of(r["doc_kind"])), "forget", None)
     if forget is not None:
-        forget(_source(con, r))
+        forget(source_of(con, r))
     if r["parent_id"] is not None and con.execute("SELECT 1 FROM record_sources WHERE id = ?",
                                                   (r["parent_id"],)).fetchone():
         dropped = store.meta(con, r["parent_id"]).get("dropped") or []
