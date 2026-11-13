@@ -23,9 +23,9 @@ from unittest import mock
 
 from support import old_db, old_repo
 
-from jobhunt import db
+from jobhunt import db, importer
 from jobhunt.cli import data as cli_data
-from jobhunt.core import importer, paths
+from jobhunt.core import paths
 from jobhunt.core.settings import store
 
 ROOT = Path(__file__).resolve().parents[1]

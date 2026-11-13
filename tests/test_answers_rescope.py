@@ -15,7 +15,8 @@ from unittest import mock
 from support import old_db, old_repo
 from test_importer import FAKE_NOW, load_export, writable
 
-from jobhunt.core import answers_rescope, importer
+from jobhunt import importer
+from jobhunt.core import answers_rescope
 from jobhunt.core.db import migrate, tasks
 from jobhunt.core.settings import store
 

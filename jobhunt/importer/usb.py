@@ -35,9 +35,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import clock, paths
-from .importer import ImportStopped, Report
-from .settings import legacy_map
+from ..core import clock, paths
+from ..core.settings import legacy_map
+from . import ImportStopped, Report
 
 log = logging.getLogger(__name__)
 
@@ -177,7 +177,7 @@ def _flatten(config: dict) -> dict[str, Any]:
 
 def settings_from(config: dict) -> tuple[dict[str, Any], list[str]]:
     """(setting -> checked value, old keys left out) from the stick's `config.toml`."""
-    from . import settings
+    from ..core import settings
 
     flat = _flatten(config)
     values: dict[str, Any] = {}
@@ -288,7 +288,7 @@ def run(folder: Path, dry_run: bool = False, *, say: Callable[[str], None] | Non
     if n:
         report.add("schedule", f"Kept when the old Hal last searched and checked email ({n}).", jobs=n)
     _retire(folder, system, report)
-    from . import activity
+    from ..core import activity
 
     detail = "\n".join(s["line"] for s in report.steps)
     activity.record("settings", "setup.import_usb", DONE, WHY, detail=detail, tone="good")
@@ -303,8 +303,8 @@ def _copy_database(src: Path, dest: Path, report: Report) -> None:
     found an older Hal"): its sign-ins, settings, actions and Activity must survive the copy.
     """
     from .. import db
-    from . import backup
-    from .db import migrate
+    from ..core import backup
+    from ..core.db import migrate
 
     copy = paths.state_dir() / STAGING_DB
     copy.unlink(missing_ok=True)
@@ -389,8 +389,8 @@ def _copy_files(old: Path, folder: Path, counts: _Counts, report: Report) -> Non
 
 
 def _apply_settings(values: dict[str, Any], counts: _Counts, report: Report) -> None:
-    from . import settings
-    from .db import tasks
+    from ..core import settings
+    from ..core.db import tasks
 
     settings.set_many(values, by="import")
     counts.settings = len(values)
@@ -403,7 +403,7 @@ def _apply_settings(values: dict[str, Any], counts: _Counts, report: Report) -> 
 
 
 def _move_secrets(folder: Path, names: list[str], counts: _Counts, report: Report) -> None:
-    from .settings import secrets
+    from ..core.settings import secrets
 
     kept = []
     for name in names:

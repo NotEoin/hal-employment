@@ -1,7 +1,7 @@
 """Commands for moving and keeping data: `import`, `migrate` and `backup`.
 
-`import` moves the owner's old in-checkout data into Hal's own folders (`core.importer`), or hands an
-old USB-stick install to `core.importer_usb` once that exists. `migrate` shows and runs pending
+`import` moves the owner's old in-checkout data into Hal's own folders (`jobhunt.importer`), or hands an
+old USB-stick install to `importer.usb` once that exists. `migrate` shows and runs pending
 database migrations without opening the database through `db.connect()`, which would migrate it silently.
 `backup` writes one snapshot of the database. Each prints plain lines and exits 1 with the reason when it
 stops.
@@ -20,12 +20,12 @@ DB_TIMEOUT_S = 30     # the same wait as db.connect(): the server and the CLI sh
 
 def cmd_import(args) -> None:
     """Runs the one-time import, its dry run, or its undo."""
-    from ..core import importer
+    from .. import importer
 
     try:
         if args.from_usb_install:
             try:
-                usb = importlib.import_module("jobhunt.core.importer_usb")
+                usb = importlib.import_module("jobhunt.importer.usb")
             except ImportError:
                 sys.exit("Copying from an old Hal on a USB install is not ready in this version of Hal.")
             usb.run(Path(args.from_usb_install), dry_run=args.dry_run)

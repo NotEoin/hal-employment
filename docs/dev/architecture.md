@@ -2016,7 +2016,7 @@ the code folder or the record folder. The help file passes every line through `h
 contacts and saved answers replaced, lines holding a private answer dropped) and is shown before it is
 saved.
 
-## Importing older data (`core/importer.py`)
+## Importing older data (`jobhunt/importer/`)
 
 `jobhunt import` moves data kept inside an older checkout into the data folder: it builds a staging home
 beside the target through `paths.set_override`, migrates it with the normal code, and appears only at the

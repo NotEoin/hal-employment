@@ -93,7 +93,8 @@ def sign_in(ctx: runner.Ctx) -> dict:
 
 def import_usb(ctx: runner.Ctx, path: str, dry_run: bool = False) -> dict:
     """Copies the old stick install into this Hal and retires it."""
-    from ..core import importer, importer_usb
+    from .. import importer
+    from ..importer import usb as importer_usb
 
     ctx.step("Looking at the older Hal on this computer")
     try:
@@ -105,7 +106,7 @@ def import_usb(ctx: runner.Ctx, path: str, dry_run: bool = False) -> dict:
 
 def _fake_stick(world) -> dict:
     """G9's example: a made-up stick install inside the made-up world, imported as a dry run."""
-    from ..core import importer_usb
+    from ..importer import usb as importer_usb
 
     folder = importer_usb.make_example(Path(world.root) / "stick-example")
     return {"path": str(folder), "dry_run": True}

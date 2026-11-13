@@ -10,9 +10,10 @@ import support  # noqa: F401 - must come before jobhunt
 from support import old_db
 from support.actions import wait_for_actions
 
-from jobhunt import db
-from jobhunt.core import importer, importer_usb, paths, runner, settings
+from jobhunt import db, importer
+from jobhunt.core import paths, runner, settings
 from jobhunt.core.settings import secrets, store
+from jobhunt.importer import usb as importer_usb
 
 PRIVATE = '[applicant]\nadjustments = "Prefer not to say"\n'   # made up; copied as bytes, never read by Hal
 CONFIG = """[applicant]

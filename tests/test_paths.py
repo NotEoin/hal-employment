@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parent.parent
 PACKAGE = REPO / "jobhunt"
 RUN_TIMEOUT_S = 60
 # Only these modules may name the old in-checkout folders: they find or move the owner's old data.
-MAY_NAME_OLD_FOLDERS = {"core/paths.py", "core/importer.py", "core/importer_usb.py"}
+MAY_NAME_OLD_FOLDERS = {"core/paths.py", "importer/__init__.py", "importer/usb.py"}
 DATA_FUNCTIONS = ("config_dir", "data_dir", "cache_dir", "documents_dir", "helper_dir", "record_default", "db_path",
                   "private_path", "browser_profile", "shots_dir", "cv_dir", "backups_dir", "logs_dir", "state_dir",
                   "legacy_packs_dir", "claude_work_dir")
