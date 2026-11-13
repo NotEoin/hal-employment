@@ -292,7 +292,7 @@ class Store(unittest.TestCase):
         a = self.job(CV_A, start="May 2024", end="March 2023")
         (c,) = self.open_conflicts("dates")
         self.assertEqual(c["item_ids"], [a])
-        done = conflicts.resolve(self.con, c["id"], value="March 2025")
+        done = store.resolve_conflict(self.con, c["id"], value="March 2025")
         self.assertEqual((done["state"], done["resolution"]), ("resolved", {"value": "March 2025"}))
         got = store.item(self.con, a)
         self.assertEqual((got["state"], got["fields"]["end"]), ("edited", "2025-03"))
@@ -305,11 +305,11 @@ class Store(unittest.TestCase):
         store.edit(self.con, b, {"start": "Feb 2021", "end": "Dec 2021"})
         (c,) = self.open_conflicts("overlap")
         with self.assertRaises(ValueError):
-            conflicts.resolve(self.con, c["id"], keep_item=999)
-        conflicts.resolve(self.con, c["id"], keep_item=a)
+            store.resolve_conflict(self.con, c["id"], keep_item=999)
+        store.resolve_conflict(self.con, c["id"], keep_item=a)
         self.assertEqual(store.item(self.con, b)["state"], "hidden")
         with self.assertRaises(ValueError):
-            conflicts.resolve(self.con, c["id"], keep_all=True)
+            store.resolve_conflict(self.con, c["id"], keep_all=True)
 
     def test_a_resolved_conflict_stays_resolved_when_the_files_are_read_again(self):
         self.job(CV_A, title="Archive assistant", employer="Brackenholt Record Office", start="Jan 2021",
@@ -317,7 +317,7 @@ class Store(unittest.TestCase):
         self.job(CV_A, title="Museum assistant", employer="Fenwick Lantern Museum Trust", start="Jan 2023",
                  end="Jun 2023")
         (gap,) = self.open_conflicts("gap")
-        conflicts.resolve(self.con, gap["id"], keep_all=True)
+        store.resolve_conflict(self.con, gap["id"], keep_all=True)
         self.job(CV_A, title="Museum assistant", employer="Fenwick Lantern Museum Trust", start="Jan 2023",
                  end="Jun 2023")
         self.assertEqual(self.open_conflicts(), [])

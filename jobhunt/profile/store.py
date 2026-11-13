@@ -2,8 +2,8 @@
 
 The ingest calls `add_found(con, kind, fields, evidence)` for each fact it reads in a document; the Your record
 page reads items with `items` and `item`, and changes them with `edit`, `confirm`, `hide`, `confirm_many`,
-`hide_many`, `add_by_hand` and `delete`. Every write ends with `conflicts.refresh`, so the list of what does
-not add up always matches the facts.
+`hide_many`, `add_by_hand` and `delete`, and settles a conflict with `resolve_conflict`. Every write ends with
+`conflicts.refresh`, so the list of what does not add up always matches the facts.
 
 Design decisions, each with its reason:
 
@@ -72,7 +72,7 @@ import sqlite3
 from collections.abc import Callable
 
 from jobhunt import db
-from jobhunt.profile import conflicts, cvs, index, merge, strength
+from jobhunt.profile import conflicts, context_rules, cvs, index, merge, strength, tier_rules
 
 TEXT, DATE, FLAG, LIST, MODULES = "text", "date", "bool", "list", "modules"
 # Each kind's fields and their types. `period` is also accepted for jobs and education, and split into
@@ -94,6 +94,7 @@ NAMED_BY = {"job": ("title", "employer"), "education": ("qualification", "instit
             "skill": ("name",), "project": ("name",), "achievement": ("title",), "certificate": ("name",),
             "basic": ("key",), "link": ("url",)}
 STATES = ("hal", "confirmed", "edited", "hidden")
+USED_STATES = ("confirmed", "edited")     # the states of an item the person checked, which writing uses
 STATE_WORDS = {"hal": "Found by Hal", "confirmed": "Checked by you", "edited": "Edited by you",
                "hidden": "Hidden"}
 HOURS = {"full time": "full_time", "fulltime": "full_time", "full_time": "full_time",
@@ -842,6 +843,49 @@ STAR_BY_YOU = "you"
 PROJECT_SECTION = "project"     # the section whose facts are a project's own source (`section_rank`)
 
 
+def resolve_conflict(con: sqlite3.Connection, conflict_id, *, value=None, keep_item=None,
+                     keep_all: bool = False) -> dict:
+    """Settles a conflict with the person's choice and returns it.
+
+    - `value`: the right value of the conflict's field; the item is edited to it (so it is the person's).
+    - `keep_item`: one of the conflict's items is the right one; the others are hidden.
+    - `keep_all`: everything is right as it is (two jobs really overlapped, the gap is real).
+    Raises ValueError when the choice does not fit the conflict.
+    """
+    c = conflicts.get(con, conflict_id)
+    if value is not None and c["field"]:
+        kind = con.execute("SELECT kind FROM profile_items WHERE id = ?", (c["item_ids"][0],)).fetchone()
+        if kind is None:
+            raise LookupError("The item this conflict was about is not in your profile any more.")
+        clean(kind["kind"], {c["field"]: value})
+    if c["state"] != "open":
+        raise ValueError("That conflict is already settled.")
+    if sum(x is not None and x is not False for x in (value, keep_item, keep_all or None)) != 1:
+        raise ValueError("Choose one: the right value, the item to keep, or keep them all.")
+    if value is not None:
+        if not str(value).strip():
+            raise ValueError("Give the right value.")
+        if "value" not in c["choices"] or not c["field"]:
+            raise ValueError("This conflict is not about one value; keep an item or keep them all.")
+        resolution = {"value": value}
+    elif keep_item is not None:
+        if "keep_item" not in c["choices"] or keep_item not in c["item_ids"]:
+            raise ValueError("Keep one of the items this conflict names.")
+        resolution = {"keep_item": keep_item}
+    else:
+        resolution = {"keep_all": True}
+    with con:
+        con.execute("UPDATE profile_conflicts SET state = 'resolved', resolution = ?, updated = ? WHERE id = ?",
+                    (json.dumps(resolution), db.now(), c["id"]))
+    if value is not None:
+        edit(con, c["item_ids"][0], {c["field"]: value})
+    elif keep_item is not None:
+        for other in c["item_ids"]:
+            if other != keep_item:
+                hide(con, other)
+    return conflicts.get(con, c["id"])
+
+
 def set_star(con: sqlite3.Connection, item_id, on: bool) -> dict:
     """Stars a project or job card for the person, or takes the star off; returns the item.
 
@@ -916,6 +960,11 @@ def is_weak(item: dict) -> bool:
     return len(files) < STRONG_FILES and not any(e.get("role", "") == OWN_ROLE for e in item["evidence"])
 
 
+def source_strength(e: dict) -> tuple:
+    """How far one piece of evidence is trusted, for sorting: the person's own, rank, verified, quoted."""
+    return (e.get("role", "") == OWN_ROLE, merge.rank(e["doc_type"]), bool(e["verified"]), bool(e["quote"]))
+
+
 def _strength(e: sqlite3.Row) -> dict:
     """A skill's piece of evidence's strength and its words, from its source's section, title, module and card."""
     if e["kind"] != "skill":
@@ -952,9 +1001,6 @@ def evidence_of(con: sqlite3.Connection, item_ids: list[int]) -> dict[int, list[
 
 
 def _shape(row: sqlite3.Row, evidence: list[dict], open_conflicts: list[dict]) -> dict:
-    # tiers and contexts read the store's items, so they are imported when first needed
-    from jobhunt.profile import contexts, tiers
-
     fields = _row_fields(row)
     out = {"id": row["id"], "kind": row["kind"], "state": row["state"], "state_words": STATE_WORDS[row["state"]],
            "origin": row["origin"], "fields": fields, "title": title(row["kind"], fields),
@@ -965,7 +1011,7 @@ def _shape(row: sqlite3.Row, evidence: list[dict], open_conflicts: list[dict]) -
            "star": bool(row["star"]), "star_by": row["star_by"], "can_star": row["kind"] in STAR_KINDS}
     if row["kind"] == "skill":
         out["studied"] = is_studied(out)
-    return {**out, **tiers.shown(out, row), **contexts.shown(out, row)}
+    return {**out, **tier_rules.shown(out, row), **context_rules.shown(out, row)}
 
 
 def item(con: sqlite3.Connection, item_id) -> dict:

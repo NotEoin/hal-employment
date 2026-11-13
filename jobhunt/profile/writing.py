@@ -100,8 +100,9 @@ from dataclasses import dataclass, field
 
 from jobhunt import db, record
 from jobhunt.ingest import frontmatter
-from jobhunt.profile import contexts, merge, owners, store, strength, tiers
+from jobhunt.profile import contexts, duplicates, merge, owners, store, strength, tiers
 from jobhunt.profile import cvs as section_cvs
+from jobhunt.profile.store import USED_STATES
 from jobhunt.writing import planned, stage
 from jobhunt.writing import quotes as writing_quotes
 
@@ -115,7 +116,6 @@ LIMIT = 5000               # below the record part's 6000 (`record.context`); a 
 LINE_MAX = 450
 QUOTE_CHARS = 160          # a skill's evidence quote, cut so it never crowds out the other facts
 HEADING = "Profile (facts about the applicant from their files, each checked by them):"
-USED_STATES = ("confirmed", "edited")
 CARD_KINDS = ("project", "job")    # the cards whose tools and work the fit map sees in full (`cards`)
 CARDS_HEADING = "Profile cards (every project and job the applicant checked, with its tools):"
 CARD_SUMMARY = 200        # characters of a card's summary: enough to say what it was, short enough for all
@@ -542,16 +542,10 @@ def source_words(item: dict, cvs: CvAuthority) -> str:
     return OLDER_CV_WORDS if cv else RECORD_WORDS
 
 
-def employers(con: sqlite3.Connection) -> list[str]:
-    """The employers of the jobs the person checked, which make a project that names one work."""
-    return [it["fields"]["employer"] for it in store.items(con, "job", hidden=False)
-            if it["state"] in USED_STATES and it["fields"].get("employer")]
-
-
 def _lines(con: sqlite3.Connection, queries: list[str] | None = None) -> list[str]:
     out = []
     wanted = set(merge.text_key(" ".join(queries or [])).split()) - QUERY_STOP
-    worked_for = employers(con)
+    worked_for = contexts.employers(con)
     cvs, view = CvAuthority.of(con), owners.Files.of(con)
     tags = _tags([it for it in store.items(con, "project", hidden=False)
                   if it["state"] in USED_STATES and it["tier"] != tiers.ARCHIVE])
@@ -632,7 +626,7 @@ def passage_contexts(con: sqlite3.Connection) -> dict[str, str]:
     """The context, in a prompt's words, of each file a project card rests on: {file in the record: words}; a
     file that lists projects (`owners.Files.listings`) says none, as its passages are about many, and a
     project's own file says its owner's."""
-    worked_for = employers(con)
+    worked_for = contexts.employers(con)
     view = owners.Files.of(con)
     out: dict[str, str] = {}
     for it in store.items(con, "project", hidden=False):
@@ -670,7 +664,7 @@ def with_record(queries: list[str]) -> str:
 
 # Document types that hold one project: `writing.stage` PERSONAL_TYPES and DEGREE_TYPES, written out (in
 # `owners`) because `stage` is still loading when the profile package is.
-PROJECT_FILES = owners.PROJECT_FILES
+PROJECT_FILES = duplicates.PROJECT_FILES
 
 
 def aliases(item: dict, hidden: list[dict], view: owners.Files | None = None) -> list[str]:
@@ -721,7 +715,7 @@ def cards(con: sqlite3.Connection | None = None) -> list[dict]:
     if con is None:
         with closing(db.connect()) as own:
             return cards(own)
-    worked_for = employers(con)
+    worked_for = contexts.employers(con)
     hidden = [it for it in store.items(con, "project") if it["state"] == "hidden"]
     cvs, view = CvAuthority.of(con), owners.Files.of(con)
     older_ids = section_cvs.older_sources(con)

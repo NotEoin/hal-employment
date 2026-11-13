@@ -64,6 +64,8 @@ YEARS_APART = 2            # a course and a project two or more years apart are 
 MONTHS = 12
 MERGED = "Merged into "    # `merged_why` of a merged card, then the card's name; "Part of ..." is a project fold
 LISTS = ("cv", "letter", "transcript")    # documents that list every experience: sharing one says nothing
+# Document types that hold one project (`owners`); `profile.writing.PROJECT_FILES` is this.
+PROJECT_FILES = ("repository", "project", "coursework", "dissertation")
 FIELD_CHARS = 300
 LIST_ITEMS = 8
 FILES = 5
@@ -452,15 +454,12 @@ def hidden_twins(con: sqlite3.Connection) -> list[dict]:
     """Each shown card with the cards the person hid whose files are all repository or project files that
     shown card rests on too, maybe the same work (never merged without them): [{"item": ITEM, "hidden": [ITEM]}].
     A card they kept apart before (`store.APART`) is not offered again."""
-    # loaded late: `owners` reads `listing_files` from this module
-    from jobhunt.profile import owners
-
     out = []
     for kind in tiers.TIERED_KINDS:
         found = store.items(con, kind)
         hid = [i for i in found if i["state"] == "hidden" and i["merged_into"] is None
                and i["merged_why"] != store.APART and i["evidence"]
-               and all(e["doc_type"] in owners.PROJECT_FILES for e in i["evidence"])]
+               and all(e["doc_type"] in PROJECT_FILES for e in i["evidence"])]
         for shown in (i for i in found if i["state"] != "hidden"):
             files = {e["source_rel"] for e in shown["evidence"]}
             same = [h for h in hid if {e["source_rel"] for e in h["evidence"]} <= files]

@@ -39,8 +39,6 @@ from dataclasses import dataclass, field
 from jobhunt.profile import duplicates, store
 
 LISTING_CARDS = 2          # visible project cards one file backs that make it a listing rather than one's own
-# Document types that hold one project; `profile.writing.PROJECT_FILES` is this.
-PROJECT_FILES = ("repository", "project", "coursework", "dissertation")
 # File names that name no project: a repository's note is named after its folder, but these are not.
 GENERIC_FILES = {"readme", "index", "notes", "main", "untitled", "project", "code", "src", "app", "cv"}
 NAME_MIN = 3               # a file name this short ("ui", "v2") names no project
@@ -102,7 +100,7 @@ class Files:
         for it in visible:
             for e in it["evidence"]:
                 backers.setdefault(e["source_rel"], set()).add(it["id"])
-                named = key(file_name(e["source_rel"])) if e["doc_type"] in PROJECT_FILES else ""
+                named = key(file_name(e["source_rel"])) if e["doc_type"] in duplicates.PROJECT_FILES else ""
                 found = [i for i, own in names.items() if named and named in own]
                 if len(found) == 1:
                     owners[e["source_rel"]] = found[0]

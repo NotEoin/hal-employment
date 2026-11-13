@@ -12,7 +12,7 @@ import support  # noqa: F401 - sets a temporary home before jobhunt is imported
 
 from jobhunt import db
 from jobhunt.core import paths
-from jobhunt.profile import contexts, store, writing
+from jobhunt.profile import context_rules, contexts, store, writing
 from jobhunt.writing import stage
 
 NOW = "2026-11-07T09:00:00Z"
@@ -108,7 +108,7 @@ class Contexts(unittest.TestCase):
         self.assertEqual(store.item(self.con, skill)["context_words"], "", "a skill has no context")
 
     def test_the_page_words_cover_every_context(self):
-        self.assertEqual(sorted(contexts.CHOICE_WORDS), sorted(stage.CONTEXTS))
+        self.assertEqual(sorted(context_rules.CHOICE_WORDS), sorted(stage.CONTEXTS))
         self.assertTrue(set(contexts.BY_KIND.values()) <= set(stage.CONTEXTS))
 
     def test_a_job_done_as_part_of_a_degree_says_so_in_the_block(self):

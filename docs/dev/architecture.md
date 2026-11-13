@@ -1836,7 +1836,7 @@ of kind `move`).
   every person's prompts. A tier the person set (`PUT /api/v2/profile/items/{id}/tier`) is never changed;
   Hal judges a card again only when the fingerprint of its evidence (`tier_basis`) changes. Without an AI
   only the rules run. Every shaped item carries `tier`, `tier_by`, `tier_why` and `tier_words`
-  (`tiers.shown`), with the rules applied again on read, so a card the person confirms leaves the archive
+  (`tier_rules.shown`), with the rules applied again on read, so a card the person confirms leaves the archive
   at once. The ingest action runs the pass after each read (`profile.actions.sort`), and
   `POST /api/v2/profile/tiers` starts it as the action `profile.tiers`.
 - Duplicates (`duplicates.py`, migration 0027): after each read, before sorting, the ingest action runs
@@ -1884,7 +1884,7 @@ of kind `move`).
   (`by` "hal" or "person", `duplicates.merged_by`); the page shows the person's as "You merged these" with
   the same Undo (`duplicates.undo` takes both). `duplicates.hidden_twins` gives each shown card with the
   cards the person hid (not merged, not `apart`) whose evidence is all repository or project files
-  (`owners.PROJECT_FILES`) the shown card also rests on, as `hidden_twins` of the check payload, shown as
+  (`duplicates.PROJECT_FILES`) the shown card also rests on, as `hidden_twins` of the check payload, shown as
   "Hidden cards from the same files" with a "Same as" button; nothing merges them without the person.
 - Contexts (`contexts.py`, migration 0026): each card of the tiered kinds has a `context` (`degree`,
   `team`, `work`, `personal`, or '' when nothing shows it) and `context_by` (`hal` or `person`). A job is

@@ -338,8 +338,8 @@ def resolve(req: Request) -> dict:
     """Settles a conflict with the right value, the item to keep, or "keep them all"."""
     body = req.body if isinstance(req.body, dict) else {}
     try:
-        done = conflicts.resolve(req.con, req.params["conflict_id"], value=body.get("value"),
-                                 keep_item=body.get("keep_item"), keep_all=bool(body.get("keep_all")))
+        done = store.resolve_conflict(req.con, req.params["conflict_id"], value=body.get("value"),
+                                      keep_item=body.get("keep_item"), keep_all=bool(body.get("keep_all")))
     except ValueError as e:
         raise BadRequest(str(e)) from e
     events.publish("profile", conflict_id=done["id"])

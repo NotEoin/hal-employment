@@ -5,7 +5,7 @@ Each job, course, project, achievement and certificate (`tiers.TIERED_KINDS`) ke
 (`writing.stage.CONTEXTS`: degree, team, work, personal, or '' when nothing shows it) and `context_by` (`hal`
 or `person`), migration 0026. `found(item, employers)` is Hal's reading of a card; `current(item, employers)`
 is the context writing uses; `refresh(con)` stores Hal's reading for every card the person has not set;
-`set_context` is the person's choice; `shown(item, stored)` is what a shaped item carries.
+`set_context` is the person's choice; `context_rules.shown(item, stored)` is what a shaped item carries.
 
 Design decisions, each with its reason:
 
@@ -25,15 +25,9 @@ import sqlite3
 
 from jobhunt import db
 from jobhunt.profile import store
+from jobhunt.profile.context_rules import BY_HAL, BY_KIND, BY_PERSON, CONTEXT_KINDS
 from jobhunt.writing import stage
 
-BY_HAL, BY_PERSON = "hal", "person"
-CONTEXT_KINDS = ("job", "education", "project", "achievement", "certificate")   # as `tiers.TIERED_KINDS`
-# The person's choice on a card, in the words the Check your record page shows; the keys are
-# `writing.stage.CONTEXTS`, written out because `stage` is still loading when the profile package is.
-CHOICE_WORDS = {"degree": "Part of my degree", "team": "University team project", "work": "At work",
-                "personal": "In my own time"}
-BY_KIND = {"job": "work", "education": "degree"}   # unless the person says otherwise
 
 def found(item: dict, worked_for: list[str]) -> str:
     """Hal's context for a shaped `item` from its kind, fields and evidence; "" when nothing shows it."""
@@ -55,21 +49,6 @@ def current(item: dict, worked_for: list[str]) -> str:
     return found(item, worked_for)
 
 
-def shown(item: dict, stored) -> dict:
-    """The context a shaped `item` carries: {context, context_by, context_words}; `stored` holds its columns.
-
-    The person's choice wins, then Hal's stored reading, then the kind's own (a job is work); a kind with no
-    context has none.
-    """
-    if item["kind"] not in CONTEXT_KINDS:
-        return {"context": "", "context_by": "", "context_words": ""}
-    context, by = stored["context"], stored["context_by"]
-    if context not in stage.CONTEXTS or by not in (BY_HAL, BY_PERSON):
-        context = BY_KIND.get(item["kind"], "")
-        by = BY_HAL if context else ""
-    return {"context": context, "context_by": by, "context_words": CHOICE_WORDS.get(context, "")}
-
-
 def set_context(con: sqlite3.Connection, item_id, context: str) -> dict:
     """The person says where an experience was done; Hal never changes it after this. Returns the item.
 
@@ -87,11 +66,14 @@ def set_context(con: sqlite3.Connection, item_id, context: str) -> dict:
     return store.item(con, item["id"])
 
 
+def employers(con: sqlite3.Connection) -> list[str]:
+    """The employers of the jobs the person checked, which make a project that names one work."""
+    return [it["fields"]["employer"] for it in store.items(con, "job", hidden=False)
+            if it["state"] in store.USED_STATES and it["fields"].get("employer")]
+
+
 def refresh(con: sqlite3.Connection) -> int:
     """Stores Hal's context for every card the person has not set; returns how many changed."""
-    # the Profile block reads contexts, so its module is imported when first needed
-    from jobhunt.profile.writing import employers
-
     worked_for = employers(con)
     changed = 0
     with con:
