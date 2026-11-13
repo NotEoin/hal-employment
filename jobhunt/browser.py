@@ -41,15 +41,9 @@ from .core import paths
 log = logging.getLogger(__name__)
 
 # PROFILE, SHOTS and SIGNED_IN (sites the applicant has signed in to in Hal's browser, where Apply may send a
-# stored CV at once) are resolved when used, so tests and the data move point them elsewhere.
+# stored CV at once) are resolved when used through `_live`, so tests and the data move point them elsewhere.
 _LIVE = {"PROFILE": paths.browser_profile, "SHOTS": paths.shots_dir,
          "SIGNED_IN": lambda: paths.data_dir() / "signed-in.json"}
-
-
-def __getattr__(name):  # old path constants, read live (PEP 562)
-    if name in _LIVE:
-        return _LIVE[name]()
-    raise AttributeError(name)
 
 
 def _live(name: str):

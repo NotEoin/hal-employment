@@ -180,7 +180,7 @@ def _answer(con, job, found: dict, step: int, done: list) -> dict:
 
 
 def _shot(job_id: str, name: str = "filled.png") -> Path:
-    return browser.SHOTS / pack.slug(job_id) / name
+    return Path(browser._live("SHOTS")) / pack.slug(job_id) / name
 
 
 def _enter(con, job, form: dict, only: list | None = None) -> dict:
