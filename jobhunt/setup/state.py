@@ -6,10 +6,10 @@ place (the step to open at, and whether the person chose "Save and finish later"
 value changed in Settings; the steps save their own fields through the settings store as they are typed.
 
 Design notes:
-- `done()` answers "may the guide stay closed?", which is what `/session` and `/open` ask: true once All set
-  is reached, once the person chose "Save and finish later" (Home's card then lists what is left), and for
-  a developer's checkout that held jobs before the guide existed (the owner's install), so an update never
-  pushes someone who already uses Hal into the guide.
+- `guide_may_stay_closed()` answers "may the guide stay closed?", which is what `/session` and `/open` ask:
+  true once All set is reached, once the person chose "Save and finish later" (Home's card then lists what
+  is left), and for a developer's checkout that held jobs before the guide existed (the owner's install),
+  so an update never pushes someone who already uses Hal into the guide.
 - Welcome and All set are not listed on Home: they have nothing to set up.
 """
 from __future__ import annotations
@@ -109,7 +109,7 @@ def finished(con: sqlite3.Connection) -> bool:
     return states(con)["done"] == "done"
 
 
-def done(con: sqlite3.Connection) -> bool:
+def guide_may_stay_closed(con: sqlite3.Connection) -> bool:
     """True when the guide need not open by itself (see the module notes)."""
     rows = _rows(con)
     return finished(con) or bool(_guide(rows).get("later")) or _used_before_the_guide(con, rows)
@@ -144,7 +144,7 @@ def later(con: sqlite3.Connection) -> None:
 def overview(con: sqlite3.Connection, found: dict | None = None) -> dict:
     """The `/setup` reply: the step to open at, every step with its state, and what Hal found."""
     st = states(con)
-    return {"step": current(con), "done": done(con), "finished": finished(con),
+    return {"step": current(con), "done": guide_may_stay_closed(con), "finished": finished(con),
             "steps": [{"id": s.id, "name": s.name, "sub": s.sub, "optional": s.optional, "state": st[s.id]}
                       for s in STEPS],
             "found": found or {"usb_install": None}}

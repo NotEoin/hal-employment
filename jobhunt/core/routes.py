@@ -34,11 +34,11 @@ def _setting(key: str, fallback):
 
 
 def setup_done(con: sqlite3.Connection) -> bool:
-    """True when the setup guide is finished (always, until the setup package provides its state)."""
+    """True when the setup guide may stay closed (always, until the setup package provides its state)."""
     if importlib.util.find_spec(SETUP_STATE) is None:
         return True
     state = importlib.import_module(SETUP_STATE)
-    return bool(state.done(con)) if hasattr(state, "done") else True
+    return bool(state.guide_may_stay_closed(con)) if hasattr(state, "guide_may_stay_closed") else True
 
 
 def first_name() -> str:
