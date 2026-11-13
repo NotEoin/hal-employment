@@ -75,7 +75,7 @@ class Client:
         if body is not None:
             data = json.dumps(body).encode()
             sent["Content-Type"] = "application/json"
-        if csrf and method in ("POST", "PUT", "DELETE"):
+        if csrf and method in ("POST", "PUT", "PATCH", "DELETE"):
             sent["X-Hal"] = "1"
         sent.update(headers or {})
         try:

@@ -1,7 +1,9 @@
 """The My CV API: the header and "employers get" line, the document, its versions, the bin and the sections.
 
 - Every edit is a new version in the store; nothing here changes a version in place.
-- A document or layout that does not fit schema 2 answers 400 with the field path (`CVError`), never 409.
+- A document or layout that does not fit schema 2 answers 400 with the field path (`CVError`). Only a save of
+  the editor's changes (`PATCH /cv/document`) answers 409, when the version it was made on is no longer in
+  use, so the person can reload and keep what they want.
 - The CV type and look names come from `types.load` and `render.look`; an id neither knows (a type copy
   that was deleted) is shown in words, so the page never fails over a name.
 """
@@ -11,9 +13,9 @@ import importlib
 import logging
 
 from jobhunt.core import activity, settings
-from jobhunt.cvstudio import checks, model, store
+from jobhunt.cvstudio import checks, edit, model, store
 from jobhunt.cvstudio.model import CVError
-from jobhunt.web.router import BadRequest, NotFound, route
+from jobhunt.web.router import BadRequest, Conflict, NotFound, route
 
 log = logging.getLogger(__name__)
 
@@ -158,6 +160,36 @@ def put_document(req) -> dict:
     n = store.version(vid, con=req.con)["n"]
     _note(f"Saved your CV as version {n}: {what}")
     return {"version_id": vid, "n": n}
+
+
+@route("PATCH", "/api/v2/cv/document")
+def patch_document(req) -> dict:
+    """Saves the Edit your CV changes, made on version `base`, as one new version."""
+    body = req.body or {}
+    base = str(body.get("base") or "")
+    if not base:
+        raise BadRequest("Say which version you edited.", field="base")
+    what = str(body.get("what") or "").strip() or "You edited your CV"
+    try:
+        vid, before, after = edit.save(req.con, base, edit.changes_from(body.get("changes")), what)
+    except store.StaleVersion as e:
+        raise Conflict(str(e)) from e
+    except LookupError as e:
+        raise Conflict("That version of your CV is not there any more. Your changes are not saved.") from e
+    except CVError as e:
+        raise _bad(e) from e
+    from ..writing import edits
+
+    edits.from_cv(req.con, before, after)
+    n = store.version(vid, con=req.con)["n"]
+    _note(f"Saved your CV as version {n}: {what}")
+    return {"version_id": vid, "n": n}
+
+
+@route("GET", "/api/v2/cv/record-cards")
+def get_record_cards(req) -> list[dict]:
+    """The jobs, education, projects and certificates in your record, each as the CV entry it makes."""
+    return edit.cards(req.con)
 
 
 @route("GET", "/api/v2/cv/versions")

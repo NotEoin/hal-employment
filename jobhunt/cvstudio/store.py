@@ -12,6 +12,8 @@
   read, so "your original file, byte for byte" stays true.
 - Writes take SQLite's write lock first (`BEGIN IMMEDIATE`), so two requests saving at once get versions
   N and N+1, never a clash. Each new version publishes the event "cv".
+- A save made on one version (`new_version(..., base=...)`) is refused with `StaleVersion` when another version
+  came into use since, checked under the write lock, so an editor never overwrites a change made elsewhere.
 """
 from __future__ import annotations
 
@@ -72,6 +74,10 @@ def _writing(con: sqlite3.Connection) -> Iterator[None]:
         con.rollback()
         raise
     con.commit()
+
+
+class StaleVersion(CVError):
+    """The version a change was made on is no longer the one in use."""
 
 
 def _row(r: sqlite3.Row | None) -> dict | None:
@@ -146,10 +152,11 @@ def version(version_id: str, con: sqlite3.Connection | None = None) -> dict:
 
 def new_version(doc_: CVDoc, *, origin: str, what: str, by: str, parent: str | None = None,
                 job_id: str | None = None, type_id: str | None = None, file_id: str | None = None,
-                con: sqlite3.Connection | None = None) -> str:
+                base: str | None = None, con: sqlite3.Connection | None = None) -> str:
     """Stores `doc_` as the next version and returns its id; a main-CV version becomes the one in use.
 
-    CVError when the document has problems (`model.validate`) or `by` is not you, hal or baseline.
+    CVError when the document has problems (`model.validate`) or `by` is not you, hal or baseline;
+    `StaleVersion` when `base` is given and is no longer the version in use.
     """
     if by not in BYS:
         raise CVError(f"by: {by!r} is not one of {', '.join(BYS)}")
@@ -163,6 +170,8 @@ def new_version(doc_: CVDoc, *, origin: str, what: str, by: str, parent: str | N
     with _conn(con) as c:
         d = doc(c)
         with _writing(c):
+            if base is not None and doc(c)["current_version_id"] != base:
+                raise StaleVersion("Your CV changed since you started editing. Your changes are not saved.")
             n = c.execute("SELECT coalesce(max(n), 0) + 1 FROM cv_versions WHERE doc_id = ?", (DOC_ID,)).fetchone()[0]
             vid = f"v{n}-{hashlib.sha1(data.encode()).hexdigest()[:8]}"
             parent = parent if parent is not None else (d["current_version_id"] if job_id is None else None)
