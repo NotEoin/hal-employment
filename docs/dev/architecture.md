@@ -528,8 +528,9 @@ runs: tests use `tests/support/fake_claude/`.
   and a part of a system (`purpose.LAYER`: backend, deployment, database ...) must be in a fact naming the
   tool: Docker "to package the application" was an agent sandbox, 2026-11-08; and a purpose a fact gives to
   another known tool by name, when no fact naming the sentence's tool holds it, fails citing that tool,
-  `purpose.doer`, `purpose.CROSSED`: "GPT-SoVITS to transcribe utterances" when faster-whisper transcribed); `taught`'s module
-  checks; the work unnamed in the first sentence; too few sentences; and the writing rules' high hits.
+  `purpose.other_tool_for_purpose`, `purpose.CROSSED`: "GPT-SoVITS to transcribe utterances" when
+  faster-whisper transcribed); `taught`'s module checks; the work unnamed in the first sentence; too few
+  sentences; and the writing rules' high hits.
   A letter paragraph ends on why the work matters for the job only when a fact clearly fits; no check asks
   for that last sentence, as a check that redrafted paragraphs until their last sentence named a word of the
   advert left generic ties ("This experience in building precise.") and raised generic sentences from 7 to
