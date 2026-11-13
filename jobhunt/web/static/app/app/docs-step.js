@@ -11,7 +11,11 @@
    A CV Hal made with its change list (`docs.cv.schema` 2) is edited in place with My CV's editor in job
    mode (cv/edit-tab.js); it stays mounted while another tab shows, so unsaved changes survive a tab switch,
    and Approve waits until they are saved or discarded. An older application's CV keeps the change list
-   with Undo. */
+   with Undo.
+
+   While "Ask me what the job cares about first" (`cvdocs.pick_first`) is on, the CV tab first lists the
+   job's requirements (`docs.cv.pick`, from `tailor.to_pick`) to tick three to five of; one button sends
+   them and Hal makes the job's CV again from them. Approve waits for that too. */
 import { html, cx, useState } from "../core/html.js";
 import { post, put } from "../core/api.js";
 import { toast, openDialog, invalidate } from "../core/store.js";
@@ -68,6 +72,32 @@ function Writing({ a }) {
     ${a.action_id && html`<div class="row" style="margin-top:12px"><button type="button" class="btn stop" onClick=${() => stop(a)}><${Icon} n="stop" c="s" />Stop</button></div>`}</section>`;
 }
 
+const MIN_PICKS = 3, MAX_PICKS = 5;   // as `tailor.MIN_PICKS` and `tailor.MAX_PICKS`
+
+/** What the job cares about most: the job's requirements to tick before Hal adjusts its CV. */
+function Picks({ a, offered }) {
+  const [ticked, setTicked] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const flip = r => setTicked(ticked.includes(r) ? ticked.filter(x => x !== r) : [...ticked, r]);
+  const ok = ticked.length >= MIN_PICKS && ticked.length <= MAX_PICKS;
+  const send = async () => {
+    setBusy(true);
+    try {
+      await post(appPath(a) + "/cv/priorities", { priorities: ticked });
+      toast("Hal is adjusting your CV for what you ticked.");
+      invalidate("/applications*");
+    } catch (err) { toast(err.message); setBusy(false); }
+  };
+  return html`<section class="card picks"><fieldset style="border:0;margin:0;padding:0">
+      <legend><h2 class="h2" style="margin:0">What does this job care about most?</h2></legend>
+      <p class="small sub" id="picks-help">Tick ${MIN_PICKS} to ${MAX_PICKS}. Hal adjusts your CV for this job to show those first.</p>
+      ${offered.map(r => html`<label class="li" style="align-items:center;cursor:pointer" key=${r}>
+        <input type="checkbox" checked=${ticked.includes(r)} onChange=${() => flip(r)} /><div class="grow" style="min-width:0">${r}</div></label>`)}
+    </fieldset>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn primary" disabled=${!ok || busy} aria-describedby="picks-help" onClick=${send}>Adjust my CV for these</button>
+      <span class="small sub" role="status">${ticked.length} ticked</span></div></section>`;
+}
+
 /** The Documents step. */
 export function DocsStep({ a, reload, onApproved }) {
   const d = a.docs;
@@ -95,12 +125,14 @@ export function DocsStep({ a, reload, onApproved }) {
   };
   const changes = d.cv.changes || [];
   const original = d.cv.sent_as === "original";
-  const editable = d.cv.schema === 2 && !original;
+  const pick = d.cv.pick || [];
+  const editable = d.cv.schema === 2 && !original && !pick.length;
   return html`
     <div class="approve"><div class="ic info"><${Icon} n="file" /></div><div class="grow"><b>Check what Hal made for this job, then approve it.</b>
       <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div>
-      ${cvDirty && html`<div class="small" role="status">Save or discard your changes to the CV before you approve.</div>`}</div>
-      <button type="button" class="btn primary" disabled=${cvDirty} onClick=${onApprove}>Approve and fill in the form</button>
+      ${cvDirty && html`<div class="small" role="status">Save or discard your changes to the CV before you approve.</div>`}
+      ${pick.length > 0 && html`<div class="small" role="status">Tick what this job cares about most on the CV tab before you approve.</div>`}</div>
+      <button type="button" class="btn primary" disabled=${cvDirty || pick.length > 0} onClick=${onApprove}>Approve and fill in the form</button>
       <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button>
       <button type="button" class="btn quiet" onClick=${() => openDialog("critique", { app: a })}><${Icon} n="eye" c="s" />Critique as a recruiter</button></div>
     <${UncheckedNote} />
@@ -108,7 +140,8 @@ export function DocsStep({ a, reload, onApproved }) {
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />
     ${editable && html`<div class="docs-split cv-job" hidden=${tab !== "cv"}><${EditTab} job=${{ path: appPath(a) + "/cv", appPath: appPath(a),
       onSaved: reload, onDirty: setCvDirty }} /><div class="docs-pdf"><${Pdf} url=${d.cv.preview_url} label="CV preview" /></div></div>`}
-    ${tab === "cv" && !editable && html`<div class="docs-split"><div class="stack s">
+    ${tab === "cv" && pick.length > 0 && html`<${Picks} a=${a} offered=${pick} />`}
+    ${tab === "cv" && !editable && !pick.length && html`<div class="docs-split"><div class="stack s">
       <p class="sub" style="margin:0">${original ? "Hal sends your own CV file, unchanged, as you chose on My CV." : changes.length ? "Hal changed " + plural(changes.length, "thing") + " from your CV for this job." : "Hal used your main CV as it is for this job."}</p>
       ${changes.map(c => html`<article class=${cx("sugg", !c.on && "done")}><div class="row tight"><span class="chip info">${c.kind}</span><span class="small sub">${c.where}</span><span class="sp"></span>
         ${c.on ? html`<button type="button" class="btn quiet small" onClick=${() => toggle(c, false)}><${Icon} n="undo" c="s" />Undo</button>`

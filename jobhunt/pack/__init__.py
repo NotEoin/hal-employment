@@ -329,7 +329,7 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     message, answers = others["message"], others["answers"]
     letter, message, answers, refused = without_refusals(letter, message, answers)
 
-    made = tailor.prepare(dict(job), con=con)
+    made = tailor.prepare(dict(job), priorities=tailor.picked(job_id, con), con=con)
     track = next((c["after"] for c in made["changes"] if c["target"] == "headline"), None)
     pdf = cv.render(tailor.v1(job_id, con), out_dir)
     flagged = refused + written["flags"] + others["flags"]

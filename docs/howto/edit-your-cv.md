@@ -25,7 +25,10 @@ them a writing problem to fix. Lines added from your record are marked **From yo
 When Hal writes the documents for a job, the **CV** tab of that application's **Documents** step shows the
 CV Hal made for it in the same editor, with the PDF Hal will upload beside it. Your main CV stays as it is.
 
-1. Open the application and its **CV** tab.
+1. Open the application and its **CV** tab. If **Ask me what the job cares about first** is on (**Settings**,
+   **CV and documents**), the tab first asks **What does this job care about most?** and lists the job's
+   requirements. Tick three to five of them and press **Adjust my CV for these**. Hal makes the job's CV
+   again from what you ticked, then shows it here.
 2. Read **What Hal changed for this job**. Each change says what kind it is (**Reworded**, **Moved** or
    **Added**), your CV's words beside the job's, and why. The parts Hal changed are marked **Hal:**
    with the same kind in the CV below.
@@ -49,6 +52,8 @@ Hal's on a line you also changed, your words stay.
 | "Your main CV already has these lines." | Nothing to copy: the entry reads the same on both. |
 | The CV tab shows only Hal's changes, with no editor | Hal wrote this application's documents before CVs could be edited line by line. Use **Undo** on Hal's changes, or change your main CV on **My CV**. |
 | "Save or discard your changes first." after **Undo** or **Copy to my main CV** | Save or discard your edits, then press it again. |
+| **Adjust my CV for these** cannot be pressed | Tick three to five of the requirements, not fewer or more. |
+| **Approve and fill in the form** cannot be pressed, and the step says to tick what this job cares about most | Tick three to five requirements on the CV tab and press **Adjust my CV for these** first, or turn off **Ask me what the job cares about first** in **Settings**. |
 
 ## When something goes wrong on My CV
 

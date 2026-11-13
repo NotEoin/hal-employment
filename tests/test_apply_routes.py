@@ -430,6 +430,7 @@ SHOP = "s:experience/e:ex-shop"
 TABLE = SHOP + "/b:b-table"
 FOR_THE_JOB = "History graduate who catalogued parish letters for a records office."
 MINE = "Ran the local history table and chose its stock each week"
+NEEDS = ["Cataloguing archive collections", "Answering visitor enquiries", "Writing short reports"]
 
 
 class JobCv(unittest.TestCase):
@@ -529,6 +530,46 @@ class JobCv(unittest.TestCase):
         self.assertEqual(self.c.get(self.url()).json()["docs"]["cv"]["version_n"], store.version(vid)["n"])
         late = self.save(tailor.shown(self.job)["rev"], {"op": "delete", "target": SHOP + "/b:b-events"})
         self.assertEqual(late.status, 409)
+
+    def asks_first(self, on: bool) -> None:
+        """Turns `cvdocs.pick_first` on or off, and gives the job four requirements, one switched off."""
+        from jobhunt.core import settings
+
+        settings.set("cvdocs.pick_first", on, by="you")
+        self.con.execute("DELETE FROM job_requirements WHERE job_id = ?", (self.job,))
+        for n, (text, state) in enumerate([*((r, "met") for r in NEEDS), ("Driving licence", "off")], 1):
+            self.con.execute("INSERT INTO job_requirements (job_id, n, text, state, updated) VALUES (?, ?, ?, ?, ?)",
+                             (self.job, n, text, state, db.now()))
+        self.con.commit()
+
+    def test_with_ask_first_on_the_requirements_you_tick_reach_the_cvs_adjusting_and_are_kept(self):
+        self.asks_first(True)
+        self.assertEqual(self.c.get(self.url()).json()["docs"]["cv"]["pick"], NEEDS, "switched off is not asked")
+        two = self.c.post(self.url("/cv/priorities"), {"priorities": NEEDS[:2]})
+        self.assertEqual(two.status, 400)
+        self.assertIn("Tick 3 to 5", two.json()["error"]["message"])
+        made_up = self.c.post(self.url("/cv/priorities"), {"priorities": [*NEEDS[:2], "Driving licence"]})
+        self.assertEqual(made_up.status, 400, "only the requirements shown can be ticked")
+        with mock.patch.object(tailor, "prepare", wraps=tailor.prepare) as prepare:
+            started = self.c.post(self.url("/cv/priorities"), {"priorities": NEEDS})
+            self.assertEqual(started.status, 200, started.text)
+            self.wait_done(started.json()["action_id"])
+        self.assertEqual(prepare.call_args.kwargs["priorities"], NEEDS)
+        row = self.con.execute("SELECT priorities FROM job_cvs WHERE job_id = ?", (self.job,)).fetchone()
+        self.assertEqual(json.loads(row["priorities"]), NEEDS)
+        self.assertEqual(tailor.picked(self.job), NEEDS, "Make the documents again uses them too")
+        self.assertEqual(self.c.get(self.url()).json()["docs"]["cv"]["pick"], [], "asked once")
+
+    def test_with_ask_first_off_nothing_is_asked_and_no_picks_are_taken(self):
+        self.asks_first(False)
+        self.assertEqual(self.c.get(self.url()).json()["docs"]["cv"]["pick"], [])
+        refused = self.c.post(self.url("/cv/priorities"), {"priorities": NEEDS})
+        self.assertEqual(refused.status, 400)
+        self.assertIsNone(tailor.picked(self.job))
+
+    def wait_done(self, action_id: str) -> None:
+        done = runner.wait(action_id, WAIT_S)
+        self.assertEqual(done["state"], "done", done["error"])
 
     def test_an_application_written_before_has_no_line_editor(self):
         self.con.execute("DELETE FROM job_cvs WHERE job_id = ?", (self.job,))

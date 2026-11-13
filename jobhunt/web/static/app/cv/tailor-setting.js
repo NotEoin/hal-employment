@@ -1,9 +1,9 @@
 /* The Adjust for each job card on My CV: No, A little or More, the setting `cvdocs.tailor`, saved through the
    settings API so Activity and Undo work as for any setting. The words say what applications do
    (`cvstudio/tailor.py`): A little reorders and rewords the profile line, More also rewords up to three lines.
-   "Ask me what the job cares about first" (`cvdocs.pick_first`) is not offered because no application asks
-   for those picks yet (2026-11-13). While the original file is sent the card says adjusting is off and why,
-   because the server forces it to No then. */
+   "Ask me what the job cares about first" (`cvdocs.pick_first`) is set under Settings, CV and documents;
+   while it is on, an application's CV step asks for those picks (app/docs-step.js). While the original file
+   is sent the card says adjusting is off and why, because the server forces it to No then. */
 import { html } from "../core/html.js";
 import { put } from "../core/api.js";
 import { toast, useApi } from "../core/store.js";

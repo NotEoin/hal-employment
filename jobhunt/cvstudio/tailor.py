@@ -14,6 +14,12 @@ shows. With `cvdocs.pick_first`, `priorities` are the three to five requirements
 they are used. The result is kept in `job_cvs` with its change list, so each
 change can be undone and redone before approval; `approve` saves the CV as a tailored version for that job.
 
+Ticking (`to_pick`, `picked`): the documents are written before the person opens the application, so Hal
+first makes the job's CV from the requirements still on, and while `cvdocs.pick_first` is on the CV step
+asks for the picks before anything else on that CV. The picks make the job's CV again (`prepare`), so they
+are asked only while the person has not edited it, and they are kept in `job_cvs.priorities`, so Make the
+documents again uses them too.
+
 Design decision: a change list entry stores the model change that makes it (`op`, `target`, `value`), and
 the job's CV is always rebuilt from the base version plus the changes still on. Undo and Redo are then order
 free and can never drift from what the list shows.
@@ -60,6 +66,7 @@ APPROVED = "You approved this CV already. Make the documents again to change it.
 ORIGINAL_WHY = ("Adjusting for each job is off while you send your original file. Employers get it exactly as "
                 "you uploaded it.")
 LEVEL_WORDS = {"little": "Adjusting a little", "more": "Adjusting more"}
+MIN_PICKS, MAX_PICKS = 3, 5        # "the three to five things the job cares about most" (`cvdocs.pick_first`)
 
 
 def _store():
@@ -240,6 +247,52 @@ def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None
         c.commit()
     events.publish("application", id=job["id"])
     return shown(job["id"], con) | {"why_no": why}
+
+
+def picked(job_id: str, con: sqlite3.Connection | None = None) -> list[str] | None:
+    """The requirements the person ticked for this job while `cvdocs.pick_first` is on; None otherwise."""
+    from jobhunt.core import settings
+
+    if not settings.get("cvdocs.pick_first"):
+        return None
+    with _conn(con) as c:
+        row = c.execute("SELECT priorities FROM job_cvs WHERE job_id = ?", (job_id,)).fetchone()
+    return json.loads(row["priorities"]) if row is not None and row["priorities"] else None
+
+
+def to_pick(job: dict, con: sqlite3.Connection | None = None) -> list[str]:
+    """The job's requirements for the person to tick before Hal adjusts its CV; empty when nothing is to ask.
+
+    Asked while `cvdocs.pick_first` is on and the job's CV Hal made is adjusted (not No), not approved, has no
+    picks yet and has none of the person's edits, which the picks would make again. A job with fewer than
+    `MIN_PICKS` requirements is not asked.
+    """
+    from jobhunt.core import settings
+
+    if not settings.get("cvdocs.pick_first"):
+        return []
+    with _conn(con) as c:
+        row = c.execute("SELECT * FROM job_cvs WHERE job_id = ?", (job["id"],)).fetchone()
+        if (row is None or row["level"] == "no" or row["approved"] or row["priorities"]
+                or _split(json.loads(row["changes"]))[1]):
+            return []
+        found = requirements(job, c)
+    return found if len(found) >= MIN_PICKS else []
+
+
+def check_picks(job: dict, picks: object, con: sqlite3.Connection | None = None) -> list[str]:
+    """The person's picks, once they are `MIN_PICKS` to `MAX_PICKS` of `to_pick`'s list; ValueError otherwise."""
+    offered = to_pick(job, con)
+    if not offered:
+        raise ValueError("Hal is not asking what this job cares about: the setting is off, or its CV changed.")
+    if not isinstance(picks, list) or not all(isinstance(p, str) for p in picks):
+        raise ValueError("Send the requirements you ticked as a list.")
+    picks = list(dict.fromkeys(picks))
+    if not MIN_PICKS <= len(picks) <= MAX_PICKS:
+        raise ValueError(f"Tick {MIN_PICKS} to {MAX_PICKS} of the things this job cares about.")
+    if any(p not in offered for p in picks):
+        raise ValueError("Tick only the requirements shown for this job.")
+    return picks
 
 
 def kept(job_id: str, con: sqlite3.Connection | None = None) -> bool:

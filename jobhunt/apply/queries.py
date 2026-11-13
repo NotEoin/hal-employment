@@ -418,6 +418,13 @@ SOURCE_WHY = {"profile": "From your profile (Settings, You).", "cv": "From your 
               "you": "You typed this.", "site": "The site had already filled this in, and Hal left it as it was."}
 
 
+def _cv_pick(con, job) -> list[str]:
+    """The job's requirements to tick before Hal adjusts its CV (`tailor.to_pick`); empty when not asked."""
+    from jobhunt.cvstudio import tailor
+
+    return tailor.to_pick(dict(job), con)
+
+
 def _letter_notes(job, docs: dict) -> dict:
     """The letter's Tone, Evidence and Checked: kept with a letter drafted at form time, else in its pack."""
     from jobhunt import pack
@@ -455,6 +462,7 @@ def application(con, ref: str) -> dict:
                  or docs.get("approved") or None,
                  "cv": {"changes": _cv_changes(r, docs), "preview_url": _file_url(files.get("cv")),
                         **_cv_kept(con, job_id), "look": None,
+                        "pick": _cv_pick(con, r) if step == 1 and not writing else [],
                         "sent_as": (row["cv_sent_as"] if row is not None else None)
                         or ("original" if documents.original_file() else "hal_copy")},
                  "letter": {"text": letter, "words": len(letter.split()), "tone": notes.get("tone"),

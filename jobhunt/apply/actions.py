@@ -1,6 +1,6 @@
 """One approval flow: the applying action kinds, and the workflow rules the screens rely on.
 
-The kinds (`docs.prepare`, `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`,
+The kinds (`docs.prepare`, `docs.picks`, `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`,
 `apply.adopt`, `apply.match_tab`) are persisted actions over the form driver, so each has its steps, its
 Activity row and Stop. The workflow rules are plain functions here, called by the routes: approving the
 documents starts the form, editing them marks a filled form out of date, and a discard keeps its reason
@@ -93,6 +93,28 @@ def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
     ctx.step("Your documents are ready for you to check" if "letter" in made else
              "Hal drafted no cover letter for this job; write one on the Cover letter tab, or check that Hal's AI "
              "is working in Settings")
+    return {"job_id": job_id}
+
+
+def _picks_example(world: Any) -> dict:
+    from unittest import mock
+
+    world._stack.enter_context(mock.patch.object(tailor, "prepare", lambda *a, **k: {}))
+    return _example(None, priorities=["Report writing", "Oral history interviews", "Cataloguing"])(world)
+
+
+@runner.action("docs.picks", area="documents", label="Adjusting your CV for what {title} at {company} cares about",
+               why="You ticked what this job cares about most", priority=1, example=_picks_example)
+def adjust_for_picks(ctx, job_id: str, priorities: list[str]) -> dict:
+    """Makes the job's CV again from the requirements the person ticked (`tailor.prepare`), then its PDF.
+
+    The route checks the picks first (`tailor.check_picks`).
+    """
+    job = load_job(ctx.con, job_id)
+    ctx.step("Adjusting your CV for what you ticked")
+    tailor.prepare(dict(job), priorities=priorities, con=ctx.con)
+    ctx.step("Making the PDF of your CV again")
+    documents.save(ctx.con, job, documents.load(ctx.con, job))
     return {"job_id": job_id}
 
 

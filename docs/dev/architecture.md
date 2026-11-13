@@ -417,8 +417,15 @@ runs: tests use `tests/support/fake_claude/`.
   cv.json path until it is sent: `documents.tailored` reorders the main CV with `cv.tailor`, and Undo is
   `docs["undone_changes"]`. Both paths send the main CV as it is while the setting is No, and the person's
   own file byte for byte while My CV is set to send the original (`documents.original_file`).
-- `cvdocs.pick_first` is not read: no application step asks for the person's picks yet, so `prepare` gets
-  no `priorities` and uses the requirements the person has not switched off.
+- `cvdocs.pick_first`: the documents are written before the person opens the application, so `pack.build`
+  first prepares the job's CV from the requirements the person has not switched off. While the setting is
+  on, the application's `docs.cv.pick` (`tailor.to_pick`) lists those requirements until the person ticks
+  three to five, and the CV step shows them as checkboxes in place of the editor, with Approve held.
+  `POST .../cv/priorities` checks the picks (`tailor.check_picks`) and starts `docs.picks`, which calls
+  `tailor.prepare` with them, stored in `job_cvs.priorities`, and makes the PDF again. The picks are asked
+  only while the job's CV is adjusted (not No), not approved and has none of the person's edits, which they
+  would make again. `pack.build` passes the stored picks (`tailor.picked`), so Make the documents again
+  keeps them. With the setting off, nothing is asked and stored picks are not used.
 - `fresh.py` builds a CV of the chosen type from interview answers and turns failing checks into
   suggestions.
 

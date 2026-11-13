@@ -25,6 +25,8 @@ What changed in each version, in plain words.
   **Moved** or **Added**, with **Undo** on each, and what you changed is marked **Your edit**. **Save
   changes** makes the PDF again. **Copy to my main CV** on an entry copies its lines into your main CV as
   one new version; nothing else on your main CV changes.
+  With **Ask me what the job cares about first** on in Settings, the tab first lists the job's
+  requirements: tick three to five and Hal adjusts the job's CV for those, then shows it.
 
 ## 2.1.1 (2026-11-13)
 

@@ -2,7 +2,7 @@
 
 Needs `HAL_TEST_BROWSER=1` and Playwright. This checks editing by keyboard, the names a screen reader reads,
 phone width, adding from your record, the unsaved-changes guard and the "your CV changed" answer, on My CV
-and on an application's CV.
+and on an application's CV, and ticking what the job cares about first.
 """
 from __future__ import annotations
 
@@ -248,6 +248,73 @@ class EditJobCv(unittest.TestCase):
                 for name in (f"Copy to my main CV: {JOB}", f"Delete line 2 of {JOB}", f"Lock {JOB}"):
                     self.assertEqual(p.page.locator(f"[aria-label='{name}']").count(), 1, name)
                 self.assertEqual(p.page.locator("h2:has-text('What Hal changed for this job')").count(), 1)
+                self.assertEqual(p.sideways(), 0)
+                self.assertEqual(p.serious_axe(), [])
+                self.assertEqual(p.errors, [])
+
+
+NEEDS = ["Teaching first-year labs", "Marking lab reports", "Running a help desk", "Safety training"]
+
+
+@skip_unless_browser
+class PickFirstJobCv(unittest.TestCase):
+    """The application's CV step with "Ask me what the job cares about first" on: tick, then the job's CV."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._stack = contextlib.ExitStack()
+        cls.browser = cls._stack.enter_context(chromium())
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._stack.close()
+
+    def setUp(self) -> None:
+        from jobhunt.core import settings
+
+        EditJobCv.setUp(self)   # the same made-up application with Hal's change on line 1
+        settings.set("cvdocs.pick_first", True, by="you")
+        con = db.connect()
+        try:
+            for n, text in enumerate(NEEDS, 1):
+                con.execute("INSERT INTO job_requirements (job_id, n, text, state, updated) VALUES (?, ?, ?, 'met', ?)",
+                            (APP_JOB, n, text, db.now()))
+            con.commit()
+        finally:
+            con.close()
+
+    def page(self, size: str = "wide", scheme: str = "light") -> AppPage:
+        p = AppPage(self.browser, f"http://127.0.0.1:{self.hal.port}", size, scheme)
+        self.addCleanup(p.close)
+        p.page.goto(self.hal.open_url())
+        p.open("app-" + quote(APP_JOB, safe=""))
+        p.shows(p.page.get_by_role("checkbox", name=NEEDS[0]), "the first requirement to tick")
+        return p
+
+    def test_three_ticked_by_keyboard_adjust_the_jobs_cv_and_then_the_editor_shows(self) -> None:
+        p = self.page()
+        adjust = p.page.get_by_role("button", name="Adjust my CV for these")
+        self.assertTrue(adjust.is_disabled())
+        self.assertTrue(p.page.locator("button:has-text('Approve and fill in the form')").is_disabled())
+        p.page.get_by_role("checkbox", name=NEEDS[0]).focus()
+        for _ in range(3):
+            p.page.keyboard.press("Space")
+            p.page.keyboard.press("Tab")
+        p.page.wait_for_selector("text=3 ticked")
+        adjust.focus()
+        p.page.keyboard.press("Enter")
+        p.shows(p.page.locator(f"textarea[aria-label='Line 1 of {JOB}']"), "the job's CV after the picks")
+        self.assertEqual(tailor.picked(APP_JOB), NEEDS[:3])
+        self.assertEqual(p.page.get_by_role("checkbox", name=NEEDS[0]).count(), 0, "asked once")
+        self.assertEqual(p.errors, [])
+
+    def test_every_requirement_is_named_and_the_step_fits_a_phone(self) -> None:
+        for size, scheme in (("wide", "light"), ("narrow", "dark")):
+            with self.subTest(size=size):
+                p = self.page(size, scheme)
+                for name in NEEDS:
+                    self.assertEqual(p.page.get_by_role("checkbox", name=name).count(), 1, name)
+                self.assertEqual(p.page.get_by_role("group", name="What does this job care about most?").count(), 1)
                 self.assertEqual(p.sideways(), 0)
                 self.assertEqual(p.serious_axe(), [])
                 self.assertEqual(p.errors, [])

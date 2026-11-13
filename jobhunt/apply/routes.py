@@ -3,7 +3,8 @@
 Anything that drives the browser or the AI starts an action and returns its id at once; the page follows
 it on the event stream. An application is named by its job id or by its number ("12"). Asking for changes
 and rewriting the letter are `docs/write_routes.py`'s. The application's CV is edited through `/cv`, with
-the same change list and 409 as My CV's editor (`cvstudio/tailor.py`).
+the same change list and 409 as My CV's editor (`cvstudio/tailor.py`); `/cv/priorities` takes the
+requirements the person ticked while `cvdocs.pick_first` asks first.
 """
 from __future__ import annotations
 
@@ -131,6 +132,19 @@ def save_job_cv(req: Request) -> dict:
         raise BadRequest(str(e), field=str(e).split(":", 1)[0]) from e
     made = actions.save_documents(req.con, job_id, {})
     return {**tailor.editor(job_id, req.con), "form_out_of_date": made["form_out_of_date"]}
+
+
+@route("POST", PREFIX + "/{app_id}/cv/priorities")
+def priorities(req: Request) -> dict:
+    """The three to five requirements the person ticked: Hal makes the job's CV again from them."""
+    job_id = _id(req)
+    try:
+        picks = tailor.check_picks(dict(queries.load_job(req.con, job_id)), json_body(req).get("priorities"),
+                                   req.con)
+    except ValueError as e:
+        raise BadRequest(str(e), field="priorities") from e
+    return {"action_id": actions.start("docs.picks", job_id, params={"priorities": picks}, **who(req),
+                                       priority=NOW)}
 
 
 @route("POST", PREFIX + "/{app_id}/cv/copy")
