@@ -1,4 +1,4 @@
-"""What the Applications area puts on Home: the applications waiting for the person.
+"""What the Applications area puts on Home: the applications waiting for the person, and "This week".
 
 Each item is one application and the one thing it needs next: documents to approve, answers to check, a
 last page to send, or a follow-up that is due. A page that waits for a sign-in or a human check reaches
@@ -6,7 +6,8 @@ Home as the driver's own alert, so it is not repeated here.
 
 `urgency` is on Home's scale (`core/home_routes.py` `URGENCY`), lower first. A form already filled outranks
 documents, because the site may sign the person out; anything closing within `SOON_DAYS` moves up by
-`SOON_BONUS`, so a closing job comes first.
+`SOON_BONUS`, so a closing job comes first. "This week" (`stats.week`) is given here, as a section, so the
+core's Home route never imports a feature module.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import logging
 from datetime import timedelta
 from urllib.parse import quote
 
+from .. import stats
 from ..core import clock
 from .queries import _busy, _form_counts, column_of, load_app
 
@@ -83,3 +85,8 @@ def needs(con) -> list[dict]:
                                  f"{org} has not replied. Hal can draft a short, polite note for you to send.",
                                  "Open", now))
     return sorted(out, key=lambda i: i["urgency"])
+
+
+def sections(con) -> dict:
+    """Home's "week" section (`stats.week`)."""
+    return {"week": stats.week(con)}

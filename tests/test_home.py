@@ -8,6 +8,7 @@ from unittest import mock
 from support.api import HalServer
 from support.world import World, job_id
 
+from jobhunt.apply import home as apply_home
 from jobhunt.core import activity, clock, home_routes, plugins, runner
 from jobhunt.mail import home as mail_home
 
@@ -55,7 +56,7 @@ class Home(unittest.TestCase):
     def test_sections_from_areas_and_the_rail_counts(self):
         job = {"id": job_id("fernhill-grad"), "title": "Graduate Software Engineer"}
         find = area("jobhunt.find.home", sections={"new_matches": [job], "counts": {"memory": 2}})
-        with mock.patch.object(plugins, "modules", return_value=[find]):
+        with mock.patch.object(plugins, "modules", return_value=[find, apply_home]):
             page = home_routes.home(self.con)
         self.assertEqual(page["new_matches"], [job])
         self.assertEqual(page["counts"]["jobs"], 1)

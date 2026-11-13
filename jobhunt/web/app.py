@@ -469,7 +469,7 @@ def serve(port: int | None = None, open_browser: bool = False, background: bool 
     if failed:
         log.warning("start tasks failed: %s", ", ".join(failed))
     if worker:
-        from ..core.worker import worker as queue_worker
+        from ..worker import worker as queue_worker
 
         threading.Thread(target=queue_worker, name="worker", daemon=True).start()
     stop = threading.Event()

@@ -11,7 +11,6 @@ import logging
 import sqlite3
 from datetime import datetime
 
-from .. import stats
 from ..web.router import Request, route
 from . import activity, clock, plugins, runner, settings
 
@@ -151,7 +150,7 @@ def home(con: sqlite3.Connection) -> dict:
     return {"date_words": _date_words(now), "greeting": _greeting(now), "summary": summary_words(len(needs),
                                                                                                  len(new_matches)),
             "needs": needs, "new_matches": new_matches, "first_search": sections.get("first_search"),
-            "week": sections.get("week") or stats.week(con), "goal": _goal(sections), "setup": sections.get("setup"),
+            "week": sections.get("week"), "goal": _goal(sections), "setup": sections.get("setup"),
             "today": today, "counts": counts}
 
 

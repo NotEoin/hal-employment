@@ -9,7 +9,7 @@ on Your record, and never reads them straight in (`sections.sort_actions.queue_i
 import logging
 import time
 
-from .. import contacts, db, record, replenish, tasks
+from . import contacts, db, record, replenish, tasks
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ JOB_ID = "find.prepare"
 
 def _held() -> str | None:
     """Why preparing ahead is held back now, or None."""
-    from . import scheduler
+    from .core import scheduler
 
     if scheduler.paused_for(JOB_ID):
         return "Hal is paused"
@@ -46,7 +46,7 @@ def sync_record() -> dict:
 
     An unreadable folder is reported, not raised.
     """
-    from ..sections import sort_actions
+    from .sections import sort_actions
 
     try:
         out = record.sync()
