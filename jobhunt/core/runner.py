@@ -1092,8 +1092,8 @@ def _note(con, job_id: str, state: str, message: str) -> None:
         if form is not None:
             form.update(state=state, message=message)
             _set_app(con, job_id, form=form)
-    except Exception:  # noqa: BLE001 - the action's own message still reaches the page
-        pass
+    except Exception as e:  # the action's own message still reaches the page
+        log.debug("could not copy the action's state to job %s's form: %s", job_id, e)
 
 
 from ..apply.queries import _app, _set_app  # noqa: E402 - imported last; queries imports this module

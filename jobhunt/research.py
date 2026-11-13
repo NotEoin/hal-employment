@@ -4,10 +4,13 @@ Uses DuckDuckGo's HTML endpoint, which needs no key. Returns plain text for
 the local model to summarise; nothing here calls a model.
 """
 import html
+import logging
 import re
 import urllib.parse
 
 from .http import get
+
+log = logging.getLogger(__name__)
 
 SEARCH = "https://html.duckduckgo.com/html/?q="
 BROWSER_UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
@@ -41,7 +44,8 @@ def company_pages(company: str, max_pages: int = 2) -> list[tuple[str, str]]:
     for url in search(f"{company} company about"):
         try:
             found.append((url, page_text(url)))
-        except Exception:  # noqa: BLE001 - research is best effort; one bad page is skipped
+        except Exception as e:  # research is best effort; one bad page is skipped
+            log.debug("skipped %s: %s", url, e)
             continue
         if len(found) >= max_pages:
             break

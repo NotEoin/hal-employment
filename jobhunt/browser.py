@@ -27,6 +27,7 @@ import contextlib
 import difflib
 import importlib.util
 import json
+import logging
 import os
 import queue
 import re
@@ -36,6 +37,8 @@ from urllib.parse import quote_plus, urlparse
 
 from .apply import guard
 from .core import paths
+
+log = logging.getLogger(__name__)
 
 # PROFILE, SHOTS and SIGNED_IN (sites the applicant has signed in to in Hal's browser, where Apply may send a
 # stored CV at once) are resolved when used, so tests and the data move point them elsewhere.
@@ -206,7 +209,8 @@ def _guarded(page, job_id: str):
             for frame in _frames(page):
                 try:
                     cancelled = frame.evaluate(UNBLOCK_JS)
-                except Exception:  # a page that moved on took its block with it
+                except Exception as e:  # a page that moved on took its block with it
+                    log.debug("could not lift a page's block: %s", e)
                     continue
                 for what in dict.fromkeys(cancelled or []):
                     guard.record(job_id, frame.url, what)
@@ -369,8 +373,8 @@ class Browser:
             pages = ctx.pages
             if pages:
                 pages[0].wait_for_timeout(PUMP_MS)
-        except Exception:  # a window closed while idle is launched again when next used
-            pass
+        except Exception as e:  # a window closed while idle is launched again when next used
+            log.debug("the idle window stopped answering: %s", e)
 
     def context(self):
         """Returns the browser context, launching it (again, if the window was closed)."""
@@ -425,8 +429,8 @@ class Browser:
         for page in self.pages.pop(job_id, []):
             try:
                 page.close()
-            except Exception:  # already closed
-                pass
+            except Exception as e:  # already closed
+                log.debug("could not close a tab: %s", e)
 
 
 BROWSER = Browser()
@@ -514,8 +518,8 @@ def _dismiss_banners(page, notes=None) -> None:
     try:
         if page.main_frame.evaluate(POPUP_JS):
             page.wait_for_timeout(POPUP_GONE_MS)
-    except Exception:  # the page moved on mid-look; the next read looks again
-        pass
+    except Exception as e:  # the page moved on mid-look; the next read looks again
+        log.debug("could not look for a pop-up: %s", e)
 
 
 def _cookie_banner(page, notes=None) -> None:
@@ -528,8 +532,8 @@ def _cookie_banner(page, notes=None) -> None:
                 button.click(timeout=3_000)
                 page.wait_for_timeout(500)
                 return
-        except Exception:  # a banner that will not close may not block anything
-            pass
+        except Exception as e:  # a banner that will not close may not block anything
+            log.debug("could not close a banner: %s", e)
 
 
 def _settle(page) -> None:
@@ -537,12 +541,12 @@ def _settle(page) -> None:
         # Adzuna links show a holding page that hands over to the advertiser a few seconds later.
         try:
             page.wait_for_url(lambda u: "adzuna." not in urlparse(u).netloc, timeout=15_000)
-        except Exception:  # some adverts are hosted on Adzuna itself
-            pass
+        except Exception as e:  # some adverts are hosted on Adzuna itself
+            log.debug("the advert stayed on Adzuna: %s", e)
     try:
         page.wait_for_load_state("networkidle", timeout=15_000)
-    except Exception:  # some pages poll forever; the DOM is ready regardless
-        pass
+    except Exception as e:  # some pages poll forever; the DOM is ready regardless
+        log.debug("the page never went quiet: %s", e)
 
 
 def site_key(url: str) -> str:
@@ -662,8 +666,8 @@ def _close_list(page, box) -> None:
         still_open = box.get_attribute("aria-expanded") == "true"
         if (page.locator("[data-hal-opt]:visible").count() or still_open) and not box.evaluate(PRESS_AROUND_JS):
             box.press("Escape")
-    except Exception:  # nothing was open
-        pass
+    except Exception as e:  # nothing was open
+        log.debug("no list to close: %s", e)
 
 
 def _open_list(box) -> None:
@@ -1002,8 +1006,8 @@ def _set_choice(frame, el, want: bool, native: bool) -> None:
     except Exception:  # a styled control: its label takes the click instead
         try:
             el.evaluate("e => (e.labels && e.labels[0] ? e.labels[0] : e.parentElement).click()")
-        except Exception:  # the label click is a second try; the state is checked below
-            pass
+        except Exception as e:  # the label click is a second try; the state is checked below
+            log.debug("could not click the label: %s", e)
         if el.is_checked() != want:
             el.set_checked(want, force=True, timeout=3_000)
 
