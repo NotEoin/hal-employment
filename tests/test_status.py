@@ -13,9 +13,13 @@ from test_runner import WAIT_S, Kinds, fresh_home
 from jobhunt.core import events, runner, status
 
 
-def from_modules(module: str, name: str):
-    """`status._optional` for the stand-in area modules a test put in `sys.modules`."""
-    return getattr(sys.modules.get(module), name, None)
+def from_stand_ins(**stand_ins: types.ModuleType):
+    """`status._optional` that finds `stand_ins` by module name, and any other module where it is loaded.
+
+    Never a `sys.modules` patch: undoing one also drops what was first imported inside it, and the settings
+    registry then came back empty for the next test in the process (2026-11-13).
+    """
+    return lambda module, name: getattr(stand_ins.get(module) or sys.modules.get(module), name, None)
 
 
 class StatusLine(unittest.TestCase):
@@ -79,8 +83,7 @@ class StatusLine(unittest.TestCase):
             {"id": "mail.check", "label": "Check email", "at": "2026-10-22T11:45:00Z"},
             {"id": "notify.digest", "label": "Send the daily summary", "at": "2026-10-22T17:00:00Z"}]
         scheduler.paused = lambda: True
-        with mock.patch.dict(sys.modules, {"jobhunt.core.scheduler": scheduler}), \
-             mock.patch.object(status, "_optional", from_modules):
+        with mock.patch.object(status, "_optional", from_stand_ins(**{"jobhunt.core.scheduler": scheduler})):
             line = status.status(self.con)
         self.assertFalse(line["busy"])
         self.assertTrue(line["paused"])
@@ -92,8 +95,7 @@ class StatusLine(unittest.TestCase):
             raise OSError("the disk went away")
         health = types.ModuleType("jobhunt.core.health")
         health.problem_count = broken
-        with mock.patch.dict(sys.modules, {"jobhunt.core.health": health}), \
-             mock.patch.object(status, "_optional", from_modules), \
+        with mock.patch.object(status, "_optional", from_stand_ins(**{"jobhunt.core.health": health})), \
              self.assertLogs("jobhunt.core.status", "ERROR"):
             line = status.status(self.con)
         self.assertEqual((line["busy"], line["problems"]), (False, 0))
