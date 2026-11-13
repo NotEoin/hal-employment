@@ -235,7 +235,7 @@ public sector and technology. **Jobs**, **Where Hal looks** lists each one, with
 | Jobs | Matches, Saved and Hidden jobs, and Where Hal looks |
 | Applications | Every application, from Getting ready to Form filled, Sent, Interview and Offer |
 | Messages | Replies from employers and job alerts, sorted by Hal |
-| My CV | Your CV, Hal's suggestions, its type and look, checks, and every version |
+| My CV | Your CV, editing it line by line ([how](../howto/edit-your-cv.md)), Hal's suggestions, its type and look, checks, and every version |
 | Documents | The CVs and letters you approved, by application, ready to copy or send |
 | Your record | Your evidence: certificates, references, past work, and what Hal learned from them |
 | Activity | Everything Hal did and why, with Undo where it can be undone |

@@ -2,6 +2,17 @@
 
 What changed in each version, in plain words.
 
+## Unreleased
+
+### What's new
+
+- **Edit your CV line by line.** My CV has a new **Edit your CV** tab: each section, then its entries, then
+  their lines. Change, add, delete, move, hide and lock them, or press **Add from your record** to copy in a
+  job, qualification, project or certificate from Your record as it is, with no AI. **Save changes** keeps
+  the whole session as one new version, so Undo is choosing an older version in **Versions**, and Hal asks
+  before you leave with changes not saved. If your CV changed elsewhere meanwhile, Hal says so and saves
+  nothing. Lines you typed are marked **Your words**, and Hal's suggestions never call them a writing problem.
+
 ## 2.1.1 (2026-11-13)
 
 ### Fixed
