@@ -7,8 +7,7 @@ Every file, employer and module is invented.
 from __future__ import annotations
 
 from jobhunt.profile import store
-
-from .people import HUMANITIES
+from support.people import HUMANITIES
 
 CV = "Sources/CVs and letters/Marnie Quillfeather CV.md"
 TRANSCRIPT = "Sources/Education/Nowhere Fen transcript.md"

@@ -23,8 +23,8 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
-from ..core.platform import wsl2
-from .base import LLMUnavailable
+from jobhunt.ai.base import LLMUnavailable
+from jobhunt.core.platform import wsl2
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ waiting: str | None = None      # the status line while a background call waits;
 
 
 def _ignored() -> tuple[str, ...]:
-    from ..core import settings
+    from jobhunt.core import settings
 
     try:
         extra = tuple(settings.get("ai.gpu_ignore") or ())
@@ -85,7 +85,7 @@ def _names(found: list[tuple[str, int]]) -> str:
 
 def gate_on() -> bool:
     """True when `ai.gpu_gate` asks local models to wait for a busy card."""
-    from ..core import settings
+    from jobhunt.core import settings
 
     return bool(settings.get("ai.gpu_gate"))
 
@@ -145,7 +145,7 @@ def claim(priority: int) -> Iterator[None]:
 
 def busy() -> str | None:
     """Why the AI cannot run now, or None when it can."""
-    from . import backend
+    from jobhunt.ai import backend
 
     be = backend()
     if be.local_gpu and gate_on():

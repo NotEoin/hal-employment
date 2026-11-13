@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 import threading
 
-from ..web.router import BadRequest, Request, route
-from . import activity, health, plugins, runner, scheduler
+from jobhunt.core import activity, health, plugins, runner, scheduler
+from jobhunt.web.router import BadRequest, Request, route
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ ADDON_PREFIX = "addon."
 @plugins.on_start
 def start_schedule() -> None:
     """Starts the in-app schedule with the server; applies start at login and the /jobs command as they change."""
-    from . import settings
+    from jobhunt.core import settings
 
     scheduler.start()
     settings.on_change(LOGIN_KEY, apply_start_at_login)
@@ -33,7 +33,7 @@ def start_schedule() -> None:
 
 def install_jobs_command(*_changed) -> None:
     """Renders the owner's `/jobs` command again whenever an add-on setting changes; never for a test home."""
-    from ..addons import hal
+    from jobhunt.addons import hal
 
     if health.in_own_home():
         return
@@ -48,7 +48,7 @@ def install_jobs_command(*_changed) -> None:
 
 def apply_start_at_login(key: str, old, new) -> str | None:
     """Switches start at login through the platform layer; never for a test or worktree home."""
-    from . import paths, platform
+    from jobhunt.core import paths, platform
 
     if paths.home_override() is not None:
         log.info("start at login left alone: this Hal runs in its own home folder")
@@ -72,7 +72,7 @@ def pause(req: Request) -> dict:
 @route("POST", "/api/v2/system/restart", auth="session_or_local")
 def restart(req: Request) -> dict:
     """Restarts Hal after replying."""
-    from . import platform
+    from jobhunt.core import platform
 
     activity.record("system", "system.restart", "Restarted Hal", "You pressed Restart")
     timer = threading.Timer(RESTART_AFTER_S, platform.current().restart_server)
@@ -98,7 +98,7 @@ def run_now(req: Request) -> dict:
 @route("POST", "/api/v2/schedule/retire-timers", local_only=True)
 def retire_timers(req: Request) -> dict:
     """"Let Hal run them instead": retires the old timers so Hal's own schedule runs their jobs."""
-    from . import platform
+    from jobhunt.core import platform
 
     retired = platform.retire_legacy_timers()
     scheduler.check_timers()

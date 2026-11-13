@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..core.builtin_schedule import every
-from ..core.scheduler import Job
-from .actions import REFRESH
+from jobhunt.core.builtin_schedule import every
+from jobhunt.core.scheduler import Job
+from jobhunt.sections.actions import REFRESH
 
 MINUTES_AN_HOUR = 60
 WHY = "Hal checks your projects regularly for changes"
@@ -18,7 +18,7 @@ WHY = "Hal checks your projects regularly for changes"
 
 def run_after(after: datetime) -> datetime | None:
     """The next refresh, `schedule.projects_every` hours after `after`; None when it is off (0)."""
-    from ..core import settings
+    from jobhunt.core import settings
 
     hours = int(settings.get("schedule.projects_every") or 0)
     return every(hours * MINUTES_AN_HOUR, after) if hours > 0 else None
@@ -26,7 +26,7 @@ def run_after(after: datetime) -> datetime | None:
 
 def run_in_background() -> None:
     """Never used while `record.projects_refresh` is registered; the schedule runs that kind instead."""
-    from ..core import runner
+    from jobhunt.core import runner
 
     runner.run(REFRESH, why=WHY)
 

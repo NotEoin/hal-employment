@@ -2,7 +2,7 @@
 for questions about applying."""
 import re
 
-from ..writing import check as writing_check
+from jobhunt.writing import check as writing_check
 
 FIND_PREFIX = "find the person hiring"   # the start of the To line when the advert names nobody
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")

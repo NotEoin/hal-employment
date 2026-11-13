@@ -17,9 +17,9 @@ import logging
 import re
 from dataclasses import dataclass
 
-from ..core import settings
-from ..core.settings import secrets
-from ..core.settings.registry import SettingError
+from jobhunt.core import settings
+from jobhunt.core.settings import secrets
+from jobhunt.core.settings.registry import SettingError
 
 log = logging.getLogger(__name__)
 

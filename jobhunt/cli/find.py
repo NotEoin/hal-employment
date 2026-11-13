@@ -13,14 +13,14 @@ import sys
 import textwrap
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .. import db
-from ..core import clock, settings
-from ..find import detect, rules
-from ..find import goal as goal_mod
-from ..find import sources_registry as registry
-from ..find.score import prefilter
-from ..notify import notify
-from ..sources import academic, aggregators, ats, startups
+from jobhunt import db
+from jobhunt.core import clock, settings
+from jobhunt.find import detect, rules
+from jobhunt.find import goal as goal_mod
+from jobhunt.find import sources_registry as registry
+from jobhunt.find.score import prefilter
+from jobhunt.notify import notify
+from jobhunt.sources import academic, aggregators, ats, startups
 
 # The registry's own table of built-in fetchers (the same dict object), named as before for older callers.
 STANDALONE = registry.builtin_fetchers()
@@ -142,8 +142,8 @@ def cmd_add(args):
     link) adds the job without its advert, with one line saying so."""
     import urllib.error
 
-    from .. import http
-    from ..company import research
+    from jobhunt import http
+    from jobhunt.company import research
     con = db.connect()
     try:
         text = research.page_text(args.url, limit=20000)
@@ -163,7 +163,7 @@ def cmd_add(args):
 
 def cmd_screen(args):
     """Handles `jobhunt screen`: screens jobs above a minimum score."""
-    from ..find import screen
+    from jobhunt.find import screen
     con = db.connect()
     for job_id, ok, reason in screen.screen(con, args.min, args.n):
         print(f"{'PASS' if ok else 'fail'}  {job_id[:60]:60}  {reason}")
@@ -171,7 +171,7 @@ def cmd_screen(args):
 
 def cmd_queue(args):
     """Handles `jobhunt queue`: lists the jobs ready to apply to."""
-    from ..find import replenish
+    from jobhunt.find import replenish
     con = db.connect()
     rows = con.execute("""SELECT * FROM jobs WHERE status = 'ready' AND active = 1
                           ORDER BY score DESC, first_seen DESC LIMIT ?""", (replenish.TARGET,)).fetchall()

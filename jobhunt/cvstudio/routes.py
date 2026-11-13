@@ -154,7 +154,7 @@ def put_document(req) -> dict:
         vid = store.new_version(doc, origin="manual", what=what, by="you", con=req.con)
     except CVError as e:
         raise _bad(e) from e
-    from ..writing import edits
+    from jobhunt.writing import edits
 
     edits.from_cv(req.con, before, doc)
     n = store.version(vid, con=req.con)["n"]
@@ -178,7 +178,7 @@ def patch_document(req) -> dict:
         raise Conflict("That version of your CV is not there any more. Your changes are not saved.") from e
     except CVError as e:
         raise _bad(e) from e
-    from ..writing import edits
+    from jobhunt.writing import edits
 
     edits.from_cv(req.con, before, after)
     n = store.version(vid, con=req.con)["n"]

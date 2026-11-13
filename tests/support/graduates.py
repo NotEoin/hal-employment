@@ -402,8 +402,7 @@ def sectioned(con: sqlite3.Connection, who: Graduate, folder: Path) -> None:
     (Avery's code project in `folder`, Marnie's exhibition added by hand). Run it with a fake AI in place."""
     from jobhunt.sections import pipeline
     from jobhunt.sections import store as sources
-
-    from . import repos
+    from support import repos
 
     _upload(con, "cv", "cv.md", who.cv, "cv")
     _upload(con, "cv", "older-cv.md", who.older_cv, "cv")

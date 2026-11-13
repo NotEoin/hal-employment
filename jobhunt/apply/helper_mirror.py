@@ -17,7 +17,7 @@ import logging
 import os
 from pathlib import Path
 
-from ..core import paths, plugins
+from jobhunt.core import paths, plugins
 
 log = logging.getLogger(__name__)
 

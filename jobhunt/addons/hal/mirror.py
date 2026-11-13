@@ -9,7 +9,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from . import _path_setting, enabled
+from jobhunt.addons.hal import _path_setting, enabled
 
 
 def folder() -> Path | None:

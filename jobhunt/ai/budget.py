@@ -22,8 +22,8 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import datetime, time, timedelta, tzinfo
 
-from ..core import clock
-from .base import ChatResult, Limited, LLMUnavailable
+from jobhunt.ai.base import ChatResult, Limited, LLMUnavailable
+from jobhunt.core import clock
 
 log = logging.getLogger(__name__)
 
@@ -69,13 +69,13 @@ def current_priority() -> int:
 
 
 def _con() -> sqlite3.Connection:
-    from .. import db
+    from jobhunt import db
 
     return db.connect()
 
 
 def _setting(key: str):
-    from ..core import settings
+    from jobhunt.core import settings
 
     return settings.get(key)
 
@@ -112,7 +112,7 @@ def limit_words(until: datetime | None) -> str:
 
 
 def _in_hours(raw, now: datetime) -> bool:
-    from ..core.settings import parse
+    from jobhunt.core.settings import parse
 
     hours = parse.hours(raw) if raw else None    # the stored value, or words such as "22:00 to 07:30"
     if not hours:
@@ -138,7 +138,7 @@ def background_today(provider: str, con: sqlite3.Connection | None = None) -> in
 def admit(priority: int, purpose: str, backend=None) -> None:
     """Raises `LLMUnavailable` (with its `kind` and plain words) when a call may not run now."""
     if backend is None:
-        from . import backend as current
+        from jobhunt.ai import backend as current
 
         backend = current()
     if backend.online and _setting("ai.local_only"):

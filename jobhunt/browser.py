@@ -36,8 +36,8 @@ import typing
 from pathlib import Path
 from urllib.parse import quote_plus, urlparse
 
-from .apply import guard
-from .core import paths
+from jobhunt.apply import guard
+from jobhunt.core import paths
 
 log = logging.getLogger(__name__)
 
@@ -234,7 +234,7 @@ def notes_for(url: str, job_id: str | None = None):
 
     With only the built-in notes on, each hook below does what Hal did before notes existed.
     """
-    from .sites import notes
+    from jobhunt.sites import notes
 
     return notes.for_page(url or "", job_id=job_id)
 
@@ -245,7 +245,7 @@ def note_used(note, job_id: str | None, field: str, what: str) -> dict:
     The line also carries the note's `id`, `text` and `origin`, the shape autofill lists a note in, so the Form
     step's "Notes Hal used on this site" names every note, whichever part of Hal used it.
     """
-    from .sites import notes
+    from jobhunt.sites import notes
 
     notes.used(note.id, job_id or "", ok=True, detail=what)
     return {"note": note.id, "field": field, "what": what, "id": note.id, "text": note.text, "origin": note.origin}
@@ -317,7 +317,7 @@ def application_url(job) -> str:
     """Returns the page holding the application form for a job, as the `open_url` notes about its site say
     (`sites.behaviour.application_url`): the built-in ones open Ashby's and Lever's forms directly and the
     Greenhouse form on an employer's own careers page; a person's note about the site wins over them."""
-    from .sites import behaviour
+    from jobhunt.sites import behaviour
 
     return behaviour.application_url(job, notes_for(job["url"] or "", job["id"]))
 
@@ -515,7 +515,7 @@ def _dismiss_banners(page, notes=None) -> None:
     """Closes a cookie banner, refusing optional cookies where it can, then a job-alert or similar pop-up
     (`halPopup` in page.js); never presses a button inside a form."""
     _cookie_banner(page, notes)
-    from .core import settings
+    from jobhunt.core import settings
 
     if not settings.get("applying.close_popups"):
         return
@@ -560,7 +560,7 @@ def site_key(url: str) -> str:
     Workday employer never marks every other as signed in. One rule for the engines, the notes and the sites
     table, so a sign-in and a note about an employer are kept under the same key.
     """
-    from .sites import notes
+    from jobhunt.sites import notes
 
     return notes.site_key(url)
 
@@ -1407,7 +1407,7 @@ def _close(b: Browser, job_id: str) -> None:
 
 def mode() -> str:
     """Returns where forms are driven: Hal's own "window" or "headless" browser, or the "extension"."""
-    from .core import settings
+    from jobhunt.core import settings
 
     mode = os.environ.get("JOBHUNT_APPLY_BROWSER") or settings.get("applying.mode")
     return "extension" if mode == "helper" else mode   # the engines still call the helper "extension"
@@ -1445,7 +1445,7 @@ def use_extension(**steps) -> None:
 
 def _steps() -> ExtensionSteps:
     """The extension's steps; importing `extension` registers them (it needs this module, so it loads late)."""
-    from . import extension  # noqa: F401 - the import registers the steps
+    from jobhunt import extension  # noqa: F401 - the import registers the steps
     return _extension_steps
 
 

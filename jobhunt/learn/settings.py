@@ -6,7 +6,7 @@ remembers.
 """
 from __future__ import annotations
 
-from ..core.settings.registry import Setting, register
+from jobhunt.core.settings.registry import Setting, register
 
 ORDER = 140     # after "Quit Hal", the last row of Advanced
 AREAS = (("finding", "Finding jobs"), ("cv", "Your CV"), ("writing", "Your writing"))   # `patterns.SOURCES`

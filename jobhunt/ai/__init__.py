@@ -24,11 +24,21 @@ import re
 import threading
 from collections.abc import Iterator
 
-from ..core import plugins
-from . import budget, gpu, guard
-from .base import Backend, ChatRequest, ChatResult, Limited, LLMUnavailable, PrivateLeak, Role, Status, role_for
-from .budget import at_priority, current_priority
-from .counting import Calls, count, counted
+from jobhunt.ai import budget, gpu, guard
+from jobhunt.ai.base import (
+    Backend,
+    ChatRequest,
+    ChatResult,
+    Limited,
+    LLMUnavailable,
+    PrivateLeak,
+    Role,
+    Status,
+    role_for,
+)
+from jobhunt.ai.budget import at_priority, current_priority
+from jobhunt.ai.counting import Calls, count, counted
+from jobhunt.core import plugins
 
 __all__ = [
     "Backend",
@@ -70,7 +80,7 @@ _built: dict = {}
 
 
 def _test_backend() -> Backend:
-    from .fake import FakeBackend
+    from jobhunt.ai.fake import FakeBackend
 
     if "test" not in _built:
         fake = FakeBackend(default=LLMUnavailable(NOT_IN_TESTS))
@@ -80,7 +90,7 @@ def _test_backend() -> Backend:
 
 
 def _settings():
-    from ..core import settings
+    from jobhunt.core import settings
 
     return settings
 
@@ -88,20 +98,20 @@ def _settings():
 def _build(name: str) -> Backend:
     settings = _settings()
     if name == "local":
-        from .ollama import OllamaBackend
+        from jobhunt.ai.ollama import OllamaBackend
 
         return OllamaBackend(settings.get("ai.ollama_url"))
     if name == "openai_compat":
-        from .openai_compat import OpenAICompatBackend
+        from jobhunt.ai.openai_compat import OpenAICompatBackend
 
         return OpenAICompatBackend(settings.get("ai.openai_url"), _openai_key())
     if name == "hal":
-        from .hal_gateway import GatewayBackend
+        from jobhunt.ai.hal_gateway import GatewayBackend
 
         return GatewayBackend(settings.get("ai.hal_url"), settings.get("ai.hal_token_file"),
                               settings.get("ai.hal_batch_token_file"))
     if name == "claude_cli":
-        from .claude_cli import ClaudeCLIBackend
+        from jobhunt.ai.claude_cli import ClaudeCLIBackend
 
         return ClaudeCLIBackend()
     if name == "fake" and os.environ.get(TEST_ENV) == "1":
@@ -128,7 +138,7 @@ def backend() -> Backend:
             return _override[-1]
     if os.environ.get(TEST_ENV) == "1" and not os.environ.get(REAL_AI_ENV):
         return _test_backend()
-    from . import provider
+    from jobhunt.ai import provider
 
     name = provider.current()
     key = (name, _settings().revision())
@@ -308,6 +318,6 @@ def ready(priority: int = budget.BACKGROUND, purpose: str = "") -> str | None:
 @plugins.on_start
 def choose_ai_once() -> None:
     """Stores the suggested `ai.provider` once when nobody has chosen one."""
-    from . import provider
+    from jobhunt.ai import provider
 
     log.info("Hal's AI: %s", provider.current())

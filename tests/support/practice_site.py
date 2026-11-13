@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from .api import Client
+from support.api import Client
 
 PRACTICE = Path(__file__).resolve().parent.parent / "site" / "practice"
 THANKS = (b"<!doctype html><html><head><meta charset='utf-8'><title>Application received</title></head><body>"
@@ -119,8 +119,7 @@ class HelperBrowser:
     def start_helper(cls, tmp: Path) -> None:
         """Starts Hal and the helper's browser, and pairs the helper; `cls.helper_id` is its id."""
         from jobhunt import extension
-
-        from .legacy import EXTENSION
+        from support.legacy import EXTENSION
 
         extension.reset()
         cls.start_hal()

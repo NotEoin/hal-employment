@@ -17,10 +17,10 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
-from ..core import events
+from jobhunt.core import events
 
 if TYPE_CHECKING:
-    from .app import AppHandler
+    from jobhunt.web.app import AppHandler
 
 PING_S = 15.0
 RETRY_MS = 3000

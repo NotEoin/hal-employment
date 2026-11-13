@@ -19,9 +19,8 @@ import logging
 from jobhunt import db
 from jobhunt.core import runner, settings
 from jobhunt.core.settings.registry import SettingError
-
-from . import parse, store
-from .model import to_json
+from jobhunt.cvstudio import parse, store
+from jobhunt.cvstudio.model import to_json
 
 log = logging.getLogger(__name__)
 

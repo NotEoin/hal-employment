@@ -10,6 +10,6 @@ DEFAULT_PLACES = ("London",)   # the UK's largest job market, for a goal with no
 
 def places() -> list[str]:
     """The goal's places in the person's order, else `DEFAULT_PLACES`."""
-    from ..find import goal
+    from jobhunt.find import goal
 
     return [p.name for p in goal.current().places] or list(DEFAULT_PLACES)

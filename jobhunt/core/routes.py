@@ -10,10 +10,10 @@ import importlib.util
 import logging
 import sqlite3
 
-from .. import __version__
-from ..web import auth, sse
-from ..web.router import Request, Stream, route
-from . import paths, plugins
+from jobhunt import __version__
+from jobhunt.core import paths, plugins
+from jobhunt.web import auth, sse
+from jobhunt.web.router import Request, Stream, route
 
 log = logging.getLogger(__name__)
 SETUP_STATE = "jobhunt.setup.state"      # the setup guide decides whether setup is finished
@@ -25,7 +25,7 @@ PAGES = (("Home", "home"), ("Jobs", "jobs"), ("Applications", "apps"), ("Message
 
 
 def _setting(key: str, fallback):
-    from . import settings
+    from jobhunt.core import settings
 
     try:
         return settings.get(key)

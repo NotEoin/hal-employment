@@ -5,7 +5,7 @@ are never read here: this module does not import the private store, and a test h
 """
 from __future__ import annotations
 
-from ..core import settings
+from jobhunt.core import settings
 
 # (label, setting key) in the order forms usually ask for them; empty values are left out.
 ROWS = (

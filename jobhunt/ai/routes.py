@@ -9,17 +9,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core import clock, runner
-from ..web.router import Conflict, Request, route
-from . import actions, budget, claude_setup, health
-from .base import LLMUnavailable
+from jobhunt.ai import actions, budget, claude_setup, health
+from jobhunt.ai.base import LLMUnavailable
+from jobhunt.core import clock, runner
+from jobhunt.web.router import Conflict, Request, route
 
 CLAUDE_MODELS = {"writer": ["opus", "sonnet", "haiku"], "checker": ["opus", "sonnet", "haiku"],
                  "quick": ["sonnet", "haiku"]}   # quick jobs never need Opus
 
 
 def _provider() -> str:
-    from .health import chosen
+    from jobhunt.ai.health import chosen
 
     return chosen()
 
@@ -41,8 +41,8 @@ def _host(req: Request) -> str | None:
 
 def _hal_available(name: str) -> bool:
     """True when Hal's model gateway answers, so setup can offer it; false without probing when it is in use."""
-    from ..core import settings
-    from ..core.settings.catalog.ai import hal_answers
+    from jobhunt.core import settings
+    from jobhunt.core.settings.catalog.ai import hal_answers
 
     return name == "hal" or hal_answers(settings.get)
 
@@ -69,7 +69,7 @@ def claude_status(fresh: bool = False) -> dict:
 def status(req: Request) -> dict:
     """Is the AI ready: {provider, installed, version, signed_in, account, plan_ok, ready, why, fix,
     used_today, background_today, cap, limited_until, allowance, remote_host, mode, hal_available}."""
-    from .. import ai
+    from jobhunt import ai
 
     name = _provider()
     fresh = req.query.get("fresh") == "1"
@@ -93,8 +93,8 @@ def status(req: Request) -> dict:
 @route("GET", "/api/v2/ai/recommend", slow=True)
 def recommend(req: Request) -> dict:
     """Which AI fits this computer: {pick, why, machine: {memory_gb, gpu, laptop}}."""
-    from ..core import platform, settings
-    from ..core.settings.catalog.ai import ollama_answers
+    from jobhunt.core import platform, settings
+    from jobhunt.core.settings.catalog.ai import ollama_answers
 
     found = platform.current().machine()
     machine = {"memory_gb": found.get("memory_gb"), "gpu": found.get("gpu"), "laptop": claude_setup.has_battery()}
@@ -133,7 +133,7 @@ def test(req: Request) -> dict:
 @route("GET", "/api/v2/ai/models", slow=True)
 def models(req: Request) -> dict:
     """The model choices for each role of the AI in use: {writer, checker, quick}."""
-    from .. import ai
+    from jobhunt import ai
 
     if _provider() == "claude_cli":
         return {role: list(names) for role, names in CLAUDE_MODELS.items()}

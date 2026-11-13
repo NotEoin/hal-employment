@@ -20,8 +20,8 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from ..core import clock, naming, paths
-from . import files as registry
+from jobhunt.core import clock, naming, paths
+from jobhunt.docs import files as registry
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def job_id_in_pack(pack_md: Path) -> str | None:
 
 def legacy_folder(job) -> Path | None:
     """The old shared pack folder for `job`, only when its `pack.md` says it belongs to this job."""
-    from .. import pack
+    from jobhunt import pack
 
     folder = paths.legacy_packs_dir() / pack.slug(f"{job['company']}-{job['title']}")
     owner = job_id_in_pack(folder / PACK_MD)

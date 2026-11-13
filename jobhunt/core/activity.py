@@ -17,8 +17,8 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any, TypedDict
 
-from .. import db
-from . import clock, events, plugins
+from jobhunt import db
+from jobhunt.core import clock, events, plugins
 
 log = logging.getLogger(__name__)
 

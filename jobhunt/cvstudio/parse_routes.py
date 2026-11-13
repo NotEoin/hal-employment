@@ -16,11 +16,10 @@ import json
 import sqlite3
 
 from jobhunt.core import runner, settings
+from jobhunt.cvstudio import parse, pdfread, store
+from jobhunt.cvstudio.model import CVError
+from jobhunt.cvstudio.parse_actions import fill_empty_settings
 from jobhunt.web.router import BadRequest, BytesResponse, Conflict, NotFound, route
-
-from . import parse, pdfread, store
-from .model import CVError
-from .parse_actions import fill_empty_settings
 
 PAGE_SCALE = 1.5          # page pictures at 108 dots per inch: readable beside Hal's reading, quick to make
 PASTED_NAME = "Pasted CV.txt"

@@ -8,7 +8,7 @@ only on each job page, so those are read from its text.
 import html
 import re
 
-from ..http import get, get_json
+from jobhunt.http import get, get_json
 
 API = "https://iuk-ktp.org.uk/wp-json/wp/v2/job?per_page=100&_fields=id,date,title,link"
 

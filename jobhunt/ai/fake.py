@@ -12,7 +12,7 @@ import threading
 import time
 from collections.abc import Callable
 
-from .base import ChatRequest, ChatResult, LLMUnavailable, Status
+from jobhunt.ai.base import ChatRequest, ChatResult, LLMUnavailable, Status
 
 Reply = str | Callable[[ChatRequest], str] | BaseException | type
 REGEX_PREFIX = "re:"

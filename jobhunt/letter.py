@@ -10,8 +10,8 @@ from the person's main CV, never from a file outside Hal.
 from datetime import date
 from pathlib import Path
 
-from .cvstudio import cv, pdfdraw
-from .cvstudio.pdf import _drawable
+from jobhunt.cvstudio import cv, pdfdraw
+from jobhunt.cvstudio.pdf import _drawable
 
 BODY_GAP = 7.0      # space between paragraphs
 BLOCK_GAP = 14.0    # space between the address block, subject and body
@@ -55,8 +55,8 @@ def render(body: str, out: Path, recipient: list[str], subject: str, when: date 
     """
     if look is None:
         return draw(body, out, recipient, subject, when, cv_sent)
-    from .cvstudio import export, printer
-    from .cvstudio import render as pages
+    from jobhunt.cvstudio import export, printer
+    from jobhunt.cvstudio import render as pages
 
     when = when or date.today()
     title = (cv.printable(cv_sent) if cv_sent is not None else cv.load()).get("title", "")

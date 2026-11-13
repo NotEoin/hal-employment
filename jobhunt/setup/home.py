@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from ..core import runner
-from . import state
+from jobhunt.core import runner
+from jobhunt.setup import state
 
 FIRST_SEARCH_ROW = "done"     # All set's row keeps the first search's action id in its data
 

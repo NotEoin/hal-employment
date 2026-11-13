@@ -29,7 +29,7 @@ from http.cookies import SimpleCookie
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from ..core import clock, paths
+from jobhunt.core import clock, paths
 
 OPEN_TOKEN_S = 120                         # long enough to open a window, too short to reuse
 SESSION_DAYS = 30                          # a session unused this long ends
@@ -125,7 +125,7 @@ def server_port() -> int:
             return int(raw)
         except ValueError as e:
             raise ValueError(f"HAL_EMPLOYMENT_PORT={raw!r} is not a port number") from e
-    from ..core.settings import store
+    from jobhunt.core.settings import store
 
     return int(store.stored("advanced.port") or DEFAULT_PORT)
 
@@ -140,7 +140,7 @@ def _safe_next(next_path: str | None) -> str | None:
 def mint_open_url(*, remote: bool = False, remote_host: str | None = None, port: int | None = None,
                   next: str | None = None, con: sqlite3.Connection | None = None) -> str:
     """A one-time link that opens a signed-in window: `http://127.0.0.1:<port>/open?t=<token>&next=<path>`."""
-    from .. import db
+    from jobhunt import db
 
     token = secrets.token_urlsafe(TOKEN_BYTES)
     now = clock.now_utc()

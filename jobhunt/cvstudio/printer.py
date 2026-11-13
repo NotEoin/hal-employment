@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import pdfread, render
+from jobhunt.cvstudio import pdfread, render
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class Printer:
 
 
 def _platform() -> Any:
-    from ..core import platform
+    from jobhunt.core import platform
 
     return platform.current()
 
@@ -158,7 +158,7 @@ def check(pdf: Path, *, expect_name: str, max_pages: int, expect_text: Iterable[
 
 def _record_fallback(reason: str, why: str) -> None:
     try:
-        from ..core import activity
+        from jobhunt.core import activity
 
         activity.record("cv", "cv.printed_simple", FALLBACK_WORDS.format(reason=reason), why or "Your CV was printed",
                         icon="file", tone="warn")

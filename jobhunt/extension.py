@@ -21,9 +21,9 @@ import threading
 import time
 import uuid
 
-from . import browser
-from .apply import guard
-from .browser import (
+from jobhunt import browser
+from jobhunt.apply import guard
+from jobhunt.browser import (
     APPLIED,
     APPLY_BUTTON,
     ATS_FRAME,
@@ -47,7 +47,7 @@ from .browser import (
     signed_in_at,
     site_key,
 )
-from .core import settings
+from jobhunt.core import settings
 
 POLL_WAIT = 20  # seconds a poll is held open; the browser stops a worker whose request takes 30
 PATTERNS = {"apply": APPLY_BUTTON.pattern, "next": NEXT_BUTTON.pattern, "submit": SUBMIT_BUTTON.pattern,
@@ -121,9 +121,9 @@ def poll_helper(helper_id: str, version: str | None, protocol: int | None, wait:
     A helper older than Hal is asked to reload once (it re-reads the files git updated); one still older
     after that is noted for "Is Hal working?".
     """
-    from . import db
-    from .apply import helpers
-    from .core import events
+    from jobhunt import db
+    from jobhunt.apply import helpers
+    from jobhunt.core import events
 
     began = _generation
     first = _touch(helper_id)
@@ -195,8 +195,8 @@ def assign(job_id: str, helper_id: str) -> None:
 
 def _keep(job_id: str, helper_id: str) -> None:
     """Writes the carrier on the application row, once there is one (a handed-over tab gets its row later)."""
-    from . import db
-    from .apply import helpers
+    from jobhunt import db
+    from jobhunt.apply import helpers
 
     if job_id in _kept:
         return
@@ -211,8 +211,8 @@ def _keep(job_id: str, helper_id: str) -> None:
 
 def _carrier(job_id: str | None, cmd: str) -> str:
     """The helper a command goes to; raises RuntimeError when no helper can take it."""
-    from . import db
-    from .apply import helpers
+    from jobhunt import db
+    from jobhunt.apply import helpers
 
     with _lock:
         live = {h for h in set(_seen) | {h for h, _ in _waiting.values()} if _connected_locked(h)}

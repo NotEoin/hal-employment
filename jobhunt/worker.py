@@ -9,9 +9,9 @@ on Your record, and never reads them straight in (`sections.sorting.actions.queu
 import logging
 import time
 
-from . import db, record, tasks
-from .docs import contacts
-from .find import replenish
+from jobhunt import db, record, tasks
+from jobhunt.docs import contacts
+from jobhunt.find import replenish
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ JOB_ID = "find.prepare"
 
 def _held() -> str | None:
     """Why preparing ahead is held back now, or None."""
-    from .core import scheduler
+    from jobhunt.core import scheduler
 
     if scheduler.paused_for(JOB_ID):
         return "Hal is paused"
@@ -48,7 +48,7 @@ def sync_record() -> dict:
 
     An unreadable folder is reported, not raised.
     """
-    from .sections.sorting import actions as sort_actions
+    from jobhunt.sections.sorting import actions as sort_actions
 
     try:
         out = record.sync()

@@ -26,8 +26,8 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from ..core import clock, paths
-from .base import ChatRequest, ChatResult, Limited, LLMUnavailable, Status
+from jobhunt.ai.base import ChatRequest, ChatResult, Limited, LLMUnavailable, Status
+from jobhunt.core import clock, paths
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def reset_time(text: str, now: datetime | None = None) -> datetime | None:
         hour = 0
     if hour > 23 or minute > 59:
         return None
-    from .budget import _london
+    from jobhunt.ai.budget import _london
 
     zone = _london()
     local = (now or clock.now_utc()).astimezone(zone)
@@ -100,7 +100,7 @@ def classify(text: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> LLMUnavailab
         return LLMUnavailable(FREE_PLAN, kind="free_plan")
     if _LIMIT.search(text):
         until = reset_time(text)
-        from .budget import limit_words
+        from jobhunt.ai.budget import limit_words
 
         return Limited(limit_words(until), until=until)
     if _SUBSCRIPTION.search(text):
@@ -203,7 +203,7 @@ class ClaudeCLIBackend:
         """Ready when the command line is installed and no limit holds; sign-in is checked by its setup step."""
         if executable() is None:
             return Status(ready=False, why=NOT_INSTALLED, fix="install_claude")
-        from .budget import limit_words, limited_until
+        from jobhunt.ai.budget import limit_words, limited_until
 
         try:
             until = limited_until(self.name)

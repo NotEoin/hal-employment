@@ -32,8 +32,7 @@ from jobhunt.cvstudio import cv
 from jobhunt.find import boards, replenish
 from jobhunt.mail import gmail
 from jobhunt.writing import plan
-
-from .actions import wait_for_actions
+from support.actions import wait_for_actions
 
 PERSON = {
     "first_name": "Robin", "last_name": "Testwell", "full_name": "Robin Testwell",

@@ -14,8 +14,8 @@ import time
 import urllib.error
 import urllib.request
 
-from .base import ChatRequest, ChatResult, LLMUnavailable, Status
-from .openai_compat import MAX_TOKENS, RAN_ON, RETRY_TEMPERATURE, TRIES
+from jobhunt.ai.base import ChatRequest, ChatResult, LLMUnavailable, Status
+from jobhunt.ai.openai_compat import MAX_TOKENS, RAN_ON, RETRY_TEMPERATURE, TRIES
 
 log = logging.getLogger(__name__)
 

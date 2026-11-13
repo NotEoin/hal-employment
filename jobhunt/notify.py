@@ -14,7 +14,7 @@ would only tell whoever sits there.
 import logging
 import urllib.request
 
-from .core import clock
+from jobhunt.core import clock
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ TOPIC_SECRET = "notify.ntfy_topic"
 
 
 def _get(key: str):
-    from .core import settings
+    from jobhunt.core import settings
 
     return settings.get(key)
 
@@ -45,7 +45,7 @@ def quiet_now(now=None) -> bool:
 
 
 def _topic() -> str | None:
-    from .core.settings import secrets
+    from jobhunt.core.settings import secrets
 
     try:
         return secrets.get(TOPIC_SECRET, interactive=False)
@@ -72,7 +72,7 @@ def _phone(title: str, body: str, url: str | None, urgent: bool) -> None:
 
 def _away() -> bool:
     """True while a window from another computer is showing Hal, so the desktop pop-up goes there instead."""
-    from .remote import sessions
+    from jobhunt.remote import sessions
 
     try:
         return sessions.window_open()
@@ -83,12 +83,12 @@ def _away() -> bool:
 
 def notify(title: str, body: str, url: str | None = None, urgent: bool = False) -> None:
     """Sends a desktop and phone alert as the settings say; urgent alerts are also spoken with the Hal add-on."""
-    from .core import events
+    from jobhunt.core import events
 
     held = not urgent and quiet_now()
     events.publish("notify", title=title, body=body, urgent=urgent)
     if _get("notify.desktop") and not held and not _away():
-        from .core import platform
+        from jobhunt.core import platform
 
         try:
             platform.current().notify(title, body, urgent=urgent)
@@ -97,6 +97,6 @@ def notify(title: str, body: str, url: str | None = None, urgent: bool = False) 
     if _get("notify.phone") and not held:
         _phone(title, body, url, urgent)
     if urgent:
-        from .addons import hal
+        from jobhunt.addons import hal
 
         hal.speak(f"{title}. {body}")

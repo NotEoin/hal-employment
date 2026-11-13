@@ -1,8 +1,8 @@
 """GET /api/v2/status: the status line over every page; the words come from `core.status`."""
 from __future__ import annotations
 
-from ..web.router import Request, route
-from . import runner, status
+from jobhunt.core import runner, status
+from jobhunt.web.router import Request, route
 
 
 @route("GET", "/api/v2/status")

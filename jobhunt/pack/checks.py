@@ -2,12 +2,12 @@
 echo rewrite, the "Check before sending" lines and the refusals taken out."""
 import re
 
-from .. import ai, record
-from ..profile import writing as profile_writing
-from ..writing import check as writing_check
-from ..writing import drafts, plain, stage, strengths, taught
-from .fitmap import known_tools
-from .reading import SOMEONE, Brief, _record_part, prompt
+from jobhunt import ai, record
+from jobhunt.pack.fitmap import known_tools
+from jobhunt.pack.reading import SOMEONE, Brief, _record_part, prompt
+from jobhunt.profile import writing as profile_writing
+from jobhunt.writing import check as writing_check
+from jobhunt.writing import drafts, plain, stage, strengths, taught
 
 CUT_FLAG = "the {what} stopped mid-sentence twice; Hal kept it to its last full sentence, so check its ending"
 CUT_WHAT = {"letter": "cover letter", "message": "message to the person hiring"}

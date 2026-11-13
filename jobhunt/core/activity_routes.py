@@ -5,8 +5,8 @@ starts in the background; both report through the event stream.
 """
 from __future__ import annotations
 
-from ..web.router import BadRequest, Request, route
-from . import activity, runner
+from jobhunt.core import activity, runner
+from jobhunt.web.router import BadRequest, Request, route
 
 
 def _int(value: str | None, name: str) -> int | None:

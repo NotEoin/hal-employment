@@ -34,9 +34,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import paths
-from . import claude_cli
-from .base import LLMUnavailable
+from jobhunt.ai import claude_cli
+from jobhunt.ai.base import LLMUnavailable
+from jobhunt.core import paths
 
 log = logging.getLogger(__name__)
 
@@ -310,7 +310,7 @@ def _console(args: list[str], title: str) -> int:
         return _open_console(args, title)
     if _testing():
         raise RuntimeError("Tests never open a window.")
-    from ..core import platform
+    from jobhunt.core import platform
 
     return platform.current().open_console(args, title)
 

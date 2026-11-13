@@ -23,8 +23,7 @@ from jobhunt import record
 from jobhunt.core import paths, runner
 from jobhunt.core.settings import store
 from jobhunt.web import app, auth
-
-from .actions import wait_for_actions
+from support.actions import wait_for_actions
 
 TIMEOUT_S = 10   # every request in these tests answers at once; a hang fails the test instead
 

@@ -1,9 +1,32 @@
 """The drafts beside the letter: the message to the person hiring and the form answers, one story a
 paragraph when the plan tells any, else drafted whole, and none left blank."""
 
-from .. import ai
-from ..profile import writing as profile_writing
-from ..writing import (
+from jobhunt import ai
+from jobhunt.pack.checks import (
+    CUT_FLAG,
+    CUT_WHAT,
+    DANGLING_FLAG,
+    ECHO_FLAG,
+    _hits,
+    check_drafts,
+    fix_claims,
+    fix_echoes,
+    revise_once,
+)
+from jobhunt.pack.drafting import _draft, fitting_names, paragraph_scope, spelt, story_ranking
+from jobhunt.pack.hiring import hiring_contacts
+from jobhunt.pack.reading import (
+    COMMON_QUESTIONS,
+    SOMEONE,
+    Brief,
+    _job_text,
+    _requirements,
+    evidence_plan,
+    field_of,
+    prompt,
+)
+from jobhunt.profile import writing as profile_writing
+from jobhunt.writing import (
     drafts,
     eligibility,
     fields,
@@ -17,21 +40,7 @@ from ..writing import (
     repeats,
     stage,
 )
-from ..writing import plan as planning
-from .checks import (
-    CUT_FLAG,
-    CUT_WHAT,
-    DANGLING_FLAG,
-    ECHO_FLAG,
-    _hits,
-    check_drafts,
-    fix_claims,
-    fix_echoes,
-    revise_once,
-)
-from .drafting import _draft, fitting_names, paragraph_scope, spelt, story_ranking
-from .hiring import hiring_contacts
-from .reading import COMMON_QUESTIONS, SOMEONE, Brief, _job_text, _requirements, evidence_plan, field_of, prompt
+from jobhunt.writing import plan as planning
 
 REPEAT_FLAG = "says what an earlier answer already says"   # an answer still repeating after its rewrite
 

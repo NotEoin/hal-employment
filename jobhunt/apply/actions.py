@@ -22,10 +22,10 @@ import threading
 from collections import defaultdict
 from typing import Any
 
-from .. import browser, db, documents
-from ..core import runner, settings
-from . import driver
-from .queries import column_of, load_app, load_job, mark_applied, set_app, site_of
+from jobhunt import browser, db, documents
+from jobhunt.apply import driver
+from jobhunt.apply.queries import column_of, load_app, load_job, mark_applied, set_app, site_of
+from jobhunt.core import runner, settings
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ def _example(name: str | None, owner: Any = driver, **extra: Any):
 
 
 def _prepare_example(world: Any) -> dict:
-    from .. import pack
+    from jobhunt import pack
 
     return _example("build", pack, time="10:00", open_check=False)(world)
 
@@ -72,7 +72,7 @@ def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
     Resumable: a restart part way through starts it again by itself, since a queue of jobs left every one
     stalled under Getting ready after a restart (testers, 2026-11-04). Starting again only rewrites the drafts.
     """
-    from .. import pack
+    from jobhunt import pack
 
     job = load_job(ctx.con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
@@ -102,8 +102,8 @@ def _advert_closed(con, job) -> bool:
     card each (testers, 2026-11-04). One fetch, as the check before a job first shows in Matches; a page that
     cannot be read (some boards refuse plain fetches) counts as open, and the form step finds out later.
     """
-    from ..core import clock
-    from ..find import closed_check
+    from jobhunt.core import clock
+    from jobhunt.find import closed_check
 
     if closed_check.check(dict(job)) != "closed":
         return False
@@ -160,7 +160,7 @@ def adopt_tab(ctx, job_id: str, url: str = "") -> str:
 
 def matched_tab(con, page: dict) -> dict:
     """The job a tab the person opened belongs to, made when no known job matches."""
-    from . import adopt
+    from jobhunt.apply import adopt
 
     job, made = adopt.adopt(con, page)
     return {"job": job["id"], "made": made, "company": job["company"], "title": job["title"]}
@@ -196,7 +196,7 @@ def start(kind: str, job_id: str, *, params: dict | None = None, why: str | None
 
 def apply_with_hal(con, job_id: str, *, session_id: str | None = None) -> str:
     """Apply with Hal: the documents come first; the form opens only once they are approved."""
-    from ..core import clock
+    from jobhunt.core import clock
 
     return start("docs.prepare", job_id, params={"time": clock.now_utc().strftime("%H:%M")},
                  session_id=session_id)
@@ -240,7 +240,7 @@ def _approve_documents(con, job_id: str, body: dict | None, *, session_id: str |
     job = load_job(con, job_id)
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(con, job_id, "applying", "chosen from the queue")
-    from ..writing import edits
+    from jobhunt.writing import edits
 
     now = db.now()
     before = documents.load(con, job)
@@ -282,7 +282,7 @@ def save_documents(con, job_id: str, body: dict, *, by_you: bool = False) -> dic
     `by_you` when the person wrote the edits (the Save route): Hal keeps each change as a pair to learn their
     writing from (`writing.edits`). Hal's own rewrites pass through here too and teach nothing.
     """
-    from ..writing import edits
+    from jobhunt.writing import edits
 
     job = load_job(con, job_id)
     before = documents.load(con, job)
@@ -338,7 +338,7 @@ def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") 
                     (job_id, db.now()))
     con.execute("UPDATE applications SET closed_reason = ?, closed_detail = ?, updated = ? WHERE job_id = ?",
                 (reason, words or None, db.now(), job_id))
-    from ..find import rules
+    from jobhunt.find import rules
 
     key = rules.repost_key(job)
     for d in con.execute("""SELECT id, company, title, location FROM jobs WHERE id != ?
@@ -350,7 +350,7 @@ def discard(con, job_id: str, reason: str = "skipped_for_now", words: str = "") 
 
 
 def _close_quietly(job_id: str) -> None:
-    from .queries import _close_quietly as close
+    from jobhunt.apply.queries import _close_quietly as close
 
     close(job_id)
 

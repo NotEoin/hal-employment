@@ -66,7 +66,7 @@ def _words(items: list[str], last: str = "or") -> str:
 
 def cv_type():
     """The CV type of Hal's copy of the CV, or None when none can be read."""
-    from . import store, types
+    from jobhunt.cvstudio import store, types
 
     try:
         return types.load(store.type_in_use())
@@ -76,9 +76,9 @@ def cv_type():
 
 
 def _person() -> dict:
-    from ..core import settings
-    from ..find import goal as goal_mod
-    from ..find import screen
+    from jobhunt.core import settings
+    from jobhunt.find import goal as goal_mod
+    from jobhunt.find import screen
 
     goal = goal_mod.current()
     name = (settings.get("you.name") or "").strip()
@@ -105,9 +105,9 @@ def _person() -> dict:
 
 def voice(job=None, con=None) -> dict:
     """The person's voice from their own writing (`writing.voice`); empty while "Match my own writing" is off."""
-    from .. import db
-    from ..core import settings
-    from ..writing import voice as voice_mod
+    from jobhunt import db
+    from jobhunt.core import settings
+    from jobhunt.writing import voice as voice_mod
 
     if not settings.get("cvdocs.voice"):
         return {"card": {}, "lines": [], "exemplars": [], "own_words": []}
@@ -123,14 +123,14 @@ def voice(job=None, con=None) -> dict:
 
 def profile_block() -> str:
     """The person's profile as a "Profile" block (only the facts they checked); "" when there are none."""
-    from ..profile import writing
+    from jobhunt.profile import writing
 
     return writing.block()
 
 
 def _type_part(kind) -> dict:
-    from ..core import settings
-    from ..writing import spelling as spelling_mod
+    from jobhunt.core import settings
+    from jobhunt.writing import spelling as spelling_mod
 
     docs = {**NEUTRAL, **((kind.documents or {}) if kind is not None else {})}
     writing = (kind.writing or {}) if kind is not None else {}

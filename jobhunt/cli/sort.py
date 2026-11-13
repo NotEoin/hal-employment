@@ -29,7 +29,7 @@ FOLDER_KINDS = ("repo", "local_folder")     # kinds of document held as a folder
 
 
 def _hal(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
-    from . import record
+    from jobhunt.cli import record
 
     return record._hal(method, path, body)
 
@@ -105,8 +105,8 @@ def cmd_sort(args):
 
 def _form(path: str, files: list[tuple[str, bytes, str]], fields: dict) -> tuple[int, dict]:
     """POSTs a multipart form to the running Hal with the local API key, as the page uploads files."""
-    from .. import updates
-    from .record import address
+    from jobhunt import updates
+    from jobhunt.cli.record import address
 
     key, port = address()
     boundary = uuid.uuid4().hex

@@ -24,8 +24,8 @@ FINAL = ("done", "error", "stopped", "interrupted")
 
 def address() -> tuple[str, int]:
     """The local API key and the port of the running Hal on this computer."""
-    from .. import updates
-    from ..core import paths, settings
+    from jobhunt import updates
+    from jobhunt.core import paths, settings
 
     key = (paths.config_dir() / "local-api-key").read_text(encoding="utf-8").strip()
     raw = os.environ.get("HAL_EMPLOYMENT_PORT", "").strip()
@@ -34,7 +34,7 @@ def address() -> tuple[str, int]:
 
 def _hal(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
     """Calls the running Hal on this computer with the local API key."""
-    from .. import updates
+    from jobhunt import updates
 
     key, port = address()
     con = http.client.HTTPConnection(updates.BIND, port, timeout=HTTP_TIMEOUT_S)
@@ -69,7 +69,7 @@ def ingest(folders: list[str], again: bool = False, tidy: bool = False, mine: li
     if status != 200:
         sys.exit(f"ingest: {(out.get('error') or {}).get('message') or status}")
     if not (again or tidy):
-        from . import sort
+        from jobhunt.cli import sort
 
         print(f"Sorting {len(folders)} folder(s); Hal proposes where each file goes and adds nothing yet.")
         sort.follow_sort(out["sort_id"])
@@ -96,7 +96,7 @@ def cmd_ingest(args):
 
 def cmd_record(args):
     """Handles `jobhunt record`: searches or asks questions about your record."""
-    from .. import record
+    from jobhunt import record
     query = " ".join(args.text)
     if args.op in ("search", "ask") and not query:
         sys.exit(f"record {args.op}: give a question")

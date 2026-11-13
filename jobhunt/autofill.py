@@ -35,14 +35,14 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from . import ai, db, record
-from .ai import gpu, prompts
-from .company import salary
-from .cvstudio import cv
-from .writing import spelling, stage
+from jobhunt import ai, db, record
+from jobhunt.ai import gpu, prompts
+from jobhunt.company import salary
+from jobhunt.cvstudio import cv
+from jobhunt.writing import spelling, stage
 
 if TYPE_CHECKING:
-    from .sites.notes import Note, NoteSet
+    from jobhunt.sites.notes import Note, NoteSet
 
 HOW_HEARD = {"greenhouse": "Company careers page", "lever": "Company careers page", "ashby": "Company careers page",
              "workable": "Company careers page", "smartrecruiters": "Company careers page",
@@ -148,7 +148,7 @@ def _yes(value) -> str:
 
 def profile() -> dict:
     """The person's standard answers, from the `you.*` settings, in the words forms use; never a private answer."""
-    from .core import settings
+    from jobhunt.core import settings
 
     you = settings.get_many("you.")
     name = (you.get("you.name") or "").strip()
@@ -247,7 +247,7 @@ def private_question(field: dict) -> str | None:
 
 def _private(key: str) -> str | None:
     """A saved private answer, for typing into the form only; never for a prompt, a log or the profile."""
-    from .core.settings.private import value_for_form
+    from jobhunt.core.settings.private import value_for_form
 
     return value_for_form(key) or None
 
@@ -615,7 +615,7 @@ def remember(con, fields: list[dict], company: str = "", job=None) -> int:
                     (question, _asked(f), json.dumps(value), scope, scope_key, db.now()))
         kept += 1
     con.commit()
-    from .writing import edits
+    from jobhunt.writing import edits
 
     edits.from_fields(con, fields, job)
     return kept
@@ -682,7 +682,7 @@ def page_notes(job, notes: NoteSet | None = None) -> NoteSet | None:
     url = _get(job, "url")
     if not url:
         return None
-    from .sites import notes as site_notes
+    from jobhunt.sites import notes as site_notes
 
     return site_notes.for_page(url, job_id=str(_get(job, "id") or "") or None)
 
@@ -766,7 +766,7 @@ REVIEWED = ("profile", "your earlier answer", "documents: drafted answer")
 
 def _prompt(prompt_id: str) -> str:
     """A form prompt filled in with the person's name from the settings."""
-    from . import pack
+    from jobhunt import pack
 
     return pack.prompt(prompt_id)
 
@@ -989,7 +989,7 @@ def mark_written(fields: list[dict]) -> list[dict]:
 
 def _conventions(job) -> str:
     """The conventions for answers in this kind of job (`writing.fields`): STAR for a Civil Service form."""
-    from .writing import fields
+    from jobhunt.writing import fields
 
     return fields.block(fields.for_job(job), "answer")
 
@@ -1206,7 +1206,7 @@ def check_written(job, answered: list[dict], facts: str, found: str) -> None:
     verify call for the whole form. The advert is the employer's own words, never flagged for being
     restated. A marked answer is not rewritten: the person reads it on the Form step.
     """
-    from . import pack
+    from jobhunt import pack
 
     prose = [f for f in answered if _makes_claims(f)]
     if not prose:

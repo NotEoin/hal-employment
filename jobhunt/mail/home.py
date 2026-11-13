@@ -4,8 +4,8 @@ from __future__ import annotations
 import sqlite3
 from datetime import timedelta
 
-from ..core import clock
-from . import messages
+from jobhunt.core import clock
+from jobhunt.mail import messages
 
 URGENCY = 20                 # after actions waiting for you (10), before documents to make again (30)
 RECENT_DAYS = 3              # as gmail.sync's attention window

@@ -16,8 +16,8 @@ SKIP_PARTS = ("__pycache__", "node_modules")
 
 def cmd_open_url(args) -> None:
     """Makes sure Hal is running, then prints a one-time link for a window on this or another computer."""
-    from ..remote import service
-    from ..web import auth
+    from jobhunt.remote import service
+    from jobhunt.web import auth
 
     port = auth.server_port()
     try:
@@ -41,7 +41,7 @@ def _tar_filter(info: tarfile.TarInfo) -> tarfile.TarInfo:
 
 def cmd_helper_files(args) -> None:
     """Writes the browser helper's files as a tar to stdout (`--tar`), or prints where they are."""
-    from ..apply import helper_mirror
+    from jobhunt.apply import helper_mirror
 
     src = helper_mirror.source()   # the folder the desktop refreshes its visible copy from
     if not (src / "manifest.json").is_file():
@@ -62,8 +62,8 @@ def cmd_helper_files(args) -> None:
 
 def cmd_remote_launcher(args) -> None:
     """Prints the launcher for the other computer, filled in with this computer's host, user and port."""
-    from ..remote import launcher
-    from ..web import auth
+    from jobhunt.remote import launcher
+    from jobhunt.web import auth
 
     try:
         data = launcher.render(args.os, host=args.host or launcher.this_host(), user=args.user or launcher.this_user(),

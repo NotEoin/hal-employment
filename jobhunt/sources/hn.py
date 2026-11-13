@@ -8,8 +8,8 @@ finer location filtering.
 import html
 import re
 
-from ..http import get_json
-from . import places
+from jobhunt.http import get_json
+from jobhunt.sources import places
 
 SEARCH = "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10"
 UK_WORDS = ("uk", "united kingdom", "england", "scotland", "wales")

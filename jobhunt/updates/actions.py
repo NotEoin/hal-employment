@@ -18,8 +18,8 @@ import logging
 import os
 from pathlib import Path
 
-from .. import db, updates
-from ..core import clock, runner
+from jobhunt import db, updates
+from jobhunt.core import clock, runner
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def sign_in(ctx: runner.Ctx) -> dict:
     gh = Path(inst.tools) / "gh" if inst.tools else None
     if os.name != "nt" and gh is not None and gh.is_file():
         # Linux signs in through the GitHub CLI, whose browser sign-in needs a terminal to show its code
-        from ..core import platform
+        from jobhunt.core import platform
 
         platform.current().open_console([str(gh), "auth", "login", "--web", "--hostname", "github.com",
                                          "--git-protocol", "https"], "Sign in to GitHub")
@@ -93,8 +93,8 @@ def sign_in(ctx: runner.Ctx) -> dict:
 
 def import_usb(ctx: runner.Ctx, path: str, dry_run: bool = False) -> dict:
     """Copies the old stick install into this Hal and retires it."""
-    from .. import importer
-    from ..importer import usb as importer_usb
+    from jobhunt import importer
+    from jobhunt.importer import usb as importer_usb
 
     ctx.step("Looking at the older Hal on this computer")
     try:
@@ -106,7 +106,7 @@ def import_usb(ctx: runner.Ctx, path: str, dry_run: bool = False) -> dict:
 
 def _fake_stick(world) -> dict:
     """G9's example: a made-up stick install inside the made-up world, imported as a dry run."""
-    from ..importer import usb as importer_usb
+    from jobhunt.importer import usb as importer_usb
 
     folder = importer_usb.make_example(Path(world.root) / "stick-example")
     return {"path": str(folder), "dry_run": True}

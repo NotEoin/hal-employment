@@ -25,7 +25,7 @@ IDENTITY = {"NAME": "you.name", "EMAIL": "you.email", "PHONE": "you.phone"}
 def __getattr__(name: str) -> str:
     """`NAME`, `EMAIL` and `PHONE`, read from the settings when used, so a changed setting needs no restart."""
     if name in IDENTITY:
-        from ..core import settings
+        from jobhunt.core import settings
 
         return str(settings.get(IDENTITY[name]) or "")
     raise AttributeError(name)

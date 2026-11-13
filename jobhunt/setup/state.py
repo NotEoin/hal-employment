@@ -18,7 +18,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 
-from ..core import clock, events, paths
+from jobhunt.core import clock, events, paths
 
 GUIDE = "guide"            # the pseudo-step row holding the guide's own place
 STATES = ("todo", "done", "skipped")

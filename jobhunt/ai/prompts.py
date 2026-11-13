@@ -74,7 +74,7 @@ def get(prompt_id: str, folder: Path | None = None) -> Prompt:
 
 def override(prompt_id: str, *, con: sqlite3.Connection | None = None) -> str | None:
     """The person's edit of a prompt, or None."""
-    from .. import db
+    from jobhunt import db
 
     own = con is None
     con = con or db.connect()
@@ -139,7 +139,7 @@ def detail(con: sqlite3.Connection, prompt_id: str, folder: Path | None = None) 
 
 def save(con: sqlite3.Connection, prompt_id: str, new_text: str, folder: Path | None = None) -> None:
     """Stores the person's edit; refused in plain words when it drops a placeholder the prompt needs."""
-    from ..core import clock
+    from jobhunt.core import clock
 
     prompt = get(prompt_id, folder)
     if not new_text.strip():

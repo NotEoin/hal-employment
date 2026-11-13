@@ -4,8 +4,8 @@ Closed applications are left out, as on the board's columns; the Closed list is 
 """
 from __future__ import annotations
 
-from .home import _route
-from .queries import IN_FLIGHT
+from jobhunt.apply.home import _route
+from jobhunt.apply.queries import IN_FLIGHT
 
 LIMIT = 8   # leaves room in the palette's 30 results (core/routes.py SEARCH_LIMIT) for the other areas
 

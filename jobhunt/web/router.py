@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import parse_qs, unquote, urlparse
 
 if TYPE_CHECKING:
-    from .app import AppHandler
-    from .auth import Helper, Session
+    from jobhunt.web.app import AppHandler
+    from jobhunt.web.auth import Helper, Session
 
 Auth = Literal["session", "helper", "session_or_helper", "local", "session_or_local", "pairing", "none"]
 AUTH_KINDS = ("session", "helper", "session_or_helper", "local", "session_or_local", "pairing", "none")
@@ -158,7 +158,7 @@ class Request:
     def con(self) -> sqlite3.Connection:
         """This request's database connection."""
         if self._con is None:
-            from .. import db
+            from jobhunt import db
 
             self._con = db.connect()
         return self._con
@@ -289,7 +289,7 @@ def _read_body(handler: AppHandler, limit: int = MAX_BODY) -> tuple[Any, dict[st
 
 
 def _allowed(r: Route, req: Request, handler: AppHandler) -> None:
-    from . import auth
+    from jobhunt.web import auth
 
     if r.auth == "none":
         return
@@ -326,7 +326,7 @@ def _as_http_error(e: Exception) -> HTTPError | None:
     `IndexError` are LookupErrors too, but code raises them by mistake, so they stay unmapped and are
     recorded as unexpected. A mapped error is logged at debug level with its traceback.
     """
-    from ..core.settings.registry import SettingError
+    from jobhunt.core.settings.registry import SettingError
 
     if isinstance(e, SettingError):
         return BadRequest(str(e), field=e.key)
@@ -348,7 +348,7 @@ def _record_failure(req: Request, e: Exception) -> None:
     """Logs the traceback and adds an Activity row in area system, when the activity table exists."""
     log.error("%s %s failed\n%s", req.method, req.path, traceback.format_exc())
     try:
-        from ..core import clock
+        from jobhunt.core import clock
 
         req.con.execute("""INSERT INTO activity (at, area, kind, icon, tone, text, why, detail, session_id)
                            VALUES (?, 'system', 'system.error', 'warn', 'bad', ?, ?, ?, ?)""",

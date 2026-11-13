@@ -92,8 +92,8 @@ def never_press(control: dict, page: dict, kind: str = "named") -> str | None:
 
 def record(job_id: str | None, url: str, reason: str, con=None) -> None:
     """Writes a `site_events` row `would_submit` for a press Hal refused or a submit it cancelled."""
-    from .. import db
-    from ..browser import site_key
+    from jobhunt import db
+    from jobhunt.browser import site_key
 
     log.warning("would_submit on %s: %s", url, reason)
     own = con is None

@@ -18,7 +18,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from . import clock, paths, plugins
+from jobhunt.core import clock, paths, plugins
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def _clock_words(iso_text: str) -> str:
 
 def schedule_check() -> CheckResult:
     """The next search, and whether the old timers run jobs instead."""
-    from . import scheduler, settings
+    from jobhunt.core import scheduler, settings
 
     timers = scheduler.timers_in_charge()
     if timers:
@@ -123,7 +123,7 @@ def data_folder_check() -> CheckResult:
 
 def port_check() -> CheckResult:
     """Hal answers on its own address."""
-    from ..web import app, auth
+    from jobhunt.web import app, auth
 
     port = auth.server_port()
     if app.answering(port):
@@ -139,7 +139,7 @@ def in_own_home() -> bool:
 
 def login_check() -> CheckResult:
     """Whether Hal starts when the computer starts, as `schedule.start_at_login` asks."""
-    from . import platform, settings
+    from jobhunt.core import platform, settings
 
     if in_own_home():
         return ok("This Hal runs in its own home folder, so it never starts by itself.")

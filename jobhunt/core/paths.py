@@ -285,7 +285,7 @@ def documents_dir() -> Path:
 
 def applications_dir() -> Path:
     """Where application folders go: the `cvdocs.folder` setting when the person changed it."""
-    from .settings import store
+    from jobhunt.core.settings import store
 
     chosen = store.stored("cvdocs.folder")
     return Path(chosen).expanduser() if chosen else documents_dir() / "Applications"
@@ -363,7 +363,7 @@ def _write_marker(data: Path) -> None:
     marker = data / MARKER
     if marker.exists():
         return
-    from .. import __version__
+    from jobhunt import __version__
 
     created = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     marker.write_text(json.dumps({"created": created, "kind": "fresh", "source": None, "code_version": __version__,

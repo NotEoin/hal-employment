@@ -4,7 +4,7 @@ The row is information only; the Settings page shows the folder from `GET /api/v
 """
 from __future__ import annotations
 
-from ..core.settings.registry import Setting, register
+from jobhunt.core.settings.registry import Setting, register
 
 FOLDER_ORDER = 15   # just after "Browser Hal fills forms in"
 

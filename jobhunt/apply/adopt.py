@@ -8,10 +8,10 @@ import hashlib
 import re
 from urllib.parse import parse_qsl, urlparse
 
-from .. import ai, db
-from ..ai import gpu, prompts
-from ..browser import application_url
-from ..find import goal
+from jobhunt import ai, db
+from jobhunt.ai import gpu, prompts
+from jobhunt.browser import application_url
+from jobhunt.find import goal
 
 # Applicant tracking systems that name the employer in the address: (host pattern, where the name is).
 ATS = [(re.compile(r"(^|\.)(job-boards|boards)\.(eu\.)?greenhouse\.io$"), "path"),

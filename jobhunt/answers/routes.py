@@ -4,8 +4,8 @@ The rules live in `answers.saved`; these handlers only turn its errors into the 
 """
 from __future__ import annotations
 
-from ..web.router import BadRequest, Conflict, NotFound, Request, route
-from . import saved
+from jobhunt.answers import saved
+from jobhunt.web.router import BadRequest, Conflict, NotFound, Request, route
 
 PREFIX = "/api/v2/answers"
 GONE = "That saved answer is no longer there."

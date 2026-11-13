@@ -40,7 +40,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
-from ..core import filelock, paths
+from jobhunt.core import filelock, paths
 
 log = logging.getLogger(__name__)
 

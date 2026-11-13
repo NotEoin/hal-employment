@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from . import paths
+from jobhunt.core import paths
 
 MOVE_DATA_URGENCY = 5      # before anything else: Hal still reads the data folder inside its code
 PAUSED_URGENCY = 35        # after what waits for you and the emails, before the to-dos
@@ -15,7 +15,7 @@ PAUSED_URGENCY = 35        # after what waits for you and the emails, before the
 
 def needs(con: sqlite3.Connection) -> list[dict]:
     """The core's own "needs you" items."""
-    from . import scheduler
+    from jobhunt.core import scheduler
 
     out = []
     if scheduler.paused(con):

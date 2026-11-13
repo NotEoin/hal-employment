@@ -14,9 +14,9 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from ...web.router import BadRequest, Conflict, NotFound, NotHere, Request, route
-from .. import plugins, settings
-from . import private, secrets
+from jobhunt.core import plugins, settings
+from jobhunt.core.settings import private, secrets
+from jobhunt.web.router import BadRequest, Conflict, NotFound, NotHere, Request, route
 
 _started: dict[str, Any] | None = None
 _started_lock = threading.Lock()

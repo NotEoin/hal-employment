@@ -31,9 +31,9 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .. import ai, db
-from ..ai import prompts
-from ..find.score import score
+from jobhunt import ai, db
+from jobhunt.ai import prompts
+from jobhunt.find.score import score
 
 log = logging.getLogger(__name__)
 
@@ -99,14 +99,14 @@ def address() -> str:
     """The job inbox's address, lower case: the `email.address` setting, or "" when none is set."""
     if ADDRESS is not None:
         return ADDRESS.lower()
-    from ..core import settings
+    from jobhunt.core import settings
 
     return (settings.get("email.address") or "").strip().lower()
 
 
 def password() -> str | None:
     """The inbox's app password: the saved secret, else the old layout's file; None when neither exists."""
-    from ..core.settings import secrets
+    from jobhunt.core.settings import secrets
 
     try:
         saved = secrets.get(PASSWORD_SECRET, interactive=False)
@@ -192,7 +192,7 @@ GENERIC = {"group", "department", "office", "service", "services", "indeed", "in
 
 def _generic() -> set[str]:
     """Names that are never an employer: GENERIC, plus the person's own first name (their sent mail)."""
-    from ..core import settings
+    from jobhunt.core import settings
 
     name = (settings.get("you.preferred_name") or settings.get("you.name") or "").split()
     return GENERIC | ({name[0].lower()} if name else set())
@@ -518,7 +518,7 @@ APPLICATION_NEWS = re.compile(r"your application|thank you for (applying|your ap
 
 def alert_senders() -> list[tuple[str, str]]:
     """(name, part of an address) for every job alert sender: the person's own list, else Hal's."""
-    from ..core import settings
+    from jobhunt.core import settings
 
     own = [line.strip() for line in settings.get("email.alert_senders") or [] if line.strip()]
     if own:
@@ -575,14 +575,14 @@ def lead_from_link(url: str, words: str, after: str, sender_name: str) -> dict |
 
 
 def _detail_page(url: str) -> str:
-    from .. import http
+    from jobhunt import http
 
     return http.get(url, timeout=DETAIL_TIMEOUT, retries=0)
 
 
 def _read_detail(job: dict) -> None:
     """Fills a lead's advert from its page, when it can be read; a page that fails leaves the lead as it is."""
-    from ..find import job_actions
+    from jobhunt.find import job_actions
 
     try:
         found = job_actions.read_advert(job["url"], _detail_page(job["url"]))
@@ -602,8 +602,8 @@ def ingest_alert(con, sender: str, subject: str, body: str, when: str, links: li
     link whose words read as a job title becomes a lead with the email's employer words, and the first few
     get their advert read in full.
     """
-    from ..core import settings
-    from ..find import rules
+    from jobhunt.core import settings
+    from jobhunt.find import rules
 
     new = 0
     m = INDEED_SUBJECT.match(subject) if "indeed" in sender.lower() else None

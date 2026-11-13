@@ -19,13 +19,13 @@ NO_VAULT = Path(os.devnull) / "no-hal-vault"
 
 def folder() -> Path:
     """The Hal vault folder, or `NO_VAULT` while the add-on is off or has none."""
-    from .addons import hal
+    from jobhunt.addons import hal
 
     return hal.vault() or NO_VAULT
 
 
 def _follow_up_days() -> int:
-    from .core import settings
+    from jobhunt.core import settings
 
     return int(settings.get("notify.follow_up_days"))
 
@@ -63,7 +63,7 @@ def actions(con) -> list[tuple[str, str]]:
 
 def write(con) -> Path | None:
     """Writes the Pipeline note when the Hal add-on says to; returns its path, or None."""
-    from .addons.hal import pipeline
+    from jobhunt.addons.hal import pipeline
 
     return pipeline.write(con)
 

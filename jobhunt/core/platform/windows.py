@@ -23,8 +23,8 @@ import webbrowser
 from collections.abc import Callable
 from pathlib import Path, PureWindowsPath
 
-from .. import paths
-from . import KINDS, NEW_WINDOW, STOP_GRACE_S, TOOL_TIMEOUT_S, Browser, found
+from jobhunt.core import paths
+from jobhunt.core.platform import KINDS, NEW_WINDOW, STOP_GRACE_S, TOOL_TIMEOUT_S, Browser, found
 
 log = logging.getLogger(__name__)
 

@@ -6,10 +6,10 @@ window is open starts with the server (`sessions.start_presence`).
 """
 from __future__ import annotations
 
-from .. import db
-from ..core import plugins
-from ..web.router import BadRequest, BytesResponse, Request, route
-from . import instructions, launcher, sessions
+from jobhunt import db
+from jobhunt.core import plugins
+from jobhunt.remote import instructions, launcher, sessions
+from jobhunt.web.router import BadRequest, BytesResponse, Request, route
 
 PREFIX = "/api/v2/remote"
 MIME = {"windows": "application/x-msdos-program", "linux": "application/x-sh", "mac": "application/x-sh"}
@@ -29,7 +29,7 @@ def how(req: Request) -> dict:
 @route("GET", PREFIX + "/launcher")
 def launcher_file(req: Request) -> BytesResponse:
     """The launcher for `os` (linux, mac or windows), filled in for this computer, as a download."""
-    from ..web import auth
+    from jobhunt.web import auth
 
     os_name = (req.query.get("os") or "").strip().lower()
     if os_name not in launcher.TEMPLATES:

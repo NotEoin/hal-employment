@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import _get, enabled, vault
+from jobhunt.addons.hal import _get, enabled, vault
 
 
 def write(con) -> Path | None:

@@ -16,7 +16,7 @@ import logging
 import sqlite3
 import threading
 
-from ..core import clock
+from jobhunt.core import clock
 
 log = logging.getLogger(__name__)
 
@@ -26,13 +26,13 @@ _lock = threading.Lock()
 
 
 def _con() -> sqlite3.Connection:
-    from .. import db
+    from jobhunt import db
 
     return db.connect()
 
 
 def _label(value: str) -> str:
-    from ..core import settings
+    from jobhunt.core import settings
 
     return dict(settings.setting(KEY).choices).get(value, value)
 
@@ -70,7 +70,7 @@ def _pin(con: sqlite3.Connection, value: str, by: str, *, history: bool) -> bool
     except BaseException:
         con.execute("ROLLBACK")
         raise
-    from ..core.settings import store
+    from jobhunt.core.settings import store
 
     store.drop_cache()
     return True
@@ -78,15 +78,15 @@ def _pin(con: sqlite3.Connection, value: str, by: str, *, history: bool) -> bool
 
 def suggestion() -> str:
     """The choice setup offers: Claude on Windows; on Linux this computer when Ollama answers, else Claude."""
-    from ..core import settings
-    from ..core.settings import registry
+    from jobhunt.core import settings
+    from jobhunt.core.settings import registry
 
     return registry.default_of(settings.setting(KEY), settings.get)
 
 
 def current() -> str:
     """The stored choice; the first call with none stores the suggestion once."""
-    from ..core.settings import store
+    from jobhunt.core.settings import store
 
     value = store.stored(KEY)
     if value:

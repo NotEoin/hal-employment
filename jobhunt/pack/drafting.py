@@ -3,13 +3,13 @@ for again when it is cut off, the paragraph scope and the one story ranking per 
 import logging
 import re
 
-from .. import ai, record
-from ..profile import writing as profile_writing
-from ..writing import drafts, fields, paragraphs, plain, rank, spelling, stage
-from ..writing import plan as planning
-from .checks import applicant_names
-from .fitmap import known_tools
-from .reading import Brief, _job_text, _record_part, _requirements, field_of, previous_applications, prompt
+from jobhunt import ai, record
+from jobhunt.pack.checks import applicant_names
+from jobhunt.pack.fitmap import known_tools
+from jobhunt.pack.reading import Brief, _job_text, _record_part, _requirements, field_of, previous_applications, prompt
+from jobhunt.profile import writing as profile_writing
+from jobhunt.writing import drafts, fields, paragraphs, plain, rank, spelling, stage
+from jobhunt.writing import plan as planning
 
 log = logging.getLogger(__name__)
 
@@ -98,8 +98,8 @@ def paragraph_scope(brief: Brief, *, found: list[planning.Story], cards: list[di
 def _voice(kind: str) -> tuple[str, ...]:
     """Excerpts of the person's own letters for a letter's requests (`sections.letters.voice_excerpts`); none for
     another kind of draft, or while "Match my own writing" (`cvdocs.voice`) is off."""
-    from ..core import settings
-    from ..sections import letters
+    from jobhunt.core import settings
+    from jobhunt.sections import letters
 
     if kind != "letter" or not settings.get("cvdocs.voice"):
         return ()

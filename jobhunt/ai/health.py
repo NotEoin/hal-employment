@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import sqlite3
 
-from .. import db
-from ..core.health import Check, CheckResult, Fix, bad, ok, warn
-from . import budget, claude_setup
+from jobhunt import db
+from jobhunt.ai import budget, claude_setup
+from jobhunt.core.health import Check, CheckResult, Fix, bad, ok, warn
 
 SETUP_ROUTE = "setup-ai"
 NAMES = {"claude_cli": "AI (Claude subscription)", "local": "AI (on this computer)",
@@ -20,9 +20,9 @@ NAMES = {"claude_cli": "AI (Claude subscription)", "local": "AI (on this compute
 
 def chosen() -> str:
     """The AI chosen, else the catalogue's plain default; never stores anything and never probes the network."""
-    from ..core import settings
-    from ..core.settings import store
-    from . import provider
+    from jobhunt.ai import provider
+    from jobhunt.core import settings
+    from jobhunt.core.settings import store
 
     return store.stored(provider.KEY) or settings.setting(provider.KEY).default
 
@@ -73,7 +73,7 @@ def claude() -> CheckResult:
 
 def other(name: str) -> CheckResult:
     """The local AI or another local server: whether it answers."""
-    from .. import ai
+    from jobhunt import ai
 
     st = ai.backend().status()
     if not st.ready:

@@ -46,9 +46,9 @@ from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
-from .core import paths
-from .ingest import frontmatter
-from .markitdown_loader import markitdown_converter
+from jobhunt.core import paths
+from jobhunt.ingest import frontmatter
+from jobhunt.markitdown_loader import markitdown_converter
 
 log = logging.getLogger(__name__)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # Windows: no console flashes up for tesseract
@@ -60,7 +60,7 @@ MEANING_MIN = 0.55        # nomic-embed-text similarities run high; below this a
 
 
 def _setting(key: str):
-    from .core import settings
+    from jobhunt.core import settings
 
     return settings.get(key)
 
@@ -149,7 +149,7 @@ def _ocr(path: Path) -> str:
             log.warning("tesseract could not read %s", path.name)
             return ""
         return out.stdout.decode("utf-8", errors="replace") if out.returncode == 0 else ""
-    from .cvstudio import pdfread
+    from jobhunt.cvstudio import pdfread
 
     with tempfile.TemporaryDirectory() as tmp:
         texts = []
@@ -224,7 +224,7 @@ def _text_of(path: Path) -> str:
     # run a transcript's columns together ("10 76" for credits and mark); reading the text by position keeps
     # each row on one line with its columns apart. Pipe tables are therefore no sign of structure here.
     if suffix == ".pdf" and (len(text.strip()) < 50 or not re.search(r"^#{1,6} ", text, re.M)):
-        from .cvstudio import pdfread
+        from jobhunt.cvstudio import pdfread
 
         laid = pdfread.text(path, layout=True)
         text = laid if laid.strip() else text
@@ -271,7 +271,7 @@ def _ingest_owned(vault: Path) -> set[Path]:
     The drop folder's files are read into `Sources/` notes, and the copies of originals in `ORIGINALS`
     already have theirs; a second note beside each would put every passage in the index twice.
     """
-    from .ingest import sources
+    from jobhunt.ingest import sources
 
     return {(vault / ORIGINALS).resolve(), sources.drop_folder().expanduser().resolve()}
 
@@ -432,7 +432,7 @@ def sync() -> dict:
 
 
 def _now() -> str:
-    from .core import clock
+    from jobhunt.core import clock
 
     return clock.iso()
 
@@ -454,7 +454,7 @@ def _by_meaning() -> bool:
 
 def _local_ai():
     """The AI backend when it runs on this computer; None for one that sends text elsewhere."""
-    from . import ai
+    from jobhunt import ai
 
     be = ai.backend()
     return None if getattr(be, "online", True) else be
@@ -470,7 +470,7 @@ def _passage_key(c: dict) -> str:
 
 def _embed(texts: list[str]) -> list[list[float]]:
     """Vectors for `texts` from the AI on this computer; raises `RecordUnavailable` when it cannot answer."""
-    from . import ai
+    from jobhunt import ai
 
     be = _local_ai()
     if be is None:
@@ -663,7 +663,7 @@ def passage_kind(hit: dict) -> str:
     read from its document type, path and title; "" for a note that is not a project, coursework or
     dissertation. A project card resting on the note says its own context instead
     (`profile.writing.with_contexts`)."""
-    from .writing import stage
+    from jobhunt.writing import stage
 
     doc_type = hit.get("doc_type") or ""
     if doc_type not in (*stage.DEGREE_TYPES, *stage.PERSONAL_TYPES):
@@ -696,8 +696,8 @@ def ask(question: str) -> dict:
 
     Only passages outside private folders are sent.
     """
-    from . import ai
-    from .ai import prompts
+    from jobhunt import ai
+    from jobhunt.ai import prompts
 
     hits = search(question, k=6, min_score=ASK_MIN)
     if not hits:
@@ -712,7 +712,7 @@ def ask(question: str) -> dict:
                          role="checker", timeout=ASK_TIMEOUT_S, purpose="record_ask", priority=0)
     except ai.LLMUnavailable as e:
         return {"answer": "", "sources": sources, "passages": hits, "by": "search", "note": str(e)}
-    from .ai import undash
+    from jobhunt.ai import undash
 
     return {"answer": undash(answer.strip()), "sources": sources, "passages": hits, "by": "model"}
 

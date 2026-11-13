@@ -36,8 +36,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from ..core import clock, events, paths, settings
-from ..web import auth
+from jobhunt.core import clock, events, paths, settings
+from jobhunt.web import auth
 
 log = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ def check_key(con: sqlite3.Connection, header: str | None, origin: str | None = 
 
 
 def _verify_helper(handler: Any) -> auth.Helper | None:
-    from .. import db
+    from jobhunt import db
 
     header = handler.headers.get(KEY_HEADER)
     if not header:
@@ -242,7 +242,7 @@ def forget(con: sqlite3.Connection, helper_id: str) -> None:
 
 def listing(con: sqlite3.Connection, session: auth.Session | None) -> list[dict]:
     """The paired helpers as the setup step and Settings show them."""
-    from .. import extension
+    from jobhunt import extension
 
     out = []
     for r in paired(con):

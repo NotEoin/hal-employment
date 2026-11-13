@@ -23,14 +23,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import documents, pack
-from ..apply import actions as apply_actions
-from ..apply.queries import load_job
-from ..core import runner
-from ..cvstudio import cv
-from ..writing import critique as writing_critique
-from ..writing import fields
-from . import contacts, prep
+from jobhunt import documents, pack
+from jobhunt.apply import actions as apply_actions
+from jobhunt.apply.queries import load_job
+from jobhunt.core import runner
+from jobhunt.cvstudio import cv
+from jobhunt.docs import contacts, prep
+from jobhunt.writing import critique as writing_critique
+from jobhunt.writing import fields
 
 WORDS_SHOWN = 200   # characters of the person's request kept in the action's parameters and its why
 

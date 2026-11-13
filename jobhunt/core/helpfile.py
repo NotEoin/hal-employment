@@ -24,8 +24,8 @@ import sys
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from .. import __version__
-from . import clock, paths
+from jobhunt import __version__
+from jobhunt.core import clock, paths
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ PERSONAL_KEYS = ("you.name", "you.preferred_name", "you.email", "you.phone", "yo
 
 
 def _setting_values() -> list[tuple[str, str]]:
-    from . import settings
+    from jobhunt.core import settings
 
     out = []
     for key in PERSONAL_KEYS:
@@ -99,7 +99,7 @@ def _answer_values(con: sqlite3.Connection) -> list[tuple[str, str]]:
 
 def scrubber(con: sqlite3.Connection) -> Callable[[str], str | None]:
     """A function that takes the person out of one line, or returns None when the line must be left out."""
-    from ..ai import guard
+    from jobhunt.ai import guard
 
     known = _setting_values() + _contact_values(con) + _answer_values(con)
     # Longest first, so a full name is replaced before the first name inside it.
@@ -118,7 +118,7 @@ def scrubber(con: sqlite3.Connection) -> Callable[[str], str | None]:
 
 
 def _checks() -> list[str]:
-    from . import health_routes
+    from jobhunt.core import health_routes
 
     out = []
     for c in health_routes.run_checks():
@@ -147,7 +147,7 @@ def _failures(con: sqlite3.Connection) -> list[str]:
 
 def text(con: sqlite3.Connection) -> str:
     """The help file's words, already scrubbed."""
-    from .db import migrate
+    from jobhunt.core.db import migrate
 
     try:
         version = migrate.user_version(con)

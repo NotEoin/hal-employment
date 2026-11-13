@@ -5,11 +5,11 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from ..company import reputation
-from ..core import events
-from .hiring import message_to, salutation
-from .letter import NOTE_KEYS, NOTES_HEADING
-from .reading import Brief, slug
+from jobhunt.company import reputation
+from jobhunt.core import events
+from jobhunt.pack.hiring import message_to, salutation
+from jobhunt.pack.letter import NOTE_KEYS, NOTES_HEADING
+from jobhunt.pack.reading import Brief, slug
 
 PREPARED = "docs.prepared"    # the event the Hal add-on's Applications mirror listens for
 # The pack's last section. It names no command: the Documents page has a button for each.
@@ -22,7 +22,7 @@ CHECK_HEADING = "## Check before sending"
 
 def mirror_note(job, pack_md: Path) -> Path | None:
     """Copies the pack into the Hal add-on's Applications folder under the old note name; None when it is off."""
-    from ..addons.hal import mirror
+    from jobhunt.addons.hal import mirror
 
     return mirror.copy(pack_md, f"{slug(job['company'])} - {slug(job['title'])}.md")
 
@@ -48,7 +48,7 @@ def add_company_check(pack_md: Path, company: str, job=None) -> None:
 
 def read_letter_notes(job) -> dict:
     """The letter's Tone, Length, Evidence and Checked lines as the pack recorded them; {} for older packs."""
-    from .. import documents
+    from jobhunt import documents
 
     notes = documents.read_pack(job).get(NOTES_HEADING, "")
     return {NOTE_KEYS[k]: v.strip() for k, v in re.findall(r"^- (\w+): (.*)$", notes, re.M) if k in NOTE_KEYS}

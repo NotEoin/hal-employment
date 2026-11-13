@@ -12,9 +12,9 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-from ..core import paths
-from ..web import auth
-from . import launcher
+from jobhunt.core import paths
+from jobhunt.remote import launcher
+from jobhunt.web import auth
 
 log = logging.getLogger(__name__)
 

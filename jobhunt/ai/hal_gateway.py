@@ -53,8 +53,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
-from .base import ChatRequest, ChatResult, LLMUnavailable, Status
-from .openai_compat import STATUS_TIMEOUT_S, OpenAICompatBackend, classify
+from jobhunt.ai.base import ChatRequest, ChatResult, LLMUnavailable, Status
+from jobhunt.ai.openai_compat import STATUS_TIMEOUT_S, OpenAICompatBackend, classify
 
 log = logging.getLogger(__name__)
 THINKING_BUDGET_TOKENS = 8192   # Gemma 4 has no named levels of thinking, only on or off; this caps it

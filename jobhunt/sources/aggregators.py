@@ -10,9 +10,9 @@ import json
 import re
 import urllib.parse
 
-from ..http import get
-from . import places
-from .ats import strip_html
+from jobhunt.http import get
+from jobhunt.sources import places
+from jobhunt.sources.ats import strip_html
 
 SECRETS = {"adzuna": "sites.adzuna_key", "reed": "sites.reed_key"}
 # Used only when a caller passes no source and goal (older callers and tests); searches ask the goal.
@@ -23,7 +23,7 @@ DEFAULT_AGE_DAYS = 21
 
 
 def _key(name: str) -> str | None:
-    from ..core.settings import secrets
+    from jobhunt.core.settings import secrets
 
     return (secrets.get(SECRETS[name]) or "").strip() or None
 
@@ -32,8 +32,8 @@ def _plan(source: dict | None, goal) -> tuple[list[str], int, int]:
     """(queries, travel miles, oldest advert in days) for one search."""
     if source is None or goal is None:
         return list(QUERIES), DEFAULT_MILES, DEFAULT_AGE_DAYS
-    from ..core import settings
-    from ..find import sources_registry
+    from jobhunt.core import settings
+    from jobhunt.find import sources_registry
 
     return (sources_registry.queries(source, goal), goal.max_distance_miles or DEFAULT_MILES,
             int(settings.get("sites.max_age_days") or DEFAULT_AGE_DAYS))

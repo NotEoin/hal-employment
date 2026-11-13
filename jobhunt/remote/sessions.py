@@ -17,8 +17,8 @@ import sqlite3
 import threading
 from datetime import timedelta
 
-from ..core import clock, paths
-from ..web import auth
+from jobhunt.core import clock, paths
+from jobhunt.web import auth
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def sign_out(con: sqlite3.Connection, session_id: str) -> None:
 
 def _streaming_here(con: sqlite3.Connection) -> bool:
     """True when a remote window has an event stream open in this process (the server)."""
-    from ..web import sse
+    from jobhunt.web import sse
 
     return any(sse.open_count(r["id_hash"]) for r in _live(con))
 
@@ -107,7 +107,7 @@ def window_open(con: sqlite3.Connection | None = None) -> bool:
 
 
 def _beat_forever(connect) -> None:
-    from ..web import sse
+    from jobhunt.web import sse
 
     while not _stop.wait(PRESENCE_S) and not sse.STOPPING.is_set():
         try:

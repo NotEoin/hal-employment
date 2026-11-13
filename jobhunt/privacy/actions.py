@@ -5,7 +5,7 @@ Kept apart from `routes.py` so `runner.load_kinds()`, which imports only `action
 """
 from __future__ import annotations
 
-from ..core import clock, runner
+from jobhunt.core import clock, runner
 
 KIND = "privacy.export"
 
@@ -14,8 +14,8 @@ KIND = "privacy.export"
                why="You pressed Export everything", exclusive="kind", example=lambda world: {})
 def export_everything(ctx: runner.Ctx) -> dict:
     """Writes the zip into the exports folder and registers it for download."""
-    from ..core import helpfile
-    from .routes import export
+    from jobhunt.core import helpfile
+    from jobhunt.privacy.routes import export
 
     folder = helpfile.exports_dir()
     folder.mkdir(parents=True, exist_ok=True)

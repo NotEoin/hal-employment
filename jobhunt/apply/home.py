@@ -15,9 +15,9 @@ import logging
 from datetime import timedelta
 from urllib.parse import quote
 
-from ..core import clock
-from . import stats
-from .queries import _busy, _form_counts, column_of, load_app
+from jobhunt.apply import stats
+from jobhunt.apply.queries import _busy, _form_counts, column_of, load_app
+from jobhunt.core import clock
 
 log = logging.getLogger(__name__)
 

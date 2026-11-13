@@ -5,8 +5,8 @@ Importing this module at server start also imports `jobhunt.ai`, which registers
 """
 from __future__ import annotations
 
-from ..web.router import BadRequest, NotFound, Request, route
-from . import prompts
+from jobhunt.ai import prompts
+from jobhunt.web.router import BadRequest, NotFound, Request, route
 
 
 def _prompt(req: Request) -> str:

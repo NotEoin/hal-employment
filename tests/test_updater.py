@@ -468,7 +468,7 @@ class Spawning(unittest.TestCase):
             if isinstance(node, ast.Import):
                 names = [a.name.split(".")[0] for a in node.names]
             elif isinstance(node, ast.ImportFrom):
-                if node.level:
+                if node.module == "jobhunt.core":
                     self.assertEqual([a.name for a in node.names], ["filelock", "paths"])
                     continue
                 names = [(node.module or "").split(".")[0]]

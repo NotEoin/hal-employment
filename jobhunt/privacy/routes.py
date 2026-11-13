@@ -25,9 +25,9 @@ import threading
 import zipfile
 from pathlib import Path
 
-from ..core import clock, paths, runner
-from ..web.router import BadRequest, Conflict, Request, route
-from . import actions
+from jobhunt.core import clock, paths, runner
+from jobhunt.privacy import actions
+from jobhunt.web.router import BadRequest, Conflict, Request, route
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ ALWAYS_LEAVES = ("Searches sent to job sites", "Checks for updates on GitHub")
 
 
 def _secret_values() -> list[str]:
-    from ..core.settings import secrets
+    from jobhunt.core.settings import secrets
 
     out = []
     for name in secrets.NAMES:
@@ -65,8 +65,8 @@ def _secret_values() -> list[str]:
 
 def leaves() -> list[str]:
     """What leaves this computer, worked out from the settings."""
-    from ..core import settings
-    from ..core.settings import secrets
+    from jobhunt.core import settings
+    from jobhunt.core.settings import secrets
 
     out = [ALWAYS_LEAVES[0]]
     if secrets.status("email.app_password") == "saved":
@@ -80,7 +80,7 @@ def leaves() -> list[str]:
 
 
 def _record_folder() -> Path:
-    from ..core import settings
+    from jobhunt.core import settings
 
     chosen = settings.get("record.folder")
     return Path(chosen).expanduser() if chosen else paths.record_default()
@@ -89,7 +89,7 @@ def _record_folder() -> Path:
 @route("GET", "/api/v2/privacy")
 def privacy(req: Request) -> dict:
     """Where your data is kept, whether this window can open it, and what leaves this computer."""
-    from ..core.settings import secrets
+    from jobhunt.core.settings import secrets
 
     where = {"data": str(paths.data_dir()), "config": str(paths.config_dir()),
              "documents": str(paths.applications_dir()), "record": str(_record_folder())}
@@ -104,7 +104,7 @@ def privacy(req: Request) -> dict:
 
 
 def _db_copy(folder: Path) -> Path:
-    from .. import db
+    from jobhunt import db
 
     target = folder / "jobs.db"
     src = db.connect()
@@ -121,7 +121,7 @@ def _db_copy(folder: Path) -> Path:
 
 def _safe(path: Path, secret_values: list[str]) -> str | None:
     """None when the file may go into the export, else the reason it is left out."""
-    from ..ai import guard
+    from jobhunt.ai import guard
 
     data = path.read_bytes()
     if any(v.encode("utf-8") in data for v in secret_values):
@@ -209,7 +209,7 @@ def folders_to_delete() -> list[Path]:
 
 def delete_everything() -> list[str]:
     """Deletes Hal's data, settings, cache, documents and saved secrets; returns what could not be deleted."""
-    from ..core.settings import secrets
+    from jobhunt.core.settings import secrets
 
     folders = folders_to_delete()
     failed = []
@@ -250,7 +250,7 @@ def delete(req: Request) -> dict:
 def open_folder(folder: Path) -> None:
     """Opens `folder` in the file manager of this computer."""
     try:
-        from ..core import platform as plat
+        from jobhunt.core import platform as plat
         plat.current().open_path(folder)
         return
     except (ImportError, AttributeError, NotImplementedError):

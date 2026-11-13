@@ -6,8 +6,8 @@ and rewriting the letter are `docs/write_routes.py`'s.
 """
 from __future__ import annotations
 
-from ..web.router import BadRequest, Conflict, NotHere, Request, json_body, route, who
-from . import actions, queries
+from jobhunt.apply import actions, queries
+from jobhunt.web.router import BadRequest, Conflict, NotHere, Request, json_body, route, who
 
 PREFIX = "/api/v2/applications"
 NOW = 0   # runner priority for a button the person just pressed on one application and is watching
@@ -144,7 +144,7 @@ def draft_rest(req: Request) -> dict:
 @route("POST", PREFIX + "/{app_id}/form/show")
 def show(req: Request) -> dict:
     """Show me the form: brings its tab to the front, on the computer the person is using."""
-    from .. import browser
+    from jobhunt import browser
 
     job_id = _id(req)
     if req.remote:
@@ -157,7 +157,7 @@ def show(req: Request) -> dict:
 def _show_on_this_computer(job_id: str) -> dict:
     """The remote branch: Hal's own window is not offered from another computer, so the form is in a tab of
     the browser helper paired in that computer's browser, and that helper brings it forward."""
-    from .. import extension
+    from jobhunt import extension
 
     if not extension.connected():
         raise NotHere("The browser helper in this browser is not connected. Open Hal in the browser that has "

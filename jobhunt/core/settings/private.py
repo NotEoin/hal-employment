@@ -21,7 +21,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from .. import paths
+from jobhunt.core import paths
 
 YES_NO = ("Yes", "No")
 YES_NO_PNTS = ("Yes", "No", "Prefer not to say")
@@ -214,7 +214,7 @@ def clear(key: str) -> None:
 
 def _record(text: str) -> None:
     """History and an Activity row with no words of any answer."""
-    from . import store
+    from jobhunt.core.settings import store
 
     store.record_saved(SETTING, text=text, why="You changed your private answers in Settings.")
 

@@ -22,8 +22,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from .. import updates
-from ..core import paths
+from jobhunt import updates
+from jobhunt.core import paths
 
 MARK = "made by hal-employment install"
 SHIM = "hal-employment-cli"
@@ -88,7 +88,7 @@ class Installer:
     def platform(self):
         """The platform layer (a fake in tests)."""
         if self._platform is None:
-            from ..core import platform
+            from jobhunt.core import platform
 
             self._platform = platform.current()
         return self._platform
@@ -102,7 +102,7 @@ class Installer:
 
     def record(self, *, git: str, uv: str, extras: list[str]) -> Path:
         """Writes `state/install.json` for a user install."""
-        from ..core import clock
+        from jobhunt.core import clock
 
         inst = updates.Install(kind="user", code=str(self.code), tools=str(self.tools), git=git, uv=uv,
                                python_dir=os.environ.get("UV_PYTHON_INSTALL_DIR", str(self.tools / "python")),
@@ -118,7 +118,7 @@ class Installer:
 
     def windows(self, extras: list[str]) -> None:
         """Start menu and desktop shortcuts, Update Hal, the Startup entry, the uninstall entry, the record."""
-        from ..core.platform import icon as hal_icon
+        from jobhunt.core.platform import icon as hal_icon
 
         plat = self.platform
         scripts = self.code / ".venv" / "Scripts"
@@ -227,7 +227,7 @@ def _reg_write(key: str, values: dict[str, str] | None) -> None:
 
 
 def _spawn(args: list[str]) -> None:
-    from ..core import platform
+    from jobhunt.core import platform
 
     platform.current().spawn_detached(args)
 

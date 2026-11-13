@@ -43,8 +43,8 @@ from email.message import Message
 from html.parser import HTMLParser
 from typing import Any, Literal
 
-from .. import http
-from ..markitdown_loader import markitdown_converter
+from jobhunt import http
+from jobhunt.markitdown_loader import markitdown_converter
 
 log = logging.getLogger(__name__)
 
@@ -221,7 +221,7 @@ def export_url(url: str) -> str | None:
 
 
 def _page_cap() -> int:
-    from ..core import settings
+    from jobhunt.core import settings
 
     try:
         return int(settings.get("record.web_pages"))
@@ -578,7 +578,7 @@ def _read_html(page_html: str) -> _Doc:
 
 def _github_token() -> str | None:
     """The person's GitHub token, or None; a locked keyring counts as none, so reading never prompts."""
-    from ..core.settings import secrets
+    from jobhunt.core.settings import secrets
 
     try:
         return (secrets.get(TOKEN_SECRET, interactive=False) or "").strip() or None

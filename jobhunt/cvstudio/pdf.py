@@ -9,8 +9,8 @@ the `cvdocs.file_name` setting (`core.naming`), never from code.
 """
 from pathlib import Path
 
-from ..core import naming
-from . import cv, pdfdraw
+from jobhunt.core import naming
+from jobhunt.cvstudio import cv, pdfdraw
 
 # Section headings; a CV may rename any of them in its "titles" (a history CV might say "Research and projects").
 TITLES = {"education": "Education", "projects": "Projects", "experience": "Experience", "skills": "Skills",
@@ -83,7 +83,7 @@ PLAIN = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "
 def _drawable(value):
     """`value` with every string reduced to what the PDF fonts draw: ASCII and the Latin-1 letters."""
     if isinstance(value, str):
-        from ..ai import undash
+        from jobhunt.ai import undash
         text = "".join(PLAIN.get(c, c) for c in undash(value))
         return "".join(c for c in text if c in "\n" or " " <= c <= "~" or "\u00a0" <= c <= "\u00ff")
     if isinstance(value, list):

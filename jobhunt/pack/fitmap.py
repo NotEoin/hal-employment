@@ -2,13 +2,13 @@
 with no AI after the one ask, and the eligibility flag it gives."""
 import re
 
-from .. import ai
-from ..company import reputation
-from ..cvstudio import cv
-from ..profile import writing as profile_writing
-from ..writing import check as writing_check
-from ..writing import drafts, eligibility, repeats, stage
-from .reading import _analyse, _job_text, _kept, _record_part, _requirements, _words, prompt
+from jobhunt import ai
+from jobhunt.company import reputation
+from jobhunt.cvstudio import cv
+from jobhunt.pack.reading import _analyse, _job_text, _kept, _record_part, _requirements, _words, prompt
+from jobhunt.profile import writing as profile_writing
+from jobhunt.writing import check as writing_check
+from jobhunt.writing import drafts, eligibility, repeats, stage
 
 
 def _fit(who: dict, analysis: dict, facts: str, kept: str, job=None) -> dict:

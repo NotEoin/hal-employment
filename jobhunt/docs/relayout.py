@@ -16,8 +16,8 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from ..core import activity, clock, naming, paths
-from . import folders
+from jobhunt.core import activity, clock, naming, paths
+from jobhunt.docs import folders
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ WHY_REDRAFT = "an older job used the same folder"
 
 
 def _slug(job) -> str:
-    from .. import pack
+    from jobhunt import pack
 
     return pack.slug(f"{job['company']}-{job['title']}")
 
@@ -61,7 +61,7 @@ def _docs(con: sqlite3.Connection, job) -> dict:
             return json.loads(row["docs"])
         except ValueError:
             log.warning("the stored documents of %s are not JSON; using the first draft", job["id"])
-    from .. import documents
+    from jobhunt import documents
 
     return documents.drafts(job)
 

@@ -39,4 +39,7 @@ line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "RUF", "PLC2401"]
+select = ["E", "F", "W", "I", "B", "UP", "RUF", "PLC2401", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"

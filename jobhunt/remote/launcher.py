@@ -21,7 +21,7 @@ import re
 import socket
 from pathlib import Path
 
-from ..core import paths
+from jobhunt.core import paths
 
 SHIM = "~/.local/bin/hal-employment-cli"
 TEMPLATES = {"linux": "hal-remote.sh", "mac": "hal-remote.sh", "windows": "hal-remote.cmd"}

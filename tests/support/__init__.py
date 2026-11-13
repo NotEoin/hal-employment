@@ -14,7 +14,7 @@ import os
 import shutil
 import tempfile
 
-from . import offline
+from support import offline
 
 os.environ.setdefault("HAL_TEST_MODE", "1")
 if not os.environ.get("HAL_EMPLOYMENT_HOME", "").strip():
@@ -30,6 +30,6 @@ if not os.environ.get("HAL_EMPLOYMENT_OSRELEASE"):
     os.environ["HAL_EMPLOYMENT_OSRELEASE"] = _release
     atexit.register(shutil.rmtree, os.path.dirname(_release), ignore_errors=True)
 
-from . import reader_ai  # noqa: E402 - jobhunt loads only once the temporary home is set above
+from support import reader_ai  # noqa: E402 - jobhunt loads only once the temporary home is set above
 
 reader_ai.install()

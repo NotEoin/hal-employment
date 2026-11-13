@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from .. import autofill, db
+from jobhunt import autofill, db
 
 SCOPES = ("everywhere", "site", "job", "never")
 NEEDS_CHOICE = "Choose where to use it"

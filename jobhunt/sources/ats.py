@@ -9,7 +9,7 @@ import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-from ..http import get, get_json
+from jobhunt.http import get, get_json
 
 
 def strip_html(s: str | None) -> str:

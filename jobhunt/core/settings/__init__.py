@@ -26,7 +26,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from . import store
+from jobhunt.core.settings import store
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class SetResult:
 def _registry():
     """The registry module with every catalogue and area settings file loaded."""
     global _loaded
-    from . import registry
+    from jobhunt.core.settings import registry
 
     with _load_lock:
         if not _loaded:
@@ -118,7 +118,7 @@ def revision() -> int:
 
 def display(key: str, value: Any = ...) -> str:
     """The words for `key`'s value (its live value when none is given)."""
-    from . import parse
+    from jobhunt.core.settings import parse
 
     item = setting(key)
     return parse.describe(item, get(key) if value is ... else value)
@@ -126,7 +126,7 @@ def display(key: str, value: Any = ...) -> str:
 
 def check(key: str, value: Any) -> Any:
     """What `set` would store for `value`; raises `SettingError` with words, and writes nothing."""
-    from . import parse
+    from jobhunt.core.settings import parse
 
     item = setting(key)
     reg = _registry()
@@ -185,8 +185,8 @@ def _guard_by(key: str, by: str) -> None:
 
 def _write(con: sqlite3.Connection, key: str, value: Any, *, by: str, session_id: str | None) -> tuple:
     """Stores one checked value inside the caller's transaction; returns what `SetResult` needs."""
-    from .. import clock
-    from . import parse
+    from jobhunt.core import clock
+    from jobhunt.core.settings import parse
 
     item = setting(key)
     default = _default(item)
@@ -212,7 +212,7 @@ def _result(con: sqlite3.Connection, key: str, value: Any, item, written: store.
 
 
 def _published(results: list[tuple[str, Any, Any]]) -> None:
-    from .. import events
+    from jobhunt.core import events
 
     events.publish("setting", keys=[k for k, _, _ in results])
     for key, old, new in results:
@@ -220,7 +220,7 @@ def _published(results: list[tuple[str, Any, Any]]) -> None:
 
 
 def _con() -> sqlite3.Connection:
-    from ... import db
+    from jobhunt import db
 
     return db.connect()
 
@@ -312,7 +312,7 @@ def cached(*prefixes: str):
 
 def schema(*, developer: bool, remote: bool, platform: str | None = None) -> list[dict]:
     """The Settings page's groups and rows for this session, in page order; empty groups are left out."""
-    from .. import paths
+    from jobhunt.core import paths
 
     reg = _registry()
     platform = platform or paths.platform_name()

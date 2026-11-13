@@ -17,11 +17,11 @@ import re
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import ai, db, letter, pack
-from .ai import gpu
-from .core import naming, settings
-from .cvstudio import cv
-from .docs import folders
+from jobhunt import ai, db, letter, pack
+from jobhunt.ai import gpu
+from jobhunt.core import naming, settings
+from jobhunt.cvstudio import cv
+from jobhunt.docs import folders
 
 SECTION = re.compile(r"^## (.+?)\n(.*?)(?=^## |\Z)", re.S | re.M)
 # Where `render` writes while an approval builds the new folder. A context variable rather than an argument,
@@ -144,7 +144,7 @@ def save(con, job, docs: dict) -> None:
 
 def original_file() -> str | None:
     """The kept file id of the person's own CV while My CV is set to send it unchanged, else None."""
-    from .cvstudio import store
+    from jobhunt.cvstudio import store
 
     d = store.doc()
     return d["baseline_file_id"] if d["send"] == "original" and d["baseline_file_id"] else None
@@ -156,7 +156,7 @@ def cv_file_name() -> str:
     fid = original_file()
     if fid is None:
         return name
-    from .cvstudio import store
+    from jobhunt.cvstudio import store
 
     ext = Path(store.file_row(fid)["name"]).suffix.lower()
     return Path(name).stem + ext if ext else name
@@ -212,7 +212,7 @@ def render(job, docs: dict, out: Path | None = None) -> dict:
     want = d / cv_file_name()
     fid = original_file()
     if fid is not None:
-        from .cvstudio import store
+        from jobhunt.cvstudio import store
 
         want.write_bytes(store.file_bytes(fid))
         made["cv"] = str(want)

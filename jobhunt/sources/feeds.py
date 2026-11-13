@@ -15,9 +15,9 @@ import re
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-from ..http import get
-from . import places
-from .ats import strip_html
+from jobhunt.http import get
+from jobhunt.sources import places
+from jobhunt.sources.ats import strip_html
 
 FETCH_TIMEOUT = 30          # seconds per feed or page
 FEED_ITEMS = 200            # a feed longer than this is a site's whole archive; the newest are enough
@@ -77,7 +77,7 @@ def read_feed(source: dict) -> list[dict]:
 
 def read_careers_page(source: dict) -> list[dict]:
     """The jobs a careers page lists in its schema.org data."""
-    from ..find import detect
+    from jobhunt.find import detect
 
     url = source["config"]["url"]
     return detect.postings(get(url, timeout=FETCH_TIMEOUT), url, source["name"])
@@ -85,7 +85,7 @@ def read_careers_page(source: dict) -> list[dict]:
 
 def guardian(source: dict, goal) -> list[dict]:
     """Guardian Jobs' RSS search for the goal's phrases in each of the goal's places."""
-    from ..find import sources_registry
+    from jobhunt.find import sources_registry
 
     pattern = source["config"]["feed"]
     jobs: dict[str, dict] = {}

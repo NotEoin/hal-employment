@@ -11,8 +11,8 @@ import logging
 import sqlite3
 from datetime import datetime
 
-from ..web.router import Request, route
-from . import activity, clock, plugins, runner, settings
+from jobhunt.core import activity, clock, plugins, runner, settings
+from jobhunt.web.router import Request, route
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ def _goal(sections: dict) -> dict | None:
     if "goal" in sections:
         return sections["goal"]
     try:
-        from ..find import goal as goal_mod
+        from jobhunt.find import goal as goal_mod
 
         g = goal_mod.current()
         return {"rows": [list(r) for r in goal_mod.summary_rows(g)], "mode": settings.display("goal.mode"),
@@ -136,7 +136,7 @@ def summary_words(n_needs: int, n_new: int) -> str:
 
 def home(con: sqlite3.Connection) -> dict:
     """Everything Home shows, in the shape the Home page reads."""
-    from ..mail import messages
+    from jobhunt.mail import messages
 
     runner.flush()
     now = clock.local()

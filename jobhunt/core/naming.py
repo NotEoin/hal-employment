@@ -43,7 +43,7 @@ def file_name(kind: str, *, name: str | None = None, template: str | None = None
     if kind not in TEMPLATE_KEYS:
         raise ValueError(f"unknown document kind {kind!r}; one of {', '.join(TEMPLATE_KEYS)}")
     if name is None or template is None:
-        from . import settings
+        from jobhunt.core import settings
 
         name = settings.get("you.name") if name is None else name
         template = settings.get(TEMPLATE_KEYS[kind]) if template is None else template

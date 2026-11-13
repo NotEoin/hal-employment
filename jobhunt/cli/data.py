@@ -13,14 +13,14 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from ..core import paths
+from jobhunt.core import paths
 
 DB_TIMEOUT_S = 30     # the same wait as db.connect(): the server and the CLI share the file
 
 
 def cmd_import(args) -> None:
     """Runs the one-time import, its dry run, or its undo."""
-    from .. import importer
+    from jobhunt import importer
 
     try:
         if args.from_usb_install:
@@ -42,7 +42,7 @@ def cmd_import(args) -> None:
 
 def cmd_migrate(args) -> None:
     """Prints the pending migrations and, unless --dry-run, runs them with a backup first."""
-    from ..core.db import migrate
+    from jobhunt.core.db import migrate
 
     path = paths.db_path()
     if not path.is_file():
@@ -68,8 +68,8 @@ def cmd_migrate(args) -> None:
 
 def cmd_backup(args) -> None:
     """Writes one snapshot of the database to the backups folder and prints its path."""
-    from .. import db
-    from ..core import backup
+    from jobhunt import db
+    from jobhunt.core import backup
 
     con = db.connect()
     try:

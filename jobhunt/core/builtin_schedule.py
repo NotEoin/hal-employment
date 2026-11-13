@@ -13,9 +13,9 @@ import logging
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime, timedelta
 
-from .. import db
-from . import clock
-from .scheduler import Job
+from jobhunt import db
+from jobhunt.core import clock
+from jobhunt.core.scheduler import Job
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ TIDY_AT = "03:10"
 
 
 def _get(key: str):
-    from . import settings
+    from jobhunt.core import settings
 
     return settings.get(key)
 
@@ -101,14 +101,14 @@ def record_after(after: datetime) -> datetime:
 
 def sync_record() -> dict:
     """Reads new or changed files in the record folder."""
-    from ..worker import sync_record as sync
+    from jobhunt.worker import sync_record as sync
 
     return sync()
 
 
 def backup() -> str:
     """Today's checked copy of Hal's records."""
-    from . import backup as backups
+    from jobhunt.core import backup as backups
 
     con = db.connect()
     try:
@@ -119,8 +119,8 @@ def backup() -> str:
 
 def tidy() -> dict:
     """Old backups past their keep rule, and sign-in links and windows that have expired."""
-    from . import backup as backups
-    from . import paths
+    from jobhunt.core import backup as backups
+    from jobhunt.core import paths
 
     con = db.connect()
     try:

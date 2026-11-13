@@ -13,9 +13,9 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from ..http import get
-from . import places
-from .ats import strip_html
+from jobhunt.http import get
+from jobhunt.sources import places
+from jobhunt.sources.ats import strip_html
 
 BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 YC_PAGES = ["https://www.ycombinator.com/jobs/location/london",
@@ -61,7 +61,7 @@ def yc_detail(job: dict) -> str:
 
 
 def _seed_80k() -> dict:
-    from ..find import sources_registry
+    from jobhunt.find import sources_registry
 
     return sources_registry.seed_by_id()["80k"].get("config", {})
 
@@ -107,7 +107,7 @@ def workable_search(source: dict | None = None, goal=None, max_pages: int = MAX_
     """Searches every Workable employer's adverts, which skews towards small organisations."""
     queries = list(WORKABLE_QUERIES)
     if source is not None and goal is not None:
-        from ..find import sources_registry
+        from jobhunt.find import sources_registry
 
         extra = sources_registry.early_terms(goal, EARLY_TERMS)
         extra = ((INTERN_TERM,) if "internship" in goal.kinds else ()) + extra

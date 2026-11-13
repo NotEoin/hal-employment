@@ -8,15 +8,15 @@ and a pack drafted before those folders existed is still found where it was.
 import sys
 from contextlib import closing
 
-from .. import db
-from ..core import naming
-from .find import _find
+from jobhunt import db
+from jobhunt.cli.find import _find
+from jobhunt.core import naming
 
 
 def _pack_md(job):
     """The job's `pack.md`, in its application folder or, for an older pack, its old folder; None if none."""
-    from .. import documents
-    from ..docs import folders
+    from jobhunt import documents
+    from jobhunt.docs import folders
 
     folder = documents.pack_dir(job, create=False)
     if folder is not None and (folder / folders.PACK_MD).exists():
@@ -27,8 +27,8 @@ def _pack_md(job):
 
 def cmd_pack(args):
     """Handles `jobhunt pack`: drafts the CV and cover letter for a job."""
-    from .. import ai, pack
-    from ..cvstudio import cv
+    from jobhunt import ai, pack
+    from jobhunt.cvstudio import cv
     if args.cv_only:
         con = db.connect()
         for r in con.execute("SELECT * FROM jobs WHERE status = 'ready'"):
@@ -58,7 +58,7 @@ def cmd_letter(args):
     """Handles `jobhunt letter`: drafts a cover letter."""
     import re as _re
 
-    from .. import letter
+    from jobhunt import letter
     # closed here, not left to the garbage collector: Windows cannot remove an open database (CI, 2026-10-23)
     with closing(db.connect()) as con:
         r = _find(con, args.id)
@@ -75,7 +75,7 @@ def cmd_letter(args):
 
 def cmd_check(args):
     """Handles `jobhunt check`: checks the documents of ready jobs."""
-    from .. import pack
+    from jobhunt import pack
     with closing(db.connect()) as con:
         rows = con.execute("SELECT * FROM jobs WHERE status = 'ready'").fetchall() if args.ready else [_find(con, args.id)]
     for r in rows:
@@ -87,7 +87,7 @@ def cmd_check(args):
 
 def cmd_contacts(args):
     """Handles `jobhunt contacts`: finds people to contact for a job."""
-    from ..docs import contacts
+    from jobhunt.docs import contacts
     con = db.connect()
     found = contacts.find(con, _find(con, args.id))
     for p in found["people"]:

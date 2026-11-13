@@ -5,7 +5,7 @@ person with many repositories uses up in one read.
 """
 from __future__ import annotations
 
-from ..core.settings.registry import Setting, register
+from jobhunt.core.settings.registry import Setting, register
 
 WEB_PAGES = 30          # enough for a portfolio or a blog's recent posts, few enough to read in a minute
 WEB_PAGES_MAX = 200     # a bigger site is not one person's own work

@@ -23,10 +23,10 @@ import subprocess
 import threading
 from pathlib import Path
 
-from .. import __version__, db, updates
-from ..core import activity, paths, plugins, runner
-from ..web import auth
-from ..web.router import BadRequest, Conflict, Request, route
+from jobhunt import __version__, db, updates
+from jobhunt.core import activity, paths, plugins, runner
+from jobhunt.web import auth
+from jobhunt.web.router import BadRequest, Conflict, Request, route
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def updater_argv(inst: updates.Install, *flags: str, system: str | None = None) 
 
 def start_updater(*flags: str) -> int:
     """Spawns the updater detached, in its own unit on Linux; returns its pid."""
-    from ..core import platform
+    from jobhunt.core import platform
 
     inst = updates.read_install()
     os.environ.update(inst.uv_env())    # Windows passes this process's environment to the child
@@ -255,7 +255,7 @@ def absorb_result() -> int | None:
         row = None
     if last.get("held"):
         try:
-            from ..core import settings
+            from jobhunt.core import settings
 
             if settings.get("updates.held_commit") != last["held"]:
                 settings.set("updates.held_commit", last["held"], by="hal")

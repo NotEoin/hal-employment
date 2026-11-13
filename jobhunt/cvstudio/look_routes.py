@@ -13,23 +13,22 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from jobhunt.cvstudio import export, render
 from jobhunt.web.router import BadRequest, BytesResponse, FileResponse, HtmlResponse, NotFound, Request, route
-
-from . import export, render
 
 log = logging.getLogger(__name__)
 CURRENT = "current"           # a version id that means Hal's copy as it is now
 
 
 def _store() -> Any:
-    from . import store
+    from jobhunt.cvstudio import store
 
     return store
 
 
 def _type(type_id: str | None) -> Any:
     """The CV type, or None when it cannot be loaded (the page then keeps the document's own order)."""
-    from . import types
+    from jobhunt.cvstudio import types
 
     try:
         return types.load(type_id) if type_id else None
@@ -83,8 +82,7 @@ def looks_list(req: Request) -> list[dict]:
 def choose_look(req: Request) -> dict:
     """Chooses the look Hal's copy is printed in, and answers My CV's header as GET /cv does."""
     from jobhunt.core import events
-
-    from .routes import summary
+    from jobhunt.cvstudio.routes import summary
 
     look_id = str((req.body or {}).get("id") or "")
     try:

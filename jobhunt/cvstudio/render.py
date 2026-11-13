@@ -113,7 +113,7 @@ def _p(profile: dict, key: str) -> str:
 
 def profile_from_settings() -> dict:
     """The person's name and contact details from the `you.*` settings, as the render functions take them."""
-    from ..core import settings
+    from jobhunt.core import settings
 
     def get(key: str) -> str:
         try:

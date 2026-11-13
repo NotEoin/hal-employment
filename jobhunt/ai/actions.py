@@ -15,9 +15,9 @@ import sys
 import time
 from typing import Any
 
-from ..core import paths, runner
-from . import claude_setup
-from .base import LLMUnavailable
+from jobhunt.ai import claude_setup
+from jobhunt.ai.base import LLMUnavailable
+from jobhunt.core import paths, runner
 
 INSTALL = "ai.claude_install"
 SIGN_IN = "ai.claude_sign_in"
@@ -108,7 +108,7 @@ def _claude_ready() -> str | None:
                exclusive="kind", example=lambda world: {"button": "Test now"})
 def test_ai(ctx: runner.Ctx, button: str = "Test") -> dict:
     """Asks the AI Hal uses one short question: {ok, seconds, words}."""
-    from .. import ai
+    from jobhunt import ai
 
     ctx.step("Checking which AI Hal uses")
     be = ai.backend()

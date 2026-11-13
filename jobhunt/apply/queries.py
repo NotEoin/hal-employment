@@ -8,9 +8,9 @@ from datetime import timedelta
 from pathlib import Path
 from urllib.parse import quote
 
-from .. import browser, db, documents, tasks
-from ..core import clock, settings
-from ..core.runner import ACTIONS, ACTIVE, checkpoint
+from jobhunt import browser, db, documents, tasks
+from jobhunt.core import clock, settings
+from jobhunt.core.runner import ACTIONS, ACTIVE, checkpoint
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def _close_quietly(job_id: str) -> None:
 
 def _platform(url: str) -> str:
     """The application system's name for "Something wrong here?" ("Workable"), or "" for an employer's own site."""
-    from ..sites import notes
+    from jobhunt.sites import notes
 
     ats = notes.ats_of(url)
     return notes.ATS_NAMES.get(ats, ats) if ats else ""
@@ -343,7 +343,7 @@ def _steps(con, job_id: str, col: str | None, app: dict, row) -> tuple[int, list
 
 def _cv_changes(job, docs: dict) -> list[dict]:
     """The per-job CV changes, each with whether it is on, compared with the main CV."""
-    from ..cvstudio import cv
+    from jobhunt.cvstudio import cv
 
     try:
         found = cv.changes(cv.load(), documents.proposed_cv(job, docs))
@@ -406,7 +406,7 @@ SOURCE_WHY = {"profile": "From your profile (Settings, You).", "cv": "From your 
 
 def _letter_notes(job, docs: dict) -> dict:
     """The letter's Tone, Evidence and Checked: kept with a letter drafted at form time, else in its pack."""
-    from .. import pack
+    from jobhunt import pack
 
     return docs.get("letter_notes") or pack.read_letter_notes(job)
 
@@ -492,7 +492,7 @@ SENT_WORDS = {"site_confirmed": "The site said it was received after you pressed
 
 def _running_for(job_id: str) -> dict | None:
     """The action Hal is running for this application, for the page's Stop button."""
-    from ..core import runner
+    from jobhunt.core import runner
 
     return runner.running_for(job_id)
 
@@ -514,14 +514,14 @@ def _file_url(path: str | None) -> str | None:
 
 def form_words(form: dict) -> str:
     """What the Form step says, the same in every mode: see `driver.form_words`."""
-    from .driver import form_words as words
+    from jobhunt.apply.driver import form_words as words
 
     return words(form)
 
 
 def driver_marks(form: dict) -> list[dict]:
     """The driver's marks for a form's fields (green fine, amber to check)."""
-    from .driver import _marks
+    from jobhunt.apply.driver import _marks
 
     return _marks(form)
 

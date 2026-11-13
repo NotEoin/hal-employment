@@ -4,13 +4,13 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .. import ai
-from ..ai import prompts
-from ..company import research
-from ..cvstudio import context as cv_context
-from ..profile import writing as profile_writing
-from ..writing import fields
-from ..writing import plan as planning
+from jobhunt import ai
+from jobhunt.ai import prompts
+from jobhunt.company import research
+from jobhunt.cvstudio import context as cv_context
+from jobhunt.profile import writing as profile_writing
+from jobhunt.writing import fields
+from jobhunt.writing import plan as planning
 
 SOMEONE = cv_context.SOMEONE  # what a prompt calls the person before they have given a name
 
@@ -128,7 +128,7 @@ def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, .
 
 def previous_applications(con, job) -> str:
     """Summarises earlier applications to the same employer, from the tracker."""
-    from ..mail.gmail import norm
+    from jobhunt.mail.gmail import norm
     rows = con.execute("SELECT id, company, title, status FROM jobs WHERE id != ? AND status IN "
                        "('applied','assessment','interview','offer','rejected','withdrawn')", (job["id"],)).fetchall()
     same = [r for r in rows if norm(r["company"]) and norm(r["company"]) == norm(job["company"])]

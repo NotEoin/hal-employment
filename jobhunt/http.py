@@ -8,7 +8,7 @@ import time
 import urllib.error
 import urllib.request
 
-from . import __version__
+from jobhunt import __version__
 
 PRODUCT = f"HalEmployment/{__version__}"
 
@@ -19,7 +19,7 @@ class PageGone(Exception):
 
 def user_agent() -> str:
     """What job sites see: the app and version, and the `sites.contact` address only if the person set one."""
-    from .core import settings
+    from jobhunt.core import settings
 
     contact = (settings.get("sites.contact") or "").strip()
     return f"{PRODUCT} (job search; contact {contact})" if contact else PRODUCT

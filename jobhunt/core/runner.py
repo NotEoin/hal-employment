@@ -43,8 +43,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .. import db
-from . import clock, events, filelock, paths, plugins
+from jobhunt import db
+from jobhunt.core import clock, events, filelock, paths, plugins
 
 log = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ def forget(kind: str) -> None:
 def load_kinds() -> dict[str, ActionKind]:
     """Imports every area's `actions` modules and the data tasks, so every kind is registered."""
     plugins.modules("actions")
-    from .db import tasks
+    from jobhunt.core.db import tasks
 
     tasks.load()
     return dict(KINDS)
@@ -351,7 +351,7 @@ def _publish_action(live: _Live, state: str, message: str) -> None:
 
 
 def _publish_status(con: sqlite3.Connection) -> None:
-    from . import status
+    from jobhunt.core import status
 
     try:
         events.publish("status", **status.status(con))
@@ -360,7 +360,7 @@ def _publish_status(con: sqlite3.Connection) -> None:
 
 
 def _guarded(text: str | None) -> str | None:
-    from . import activity
+    from jobhunt.core import activity
 
     return activity.guard_text(text)
 
@@ -992,7 +992,7 @@ def at_start() -> None:
     n = recover()
     if n:
         log.info("%d actions were interrupted by the last stop", n)
-    from .db import tasks
+    from jobhunt.core.db import tasks
 
     tasks.start_due()
 

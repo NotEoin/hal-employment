@@ -22,8 +22,8 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import Path
 from typing import Any
 
-from ..web.router import NotFound, Request, route
-from . import plugins
+from jobhunt.core import plugins
+from jobhunt.web.router import NotFound, Request, route
 
 log = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ def fix(req: Request) -> dict:
         return {"route": row["fix"]["route"]}
     if row["fix"]["action"].startswith("/"):
         return {"post": row["fix"]["action"]}
-    from . import runner
+    from jobhunt.core import runner
 
     return {"action_id": runner.start(row["fix"]["action"], why=f"You pressed {row['fix']['label']}",
                                       priority=0, session_id=req.session_id,
@@ -141,14 +141,14 @@ def fix(req: Request) -> dict:
 @route("POST", "/api/v2/help-file", slow=True)
 def help_file(req: Request) -> dict:
     """Makes a help file with the person taken out; the page shows the words before anyone sends it."""
-    from . import helpfile
+    from jobhunt.core import helpfile
 
     return helpfile.make(req.con)
 
 
 def _platform_browsers() -> list[Any] | None:
     try:
-        from . import platform as plat
+        from jobhunt.core import platform as plat
         return list(plat.current().browsers())
     except (ImportError, AttributeError, NotImplementedError, OSError):
         return None
@@ -175,7 +175,7 @@ def found_browser_ids() -> set[str]:
 
 def browsers() -> list[dict]:
     """Every browser the setting lists, with whether it was found and whether Hal can fill forms in it."""
-    from .settings.catalog import applying
+    from jobhunt.core.settings.catalog import applying
 
     found = found_browser_ids()
     return [{"id": bid, "name": words, "found": bid in found, "supported": bid not in applying.UNSUPPORTED_BROWSERS}

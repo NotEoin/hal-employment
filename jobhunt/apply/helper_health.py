@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from contextlib import closing
 
-from .. import db, extension
-from ..core.health import Check, CheckResult, Fix, ok, warn
-from . import helpers
+from jobhunt import db, extension
+from jobhunt.apply import helpers
+from jobhunt.core.health import Check, CheckResult, Fix, ok, warn
 
 OLDER = "The browser helper is older than Hal."
 OLDER_REMOTE = "The browser helper is older than Hal. Run the launcher again; it copies the new helper."

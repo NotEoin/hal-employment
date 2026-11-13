@@ -28,9 +28,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import __version__, db
-from ..core import filelock, naming, paths, plugins
-from . import auth, router, sse
+from jobhunt import __version__, db
+from jobhunt.core import filelock, naming, paths, plugins
+from jobhunt.web import auth, router, sse
 
 BIND = "127.0.0.1"
 HOSTS = ("127.0.0.1", "localhost")
@@ -272,7 +272,7 @@ class AppHandler(BaseHTTPRequestHandler):
             known = cookies.get(auth.browser_cookie_name())
             value, browser_id, _ = auth.create_session(con, remote=bool(row["remote"]), remote_host=row["remote_host"],
                                                        browser_id=known, user_agent=self.headers.get("User-Agent"))
-            from ..core import routes as core_routes
+            from jobhunt.core import routes as core_routes
 
             target = row["next"] or ("/" if core_routes.setup_done(con) else "/#setup")
         finally:
@@ -314,8 +314,8 @@ class AppHandler(BaseHTTPRequestHandler):
             ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
             self._reply_bytes(200, target.read_bytes(), ctype)
             return
-        from .. import documents
-        from ..apply.queries import load_job
+        from jobhunt import documents
+        from jobhunt.apply.queries import load_job
 
         job_id, which = unquote(m.group(1)), m.group(2)
         con = db.connect()
@@ -469,7 +469,7 @@ def serve(port: int | None = None, open_browser: bool = False, background: bool 
     if failed:
         log.warning("start tasks failed: %s", ", ".join(failed))
     if worker:
-        from ..worker import worker as queue_worker
+        from jobhunt.worker import worker as queue_worker
 
         threading.Thread(target=queue_worker, name="worker", daemon=True).start()
     stop = threading.Event()

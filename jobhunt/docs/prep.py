@@ -5,9 +5,9 @@ applications table. The notes prepare the person for the stage; they are not ans
 to send on their behalf. The prompt (`ai/prompts/prep.txt`) names no one: `cvstudio.context.build` fills it
 with the person and the CV type's `prep_topics`, and the tests the advert names go in the request.
 """
-from .. import ai, db, documents, pack, record
-from ..cvstudio import cv
-from ..writing import stage as person_stage
+from jobhunt import ai, db, documents, pack, record
+from jobhunt.cvstudio import cv
+from jobhunt.writing import stage as person_stage
 
 PREP_TIMEOUT = 600   # seconds; the notes are long, and a local model on a busy graphics card is slow
 ADVERT_CHARS = 8000  # what fits a local model's context beside the instructions and the evidence

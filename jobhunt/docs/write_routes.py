@@ -7,13 +7,13 @@ Applications routes.
 """
 from __future__ import annotations
 
-from ..apply import actions as apply_actions
-from ..apply import queries
-from ..apply import routes as apply_routes
-from ..apply.routes import PREFIX
-from ..core import runner
-from ..web.router import BadRequest, Request, json_body, route, who
-from .write_actions import WORDS_SHOWN, critique_subject
+from jobhunt.apply import actions as apply_actions
+from jobhunt.apply import queries
+from jobhunt.apply import routes as apply_routes
+from jobhunt.apply.routes import PREFIX
+from jobhunt.core import runner
+from jobhunt.docs.write_actions import WORDS_SHOWN, critique_subject
+from jobhunt.web.router import BadRequest, Request, json_body, route, who
 
 
 def _words(req: Request, *, needed: bool) -> str:

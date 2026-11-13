@@ -17,7 +17,7 @@ def _words(value: Any) -> str:
 
 def _elsewhere(item) -> str | None:
     """The status of a secret or private row, or None for a stored value."""
-    from ..core.settings import private, secrets
+    from jobhunt.core.settings import private, secrets
 
     if item.kind == "secret":
         return secrets.status(item.secret_name)
@@ -28,7 +28,7 @@ def _elsewhere(item) -> str | None:
 
 
 def _line(key: str) -> str:
-    from ..core import settings
+    from jobhunt.core import settings
 
     item = settings.setting(key)
     status = _elsewhere(item)
@@ -43,8 +43,8 @@ def _line(key: str) -> str:
 
 def cmd_settings(args) -> None:
     """Runs one `settings` subcommand."""
-    from ..core import settings
-    from ..core.settings import registry
+    from jobhunt.core import settings
+    from jobhunt.core.settings import registry
 
     try:
         if args.op == "list":

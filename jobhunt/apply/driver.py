@@ -13,11 +13,10 @@ import traceback
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .. import autofill, browser, db, documents, pack
-from ..apply import guard
-from ..apply.queries import AGGREGATORS, form_stuck, load_app, load_job, mark_applied, record_form_state, set_app
-from ..core import runner, settings
-from . import adopt
+from jobhunt import autofill, browser, db, documents, pack
+from jobhunt.apply import adopt, guard
+from jobhunt.apply.queries import AGGREGATORS, form_stuck, load_app, load_job, mark_applied, record_form_state, set_app
+from jobhunt.core import runner, settings
 
 MINUTE_S = 60
 # How long Hal waits on a page only the applicant can pass is `applying.wait_minutes`; the setting was shown but
@@ -311,7 +310,7 @@ def _add_notes_used(form: dict, lines: list[dict]) -> None:
 def _count_note_answers(form: dict, job_id: str) -> None:
     """Counts each site note that answered or skipped a question (autofill lists it on the field), once per
     question, as working when the form took the answer, and adds it to the form's list of notes used."""
-    from ..sites import notes
+    from jobhunt.sites import notes
 
     counted = set(form.get("notes_counted") or [])
     for f in form.get("fields", []):
@@ -741,7 +740,7 @@ def _type_code(con, job, boxes: list[str]) -> bool:
 
     Only with `email.codes` on. The person presses the button next to the code; Hal never does.
     """
-    from ..mail import gmail
+    from jobhunt.mail import gmail
     if not settings.get("email.codes"):
         return False
     job_id = job["id"]

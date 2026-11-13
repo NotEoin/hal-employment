@@ -21,8 +21,8 @@ import urllib.request
 
 import segno
 
-from ..core import settings
-from ..core.settings import secrets
+from jobhunt.core import settings
+from jobhunt.core.settings import secrets
 
 log = logging.getLogger(__name__)
 

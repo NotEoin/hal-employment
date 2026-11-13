@@ -21,8 +21,8 @@ import sys
 import time
 from collections.abc import Callable
 
-from ..core import platform
-from ..web import app
+from jobhunt.core import platform
+from jobhunt.web import app
 
 log = logging.getLogger(__name__)
 

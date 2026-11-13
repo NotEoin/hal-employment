@@ -56,7 +56,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from ..http import get
+from jobhunt.http import get
 
 log = logging.getLogger(__name__)
 
@@ -347,7 +347,7 @@ def companies_house(company: str, advert: Advert | None = None, today: date | No
     named like it, active, in one of the advert's trades or its town, and not a new namesake (see the module
     notes). One that is not plainly the employer (`stated`) is listed as a possible match (`POSSIBLE`) when
     its name is the employer's exactly, else left out."""
-    from ..core import clock
+    from jobhunt.core import clock
 
     advert, today = advert or Advert(), today or clock.local_day()
     page = get(COMPANIES_HOUSE + urllib.parse.quote_plus(company), headers=BROWSER, timeout=LOOKUP_TIMEOUT_S)

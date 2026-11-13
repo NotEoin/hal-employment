@@ -28,8 +28,8 @@ import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 
-from .. import paths
-from . import (
+from jobhunt.core import paths
+from jobhunt.core.platform import (
     APP_UNIT,
     HAL_UNIT,
     KINDS,

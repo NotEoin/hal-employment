@@ -13,10 +13,10 @@ import logging
 import tomllib
 from pathlib import Path
 
-from .. import extension
-from ..core import platform, runner
-from ..web.router import BadRequest, Conflict, FileResponse, NotFound, Request, json_body, route
-from . import helper_mirror, helpers  # noqa: F401 - helper_mirror registers its start task on import
+from jobhunt import extension
+from jobhunt.apply import helper_mirror, helpers  # noqa: F401 - helper_mirror registers its start task on import
+from jobhunt.core import platform, runner
+from jobhunt.web.router import BadRequest, Conflict, FileResponse, NotFound, Request, json_body, route
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def listing(req: Request) -> list:
 @route("GET", PREFIX + "/browsers")
 def browsers(req: Request) -> dict:
     """The browsers setup explains, which of them are on this computer, and the helper folder."""
-    from ..core import paths
+    from jobhunt.core import paths
 
     found = _found()
     out = []
@@ -101,7 +101,7 @@ def open_extensions_page(req: Request) -> dict:
 @route("POST", PREFIX + "/pairing-code")
 def pairing_code(req: Request) -> dict:
     """A one-time code for the helper in the chosen browser, and the pairing page's address."""
-    from ..web import auth
+    from jobhunt.web import auth
 
     browser = str(json_body(req).get("browser") or "") or None
     code = helpers.new_code(req.con, req.session, browser)
@@ -112,7 +112,7 @@ def pairing_code(req: Request) -> dict:
 @route("POST", PREFIX + "/open-pair-page", local_only=True)
 def open_pair_page(req: Request) -> dict:
     """Opens the pairing page in the chosen browser, where the helper reads the code."""
-    from ..web import auth
+    from jobhunt.web import auth
 
     body = json_body(req)
     code = str(body.get("code") or "")
@@ -170,7 +170,7 @@ def adopt(req: Request) -> dict:
     Finding the job may ask the AI, so it is an action; when it takes over `ADOPT_WAIT_S` the reply carries
     its `action_id` and the helper asks again with it.
     """
-    from . import actions
+    from jobhunt.apply import actions
 
     body = json_body(req)
     action_id = body.get("action_id")
@@ -196,8 +196,8 @@ def adopt(req: Request) -> dict:
 @route("POST", PREFIX + "/fill-empty", auth="helper")
 def fill_empty(req: Request) -> dict:
     """The panel's "Fill empty boxes": fills what the job's tab shows that is still empty."""
-    from .driver import act_page
-    from .queries import form_stuck
+    from jobhunt.apply.driver import act_page
+    from jobhunt.apply.queries import form_stuck
 
     job_id = str(json_body(req).get("job_id") or "")
     if not job_id:
@@ -209,8 +209,8 @@ def fill_empty(req: Request) -> dict:
 @route("GET", PREFIX + "/file", auth="helper")
 def file(req: Request) -> FileResponse:
     """A document to upload, from that application's own documents only."""
-    from .. import documents
-    from .queries import load_job
+    from jobhunt import documents
+    from jobhunt.apply.queries import load_job
 
     job_id = req.query.get("job_id") or ""
     con = req.con

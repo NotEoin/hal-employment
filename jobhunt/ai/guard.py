@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from .base import ChatRequest, PrivateLeak
+from jobhunt.ai.base import ChatRequest, PrivateLeak
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def _fold(text: str) -> str:
 
 def _values() -> list[str]:
     """The saved free-text private answers, from the private answers store."""
-    from ..core.settings.private import values_for_guard
+    from jobhunt.core.settings.private import values_for_guard
 
     return list(values_for_guard())
 
@@ -48,8 +48,8 @@ def contains_private(*texts: str) -> bool:
 
 
 def _record_stop(req: ChatRequest) -> None:
-    from .. import db
-    from ..core import clock
+    from jobhunt import db
+    from jobhunt.core import clock
 
     con = db.connect()
     try:

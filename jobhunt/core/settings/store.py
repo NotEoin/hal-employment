@@ -70,7 +70,7 @@ def _missing_table(e: sqlite3.OperationalError) -> bool:
 
 
 def _connect() -> sqlite3.Connection:
-    from ... import db
+    from jobhunt import db
 
     return db.connect()
 
@@ -78,7 +78,7 @@ def _connect() -> sqlite3.Connection:
 def _db_name(con: sqlite3.Connection | None) -> str:
     """The file behind `con`, or the one `db.connect()` would open, which keys the cache."""
     if con is None:
-        from .. import paths
+        from jobhunt.core import paths
 
         return os.path.realpath(paths.db_path())
     row = con.execute("PRAGMA database_list").fetchone()
@@ -238,7 +238,7 @@ def write(con: sqlite3.Connection, key: str, value: Any, *, default: Any, by: st
 
 def record_saved(key: str, *, text: str, why: str, by: str = "you", session_id: str | None = None) -> None:
     """History and Activity for a secret or private answer that was saved or cleared, with no value in either."""
-    from .. import clock
+    from jobhunt.core import clock
 
     con = _connect()
     try:

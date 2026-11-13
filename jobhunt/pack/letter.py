@@ -2,9 +2,35 @@
 the Tone, Length, Evidence and Checked notes beside it."""
 import logging
 
-from ..cvstudio import cv
-from ..profile import writing as profile_writing
-from ..writing import (
+from jobhunt.cvstudio import cv
+from jobhunt.pack.checks import (
+    CUT_FLAG,
+    CUT_WHAT,
+    DANGLING_FLAG,
+    ECHO_FLAG,
+    _hits,
+    check_drafts,
+    fix_claims,
+    fix_echoes,
+    revise_once,
+)
+from jobhunt.pack.drafting import _context, _draft, fitting_names, paragraph_scope, story_ranking
+from jobhunt.pack.fitmap import _fit, known_tools
+from jobhunt.pack.reading import (
+    SOMEONE,
+    Brief,
+    _analyse,
+    _job_text,
+    _kept,
+    _requirements,
+    evidence_plan,
+    field_of,
+    passages,
+    person,
+    previous_applications,
+)
+from jobhunt.profile import writing as profile_writing
+from jobhunt.writing import (
     drafts,
     eligibility,
     fields,
@@ -18,33 +44,7 @@ from ..writing import (
     relocation,
     stage,
 )
-from ..writing import plan as planning
-from .checks import (
-    CUT_FLAG,
-    CUT_WHAT,
-    DANGLING_FLAG,
-    ECHO_FLAG,
-    _hits,
-    check_drafts,
-    fix_claims,
-    fix_echoes,
-    revise_once,
-)
-from .drafting import _context, _draft, fitting_names, paragraph_scope, story_ranking
-from .fitmap import _fit, known_tools
-from .reading import (
-    SOMEONE,
-    Brief,
-    _analyse,
-    _job_text,
-    _kept,
-    _requirements,
-    evidence_plan,
-    field_of,
-    passages,
-    person,
-    previous_applications,
-)
+from jobhunt.writing import plan as planning
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], 
                  softened: bool = False) -> dict:
     """The Tone, Length, Evidence and Checked lines shown beside a letter; `revised` when the writer had to
     revise it once for the writing rules, `softened` when it rewrote claims the facts do not support."""
-    from ..core import settings
+    from jobhunt.core import settings
 
     tone = TONE_LABELS.get(settings.get("cvdocs.letter_tone"), who["tone"].capitalize())
     letter_flags = [f for f in flags if not f.startswith(("REAPPLICATION", "ELIGIBILITY"))]

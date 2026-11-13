@@ -48,11 +48,11 @@ if os.environ.get("HAL_EMPLOYMENT_NO_TRAMPOLINE") != "1" and sys.prefix == sys.b
 
 import argparse  # noqa: E402 - after the venv trampoline
 
-from . import db  # noqa: E402 - after the venv trampoline
-from .ai.base import LLMUnavailable  # noqa: E402 - after the venv trampoline
-from .cli import register_all  # noqa: E402 - after the venv trampoline
-from .cli.docs import cmd_check, cmd_contacts, cmd_letter, cmd_pack  # noqa: E402 - after the venv trampoline
-from .cli.find import (  # noqa: E402 - after the venv trampoline
+from jobhunt import db  # noqa: E402 - after the venv trampoline
+from jobhunt.ai.base import LLMUnavailable  # noqa: E402 - after the venv trampoline
+from jobhunt.cli import register_all  # noqa: E402 - after the venv trampoline
+from jobhunt.cli.docs import cmd_check, cmd_contacts, cmd_letter, cmd_pack  # noqa: E402 - after the venv trampoline
+from jobhunt.cli.find import (  # noqa: E402 - after the venv trampoline
     cmd_add,
     cmd_discover,
     cmd_list,
@@ -65,10 +65,10 @@ from .cli.find import (  # noqa: E402 - after the venv trampoline
     cmd_show,
     cmd_stats,
 )
-from .cli.mail import cmd_digest, cmd_inbox, cmd_mail, cmd_todo  # noqa: E402 - after the venv trampoline
-from .cli.record import cmd_ingest, cmd_record  # noqa: E402 - after the venv trampoline
-from .cli.system import cmd_serve, cmd_vault  # noqa: E402 - after the venv trampoline
-from .core import tls  # noqa: E402 - after the venv trampoline
+from jobhunt.cli.mail import cmd_digest, cmd_inbox, cmd_mail, cmd_todo  # noqa: E402 - after the venv trampoline
+from jobhunt.cli.record import cmd_ingest, cmd_record  # noqa: E402 - after the venv trampoline
+from jobhunt.cli.system import cmd_serve, cmd_vault  # noqa: E402 - after the venv trampoline
+from jobhunt.core import tls  # noqa: E402 - after the venv trampoline
 
 
 def main():

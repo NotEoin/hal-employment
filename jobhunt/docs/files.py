@@ -18,7 +18,7 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
-from ..core import clock, paths
+from jobhunt.core import clock, paths
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ HASH_CHUNK = 1024 * 1024
 
 
 def _record_root() -> Path:
-    from ..core import settings
+    from jobhunt.core import settings
 
     chosen = settings.get("record.folder")
     return Path(chosen).expanduser() if chosen else paths.record_default()
@@ -126,7 +126,7 @@ def open_folder(folder: Path) -> None:
         log.info("test mode: not opening %s", folder)
         return
     try:
-        from ..core import platform as hal_platform
+        from jobhunt.core import platform as hal_platform
 
         opener = getattr(hal_platform, "open_folder", None)
     except ImportError:

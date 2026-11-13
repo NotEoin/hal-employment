@@ -70,14 +70,11 @@ Design notes:
 import logging
 from pathlib import Path
 
-from .. import ai, db
-from ..company import reputation
-from ..core import events
-from ..cvstudio import cv
-from ..profile import writing as profile_writing
-from ..writing import drafts, eligibility, motive, rank
-from ..writing import plan as planning
-from .checks import (
+from jobhunt import ai, db
+from jobhunt.company import reputation
+from jobhunt.core import events
+from jobhunt.cvstudio import cv
+from jobhunt.pack.checks import (
     CUT_FLAG,
     DANGLING_FLAG,
     ECHO_FLAG,
@@ -89,7 +86,7 @@ from .checks import (
     unsupported_numbers,
     without_refusals,
 )
-from .drafting import (
+from jobhunt.pack.drafting import (
     CUT_NOTE,
     DRAFT_TEMPERATURE,
     _context,
@@ -99,7 +96,7 @@ from .drafting import (
     spelt,
     story_ranking,
 )
-from .fitmap import (
+from jobhunt.pack.fitmap import (
     CELL_WORDS,
     EQUIVALENTS,
     MISSING_GAP,
@@ -118,8 +115,8 @@ from .fitmap import (
     with_sources,
     without_reasoning,
 )
-from .hiring import FIND_PREFIX, hiring_contacts, message_to, salutation
-from .letter import (
+from jobhunt.pack.hiring import FIND_PREFIX, hiring_contacts, message_to, salutation
+from jobhunt.pack.letter import (
     CHECKED_CLEAN,
     LETTER_TRIES,
     REVISED,
@@ -133,8 +130,15 @@ from .letter import (
     letter_frame,
     write_letter,
 )
-from .markdown import NOTHING_TO_CHECK, PREPARED, _markdown, add_company_check, mirror_note, read_letter_notes
-from .others import (
+from jobhunt.pack.markdown import (
+    NOTHING_TO_CHECK,
+    PREPARED,
+    _markdown,
+    add_company_check,
+    mirror_note,
+    read_letter_notes,
+)
+from jobhunt.pack.others import (
     NO_ANSWER,
     REPEAT_FLAG,
     STORY_TRIES,
@@ -150,7 +154,7 @@ from .others import (
     message_opening,
     write_others,
 )
-from .reading import (
+from jobhunt.pack.reading import (
     COMMON_QUESTIONS,
     Brief,
     _analyse,
@@ -166,6 +170,9 @@ from .reading import (
     slug,
     written_out,
 )
+from jobhunt.profile import writing as profile_writing
+from jobhunt.writing import drafts, eligibility, motive, rank
+from jobhunt.writing import plan as planning
 
 __all__ = [
     "CELL_WORDS",
@@ -292,7 +299,7 @@ def build(con, job_id: str, use_web: bool = True, ctx=None) -> Path:
 
 def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     job = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-    from .. import documents
+    from jobhunt import documents
 
     if not has_facts(con):
         raise NothingChecked(NOTHING_CHECKED)

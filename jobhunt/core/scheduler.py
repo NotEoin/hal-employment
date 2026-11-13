@@ -33,8 +33,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .. import db
-from . import clock, events, paths, plugins, runner
+from jobhunt import db
+from jobhunt.core import clock, events, paths, plugins, runner
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ def jobs() -> dict[str, Job]:
 
 
 def _settings_get(key: str) -> Any:
-    from . import settings
+    from jobhunt.core import settings
 
     return settings.get(key)
 
@@ -126,7 +126,7 @@ def paused(con=None) -> bool:
 
 def set_paused(on: bool, *, why: str = "You pressed Pause") -> bool:
     """Pauses or carries on; records it in Activity and tells every window."""
-    from . import activity, status
+    from jobhunt.core import activity, status
 
     text = ("Paused searches and the daily summary. Email checks carry on." if on
             else "Carried on with searches and the daily summary.")
@@ -315,7 +315,7 @@ def _child_env() -> dict[str, str]:
 
 def run_child(ctx: runner.Ctx, args: tuple[str, ...] | list[str], *, timeout: float = CHILD_TIMEOUT_S) -> int:
     """Runs `jobhunt <args>` hidden; each printed line is a step; Stop or the time limit end the whole tree."""
-    from . import platform
+    from jobhunt.core import platform
 
     plat = platform.current()
     proc = plat.popen_hidden(child_argv(args), cwd=str(paths.code_dir()), env=_child_env(),
@@ -402,7 +402,7 @@ def run_now(job_id: str) -> str:
 
 def check_timers() -> frozenset[str]:
     """Reads which old timers are enabled (Linux; 5 s each) and remembers them until the next start."""
-    from . import platform
+    from jobhunt.core import platform
 
     try:
         _STATE.timers = frozenset(platform.current().legacy_timers_enabled())

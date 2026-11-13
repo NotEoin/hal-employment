@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, ClassVar
 
-from .base import ChatRequest, ChatResult, LLMUnavailable, Status
+from jobhunt.ai.base import ChatRequest, ChatResult, LLMUnavailable, Status
 
 log = logging.getLogger(__name__)
 

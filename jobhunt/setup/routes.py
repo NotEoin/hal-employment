@@ -21,11 +21,11 @@ import logging
 import sqlite3
 from typing import Any
 
-from ..core import clock, runner, settings
-from ..core.settings import secrets
-from ..core.settings.registry import SettingError
-from ..web.router import BadRequest, Conflict, Request, route
-from . import email_test, phone, record_folder, state
+from jobhunt.core import clock, runner, settings
+from jobhunt.core.settings import secrets
+from jobhunt.core.settings.registry import SettingError
+from jobhunt.setup import email_test, phone, record_folder, state
+from jobhunt.web.router import BadRequest, Conflict, Request, route
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ def overview(req: Request) -> dict:
 
 def start_first_search() -> str | None:
     """Starts the first search now; None when one is already running."""
-    from ..core import scheduler
+    from jobhunt.core import scheduler
 
     try:
         return scheduler.run_now(FIRST_SEARCH)
@@ -108,7 +108,7 @@ def later(req: Request) -> dict:
 
 def _from_cv() -> dict[str, str]:
     try:
-        from ..cvstudio import parse, store
+        from jobhunt.cvstudio import parse, store
 
         _, doc = store.current()
         return parse.prefill(doc)

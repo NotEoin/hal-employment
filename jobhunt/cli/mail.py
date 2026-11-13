@@ -3,20 +3,20 @@
 The bodies moved unchanged from `jobhunt/__main__.py`; the parser, its arguments and help stay there,
 because the voice bridge and the /jobs command parse what these commands print.
 """
-from .. import db
-from ..notify import notify
+from jobhunt import db
+from jobhunt.notify import notify
 
 
 def cmd_mail(args):
     """Handles `jobhunt mail`: reads recent job emails."""
-    from ..mail import gmail
+    from jobhunt.mail import gmail
     con = db.connect()
     attention = gmail.sync(con, args.days)
-    from .. import tasks
+    from jobhunt import tasks
     tasks.sync(con)
     rows = con.execute("SELECT kind, COUNT(*) n FROM emails GROUP BY kind ORDER BY n DESC").fetchall()
     print("emails:", ", ".join(f"{r['kind']} {r['n']}" for r in rows))
-    from .. import pipeline_note
+    from jobhunt import pipeline_note
     pipeline_note.write(con)
     for a in attention:
         print(f"  NEEDS YOU  {a['kind']:10} {a['company'] or '?'} | {a['subject']}")
@@ -26,7 +26,7 @@ def cmd_mail(args):
 
 def cmd_digest(args):
     """Handles `jobhunt digest`: sends or speaks the daily digest."""
-    from ..mail import digest
+    from jobhunt.mail import digest
     con = db.connect()
     print(digest.spoken(con) if args.spoken else digest.send(con, args.dry_run))
 

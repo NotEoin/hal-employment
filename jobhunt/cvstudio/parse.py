@@ -35,10 +35,10 @@ from dataclasses import dataclass, field
 from typing import Any
 from xml.etree import ElementTree
 
-from ..ai import prompts
-from . import pdfread
-from . import types as cvtypes
-from .model import KINDS, Bullet, CVDoc, Entry, Module, Section
+from jobhunt.ai import prompts
+from jobhunt.cvstudio import pdfread
+from jobhunt.cvstudio import types as cvtypes
+from jobhunt.cvstudio.model import KINDS, Bullet, CVDoc, Entry, Module, Section
 
 log = logging.getLogger(__name__)
 
@@ -842,8 +842,8 @@ def from_ai(reply: dict) -> Reading | None:
 
 def read_with_ai(lines: list[Line]) -> tuple[Reading | None, str]:
     """The AI's reading of the lines and "" , or (None, why not) when there is no AI or its reply is unusable."""
-    from .. import ai
-    from ..ai.base import LLMUnavailable, PrivateLeak
+    from jobhunt import ai
+    from jobhunt.ai.base import LLMUnavailable, PrivateLeak
 
     try:
         reply = ai.chat_json(prompts.text("cv_parse"), _blocks(lines), role="checker", priority=0,

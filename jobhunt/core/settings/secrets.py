@@ -34,7 +34,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from .. import paths
+from jobhunt.core import paths
 
 log = logging.getLogger(__name__)
 
@@ -259,7 +259,7 @@ def _file_delete(name: str) -> None:
 
 def _record(name: str, verb: str) -> None:
     """History and Activity naming the key's Settings row, never its value."""
-    from . import _registry, store
+    from jobhunt.core.settings import _registry, store
 
     row = next((s for s in _registry().REGISTRY.values() if s.kind == "secret" and s.secret_name == name), None)
     store.record_saved(row.key if row else name, text=f"{verb}: {row.label if row else name}",

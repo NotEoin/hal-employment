@@ -9,9 +9,9 @@ import html
 import re
 import urllib.parse
 
-from ..http import get
-from . import places
-from .ats import strip_html
+from jobhunt.http import get
+from jobhunt.sources import places
+from jobhunt.sources.ats import strip_html
 
 BROWSER = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 # Used only when a caller passes no source and goal (older callers); searches ask the goal.
@@ -27,7 +27,7 @@ def _text(fragment: str) -> str:
 def _searches(source: dict | None, goal) -> list[str]:
     if source is None or goal is None:
         return list(SEARCHES)
-    from ..find import sources_registry
+    from jobhunt.find import sources_registry
 
     student = goal.is_student() or any(k in goal.kinds for k in STUDENT_KINDS)
     extra = tuple(source.get("config", {}).get("student_terms", [])) if student else ()

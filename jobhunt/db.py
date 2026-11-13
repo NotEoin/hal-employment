@@ -7,8 +7,8 @@ importer and worktrees each open their own file. The schema is made and upgraded
 import sqlite3
 from pathlib import Path
 
-from .core import clock, paths
-from .core.db import migrate
+from jobhunt.core import clock, paths
+from jobhunt.core.db import migrate
 
 BUSY_TIMEOUT_S = 30  # the web server, its worker and the CLI share the file; each waits out the others' writes
 

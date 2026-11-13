@@ -1,9 +1,9 @@
 """The Messages routes: the list, opening (which marks read), Mark all read, Archive and Check email."""
 from __future__ import annotations
 
-from ..core import runner
-from ..web.router import BadRequest, Conflict, Request, route
-from . import messages
+from jobhunt.core import runner
+from jobhunt.mail import messages
+from jobhunt.web.router import BadRequest, Conflict, Request, route
 
 MAIL_SUBJECT = "_mail"   # one email check at a time, whoever starts it
 

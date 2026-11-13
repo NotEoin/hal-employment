@@ -9,9 +9,9 @@ from datetime import date, datetime
 from email.message import EmailMessage
 from email.utils import getaddresses
 
-from ..core import settings
-from ..pipeline_note import actions
-from . import gmail
+from jobhunt.core import settings
+from jobhunt.mail import gmail
+from jobhunt.pipeline_note import actions
 
 
 def build(con) -> tuple[str, str]:

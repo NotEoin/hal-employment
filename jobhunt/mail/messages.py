@@ -11,7 +11,7 @@ import re
 import sqlite3
 from datetime import datetime, timedelta
 
-from ..core import clock, events
+from jobhunt.core import clock, events
 
 FILTERS = ("all", "unread", "employers", "hal")
 LIST_LIMIT = 200
@@ -44,7 +44,7 @@ def sender_words(sender: str | None, company: str | None) -> str:
 
 
 def _email_item(r: sqlite3.Row) -> dict:
-    from .. import tasks
+    from jobhunt import tasks
 
     kind = r["kind"]
     url = tasks.thread_url(r["thrid"]) if kind in ATTENTION else None

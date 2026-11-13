@@ -35,9 +35,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..core import clock, paths
-from ..core.settings import legacy_map
-from . import ImportStopped, Report
+from jobhunt.core import clock, paths
+from jobhunt.core.settings import legacy_map
+from jobhunt.importer import ImportStopped, Report
 
 log = logging.getLogger(__name__)
 
@@ -177,7 +177,7 @@ def _flatten(config: dict) -> dict[str, Any]:
 
 def settings_from(config: dict) -> tuple[dict[str, Any], list[str]]:
     """(setting -> checked value, old keys left out) from the stick's `config.toml`."""
-    from ..core import settings
+    from jobhunt.core import settings
 
     flat = _flatten(config)
     values: dict[str, Any] = {}
@@ -278,7 +278,7 @@ def run(folder: Path, dry_run: bool = False, *, say: Callable[[str], None] | Non
     _copy_files(old, folder, counts, report)
     _apply_settings(values, counts, report)
     _move_secrets(old / "secrets", secrets_found, counts, report)
-    from .. import db
+    from jobhunt import db
 
     con = db.connect()
     try:
@@ -288,7 +288,7 @@ def run(folder: Path, dry_run: bool = False, *, say: Callable[[str], None] | Non
     if n:
         report.add("schedule", f"Kept when the old Hal last searched and checked email ({n}).", jobs=n)
     _retire(folder, system, report)
-    from ..core import activity
+    from jobhunt.core import activity
 
     detail = "\n".join(s["line"] for s in report.steps)
     activity.record("settings", "setup.import_usb", DONE, WHY, detail=detail, tone="good")
@@ -302,9 +302,9 @@ def _copy_database(src: Path, dest: Path, report: Report) -> None:
     Rows are added rather than the file replaced, because the new Hal may already be running (setup's "We
     found an older Hal"): its sign-ins, settings, actions and Activity must survive the copy.
     """
-    from .. import db
-    from ..core import backup
-    from ..core.db import migrate
+    from jobhunt import db
+    from jobhunt.core import backup
+    from jobhunt.core.db import migrate
 
     copy = paths.state_dir() / STAGING_DB
     copy.unlink(missing_ok=True)
@@ -389,8 +389,8 @@ def _copy_files(old: Path, folder: Path, counts: _Counts, report: Report) -> Non
 
 
 def _apply_settings(values: dict[str, Any], counts: _Counts, report: Report) -> None:
-    from ..core import settings
-    from ..core.db import tasks
+    from jobhunt.core import settings
+    from jobhunt.core.db import tasks
 
     settings.set_many(values, by="import")
     counts.settings = len(values)
@@ -403,7 +403,7 @@ def _apply_settings(values: dict[str, Any], counts: _Counts, report: Report) -> 
 
 
 def _move_secrets(folder: Path, names: list[str], counts: _Counts, report: Report) -> None:
-    from ..core.settings import secrets
+    from jobhunt.core.settings import secrets
 
     kept = []
     for name in names:

@@ -144,10 +144,10 @@ class Platform(Protocol):
 def current() -> Platform:
     """This computer's platform layer."""
     if os.name == "nt":
-        from .windows import WindowsPlatform
+        from jobhunt.core.platform.windows import WindowsPlatform
 
         return WindowsPlatform()
-    from .linux import LinuxPlatform
+    from jobhunt.core.platform.linux import LinuxPlatform
 
     return LinuxPlatform()
 

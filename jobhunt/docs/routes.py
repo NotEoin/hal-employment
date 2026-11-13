@@ -11,9 +11,9 @@ import re
 import sqlite3
 from datetime import datetime
 
-from ..web.router import BytesResponse, FileResponse, HtmlResponse, NotFound, Request, route
-from . import details, folders
-from . import files as registry
+from jobhunt.docs import details, folders
+from jobhunt.docs import files as registry
+from jobhunt.web.router import BytesResponse, FileResponse, HtmlResponse, NotFound, Request, route
 
 # Board columns by job status; "applying" splits by the application's stage.
 COLUMN_TITLES = {"ready": "Getting ready", "form": "Form filled", "sent": "Sent", "interview": "Interview",

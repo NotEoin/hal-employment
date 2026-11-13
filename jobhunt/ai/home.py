@@ -21,7 +21,7 @@ def signed_out_since(con: sqlite3.Connection) -> str | None:
 
 def needs(con: sqlite3.Connection) -> list[dict]:
     """The sign-in item, while the newest Claude call failed as signed out."""
-    from .health import chosen
+    from jobhunt.ai.health import chosen
 
     if chosen() != "claude_cli":
         return []

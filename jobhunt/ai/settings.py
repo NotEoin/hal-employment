@@ -5,7 +5,7 @@ line keeps `ai.provider` stored just as one made in the app does.
 """
 from __future__ import annotations
 
-from ..core import settings
-from . import provider
+from jobhunt.ai import provider
+from jobhunt.core import settings
 
 settings.on_change(provider.KEY, provider.keep_stored)

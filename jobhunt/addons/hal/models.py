@@ -9,7 +9,7 @@ import re
 import shlex
 from pathlib import Path
 
-from . import _path_setting, enabled
+from jobhunt.addons.hal import _path_setting, enabled
 
 LINE = re.compile(r"^\s*(HAL_\w+)=(.*)$")
 # hal.conf key for each AI role; old roles main, writer, fast map to checker, writer, quick.

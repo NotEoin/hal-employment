@@ -8,15 +8,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..core.builtin_schedule import daily
-from ..core.scheduler import Job
+from jobhunt.core.builtin_schedule import daily
+from jobhunt.core.scheduler import Job
 
 CHECK_AT = "09:00"
 
 
 def check_after(after: datetime) -> datetime | None:
     """09:00 local time after `after`, or None while daily checks are off."""
-    from ..core import settings
+    from jobhunt.core import settings
 
     if not settings.get("updates.auto_check"):
         return None
@@ -25,7 +25,7 @@ def check_after(after: datetime) -> datetime | None:
 
 def check_in_background() -> None:
     """Never used while `updates.check` is registered; the schedule runs that kind instead."""
-    from ..core import runner
+    from jobhunt.core import runner
 
     runner.run("updates.check", why="Daily update check")
 

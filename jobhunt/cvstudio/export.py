@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from . import printer, render
+from jobhunt.cvstudio import printer, render
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 FORMATS = {"pdf": ("application/pdf", ".pdf"), "docx": (DOCX_MIME, ".docx"),
@@ -37,7 +37,7 @@ class UnknownFormat(ValueError):
 
 def file_name(fmt: str) -> str:
     """The download's name: the `cvdocs.file_name` template with this format's extension."""
-    from ..core import naming
+    from jobhunt.core import naming
 
     if fmt not in FORMATS:
         raise UnknownFormat(f"Hal cannot export a CV as {fmt!r}.")
@@ -49,7 +49,7 @@ def file_name(fmt: str) -> str:
 
 def fold_for_simple_pdf(text: str) -> str:
     """What Hal's simple PDF can hold of `text` (it draws ASCII and Latin-1 letters only)."""
-    from . import pdf as cvpdf
+    from jobhunt.cvstudio import pdf as cvpdf
 
     return cvpdf._drawable(text)
 
@@ -57,7 +57,7 @@ def fold_for_simple_pdf(text: str) -> str:
 def cv_pdf(doc: Any, type_: Any, look_id: str, profile: dict, out: Path, *, layout: dict | None = None,
            why: str = "") -> dict:
     """Prints a CV to `out` with the printer, falling back to the simple PDF; the printer's result."""
-    from . import pdf as cvpdf
+    from jobhunt.cvstudio import pdf as cvpdf
 
     v = render.view(doc, type_, profile, layout=layout)
     html = render.html_of(v, look_id)
@@ -226,13 +226,13 @@ def to_jsonresume(doc: Any, profile: dict) -> dict:
 def export(fmt: str, doc: Any, type_: Any, look_id: str, profile: dict, *, layout: dict | None = None,
            work_dir: Path | None = None) -> tuple[bytes, str, str]:
     """(bytes, file name, media type) of the CV in one format."""
-    from . import model
+    from jobhunt.cvstudio import model
 
     if fmt not in FORMATS:
         raise UnknownFormat(f"Hal cannot export a CV as {fmt!r}. Choose PDF, Word, text, JSON Resume or website.")
     mime = FORMATS[fmt][0]
     if fmt == "pdf":
-        from ..core import paths
+        from jobhunt.core import paths
 
         folder = work_dir or paths.cache_dir() / "cv-print"
         html = render.render_cv_html(doc, type_, look_id, profile, for_print=True, layout=layout)

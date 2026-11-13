@@ -6,8 +6,8 @@ inside GitHub's limit for an account with dozens of projects.
 """
 from __future__ import annotations
 
-from ..core.settings.catalog._shared import choices
-from ..core.settings.registry import Setting, register
+from jobhunt.core.settings.catalog._shared import choices
+from jobhunt.core.settings.registry import Setting, register
 
 EVERY_DEFAULT = 6       # hours
 ORDER = 70              # after "Read your record folder every"
