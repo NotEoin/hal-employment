@@ -48,6 +48,7 @@ from pathlib import Path
 
 from .core import paths
 from .ingest import frontmatter
+from .markitdown_loader import markitdown_converter
 
 log = logging.getLogger(__name__)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # Windows: no console flashes up for tesseract
@@ -119,9 +120,6 @@ class RecordUnavailable(Exception):
 
 
 # Turning documents into notes ---------------------------------------------------------------
-
-_MARKITDOWN = None
-
 
 def _run(args: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(args, capture_output=True, creationflags=NO_WINDOW, **kw)
@@ -202,18 +200,16 @@ def _text_of(path: Path) -> str:
     MarkItDown is called only through convert_local on files inside the record, with plugins off and no
     cloud service configured, so a document is never fetched from or sent anywhere.
     """
-    global _MARKITDOWN
     suffix = path.suffix.lower()
     if suffix in IMAGES:
         return _ocr(path)
     text = ""
-    try:
-        if _MARKITDOWN is None:
-            from markitdown import MarkItDown
-            _MARKITDOWN = MarkItDown(enable_plugins=False)
-        text = _MARKITDOWN.convert_local(str(path)).markdown or ""
-    except Exception:  # a converter missing or failing falls back below, or leaves the file unread
-        text = ""
+    converter = markitdown_converter()
+    if converter is not None:
+        try:
+            text = converter.convert_local(str(path)).markdown or ""
+        except Exception as e:  # a converter can fail any way; the readers below try again, or the file stays unread
+            log.info("MarkItDown could not read %s: %s", path.name, e)
     if not text.strip() and suffix in OPENDOCUMENT:
         try:
             text = _opendocument(path)

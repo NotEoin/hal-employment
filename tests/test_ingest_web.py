@@ -188,7 +188,7 @@ class PlainSites(Base):
         self.assertNotIn("Footer words", home.text)
 
     def test_without_markitdown_the_plain_reader_keeps_headings_and_lists(self) -> None:
-        with mock.patch.object(web, "_markitdown", return_value=None):
+        with mock.patch.object(web, "markitdown_converter", return_value=None):
             [home] = web.fetch([self.url("/portfolio/")], page_cap=1)
         self.assertIn("# Robin's work", home.text)
         self.assertIn("- Map cleaning\n- Archive cataloguing", home.text)

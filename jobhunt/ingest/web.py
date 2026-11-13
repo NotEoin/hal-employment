@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import functools
 import io
 import json
 import logging
@@ -45,6 +44,7 @@ from html.parser import HTMLParser
 from typing import Any, Literal
 
 from .. import http
+from ..markitdown_loader import markitdown_converter
 
 log = logging.getLogger(__name__)
 
@@ -544,19 +544,9 @@ _AROUND = re.compile(r"<(nav|header|footer|aside|form|script|style|noscript|svg|
                      re.I | re.S)
 
 
-@functools.cache
-def _markitdown() -> Any | None:
-    """A MarkItDown converter with plugins off, or None when the documents extra is not installed."""
-    try:
-        from markitdown import MarkItDown
-    except ImportError:
-        return None
-    return MarkItDown(enable_plugins=False)
-
-
 def _as_markdown(page_html: str) -> str:
     """The page's own content as Markdown through MarkItDown; "" when it is missing or fails."""
-    converter = _markitdown()
+    converter = markitdown_converter()
     if converter is None:
         return ""
     main = _MAIN.search(page_html)

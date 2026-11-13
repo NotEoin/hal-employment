@@ -61,7 +61,6 @@ class Record(unittest.TestCase):
         self.settings = {"record.search": "words", "record.private_folders": ["Private"], "record.ocr": True}
         for p in (mock.patch.object(record, "VAULT", self.vault, create=True),
                   mock.patch.object(record, "INDEX", self.vault.parent / "record-index.json", create=True),
-                  mock.patch.object(record, "_MARKITDOWN", record._MARKITDOWN),
                   mock.patch.object(record, "_setting", self.setting)):
             p.start()
             self.addCleanup(p.stop)
@@ -95,8 +94,9 @@ class Record(unittest.TestCase):
         (self.vault / "transcript.pdf").write_bytes(tiny_pdf(["Code     Module Title          Credits  Mark",
                                                               "HIS3021  Cold War Diplomacy    20       68"]))
         guessed = "| HIS3021 Cold War Diplomacy | 20 68 |\n| --- | --- |\n"
-        record._MARKITDOWN = type("Guess", (), {"convert_local": lambda self, p: type("R", (), {"markdown": guessed})()})()
-        record.convert()
+        guess = type("Guess", (), {"convert_local": lambda self, p: type("R", (), {"markdown": guessed})()})()
+        with mock.patch.object(record, "markitdown_converter", return_value=guess):
+            record.convert()
         text = (self.vault / "transcript (PDF).md").read_text(encoding="utf-8")
         self.assertNotIn("| 20 68 |", text)
         self.assertRegex(text, r"Cold War Diplomacy +20 +68")
@@ -110,8 +110,11 @@ class Record(unittest.TestCase):
                '</w:body></w:document>')
         with zipfile.ZipFile(self.vault / "certs.docx", "w") as z:
             z.writestr("word/document.xml", xml)
-        record._MARKITDOWN = type("Broken", (), {"convert_local": lambda self, p: 1 / 0})()
-        record.sync()
+        broken = type("Broken", (), {"convert_local": lambda self, p: 1 / 0})()
+        with mock.patch.object(record, "markitdown_converter", return_value=broken), \
+                self.assertLogs("jobhunt.record", "INFO") as logged:
+            record.sync()
+        self.assertIn("MarkItDown could not read certs.docx", logged.output[0])
         self.assertIn("## First Aid", (self.vault / "certs (DOCX).md").read_text(encoding="utf-8"))
         self.assertEqual(record.search("first aid certificate", min_score=0.3)[0]["heading"], "First Aid")
 
