@@ -11,7 +11,7 @@ import importlib
 import importlib.util
 import logging
 import sqlite3
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +21,30 @@ PAUSED_META = "schedule:paused"
 NEXT_WORDS = {"find.discover": "job search", "mail.check": "email check", "notify.digest": "daily summary",
               "record.sync": "read of your record folder", "system.backup": "backup", "system.tidy": "tidy-up",
               "learn.patterns": "look for patterns", "updates.check": "check for updates"}
+
+
+class NextRun(TypedDict):
+    """One of the next scheduled jobs, as the status line names it."""
+
+    what: str
+    at: str
+
+
+class StatusReply(TypedDict):
+    """The `/status` reply; `state` is there only while Hal is busy."""
+
+    busy: bool
+    text: str
+    step_n: int
+    step_total: int | None
+    action_id: str | None
+    why_activity_id: int | None
+    next: list[NextRun]
+    paused: bool
+    problems: int
+    ai_limited_until: str | None
+    reconnecting: bool
+    state: NotRequired[str]
 
 
 def _optional(module: str, name: str) -> Any | None:
@@ -61,20 +85,21 @@ def _paused(con: sqlite3.Connection) -> bool:
     return bool(row and row[0] == "1")
 
 
-def _next(con: sqlite3.Connection) -> list[dict]:
+def _next(con: sqlite3.Connection) -> list[NextRun]:
     runs = _call("jobhunt.core.scheduler", "next_runs", default=[]) or []
     return [{"what": NEXT_WORDS.get(r.get("id", "")) or r.get("label", "").lower() or r.get("id", ""),
              "at": r.get("at")} for r in runs[:NEXT_SHOWN] if r.get("at")]
 
 
-def status(con: sqlite3.Connection) -> dict:
+def status(con: sqlite3.Connection) -> StatusReply:
     """The `/status` reply."""
     row = busiest(con)
     budget = _call("jobhunt.ai.budget", "today", default={}) or {}
-    out = {"busy": False, "text": "", "step_n": 0, "step_total": None, "action_id": None, "why_activity_id": None,
-           "next": _next(con), "paused": _paused(con),
-           "problems": int(_call("jobhunt.core.health", "problem_count", con, default=0) or 0),
-           "ai_limited_until": budget.get("limited_until"), "reconnecting": False}
+    out: StatusReply = {
+        "busy": False, "text": "", "step_n": 0, "step_total": None, "action_id": None, "why_activity_id": None,
+        "next": _next(con), "paused": _paused(con),
+        "problems": int(_call("jobhunt.core.health", "problem_count", con, default=0) or 0),
+        "ai_limited_until": budget.get("limited_until"), "reconnecting": False}
     if row is not None:
         text = row["activity_text"] or row["message"] or row["kind"]
         if row["state"] == "waiting_for_you" and row["message"]:

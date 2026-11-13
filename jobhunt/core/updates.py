@@ -38,7 +38,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from . import filelock, paths
 
@@ -524,7 +524,28 @@ def has_keys(text: str) -> bool:
     return any(line.strip() and not line.strip().startswith("#") for line in text.splitlines())
 
 
-def signing(world: World | None = None) -> dict:
+class Signing(TypedDict):
+    """Whether updates are checked for the maintainer's signature, and that in words."""
+
+    checked: bool
+    words: str
+
+
+class CheckResult(TypedDict):
+    """What `check()` found; `version` is there only when an update is waiting."""
+
+    commit: str
+    newest: str
+    behind: int
+    held: str
+    signing: Signing
+    available: bool
+    words: str
+    whats_new: list[str]
+    version: NotRequired[str]
+
+
+def signing(world: World | None = None) -> Signing:
     """{checked, words}: whether updates are checked for the maintainer's signature on this install."""
     if world is None:
         text = _file_text(paths.code_dir() / Path(SIGNERS))
@@ -619,7 +640,7 @@ def restore_db(backup: Path) -> None:
         src.close()
 
 
-def check(world: World) -> dict:
+def check(world: World) -> CheckResult:
     """Steps 1 to 3: whether an update is waiting, what is new, and whether its commits are signed."""
     stop = refusal(world)
     if stop is not None and stop.state == "developer":
@@ -638,7 +659,7 @@ def check(world: World) -> dict:
     return out
 
 
-def check_and_keep(world: World) -> dict:
+def check_and_keep(world: World) -> CheckResult:
     """`check()`, with its result (or its failure in words) kept for Settings and Home."""
     try:
         result = check(world)

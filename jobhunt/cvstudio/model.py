@@ -20,7 +20,7 @@ import json
 import re
 import secrets
 from dataclasses import asdict, dataclass, field, fields
-from typing import Any, Literal, get_args
+from typing import Any, Literal, TypedDict, get_args
 
 SCHEMA = 2
 SectionKind = Literal["summary", "education", "experience", "volunteering", "projects", "research", "skills",
@@ -441,12 +441,22 @@ def _label(s: Section, e: Entry | None = None) -> str:
 ENTRY_TEXT = ("heading", "org", "location", "start", "end", "grade", "meta", "link", "text")
 
 
-def diff(a: CVDoc, b: CVDoc) -> list[dict]:
+class DiffLine(TypedDict):
+    """One change `diff` reports: where it is in words, its kind, the values either side and its target."""
+
+    where: str
+    kind: str
+    before: Any
+    after: Any
+    target: Target
+
+
+def diff(a: CVDoc, b: CVDoc) -> list[DiffLine]:
     """What changed from `a` to `b`, by id: {where, kind, before, after, target}.
 
     Kinds: Reworded, Added, Moved, Left out, Hidden (and Shown, for a part brought back).
     """
-    out: list[dict] = []
+    out: list[DiffLine] = []
 
     def add(where: str, kind: str, before: Any, after: Any, target: str) -> None:
         out.append({"where": where, "kind": kind, "before": before, "after": after, "target": target})

@@ -15,7 +15,7 @@ import logging
 import sqlite3
 from collections.abc import Callable
 from datetime import timedelta
-from typing import Any
+from typing import Any, TypedDict
 
 from .. import db
 from . import clock, events, plugins
@@ -38,6 +38,55 @@ UndoFn = Callable[[sqlite3.Connection, dict, dict], str | None]
 UNDO: dict[str, UndoFn] = {}
 _guard: Callable[[str], bool] | None = None
 _guard_looked = False
+
+
+class UsedItem(TypedDict):
+    """One thing a row says Hal used, such as a file or a note."""
+
+    kind: str
+    label: str
+
+
+class ActivityItem(TypedDict):
+    """One Activity row as the API sends it."""
+
+    id: int
+    t: str
+    day: str
+    at: str
+    area: str
+    area_label: str
+    kind: str
+    icon: str
+    tone: str
+    text: str
+    running: bool
+    why: str
+    used: list[UsedItem]
+    ai_words: str
+    ai_detail: str
+    took: str
+    changed: str
+    undo: bool
+    undone: bool
+    remote: bool
+    job_id: str | None
+    action_id: str | None
+    detail: str
+
+
+class ActivityDay(TypedDict):
+    """One day of the Activity page, newest row first."""
+
+    day: str
+    items: list[ActivityItem]
+
+
+class ActivityPage(TypedDict):
+    """The Activity page; `more` is the `before` for the next page, or None."""
+
+    days: list[ActivityDay]
+    more: int | None
 
 
 def undo_handler(kind: str) -> Callable[[UndoFn], UndoFn]:
@@ -220,7 +269,7 @@ def day_words(at: str, today: Any = None) -> str:
     return f"{day:%A} {day.day} {day:%B}"
 
 
-def item(row: sqlite3.Row | dict) -> dict:
+def item(row: sqlite3.Row | dict) -> ActivityItem:
     """One row as the API's ActivityItem."""
     r = dict(row)
     used = json.loads(r["used"]) if r.get("used") else []
@@ -241,13 +290,13 @@ def item(row: sqlite3.Row | dict) -> dict:
             "action_id": r.get("action_id"), "detail": r.get("detail") or ""}
 
 
-def one(con: sqlite3.Connection, activity_id: int) -> dict:
+def one(con: sqlite3.Connection, activity_id: int) -> ActivityItem:
     """One row as an ActivityItem; LookupError when there is none."""
     return item(_row(con, activity_id))
 
 
 def page(con: sqlite3.Connection, *, area: str | None = None, before: int | None = None,
-         limit: int = PAGE_LIMIT, job_id: str | None = None) -> dict:
+         limit: int = PAGE_LIMIT, job_id: str | None = None) -> ActivityPage:
     """The Activity page: newest first, grouped by day; `more` is the `before` for the next page, or None."""
     limit = max(1, min(int(limit), MAX_LIMIT))
     where, args = [], []
@@ -265,7 +314,7 @@ def page(con: sqlite3.Connection, *, area: str | None = None, before: int | None
     sql = "SELECT * FROM activity" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY id DESC LIMIT ?"
     rows = con.execute(sql, (*args, limit + 1)).fetchall()
     more = rows[limit - 1]["id"] if len(rows) > limit else None
-    days: list[dict] = []
+    days: list[ActivityDay] = []
     for r in rows[:limit]:
         it = item(r)
         if not days or days[-1]["day"] != it["day"]:
