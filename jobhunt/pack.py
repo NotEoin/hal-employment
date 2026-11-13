@@ -60,8 +60,10 @@ Design notes:
 import logging
 import re
 import textwrap
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from . import ai, cv, db, record, reputation, research
 from .ai import prompts
@@ -145,6 +147,19 @@ EVIDENCE_SHOWN = 3        # pieces of evidence named on the letter's Evidence li
 PASSAGE = re.compile(r"^\[(.+?)\]$", re.M)   # the "[file > heading]" line `record.context` puts on each passage
 QUESTION_SHARE = 0.8      # share of a question's words the advert must hold for it to count as written out
 NOTE_PARA = re.compile(r"\(.*\)\Z|(notes?|word count)\b", re.S | re.I)   # a closing paragraph about the draft
+
+
+@dataclass(frozen=True)
+class Brief:
+    """What every draft for one job is written from and checked against: the job row, the person's prompt
+    values (`person`), the advert reading, the company brief, the CV facts and the record passages (`_kept`)."""
+    job: Any
+    who: dict
+    analysis: dict
+    about: str
+    facts: str
+    kept: str
+
 
 def slug(text: str) -> str:
     """Returns a file-name-safe form of a text."""
@@ -479,15 +494,16 @@ def evidence_plan(analysis: dict, facts: str, kept: str, questions: tuple[str, .
                          profile_writing.cards(), profile_writing.listings())
 
 
-def _context(job, who: dict, analysis: dict, about: str, fit: dict, facts: str, kept: str, history: str) -> str:
+def _context(brief: Brief, fit: dict, history: str) -> str:
     """The request text every drafted document shares: the job, the evidence and the person's dates."""
+    job, analysis = brief.job, brief.analysis
     return (f"Job: {job['title']} at {job['company']}\nRole summary: {analysis.get('summary', '')}\n"
             + (f"Earlier applications to this employer: {history}. Do not mention them unless asked.\n"
                if history else "") +
             f"{stage.today_lines()}\nMention availability only if the advert's start date is "
             f"flexible; for a fixed intake, refer to that intake instead.\n"
-            f"Company: {about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{facts}"
-            + _record_part(f"Employment record ({record.OWN_DOCUMENTS}; use it where the CV is silent)", kept))
+            f"Company: {brief.about}\nEvidence map: {fit.get('matches', [])}\n\nCV facts:\n{brief.facts}"
+            + _record_part(f"Employment record ({record.OWN_DOCUMENTS}; use it where the CV is silent)", brief.kept))
 
 
 def read_job(job, who: dict, facts: str) -> dict:
@@ -499,7 +515,7 @@ def read_job(job, who: dict, facts: str) -> dict:
 
 def shared_context(con, job, who: dict, read: dict, about: str, facts: str) -> str:
     """The request text the letter, message and answers share (`_context`) for a `read_job` reading."""
-    return _context(job, who, read["analysis"], about, read["fit"], facts, read["kept"],
+    return _context(Brief(job, who, read["analysis"], about, facts, read["kept"]), read["fit"],
                     previous_applications(con, job))
 
 
@@ -532,9 +548,10 @@ def _letter(who: dict, context: str, trimmed: set[str] | None = None) -> str:
     return _draft(who, "letter", context, set() if trimmed is None else trimmed)
 
 
-def _hits(who: dict, text: str, kind: str, *, facts: str, kept: str, sources: tuple[str, ...]) -> list:
+def _hits(brief: Brief, text: str, kind: str, sources: tuple[str, ...]) -> list:
     """What the writing checker finds in a draft against every fact it may draw on."""
-    return writing_check.check(text, kind, sources=(facts, kept, *sources),
+    who, facts = brief.who, brief.facts
+    return writing_check.check(text, kind, sources=(facts, brief.kept, *sources),
                                spelling=who.get("spelling_code", ""), cv_text=facts if kind == "letter" else "",
                                target_words=who.get("letter_words") if kind == "letter" else None,
                                allowed=who.get("own_words") or ())
@@ -629,31 +646,35 @@ def fix_echoes(draft, echoed_in, rewrite):
     return (again or draft), bool(again)
 
 
-def fix_claims(who: dict, draft, rewrite, *, facts: str, kept: str, employer: tuple[str, ...], as_text=str):
+def fix_claims(brief: Brief, draft, rewrite, *, employer: tuple[str, ...], as_text=str):
     """The draft rewritten once by `rewrite(note)` when it makes claims about the person their facts do not
     support, then checked again; returns (draft, the claims still unsupported, whether it was rewritten).
 
     One rewrite, never a loop, as with `revise_once`. `as_text` turns a draft (the answers are a list) into
     the text that is checked.
     """
-    claims = unsupported_claims(who, as_text(draft), facts=facts, kept=kept, employer=employer)
+    def unsupported(text: str) -> list[str]:
+        return unsupported_claims(brief.who, text, facts=brief.facts, kept=brief.kept, employer=employer)
+
+    claims = unsupported(as_text(draft))
     if not claims:
         return draft, [], False
     again = rewrite(claims_note(claims))
     if not again:
         return draft, claims, False
-    return again, unsupported_claims(who, as_text(again), facts=facts, kept=kept, employer=employer), True
+    return again, unsupported(as_text(again)), True
 
 
-def check_drafts(who: dict, drafts: str, *, facts: str, kept: str, sources: tuple[str, ...], kind: str = "letter",
+def check_drafts(brief: Brief, drafts: str, *, sources: tuple[str, ...], kind: str = "letter",
                  claims: list[str] | None = None) -> list[str]:
     """What to check before sending: numbers no source holds, claims the facts do not support (`claims` when
     `fix_claims` already found them, else `unsupported_claims`), the writing rules a draft breaks
     (`writing.check`) and the person's never-use phrases."""
-    hits = _hits(who, drafts, kind, facts=facts, kept=kept, sources=sources)
+    who = brief.who
+    hits = _hits(brief, drafts, kind, sources)
     flagged = [h.flag for h in hits if h.rule == "T1"]
     if claims is None:
-        claims = unsupported_claims(who, drafts, facts=facts, kept=kept, employer=sources)
+        claims = unsupported_claims(who, drafts, facts=brief.facts, kept=brief.kept, employer=sources)
     flagged += [f"unsupported claim: {c}" for c in claims]
     flagged += [h.flag for h in writing_check.flagged(hits) if h.rule != "T1"]
     names, labels = applicant_names(who), plain.settings_labels()
@@ -688,22 +709,23 @@ def letter_notes(who: dict, letter: str, evidence: list[str], flags: list[str], 
                 "sending: see Check before sending.")}
 
 
-def paragraph_scope(who: dict, job, analysis: dict, about: str, *, facts: str, kept: str,
-                    found: list[planning.Story], cards: list[dict], request: str = "",
+def paragraph_scope(brief: Brief, *, found: list[planning.Story], cards: list[dict], request: str = "",
                     kind: str = "letter") -> paragraphs.Scope:
     """What each paragraph of one job's `kind` of draft is drafted with and checked against beside its own story
     (`writing.paragraphs`): the job and its advert, today, the field's conventions, the employer's words, every
     story and card, the person's names, modules and settings wording, and for a letter, while "Match my own
     writing" is on, short excerpts of the person's own letters for their voice (`sections.letters`)."""
+    job, who, about = brief.job, brief.who, brief.about
     now, advert = stage.current(), _job_text(job)
-    brief = (f"What the employer does (from the company brief; never copy its words):\n"
-             f"{about.strip()[:paragraphs.BRIEF_CHARS]}\n\n") if (about or "").strip() else ""
+    company = (f"What the employer does (from the company brief; never copy its words):\n"
+               f"{about.strip()[:paragraphs.BRIEF_CHARS]}\n\n") if (about or "").strip() else ""
     context = (f"The job: {job['title']} at {job['company']}\nThe advert (for what the job is; never copy its "
-               f"words):\n{advert[:paragraphs.ADVERT_CHARS]}\n\n{brief}{stage.today_lines(now)}\n\n"
-               + fields.block(field_of(job, who, analysis), kind))
+               f"words):\n{advert[:paragraphs.ADVERT_CHARS]}\n\n{company}{stage.today_lines(now)}\n\n"
+               + fields.block(field_of(job, who, brief.analysis), kind))
     return paragraphs.Scope(tuple(found), tuple(cards), tuple(known_tools(cards)),
                             f"{advert}\n{about}\n{stage.today_lines(now)}", advert, about,
-                            (job["title"], job["company"]), now, tuple(profile_writing.module_names()), (facts, kept),
+                            (job["title"], job["company"]), now, tuple(profile_writing.module_names()),
+                            (brief.facts, brief.kept),
                             tuple(applicant_names(who)), tuple(plain.settings_labels()), who, context.strip(), request,
                             tuple(profile_writing.studied_skills()), _voice(kind), tuple(profile_writing.degrees()))
 
@@ -719,16 +741,17 @@ def _voice(kind: str) -> tuple[str, ...]:
     return tuple(letters.voice_excerpts())
 
 
-def letter_frame(who: dict, job, scope: paragraphs.Scope, pairing: motive.Pairing | None,
+def letter_frame(brief: Brief, scope: paragraphs.Scope, pairing: motive.Pairing | None,
                  told: tuple[str, ...], modules: tuple[str, ...] = (),
                  middle: tuple[tuple[str, str], ...] = ()) -> frame.Facts:
     """The fixed facts of a letter's opening and closing: the person's name and course (`opening.described`), the
     role, the reason for this employer, the names of the work the middle tells, the `modules` the job's
     requirements name that no paragraph shows (`plan.relevant_modules`) and the middle's paragraphs, (name,
     text) each, which the frame must not retell (`frame.retold`)."""
-    name = str(who.get("name") or "")
+    name = str(brief.who.get("name") or "")
     now = scope.now or stage.current()
-    return frame.Facts("" if name == SOMEONE else name, opening.described(now), job["title"], job["company"],
+    return frame.Facts("" if name == SOMEONE else name, opening.described(now), brief.job["title"],
+                       brief.job["company"],
                        pairing, told, now.institution, modules, middle)
 
 
@@ -759,15 +782,16 @@ def _letter_bodies(chosen: list[planning.Story], spare: list[planning.Story], sh
     return bodies
 
 
-def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, kept: str, facts: str,
-                  plan: list[planning.Item], pairing: motive.Pairing | None, chosen: list[planning.Story],
-                  wanted: str = "", spare: list[planning.Story] = ()) -> dict:
+def _story_letter(con, brief: Brief, scope: paragraphs.Scope, *, plan: list[planning.Item],
+                  pairing: motive.Pairing | None, chosen: list[planning.Story], wanted: str = "",
+                  spare: list[planning.Story] = ()) -> dict:
     """A letter told one piece of work a paragraph (`writing.paragraphs`): the `chosen` stories (`rank.order`),
     each drafted from its own facts and checked against them, at a length that fills the person's letter length
     (`paragraphs.letter`), and the next of `spare` (`rank.Told.others`) when one is dropped or the letter is short
     (`_letter_bodies`), between an opening and a closing drafted from the fixed facts of who is writing, the
     role and the reason for this employer (`letter_frame`, `writing.frame`); `wanted` is the job's requirements,
     for the modules the opening may name."""
+    who, facts, kept = brief.who, brief.facts, brief.kept
     shape = paragraphs.letter(who.get("letter_words"), len(chosen))
     bodies = _letter_bodies(chosen, list(spare), shape, scope, who.get("letter_words"))
     told = tuple(b.story.name for b in bodies if b.text and b.story.name)
@@ -775,13 +799,13 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
     modules = planning.relevant_modules(profile_writing.marked_modules(institution=course), wanted,
                                         "\n".join(b.story.words() for b in bodies if b.text))
     middle = tuple((b.story.name, b.text) for b in bodies if b.text)
-    facts_said = letter_frame(who, job, scope, pairing, told, modules, middle)
+    facts_said = letter_frame(brief, scope, pairing, told, modules, middle)
     framed = frame.settle(facts_said, scope)
     cards = list(scope.cards)
     text = "\n\n".join(p for p in (framed.opening, *(b.text for b in bodies), framed.closing) if p)
     letter = plain.tidy(relocation.without_own_move(text, eligibility.person(con)), cards)
-    flags = check_drafts(who, letter, facts=facts, kept=kept, sources=(scope.advert, scope.brief, facts_said.words(),
-                                                                       scope.allowed), claims=[])
+    flags = check_drafts(brief, letter, sources=(scope.advert, scope.brief, facts_said.words(), scope.allowed),
+                         claims=[])
     flags += [b.listed for b in bodies if b.dropped]
     flags += [line for b in bodies for line in b.checks]
     flags += [f"{DANGLING_FLAG}: {s}" for s in flow.dangling(letter)]
@@ -797,12 +821,12 @@ def _story_letter(con, job, who: dict, scope: paragraphs.Scope, *, fit: dict, ke
             "notes": letter_notes(who, letter, shown, flags, softened=softened)}
 
 
-def story_ranking(job, analysis: dict, about: str, found: list[planning.Story],
-                  cards: list[dict]) -> list[rank.Ranked]:
+def story_ranking(brief: Brief, found: list[planning.Story], cards: list[dict]) -> list[rank.Ranked]:
     """The one AI ranking of the person's work for one job (`writing.rank`), logged with its reasons; [] when it
     gave nothing usable, so the job's words choose the work."""
+    job, analysis = brief.job, brief.analysis
     ranked = rank.make(rank.Job(job["title"], job["company"], str(analysis.get("summary") or ""),
-                                tuple(_requirements(analysis)), about or ""), cards, found)
+                                tuple(_requirements(analysis)), brief.about or ""), cards, found)
     if ranked:
         log.info("story ranking for job %s: %s", job["id"], rank.said(ranked))
     else:
@@ -830,22 +854,22 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
     kept = kept if kept is not None else _kept(analysis)
     fit = fit if fit is not None else _fit(who, analysis, facts, kept, job)
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept)
+    brief = Brief(job, who, analysis, about, facts, kept)
     names = (job["title"], job["company"])
     cards = profile_writing.cards()
     found = planning.with_showcase(planning.stories(plan, cards), cards)
     if found:
-        scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
-                                request=request, kind="letter")
+        scope = paragraph_scope(brief, found=found, cards=cards, request=request, kind="letter")
         asked = ranking is None
-        ranking = story_ranking(job, analysis, about, found, cards) if asked else ranking
+        ranking = story_ranking(brief, found, cards) if asked else ranking
         wanted = "\n".join(_requirements(analysis))
         told = rank.order(found, cards, ranking, wanted)
         pairing = motive.make(names, _job_text(job), about, plan, fitting_names(ranking))
-        written = _story_letter(con, job, who, scope, fit=fit, kept=kept, facts=facts, plan=plan, pairing=pairing,
-                                chosen=list(told.letter), wanted=wanted, spare=list(told.others))
+        written = _story_letter(con, brief, scope, plan=plan, pairing=pairing, chosen=list(told.letter),
+                                wanted=wanted, spare=list(told.others))
         return {**written, "ranking": ranking, "calls": written["calls"] + asked}
     pairing = motive.make(names, _job_text(job), about, plan)
-    text = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
+    text = _context(brief, fit, previous_applications(con, job))
     text += f"\n\n{motive.block(pairing)}" if pairing is not None else ""
     text += "\n\n" + fields.block(field_of(job, who, analysis), "letter")
     if request:
@@ -860,14 +884,14 @@ def write_letter(con, job, *, who: dict | None = None, analysis: dict | None = N
         return _letter(who, f"{text}\n\nYour draft:\n{letter}\n\n{note}", trimmed)
 
     letter = _letter(who, text, trimmed)
-    letter, revised = revise_once(letter, _hits(who, letter, "letter", facts=facts, kept=kept, sources=sources),
+    letter, revised = revise_once(letter, _hits(brief, letter, "letter", sources),
                                   lambda note: _letter(who, f"{text}\n\nYour first draft:\n{letter}\n\n{note}",
                                                        trimmed))
     letter, _ = fix_echoes(letter, echoed_in, again)
-    letter, claims, softened = fix_claims(who, letter, again, facts=facts, kept=kept, employer=sources)
+    letter, claims, softened = fix_claims(brief, letter, again, employer=sources)
     cut = letter in trimmed
     letter = plain.tidy(relocation.without_own_move(letter, eligibility.person(con)), cards)
-    flags = check_drafts(who, letter, facts=facts, kept=kept, sources=sources, claims=claims)
+    flags = check_drafts(brief, letter, sources=sources, claims=claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in echoed_in(letter)]
     flags += [f"{DANGLING_FLAG}: {s}" for s in flow.dangling(letter)]
     if flow.short(letter, who.get("letter_words")):
@@ -926,12 +950,14 @@ def fix_repeats(answers: list[dict], rewrite):
     return (again or answers), bool(again)
 
 
-def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[str, ...],
+def _answers(brief: Brief, request: str, *, sources: tuple[str, ...],
              names: tuple[str, ...] = ()) -> tuple[list[dict], list[str], list[str]]:
     """Answers to the questions `request` lists, revised once together when one breaks a high-severity rule,
     once when a "why here" answer restates the advert (`echoed_answers`) and once more when they make claims
     the facts do not support, after once more when a later answer repeats an earlier one (`fix_repeats`);
     returns (answers, the claims still unsupported, the sentences still restating the advert)."""
+    who = brief.who
+
     def ask(text: str) -> list[dict]:
         found = ai.chat_json(prompt("answers", who), text, role="writer", timeout=ai.LONG_TIMEOUT_S,
                             purpose="answers").get("answers", [])
@@ -942,13 +968,12 @@ def _answers(who: dict, request: str, *, facts: str, kept: str, sources: tuple[s
         return ask(f"{request}\n\nYour answers:\n{_answers_text(answers)}\n\n{note}")
 
     answers = ask(request)
-    hits = [h for a in answers for h in _hits(who, a["answer"], "answer", facts=facts, kept=kept, sources=sources)]
+    hits = [h for a in answers for h in _hits(brief, a["answer"], "answer", sources)]
     answers = revise_once(answers, hits,
                           lambda note: ask(f"{request}\n\nYour first answers:\n{_answers_text(answers)}\n\n{note}"))[0]
     answers, _ = fix_echoes(answers, lambda found: echoed_answers(found, sources, names), again)
     answers, _ = fix_repeats(answers, again)
-    answers, claims = fix_claims(who, answers, again, facts=facts, kept=kept, employer=sources,
-                                 as_text=_answers_text)[:2]
+    answers, claims = fix_claims(brief, answers, again, employer=sources, as_text=_answers_text)[:2]
     return answers, claims, echoed_answers(answers, sources, names)
 
 
@@ -962,19 +987,19 @@ def _message(who: dict, context: str, trimmed: set[str]) -> str:
     return body
 
 
-def message_opening(who: dict, job, analysis: dict) -> opening.Opening:
+def message_opening(brief: Brief) -> opening.Opening:
     """The message's greeting and first sentence (`writing.opening`): the person's name and stage, the role, and
     the advert's first hiring contact (`hiring_contacts`)."""
-    contacts = hiring_contacts(analysis, _job_text(job))
-    name = str(who.get("name") or "")
-    return opening.Opening.of("" if name == SOMEONE else name, stage.current(), job["title"],
+    contacts = hiring_contacts(brief.analysis, _job_text(brief.job))
+    name = str(brief.who.get("name") or "")
+    return opening.Opening.of("" if name == SOMEONE else name, stage.current(), brief.job["title"],
                               contacts[0]["name"] if contacts else "")
 
 
-def answers_request(job, who: dict, analysis: dict, questions: list[str], context: str) -> str:
+def answers_request(brief: Brief, questions: list[str], context: str) -> str:
     """The request for answers to `questions`: each question, the shared context and the field's conventions."""
     return ("Questions:\n" + "\n".join(f"- {q}" for q in questions)
-            + f"\n\n{context}\n\n{fields.block(field_of(job, who, analysis), 'answer')}")
+            + f"\n\n{context}\n\n{fields.block(field_of(brief.job, brief.who, brief.analysis), 'answer')}")
 
 
 NO_ANSWER = 'Hal drafted no answer to "{question}": your facts gave nothing it could check. Answer it yourself'
@@ -1058,7 +1083,7 @@ def _story_message(found: list[planning.Story], scope: paragraphs.Scope, after: 
     return out
 
 
-def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, facts: str, kept: str,
+def _story_others(brief: Brief, scope: paragraphs.Scope, *,
                   plan: list[planning.Item], questions: list[str], pairing: motive.Pairing | None, paired: bool,
                   told: tuple[str, ...], ordered: list[planning.Story], whole_message=None,
                   whole_answers=None, ranking: list[rank.Ranked] = ()) -> dict:
@@ -1079,7 +1104,7 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
     you, cards, calls = eligibility.person(), list(scope.cards), 0
     found = list(ordered)
     used = dict.fromkeys(told, 1)
-    first = message_opening(who, job, analysis)
+    first = message_opening(brief)
     tried = _story_message(found, scope, first.sentence, used, ranking)
     body = next((p for p in tried if p.text), tried[-1] if tried else paragraphs.Paragraph(found[0]))
     calls += sum(p.calls for p in tried)
@@ -1088,7 +1113,7 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
         body.text, flags = whole_message(), []
         calls += 1
     if not paired and any(drafts.why_question(q) for q in questions):
-        pairing = motive.make((job["title"], job["company"]), scope.advert, scope.brief, plan,
+        pairing = motive.make((brief.job["title"], brief.job["company"]), scope.advert, scope.brief, plan,
                               fitting_names(list(ranking)))
         calls += 1
     answers = []
@@ -1111,8 +1136,8 @@ def _story_others(who: dict, job, analysis: dict, scope: paragraphs.Scope, *, fa
         a["answer"] = plain.tidy(relocation.without_own_move(a["answer"], you), cards)
     message = plain.tidy(relocation.without_own_move(body.text, you), cards)
     written = "\n\n".join([message, *(a["answer"] for a in answers)])
-    flags = check_drafts(who, written, facts=facts, kept=kept, sources=(scope.advert, scope.brief, scope.allowed),
-                         kind="answer", claims=[]) + flags
+    flags = check_drafts(brief, written, sources=(scope.advert, scope.brief, scope.allowed), kind="answer",
+                         claims=[]) + flags
     return {"message": first.put(message), "answers": answers, "flags": flags, "calls": calls}
 
 
@@ -1138,51 +1163,48 @@ def write_others(who: dict, job, analysis: dict, about: str, *, message_request:
     job_text = _job_text(job)
     their_words, trimmed = (job_text, about), set()
     plan = plan if plan is not None else evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
+    brief = Brief(job, who, analysis, about, facts, kept)
     cards = profile_writing.cards()
     found = planning.with_showcase(planning.stories(plan, cards), cards)
     if found:
-        scope = paragraph_scope(who, job, analysis, about, facts=facts, kept=kept, found=found, cards=cards,
-                                request=request, kind="answer")
+        scope = paragraph_scope(brief, found=found, cards=cards, request=request, kind="answer")
         def whole_message() -> str:
-            return _message(who, f"{message_request}\n\n{message_opening(who, job, analysis).note}", set())
+            return _message(who, f"{message_request}\n\n{message_opening(brief).note}", set())
 
         def whole_answers(blank: list[str]) -> dict[str, str]:
             rest = answers_request.split("\n\n", 1)[1] if "\n\n" in answers_request else ""
             asked = "Questions:\n" + "\n".join(f"- {q}" for q in blank) + (f"\n\n{rest}" if rest else "")
-            found, _, _ = _answers(who, asked, facts=facts, kept=kept, sources=their_words,
-                                   names=(job["title"], job["company"]))
+            found, _, _ = _answers(brief, asked, sources=their_words, names=(job["title"], job["company"]))
             said = [str(a.get("answer") or "") for a in found]
             by_question = {str(a.get("question") or ""): s for a, s in zip(found, said, strict=True)}
             return {q: by_question.get(q) or (said[k] if len(said) == len(blank) else "") for k, q in enumerate(blank)}
 
         asked = ranking is None
-        ranking = story_ranking(job, analysis, about, found, cards) if asked else ranking
+        ranking = story_ranking(brief, found, cards) if asked else ranking
         ordered = rank.order(found, cards, ranking, "\n".join(_requirements(analysis))).others
-        written = _story_others(who, job, analysis, scope, facts=facts, kept=kept, plan=plan,
+        written = _story_others(brief, scope, plan=plan,
                                 questions=list(questions) if answers_request else [], pairing=pairing,
                                 paired=paired, told=told, ordered=list(ordered), whole_message=whole_message,
                                 whole_answers=whole_answers, ranking=ranking)
         return {**written, "calls": written["calls"] + asked}
-    first = message_opening(who, job, analysis)
+    first = message_opening(brief)
     message_request += f"\n\n{first.note}"
 
     def rewrite_message(note: str) -> str:
         return _message(who, f"{message_request}\n\nYour draft:\n{message}\n\n{note}", trimmed)
 
     message = _message(who, message_request, trimmed)
-    message, message_claims, _ = fix_claims(who, message, rewrite_message, facts=facts, kept=kept,
-                                            employer=their_words)
+    message, message_claims, _ = fix_claims(brief, message, rewrite_message, employer=their_words)
     cut = message in trimmed
     answers, answer_claims, answer_echoes = _answers(
-        who, answers_request, facts=facts, kept=kept, sources=their_words,
+        brief, answers_request, sources=their_words,
         names=(job["title"], job["company"])) if answers_request else ([], [], [])
     you = eligibility.person()
     message = plain.tidy(relocation.without_own_move(message, you), cards)
     answers = [{**a, "answer": plain.tidy(relocation.without_own_move(str(a.get("answer") or ""), you), cards)}
                for a in answers]
     written = "\n\n".join([message, *(a.get("answer", "") for a in answers)])
-    flags = check_drafts(who, written, facts=facts, kept=kept, sources=their_words, kind="answer",
-                         claims=message_claims + answer_claims)
+    flags = check_drafts(brief, written, sources=their_words, kind="answer", claims=message_claims + answer_claims)
     flags += [f"{ECHO_FLAG}: {s}" for s in answer_echoes]
     flags += [f"{REPEAT_FLAG}: {s}" for _, s, _ in repeated_answers(answers)]
     flags += [f"{DANGLING_FLAG}: {s}" for s in flow.dangling(message)]
@@ -1347,12 +1369,13 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
     kept = _kept(analysis)
     fit = _fit(who, analysis, facts, kept, job)
     plan = evidence_plan(analysis, facts, kept, tuple(COMMON_QUESTIONS))
+    brief = Brief(job, who, analysis, about, facts, kept)
     written = write_letter(con, job, who=who, analysis=analysis, about=about, kept=kept, fit=fit, plan=plan)
     letter = written["text"]
-    context = _context(job, who, analysis, about, fit, facts, kept, previous_applications(con, job))
+    context = _context(brief, fit, previous_applications(con, job))
     questions = [*(analysis.get("questions") or []), *COMMON_QUESTIONS]
     others = write_others(who, job, analysis, about, message_request=context,
-                          answers_request=answers_request(job, who, analysis, questions, context),
+                          answers_request=answers_request(brief, questions, context),
                           facts=facts, kept=kept, plan=plan, questions=questions,
                           pairing=written["pairing"], paired=True, told=tuple(written.get("told", ())),
                           ranking=written.get("ranking"))
@@ -1378,8 +1401,7 @@ def _build(con, job_id: str, use_web: bool, ctx) -> Path:
         for label in written["used"]:
             ctx.used("record", label)
 
-    md = _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged, who,
-                   written["notes"])
+    md = _markdown(brief, urls, fit, letter, message, answers, pdf, track, flagged, written["notes"])
     md = md.replace("## Role\n", company_md + "\n## Role\n", 1)
     pack_md = out_dir / "pack.md"
     pack_md.write_text(md)
@@ -1440,7 +1462,9 @@ def read_letter_notes(job) -> dict:
     return {NOTE_KEYS[k]: v.strip() for k, v in re.findall(r"^- (\w+): (.*)$", notes, re.M) if k in NOTE_KEYS}
 
 
-def _markdown(job, analysis, about, urls, fit, letter, message, answers, pdf, track, flagged, who, notes) -> str:
+def _markdown(brief: Brief, urls, fit, letter, message, answers, pdf, track, flagged, notes) -> str:
+    """The pack's Markdown: the job, what to check, the role, the company, the fit map and every draft."""
+    job, analysis, about, who = brief.job, brief.analysis, brief.about, brief.who
     lines = [f"# {job['company']}: {job['title']}", "",
              f"- Apply: {job['url']}",
              f"- Location: {job['location'] or 'not stated'} | Salary: {job['salary'] or 'not stated'}",
