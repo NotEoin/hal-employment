@@ -278,14 +278,14 @@ def source_of(con: sqlite3.Connection, r: sqlite3.Row) -> readers.Source:
                           meta=store.meta(con, r["id"]), cards=cards)
 
 
-def vault() -> Path:
+def record_folder() -> Path:
     """The record folder the notes go in."""
     return record.folder()
 
 
 def ensure_record() -> Path:
     """The record folder, made with its starter folders (`evidence.routes.make_default`) when it is missing."""
-    folder = vault()
+    folder = record_folder()
     if not folder.is_dir():
         make_default()
     return folder
@@ -300,7 +300,7 @@ def note_folder(section: registry.Section, target: dict | None) -> str:
 def _drop_note(note_rel: str | None) -> None:
     if not note_rel:
         return
-    root = vault().resolve()
+    root = record_folder().resolve()
     path = (root / note_rel).resolve()
     if root in path.parents:
         path.unlink(missing_ok=True)
@@ -342,7 +342,7 @@ def _evidence(section: registry.Section, kind: registry.DocKind, source_id: int,
 def _write_note(r: sqlite3.Row, section: registry.Section, kind: registry.DocKind, source: readers.Source,
                 reading: readers.Reading, name: str) -> str:
     """Writes the source's note under its section's folder; returns its path inside the record."""
-    root = vault()
+    root = record_folder()
     folder = root / note_folder(section, source.target)
     folder.mkdir(parents=True, exist_ok=True)
     title = r["title"] or reading.title or readers.title_in(reading.text, name)

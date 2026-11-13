@@ -102,7 +102,7 @@ def _placed(p: sorter.Proposal, fm: dict, text: str) -> None:
 
 def propose(con: sqlite3.Connection) -> sorter.Sorted:
     """A proposal for each older note that facts name, by its frontmatter and the sorter's rules."""
-    vault = pipeline.vault()
+    vault = pipeline.record_folder()
     out = sorter.Sorted()
     for rel in _old_rels(con):
         note = vault / rel

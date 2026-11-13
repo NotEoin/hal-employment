@@ -84,7 +84,7 @@ def new_batch() -> str:
     return uuid.uuid4().hex
 
 
-def vault() -> Path:
+def record_folder() -> Path:
     """The record folder, made when it is not there yet: the person asked for files to go into it."""
     folder = record.folder()
     folder.mkdir(parents=True, exist_ok=True)
@@ -281,7 +281,7 @@ def _covered(con: sqlite3.Connection, row: sqlite3.Row, batch: str, covered: lec
     hit = covered.find(row["rel"], Path(row["rel"]).stem)
     if hit is None:
         return False
-    _also_at(vault(), hit[1], _source(row, batch))
+    _also_at(record_folder(), hit[1], _source(row, batch))
     items.update(con, row["id"], state="covered", dup_of=hit[0], note=hit[1], role=roles.TAUGHT)
     return True
 
@@ -438,7 +438,7 @@ def _finish(con: sqlite3.Connection, row: sqlite3.Row, read: _Read, batch: str, 
     if read.private:                               # no note, no copy of the file, no facts
         privacy.hold(con, row["id"], read.private)
         return None
-    vault_dir = vault()
+    vault_dir = record_folder()
     if row["note"]:
         return _again(con, row, read, vault_dir, batch)
     if read.skip:
@@ -480,7 +480,7 @@ def _copy_of(con: sqlite3.Connection, row: sqlite3.Row, batch: str) -> bool:
     if first is None:
         return False
     if first["note"] and row["path"] != first["path"]:   # the same file read again is not a copy
-        _also_at(vault(), first["note"], _source(row, batch))
+        _also_at(record_folder(), first["note"], _source(row, batch))
     items.update(con, row["id"], state="duplicate", dup_of=first["id"], note=first["note"])
     return True
 
@@ -599,7 +599,7 @@ def _courses(con: sqlite3.Connection, batch: str) -> list[str]:
     slides in another folder, adds its files to that note. One module had seven notes, one per folder and
     spelling of its name (2026-11-05).
     """
-    vault_dir, written = vault(), []
+    vault_dir, written = record_folder(), []
     for unit in con.execute("SELECT * FROM ingest_items WHERE batch = ? AND kind = 'course' AND state = 'pending'",
                             (batch,)).fetchall():
         members = con.execute("""SELECT rel, note FROM ingest_items WHERE batch = ? AND unit = ? AND note IS NOT NULL
@@ -674,10 +674,10 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
     if tidy and not con.execute("SELECT 1 FROM ingest_items WHERE batch = ? LIMIT 1", (batch,)).fetchone():
         # once only: a carry-on after a restart finds the notes to read again in the batch already
         step("Backing up and tidying your record")
-        tidied = tidy_pass.prepare(con, batch, vault())
+        tidied = tidy_pass.prepare(con, batch, record_folder())
     step("Reading each file, your CV and other rich documents first")
     drop_root = sources.drop_folder().resolve() if drop else None
-    versions.set_aside_old_copies(con, batch, vault())
+    versions.set_aside_old_copies(con, batch, record_folder())
     # supporting files are never read: `attach.attach_pending` lists them with their unit once it is written
     todo = [r for r in items.pending(con, batch) if r["kind"] not in UNITS and not attach.supporting(r)]
     # Within a rank, typed notes before converted decks and handouts, so a lecture's notes are in the record
@@ -686,10 +686,10 @@ def run(con: sqlite3.Connection, batch: str, *, folders=(), uploads=(), drop: bo
                              not lectures.is_typed(r["rel"])))
     total = sum(items.counts(con, batch)["states"].values())
     written = _read_items(con, todo, batch, drop_root, progress, total - len(todo), total)
-    versions.record_earlier(con, batch, vault())
+    versions.record_earlier(con, batch, record_folder())
     step("Linking your notes")
     written += _courses(con, batch)
-    vault_dir = vault()
+    vault_dir = record_folder()
     written += projects.write_notes(con, batch, vault_dir)
     attach.attach_pending(con, batch, vault_dir)
     notes.link_pass(vault_dir, written)
