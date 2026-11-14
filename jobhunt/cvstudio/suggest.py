@@ -46,6 +46,7 @@ log = logging.getLogger(__name__)
 
 MAX_PENDING = 6                     # "Look again" stops when this many wait
 AI_PRIORITY = 1                     # the writer role at priority 1: documents for jobs you chose
+RECORD_CHARS = 6000                 # the record text a prompt gets, as `record.context` gives one
 DETERMINISTIC_KINDS = ("Consistency", "Symbols", "Dates")   # the kinds "Accept all" works for
 KINDS = ("Wording", "Results", "Order", "Cut", "Consistency", "Symbols", "Dates", "Add", "Gap")
 OPS = ("replace", "insert", "delete", "move", "hide", "reorder", "retitle")
@@ -546,7 +547,7 @@ def _profile() -> dict:
 
 def passages_for(doc, sids: list[str]) -> list[dict]:
     """Passages of the person's own documents about these sections' entries (`record.writing_hits`); none when
-    the record cannot be searched."""
+    the record cannot be searched. Their texts share `RECORD_CHARS`, as a passage can be a whole document."""
     from jobhunt import record
 
     queries = []
@@ -561,7 +562,9 @@ def passages_for(doc, sids: list[str]) -> list[dict]:
     except Exception as e:  # a missing or unreadable record means fewer facts, not no suggestions
         log.info("record search for CV suggestions failed: %r", e)
         return []
-    return [p for hits in found for p in hits]
+    passages = [p for hits in found for p in hits]
+    each = RECORD_CHARS // max(len(passages), 1)
+    return [p | {"text": p.get("text", "")[:each]} for p in passages]
 
 
 def _prefs_words(con: sqlite3.Connection) -> list[str]:

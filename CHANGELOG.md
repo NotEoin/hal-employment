@@ -33,6 +33,10 @@ What changed in each version, in plain words.
 - **An application's tab is watched once.** Two steps starting at the same moment could each start a
   watcher for the same browser tab. Now the second one finds the first and leaves it to it.
 
+- **CV suggestions work when your record holds a long document.** A long file with no headings, such as a
+  transcript, went to the AI whole, so the request was too big for a local model and no suggestion came back.
+  Each suggestion now gets a share of 6,000 characters of your record, as letters do.
+
 - **A fault inside Hal says so.** A bug in Hal while answering the app was sometimes shown as "not found" or
   as a conflict with your changes. It is now logged and shown as an error in Hal.
 

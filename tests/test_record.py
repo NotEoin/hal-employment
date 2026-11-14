@@ -330,6 +330,20 @@ class Record(unittest.TestCase):
                         <= {"Sources/Projects/Mine.md", "My notes/Robot.md"})
         self.assertTrue(suggest.passages_for(doc, ["s:projects"]))
 
+    def test_cv_suggestions_send_a_bounded_share_of_a_long_document(self):
+        # regression: a heading-less transcript came back whole, and a job CV's prompt reached 235K tokens
+        from types import SimpleNamespace
+
+        from jobhunt.cvstudio import suggest
+
+        long = [{"path": f"Sources/Long{i}.md", "heading": "", "text": "word " * 50_000} for i in range(2)]
+        entry = SimpleNamespace(heading="Robot arm", org="", hidden=False)
+        doc = SimpleNamespace(sections=[SimpleNamespace(id="s:projects", entries=[entry])])
+        with mock.patch.object(record, "writing_hits", return_value=[long]):
+            found = suggest.passages_for(doc, ["s:projects"])
+        self.assertEqual(len(found), 2)
+        self.assertLessEqual(sum(len(p["text"]) for p in found), suggest.RECORD_CHARS)
+
     def test_a_projects_passage_says_its_kind(self):
         # a letter called a personal project "degree work" (2026-11-06)
         own = "---\nhal: ingested\nrole: own\ndoc_type: {doc_type}\n---\n# {title}\n\nThe tide gauge {words}.\n"
