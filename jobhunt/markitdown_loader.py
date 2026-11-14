@@ -18,7 +18,8 @@ def markitdown_converter() -> Any | None:
     """
     try:
         from markitdown import MarkItDown
+
+        return MarkItDown(enable_plugins=False)
     except Exception as e:  # a missing extra and a broken C++ runtime both mean: read the plain way
         log.info("MarkItDown is not available (%s); documents are read without it", e)
         return None
-    return MarkItDown(enable_plugins=False)

@@ -1,5 +1,7 @@
 """The shared MarkItDown loader: built once, and a missing extra is logged once."""
 import builtins
+import sys
+import types
 import unittest
 from unittest import mock
 
@@ -27,6 +29,14 @@ class MarkItDownLoader(unittest.TestCase):
             self.assertIsNone(markitdown_loader.markitdown_converter())
             self.assertIsNone(markitdown_loader.markitdown_converter())
         self.assertEqual(len(logged.output), 1)
+
+    def test_a_converter_that_fails_to_build_gives_no_converter(self):
+        # regression: only the import was guarded, so a model load error in the constructor reached the record build
+        broken = types.ModuleType("markitdown")
+        broken.MarkItDown = mock.Mock(side_effect=RuntimeError("onnxruntime session failed"))
+        with mock.patch.dict(sys.modules, {"markitdown": broken}), \
+                self.assertLogs("jobhunt.markitdown_loader", "INFO"):
+            self.assertIsNone(markitdown_loader.markitdown_converter())
 
     def test_one_converter_is_shared_by_every_caller(self):
         first = markitdown_loader.markitdown_converter()
