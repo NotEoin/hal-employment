@@ -161,7 +161,8 @@ def copy_to_main(req: Request) -> dict:
     except store.StaleVersion as e:
         raise Conflict("Your main CV changed since this page opened. Nothing was copied.") from e
     except CVError as e:
-        raise BadRequest(str(e).split(": ", 1)[-1].capitalize() + ".", field="target") from e
+        msg = str(e).split(": ", 1)[-1]
+        raise BadRequest(msg[:1].upper() + msg[1:] + ".", field="target") from e
     n = store.version(vid, con=req.con)["n"]
     activity.record("cv", "cv.version", f"Saved your CV as version {n}: lines copied from your CV for a job",
                     COPY_WHY, icon="file", job_id=job_id)

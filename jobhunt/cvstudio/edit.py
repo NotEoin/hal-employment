@@ -53,8 +53,12 @@ def mark_your_words(before: CVDoc, after: CVDoc) -> CVDoc:
     return after
 
 
-def save(con: sqlite3.Connection, base: str, changes: list[Change], what: str) -> tuple[str, CVDoc, CVDoc]:
+def save(con: sqlite3.Connection, base: str, changes: list[Change], what: str, *,
+         mark: bool = True) -> tuple[str, CVDoc, CVDoc]:
     """Applies `changes` to version `base` and saves the result as one new version: (its id, before, after).
+
+    With `mark` false the lines keep their sources as they come, for lines copied from a job's CV, which
+    already carry `model.YOUR_WORDS` where the person typed them.
 
     `store.StaleVersion` when `base` is not the version in use; CVError when a change does not fit or
     nothing changed.
@@ -63,7 +67,8 @@ def save(con: sqlite3.Connection, base: str, changes: list[Change], what: str) -
     after = before
     for c in changes:
         after = model.apply(after, c)
-    after = mark_your_words(before, after)
+    if mark:
+        after = mark_your_words(before, after)
     if model.to_json(after) == model.to_json(before):
         raise CVError("changes: they leave your CV as it was")
     vid = store.new_version(after, origin="manual", what=what, by="you", parent=base, base=base, con=con)

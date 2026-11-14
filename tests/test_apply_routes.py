@@ -515,9 +515,39 @@ class JobCv(unittest.TestCase):
         self.assertEqual(model.find(doc, PROFILE), made_up_cv_text(), "only that entry's lines are copied")
         again = self.c.post(self.url("/cv/copy"), {"base": vid, "target": SHOP})
         self.assertEqual(again.status, 400)
-        self.assertIn("already has these lines", again.json()["error"]["message"])
+        self.assertIn("Your main CV already has these lines", again.json()["error"]["message"])
         stale = self.c.post(self.url("/cv/copy"), {"base": self.main, "target": SHOP})
         self.assertEqual(stale.status, 409)
+
+    def test_copy_to_my_main_cv_marks_only_your_lines_as_your_words(self):
+        # regression: lines Hal reworded for the job reached the main CV marked as the person's own words
+        row = json.loads(self.con.execute("SELECT changes FROM job_cvs").fetchone()["changes"])
+        row.append({"id": "c2", "kind": "Reworded", "where": "Bookshop", "op": "replace",
+                    "target": SHOP + "/b:b-events",
+                    "value": "Ran author events", "why": "", "ev": "", "undone": False})
+        self.con.execute("UPDATE job_cvs SET changes = ?", (json.dumps(row),))
+        self.con.commit()
+        opened = self.c.get(self.url("/cv")).json()["version_id"]
+        self.save(opened, {"op": "replace", "target": TABLE + "/text", "value": MINE})
+        self.assertEqual(self.c.post(self.url("/cv/copy"), {"base": self.main, "target": SHOP}).status, 200)
+        doc = store.current()[1]
+        self.assertIn(model.YOUR_WORDS, model.find(doc, TABLE).sources)
+        self.assertNotIn(model.YOUR_WORDS, model.find(doc, SHOP + "/b:b-events").sources)
+
+    def test_making_the_documents_again_keeps_your_own_edits(self):
+        # regression: Make the documents again replaced the job's change list and dropped the person's edits
+        opened = self.c.get(self.url("/cv")).json()["version_id"]
+        self.save(opened, {"op": "replace", "target": TABLE + "/text", "value": MINE})
+        tailor.prepare(dict(queries.load_job(self.con, self.job)), level="no", con=self.con)
+        self.assertEqual(model.find(tailor.document(self.job), TABLE).text, MINE)
+        self.assertEqual(tailor.shown(self.job)["edits"], 1)
+
+    def test_a_save_that_would_break_the_cv_is_refused(self):
+        # regression: a job CV save skipped the checks a main CV save makes, so approving it failed later
+        opened = self.c.get(self.url("/cv")).json()["version_id"]
+        broken = self.save(opened, {"op": "replace", "target": "s:experience/title", "value": ""})
+        self.assertEqual(broken.status, 400, broken.text)
+        self.assertEqual(tailor.shown(self.job)["edits"], 0)
 
     def test_approving_saves_the_jobs_version_with_your_edits_and_then_it_cannot_change(self):
         opened = self.c.get(self.url("/cv")).json()["version_id"]

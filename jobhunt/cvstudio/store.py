@@ -62,7 +62,7 @@ def _conn(con: sqlite3.Connection | None) -> Iterator[sqlite3.Connection]:
 
 
 @contextlib.contextmanager
-def _writing(con: sqlite3.Connection) -> Iterator[None]:
+def writing(con: sqlite3.Connection) -> Iterator[None]:
     """One write transaction holding the write lock from the start; commits at the end, rolls back on error."""
     if con.in_transaction:
         yield
@@ -92,7 +92,7 @@ def doc(con: sqlite3.Connection | None = None) -> dict:
         row = c.execute("SELECT * FROM cv_documents WHERE id = ?", (DOC_ID,)).fetchone()
         if row is None:
             now = clock.iso()
-            with _writing(c):
+            with writing(c):
                 c.execute("""INSERT OR IGNORE INTO cv_documents (id, route, send, type_id, look_id, layout,
                              created, updated) VALUES (?, 'improve', 'hal_copy', ?, ?, '{}', ?, ?)""",
                           (DOC_ID, DEFAULT_TYPE, DEFAULT_LOOK, now, now))
@@ -169,7 +169,7 @@ def new_version(doc_: CVDoc, *, origin: str, what: str, by: str, parent: str | N
     data = model.to_json(doc_)
     with _conn(con) as c:
         d = doc(c)
-        with _writing(c):
+        with writing(c):
             if base is not None and doc(c)["current_version_id"] != base:
                 raise StaleVersion("Your CV changed since you started editing. Your changes are not saved.")
             n = c.execute("SELECT coalesce(max(n), 0) + 1 FROM cv_versions WHERE doc_id = ?", (DOC_ID,)).fetchone()[0]
@@ -209,7 +209,7 @@ def use(version_id: str, con: sqlite3.Connection | None = None) -> None:
         if v["binned"]:
             raise CVError("That version is in the bin. Take it out of the bin first.")
         doc(c)
-        with _writing(c):
+        with writing(c):
             _update_doc(c, current_version_id=version_id)
     events.publish("cv", what="use", id=version_id)
 
@@ -247,7 +247,7 @@ def bin_version(version_id: str, con: sqlite3.Connection | None = None) -> None:
             raise CVError("This version is in use. Use another version first.")
         if v["id"] == _baseline_id(c):
             raise CVError("Your first version is always kept.")
-        with _writing(c):
+        with writing(c):
             c.execute("UPDATE cv_versions SET binned = ? WHERE id = ?", (clock.iso(), version_id))
     events.publish("cv", what="bin", id=version_id)
 
@@ -256,7 +256,7 @@ def restore(version_id: str, con: sqlite3.Connection | None = None) -> None:
     """Takes a version out of the bin."""
     with _conn(con) as c:
         version(version_id, con=c)
-        with _writing(c):
+        with writing(c):
             c.execute("UPDATE cv_versions SET binned = NULL WHERE id = ?", (version_id,))
     events.publish("cv", what="restore", id=version_id)
 
@@ -281,7 +281,7 @@ def purge_bin(now=None, con: sqlite3.Connection | None = None) -> int:
         if not gone:
             return 0
         marks = ",".join("?" * len(gone))
-        with _writing(c):
+        with writing(c):
             for table, col in (("cv_parse_reports", "version_id"), ("cv_checks", "version_id"),
                                ("cv_versions", "id")):
                 c.execute(f"DELETE FROM {table} WHERE {col} IN ({marks})", gone)
@@ -305,7 +305,7 @@ def set_route(route: str, con: sqlite3.Connection | None = None) -> dict:
         d = doc(c)
         if ROUTES[route] == "original" and not d["baseline_file_id"]:
             raise CVError(NO_FILE)
-        with _writing(c):
+        with writing(c):
             _update_doc(c, route=route, send=ROUTES[route])
     events.publish("cv", what="route", id=route)
     return doc()
@@ -318,7 +318,7 @@ def set_send(send: str, con: sqlite3.Connection | None = None) -> dict:
     with _conn(con) as c:
         if send == "original" and not doc(c)["baseline_file_id"]:
             raise CVError(NO_FILE)
-        with _writing(c):
+        with writing(c):
             _update_doc(c, send=send)
     events.publish("cv", what="send", id=send)
     return doc()
@@ -382,7 +382,7 @@ def set_layout(sections: list[dict], locked_lines: list[str] | None = None,
                     for b in e.bullets:
                         b.locked = model.target_of(s, e, b) in wanted_locks
             d = doc(c)
-            with _writing(c):
+            with writing(c):
                 _update_doc(c, layout=json.dumps({**d["layout"], "locked_lines": sorted(wanted_locks)}))
         if model.to_json(new) == model.to_json(cv):
             return None
@@ -414,7 +414,7 @@ def add_file(data: bytes, name: str, *, role: str, con: sqlite3.Connection | Non
         os.replace(tmp, path)
     fid = f"f-{sha[:16]}"
     mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
-    with _conn(con) as c, _writing(c):
+    with _conn(con) as c, writing(c):
         c.execute("""INSERT OR IGNORE INTO cv_files (id, sha256, name, mime, size, rel, role, added)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (fid, sha, name, mime, len(data), rel, role, clock.iso()))
     return fid
@@ -443,7 +443,7 @@ def set_baseline_file(file_id: str, con: sqlite3.Connection | None = None) -> No
     with _conn(con) as c:
         file_row(file_id, con=c)
         doc(c)
-        with _writing(c):
+        with writing(c):
             _update_doc(c, baseline_file_id=file_id)
     events.publish("cv", what="file", id=file_id)
 
@@ -481,7 +481,7 @@ def set_type(type_id: str, con: sqlite3.Connection | None = None) -> None:
     """Records the CV type in use (the caller checks the id and makes the `type_change` version)."""
     with _conn(con) as c:
         doc(c)
-        with _writing(c):
+        with writing(c):
             _update_doc(c, type_id=type_id)
 
 
@@ -489,5 +489,5 @@ def set_look(look_id: str, con: sqlite3.Connection | None = None) -> None:
     """Records the look in use (the caller checks the id)."""
     with _conn(con) as c:
         doc(c)
-        with _writing(c):
+        with writing(c):
             _update_doc(c, look_id=look_id)

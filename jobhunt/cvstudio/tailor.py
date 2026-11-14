@@ -236,11 +236,27 @@ def _rev(row: sqlite3.Row) -> str:
 
 def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None = None,
             con: sqlite3.Connection | None = None) -> dict:
-    """Works out the job's CV and keeps it in `job_cvs`; returns the row as the documents step shows it."""
+    """Works out the job's CV and keeps it in `job_cvs`; returns the row as the documents step shows it.
+
+    The person's own edits from an earlier row are kept after Hal's new changes; an edit that no longer fits
+    the new CV is left out and logged.
+    """
+    model = _model()
     base_vid, _ = _store().current(con)
     used, why = level_for(level)
-    _, changes = for_job(job, level=level, priorities=priorities)
-    with _conn(con) as c:
+    doc, changes = for_job(job, level=level, priorities=priorities)
+    with _conn(con) as c, _store().writing(c):
+        old = c.execute("SELECT changes FROM job_cvs WHERE job_id = ?", (job["id"],)).fetchone()
+        kept_n = 0
+        for edit in _split(json.loads(old["changes"]))[1] if old else []:
+            try:
+                doc = model.apply(doc, model.Change(edit["op"], edit["target"], edit.get("value"),
+                                                    edit.get("position")))
+            except model.CVError as e:
+                log.warning("job %s: your edit %s no longer fits its new CV: %s", job["id"], edit["id"], e)
+                continue
+            kept_n += 1
+            changes.append(edit | {"id": f"y{kept_n}"})
         c.execute("INSERT OR REPLACE INTO job_cvs (job_id, base_version_id, version_id, level, priorities, changes, "
                   "approved) VALUES (?, ?, NULL, ?, ?, ?, NULL)",
                   (job["id"], base_vid, used, json.dumps(priorities) if priorities else None, json.dumps(changes)))
@@ -321,7 +337,7 @@ def shown(job_id: str, con: sqlite3.Connection | None = None) -> dict:
 
 def set_change(job_id: str, change_id: str, on: bool, con: sqlite3.Connection | None = None) -> dict:
     """Undo (`on` false) or Redo one change before approval."""
-    with _conn(con) as c:
+    with _conn(con) as c, _store().writing(c):
         row = _row(c, job_id)
         if row["approved"]:
             raise RuntimeError(APPROVED)
@@ -401,7 +417,7 @@ def save_edits(job_id: str, base: str, changes: list, con: sqlite3.Connection | 
     CVError when a change does not fit or nothing changed.
     """
     model = _model()
-    with _conn(con) as c:
+    with _conn(con) as c, _store().writing(c):
         row = _row(c, job_id)
         if row["approved"]:
             raise RuntimeError(APPROVED)
@@ -413,6 +429,9 @@ def save_edits(job_id: str, base: str, changes: list, con: sqlite3.Connection | 
             after = model.apply(after, change)
         if model.to_json(after) == model.to_json(before):
             raise model.CVError("changes: they leave this job's CV as it was")
+        problems = model.validate(after)
+        if problems:
+            raise model.CVError(problems[0])
         listed = json.loads(row["changes"])
         n = len(_split(listed)[1])
         listed += [{"id": f"y{n + i}", "by": YOU, "op": x.op, "target": x.target, "value": x.value,
@@ -477,5 +496,6 @@ def copy_to_main(job_id: str, target: str, base: str, con: sqlite3.Connection, j
     else:
         change = model.Change("replace", f"{target}/bullets", copy.deepcopy(entry.bullets))
     title = (job or {}).get("title") or "one job"
-    vid, _, _ = editing.save(con, base, [change], f"Copied {entry.heading or 'an entry'} from your CV for {title}")
+    vid, _, _ = editing.save(con, base, [change], f"Copied {entry.heading or 'an entry'} from your CV for {title}",
+                             mark=False)
     return vid
