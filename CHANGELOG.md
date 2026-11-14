@@ -28,6 +28,14 @@ What changed in each version, in plain words.
   With **Ask me what the job cares about first** on in Settings, the tab first lists the job's
   requirements: tick three to five and Hal adjusts the job's CV for those, then shows it.
 
+### Fixed
+
+- **An application's tab is watched once.** Two steps starting at the same moment could each start a
+  watcher for the same browser tab. Now the second one finds the first and leaves it to it.
+
+- **A fault inside Hal says so.** A bug in Hal while answering the app was sometimes shown as "not found" or
+  as a conflict with your changes. It is now logged and shown as an error in Hal.
+
 ## 2.1.1 (2026-11-13)
 
 ### Fixed
