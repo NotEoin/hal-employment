@@ -53,6 +53,11 @@ whole suite that way here, one process per CPU, slowest chunks first from the la
 HAL_TEST_MODE=1 HAL_TEST_BROWSER=1 uv run python scripts/dev/run_tests.py --timings ~/.cache/hal-test-times.json
 ```
 
+To test on another Python, sync it with the extras and set `UV_PYTHON` for the run too
+(`UV_PYTHON=3.11 uv run ...`). Without it, `uv run` swaps in an environment on `.python-version`'s Python with
+no extras. With `HAL_TEST_BROWSER=1` and no Playwright, `run_tests.py` stops with exit status 2 rather than
+skip every browser test, and its first line names the Python it runs on.
+
 ## What the checks prove
 
 `checkpoint.sh --quick` checks the staged lines (ASCII, ruff, personal strings) and runs the tests without

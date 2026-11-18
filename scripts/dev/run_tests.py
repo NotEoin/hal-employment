@@ -17,14 +17,22 @@ the classes that set themselves up start first.
 
 `--must-pass` names tests (by method name) that must run and pass, not skip: each is checked in the share that
 holds it, and a name no share holds fails every share. Exit status 0 when every chunk passed.
+
+`HAL_TEST_BROWSER=1` with no Playwright for this Python stops the run before any test (exit status 2), and the
+first line names the Python. Otherwise the 234 browser and practice-site tests skip and the run looks green:
+a local "Python 3.11" run took 38 s instead of 145 because `uv run` had swapped the 3.11 environment for one on
+`.python-version`'s 3.13 without the extras (2026-11-18). With uv, set `UV_PYTHON` to the Python to test, as
+the CI workflow does.
 """
 
 from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import importlib.util
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -50,6 +58,15 @@ ok = unittest.TextTestRunner(stream=sys.stdout, verbosity=2, resultclass=Result)
 print({PASSED!r} + json.dumps(passed), flush=True)
 sys.exit(0 if ok else 1)
 """
+
+
+def browser_missing() -> str | None:
+    """Why the browser tests asked for (`HAL_TEST_BROWSER=1`) cannot run here, or None when they can."""
+    if os.environ.get("HAL_TEST_BROWSER") != "1" or importlib.util.find_spec("playwright") is not None:
+        return None
+    return (f"HAL_TEST_BROWSER=1, but Python {platform.python_version()} ({sys.executable}) has no Playwright, "
+            "so every browser test would skip. Install the browser extra for this Python; with uv run, set "
+            "UV_PYTHON to it, or uv swaps in an environment on .python-version's Python without the extras.")
 
 
 def test_ids() -> list[tuple[str, bool]]:
@@ -107,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     i, n = (int(x) for x in args.share.split("/"))
     if not 1 <= i <= n:
         p.error(f"--share {args.share}: I must be between 1 and N")
+    why = browser_missing()
+    if why:
+        print(f"::error::{why}", flush=True)
+        return 2
 
     tests = test_ids()
     names = {t.rsplit(".", 1)[-1] for t, _ in tests}
@@ -117,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     chunks.sort(key=lambda c: -timings.get(c[0], 0))     # stable: with no timings the order stays as built
     mine = [t for c in chunks for t in c if t.rsplit(".", 1)[-1] in args.must_pass]
     print(f"share {i}/{n}: {sum(map(len, chunks))} of {len(tests)} tests in {len(chunks)} chunks, "
-          f"{args.workers} at a time", flush=True)
+          f"{args.workers} at a time, on Python {platform.python_version()}", flush=True)
 
     started, failed, passed = time.monotonic(), 0, set()
     with concurrent.futures.ThreadPoolExecutor(args.workers) as pool:
