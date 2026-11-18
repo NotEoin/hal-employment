@@ -61,8 +61,6 @@ log = logging.getLogger(__name__)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # Windows: no console flashes up for tesseract
 OCR_TIMEOUT_S = 120
 OCR_SCALE = 300 / 72      # 300 dpi, tesseract's documented best resolution for printed text
-EMBED_MODEL_DEFAULT = "nomic-embed-text"
-EMBED_BATCH = 32
 MEANING_MIN = 0.55        # nomic-embed-text similarities run high; below this a passage is off the subject
 
 
@@ -500,16 +498,10 @@ def _by_meaning() -> bool:
     return _setting("record.search") == "meaning"
 
 
-def _local_ai():
-    """The AI backend when it runs on this computer; None for one that sends text elsewhere."""
+def _embed_model() -> str:
     from jobhunt import ai
 
-    be = ai.backend()
-    return None if getattr(be, "online", True) else be
-
-
-def _embed_model() -> str:
-    return str(_setting("ai.model.embed") or EMBED_MODEL_DEFAULT)
+    return ai.embed_model()
 
 
 def _passage_key(c: dict) -> str:
@@ -517,19 +509,14 @@ def _passage_key(c: dict) -> str:
 
 
 def _embed(texts: list[str]) -> list[list[float]]:
-    """Vectors for `texts` from the AI on this computer; raises `RecordUnavailable` when it cannot answer."""
+    """Vectors for `texts` from the AI on this computer (`ai.embed`, outside the AI's queue, so a search on
+    screen never waits for a draft); raises `RecordUnavailable` when it cannot answer."""
     from jobhunt import ai
 
-    be = _local_ai()
-    if be is None:
-        raise RecordUnavailable("search by meaning needs the AI on this computer")
-    out: list[list[float]] = []
     try:
-        for i in range(0, len(texts), EMBED_BATCH):
-            out += be.embed(texts[i:i + EMBED_BATCH], _embed_model())
+        return ai.embed(texts, model=_embed_model(), queued=False)
     except ai.LLMUnavailable as e:
-        raise RecordUnavailable(f"the AI on this computer did not answer: {e}") from e
-    return out
+        raise RecordUnavailable(f"search by meaning needs the AI on this computer: {e}") from e
 
 
 def _embed_new(index: dict) -> bool:
@@ -556,12 +543,6 @@ def _embed_new(index: dict) -> bool:
     return True
 
 
-def _cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
-    size = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
-    return dot / size if size else 0.0
-
-
 def _hit(passage: dict) -> dict:
     """A passage as a search hit: where it is, its words and its note's document type."""
     return {**{f: passage[f] for f in ("path", "title", "heading", "text")}, "doc_type": passage.get("doc_type", "")}
@@ -569,6 +550,8 @@ def _hit(passage: dict) -> dict:
 
 def _meaning_search(queries: list[str], k: int, keep: Callable[[dict], bool]) -> list[list[dict]] | None:
     """Passages `keep` allows, ranked by meaning; None when there are no vectors or the AI does not answer."""
+    from jobhunt import ai
+
     index = _searcher()["raw"]
     vectors = index.get("vectors") or {}
     if not vectors or index.get("vector_model") != _embed_model():
@@ -581,7 +564,7 @@ def _meaning_search(queries: list[str], k: int, keep: Callable[[dict], bool]) ->
     keyed = [(c, vectors.get(_passage_key(c))) for c in index["chunks"] if keep(c)]
     out = []
     for q in asked:
-        scored = sorted(((_cosine(q, v), c) for c, v in keyed if v is not None), key=lambda x: -x[0])
+        scored = sorted(((ai.cosine(q, v), c) for c, v in keyed if v is not None), key=lambda x: -x[0])
         out.append([{**_hit(c), "score": round(s, 3), "by": "meaning"}
                     for s, c in scored[:k] if s >= MEANING_MIN])
     return out

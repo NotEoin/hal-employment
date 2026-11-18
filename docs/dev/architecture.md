@@ -375,6 +375,12 @@ private questions out of every AI request. A request's `temperature` (`ChatReque
 `ai.chat`) replaces the backend's own: 0.1 for JSON and 0.7 for prose on a local server,
 the model's own prose setting on Ollama; the Claude CLI takes none.
 
+`ai.embed(texts)` gives vectors of meaning from the AI on this computer only (`ai.model.embed`, default
+`nomic-embed-text`), in batches of `EMBED_BATCH`; a backend with `online` set raises `LLMUnavailable` before
+any text is sent. Each batch takes a turn in the queue above in the caller's work class, so a document
+write's vectors wait like its chats; the record's index and search pass `queued=False` and never wait for a
+draft. `ai.cosine(a, b)` compares two vectors. Neither goes through the allowance or the GPU gate.
+
 ### Claude Code (`ai/claude_setup.py`)
 
 Install runs Anthropic's own per-user script with no window and no admin rights (PATH in
@@ -450,6 +456,14 @@ runs: tests use `tests/support/fake_claude/`.
 - Per-CV data: `cv_suggestions.doc_id` (a review, its list, "Accept all" and the "nothing more" mark in `meta`
   are per CV), line preferences, `cv_parse_reports` and `cv_checks` (by version). Tone and length preferences,
   `cv_keywords_off` (by job) and `cv_types` hold for every CV.
+- `cvstudio/choose.py` picks the CV an application is built from among the starred ones (`choose.choose(con,
+  job)` gives a `Choice`: CV, version, `by`, reason, Hal's pick and a score per CV). Each CV's fit blends the
+  share of the advert's skills it names (`score.keywords`, with the skill lists of all the candidates' types)
+  and how close its plain text reads to the advert (`ai.cosine` of `ai.embed` vectors, kept in memory per
+  version and model), half and half; without vectors the skills decide alone. The first CV in the person's
+  order wins unless another fits by more than `LEAD_MARGIN`. The reason names what each CV covers. With one
+  CV in use there is no comparison and no AI call; when comparing fails the lead CV is used and the reason
+  says so.
 - The bin keeps a version for 30 days. It is emptied lazily (`purge_bin`, whenever versions are listed),
   and never removes a version an application or job still points at.
 - Files are kept read-only as `cv/files/<sha256>.<ext>`; `file_bytes` checks the SHA-256 on every read and

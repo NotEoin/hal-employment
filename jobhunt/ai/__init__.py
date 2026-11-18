@@ -13,6 +13,13 @@ write behind a record update never lets it past the Claude daily cap or the keep
 A failure raises `LLMUnavailable` with a `kind` and plain words, and callers fall back to rules as they always
 have.
 
+`embed` gives vectors of meaning from the AI on this computer only (Ollama, Hal's gateway): a backend that sends
+text elsewhere (`online`) is never asked, as the record's search by meaning always kept the person's words
+here. Each batch takes a turn in the same queue as `chat`, in the caller's work class, so a document write's
+vectors wait behind the person's own requests like its chats do; the record's index and search opt out, as
+before. It skips the allowance and the GPU gate, as the record's vectors always did: an embedding model is
+small and costs no allowance.
+
 The backend comes from `ai.provider` (`provider.current`, which never changes by itself) and is rebuilt
 when any setting changes. In a test run it is a made-up AI that is never ready, unless a test installs one
 with `use(...)` or `HAL_TEST_REAL_AI` asks for a real model, so no test reaches a real model by accident.
@@ -26,6 +33,7 @@ import heapq
 import itertools
 import json
 import logging
+import math
 import os
 import re
 import threading
@@ -63,8 +71,11 @@ __all__ = [
     "backend",
     "chat",
     "chat_json",
+    "cosine",
     "counted",
     "current_priority",
+    "embed",
+    "embed_model",
     "model_for",
     "ready",
     "undash",
@@ -80,6 +91,9 @@ FENCE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n?(.*?)\n?```\s*$", re.S)
 SECRETS_MODULE = "jobhunt.core.settings.secrets"
 LONG_TIMEOUT_S = 180   # seconds; what the callers that moved from the old `llm.chat` have always waited
 NOT_IN_TESTS = "The made-up AI in the tests has no answer for this."
+EMBED_MODEL_DEFAULT = "nomic-embed-text"   # the embedding model Ollama's docs suggest; `ai.model.embed` overrides
+EMBED_BATCH = 32                           # texts per request, as the record's index always sent them
+ONLINE_EMBED = "Vectors of meaning come only from the AI on this computer."
 
 _override: list[Backend] = []
 _override_lock = threading.Lock()
@@ -269,6 +283,44 @@ def chat(system: str, user: str, *, role: str = "checker", json_out: bool = Fals
             raise
     _record(result, req, be, model, len(result.text))
     return result.text
+
+
+def embed_model() -> str:
+    """The embedding model: `ai.model.embed`, else `EMBED_MODEL_DEFAULT`."""
+    return str(_settings().get("ai.model.embed") or EMBED_MODEL_DEFAULT)
+
+
+def embed(texts: list[str], *, model: str | None = None, timeout: float | None = None,
+          queued: bool = True) -> list[list[float]]:
+    """One vector per text from the AI on this computer, in `EMBED_BATCH`es, each queued like a chat.
+
+    `queued` False skips the queue, for the record's own index and search, which never waited behind a chat
+    and would make a search on screen wait for a long draft on a one-slot model. `LLMUnavailable` when the
+    backend sends text elsewhere (`online`), the model is missing or does not answer, or the queue keeps the
+    call waiting longer than `timeout` (default `ai.timeout`).
+    """
+    if not texts:
+        return []
+    be = backend()
+    if getattr(be, "online", True):
+        raise LLMUnavailable(ONLINE_EMBED)
+    model = model or embed_model()
+    wait = float(timeout or _settings().get("ai.timeout"))
+    cls = work.of_call(current_priority())
+    out: list[list[float]] = []
+    for i in range(0, len(texts), EMBED_BATCH):
+        with _turns.turn(cls, at_once(), wait) if queued else contextlib.nullcontext():
+            out += be.embed(texts[i:i + EMBED_BATCH], model)
+    if len(out) != len(texts):
+        raise LLMUnavailable("The AI on this computer sent the wrong number of vectors.")
+    return out
+
+
+def cosine(a: list[float], b: list[float]) -> float:
+    """How alike two vectors point, from -1 to 1; 0 when either is all zeros."""
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    size = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    return dot / size if size else 0.0
 
 
 def parse_json(text: str) -> dict:
