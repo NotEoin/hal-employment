@@ -13,7 +13,7 @@ This page is for anyone using Hal. You do not need to know anything technical.
   [on Windows](../howto/install-on-windows.md) or [on Linux](../howto/install-on-linux.md).
 - An AI for Hal to write with: a local model, if your computer has a strong graphics card, or a Claude Pro
   or Max subscription. The setup guide helps you choose.
-- Your CV, as a PDF or Word file, if you have one. If not, Hal can build one with you.
+- Your CV, as a PDF, Word or Markdown (.md) file, if you have one. If not, Hal can build one with you.
 - About 30 minutes for the setup guide. You can stop at any time and carry on later.
 
 ## Open Hal
@@ -34,7 +34,7 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
 
 1. **Welcome.** What Hal does, what it never does, and what stays on your computer.
 2. **Your CV.** Choose one of three ways: use your CV as it is, let Hal suggest improvements, or build a
-   fresh CV. Upload a PDF or Word file, then press **Check what Hal read** to see that Hal read it correctly.
+   fresh CV. Upload a PDF, Word or Markdown file, then press **Check what Hal read** to see that Hal read it correctly.
 3. **About you.** Your name, where you live, and the details forms ask for. Most of it is filled in from
    your CV ("From your CV"). The private questions (equality and adjustments) are optional; see
    [Your privacy](privacy.md).

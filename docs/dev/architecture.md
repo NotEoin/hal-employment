@@ -373,10 +373,13 @@ runs: tests use `tests/support/fake_claude/`.
   the PDF draws list markers as shapes, `pdfread.markers`) or its first word would not have fitted on the
   row above. Without bullet glyphs or marker shapes, a small indent marks a list item. The thresholds are
   named constants in `parse.py`, each with its reason.
-- In an entry section where the file marks headings (a bold line, or a line that starts with a bold heading
-  followed by ", details: text"), `_marked_drafts` starts entries only there. The line under a heading is
-  its details line when it is short, holds a date range or is split with `|` (each part becomes its own
-  field); other lines are the entry's paragraph. A short bold line with a heading word ("Other projects") is a section only
+- `md_lines` reads Markdown: `#` is the name (`style="title"`), `##` a section (`"heading 2"`), `###` and
+  deeper an entry heading (`style="entry"`, never a section). Wrapped lines are joined; emphasis, code and
+  link markers are taken out (a link keeps its text); a starting `**bold**` is kept in `lead`.
+- In an entry section where the file marks headings (a bold line, a `###`, or a "**Heading**, details:
+  text" line), `_marked_drafts` starts entries only there. The line under a heading is its details line
+  when it is short, holds a date range or is split with `|` (each part becomes its own field); other lines
+  are the entry's paragraph. A short bold line with a heading word ("Other projects") is a section only
   when it is as large as the file's other section titles (`_section_kinds`).
 
 ## CV types and checks (`cvstudio/types.py`, `cvstudio/checks.py`)

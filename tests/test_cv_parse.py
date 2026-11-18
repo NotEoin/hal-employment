@@ -208,7 +208,7 @@ class BrowserPrinted(unittest.TestCase):
 
     def test_a_cv_printed_by_a_browser_reads_its_entries_bullets_and_wrapped_lines(self):
         want = BROWSER_EXPECTED
-        for ext in ("pdf",):
+        for ext in ("pdf", "md"):
             with self.subTest(file=ext):
                 doc = browser_doc(ext)
                 self.assertEqual([s.kind for s in doc.sections], want["kinds"])
@@ -225,6 +225,9 @@ class BrowserPrinted(unittest.TestCase):
                 self.assertTrue(tide.bullets[0].text.endswith("storm surges by default."))
                 self.assertIn("A* search", tide.bullets[2].text)
                 self.assertTrue(tide.text.startswith("Also: a seat finder"))
+
+    def test_the_printed_pdf_and_its_markdown_read_the_same(self):
+        self.assertEqual(to_json(browser_doc("pdf")), to_json(browser_doc("md")))
 
     def test_bold_entry_headings_and_bold_lead_ins_are_seen_in_the_pdf(self):
         lines = parse.lines_of((FOLDER / f"{BROWSER_NAME}.pdf").read_bytes(), "pdf")
@@ -247,6 +250,30 @@ class BrowserPrinted(unittest.TestCase):
                  char("m", 236.14, 8)]
         with mock.patch.object(pdfread, "chars", return_value=drawn):
             self.assertEqual([ln.text for ln in parse.pdf_lines(b"")], ["from 27 m"])
+
+    def test_markdown_markers_are_stripped_and_headings_mapped(self):
+        lines = parse.md_lines("---\ntitle: cv\n---\n# Ada Example\n\n## Work history\n\n### Tester\n\n"
+                               "Made-up Ltd | 2024 - 2025\n\n* **Speed:** cut a run from *27* to `6` minutes,\n"
+                               "  see [the report](https://example.org/r) or <https://example.org/s>\n"
+                               "1. A\\* search over snake_case_names\n\n| Tool | Use |\n|---|---|\n| Git | code |\n")
+        self.assertEqual([(ln.text, ln.style, ln.bullet) for ln in lines], [
+            ("Ada Example", "title", False), ("Work history", "heading 2", False), ("Tester", "entry", False),
+            ("Made-up Ltd | 2024 - 2025", "", False),
+            ("Speed: cut a run from 27 to 6 minutes, see the report or https://example.org/s", "", True),
+            ("A* search over snake_case_names", "", True), ("Tool\tUse", "", False), ("Git\tcode", "", False)])
+        self.assertEqual(lines[4].lead, "Speed:")
+        self.assertEqual([parse.heading_kind(ln, None) for ln in lines[:3]], [None, "experience", None])
+
+    def test_markdown_files_are_accepted_and_an_empty_one_is_refused(self):
+        self.assertEqual(parse.kind_of("CV.md", b"# Ada"), "md")
+        self.assertEqual(parse.kind_of("CV.Markdown", b"# Ada"), "md")
+        self.assertEqual(parse.check(b"# Ada\n", "CV.md"), ("md", None))
+        with self.assertRaises(parse.CVReadError):
+            parse.check(b"  \n", "CV.md")
+        with self.assertRaises(parse.CVReadError) as caught:
+            parse.kind_of("CV.odt", b"odt")
+        self.assertIn("Markdown (.md)", str(caught.exception))
+
 
 class Upload(unittest.TestCase):
     def setUp(self) -> None:
@@ -308,6 +335,15 @@ class Upload(unittest.TestCase):
         self.assertEqual(store.doc()["baseline_file_id"], first["file_id"])
         r = self.client.request("PUT", "/api/v2/cv/send", {"send": "original"})
         self.assertEqual(r.status, 200, r.text)
+
+    def test_an_uploaded_markdown_cv_is_read_and_shown_as_paragraphs(self):
+        name = f"{BROWSER_NAME}.md"
+        done = self.read(name, (FOLDER / name).read_bytes())
+        self.assertEqual(done["result"]["found"], "contact details, 1 degree, 1 other qualification, 2 jobs, "
+                                                  "2 projects, 8 skills")
+        report = self.report()
+        self.assertEqual(report["original"]["kind"], "md")
+        self.assertEqual(report["original"]["paragraphs"][0], {"text": "Avery Quillon", "kind": "title"})
 
     def test_reading_works_without_an_ai(self):
         name, data = fixture("humanities", "pdf")

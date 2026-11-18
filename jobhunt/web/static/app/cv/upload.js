@@ -11,7 +11,8 @@ import { plural } from "../core/format.js";
 import { Icon } from "../ui/icons.js";
 
 const HIDDEN = "position:absolute;width:1px;height:1px;opacity:0;overflow:hidden";
-const ACCEPT = ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const ACCEPT = ".pdf,.docx,.md,.markdown,.txt,application/pdf,text/markdown,"
+  + "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const DATES = " dates";
 
 /** "Found your contact details, 1 degree, 2 jobs and 14 skills." from the report's `found`. */
@@ -103,7 +104,7 @@ export function Upload({ me = false, fresh = false, onRead }) {
       <label class="btn primary" style="position:relative;cursor:pointer">Choose a file
         <input type="file" accept=${ACCEPT} style=${HIDDEN} aria-label="Choose your CV" disabled=${!!busy}
           onChange=${e => { send(e.target.files); e.target.value = ""; }} /></label>
-      <p class="small" style="margin:10px 0 0">PDF or Word. Or <button type="button" class="btn quiet small" onClick=${() => setPasting(true)}>paste the text</button></p></div>
+      <p class="small" style="margin:10px 0 0">PDF, Word or Markdown. Or <button type="button" class="btn quiet small" onClick=${() => setPasting(true)}>paste the text</button></p></div>
     ${status}${error}</div>`;
 }
 

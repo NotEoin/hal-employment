@@ -319,6 +319,7 @@ HELVETICA_BOLD_WIDTHS = (
     611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778,
     556, 556, 500, 389, 280, 389, 584)
 FIRST_CHAR = 32
+MARKDOWN_WRAP = 100                # where an editor wraps a long Markdown line, so the reader must join it again
 
 
 def _plain(text: str) -> str:
@@ -420,6 +421,24 @@ def browser_pdf_bytes() -> bytes:
                        b"/F2 4 0 R >> >> /Contents %d 0 R >>" % (PAGE_W, PAGE_H, first_page + 2 * i + 1))
         objects.append(_stream(content))
     return _pdf(objects)
+
+
+def browser_markdown() -> str:
+    """`BROWSER` as the Markdown it was printed from, with long paragraphs wrapped as an editor wraps them."""
+    out: list[str] = []
+    prefix = {"h1": "# ", "h2": "## ", "h3": "### ", "li": "- "}
+    for kind, text in BROWSER:
+        if kind != "li" or (out and not out[-1].startswith("- ")):
+            out.append("")
+        body = prefix.get(kind, "") + text
+        if kind == "p" and len(body) > MARKDOWN_WRAP:
+            cut = body.rindex(" ", 0, MARKDOWN_WRAP)
+            body = body[:cut] + "\n" + body[cut + 1:]
+        if kind == "li" and len(body) > MARKDOWN_WRAP:
+            cut = body.rindex(" ", 0, MARKDOWN_WRAP)
+            body = body[:cut] + "\n  " + body[cut + 1:]
+        out.append(body)
+    return "\n".join(out).lstrip("\n") + "\n"
 
 
 def scanned_pdf_bytes() -> bytes:
@@ -563,6 +582,7 @@ def files() -> dict[str, bytes]:
         out[f"{NAMES[key]}.txt"] = ascii_text_of(lines).encode("ascii")
     out["Scanned-CV.pdf"] = scanned_pdf_bytes()
     out[f"{BROWSER_NAME}.pdf"] = browser_pdf_bytes()
+    out[f"{BROWSER_NAME}.md"] = browser_markdown().encode("ascii")
     return out
 
 

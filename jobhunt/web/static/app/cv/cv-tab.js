@@ -25,7 +25,7 @@ function YourFile({ cv }) {
     <div class="row" style="margin-top:12px"><button type="button" class="btn small" onClick=${() => openDialog("checkread")}><${Icon} n="eye" c="s" />Check what Hal read</button>
       <button type="button" class="btn small" aria-expanded=${replacing ? "true" : "false"} onClick=${() => setReplacing(!replacing)}><${Icon} n="upload" c="s" />Replace</button>
       <a class="btn quiet small" href="/api/v2/cv/original" download=${b.name}><${Icon} n="download" c="s" />Original</a></div>
-    ${replacing && html`<div style="margin-top:12px"><p class="small sub" style="margin:0 0 8px">Choose a new PDF or Word file. Your versions are kept.</p>
+    ${replacing && html`<div style="margin-top:12px"><p class="small sub" style="margin:0 0 8px">Choose a new PDF, Word or Markdown file. Your versions are kept.</p>
       <${Upload} fresh=${true} onRead=${() => setReplacing(false)} /></div>`}</section>`;
 }
 

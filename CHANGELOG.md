@@ -12,6 +12,10 @@ What changed in each version, in plain words.
   into your record gives the same time as the Record page. Work that is not counted in files or pages, such
   as writing a cover letter, shows no time.
 
+- **Add your CV as a Markdown file.** Hal now reads CVs written in Markdown (.md): the top heading is your
+  name, `##` headings are sections and `###` headings are jobs, qualifications or projects. Bold, italic
+  and link marks are left out of what Hal keeps.
+
 ### Fixed
 
 - **The "Make the missing documents" button on the Applications board keeps its words inside it.** On a
