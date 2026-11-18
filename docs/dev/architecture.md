@@ -556,7 +556,14 @@ runs: tests use `tests/support/fake_claude/`.
   named constants in `pdflines.py`, each with its reason.
 - `md_lines` (`cvstudio/mdread.py`) reads Markdown: `#` is the name (`style="title"`), `##` a section (`"heading 2"`), `###` and
   deeper an entry heading (`style="entry"`, never a section). Wrapped lines are joined; emphasis, code and
-  link markers are taken out (a link keeps its text); a starting `**bold**` is kept in `lead`.
+  link markers are taken out of `text` (a link keeps its text); a starting `**bold**` is kept in `lead`.
+- Each `Line` also keeps the file's bold, italic and links inside it in `marked` (`lines.marked_text`): a
+  PDF's per-character fonts (`pdflines`), a Word file's `w:b`/`w:i` runs and `w:hyperlink`s (`parse.docx_lines`,
+  addresses from `word/_rels/document.xml.rels`), Markdown's marks (`mdread`, with `_x_` and `__x__` as
+  stars and only http, https and mailto links). A style the whole line shares is structure and is left out.
+  The rules and the AI read plain `text`; `parse.keep_marks` then puts each marked line back into the
+  section text, entry text or bullet that holds its words, only when the plain words come out the same.
+  "Check what Hal read" rows show plain words, and `correct` keeps the marks whose words stay.
 - In an entry section where the file marks headings (a bold line, a `###`, or a "**Heading**, details:
   text" line), `_marked_drafts` starts entries only there. The line under a heading is its details line
   when it is short, holds a date range or is split with `|` (each part becomes its own field); other lines

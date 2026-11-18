@@ -10,6 +10,8 @@ judgement here means `pdfread.py` stays free of CV rules and this one stays free
   sign. `pdf_lines` therefore finds bold from font names, list items from marker shapes or indents, and
   joins a row to the one above when its first word would not have fitted there (see the constants below).
 - The thresholds are shares of the type size, so they hold at any scale; each says where its value comes from.
+- Each row keeps every character's bold and italic (`styles`, one per character of its text, a space taking
+  what both its neighbours share), so a line keeps bold and italic words inside it as marks (`Line.marked`).
 
 Moved out of `parse.py` with no change.
 """
@@ -20,8 +22,8 @@ import itertools
 from collections import Counter
 from dataclasses import dataclass
 
-from jobhunt.cvstudio import pdfread
-from jobhunt.cvstudio.lines import Line, _bulleted, _hash
+from jobhunt.cvstudio import inline, pdfread
+from jobhunt.cvstudio.lines import Line, _bulleted, _hash, marked_text
 
 LINE_TOLERANCE = 0.45           # share of the type size two baselines may differ by on one line (as pdfread)
 WORD_GAP = 0.25                 # a gap wider than this share of the type size parts two words (as pdfread)
@@ -42,6 +44,8 @@ INDENT_MIN = 0.5                # an indent under half the type size is ink over
 INDENT_MAX = 5.0                # a list indents about 1.5 type sizes (CSS 13 pt at 9.2 pt, Word 0.25 in at
                                 # 11 pt); five allows deep ones while a centred line is usually further in
 
+PLAIN = (False, False)          # a character's (bold, italic) when it is neither
+
 
 @dataclass
 class _Row:
@@ -59,6 +63,7 @@ class _Row:
     italic: bool
     bullet: bool
     tab: bool
+    styles: tuple[tuple[bool, bool], ...] = ()     # (bold, italic) of each character of `text`
 
 
 def _spacer(chars: list[pdfread.Char]):
@@ -90,19 +95,24 @@ def _row(row: list[pdfread.Char], spaced) -> _Row | None:
     glyphs = sorted((c for c in row if not c.char.isspace()), key=lambda c: c.x)
     if not glyphs:
         return None
-    text, lead, tab, starts = "", None, False, []
+    text, lead, tab, starts, styles = "", None, False, [], []
     for i, c in enumerate(glyphs):
         if i:
             prev = glyphs[i - 1]
+            gap = (prev.bold and c.bold, prev.italic and c.italic)
             if c.left - prev.right > COLUMN_GAP * max(c.points, 1.0):
                 text, tab = text + "\t", True
+                styles.append(gap)
             elif spaced(prev, c):
                 text += " "
+                styles.append(gap)
         if lead is None and not c.bold and i:
             lead = text
         starts.append(len(text))
         text += c.char
+        styles.append((c.bold, c.italic))
     body, bullet = _bulleted(text)
+    off = text.find(body)
     skip = 1 if bullet and len(glyphs) > 1 and glyphs[0].char not in body[:1] else 0
     rest = glyphs[skip:]
     first_word = rest
@@ -114,7 +124,7 @@ def _row(row: list[pdfread.Char], spaced) -> _Row | None:
     lead_text = "" if bold or not rest[0].bold else _bulleted((lead or "").rstrip())[0]
     return _Row(body, row[0].page, row[0].y, max(c.points for c in glyphs), rest[0].x, max(c.right for c in glyphs),
                 first_word[-1].right - first_word[0].x, bold, body if bold else lead_text,
-                all(c.italic for c in rest), bullet, tab)
+                all(c.italic for c in rest), bullet, tab, tuple(styles[off:off + len(body)]))
 
 
 def _pitches(rows: list[_Row]) -> dict[float, float]:
@@ -156,8 +166,11 @@ def _join(a: _Row, b: _Row) -> _Row:
     """`a` with its wrapped continuation `b` added."""
     glue = "" if len(a.text) > 1 and a.text[-1] in "-/" and a.text[-2].isalnum() and b.text[:1].isalnum() else " "
     lead = (a.text + glue + b.lead).rstrip() if a.bold else a.lead
+    last, first = a.styles[-1] if a.styles else PLAIN, b.styles[0] if b.styles else PLAIN
+    joint = ((last[0] and first[0], last[1] and first[1]),) if glue else ()
     return _Row(a.text + glue + b.text, a.page, b.y, a.size, a.left, b.right, a.first_word, a.bold and b.bold,
-                a.text + glue + b.text if a.bold and b.bold else lead, a.italic and b.italic, a.bullet, False)
+                a.text + glue + b.text if a.bold and b.bold else lead, a.italic and b.italic, a.bullet, False,
+                a.styles + joint + b.styles)
 
 
 def pdf_lines(data: bytes) -> list[Line]:
@@ -204,4 +217,11 @@ def pdf_lines(data: bytes) -> list[Line]:
         for r in joined:
             r.bullet = INDENT_MIN * r.size <= r.left - margins[r.page] <= INDENT_MAX * r.size
     return [Line(r.text, size=r.size, bold=r.bold, bullet=r.bullet, page=r.page, index=n, hash=_hash(r.text),
-                 left=r.left, lead=r.lead, italic=r.italic) for n, r in enumerate(joined)]
+                 left=r.left, lead=r.lead, italic=r.italic, marked=_marked(r)) for n, r in enumerate(joined)]
+
+
+def _marked(r: _Row) -> str:
+    """The row's text with its bold and italic words as marks; "" when it has none."""
+    if len(r.styles) != len(r.text) or "\t" in r.text:
+        return ""
+    return marked_text([inline.Run(ch, b, i) for ch, (b, i) in zip(r.text, r.styles, strict=True)], r.text)

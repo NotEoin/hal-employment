@@ -16,6 +16,7 @@ import uuid
 from unittest import mock
 
 from support import make_cv_fixtures as maker
+from support import people
 from support.actions import warm_document_reader
 from support.api import TIMEOUT_S, HalServer
 from support.fake_ai import fake_ai
@@ -24,9 +25,9 @@ from support.make_cv_fixtures import BROWSER_EXPECTED, BROWSER_NAME, EXPECTED, F
 from jobhunt import db
 from jobhunt.ai.base import LLMUnavailable
 from jobhunt.core import paths, runner, settings
-from jobhunt.cvstudio import mdread, parse, pdflines, pdfread, store
+from jobhunt.cvstudio import inline, mdread, parse, pdflines, pdfread, store
 from jobhunt.cvstudio.lines import Line
-from jobhunt.cvstudio.model import KINDS, to_json
+from jobhunt.cvstudio.model import KINDS, Bullet, CVDoc, Entry, Section, to_json
 
 WAIT_S = 20
 NO_AI = {"cv_parse": LLMUnavailable("The made-up AI is switched off.")}
@@ -198,6 +199,19 @@ class Rules(unittest.TestCase):
                     self.assertEqual(e.end, "")
 
 
+def unlinked(doc):
+    """The document with every link's words kept and its address left out."""
+    def words(text: str) -> str:
+        return inline.to_text([inline.Run(r.text, r.bold, r.italic) for r in inline.runs(text)])
+    for s in doc.sections:
+        s.text = words(s.text)
+        for e in s.entries:
+            e.text = words(e.text)
+            for b in e.bullets:
+                b.text = words(b.text)
+    return doc
+
+
 def browser_doc(ext: str):
     """The rules' reading of the made-up CV printed by a browser ("pdf") or of its Markdown ("md")."""
     name = f"{BROWSER_NAME}.{ext}"
@@ -228,10 +242,11 @@ class BrowserPrinted(unittest.TestCase):
                 tide = entries[2]
                 self.assertTrue(tide.bullets[0].text.endswith("storm surges by default."))
                 self.assertIn("A* search", tide.bullets[2].text)
-                self.assertTrue(tide.text.startswith("Also: a seat finder"))
+                self.assertTrue(inline.plain(tide.text).startswith("Also: a seat finder"))
 
     def test_the_printed_pdf_and_its_markdown_read_the_same(self):
-        self.assertEqual(to_json(browser_doc("pdf")), to_json(browser_doc("md")))
+        # the made-up PDF draws no link annotations, so only the Markdown keeps its links
+        self.assertEqual(to_json(unlinked(browser_doc("pdf"))), to_json(unlinked(browser_doc("md"))))
 
     def test_bold_entry_headings_and_bold_lead_ins_are_seen_in_the_pdf(self):
         lines = parse.lines_of((FOLDER / f"{BROWSER_NAME}.pdf").read_bytes(), "pdf")
@@ -255,6 +270,12 @@ class BrowserPrinted(unittest.TestCase):
         with mock.patch.object(pdfread, "chars", return_value=drawn):
             self.assertEqual([ln.text for ln in pdflines.pdf_lines(b"")], ["from 27 m"])
 
+    def test_a_correction_keeps_the_marks_whose_words_are_still_there(self):
+        doc = CVDoc(sections=[Section("experience", "experience", "Experience", entries=[
+            Entry("ex-1", heading="Guide", bullets=[Bullet("b1", "Led **20** tours for *visiting* families")])])])
+        fixed = parse.correct(doc, "s:experience/e:ex-1/b:b1", "Led 20 tours for families")
+        self.assertEqual(fixed.sections[0].entries[0].bullets[0].text, "Led **20** tours for families")
+
     def test_markdown_markers_are_stripped_and_headings_mapped(self):
         lines = mdread.md_lines("---\ntitle: cv\n---\n# Ada Example\n\n## Work history\n\n### Tester\n\n"
                                "Made-up Ltd | 2024 - 2025\n\n* **Speed:** cut a run from *27* to `6` minutes,\n"
@@ -267,6 +288,43 @@ class BrowserPrinted(unittest.TestCase):
             ("A* search over snake_case_names", "", True), ("Tool\tUse", "", False), ("Git\tcode", "", False)])
         self.assertEqual(lines[4].lead, "Speed:")
         self.assertEqual([parse.heading_kind(ln, None) for ln in lines[:3]], [None, "experience", None])
+        self.assertEqual(lines[4].marked, "**Speed:** cut a run from *27* to 6 minutes, see "
+                                          "[the report](https://example.org/r) or https://example.org/s")
+        self.assertEqual([ln.marked for ln in lines[:4] + lines[5:]], [""] * 7)
+
+    def test_markdown_underscores_become_stars_and_only_web_links_are_kept(self):
+        lines = mdread.md_lines("- __Led__ the _Saturday_ tours of snake_case_names\n"
+                                "- see [my notes](ftp://example.org/notes) and [mail me](mailto:a@example.org)\n"
+                                "- **The whole line is bold**\n- un*frigging*believable\n")
+        self.assertEqual([ln.marked for ln in lines], [
+            "**Led** the *Saturday* tours of snake_case_names", "see my notes and [mail me](mailto:a@example.org)",
+            "", ""])
+        self.assertEqual(lines[3].text, "un*frigging*believable")     # a star inside a word stays a star
+
+    def test_a_markdown_and_a_printed_cv_keep_bold_inside_a_line(self):
+        for ext in ("md", "pdf"):
+            with self.subTest(file=ext):
+                doc = browser_doc(ext)
+                tide = next(e for s in doc.sections if s.kind == "projects" for e in s.entries)
+                self.assertTrue(tide.bullets[1].text.startswith("**Testing:** wrote 120 tests"))
+                self.assertTrue(tide.text.startswith("**Also:** a seat finder"))
+                self.assertIn("A* search", tide.bullets[2].text)
+                rows = {r["path"]: r["value"] for r in parse.rows(parse.Reading(doc, {}, "rules"))}
+                self.assertNotIn("**", " ".join(rows.values()))
+
+    def test_a_word_file_keeps_its_bold_italic_and_links(self):
+        from test_cv_render import FORMATTED, formatted_cv, profile_of, type_for
+
+        from jobhunt.cvstudio import export, render
+
+        person = people.HUMANITIES
+        data = export.to_docx(render.view(formatted_cv(), type_for(person.key), profile_of(person)))
+        lines = parse.lines_of(data, "docx")
+        line = next(ln for ln in lines if "visitor guides" in ln.text)
+        self.assertEqual(line.text, inline.plain(FORMATTED))
+        self.assertEqual(line.marked, FORMATTED)
+        doc = parse.read_rules(lines).doc
+        self.assertIn(FORMATTED, [b.text for s in doc.sections for e in s.entries for b in e.bullets])
 
     def test_markdown_files_are_accepted_and_an_empty_one_is_refused(self):
         self.assertEqual(parse.kind_of("CV.md", b"# Ada"), "md")

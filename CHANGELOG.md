@@ -12,6 +12,11 @@ What changed in each version, in plain words.
   Word file show them, and their links can be clicked. A star on its own, as in "A*" or "5* rating", stays as you
   typed it. Checks, scores and Hal's writing read the words without the marks.
 
+- **Your CV file's bold, italic and links are kept.** When Hal reads a CV you add, it keeps the bold and
+  italic words inside a line, as your Word file, PDF or Markdown file shows them, and the links of a Word
+  or Markdown file. A line that is bold from start to end, such as a job title, stays a heading as before.
+  Hal 2.3.0 left these out of Markdown files.
+
 - **Choose how long each CV is.** On **My CV**, **Type and look**, the new **Length** card has **Keep this
   CV to**: no limit, one page or two pages, for each CV on its own. Until you choose, a CV follows its CV
   type, as before. The length is no longer on the Writing card, so changing it no longer makes a copy of

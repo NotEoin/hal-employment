@@ -26,6 +26,10 @@ field. Design decisions, each with its reason:
   still gives two summaries (a paragraph above a "Profile" heading, or the AI returning two), they are
   merged into one in reading order, because two sections both titled "Profile" read as a mistake on the
   page (seen on 2026-11-18 in CVs printed from Markdown).
+- The rules and the AI read plain words. A file's bold, italic and links inside a line (`Line.marked`: Word
+  runs and hyperlinks, a PDF's fonts, Markdown's marks) are put back afterwards (`keep_marks`) into the
+  lines, paragraphs and profile whose words are that line's, so both readings keep them the same way and a
+  value Hal changed keeps its plain words. "Check what Hal read" shows plain words.
 """
 from __future__ import annotations
 
@@ -43,9 +47,9 @@ from typing import Any
 from xml.etree import ElementTree
 
 from jobhunt.ai import prompts
-from jobhunt.cvstudio import pdfread
+from jobhunt.cvstudio import inline, pdfread
 from jobhunt.cvstudio import types as cvtypes
-from jobhunt.cvstudio.lines import BULLET_GLYPHS, Line, _bulleted, _hash
+from jobhunt.cvstudio.lines import BULLET_GLYPHS, Line, _bulleted, _hash, marked_text, slice_runs
 from jobhunt.cvstudio.mdread import md_lines
 from jobhunt.cvstudio.model import KINDS, Bullet, CVDoc, Entry, Module, Section
 from jobhunt.cvstudio.pdflines import SIZE_SLACK, pdf_lines
@@ -81,6 +85,8 @@ TWO_DIGIT_WHY = "The year is written with two digits."
 MISSING_WHY = "Hal did not find this in your file."
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+RELS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 DASHES = "-\u2010\u2011\u2012\u2013\u2014"
 
 SECTION_KINDS = ("summary", "education", "experience", "volunteering", "projects", "research", "skills",
@@ -266,6 +272,49 @@ def _para_text(p: ElementTree.Element) -> tuple[str, bool]:
     return "".join(parts), runs > 0 and bold_runs == runs
 
 
+def _on(rpr: ElementTree.Element | None, tag: str) -> bool:
+    """True when a run's properties switch `tag` (b, i) on."""
+    el = rpr.find(f"{W}{tag}") if rpr is not None else None
+    return el is not None and el.get(f"{W}val", "true") not in ("0", "false")
+
+
+def _run_piece(c: ElementTree.Element) -> str:
+    """The text one child of a Word run adds: its words, a tab, or a space for a line break."""
+    if c.tag == f"{W}t":
+        return c.text or ""
+    if c.tag == f"{W}tab":
+        return "\t"
+    return " " if c.tag in (f"{W}br", f"{W}cr") else ""
+
+
+def _para_runs(p: ElementTree.Element, links: dict[str, str]) -> list[inline.Run]:
+    """A paragraph's runs with their bold, italic and the address of the hyperlink around them."""
+    out: list[inline.Run] = []
+
+    def walk(el: ElementTree.Element, link: str) -> None:
+        for child in el:
+            if child.tag == f"{W}r":
+                text = "".join(_run_piece(c) for c in child)
+                rpr = child.find(f"{W}rPr")
+                out.append(inline.Run(text, _on(rpr, "b"), _on(rpr, "i"), link))
+            elif child.tag == f"{W}hyperlink":
+                walk(child, inline.safe_link(links.get(child.get(f"{R}id", ""), "")))
+            else:
+                walk(child, link)
+    walk(p, "")
+    return out
+
+
+def _docx_links(z: zipfile.ZipFile) -> dict[str, str]:
+    """The web addresses the document's hyperlinks point to, by relationship id."""
+    try:
+        root = ElementTree.fromstring(z.read("word/_rels/document.xml.rels"))
+    except (KeyError, ElementTree.ParseError):
+        return {}
+    return {r.get("Id", ""): r.get("Target", "") for r in root.iter(f"{RELS}Relationship")
+            if r.get("TargetMode") == "External"}
+
+
 def _docx_zip(data: bytes) -> zipfile.ZipFile:
     try:
         z = zipfile.ZipFile(io.BytesIO(data))
@@ -280,6 +329,7 @@ def docx_lines(data: bytes) -> list[Line]:
     """The Word file's paragraphs in order: style names, Word numbering as bullets, table rows as one line."""
     z = _docx_zip(data)
     styles = _docx_styles(z)
+    links = _docx_links(z)
     try:
         root = ElementTree.fromstring(z.read("word/document.xml"))
     except ElementTree.ParseError as e:
@@ -301,8 +351,10 @@ def docx_lines(data: bytes) -> list[Line]:
         style = styles.get(style_id, style_id.lower())
         clean, glyph = _bulleted(text)
         if clean:
+            at = text.find(clean)
+            marked = marked_text(slice_runs(_para_runs(p, links), at, at + len(clean)), clean) if at >= 0 else ""
             out.append(Line(clean, bold=bold, bullet=numbered or glyph or "list" in style, style=style,
-                            index=index, hash=_hash(clean)))
+                            index=index, hash=_hash(clean), marked=marked))
 
     def walk(parent: ElementTree.Element) -> None:
         for n, child in enumerate(parent):
@@ -785,6 +837,7 @@ def read_rules(lines: list[Line]) -> Reading:
         doc.sections.append(_section(kind, title, sid, body, marks, used))
     reading = Reading(doc, marks, "rules")
     mark_values(reading, lines)
+    keep_marks(reading.doc, lines)
     return reading
 
 
@@ -930,7 +983,52 @@ def read_with_ai(lines: list[Line]) -> tuple[Reading | None, str]:
     if reading is None:
         return None, "The AI's reading was empty."
     mark_values(reading, lines)
+    keep_marks(reading.doc, lines)
     return reading, ""
+
+
+def _with_marks(value: str, marked: dict[str, str], keys: list[str]) -> str:
+    """`value` with each file line it holds whole, at word edges, written with that line's marks."""
+    if value in marked:
+        return marked[value]
+    spans: list[tuple[int, int, str]] = []
+    for key in keys:
+        start = 0
+        while (at := value.find(key, start)) >= 0:
+            end = at + len(key)
+            clear = all(end <= s or at >= e for s, e, _ in spans)
+            edges = (not at or not value[at - 1].isalnum()) and (end == len(value) or not value[end].isalnum())
+            if clear and edges:
+                spans.append((at, end, marked[key]))
+                break
+            start = at + 1
+    if not spans:
+        return value
+    out, last = [], 0
+    for at, end, words in sorted(spans):
+        out += [inline.to_text([inline.Run(value[last:at])]), words]
+        last = end
+    out.append(inline.to_text([inline.Run(value[last:])]))
+    joined = "".join(out)
+    return joined if inline.plain(joined) == value else value
+
+
+def keep_marks(doc: CVDoc, lines: list[Line]) -> None:
+    """Puts the file's bold, italic and links (`Line.marked`) back into the profile, paragraphs and lines
+    that hold a marked line's words; any other value keeps its plain words."""
+    marked: dict[str, str] = {}
+    for line in lines:
+        if line.marked and inline.plain(line.marked) == line.text.strip():
+            marked.setdefault(line.text.strip(), line.marked)
+    if not marked:
+        return
+    keys = sorted(marked, key=len, reverse=True)
+    for sec in doc.sections:
+        sec.text = _with_marks(sec.text, marked, keys)
+        for e in sec.entries:
+            e.text = _with_marks(e.text, marked, keys)
+            for b in e.bullets:
+                b.text = _with_marks(b.text, marked, keys)
 
 
 # ------------------------------------------------------------------------------------- checks and rows
@@ -999,7 +1097,7 @@ def rows(reading: Reading) -> list[dict]:
         add("headline", "The line under your name", reading.doc.headline)
     for sec in reading.doc.sections:
         if sec.text:
-            add(f"s:{sec.id}/text", sec.title, sec.text)
+            add(f"s:{sec.id}/text", sec.title, inline.plain(sec.text))
         for e in sec.entries:
             base = f"s:{sec.id}/e:{e.id}"
             if sec.kind in ITEM_KINDS:
@@ -1017,12 +1115,13 @@ def rows(reading: Reading) -> list[dict]:
             if e.grade:
                 add(f"{base}/grade", "Grade", e.grade)
             if e.text:
-                add(f"{base}/text", e.heading or sec.title, e.text)
+                add(f"{base}/text", e.heading or sec.title, inline.plain(e.text))
             for b in e.bullets:
-                if b.text.lower().startswith("dissertation"):
-                    add(f"{base}/b:{b.id}", "Dissertation", b.text.split(":", 1)[-1].strip())
+                words = inline.plain(b.text)
+                if words.lower().startswith("dissertation"):
+                    add(f"{base}/b:{b.id}", "Dissertation", words.split(":", 1)[-1].strip())
                 elif f"{base}/b:{b.id}" in marks:
-                    add(f"{base}/b:{b.id}", e.heading or sec.title, b.text)
+                    add(f"{base}/b:{b.id}", e.heading or sec.title, words)
     return out
 
 
@@ -1081,7 +1180,7 @@ def correct(doc: CVDoc, path: str, value: str) -> CVDoc:
     if m.group("eid") is None:
         if m.group("field") != "text":
             raise LookupError(GONE_WORDS)
-        sec.text = value
+        sec.text = inline.keep_marks(sec.text, value)
         return out
     entry = next((e for e in sec.entries if e.id == m.group("eid")), None)
     if entry is None:
@@ -1090,9 +1189,10 @@ def correct(doc: CVDoc, path: str, value: str) -> CVDoc:
         bullet = next((b for b in entry.bullets if b.id == m.group("bid")), None)
         if bullet is None:
             raise LookupError(GONE_WORDS)
-        if bullet.text.lower().startswith("dissertation") and not value.lower().startswith("dissertation"):
-            value = f"{bullet.text.split(':', 1)[0]}: {value}"
-        bullet.text = value
+        words = inline.plain(bullet.text)
+        if words.lower().startswith("dissertation") and not value.lower().startswith("dissertation"):
+            value = f"{words.split(':', 1)[0]}: {value}"
+        bullet.text = inline.keep_marks(bullet.text, value)
         return out
     name = m.group("field")
     if name not in ENTRY_FIELDS:
@@ -1102,6 +1202,8 @@ def correct(doc: CVDoc, path: str, value: str) -> CVDoc:
         entry.start, entry.end = (parts[0].strip(), parts[1].strip()) if len(parts) == 2 else (value, "")
     elif name == "items":
         entry.items = _items(value)
+    elif name == "text":
+        entry.text = inline.keep_marks(entry.text, value)
     else:
         setattr(entry, name, value)
     return out
@@ -1136,8 +1238,9 @@ def prefill(doc: CVDoc) -> dict[str, str]:
         if year:
             out["you.education.start_year"] = year.group(0)
         for b in first.bullets:
-            if b.text.lower().startswith("dissertation") and ":" in b.text:
-                out["you.education.dissertation"] = b.text.split(":", 1)[1].strip()
+            words = inline.plain(b.text)
+            if words.lower().startswith("dissertation") and ":" in words:
+                out["you.education.dissertation"] = words.split(":", 1)[1].strip()
                 break
     return out
 
