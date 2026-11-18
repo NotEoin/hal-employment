@@ -14,7 +14,7 @@ from test_cv_suggest import PROFILE, TABLE, CvCase
 from jobhunt import documents
 from jobhunt.apply import actions
 from jobhunt.core import settings
-from jobhunt.cvstudio import cv, store, suggest, tailor
+from jobhunt.cvstudio import cv, model, store, suggest, tailor
 
 JOB = {"id": "job-archive-1", "title": "Archive Assistant", "company": "Fenmoor Heritage Trust",
        "requirements": ["Confident with Excel and NVivo for survey data", "Experience of archives"]}
@@ -76,6 +76,19 @@ class Tailoring(JobCase):
         self.assertIn(TABLE, [c["target"] for c in changes])
         self.assertIn(NEW_TABLE, self.bullets(doc))
         self.assertLessEqual(sum(1 for c in changes if "/b:" in c["target"]), tailor.MAX_BULLETS)
+
+    def test_a_reworded_line_for_a_job_keeps_its_bold_words(self):
+        doc = store.current()[1]
+        bold = "Ran the local history table and wrote weekly staff **recommendations**"
+        store.new_version(model.apply(doc, model.Change("replace", TABLE, bold)), origin="manual", what="Bold",
+                          by="you")
+        with fake_ai({"cv_suggest": tailoring_ai}):
+            doc, changes = tailor.for_job(JOB, level="more")
+        change = next(c for c in changes if c["target"] == TABLE)
+        self.assertEqual(change["before"], bold)
+        self.assertEqual(change["after"], "Ran the local history table, choosing stock and writing weekly "
+                                          "**recommendations**")
+        self.assertEqual(suggest.shown_at(doc, "replace", TABLE), change["after"])
 
     def test_adjust_no_gives_the_current_version_as_it_is(self):
         _, base = store.current()

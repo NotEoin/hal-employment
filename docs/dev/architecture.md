@@ -633,6 +633,11 @@ runs: tests use `tests/support/fake_claude/`.
 - `suggest.py` reviews one section at a time in the type's order, then the whole CV. Spelling, symbols,
   numeric dates, banned and never-use phrases, limits, empty sections and order need no AI; the `cv_suggest`
   prompt may add at most one suggestion per section after them.
+- Reviewers and the AI (`cv_suggest`, `cv_another`) see a line's plain words (`suggest.lines`). For a line,
+  paragraph or profile (`suggest.is_line`) the guard compares plain words, stores the line as it is now as
+  `before`, and writes each wording with `inline.keep_marks(before, plain words)`: a bold, italic or linked
+  stretch whose words are still there unchanged keeps its marks, any other is dropped, and marks the AI
+  writes itself are left out. A job's CV (`tailor._ai_change`) gets the same through the guard.
 - Guards run on every suggestion: the target exists and is unlocked, `before` matches the text there now,
   numbers, years and qualifications Hal cannot find become `[how many?]`, `[when?]` or `[which?]` (Accept
   refuses a gap, and a job's CV drops it), no I or we in the AI's wording when the type writes without them,

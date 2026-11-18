@@ -20,7 +20,7 @@ from jobhunt import db
 from jobhunt.ai import prompts
 from jobhunt.core import paths, runner, settings
 from jobhunt.core.settings import store as settings_store
-from jobhunt.cvstudio import model, store, suggest
+from jobhunt.cvstudio import inline, model, store, suggest
 
 WAIT_S = 20
 PROFILE = "s:summary/text"
@@ -99,7 +99,45 @@ class CvCase(unittest.TestCase):
         return suggest.shown_at(store.current()[1], "replace", target)
 
 
+def formatted(target: str, text: str) -> str:
+    """Makes a new version of the CV with the line at `target` written as `text`; returns the version id."""
+    doc = model.apply(store.current()[1], model.Change("replace", target, text))
+    return store.new_version(doc, origin="manual", what="Bold and italic", by="you")
+
+
 class Reviewers(CvCase):
+    def test_hals_new_wording_keeps_the_marks_whose_words_are_still_there(self):
+        formatted(VISITORS, "Helped **visitors** find *family* records at [the office](https://example.org/fro)")
+        reply = ai_suggests(VISITORS, "Helped visitors find family records at the office",
+                            "Helped visitors trace their records at the office")
+        with fake_ai({"cv_suggest": reply}) as backend:
+            suggest.look_again(self.con)
+        asked = "\n".join(json.loads(r.user)["lines"] for r in backend.requests("cv_suggest"))
+        self.assertIn(f"{VISITORS}\tHelped visitors find family records at the office", asked)
+        self.assertNotIn("**", asked)
+        mine = next(s for s in self.pending("Wording") if s["target"] == VISITORS)
+        self.assertEqual(mine["before"], "Helped **visitors** find *family* records at [the office](https://example.org/fro)")
+        self.assertEqual(mine["afters"], ["Helped **visitors** trace their records at [the office](https://example.org/fro)"])
+        suggest.accept(self.con, mine["id"])
+        self.assertEqual(self.text_at(VISITORS), mine["afters"][0])
+
+    def test_marks_the_ai_writes_itself_are_left_out(self):
+        reply = ai_suggests(VISITORS, "Helped visitors find family records",
+                            "**Helped** visitors find *family records")
+        with fake_ai({"cv_suggest": reply}):
+            suggest.look_again(self.con)
+        mine = next(s for s in self.pending("Wording") if s["target"] == VISITORS)
+        self.assertEqual(mine["afters"], ["Helped visitors find *family records"])
+        self.assertEqual(inline.runs(mine["afters"][0]), [inline.Run("Helped visitors find *family records")])
+
+    def test_a_spelling_fix_keeps_the_bold_of_the_words_it_does_not_change(self):
+        events = "s:experience/e:ex-shop/b:b-events"
+        formatted(events, "Organized **author events** for the shop")
+        suggest.look_again(self.con, use_ai=False)
+        fix = next(s for s in self.pending("Consistency") if s["target"] == events)
+        self.assertEqual((fix["before"], fix["afters"]),
+                         ("Organized **author events** for the shop", ["Organised **author events** for the shop"]))
+
     def test_deterministic_suggestions_appear_with_no_ai(self):
         out = suggest.look_again(self.con)
         kinds = {s["kind"] for s in self.pending()}

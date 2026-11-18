@@ -36,6 +36,10 @@ Design decisions:
   (`profile.writing.studied_skills`) in a list that is not already labelled as knowledge gets one suggestion,
   to leave it out or to label it "(studied)". The person may keep it: a suggestion they leave never comes
   back, so a skill they add themselves stays.
+- Reviewers and the AI read a line's plain words (`inline.plain`), never its bold, italic or link marks, so
+  a fix or a wording is plain words too. The guard compares plain words, stores the line as it is now
+  (marks and all) as `before`, and gives each new wording the marks of the line whose words it still holds
+  unchanged (`inline.keep_marks`); the rest are dropped, so a suggestion never stores a broken pair.
 """
 from __future__ import annotations
 
@@ -48,6 +52,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from jobhunt.core import clock, events
+from jobhunt.cvstudio import inline
 from jobhunt.profile import writing as profile_writing
 from jobhunt.writing import stage
 
@@ -215,20 +220,25 @@ def where(doc, target: str) -> str:
 
 
 def lines(doc) -> list[tuple[str, str, str]]:
-    """Every line of text with its target and section id: profile, paragraphs and bullets."""
+    """Every line of text with its target and section id: profile, paragraphs and bullets, as plain words."""
     out = []
     for s in doc.sections:
         if not s.visible:
             continue
         if s.text:
-            out.append((f"s:{s.id}/text", s.text, s.id))
+            out.append((f"s:{s.id}/text", inline.plain(s.text), s.id))
         for e in s.entries:
             if e.hidden:
                 continue
             if e.text:
-                out.append((f"s:{s.id}/e:{e.id}/text", e.text, s.id))
-            out += [(f"s:{s.id}/e:{e.id}/b:{b.id}", b.text, s.id) for b in e.bullets]
+                out.append((f"s:{s.id}/e:{e.id}/text", inline.plain(e.text), s.id))
+            out += [(f"s:{s.id}/e:{e.id}/b:{b.id}", inline.plain(b.text), s.id) for b in e.bullets]
     return out
+
+
+def is_line(target: str) -> bool:
+    """True when a target is text that may hold bold, italic and links: a line, a paragraph or a profile."""
+    return "/b:" in target or target.endswith("/text")
 
 
 def _locked(doc, target: str, layout: dict) -> bool:
@@ -509,7 +519,10 @@ def guard(draft: Draft, ctx: Context) -> Draft | None:
         return None
     if draft.target in ctx.keep or _locked(ctx.doc, draft.target, ctx.layout):
         return None
-    if " ".join(now.split()) != " ".join((draft.before or "").split()):
+    marked = draft.op == "replace" and is_line(draft.target)
+    words = inline.plain(now) if marked else now
+    before = inline.plain(draft.before or "") if marked else draft.before or ""
+    if " ".join(words.split()) != " ".join(before.split()):
         return None
     if (draft.kind, draft.section_id) in ctx.kinds_off:
         return None
@@ -517,19 +530,24 @@ def guard(draft: Draft, ctx: Context) -> Draft | None:
     phrases = banned_phrases(ctx.type_)
     code = spelling.chosen() if draft.ai else None
     for after in draft.afters:
-        after = with_gaps(str(after), ctx.known_text) if draft.op == "replace" else str(after)
+        after = inline.plain(str(after)) if marked else str(after)
+        after = with_gaps(after, ctx.known_text) if draft.op == "replace" else after
         if code:
             after = spelling.respell(after, code)
-        if any(_has(after, p) and not _has(now, p) for p in phrases):
+        if any(_has(after, p) and not _has(words, p) for p in phrases):
             continue
         # a fix that needs no AI keeps the person's own I; the AI's wording never speaks as I
-        if first_person(after, ctx.type_) and (draft.ai or not first_person(now, ctx.type_)):
+        if first_person(after, ctx.type_) and (draft.ai or not first_person(words, ctx.type_)):
             continue
-        if not _fits(draft, after, ctx.type_) or after in afters or after == now:
+        if not _fits(draft, after, ctx.type_) or after == words:
             continue
-        afters.append(after)
+        after = inline.keep_marks(now, after) if marked else after
+        if after not in afters:
+            afters.append(after)
     if not afters:
         return None
+    if marked:
+        draft.before = now          # the line as it is, marks and all, so recheck and undo find it
     draft.afters = afters
     if draft.fingerprint in ctx.blocked:
         return None
@@ -956,7 +974,8 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
     if edited:
         from jobhunt.writing import edits
 
-        edits.record(con, "cv_line", row["target"], afters[alt], after, job_id=row["job_id"])
+        edits.record(con, "cv_line", row["target"], inline.plain(afters[alt]), inline.plain(after),
+                     job_id=row["job_id"])
     con.execute("UPDATE cv_suggestions SET status = ?, alt = ?, edited = ?, result_version_id = ?, decided = ? "
                 "WHERE id = ?", ("edited" if edited else "accepted", alt, after if edited else None, new_vid,
                                  clock.iso(), sugg_id))
@@ -1067,7 +1086,8 @@ def another(con: sqlite3.Connection, sugg_id: str) -> dict:
     type_ = cv_type(doc_id=row["doc_id"])
     system = prompts.text("cv_another", con=con, spelling=spelling_words())
     user = json.dumps({"cv_type": type_.name, "writing": type_.writing, "target": row["target"],
-                       "now": row["before"], "why": row["why"], "already_shown": afters,
+                       "now": inline.plain(row["before"] or ""), "why": row["why"],
+                       "already_shown": [inline.plain(a) for a in afters],
                        "preferences": _prefs_words(con)}, ensure_ascii=True)
     try:
         got = ai.chat_json(system, user, role="writer", purpose="cv_another", priority=AI_PRIORITY)

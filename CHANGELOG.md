@@ -10,8 +10,10 @@ What changed in each version, in plain words.
   that link to a web page or an email address. On **Edit your CV**, select the words and press **Bold**,
   **Italic** or **Link** (or Ctrl+B and Ctrl+I), or type the marks yourself: two stars around words for bold
   (`**like this**`), one star for italic (`*like this*`), and `[words](https://example.org)` for a link. The
-  preview, the PDF and the Word file show them, and their links can be clicked. A star on its own, as in "A*" or "5* rating", stays as you
-  typed it. Checks, scores and Hal's writing read the words without the marks.
+  preview, the PDF and the Word file show them, and their links can be clicked. A star on its own, as in
+  "A*" or "5* rating", stays as you typed it. Checks, scores and Hal's writing read the words without the
+  marks. When Hal suggests new wording for a line, or rewords it for a job, the words it keeps stay bold,
+  italic or linked as they were.
 
 - **Your CV file's bold, italic and links are kept.** When Hal reads a CV you add, it keeps the bold and
   italic words inside a line, as your Word file, PDF or Markdown file shows them, and the links of a Word
