@@ -3,8 +3,10 @@
 The PDF comes from the printer (Hal's simple drawn PDF when no browser can print). The Word file is
 written with the standard library as minimal WordprocessingML using only the built-in styles Heading 1,
 List Bullet and Normal, so Word, LibreOffice and Google Docs all open it and it can be edited and uploaded
-again as a new main CV; keeping an uploaded Word file's own design is cut for now. File names
-come from the `cvdocs.file_name` setting through `core.naming`, which strips accents only in the name.
+again as a new main CV; keeping an uploaded Word file's own design is cut for now. A line's bold and italic
+are runs with `w:b` and `w:i`, and its links real hyperlinks (a relationship each, in the built-in Hyperlink
+character style), so the file reads back with the same marks. File names come from the `cvdocs.file_name`
+setting through `core.naming`, which strips accents only in the name.
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ MONTHS = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "ju
 NAME_HALF_POINTS = 32         # the name at 16 pt in the Word file
 FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)   # the same CV always gives the same bytes
 _XML_BAD = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f]")
+FIRST_LINK_ID = 3             # rId1 is the styles part and rId2 the numbering part
 
 
 class UnknownFormat(ValueError):
@@ -78,14 +81,50 @@ def _t(text: str) -> str:
     return escape(_XML_BAD.sub("", text or ""))
 
 
+class _Links:
+    """The web addresses a Word file links to, each with its relationship id."""
+
+    def __init__(self) -> None:
+        self.ids: dict[str, str] = {}
+
+    def id_of(self, url: str) -> str:
+        """The relationship id for `url`, given the first time it is asked for."""
+        return self.ids.setdefault(url, f"rId{FIRST_LINK_ID + len(self.ids)}")
+
+
+def _run(r: inline.Run, size: int | None = None) -> str:
+    """One Word run: its words in bold, italic or the Hyperlink style as `r` says, at `size` half-points."""
+    props = (('<w:rStyle w:val="Hyperlink"/>' if r.link else "") + ("<w:b/>" if r.bold else "")
+             + ("<w:i/>" if r.italic else "") + (f'<w:sz w:val="{size}"/>' if size else ""))
+    rpr = f"<w:rPr>{props}</w:rPr>" if props else ""
+    return f'<w:r>{rpr}<w:t xml:space="preserve">{_t(r.text)}</w:t></w:r>'
+
+
+def _props(style: str) -> str:
+    return f'<w:pPr><w:pStyle w:val="{style}"/></w:pPr>' if style != "Normal" else ""
+
+
 def _para(text: str, style: str = "Normal", *, bold: bool = False, size: int | None = None) -> str:
-    props = f'<w:pPr><w:pStyle w:val="{style}"/></w:pPr>' if style != "Normal" else ""
-    rpr = ("<w:rPr>" + ("<w:b/>" if bold else "") + (f'<w:sz w:val="{size}"/>' if size else "") + "</w:rPr>"
-           if bold or size else "")
-    return f'<w:p>{props}<w:r>{rpr}<w:t xml:space="preserve">{_t(text)}</w:t></w:r></w:p>'
+    return f"<w:p>{_props(style)}{_run(inline.Run(text, bold=bold), size)}</w:p>"
 
 
-def _docx_body(v: render.View) -> str:
+def _line_para(text: str, links: _Links, style: str = "Normal") -> str:
+    """A paragraph of a CV line, its marks as bold and italic runs and its links as hyperlinks."""
+    body: list[str] = []
+    runs = inline.runs(text)
+    i = 0
+    while i < len(runs):
+        j = i
+        while j < len(runs) and runs[j].link == runs[i].link:
+            j += 1
+        parts = "".join(_run(r) for r in runs[i:j])
+        body.append(f'<w:hyperlink r:id="{links.id_of(runs[i].link)}" w:history="1">{parts}</w:hyperlink>'
+                    if runs[i].link else parts)
+        i = j
+    return f"<w:p>{_props(style)}{''.join(body)}</w:p>"
+
+
+def _docx_body(v: render.View, links: _Links) -> str:
     out = [_para(v.name, bold=True, size=NAME_HALF_POINTS)]
     if v.headline:
         out.append(_para(v.headline))
@@ -94,7 +133,7 @@ def _docx_body(v: render.View) -> str:
     for s in v.sections:
         out.append(_para(s.title, "Heading1"))
         if s.text:
-            out.append(_para(s.text))
+            out.append(_line_para(s.text, links))
         for e in s.entries:
             if s.kind in ("skills", "languages") and e.items and not e.bullets:
                 out.append(_para(f"{e.heading}: {e.items}" if e.heading else e.items))
@@ -102,10 +141,14 @@ def _docx_body(v: render.View) -> str:
             top = " | ".join(x for x in (e.heading, e.dates) if x)
             if top:
                 out.append(_para(top, bold=True))
-            for line in (e.org, e.meta, e.text, e.items):
+            for line in (e.org, e.meta):
                 if line:
                     out.append(_para(line))
-            out += [_para(text, "ListBullet") for _, text in e.bullets]
+            if e.text:
+                out.append(_line_para(e.text, links))
+            if e.items:
+                out.append(_para(e.items))
+            out += [_line_para(text, links, "ListBullet") for _, text in e.bullets]
             if e.modules:
                 out.append(_para(f"Selected modules: {e.modules}"))
         if s.also:
@@ -114,6 +157,8 @@ def _docx_body(v: render.View) -> str:
 
 
 W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+HYPERLINK = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
 DOCX_PARTS = {
     "[Content_Types].xml": (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -131,13 +176,6 @@ DOCX_PARTS = {
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
         'officeDocument" Target="word/document.xml"/></Relationships>'),
-    "word/_rels/document.xml.rels": (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
-        'styles" Target="styles.xml"/>'
-        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
-        'numbering" Target="numbering.xml"/></Relationships>'),
     "word/styles.xml": (
         f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles {W}>'
         '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>'
@@ -149,7 +187,9 @@ DOCX_PARTS = {
         '<w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style>'
         '<w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/>'
         '<w:basedOn w:val="Normal"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr>'
-        '<w:ind w:left="360" w:hanging="360"/></w:pPr></w:style></w:styles>'),
+        '<w:ind w:left="360" w:hanging="360"/></w:pPr></w:style>'
+        '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/>'
+        '<w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style></w:styles>'),
     "word/numbering.xml": (
         f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering {W}>'
         '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/>'
@@ -159,15 +199,31 @@ DOCX_PARTS = {
 }
 
 
+def _document_rels(links: _Links) -> str:
+    """The document's relationships: its styles and numbering parts, then one per web address it links to."""
+    rels = ['<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+            'styles" Target="styles.xml"/>',
+            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+            'numbering" Target="numbering.xml"/>']
+    rels += [f'<Relationship Id="{rid}" Type="{HYPERLINK}" Target="{escape(url, {chr(34): "&quot;"})}" '
+             'TargetMode="External"/>' for url, rid in links.ids.items()]
+    return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            + "".join(rels) + "</Relationships>")
+
+
 def to_docx(v: render.View) -> bytes:
     """A Word file of the CV, with the same words and order as the printed page."""
-    document = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {W}><w:body>'
-                f'{_docx_body(v)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
+    links = _Links()
+    document = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {W} {R}><w:body>'
+                f'{_docx_body(v, links)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
                 '<w:pgMar w:top="1020" w:right="1020" w:bottom="1020" w:left="1020" w:header="0" w:footer="0" '
                 'w:gutter="0"/></w:sectPr></w:body></w:document>')
+    parts = [*DOCX_PARTS.items(), ("word/_rels/document.xml.rels", _document_rels(links)),
+             ("word/document.xml", document)]
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for name, text in [*DOCX_PARTS.items(), ("word/document.xml", document)]:
+        for name, text in parts:
             z.writestr(zipfile.ZipInfo(name, FIXED_ZIP_TIME), text.encode("utf-8"))
     return buf.getvalue()
 

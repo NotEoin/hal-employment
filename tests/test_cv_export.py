@@ -19,11 +19,12 @@ from support import people
 from support.api import HalServer
 from support.ui import browser_tests_on
 from test_cv_printer import NoBrowsersHere
-from test_cv_render import made_up_cv, profile_of, type_for
+from test_cv_render import GUIDES, formatted_cv, made_up_cv, profile_of, type_for
 
 from jobhunt.cvstudio import export, pdfread, printer, render, store
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 REPLY_MARGIN_S = 5  # time for the server to send the PDF once the printer is done
 
 
@@ -101,6 +102,26 @@ class Exports(unittest.TestCase):
         titles = [s.title for s in view.sections]
         self.assertEqual(sorted(titles, key=words.index), titles)
         self.assertEqual(export.to_docx(view), export.to_docx(view))   # the same CV gives the same bytes
+
+    def test_a_lines_bold_italic_and_links_are_word_runs_and_hyperlinks(self):
+        person = people.HUMANITIES
+        data = export.to_docx(render.view(formatted_cv(), type_for(person.key), profile_of(person)))
+        docx_text(data)                                                 # every part still parses
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            root = ElementTree.fromstring(z.read("word/document.xml"))
+            rels = ElementTree.fromstring(z.read("word/_rels/document.xml.rels"))
+        para = next(p for p in root.iter(f"{W}p") if "visitor guides" in "".join(t.text or "" for t in p.iter(f"{W}t")))
+        runs = [("".join(t.text or "" for t in r.iter(f"{W}t")), r.find(f"{W}rPr/{W}b") is not None,
+                 r.find(f"{W}rPr/{W}i") is not None) for r in para.iter(f"{W}r")]
+        self.assertIn(("15 tours", True, False), runs)
+        self.assertIn(("school groups", False, True), runs)
+        link = para.find(f"{W}hyperlink")
+        self.assertEqual("".join(t.text or "" for t in link.iter(f"{W}t")), "visitor guides")
+        rel = next(r for r in rels if r.get("Id") == link.get(f"{R}id"))
+        self.assertEqual((rel.get("Target"), rel.get("TargetMode")), (GUIDES, "External"))
+        heading = "".join(t.text or "" for t in root.iter(f"{W}t"))
+        self.assertIn("Collections volunteer *A*", heading)         # a heading's stars stay as typed
+        self.assertNotIn("**", heading)
 
     def test_word_files_open_in_a_document_reader(self):
         try:

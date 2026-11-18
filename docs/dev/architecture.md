@@ -617,7 +617,9 @@ runs: tests use `tests/support/fake_claude/`.
   wraps by measuring each run in its own face (`pdfdraw.wrap`), and underlines a link with a link annotation
   over its words.
 - `export.py` gives PDF, Word (WordprocessingML written with the standard library), plain text, JSON Resume
-  1.0.0 and `cv.json`. PDFs are cached in `cache/cv-print/` by the page's hash.
+  1.0.0 and `cv.json`. PDFs are cached in `cache/cv-print/` by the page's hash. In Word a line's bold and
+  italic are runs (`w:b`, `w:i`) and its links `w:hyperlink`s, each with an external relationship in
+  `word/_rels/document.xml.rels`; plain text and JSON Resume give the plain words; `cv.json` keeps the marks.
 
 ## CV suggestions (`cvstudio/suggest.py`, `tailor.py`, `fresh.py`)
 
