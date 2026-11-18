@@ -27,6 +27,7 @@ WAIT_S = 10       # every wait here ends in well under a second; this bounds a b
 HOLD_S = 0.3      # how long the slow route keeps its request in flight
 BURST = 24        # about what a page opens at once: its modules, styles, data and event stream
 CONNECT_S = 2     # a connection the backlog has room for is made at once
+STATIC = "/app/core/store.js"   # one of the app's own files
 ENTERED, RELEASE = threading.Event(), threading.Event()
 
 
@@ -131,6 +132,49 @@ class Serving(unittest.TestCase):
         self.assertGreaterEqual(time.monotonic() - started, HOLD_S / 2)
         client.join(WAIT_S)
         self.assertEqual(got, [200])
+
+    def connection(self) -> http.client.HTTPConnection:
+        con = http.client.HTTPConnection(app.BIND, self.port, timeout=WAIT_S)
+        self.addCleanup(con.close)
+        return con
+
+    def ask(self, con: http.client.HTTPConnection, method: str, path: str, **headers: str):
+        con.request(method, path, headers={"Host": f"{app.BIND}:{self.port}", **headers})
+        r = con.getresponse()
+        return r, r.read()
+
+    # Regression (CI run 44372137723): one connection per request, about a hundred per page load, used up
+    # Windows' ports in the browser tests (net::ERR_NO_BUFFER_SPACE)
+    def test_one_connection_carries_a_pages_requests(self):
+        con = self.connection()
+        for _ in range(3):
+            r, _ = self.ask(con, "GET", STATIC)
+            self.assertEqual(r.status, 200)
+            self.assertIsNotNone(con.sock, "the server closed the connection after one reply")
+
+    def test_an_unchanged_app_file_is_answered_without_its_body(self):
+        con = self.connection()
+        r, body = self.ask(con, "GET", STATIC)
+        self.assertEqual(r.getheader("Cache-Control"), app.STATIC_CACHE)
+        self.assertTrue(body)
+        again, body = self.ask(con, "GET", STATIC, **{"If-None-Match": r.getheader("ETag")})
+        self.assertEqual((again.status, body), (304, b""))
+        self.assertEqual(self.ask(con, "GET", STATIC, **{"If-None-Match": '"older"'})[0].status, 200)
+
+    def test_a_refused_write_closes_its_connection_so_its_body_is_never_read_as_a_request(self):
+        con = self.connection()
+        con.request("POST", "/api/v2/test-app/slow", body=b'{"made": "up"}',
+                    headers={"Host": f"{app.BIND}:{self.port}", "Content-Type": "application/json"})
+        r = con.getresponse()
+        r.read()
+        self.assertEqual((r.status, r.getheader("Connection")), (403, "close"))
+
+    def test_stop_does_not_wait_for_an_idle_connection(self):
+        con = self.connection()
+        self.assertEqual(self.ask(con, "GET", "/healthz")[0].status, 200)
+        started = time.monotonic()
+        self.assertTrue(self.httpd.stop())
+        self.assertLess(time.monotonic() - started, app.KEEP_ALIVE_S / 2)
 
     def test_a_running_server_answers_its_health_check(self):
         self.assertTrue(app.answering(self.port))

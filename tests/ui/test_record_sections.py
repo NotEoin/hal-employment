@@ -245,6 +245,8 @@ class RecordSections(unittest.TestCase):
         card = p.page.locator("article.rec-item", has=p.page.locator("h3", has_text="Collections volunteer"))
         card.locator("summary", has_text="Add a document for this job").click()
         docs = self.panel(p, "Documents for this job")
+        # the kinds come with the sections' own request, which can land after the panel draws
+        docs.get_by_label("What is it?").locator("option", has_text="Something else").wait_for(state="attached")
         self.assertEqual(docs.get_by_label("What is it?").locator("option").all_inner_texts(),
                          ["Reference", "Contract", "Job description", "Something else"])
         self.clean(p)

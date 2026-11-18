@@ -31,6 +31,10 @@ What changed in each version, in plain words.
   adjusting that application's CV, Hal could finish afterwards and put back the CV it had chosen. Hal now
   finishes one before it starts the other, so your choice is the one kept.
 
+- **Pages open with fewer connections.** Hal's window now reuses a few connections for the whole page
+  instead of opening one for each of its parts, and when you reload a page, the parts that have not changed
+  are not sent again. On Windows, Hal's own tests ran out of connections that way, and a page failed to load.
+
 ## 2.3.0 (2026-11-18)
 
 ### What's new

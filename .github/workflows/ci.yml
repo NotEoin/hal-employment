@@ -79,8 +79,9 @@ jobs:
             uv run python scripts/dev/check_ruff.py --base HEAD~1
           fi
       - run: uv run python scripts/dev/check_ascii.py --tree
-      # The browser tests open a connection per request, and late in one run Windows ran out
-      # (net::ERR_NO_BUFFER_SPACE). This doubles its default 16384 client ports, above the tests' 20000-29999.
+      # The browser tests once opened a connection per request, and Windows ran out of ports
+      # (net::ERR_NO_BUFFER_SPACE). The servers now keep connections open, a tenth as many over tests/ui; this
+      # stays as headroom and doubles Windows' default 16384 client ports, above the tests' 20000-29999.
       - if: runner.os == 'Windows'
         run: netsh int ipv4 set dynamicport tcp start=32768 num=32768
       - name: Tests, browser on

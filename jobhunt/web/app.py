@@ -5,6 +5,12 @@ the session or local key, `/api/v2/*` through the router (the event stream is a 
 helper from before pairing at `/api/ext/*`, a document's `/files` and `/doc/*`, then the app's own files.
 
 The address is never a setting: Hal listens on `BIND` only, and over SSH the tunnel reaches it there.
+
+Connections are kept open for the next request (HTTP/1.1). With one connection per request a page load opened
+about a hundred, one for each module, style and font, and Windows, which holds each closed connection's port
+for two minutes, ran out of them in the browser tests (net::ERR_NO_BUFFER_SPACE, CI run 44372137723). The app's
+own files carry a validator (`ETag`) with `no-cache`: a reload asks again and gets a bodiless 304, and an
+updated Hal never runs an old module from the browser's cache.
 """
 from __future__ import annotations
 
@@ -17,6 +23,7 @@ import logging
 import logging.handlers
 import mimetypes
 import re
+import select
 import socket
 import subprocess
 import sys
@@ -52,6 +59,9 @@ LISTEN_BACKLOG = 64        # waiting connections; see AppServer
 STOP_WAIT_S = 10           # an event stream ends within its wake-up time; other replies are quicker still
 CONNECT_TIMEOUT_S = 0.5    # a loopback connect to a listening port is instant; Windows needs about 2 s to refuse
 GIT_TIMEOUT_S = 5
+KEEP_ALIVE_S = 15          # an idle connection closes after this; a page reuses one within milliseconds
+IDLE_POLL_S = 0.25         # how soon an idle connection sees the server stop, so `stop` never waits on one
+STATIC_CACHE = "no-cache"  # the browser keeps a copy of the app's files but asks before each use
 LOG_BYTES = 2 * 1024 * 1024        # 5 files of 2 MB
 LOG_COUNT = 5
 LOCK_FILE = "server.lock"
@@ -103,24 +113,48 @@ class AppHandler(BaseHTTPRequestHandler):
     """One request: the checks, then the route that answers it."""
 
     server_version = "HalEmployment/2"
+    protocol_version = "HTTP/1.1"   # keep-alive; see the module's docstring
+    server: AppServer
     session: auth.Session | None = None
     local: bool = False
 
     def log_message(self, fmt: str, *args: Any) -> None:
         """Keeps the log to errors only; `_handle` logs those with their traceback."""
 
+    def handle(self) -> None:
+        """Answers requests on this connection until the browser closes it, it idles or the server stops."""
+        self.close_connection = True
+        self.handle_one_request()
+        while not self.close_connection and self._next_request_comes():
+            self.handle_one_request()
+
+    def _next_request_comes(self) -> bool:
+        """True once the next request starts arriving; False after `KEEP_ALIVE_S` idle or when the server stops.
+
+        Only the socket is watched, not `rfile`'s buffer: that holds nothing between requests unless the client
+        pipelines, which browsers and `http.client` never do.
+        """
+        deadline = time.monotonic() + KEEP_ALIVE_S
+        while not self.server.stopping.is_set() and time.monotonic() < deadline:
+            if select.select([self.connection], [], [], IDLE_POLL_S)[0]:
+                return True
+        return False
+
     # replies
 
     def end_headers(self) -> None:
-        """Every reply says not to send this address to other sites."""
+        """Every reply says not to send this address to other sites, and whether its connection closes after it."""
         self.send_header("Referrer-Policy", "no-referrer")
+        if self.close_connection:
+            self.send_header("Connection", "close")
         super().end_headers()
 
-    def _reply_bytes(self, status: int, body: bytes, ctype: str, headers: dict[str, str] | None = None) -> None:
+    def _reply_bytes(self, status: int, body: bytes, ctype: str, headers: dict[str, str] | None = None, *,
+                     cache: str = "no-store") -> None:
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
@@ -157,6 +191,7 @@ class AppHandler(BaseHTTPRequestHandler):
         if isinstance(result, router.HtmlResponse):
             return self.send_html(result.text, result.status, policy=result.policy)
         if isinstance(result, router.Stream):
+            self.close_connection = True   # a stream has no length: it ends when the connection does
             return result.writer(self)
         if isinstance(result, (router.FileResponse, router.BytesResponse)):
             data = result.path.read_bytes() if isinstance(result, router.FileResponse) else result.data
@@ -218,11 +253,17 @@ class AppHandler(BaseHTTPRequestHandler):
                 con.close()
 
     def _handle(self, method: str) -> None:
+        # A refusal answers before reading the request's body, which would then read as the next request, so a
+        # connection that carried a body is not kept. Writes are few; the page's many reads keep theirs.
+        if self.headers.get("Content-Length", "0").strip() not in ("", "0") or self.headers.get("Transfer-Encoding"):
+            self.close_connection = True
         try:
             self._route(method)
         except ConnectionError:
+            self.close_connection = True
             return  # the browser went away; there is no one to send the error to
         except Exception:
+            self.close_connection = True   # part of a reply may have gone before the error
             log.exception("%s %s failed", method, self.path)
             with contextlib.suppress(OSError):
                 self.send_json({"error": {"code": "error", "message": router.UNEXPECTED}}, 500)
@@ -350,7 +391,16 @@ class AppHandler(BaseHTTPRequestHandler):
             self._reply_bytes(404, b"not found", "text/plain")
             return
         ctype = MIME.get(target.suffix) or mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-        self._reply_bytes(200, target.read_bytes(), ctype)
+        st = target.stat()
+        etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'   # an update rewrites the file, so its time changes
+        if etag in [t.strip() for t in (self.headers.get("If-None-Match") or "").split(",")]:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", STATIC_CACHE)
+            with contextlib.suppress(ConnectionError):
+                self.end_headers()
+            return
+        self._reply_bytes(200, target.read_bytes(), ctype, {"ETag": etag}, cache=STATIC_CACHE)
 
 
 class AppServer(ThreadingHTTPServer):
@@ -363,6 +413,7 @@ class AppServer(ThreadingHTTPServer):
 
     def __init__(self, port: int) -> None:
         super().__init__((BIND, port), AppHandler)
+        self.stopping = threading.Event()   # ends the connections idling between requests
         self._in_flight: set[threading.Thread] = set()
         self._in_flight_lock = threading.Lock()
 
@@ -384,6 +435,7 @@ class AppServer(ThreadingHTTPServer):
         open file, so a restart or a test's clean-up waits here rather than racing the last replies.
         """
         self.shutdown()
+        self.stopping.set()
         sse.end_all()
         deadline = time.monotonic() + timeout
         with self._in_flight_lock:

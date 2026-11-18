@@ -95,6 +95,7 @@ class AiStep(unittest.TestCase):
 
     def test_a_made_up_friend_installs_signs_in_and_tests_claude(self):
         p = self.step()
+        p.page.wait_for_selector("#test-step >> text=Best for this laptop")   # the computer's check lands later
         text = p.page.inner_text("#test-step")
         self.assertIn("How should Hal think?", text)
         self.assertIn("Best for this laptop", text)

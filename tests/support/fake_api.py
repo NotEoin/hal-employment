@@ -15,6 +15,7 @@ import hashlib
 import json
 import mimetypes
 import re
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ APP_DIR = Path(__file__).resolve().parents[2] / "jobhunt" / "web" / "static" / "
 IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)
 SSE_PING_S = 1.0          # often enough that a stopping server ends its streams quickly
 SSE_MAX_S = 120           # no test page stays open longer; the stream thread always ends
+STATIC_CACHE = "no-cache"  # as the real server (`jobhunt.web.app.STATIC_CACHE`)
 MIME = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".woff2": "font/woff2",
         ".svg": "image/svg+xml", ".html": "text/html; charset=utf-8", ".txt": "text/plain; charset=utf-8"}
 
@@ -486,13 +488,14 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:  # the test output stays readable
         return
 
-    def _send(self, status: int, body: bytes, ctype: str, extra: dict[str, str] | None = None) -> None:
+    def _send(self, status: int, body: bytes, ctype: str, extra: dict[str, str] | None = None, *,
+              cache: str = "no-store") -> None:
         if status == 404:
             self.server.state.missing.append(self.path)
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         for k, v in (extra or {}).items():
@@ -513,10 +516,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain")
             return
         ctype = MIME.get(path.suffix) or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        extra = {}
         if path.name == "index.html":
-            extra["Content-Security-Policy"] = csp_header(path.read_text(encoding="utf-8"))
-        self._send(200, path.read_bytes(), ctype, extra)
+            self._send(200, path.read_bytes(), ctype,
+                       {"Content-Security-Policy": csp_header(path.read_text(encoding="utf-8"))})
+            return
+        # as the real server: a validator, so a reload is answered 304 instead of sending every module again
+        st = path.stat()
+        etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+        if etag in [t.strip() for t in (self.headers.get("If-None-Match") or "").split(",")]:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", STATIC_CACHE)
+            self.end_headers()
+            return
+        self._send(200, path.read_bytes(), ctype, {"ETag": etag}, cache=STATIC_CACHE)
 
     def do_GET(self) -> None:
         """Serves files and the GET routes."""
@@ -596,6 +609,11 @@ class FakeServer(ThreadingHTTPServer):
     """The fake server on 127.0.0.1 and a free port; use it as a context manager."""
 
     daemon_threads = True
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        """A page that went away mid-reply is normal (Windows: WinError 10053); anything else prints as usual."""
+        if not isinstance(sys.exc_info()[1], ConnectionError):
+            super().handle_error(request, client_address)
 
     def __init__(self, state: FakeState | None = None) -> None:
         super().__init__(("127.0.0.1", 0), Handler)

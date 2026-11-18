@@ -145,6 +145,16 @@ socketserver's 5, because Windows refuses connections past the backlog and a pag
 is larger than 5. `app.answering(port)` gives the connection 0.5 s, as Windows takes about 2 s to refuse a
 closed loopback port.
 
+The server speaks HTTP/1.1 and keeps a connection open for the next request, for up to `KEEP_ALIVE_S` (15 s)
+idle. With a connection per request, a page load opened about a hundred, and Windows, which keeps each closed
+connection's port for two minutes, ran out of ports in the browser tests (`net::ERR_NO_BUFFER_SPACE`). Over
+`tests/ui` the servers now accept 1,893 connections instead of 19,289 (measured 2026-11-18). An idle
+connection checks every 0.25 s whether the server is stopping, so `stop()` never waits on one. A connection
+closes after an event stream, an error, or any request that carried a body, because a refusal answers before
+reading the body, and the unread bytes would be taken for the next request. The app's own files carry an
+`ETag` and `Cache-Control: no-cache`: a reload revalidates each file and gets a 304 with no body. The browser
+never runs a cached file without asking, so an updated Hal never mixes old and new modules.
+
 ## Sign-in (`web/auth.py`)
 
 - `mint_open_url(remote=, remote_host=, port=, next=)` writes a one-time token (SHA-256 only, 120 s) to

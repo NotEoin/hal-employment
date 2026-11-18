@@ -115,6 +115,7 @@ class CvPage(unittest.TestCase):
         self.assertEqual(p.page.inner_text("#main h1"), "My CVs")
         self.assertIn("My CVs", p.page.inner_text("nav.rail"))
         p.page.wait_for_selector("text=Version 1")
+        p.page.wait_for_selector("input[aria-label^='Pick version']")   # the list draws after its heading
         self.assertEqual(p.page.locator("input[aria-label^='Pick version']").count(), 1)
         p.page.click(".cv-name:has-text('My CV')")
         p.page.wait_for_selector("text=Version 4")
