@@ -3,11 +3,14 @@
 The runner is one per process, while each test has its own home. An action left going when a test ends
 writes into the next test's home, or shows there as "Hal has no record of that action", so the test that
 started it must be the one that fails. `HalServer` and `World` both call `wait_for_actions` on the way out.
+A test whose request also starts a record read waits for that read too, and builds the shared document
+converter first (`warm_document_reader`), so a one-off cost is never inside a timed wait.
 """
 from __future__ import annotations
 
 import time
 
+from jobhunt import markitdown_loader
 from jobhunt.core import runner
 
 IDLE_S = 10   # the longest a test's background action may take to end once the test is over
@@ -40,3 +43,12 @@ def finished(action_id: str, timeout: float = IDLE_S) -> dict:
         raise AssertionError(f"{done['kind']} is still {done['state']} after {timeout} s, at step "
                              f"{done['step_n']} of {done['step_total']}: {done['message']!r}")
     return done
+
+
+def warm_document_reader() -> None:
+    """Builds the shared MarkItDown converter now, outside any timed wait.
+
+    A record read builds it on first use: 3.8 s on an idle machine and over 10 s on a loaded one (measured
+    2026-11-18), so the first test in a process to add a PDF to the record ran past its wait for the read.
+    """
+    markitdown_loader.markitdown_converter()

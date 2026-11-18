@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from support.actions import warm_document_reader
 from support.api import HalServer
 from test_cv_parse import upload
 from test_sections_routes import ended, form
@@ -28,6 +29,10 @@ def fixture(name: str) -> bytes:
 
 
 class RecordCvRoutes(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        warm_document_reader()
+
     def setUp(self):
         self.hal = self.enterContext(HalServer())
         folder = Path(paths.record_default())

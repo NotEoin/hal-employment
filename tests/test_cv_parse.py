@@ -16,6 +16,7 @@ import uuid
 from unittest import mock
 
 from support import make_cv_fixtures as maker
+from support.actions import warm_document_reader
 from support.api import TIMEOUT_S, HalServer
 from support.fake_ai import fake_ai
 from support.make_cv_fixtures import BROWSER_EXPECTED, BROWSER_NAME, EXPECTED, FOLDER, NAMES, PEOPLE, main, pdf_bytes
@@ -336,16 +337,22 @@ class OneProfile(unittest.TestCase):
 
 
 class Upload(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        warm_document_reader()
+
     def setUp(self) -> None:
         self.hal = self.enterContext(HalServer())
         self.client = self.hal.signed_in()
 
     def read(self, name: str, data: bytes, replies: dict | None = None, query: str = "") -> dict:
-        """Uploads a file, waits for `cv.parse` and returns the finished action."""
+        """Uploads a file, waits for `cv.parse` and the record's read of the same file, and returns the
+        finished `cv.parse`. The record's read outlived the test on a loaded machine (2026-11-18)."""
         with fake_ai(NO_AI if replies is None else replies):
             status, body = upload(self.hal, self.client, name, data, query)
             self.assertEqual(status, 200, body)
             done = runner.wait(body["action_id"], WAIT_S)
+            self.assertTrue(runner.idle(WAIT_S), "the record's read of the uploaded file has ended")
         self.assertEqual(done["state"], "done", done["error"])
         return done
 
