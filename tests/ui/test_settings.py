@@ -152,6 +152,30 @@ class SettingsPage(unittest.TestCase):
         self.saved("schedule.search_times", ["08:00", "14:00"])
         self.assertEqual([e for e in p.errors if not e.startswith(MISSING_ROUTE)], [])
 
+    def test_a_click_made_while_an_earlier_save_is_in_flight_is_kept(self) -> None:
+        # a regression: the earlier save's reply (the settings read again) came back after the click and put the
+        # old list back over the ticked box, so on a slow computer "Apprenticeships" unticked itself
+        p = self.tab("settings-goal")
+        held: list = []
+
+        def hold_first_reread(route) -> None:
+            if held:
+                route.continue_()
+                return
+            held.append((route, route.fetch()))    # the answer is read now, so it is stale when it is let through
+
+        p.page.route("**/api/v2/settings", hold_first_reread)
+        self.row(p, "goal.pattern").get_by_role("radio", name="Remote").click()
+        self.saved("goal.pattern", "remote")
+        self.until(lambda: bool(held) or bool(p.page.evaluate("0")), "the page to read its settings again")
+        self.row(p, "goal.kinds").get_by_label("Apprenticeships").check()
+        self.until(lambda: "apprenticeship" in settings.get("goal.kinds"), "goal.kinds to take Apprenticeships")
+        route, stale = held[0]
+        with p.page.expect_event("requestfinished", lambda r: r.url.endswith("/api/v2/settings")):
+            route.fulfill(response=stale)
+        p.page.evaluate("new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        self.assertTrue(self.row(p, "goal.kinds").get_by_label("Apprenticeships").is_checked())
+
     def test_what_you_type_as_the_page_draws_is_saved_on_a_busy_computer(self) -> None:
         # a regression: a text box put its stored value back over what was typed when the page's effects ran
         # late, so on a slow CI runner "Search for jobs at" never saved

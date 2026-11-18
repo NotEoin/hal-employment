@@ -6,7 +6,7 @@
    `data-key`s); the goal's earlier versions, Hal's instructions, AI and Updates add to the rows. A change saves at once; the server's SetResult says whether it needs a restart (the page
    offers Restart) or changes scores (the page offers "Re-check N jobs"). Rows marked advanced sit under
    "Show more" in their group, except while searching, which looks through every row's words. */
-import { html, cx, useState } from "../core/html.js";
+import { html, cx, useState, useRef } from "../core/html.js";
 import { put, del, run } from "../core/api.js";
 import { useApi, useStore, load, openDialog, openSetup, setTheme, setSimpleNav, toast } from "../core/store.js";
 import { go, route } from "../core/router.js";
@@ -73,7 +73,7 @@ function useBrowsers(on) {
 
 function Row({ it, ctx }) {
   const { vals, err, save, reset } = ctx;
-  const value = vals.values[it.key];
+  const value = it.key in ctx.chosen ? ctx.chosen[it.key].value : vals.values[it.key];
   const changed = vals.changed.includes(it.key);
   const words = SHOWN_WORDS.has(it.kind) && vals.display[it.key];
   if (it.kind === "prompts") {
@@ -128,6 +128,11 @@ export function Settings({ arg }) {
   const [err, setErr] = useState({});
   const [offers, setOffers] = useState({});   // group id -> {restart, rescore}
   const [busy, setBusy] = useState(false);
+  // What the person chose for a key whose save has not finished (key -> {value, id}). The row shows it instead of
+  // the stored value, so an older save's reply, which read the settings from before this choice, cannot put the
+  // old value back over it (2026-11-18). A later choice for the key has a new id and keeps the entry.
+  const [chosen, setChosen] = useState({});
+  const choices = useRef(0);
   const groups = (schema.data && schema.data.groups) || [];
   const g = groups.some(x => x.id === arg) ? arg : "you";
   const browsers = useBrowsers(g === "applying" || !!q);
@@ -140,7 +145,15 @@ export function Settings({ arg }) {
   const vals = values.data || { values: {}, changed: [], display: {}, secrets: {} };
   const privateSaved = !!(priv.data && priv.data.questions.some(x => x.saved));
 
+  const settle = (key, id) => setChosen(c => {
+    if (!c[key] || c[key].id !== id) return c;
+    const rest = { ...c };
+    delete rest[key];
+    return rest;
+  });
   const save = async (it, value) => {
+    const id = ++choices.current;
+    setChosen(c => ({ ...c, [it.key]: { value, id } }));
     try {
       const r = await put("/settings/" + encodeURIComponent(it.key), { value });
       setErr(e => ({ ...e, [it.key]: null }));
@@ -155,6 +168,8 @@ export function Settings({ arg }) {
       }
     } catch (e) {
       setErr(x => ({ ...x, [it.key]: e.message }));
+    } finally {
+      settle(it.key, id);
     }
   };
   const reset = async it => {
@@ -181,7 +196,7 @@ export function Settings({ arg }) {
   };
   const recheckWords = n => (n == null ? "Re-check every open job" : "Re-check " + n + (n === 1 ? " job" : " jobs"));
   const ctx = {
-    vals, err, save, reset,
+    vals, err, save, reset, chosen,
     help: it => (it.key === "sites.where" && sources ? plural(sources.sources.length, "site") + ", "
       + sources.sources.filter(x => x.on).length + " switched on."
       : (it.help || "").replace("{store}", (vals.store && vals.store.name) || "a protected file")),

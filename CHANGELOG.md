@@ -18,6 +18,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A setting you change while an earlier change is still saving keeps your choice.** On a slow computer the
+  earlier save's answer could arrive afterwards and put the old value back, for example unticking a box you had
+  just ticked on the Settings page.
+
 - **The "Make the missing documents" button on the Applications board keeps its words inside it.** On a
   narrow column the text ran past the button's edges; it now wraps onto two lines.
 
