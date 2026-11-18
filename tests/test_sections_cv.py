@@ -19,7 +19,7 @@ from support.fake_ai import fake_ai
 from support.graduates import AVERY, MARNIE
 from test_ingest import home
 
-from jobhunt import ai
+from jobhunt import ai, record
 from jobhunt.core import settings
 from jobhunt.cvstudio import parse as cv_parse
 from jobhunt.cvstudio import store as cv_store
@@ -333,6 +333,36 @@ class CurrentAndOlderCvs(unittest.TestCase):
         self.assertTrue(refolded, "the cards are worked out again for the rule's lead")
         self.assertEqual(again, [], "nothing to do while the lead stays")
         self.assertEqual(lead, ([current], True, False))
+
+    def test_the_first_start_after_the_update_leaves_the_record_as_it_was(self):
+        # review, 2026-11-18: the column held only an explicit choice, so it was 0 in most installs; the first
+        # settle took that for a change of lead and called every application out of date
+        with home() as (con, _, _):
+            add_cv(con, "Marnie CV old.md", MARNIE.older_cv)
+            newest = add_cv(con, "Marnie CV.md", MARNIE.cv)
+            with con:
+                con.execute("UPDATE record_sources SET current = 0")   # as an install before the update kept it
+            before = record.revision(con)
+            refolded = cvs.settle(con)
+            after = (record.revision(con), marked(con))
+        self.assertEqual(refolded, [], "the newest CV led before and leads now")
+        self.assertEqual(after, (before, [newest]))
+
+    def test_using_a_cv_that_does_not_lead_for_applications_or_not_leaves_the_record_as_it_was(self):
+        with home() as (con, _, _):
+            newest = add_cv(con, "Avery CV.md", AVERY.cv)
+            add_cv(con, "Avery CV 2023.md", AVERY.older_cv)
+            lead = my_cv(con, "Avery CV.md", AVERY.cv)
+            other = my_cv(con, "Avery CV 2023.md", AVERY.older_cv)
+            cv_store.reorder([lead, other], con=con)
+            cvs.settle(con)
+            before = record.revision(con)
+            cv_store.star(other, False, con=con)
+            off = (cvs.settle(con), record.revision(con))
+            cv_store.star(other, True, con=con)
+            on = (cvs.settle(con), record.revision(con), marked(con))
+        self.assertEqual(off, ([], before))
+        self.assertEqual(on, ([], before, [newest]))
 
     def test_removing_the_current_cv_makes_the_next_newest_lead(self):
         with home() as (con, _, _):

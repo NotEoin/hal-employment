@@ -1503,7 +1503,10 @@ people). Readers only take facts out of a source, within that frame.
   is seen, so `settle` runs after every change that may move the lead: the My CVs routes for star, archive
   and order (`cvstudio/routes._change`, `put_order`), a new CV from `cv.parse`, the record's toggle, a CV
   read or removed (`cv.refold_cv_cards`), a CV moved out of the section, and once at start
-  (`cvstudio/record_routes.settle_at_start`), which also replaces a choice an older version kept.
+  (`cvstudio/record_routes.settle_at_start`), which also replaces a choice an older version kept. Only a
+  real change of lead refolds and raises the revision: a column of 0s, as an install from before kept it,
+  stands for the newest-dated CV read (`_led_before`), and turning a CV that does not lead on or off for
+  applications changes no fact, so neither marks applications out of date.
   `PUT /record/sources/{id}` refuses `current`. `profile.store.refold` ranks an older CV's evidence at `merge.OLDER_CV_RANK` (1.5:
   below the current CV's 3 and documents' 2, above notes), and `merge.fold` joins its lists only when no
   source above gives one, so it only fills gaps. `conflicts` leaves out an older CV's value of a field another

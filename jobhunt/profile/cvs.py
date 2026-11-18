@@ -18,6 +18,11 @@ Design decisions, each with its reason:
   names the CV the cards were last folded for, and a change of lead (a CV turned on or off, the order on My
   CVs, a read, a CV removed, or an update from a version that kept the person's old flag) is seen by
   comparing it with the rule's answer. A migration may not drop a column, so it is kept and kept true.
+- Only a real change of lead raises the record's revision. Before `settle` wrote it, the column held only an
+  explicit choice and was 0 in most installs, while the cards followed the newest-dated CV read; a column of
+  0s is taken as that answer (`_led_before`), so the first start after the update does not call every
+  application out of date (review, 2026-11-18). A CV turned on or off for applications that does not lead
+  before or after changes no fact of the record, so it raises nothing either.
 - An older CV's facts rank at `merge.OLDER_CV_RANK`: below the lead CV and below documents such as a
   reference or a contract, above notes. A field the lead CV or a document gives never takes another CV's
   value; another CV only fills what nothing above it gives, and the card says "from an older CV".
@@ -80,11 +85,11 @@ def settle(con: sqlite3.Connection, *, refold: bool = False) -> list[int]:
     rows = _rows(con)
     lead = _lead_of(con, rows)
     want = [lead["id"]] if lead is not None else []
-    changed = [r["id"] for r in rows if r["current"]] != want
-    if changed:
+    if [r["id"] for r in rows if r["current"]] != want:
         with con:
             con.execute("UPDATE record_sources SET current = (id = ?) WHERE section = ?",
                         (want[0] if want else NO_SOURCE, SECTION))
+    changed = _led_before(rows) != want
     if not (changed or refold):
         return []
     from jobhunt import record
@@ -95,6 +100,17 @@ def settle(con: sqlite3.Connection, *, refold: bool = False) -> list[int]:
         record.bump_revision(con)
         events.publish("profile", lead=want[0] if want else None)
     return ids
+
+
+def _led_before(rows: list[sqlite3.Row]) -> list[int]:
+    """The id of the CV that led before this settle, by the rule the cards were last folded with: the row marked
+    `current`, else (an install from before `settle` wrote the column, where it held only an explicit choice and
+    so was 0 in most) the newest-dated CV read."""
+    marked = [r["id"] for r in rows if r["current"]]
+    if marked:
+        return marked
+    newest = _lead(rows, {})
+    return [newest["id"]] if newest is not None else []
 
 
 def older_sources(con: sqlite3.Connection) -> frozenset[int]:
