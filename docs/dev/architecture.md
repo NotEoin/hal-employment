@@ -546,7 +546,8 @@ runs: tests use `tests/support/fake_claude/`.
   correction makes "You corrected N things Hal misread".
 - Every reader gives `Line`s (`cvstudio/lines.py`) with text, size, bold, a bold lead-in (`lead`), bullet and
   style. `pdf_lines` (`cvstudio/pdflines.py`) works from `pdfread.chars`, which carry bold and italic from
-  the font name (a subset font such as `AAAAAA+Arimo-Bold`), then its flags and weight, the printed size
+  the font name (a subset font such as `AAAAAA+Arimo-Bold`), then its flags and weight (a slanted letter is
+  italic too, as a browser slants a face with no italic of its own), the printed size
   (`points`, after the page's scale) and PDFium's text order. A space goes between two characters when PDFium's text has one between them; only a
   PDF with no spaces at all falls back to the gap rule. A row is joined to the one above when it starts at
   the same place in the same type, sits one usual line step below, and either continues a list item (when
@@ -604,7 +605,8 @@ runs: tests use `tests/support/fake_claude/`.
 - A look is `cvstudio/looks/<id>/{look.toml, cv.css, letter.css}` over `looks/base.css`.
   `render.render_cv_html` draws the page; the type sets order, titles and limits, and the person's Sections
   layout wins. The page holds no script and carries its own Content-Security-Policy; the preview route sends
-  the exact bytes the printer prints.
+  the exact bytes the printer prints. A line's marks become `strong`, `em` and `a` (`inline.html`), so the
+  printed PDF has real links; other fields show their stars as typed.
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
   Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser, which cannot
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF

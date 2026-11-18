@@ -98,6 +98,20 @@ def made_up_cv(key: str) -> CVDoc:
     ])
 
 
+GUIDES = "https://example.org/guides?a=1&b=2"
+FORMATTED = f"Gave **15 tours** to *school groups* and wrote two [visitor guides]({GUIDES})."
+
+
+def formatted_cv() -> CVDoc:
+    """The humanities CV with bold, italic and a link in its second experience line, and stars in a heading
+    that are not marks; shared with the printer, simple PDF and Word export tests."""
+    doc = made_up_cv("humanities_grad")
+    entry = doc.sections[1].entries[0]
+    entry.bullets[1].text = FORMATTED
+    entry.heading = "Collections volunteer *A*"
+    return doc
+
+
 def profile_of(person: people.Person, name: str | None = None) -> dict:
     """A render profile from a made-up person's `you.*` values."""
     you = person.you
@@ -164,6 +178,29 @@ class CvPages(unittest.TestCase):
         page = self.page()
         self.assertNotIn("<script>", page)
         self.assertIn("&lt;script&gt;", page)
+
+    def test_a_lines_bold_italic_and_links_are_drawn_and_its_words_escaped(self):
+        self.doc = formatted_cv()
+        self.doc.sections[0].text = "**Archivist** <in training> & *more*"
+        page = self.page()
+        self.assertIn("Gave <strong>15 tours</strong> to <em>school groups</em> and wrote two "
+                      '<a href="https://example.org/guides?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">'
+                      "visitor guides</a>.", page)
+        self.assertIn("<strong>Archivist</strong> &lt;in training&gt; &amp; <em>more</em>", page)
+        self.assertIn("Collections volunteer *A*", page)       # a heading shows its stars as typed
+        self.assertNotIn("**", text_of(page))
+
+    def test_only_web_and_email_links_become_links(self):
+        self.doc.sections[0].text = "See [my notes](javascript:alert(1)) and [mail](mailto:m@example.org)."
+        page = self.page()
+        self.assertNotIn("javascript:alert(1)\"", page)
+        self.assertIn("[my notes](javascript:alert(1))", page)
+        self.assertIn('href="mailto:m@example.org"', page)
+
+    def test_highlighting_a_formatted_line_keeps_its_marks(self):
+        self.doc = formatted_cv()
+        page = self.page(highlight=["ex-1-b2"])
+        self.assertIn('<mark class="hl">Gave <strong>15 tours</strong>', page)
 
     def test_looks_differ_only_by_style_in_one_column(self):
         words = {look.id: text_of(self.page(look.id)) for look in render.looks() if look.columns == 1}

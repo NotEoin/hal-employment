@@ -13,9 +13,11 @@ the record's scans work wherever Hal installs. Poppler stays a developer referen
 - `page_png` encodes the picture with a few lines of `zlib`, so no imaging library is needed.
 - Each character says whether its font is bold or italic, from the font's name first (a browser's subset fonts
   are named like `AAAAAA+Arimo-Bold` and report no useful weight: Chrome's Arimo-Bold reads as weight 380,
-  checked 2026-11-18), then its flags and weight. Its `index` is its place in PDFium's text order, which
-  includes the spaces PDFium works out from the gaps, so a reader can ask whether a space lies between two
-  characters instead of guessing from their gap.
+  checked 2026-11-18), then its flags and weight. A slanted character counts as italic too: a browser
+  slants the regular face when a page asks for italic and has no italic font, which Hal's own CV fonts do
+  not have (Chrome's slant is a quarter of the height, checked 2026-11-18). Its `index` is its place in
+  PDFium's text order, which includes the spaces PDFium works out from the gaps, so a reader can ask whether
+  a space lies between two characters instead of guessing from their gap.
 """
 from __future__ import annotations
 
@@ -55,6 +57,7 @@ MARKER_RATIO = 2.0      # a marker is about as tall as it is wide; a rule under 
 MARKER_DEPTH = 5        # how deep into nested form objects to look for markers
 BOLD_NAMES = ("bold", "black", "heavy", "demi", "semibold")
 ITALIC_NAMES = ("italic", "oblique")
+SLANT_MIN = 0.1         # a shear this share of the height or more is a slanted (italic) letter; upright is 0
 
 
 @dataclass(frozen=True)
@@ -164,12 +167,14 @@ def _style(textpage: pdfium.PdfTextPage, i: int, styles: dict[tuple[str, int, in
     return styles[key]
 
 
-def _scale(textpage: pdfium.PdfTextPage, i: int) -> float:
-    """How much the character's transform scales its type size; 1 when PDFium cannot say."""
+def _transform(textpage: pdfium.PdfTextPage, i: int) -> tuple[float, bool]:
+    """(how much the character's transform scales its type size, whether it slants it); (1, False) when
+    PDFium cannot say."""
     m = pdfium_c.FS_MATRIX()
     if not pdfium_c.FPDFText_GetMatrix(textpage.raw, i, ctypes.byref(m)):
-        return 1.0
-    return math.sqrt(abs(m.a * m.d - m.b * m.c)) or 1.0
+        return 1.0, False
+    slanted = m.b == 0 and m.d != 0 and abs(m.c / m.d) >= SLANT_MIN
+    return math.sqrt(abs(m.a * m.d - m.b * m.c)) or 1.0, slanted
 
 
 def _page_chars(page: pdfium.PdfPage, number: int) -> list[Char]:
@@ -187,9 +192,10 @@ def _page_chars(page: pdfium.PdfPage, number: int) -> list[Char]:
             x, y = ctypes.c_double(), ctypes.c_double()
             pdfium_c.FPDFText_GetCharOrigin(textpage.raw, i, ctypes.byref(x), ctypes.byref(y))
             bold, italic = _style(textpage, i, styles)
+            scale, slanted = _transform(textpage, i)
             out.append(Char(chr(code), number, left, bottom, right, top,
                             float(pdfium_c.FPDFText_GetFontSize(textpage.raw, i)), x.value, y.value,
-                            bold, italic, i, _scale(textpage, i)))
+                            bold, italic or slanted, i, scale))
         return out
     finally:
         textpage.close()

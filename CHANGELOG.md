@@ -6,6 +6,12 @@ What changed in each version, in plain words.
 
 ### What's new
 
+- **Bold, italic and links in your CV.** A line of your CV can now have words in bold or italic, and words
+  that link to a web page or an email address. Type two stars around words for bold (`**like this**`), one
+  star for italic (`*like this*`), and `[words](https://example.org)` for a link. The preview and the PDF
+  show them, and a link in the PDF can be clicked. A star on its own, as in "A*" or "5* rating", stays as you
+  typed it. Checks, scores and Hal's writing read the words without the marks.
+
 - **Choose how long each CV is.** On **My CV**, **Type and look**, the new **Length** card has **Keep this
   CV to**: no limit, one page or two pages, for each CV on its own. Until you choose, a CV follows its CV
   type, as before. The length is no longer on the Writing card, so changing it no longer makes a copy of

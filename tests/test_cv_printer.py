@@ -20,7 +20,7 @@ from unittest import mock
 import support  # noqa: F401 - sets the temporary home before jobhunt loads
 from support import people, scanner
 from support.ui import browser_tests_on
-from test_cv_render import ACCENTED, made_up_cv, profile_of, type_for
+from test_cv_render import ACCENTED, GUIDES, formatted_cv, made_up_cv, profile_of, type_for
 
 from jobhunt import db
 from jobhunt.core.platform import found
@@ -199,6 +199,11 @@ class Printing(unittest.TestCase):
         self.assertIn(name, pdfread.text(self.out))
 
 
+def chars_without_spaces(chars: list) -> list:
+    """A printed PDF's characters in the order `pdfread.chars` gives them, spaces left out."""
+    return [c for c in chars if not c.char.isspace()]
+
+
 def platform_printer() -> str:
     """The printer for this computer: Edge on Windows, Playwright's Chromium elsewhere."""
     return "edge" if sys.platform == "win32" else "playwright"
@@ -223,6 +228,23 @@ class RealPrinting(unittest.TestCase):
                     self.assertIn("".join(ACCENTED.split()), squeezed)
                     self.assertLessEqual(done["pages"], 2)
 
+
+    def test_bold_italic_and_links_print_as_the_preview_shows_them(self):
+        person = people.HUMANITIES
+        out = Path(tempfile.mkdtemp()) / "cv.pdf"
+        done = export.cv_pdf(formatted_cv(), type_for(person.key), "classic", profile_of(person), out)
+        self.assertEqual(done["how"], platform_printer())
+        text = " ".join(pdfread.text(out).split())
+        self.assertIn("Gave 15 tours to school groups and wrote two visitor guides.", text)
+        self.assertNotIn("**", text)
+        chars = pdfread.chars(out)
+        line = "".join(c.char for c in chars if not c.char.isspace())
+        at = line.index("15tours")
+        styles = chars_without_spaces(chars)
+        self.assertTrue(all(c.bold for c in styles[at:at + len("15tours")]))
+        at = line.index("schoolgroups")
+        self.assertTrue(all(c.italic for c in styles[at:at + len("schoolgroups")]))
+        self.assertIn(GUIDES.encode(), out.read_bytes())
 
     def test_the_scanner_reads_each_safe_look_as_it_did_when_recorded(self):
         """Gate for the looks: the reference parsing checks (`support.scanner`) on three people x three safe looks.

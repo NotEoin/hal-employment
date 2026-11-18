@@ -17,6 +17,11 @@ changes**, and each save is a new version, so you can always go back.
 3. Press **Save changes**. Hal saves everything you changed as one new version and says its number.
 4. To undo a save, open **Versions** and press **Use this version** on the version before it.
 
+To make words bold or italic, or a link, type marks around them in a line, a paragraph or your profile:
+two stars for bold (`**Python**`), one star for italic (`*Hamlet*`), and square brackets then the web address
+in round brackets for a link (`[my portfolio](https://example.org)`). Once you save, the preview on **Your
+CV** shows the result. A star with no partner, as in "A* in Maths", stays a star.
+
 Lines you typed or reworded are marked **Your words**. Hal treats them as yours: its suggestions never call
 them a writing problem to fix. Lines added from your record are marked **From your record**.
 

@@ -10,6 +10,10 @@ Fonts are linked by the relative address `fonts/<file>`: the printer copies `FON
 prints, and the preview route serves the same files under the preview's own address, so the preview and
 the printed page are the same bytes. Every text value is escaped; the page holds no script, and its own
 Content-Security-Policy allows only its inline style and its fonts.
+
+A line's bold, italic and links (a bullet, an entry's paragraph, a section's text) are drawn by `inline.html`
+as `strong`, `em` and `a`, so the printed PDF keeps real links; every other field is shown as typed, with its
+stars. The fonts hold no italic face: the browser slants the regular one, which keeps the folder at four files.
 """
 from __future__ import annotations
 
@@ -20,6 +24,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from jobhunt.cvstudio import inline
 
 LOOKS_DIR = Path(__file__).with_name("looks")
 FONT_DIR = Path(__file__).resolve().parents[1] / "web" / "static" / "app" / "fonts" / "cv"
@@ -268,8 +274,10 @@ def _wanted(highlight: Iterable[str]) -> set[str]:
     return out
 
 
-def _hl(text: str, part_id: str, hl: set[str]) -> str:
-    return f'<mark class="hl">{_e(text)}</mark>' if part_id in hl else _e(text)
+def _hl(text: str, part_id: str, hl: set[str], *, rich: bool = False) -> str:
+    """The text escaped, its marks drawn when it is a line that may hold them, in a highlight when asked."""
+    shown = inline.html(text) if rich else _e(text)
+    return f'<mark class="hl">{shown}</mark>' if part_id in hl else shown
 
 
 def _entry_html(e: ViewEntry, hl: set[str]) -> str:
@@ -283,10 +291,10 @@ def _entry_html(e: ViewEntry, hl: set[str]) -> str:
     if e.meta:
         out.append(f'<p class="cv-meta">{_e(e.meta)}</p>')
     if e.text:
-        out.append(f'<p class="cv-text">{_hl(e.text, e.id, hl)}</p>')
+        out.append(f'<p class="cv-text">{_hl(e.text, e.id, hl, rich=True)}</p>')
     if e.bullets:
-        out.append("<ul>" + "".join(f'<li data-id="{_e(bid)}">{_hl(text, bid, hl)}</li>' for bid, text in e.bullets)
-                   + "</ul>")
+        out.append("<ul>" + "".join(f'<li data-id="{_e(bid)}">{_hl(text, bid, hl, rich=True)}</li>'
+                                    for bid, text in e.bullets) + "</ul>")
     if e.items:
         out.append(f'<p class="cv-items">{_e(e.items)}</p>')
     if e.modules:
@@ -307,7 +315,7 @@ def _skills_html(s: ViewSection, hl: set[str]) -> str:
 def _section_html(s: ViewSection, hl: set[str]) -> str:
     body = []
     if s.text:
-        body.append(f"<p>{_hl(s.text, s.id, hl)}</p>")
+        body.append(f"<p>{_hl(s.text, s.id, hl, rich=True)}</p>")
     if s.kind in ("skills", "languages") and all(e.items and not e.bullets for e in s.entries):
         body.append(_skills_html(s, hl))
     else:
