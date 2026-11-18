@@ -547,6 +547,26 @@ class JobCv(unittest.TestCase):
         self.assertEqual(self.c.post(self.url("/documents/changes/y1"), {"on": False}).status, 404,
                          "your own edits are not Hal's to undo")
 
+    def test_the_cvs_to_build_on_are_listed_and_another_can_be_chosen_until_approval(self):
+        from test_cv_suggest import made_up_cv
+
+        other = store.create("Museum CV", made_up_cv(), origin="uploaded", what="Your file", by="baseline")
+        listed = self.c.get(self.url("/cv/bases")).json()
+        first = store.version(self.main)["doc_id"]
+        self.assertEqual({c["id"]: c["chosen"] for c in listed["cvs"]}, {other: False, first: True})
+        self.assertEqual((listed["base"]["doc_id"], listed["base"]["several"]), (first, True))
+        self.assertEqual(self.c.request("PUT", self.url("/cv/base"), {"doc_id": "cv-nosuch"}).status, 400)
+        moved = self.c.request("PUT", self.url("/cv/base"), {"doc_id": other})
+        self.assertEqual(moved.status, 200, moved.text)
+        self.assertEqual(runner.wait(moved.json()["action_id"], WAIT_S)["state"], "done")
+        base = self.c.get(self.url()).json()["docs"]["cv"]["base"]
+        self.assertEqual((base["doc_id"], base["name"], base["by"]), (other, "Museum CV", "you"))
+        self.con.execute("INSERT OR IGNORE INTO applications (job_id, stage, updated) VALUES (?, 'documents', ?)",
+                         (self.job, db.now()))
+        self.con.execute("UPDATE applications SET approved_at = ? WHERE job_id = ?", (db.now(), self.job))
+        self.con.commit()
+        self.assertEqual(self.c.request("PUT", self.url("/cv/base"), {"doc_id": other}).status, 409)
+
     def test_copy_to_my_main_cv_copies_one_entrys_lines_as_one_new_version(self):
         opened = self.c.get(self.url("/cv")).json()["version_id"]
         self.save(opened, {"op": "replace", "target": TABLE + "/text", "value": MINE})

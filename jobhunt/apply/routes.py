@@ -4,13 +4,14 @@ Anything that drives the browser or the AI starts an action and returns its id a
 it on the event stream. An application is named by its job id or by its number ("12"). Asking for changes
 and rewriting the letter are `docs/write_routes.py`'s. The application's CV is edited through `/cv`, with
 the same change list and 409 as My CV's editor (`cvstudio/tailor.py`); `/cv/priorities` takes the
-requirements the person ticked while `cvdocs.pick_first` asks first.
+requirements the person ticked while `cvdocs.pick_first` asks first; `/cv/bases` lists the CVs it can be built
+from and `/cv/base` builds it on another (`cvstudio/choose.py`).
 """
 from __future__ import annotations
 
 from jobhunt.apply import actions, queries, rewrite
 from jobhunt.core import activity
-from jobhunt.cvstudio import edit, store, tailor
+from jobhunt.cvstudio import choose, edit, store, tailor
 from jobhunt.cvstudio.model import CVError
 from jobhunt.web.router import BadRequest, Conflict, NotFound, NotHere, Request, json_body, route, who
 
@@ -162,6 +163,33 @@ def priorities(req: Request) -> dict:
         raise BadRequest(str(e), field="priorities") from e
     return {"action_id": actions.start("docs.picks", job_id, params={"priorities": picks}, **who(req),
                                        priority=NOW)}
+
+
+@route("GET", PREFIX + "/{app_id}/cv/bases")
+def bases(req: Request) -> dict:
+    """The CVs in use this application can be built from (`choose.candidates`), each with `lost`: how many of
+    the person's own CV edits would not carry over to it."""
+    job_id = _id(req)
+    out = []
+    for c in choose.candidates(req.con, job_id):
+        vid = store.current(req.con, c["id"])[0]
+        out.append({**c, "lost": 0 if c["chosen"] else tailor.lost_edits(job_id, vid, req.con)})
+    return {"cvs": out, "base": choose.shown(req.con, job_id)}
+
+
+@route("PUT", PREFIX + "/{app_id}/cv/base")
+def change_base(req: Request) -> dict:
+    """Build this application's CV on another of the CVs in use (`doc_id`); the letter, message and answers
+    stay. 409 with the reason as Write the documents again gives one."""
+    doc_id = str(json_body(req).get("doc_id") or "")
+    if not doc_id:
+        raise BadRequest("Say which CV to build this application from.", field="doc_id")
+    try:
+        return {"action_id": actions.change_base(req.con, _id(req), doc_id, **who(req), priority=NOW)}
+    except rewrite.NotNow as e:
+        raise Conflict(str(e)) from e
+    except ValueError as e:
+        raise BadRequest(str(e), field="doc_id") from e
 
 
 @route("POST", PREFIX + "/{app_id}/cv/copy")

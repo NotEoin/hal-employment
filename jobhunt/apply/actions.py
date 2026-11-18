@@ -1,8 +1,8 @@
 """One approval flow: the applying action kinds, and the workflow rules the screens rely on.
 
-The kinds (`docs.prepare`, `docs.picks`, `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`,
-`apply.adopt`, `apply.match_tab`) are persisted actions over the form driver, so each has its steps, its
-Activity row and Stop. The workflow rules are plain functions here, called by the routes: approving the
+The kinds (`docs.prepare`, `docs.picks`, `docs.base_cv`, `apply.fill`, `apply.apply_edits`, `apply.next_page`,
+`apply.draft_rest`, `apply.adopt`, `apply.match_tab`) are persisted actions over the form driver, so each has
+its steps, its Activity row and Stop. The workflow rules are plain functions here, called by the routes: approving the
 documents starts the form, editing them marks a filled form out of date, and a discard keeps its reason
 apart from the others.
 
@@ -143,6 +143,59 @@ def adjust_for_picks(ctx, job_id: str, priorities: list[str]) -> dict:
     ctx.step("Making the PDF of your CV again")
     documents.save(ctx.con, job, documents.load(ctx.con, job))
     return {"job_id": job_id}
+
+
+def _base_example(world: Any) -> dict:
+    from unittest import mock
+
+    from jobhunt.cvstudio import store
+
+    world._stack.enter_context(mock.patch.object(tailor, "prepare", lambda *a, **k: {}))
+    store.current(world.con)
+    return _example(None, doc_id=store.lead_id(world.con))(world)
+
+
+@runner.action("docs.base_cv", area="documents", label="Building your CV for {title} at {company} on another CV",
+               why="You chose which of your CVs this application is built from", priority=1,
+               work_class=work.ON_SCREEN, example=_base_example)
+def build_on(ctx, job_id: str, doc_id: str) -> dict:
+    """Builds the job's CV again on CV `doc_id`, the person's pick (`choose.by_you`), then its PDF; the letter,
+    message and answers stay as they are. The person's CV edits that still fit the new CV are kept
+    (`tailor.prepare`); `lost` says how many did not.
+
+    Refused as a rewrite is (`rewrite.refusal`): an application approved or sent meanwhile is left as it is.
+    An older application (no job's CV) moves to the line-by-line CV, and its Undo list from before is dropped.
+    """
+    from jobhunt.cvstudio import choose, store
+
+    job = load_job(ctx.con, job_id)
+    left = rewrite.refusal(ctx.con, job_id, in_action=True)
+    if left:
+        ctx.step(left)
+        return {"job_id": job_id, "left": True}
+    base = choose.by_you(ctx.con, dict(job), doc_id)
+    lost = tailor.lost_edits(job_id, base.version_id, ctx.con)
+    ctx.step(f"Making your CV for this job from {choose.your(store.doc(ctx.con, doc_id)['name'])}")
+    tailor.prepare(dict(job), priorities=tailor.picked(job_id, ctx.con), base=base, con=ctx.con)
+    ctx.step("Making the PDF of your CV again")
+    docs = {k: v for k, v in documents.load(ctx.con, job).items() if k not in ("undone_changes", "cv")}
+    documents.save(ctx.con, job, docs)
+    return {"job_id": job_id, "doc_id": doc_id, "lost": lost}
+
+
+def change_base(con, job_id: str, doc_id: str, *, session_id: str | None = None, helper_id: str | None = None,
+                remote: bool = False, priority: int | None = None) -> str:
+    """Starts `docs.base_cv` to build the application on CV `doc_id`; returns its id.
+
+    `rewrite.NotNow` as `write_again`; ValueError when `doc_id` is not one of the CVs in use for applications.
+    """
+    from jobhunt.cvstudio import store
+
+    rewrite.check(con, job_id)
+    if doc_id not in {d["id"] for d in store.starred(con)}:
+        raise ValueError("Choose one of the CVs you use for applications.")
+    return start("docs.base_cv", job_id, params={"doc_id": doc_id}, why="You chose another CV for this application",
+                 session_id=session_id, helper_id=helper_id, remote=remote, priority=priority)
 
 
 def _advert_closed(con, job) -> bool:

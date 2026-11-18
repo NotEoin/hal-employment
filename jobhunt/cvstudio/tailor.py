@@ -388,6 +388,26 @@ def drop_your_edits(job_id: str, con: sqlite3.Connection | None = None) -> int:
     return len(yours)
 
 
+def lost_edits(job_id: str, version_id: str, con: sqlite3.Connection | None = None) -> int:
+    """How many of the person's own edits to the job's CV would not fit a job's CV built on version
+    `version_id`, as `prepare` would leave them out: each is tried in order on that version. Hal's changes are
+    left out of the trial, as they only reword and reorder lines, so they never decide whether a line is
+    there. 0 for a job with no job's CV."""
+    model = _model()
+    with _conn(con) as c:
+        row = c.execute("SELECT changes FROM job_cvs WHERE job_id = ?", (job_id,)).fetchone()
+        if row is None:
+            return 0
+        doc = _store().get(version_id, con=c)
+    lost = 0
+    for edit in _split(json.loads(row["changes"]))[1]:
+        try:
+            doc = model.apply(doc, model.Change(edit["op"], edit["target"], edit.get("value"), edit.get("position")))
+        except model.CVError:
+            lost += 1
+    return lost
+
+
 def _made(job_id: str, con: sqlite3.Connection | None) -> tuple[sqlite3.Row, object, object]:
     """(the row, the base version, the base with Hal's changes still on)."""
     with _conn(con) as c:

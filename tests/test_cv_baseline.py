@@ -4,13 +4,17 @@ Hal's own pick is made again by a rewrite and the person's pick is kept. Every C
 """
 from __future__ import annotations
 
+import json
 import unittest
 from unittest import mock
 
 import support  # noqa: F401 - the temporary home, before any jobhunt import
-from test_rewrite import Written
+from support.actions import finished
+from test_pack import WAIT_S
+from test_rewrite import MY_HEADLINE, MY_LETTER, Written
 
-from jobhunt.apply import queries, rewrite
+from jobhunt import db, documents
+from jobhunt.apply import actions, queries, rewrite
 from jobhunt.cvstudio import choose, cv, model, store, tailor
 
 REAL_FACTS = cv.facts_text           # `as_applicant` stands canned facts in; these tests read the real CV
@@ -40,6 +44,10 @@ class Baseline(Written):
 
     def base_doc(self) -> str | None:
         return choose.base_doc(self.job["id"], self.con)
+
+
+class Follows(Baseline):
+    """What is written for the application follows the CV it is built from."""
 
     def test_the_letter_and_the_jobs_cv_are_written_from_the_cv_hal_picked(self):
         with self.hal_picks(self.museum), mock.patch.object(cv, "facts_text", REAL_FACTS):
@@ -102,6 +110,75 @@ class Baseline(Written):
         tailor.prepare(self.job, base=mine, con=self.con)
         back = choose.by_you(self.con, self.job, self.museum)
         self.assertEqual((back.by, back.reason), ("hal", "Hal's made-up reason."))
+
+
+LIBRARY = {**MUSEUM, "title": "Library assistant", "summary": "Shelved and catalogued made-up books.",
+           "experience": [{"role": "Library assistant", "org": "Made-up Library", "dates": "2024",
+                           "body": "- Shelved"}]}
+
+
+class Switch(Baseline):
+    """Building an application on another CV (`actions.change_base`, `docs.base_cv`)."""
+
+    def setUp(self):
+        super().setUp()
+        store.new_version(model.from_v1(LIBRARY), origin="manual", what="Edit", by="you", doc_id=self.first,
+                          con=self.con)
+        with self.hal_picks(self.first):
+            self.again()
+
+    def switch(self, doc_id: str) -> dict:
+        done = finished(actions.change_base(self.con, self.job["id"], doc_id), WAIT_S)
+        self.assertEqual(done["state"], "done", done.get("error"))
+        return done["result"]
+
+    def entry_edit(self) -> dict:
+        """An edit of the person's own on the Library CV's job entry, which the Museum CV does not have."""
+        doc = store.current(self.con, self.first)[1]
+        sec = next(s for s in doc.sections if s.entries)
+        return {"id": "y2", "by": tailor.YOU, "op": "replace", "target": model.target_of(sec, sec.entries[0])
+                + "/heading", "value": "Senior library assistant"}
+
+    def test_switching_keeps_the_letter_and_the_edits_that_still_fit(self):
+        actions.save_documents(self.con, self.job["id"], {"letter": MY_LETTER}, by_you=True)
+        self.your_cv_edit()
+        self.add_edit(self.entry_edit())
+        self.assertEqual(tailor.lost_edits(self.job["id"], store.current(self.con, self.museum)[0], self.con), 1)
+        got = self.switch(self.museum)
+        self.assertEqual(got["lost"], 1)
+        self.assertEqual(documents.load(self.con, self.job)["letter"], MY_LETTER)
+        self.assertEqual(tailor.v1(self.job["id"], self.con)["title"], MY_HEADLINE)
+        kept = choose.kept(self.con, self.job["id"])
+        self.assertEqual((kept.doc_id, kept.by), (self.museum, "you"))
+
+    def test_an_approved_or_sent_application_keeps_its_cv(self):
+        self.con.execute("UPDATE applications SET approved_at = ? WHERE job_id = ?", (db.now(), self.job["id"]))
+        self.con.commit()
+        with self.assertRaises(rewrite.NotNow):
+            actions.change_base(self.con, self.job["id"], self.museum)
+        self.assertEqual(self.base_doc(), self.first)
+
+    def test_only_a_cv_in_use_for_applications_can_be_chosen(self):
+        store.star(self.museum, False, con=self.con)
+        with self.assertRaisesRegex(ValueError, "CVs you use for applications"):
+            actions.change_base(self.con, self.job["id"], self.museum)
+
+    def test_an_older_application_moves_to_the_line_by_line_cv_on_the_cv_you_chose(self):
+        self.con.execute("DELETE FROM job_cvs WHERE job_id = ?", (self.job["id"],))
+        actions.save_documents(self.con, self.job["id"], {"undone_changes": ["c1"]})
+        self.con.commit()
+        chosen = next(c["id"] for c in choose.candidates(self.con, self.job["id"]) if c["chosen"])
+        self.assertEqual(chosen, store.lead_id(self.con), "an older application was built from the lead CV")
+        self.switch(self.museum)
+        self.assertEqual(queries.application(self.con, self.job["id"])["docs"]["cv"]["schema"], 2)
+        self.assertEqual(self.base_doc(), self.museum)
+        self.assertNotIn("undone_changes", documents.load(self.con, self.job))
+
+    def add_edit(self, edit: dict) -> None:
+        row = self.con.execute("SELECT changes FROM job_cvs WHERE job_id = ?", (self.job["id"],)).fetchone()
+        self.con.execute("UPDATE job_cvs SET changes = ? WHERE job_id = ?",
+                         (json.dumps([*json.loads(row["changes"]), edit]), self.job["id"]))
+        self.con.commit()
 
 
 if __name__ == "__main__":

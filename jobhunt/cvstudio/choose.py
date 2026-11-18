@@ -319,14 +319,15 @@ def shown(con: sqlite3.Connection, job_id: str) -> dict | None:
 
 def candidates(con: sqlite3.Connection, job_id: str) -> list[dict]:
     """The CVs in use the job's CV can be built from, in the person's order, each {id, name, label, chosen,
-    pick, fit, have, of}; `fit`, `have` and `of` are None for a CV Hal has not compared for this job."""
+    pick, fit, have, of}; `fit`, `have` and `of` are None for a CV Hal has not compared for this job. An
+    application written before job CVs were kept was built from the lead CV, so that one is `chosen`."""
     found = kept(con, job_id)
     scores = {s["doc_id"]: s for s in (found.scores if found else [])}
     out = []
     for d in store.starred(con):
         s = scores.get(d["id"], {})
         out.append({"id": d["id"], "name": d["name"], "label": your(d["name"]),
-                    "chosen": bool(found and found.doc_id == d["id"]),
+                    "chosen": found.doc_id == d["id"] if found else d["lead"],
                     "pick": bool(found and found.pick == d["id"]),
                     "fit": s.get("fit"), "have": s.get("have"), "of": s.get("of")})
     return out

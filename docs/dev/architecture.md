@@ -473,6 +473,13 @@ runs: tests use `tests/support/fake_claude/`.
   form's facts, interview notes, a letter rewrite, the requirements check), None (the lead CV) for an
   application written before job CVs were kept. `cv.based_on(doc_id)` makes `cv.load()` and
   `cv.facts_text()` read that CV for a block; `pack.build` and the letter actions enter it.
+- Changing an application's CV: `GET /api/v2/applications/{id}/cv/bases` lists the starred CVs
+  (`choose.candidates`: chosen, Hal's pick, fit and skills covered when Hal compared them) with `lost`, how
+  many of the person's CV edits would not fit that CV (`tailor.lost_edits`, each edit tried on its version in
+  use). `PUT .../cv/base` `{doc_id}` checks it as a rewrite is checked (`rewrite.check`, 409) and that the CV
+  is starred (400), then starts `docs.base_cv` (`actions.build_on`): `tailor.prepare` on `choose.by_you`,
+  which keeps the person's edits that still fit, then the PDF; the letter, message and answers stay. An older
+  application gets its `job_cvs` row this way and drops its `undone_changes`.
 - The bin keeps a version for 30 days. It is emptied lazily (`purge_bin`, whenever versions are listed),
   and never removes a version an application or job still points at.
 - Files are kept read-only as `cv/files/<sha256>.<ext>`; `file_bytes` checks the SHA-256 on every read and
