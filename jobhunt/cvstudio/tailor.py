@@ -252,7 +252,8 @@ def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None
     It is built on `base` (a `choose.Choice`), kept as `base_version_id` and `base_choice`; without one, on the
     CV the job's CV was built on before, else the CV Hal chooses for it (`choose.for_writing`). The person's
     own edits from an earlier row are kept after Hal's new changes; an edit that no longer fits the new CV is
-    left out and logged.
+    left out and logged. RuntimeError once approved, as `drop_your_edits`: the approved CV is what the form is
+    filled with, and only `reopen` lets it change.
     """
     from jobhunt.cvstudio import choose
 
@@ -263,7 +264,9 @@ def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None
     used, why = level_for(level, base.doc_id)
     doc, changes = for_job(job, level=level, priorities=priorities, base=base)
     with _conn(con) as c, _store().writing(c):
-        old = c.execute("SELECT changes FROM job_cvs WHERE job_id = ?", (job["id"],)).fetchone()
+        old = c.execute("SELECT changes, approved FROM job_cvs WHERE job_id = ?", (job["id"],)).fetchone()
+        if old is not None and old["approved"]:
+            raise RuntimeError(APPROVED)
         kept_n = 0
         for edit in _split(json.loads(old["changes"]))[1] if old else []:
             try:

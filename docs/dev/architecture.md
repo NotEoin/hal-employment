@@ -235,13 +235,16 @@ processes, once a second. Payloads carry ids, never private data.
   "Apply with Hal" starts `docs.prepare`. `approve_documents` keeps the person's edits, stamps
   `docs["approved"]`, saves through `documents.save` (which rewrites the numbered application folder,
   `docs/folders.publish`), fixes the mode, session and helper the form is filled with, and starts
-  `apply.fill`. Editing documents after a fill marks the form out of date. `discard` keeps each reason
-  apart; `restore`, `sent_myself`, `change_status` and `add_note` are the rest of the board's buttons.
+  `apply.fill`. It is refused (409) while a `docs.*` action for the job is queued or running: the fill would
+  only stop that write, so the person waits and reads what it wrote. `tailor.prepare` never replaces an
+  approved job's CV either. Editing documents after a fill marks the form out of date. `discard` keeps each
+  reason apart; `restore`, `sent_myself`, `change_status` and `add_note` are the rest of the board's buttons.
 - A pack (`pack.build`, from `docs.prepare` and from the worker's preparing ahead) is written from a settled
   record (`pack/freshness.py`). `freshness.written(write, ctx)` waits while a record update is queued or
   running here or in another live process (`runner.busy_with(work.RECORD)`), as a step that Stop ends, then
   writes from the record's revision. `_build` calls `fresh.check()` after the letter, before the job's CV is
-  saved and before `pack.md` is written; a moved revision raises `RecordMoved` and the pack starts again once
+  saved and before `pack.md` is written; each check is also the action's Stop checkpoint, so a stopped
+  write saves nothing more. A moved revision raises `RecordMoved` and the pack starts again once
   the update is done, at most `MAX_RESTARTS` (2) times. The last try saves whatever it read. The revision a
   pack was written from is kept in `meta` under `docs_written_from:<job id>` (`documents.mark_written_from`);
   `documents.written_from(con, job_id)` reads it, None for a pack written before, and a value below

@@ -99,8 +99,12 @@ def application(req: Request) -> dict:
 
 @route("POST", PREFIX + "/{app_id}/documents/approve")
 def approve(req: Request) -> dict:
-    """Approve and fill in the form."""
-    return {"action_id": actions.approve_documents(req.con, _id(req), json_body(req), **who(req), priority=NOW)}
+    """Approve and fill in the form; 409 while Hal is still writing the documents."""
+    try:
+        return {"action_id": actions.approve_documents(req.con, _id(req), json_body(req), **who(req),
+                                                       priority=NOW)}
+    except rewrite.NotNow as e:
+        raise Conflict(str(e)) from e
 
 
 @route("PUT", PREFIX + "/{app_id}/documents")

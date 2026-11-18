@@ -148,6 +148,31 @@ class Routes(unittest.TestCase):
             slow.set()
         self.wait(replies[0].json()["action_id"])
 
+    def test_approving_while_hal_still_writes_the_documents_is_refused(self):
+        # review, 2026-11-18: an approval on a page that had not refreshed stopped a rewrite already running, and
+        # the rewrite went on to save an unapproved CV over the approved one
+        from jobhunt import pack
+        from jobhunt.core import settings
+
+        settings.set("cvdocs.check_open", False, by="you")
+        self.addCleanup(settings.reset, "cvdocs.check_open")
+        self.start_applying("sorrel-ready")
+        reached, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        with mock.patch.object(pack, "build", lambda con, jid, **k: reached.set() or release.wait(WAIT_S)), \
+                mock.patch.object(documents, "summary", lambda job: {"has_pack": False}), \
+                mock.patch.object(queries, "_has_documents", lambda job: True):
+            writing = actions.start("docs.prepare", job_id("sorrel-ready"))
+            self.assertTrue(reached.wait(WAIT_S))
+            r = self.c.post(self.url("sorrel-ready", "/documents/approve"), {})
+            self.assertEqual(r.status, 409, r.text)
+            self.assertIn("still writing", r.text)
+            bulk = self.c.post("/api/v2/applications/approve-ready", {"ids": [job_id("sorrel-ready")]}).json()
+            self.assertEqual(bulk["started"], {})
+            release.set()
+            self.wait(writing)
+        self.assertIsNone(self.c.get(self.url("sorrel-ready")).json()["docs"]["approved_at"])
+
     def test_a_closed_applications_page_says_why_it_closed(self):
         # testers: a closed application's page showed its step's buttons and no word of why (2026-11-04)
         self.start_applying("sorrel-ready")

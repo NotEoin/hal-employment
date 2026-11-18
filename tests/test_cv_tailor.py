@@ -217,6 +217,18 @@ class Applications(JobCase):
         actions.reopen_documents(self.con, JOB["id"])
         self.assertIsNone(tailor.version_of(JOB["id"], self.con), "taking the approval back lets the CV change")
 
+    def test_an_approved_jobs_cv_is_never_made_again_over_the_approval(self):
+        # review, 2026-11-18: a rewrite still running when the person approved replaced the approved row with an
+        # unapproved one
+        with fake_ai({"cv_suggest": tailoring_ai}):
+            tailor.prepare(JOB, level="little", con=self.con)
+            actions.approve_documents(self.con, JOB["id"], {})
+            vid = tailor.version_of(JOB["id"], self.con)
+            with self.assertRaisesRegex(RuntimeError, "approved"):
+                tailor.prepare(JOB, level="more", con=self.con)
+        self.assertEqual(tailor.version_of(JOB["id"], self.con), vid)
+        self.assertEqual(tailor.shown(JOB["id"], self.con)["level"], "little")
+
     def test_an_application_written_before_keeps_the_older_path_until_sent(self):
         older = {"title": "Older", "summary": "Reordered the older way."}
         with mock.patch.object(cv, "tailor", lambda text: (dict(older), None)):

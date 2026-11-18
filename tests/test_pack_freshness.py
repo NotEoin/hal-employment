@@ -80,6 +80,24 @@ class Freshness(unittest.TestCase):
         self.assertEqual(runner.wait(writing)["state"], "stopped")
         self.assertEqual(seen, [])
 
+    def test_a_write_stopped_part_way_saves_nothing_at_its_next_check(self):
+        # review, 2026-11-18: an approval stopped a rewrite, which carried on and wrote its CV and pack.md over the
+        # approved files, as nothing between the record wait and the end looked at Stop
+        reached, release, saved = threading.Event(), threading.Event(), []
+        self.addCleanup(release.set)
+
+        def write(fresh):
+            reached.set()
+            release.wait(WAIT_S)
+            fresh.check()
+            saved.append(fresh.revision)
+        writing = self.writer(write)
+        self.assertTrue(reached.wait(WAIT_S))
+        runner.stop(writing)
+        release.set()
+        self.assertEqual(runner.wait(writing)["state"], "stopped")
+        self.assertEqual(saved, [])
+
     def test_a_record_that_keeps_changing_is_written_from_once_the_restarts_run_out(self):
         seen = []
 

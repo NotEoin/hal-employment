@@ -46,6 +46,9 @@ SENT = "This application is sent, so Hal keeps its documents as they went to the
 CLOSED = "This application is closed. Put it back in Matches before Hal writes for it again."
 FILLING = ("Hal is filling in the form for this job. Stop it first, then write the documents again, or Hal "
            "would stop the form part way through.")
+# Why an approval is refused: Hal is writing this job's documents, so what the page shows is not what will be sent.
+WRITING = ("Hal is still writing the documents for this job. Wait until it has finished, read them, then "
+           "approve.")
 WRITABLE = ("new", "shortlisted", "ready", "applying")   # statuses Hal still writes documents for
 SENT_STATUSES = ("applied", "assessment", "interview", "offer")
 

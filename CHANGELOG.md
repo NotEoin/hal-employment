@@ -98,6 +98,11 @@ What changed in each version, in plain words.
   splits words such as "Design" into "D esign". Before, the end of a long line, such as "by default.",
   could show up as a job of its own.
 
+- **Approving waits until Hal has finished writing.** If you pressed **Approve and fill in the form** while
+  Hal was still changing the documents, for example from a page opened before Hal started or from a second
+  window, the form could be filled with a CV you never approved. Now Hal asks you to wait until it has
+  finished, and a write that stops never saves files over the ones you approved.
+
 ## 2.2.0 (2026-11-15)
 
 ### What's new

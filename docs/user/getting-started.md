@@ -76,7 +76,8 @@ The first time you open Hal, the setup guide opens by itself. Each answer is sav
    waits for it to finish updating before writing the next documents, so they use what you added.
 4. Read the documents. Change anything you like, the CV line by line
    ([how](../howto/edit-your-cv.md#edit-your-cv-for-one-job)), or ask Hal for changes. When you are happy,
-   press **Approve and fill in the form**.
+   press **Approve and fill in the form**. While Hal is still writing them, Hal asks you to wait until it
+   has finished, so you approve what you read.
 5. Hal opens the employer's form in a new window of your browser and fills it in, and the application
    moves on to its **Form** step. Later forms open in that same window until you close it. Each answer is
    marked "Fine" or "Check this", and **Why this answer?** under each one says where it came from.

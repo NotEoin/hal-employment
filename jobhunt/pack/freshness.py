@@ -5,7 +5,8 @@ write wait while a record update is queued or running (`runner.busy_with(work.RE
 `work.RECORD_WAIT_WORDS` and the action's Stop working, then runs `write(fresh)` with the record's revision.
 The write calls `fresh.check()` before it saves anything: when the revision moved while it wrote, that raises
 `RecordMoved`, and the write starts again once the update is done, so it never saves documents written from a
-record that has already changed.
+record that has already changed. In an action the check is also a Stop checkpoint: an approval of the job,
+or a second write for it, stops this one, and a stopped write must not save files over theirs.
 
 Design decisions, each with its reason:
 
@@ -40,11 +41,15 @@ class RecordMoved(Exception):
 class Fresh:
     """The record's revision a write started from; `check` says whether it still holds."""
 
-    def __init__(self, revision: int, *, last: bool) -> None:
-        self.revision, self.last = revision, last
+    def __init__(self, revision: int, *, last: bool, ctx: Any = None) -> None:
+        self.revision, self.last, self.ctx = revision, last, ctx
 
     def check(self) -> None:
-        """Raises `RecordMoved` when the record changed since the write started; the last try never raises."""
+        """Raises `RecordMoved` when the record changed since the write started; the last try never raises
+        that. In an action (`ctx`) it is a checkpoint too: a write that was stopped stops here, before it saves.
+        """
+        if self.ctx is not None:
+            self.ctx.checkpoint()
         if not self.last and record.revision() != self.revision:
             raise RecordMoved(f"the record moved from revision {self.revision}")
 
@@ -77,12 +82,12 @@ def written(write: Callable[[Fresh], T], ctx: Any = None, *, then: str | None = 
     """Runs `write(fresh)` on a settled record, again after each change it saw; returns (its result, the
     revision it was written from)."""
     for attempt in range(MAX_RESTARTS):
-        fresh = Fresh(settled(ctx, then=then), last=False)
+        fresh = Fresh(settled(ctx, then=then), last=False, ctx=ctx)
         try:
             return write(fresh), fresh.revision
         except RecordMoved as e:
             log.info("a document write starts again (%d of %d): %s", attempt + 1, MAX_RESTARTS, e)
             if ctx is not None:
                 ctx.step(AGAIN_WORDS)
-    fresh = Fresh(settled(ctx, then=then), last=True)
+    fresh = Fresh(settled(ctx, then=then), last=True, ctx=ctx)
     return write(fresh), fresh.revision

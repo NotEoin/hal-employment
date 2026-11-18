@@ -41,6 +41,7 @@ DISCARD_REASONS = {
 STATUS_REASONS = {"rejected": "rejected", "withdrawn": "withdrawn", "closed": "advert_closed"}
 CHANGEABLE = ("applying", "applied", "assessment", "interview", "offer", "rejected", "withdrawn")
 ADOPT_WHY = "You handed Hal a tab you opened yourself"
+DOCUMENT_KINDS = ("docs.",)   # the kinds that write a job's documents, which an approval must not cut short
 # One approval of an application at a time: a double-click sent two, and the second stopped the fill the first had
 # started (testers, 2026-11-04).
 _APPROVING: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
@@ -342,11 +343,15 @@ def approve_documents(con, job_id: str, body: dict | None = None, *, session_id:
     the Form step and starts `apply.fill`.
 
     An approval of an application Hal is already filling, as a double-click sends, returns that fill's id.
+    `rewrite.NotNow` while Hal writes the job's documents (queued or running): starting the fill would only
+    stop that write, which could still save a CV and files the person never approved over the approved ones.
     """
     with _APPROVING_GUARD:
         lock = _APPROVING[job_id]
     with lock:
         held = runner.running_for(job_id)
+        if held and str(held.get("kind", "")).startswith(DOCUMENT_KINDS):
+            raise rewrite.NotNow(rewrite.WRITING)
         approved = con.execute("SELECT approved_at FROM applications WHERE job_id = ?", (job_id,)).fetchone()
         if held and held["kind"] == "apply.fill" and approved and approved["approved_at"]:
             return held["id"]
