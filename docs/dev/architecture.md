@@ -409,7 +409,10 @@ runs: tests use `tests/support/fake_claude/`.
   - `store.documents(archived=False|True|None)` lists the CVs, starred first in their order; `store.starred()`
     is the ordered list to pick an application's base CV from (its first item is the lead CV). `star`,
     `archive` (also restore), `rename` and `reorder` change them; one CV stays starred while any exists, and
-    the only CV in use cannot be archived. Archive is the delete: nothing in an archived CV is removed.
+    the only CV in use cannot be archived. Each reads the CV and the counts it checks under the write lock, so
+    a change another request made just before is seen (a CV archived meanwhile is not turned on). A `reorder`
+    that does not list every starred CV (the page's list is out of date) is refused with `STALE_ORDER`, words
+    for the toast. Archive is the delete: nothing in an archived CV is removed.
   - `store.create(name, first, ...)` makes a CV and its version 1 in one write; a starred new CV goes first in
     the order, and a CV that is empty or holds only the untouched starter from the settings is archived.
     `store.cv_for_file(file_id)` finds the CV a kept file already made, so an upload of the same bytes picks

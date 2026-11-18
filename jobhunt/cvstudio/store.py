@@ -63,6 +63,8 @@ NO_FILE = "Hal has no file of yours to send as it is. Add your CV file first."
 LAST_STAR = ("Hal needs one CV to use for applications, so this one stays in use. Choose \"Use this for "
              "applications\" on another CV first, then you can turn it off here.")
 LAST_ACTIVE = "This is your only CV in use, so it cannot go to the archive. Add another CV first."
+STALE_ORDER = "Your list of CVs changed since this page opened. Reload the page and try again."
+ARCHIVED = "This CV is in the archive. Restore it first."
 STARTER_WHAT = "A starting CV made from your settings"
 PASTED_NAME = "Pasted CV.txt"      # the file name pasted text is kept under
 READ_ONLY = stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
@@ -232,14 +234,15 @@ def _star_someone(con: sqlite3.Connection) -> None:
 def star(doc_id: str, on: bool, con: sqlite3.Connection | None = None) -> dict:
     """Turns "Use this for applications" on (last in the starred order) or off; returns the CV's row.
 
-    CVError (`LAST_STAR`) when it would leave no starred CV, and when an archived CV is starred.
+    CVError (`LAST_STAR`) when it would leave no starred CV, and (`ARCHIVED`) when an archived CV is starred.
+    The CV is read under the write lock, so a change another request made meanwhile is seen.
     """
     with _conn(con) as c:
-        d = doc(c, doc_id)
         with writing(c):
+            d = doc(c, doc_id)
             if on:
                 if d["archived"]:
-                    raise CVError("This CV is in the archive. Restore it first.")
+                    raise CVError(ARCHIVED)
                 end = c.execute("SELECT coalesce(max(position), 0) + 1 FROM cv_documents WHERE starred = 1"
                                 ).fetchone()[0]
                 if not d["starred"]:
@@ -258,11 +261,11 @@ def archive(doc_id: str, on: bool = True, con: sqlite3.Connection | None = None)
     """Moves a CV to the archive (`on`), or restores it; returns the CV's row. Nothing in it is deleted.
 
     An archived CV loses its star; when it was the last starred one, the most recent CV left is starred.
-    CVError (`LAST_ACTIVE`) for the only CV in use.
+    CVError (`LAST_ACTIVE`) for the only CV in use. The CV is read under the write lock, as in `star`.
     """
     with _conn(con) as c:
-        d = doc(c, doc_id)
         with writing(c):
+            d = doc(c, doc_id)
             if on and not d["archived"]:
                 if _active_count(c) <= 1:
                     raise CVError(LAST_ACTIVE)
@@ -292,13 +295,14 @@ def rename(doc_id: str, name: str, con: sqlite3.Connection | None = None) -> dic
 def reorder(doc_ids: list[str], con: sqlite3.Connection | None = None) -> list[dict]:
     """Puts the starred CVs in this order (the first is the lead CV); returns `starred()`.
 
-    CVError unless `doc_ids` lists every starred CV once.
+    CVError (`STALE_ORDER`, in words for the page's toast) unless `doc_ids` lists every starred CV once, as when
+    the page's list is out of date.
     """
     with _conn(con) as c:
-        have = [d["id"] for d in starred(c)]
-        if sorted(doc_ids) != sorted(have) or len(set(doc_ids)) != len(doc_ids):
-            raise CVError("order: list every starred CV once")
         with writing(c):
+            have = [d["id"] for d in starred(c)]
+            if sorted(doc_ids) != sorted(have) or len(set(doc_ids)) != len(doc_ids):
+                raise CVError(STALE_ORDER)
             for i, d in enumerate(doc_ids):
                 c.execute("UPDATE cv_documents SET position = ? WHERE id = ?", (i, d))
         _publish("order", doc_ids[0] if doc_ids else "")

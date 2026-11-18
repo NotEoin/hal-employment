@@ -9,15 +9,25 @@ It reads every string literal and template text in `jobhunt/web/static/app/**/*.
 - in "Use Hal from another computer", the terminal words that page is allowed.
 
 Every file must pass (the test is strict).
+
+The messages the CV code (`jobhunt/cvstudio`) raises are scanned too, as the routes send them to the page's
+toasts as they are: literals, f-strings and module constants given to `raise`, with "star" in any form banned
+there as well. A check of the code's own arguments (`SERVER_INTERNAL`) is left out.
 """
 from __future__ import annotations
 
+import ast
 import re
+import tempfile
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[2] / "jobhunt" / "web" / "static" / "app"
+CV_SERVER = Path(__file__).resolve().parents[2] / "jobhunt" / "cvstudio"
+STAR_WORDS = re.compile(r"\bstar(s|red|ring)?\b", re.I)
+# a check of the code's own arguments, never of what a person sent: no route passes a person's words to it
+SERVER_INTERNAL = ("role: ",)
 DETAILS = "/* details */"
 HELPER_STEP = "setup/steps/helper.js"
 REMOTE_PAGE = "settings/remote.js"
@@ -217,6 +227,40 @@ def problems(text: str, file: str) -> list[str]:
     return found
 
 
+def raised_messages(path: Path) -> list[tuple[int, str]]:
+    """(line, text) of each message a module raises as a literal, an f-string (holes read as `HOLE`) or a
+    module-level string constant: the words a route's error answer carries to a toast."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    consts = {t.id: n.value.value for n in tree.body if isinstance(n, ast.Assign) for t in n.targets
+              if isinstance(t, ast.Name) and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str)}
+    out = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call) and node.exc.args):
+            continue
+        arg = node.exc.args[0]
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            out.append((node.lineno, arg.value))
+        elif isinstance(arg, ast.JoinedStr):
+            out.append((node.lineno, "".join(v.value if isinstance(v, ast.Constant) else HOLE for v in arg.values)))
+        elif isinstance(arg, ast.Name) and arg.id in consts:
+            out.append((node.lineno, consts[arg.id]))
+    return out
+
+
+def scan_server(root: Path = CV_SERVER) -> list[tuple[str, int, str, str]]:
+    """(file, line, text, problem) for every banned word in a message the CV code raises, plus "star" in any form:
+    "Use this for applications" is the app's only word for a starred CV (STAR names a way to tell examples)."""
+    hits = []
+    for path in sorted(root.glob("*.py")):
+        for line, text in raised_messages(path):
+            if text.startswith(SERVER_INTERNAL):
+                continue
+            found = problems(text, path.name) + [f"{m.group(0)!r}: say \"in use for applications\""
+                                                for m in [STAR_WORDS.search(text)] if m]
+            hits += [(path.name, line, text, p) for p in found]
+    return hits
+
+
 def scan_app(root: Path = APP) -> list[tuple[str, int, str, str]]:
     """(file, line, text, problem) for every banned word in the app's own JavaScript."""
     hits = []
@@ -261,6 +305,22 @@ class WordsTest(unittest.TestCase):
     def test_words_on_screen_use_the_apps_vocabulary(self) -> None:
         hits = scan_app()
         self.assertEqual([f"{r}:{n} {t!r}: {p}" for r, n, t, p in hits], [])
+
+    def test_the_cv_codes_messages_use_the_apps_vocabulary(self) -> None:
+        """A stale CV order answered "order: list every starred CV once" in a toast (2026-11-18)."""
+        hits = scan_server()
+        self.assertEqual([f"{r}:{n} {t!r}: {p}" for r, n, t, p in hits], [])
+
+    def test_the_server_scan_finds_messages_in_each_form(self) -> None:
+        src = ('LAST = "Every starred CV"\n'
+               'def f(x):\n'
+               '    raise ValueError(f"The {x} pack is ready")\n'
+               '    raise CVError(LAST)\n'
+               '    raise CVError("Your CV changed since you started editing.")\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "m.py").write_text(src, encoding="utf-8")
+            hits = scan_server(Path(tmp))
+        self.assertEqual([(n, p.split(":")[0]) for _, n, _, p in hits], [(3, "'pack'"), (4, "'starred'")])
 
 
 if __name__ == "__main__":

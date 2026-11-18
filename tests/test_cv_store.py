@@ -411,6 +411,38 @@ class SeveralCVs(unittest.TestCase):
         self.assertEqual({d["id"] for d in store.documents()}, {self.main, museum})
         self.assertEqual([v["n"] for v in store.versions(doc_id=museum)], [1], "an archived CV keeps its history")
 
+    def test_a_cv_archived_while_it_is_turned_on_is_not_turned_on_in_the_archive(self):
+        """`star` read the CV before taking the write lock, so a CV another request archived in between was turned
+        on while in the archive (2026-11-18)."""
+        museum = self.other()
+        store.new_version(edited(self.doc, "Kept."), origin="manual", what="Edit", by="you", doc_id=self.main)
+        store.archive(self.main, False)
+        store.star(self.main, True)
+        store.star(museum, False)
+        real, done = store.writing, []
+
+        @contextlib.contextmanager
+        def other_request_first(con):
+            if not done:
+                done.append(True)
+                store.archive(museum)       # another request, on its own connection, just before the lock
+            with real(con):
+                yield
+
+        with mock.patch.object(store, "writing", other_request_first), \
+                self.assertRaisesRegex(CVError, "in the archive"):
+            store.star(museum, True)
+        row = store.doc(doc_id=museum)
+        self.assertEqual((bool(row["archived"]), row["starred"]), (True, 0))
+
+    def test_an_out_of_date_order_says_to_reload_in_plain_words(self):
+        museum = self.other()
+        store.archive(self.main, False)
+        store.star(self.main, True)
+        with self.assertRaises(CVError) as caught:
+            store.reorder([museum])
+        self.assertEqual(str(caught.exception), store.STALE_ORDER)
+
     def test_a_cv_can_be_renamed_but_not_to_nothing(self):
         self.assertEqual(store.rename(self.main, "  Heritage   roles ")["name"], "Heritage roles")
         with self.assertRaisesRegex(CVError, "name:"):
