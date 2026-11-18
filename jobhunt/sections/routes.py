@@ -6,7 +6,7 @@ The paths sit under `/api/v2/record/sources`: `/api/v2/sources` is the job sites
 `record.sources` action and returns its id at once; the page follows that action's events. Every change
 publishes a `profile` event with the source's id, so open pages read their lists again. A change to what a
 source gives (its card, star or section, putting back an earlier read, removing it) also raises the record's
-revision (`record.bump_revision`); an added source raises it when its read ends.
+revision (`record.bump_revision`); an added source raises it when its read ends. A new title alone does not.
 
 Shapes, exactly as sent:
 
@@ -213,7 +213,8 @@ def change(req: Request) -> dict:
     except ValueError as e:
         raise BadRequest(str(e)) from e
     again = any(k in body for k in REREAD_ON)
-    record.bump_revision(req.con)
+    if again:   # a new title alone changes nothing the record gives, so applications stay up to date
+        record.bump_revision(req.con)
     events.publish("profile", source_id=got["id"])
     return {**got, "action_id": _start(req, [got["id"]], why="You changed where a source of your record goes")
             if again else None}

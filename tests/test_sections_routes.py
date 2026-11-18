@@ -193,6 +193,20 @@ class SourceRoutes(unittest.TestCase):
         self.assertEqual(self.c.request("DELETE", path).status, 404)
         self.assertEqual(self.put(path, {"title": "x"}).status, 404)
 
+    def test_renaming_a_source_leaves_the_record_as_it_was_and_moving_it_does_not(self):
+        # review, 2026-11-18: every change raised the revision, so a new title marked every application out of date
+        _, out = form(self.hal, self.c, "/document", [("award.md", AWARD, "")])
+        ended(out["action_id"])
+        path = f"/api/v2/record/sources/{out['added'][0]['id']}"
+        before = record.revision()
+        r = self.put(path, {"title": "Volunteer award"})
+        self.assertEqual((r.status, r.json()["action_id"]), (200, None), r.text)
+        self.assertEqual(record.revision(), before)
+        r = self.put(path, {"title": "Volunteer award, 2024", "section": "project"})
+        self.assertEqual(r.status, 200, r.text)
+        ended(r.json()["action_id"])
+        self.assertGreater(record.revision(), before)
+
     def test_reading_what_waits_reads_every_source_still_waiting_and_nothing_else(self):
         _, first = form(self.hal, self.c, "/document", [("Avery Quillon CV.md", CV, "")])
         ended(first["action_id"])

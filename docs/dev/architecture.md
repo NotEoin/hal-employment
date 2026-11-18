@@ -1420,7 +1420,8 @@ Hal writes from changes:
   which read through `read_all`), and of `record.sort_accept` when it starred projects or moved a record;
 - the end of every `record.ingest`, and a sorting of the tiers (`profile.actions.sort`) that sorted any;
 - the person's own changes: every card change under `/api/v2/profile` and, under `/api/v2/record/sources`,
-  changing, putting back an earlier read of, or removing a source.
+  changing what a source gives (any of the keys that read it again, `routes.REREAD_ON`; a new title alone
+  does not), putting back an earlier read of, or removing a source.
 
 A stopped read raises it too, since what it read is kept; a read that fails does not. `bump_revision(con)`
 commits `con`, so it is called once the change is committed or ready to be. A failed raise in `_save` is
