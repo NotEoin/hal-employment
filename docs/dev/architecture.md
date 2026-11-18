@@ -372,9 +372,42 @@ runs: tests use `tests/support/fake_claude/`.
 - `jobhunt/cvstudio/cv.py` is the reader of the store in the `cv.json` shape: `load()` returns the version in
   use as the PDF builder, the packs and the matching code expect it, so none of them needs the store itself.
   `v1_of(doc)` gives any document in that shape, as an application's CV is printed.
+- Several CVs (migration 0033): one `cv_documents` row each, with `name`, `starred` ("Use this for
+  applications"), `archived` and `position` (the order of the starred ones), and its own file, version in use,
+  type, look and layout. The first CV of an install has the id `main`; later ones are `cv-<hex>`.
+  - `store.lead_id()` is the lead CV: the first starred one in the person's order, else the most recently
+    changed one not archived. Every store function takes `doc_id=` and acts on the lead CV without it, so
+    `store.current()` with no argument is what tailoring, the pack writer, exports and `cv.load()` read, as
+    when there was one CV. `store.lead_version_id()` reads it without making a CV (Home, the profile).
+  - `store.documents(archived=False|True|None)` lists the CVs, starred first in their order; `store.starred()`
+    is the ordered list to pick an application's base CV from (its first item is the lead CV). `star`,
+    `archive` (also restore), `rename` and `reorder` change them; one CV stays starred while any exists, and
+    the only CV in use cannot be archived. Archive is the delete: nothing in an archived CV is removed.
+  - `store.create(name, first, ...)` makes a CV and its version 1 in one write; a starred new CV goes first in
+    the order, and a CV that is empty or holds only the untouched starter from the settings is archived.
+    `store.cv_for_file(file_id)` finds the CV a kept file already made, so an upload of the same bytes picks
+    that CV instead of making a copy.
 - Versions never change after they are written. `store.new_version` adds one under `BEGIN IMMEDIATE`, so two
-  saves at once get two numbers, and publishes the event `cv`. A version made with `job_id=` belongs to that
-  job: it is kept out of the main list and never becomes Hal's main copy.
+  saves at once get two numbers, and publishes the event `cv` (with the CV's id as `cv`). The CV is `doc_id=`,
+  else the one `base` or `parent` belongs to, else the lead CV. Numbers count one CV's own versions from 1.
+  A version made with `job_id=` belongs to that job: it is kept with its base CV, out of its list, never
+  becomes a CV's version in use, and takes no number (its `n` is below zero, a count of its own that only
+  satisfies the table's `UNIQUE (doc_id, n)`; `store.version` shows it as `None`). Ids stay `v<n>-<hash>`, and
+  ids from before 0033 kept their old numbers, so an id's number need not match the version's.
+- Migration 0033 split the one history into one CV per upload in the same transaction as its columns: an
+  `uploaded` version starts a CV, and what follows up to the next upload belongs to it, numbered again from 1;
+  versions before the first upload form one CV. The CV holding the version in use keeps `main`, its file and
+  settings, and is starred; the others are archived. Per-job versions follow their base version's CV (from
+  `job_cvs`), else the CV in use when they were made. Suggestions follow the version they were based on, and
+  line preferences (`cv_preferences.doc_id`, keep my wording and lock a line) the suggestion they came from.
+- Every `/api/v2/cv/...` route acts on the CV named by the query parameter `?cv=<id>` (`routes.cv_of`, 404 for
+  an unknown id), the lead CV without it, so the setup guide and older clients keep working; a route that
+  names a version acts on that version's CV. `GET /cv/cvs` answers `{cvs, archived, lead}`; `PUT /cv/star`
+  (`{on}`), `PUT /cv/archive` (`{on}`, false restores), `PUT /cv/name` (`{name}`), `PUT /cv/order` (`{ids}`)
+  and `DELETE /cv` (archives) answer the same list.
+- Per-CV data: `cv_suggestions.doc_id` (a review, its list, "Accept all" and the "nothing more" mark in `meta`
+  are per CV), line preferences, `cv_parse_reports` and `cv_checks` (by version). Tone and length preferences,
+  `cv_keywords_off` (by job) and `cv_types` hold for every CV.
 - The bin keeps a version for 30 days. It is emptied lazily (`purge_bin`, whenever versions are listed),
   and never removes a version an application or job still points at.
 - Files are kept read-only as `cv/files/<sha256>.<ext>`; `file_bytes` checks the SHA-256 on every read and
@@ -382,10 +415,13 @@ runs: tests use `tests/support/fake_claude/`.
 
 ## CV reading (`cvstudio/parse.py`, `parse_actions.py`, `parse_routes.py`)
 
-- `POST /cv/upload` does the cheap checks (10 MB, 6 pages, kind, a PDF with no text layer), keeps the file
-  with `store.add_file(..., role="baseline")` and starts `cv.parse`. The action makes the file the
-  baseline, then a version "Your file: <name> (never changed)" from Hal's own reading, then asks the AI
-  (`cv_parse`) and makes "Hal read your uploaded CV into sections" only when the AI's reading differs.
+- `POST /cv/upload` does the cheap checks (10 MB, 6 pages, kind, a PDF with no text layer) and keeps the file
+  with `store.add_file(..., role="baseline")`. When those bytes already made a CV it answers that CV as
+  `duplicate` and starts nothing; otherwise it starts `cv.parse`. The action reads the file with Hal's rules,
+  then asks the AI (`cv_parse`), and keeps one reading, the AI's when there is one, as one version "Your file:
+  <name> (never changed)" with the file as the CV's own. Without `?cv=` that version is version 1 of a new CV
+  (`store.create`, named after the file); with `?cv=<id>` ("Upload a new version of this CV") it is that
+  CV's next version. One upload used to make two versions, so a new CV showed as "version 9" of the old one.
 - A field says "Check this" when its value is not in the file's normalised text, the AI's confidence is
   under 0.6, the year has two digits, or a field a CV normally has is missing. The AI's reading is put in
   the rules' shape first, so the same file read by rules or AI gives the same ids. With no AI, a

@@ -36,14 +36,14 @@ def fixture(key: str, ext: str) -> tuple[str, bytes]:
     return name, (FOLDER / name).read_bytes()
 
 
-def upload(hal, client, name: str, data: bytes) -> tuple[int, dict]:
-    """POSTs one file as the page's drop zone does."""
+def upload(hal, client, name: str, data: bytes, query: str = "") -> tuple[int, dict]:
+    """POSTs one file as the page's drop zone does; `query` such as "?cv=<id>" picks the CV it goes to."""
     boundary = uuid.uuid4().hex
     body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\n"
             f"Content-Type: application/octet-stream\r\n\r\n".encode() + data + f"\r\n--{boundary}--\r\n".encode())
     con = http.client.HTTPConnection("127.0.0.1", hal.port, timeout=TIMEOUT_S)
     try:
-        con.request("POST", "/api/v2/cv/upload", body=body, headers={
+        con.request("POST", "/api/v2/cv/upload" + query, body=body, headers={
             "Host": f"127.0.0.1:{hal.port}", "X-Hal": "1", "Content-Type": f"multipart/form-data; boundary={boundary}",
             "Cookie": "; ".join(f"{k}={v}" for k, v in client.jar.items())})
         r = con.getresponse()
@@ -281,10 +281,10 @@ class Upload(unittest.TestCase):
         self.hal = self.enterContext(HalServer())
         self.client = self.hal.signed_in()
 
-    def read(self, name: str, data: bytes, replies: dict | None = None) -> dict:
+    def read(self, name: str, data: bytes, replies: dict | None = None, query: str = "") -> dict:
         """Uploads a file, waits for `cv.parse` and returns the finished action."""
         with fake_ai(NO_AI if replies is None else replies):
-            status, body = upload(self.hal, self.client, name, data)
+            status, body = upload(self.hal, self.client, name, data, query)
             self.assertEqual(status, 200, body)
             done = runner.wait(body["action_id"], WAIT_S)
         self.assertEqual(done["state"], "done", done["error"])
@@ -293,7 +293,7 @@ class Upload(unittest.TestCase):
     def versions(self) -> list[dict]:
         con = db.connect()
         try:
-            return [dict(r) for r in con.execute("SELECT * FROM cv_versions ORDER BY n")]
+            return [dict(r) for r in con.execute("SELECT * FROM cv_versions ORDER BY rowid")]
         finally:
             con.close()
 
@@ -368,8 +368,8 @@ class Upload(unittest.TestCase):
         self.assertEqual(done["state"], "done", done["error"])
         self.assertEqual(len(backend.requests("cv_parse")), 1)
         self.assertEqual(backend.requests("cv_parse")[0].priority, 0)
-        self.assertEqual([v["what"] for v in self.versions()],
-                         [f"Your file: {name} (never changed)", "Hal read your uploaded CV into sections"])
+        self.assertEqual([(v["what"], v["n"]) for v in self.versions()], [(f"Your file: {name} (never changed)", 1)])
+        self.assertEqual(done["result"]["n"], 1, "a file uploaded once is version 1, never a version 2 over it")
         rows = {r["value"]: r for r in self.report()["rows"]}
         self.assertFalse(rows[INVENTED_EMPLOYER]["sure"])
         self.assertEqual(rows[INVENTED_EMPLOYER]["why"], parse.NOT_FOUND_WHY)
@@ -412,14 +412,33 @@ class Upload(unittest.TestCase):
     def test_an_uploaded_cv_is_in_your_record_once(self):
         """A person who gave Hal their CV in setup found Your record saying "No CVs yet" (2026-11-12)."""
         name, data = fixture("humanities", "docx")
-        self.read(name, data)
-        self.read(name, data)
+        done = self.read(name, data)
+        status, again = upload(self.hal, self.client, name, data)
+        self.assertEqual(status, 200, again)
+        self.assertEqual((again["action_id"], again["duplicate"]["id"]), (None, done["result"]["cv"]))
         con = db.connect()
         try:
             cvs = con.execute("SELECT section, doc_kind FROM record_sources").fetchall()
         finally:
             con.close()
         self.assertEqual([tuple(r) for r in cvs], [("cv", "cv")])
+
+    def test_each_new_file_is_a_new_cv_at_version_one_and_a_new_version_goes_where_you_say(self):
+        """A new CV uploaded on top of an old one showed as "version 9" of it (2026-11-18)."""
+        first = self.read(*fixture("humanities", "pdf"))["result"]
+        second = self.read(*fixture("technical", "pdf"))["result"]
+        self.assertNotEqual(first["cv"], second["cv"])
+        self.assertEqual((first["n"], second["n"]), (1, 1))
+        self.assertEqual(store.lead_id(), second["cv"])
+        again = self.read(*fixture("technical", "docx"), query=f"?cv={first['cv']}")["result"]
+        self.assertEqual((again["cv"], again["n"]), (first["cv"], 2))
+        report = self.client.get(f"/api/v2/cv/parse-report?cv={first['cv']}").json()
+        self.assertEqual((report["n"], report["file"]["name"]), (2, fixture("technical", "docx")[0]))
+        name, data = fixture("humanities", "pdf")
+        status, dup = upload(self.hal, self.client, name, data)
+        self.assertEqual((status, dup["action_id"], dup["duplicate"]["id"]), (200, None, first["cv"]))
+        self.assertEqual(self.client.get(f"/api/v2/cv/original?cv={first['cv']}").body,
+                         fixture("technical", "docx")[1])
 
     def test_a_scanned_pdf_is_explained_when_it_is_uploaded(self):
         status, body = upload(self.hal, self.client, "Scanned-CV.pdf", (FOLDER / "Scanned-CV.pdf").read_bytes())

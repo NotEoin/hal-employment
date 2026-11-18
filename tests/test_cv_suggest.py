@@ -121,9 +121,9 @@ class Reviewers(CvCase):
     def test_a_suggestion_accepted_while_the_tab_reloads_stays_accepted(self):
         # the store's "cv" event reloads the tab mid-Accept all; its recheck superseded the accepted rows
         suggest.look_again(self.con)
-        stale = suggest._pending(self.con)
+        stale = suggest._pending(self.con, store.doc()["id"])
         out = suggest.accept_kind(self.con, "Consistency")
-        with mock.patch.object(suggest, "_pending", lambda con: stale):
+        with mock.patch.object(suggest, "_pending", lambda con, doc_id: stale):
             suggest.recheck(self.con, out["version_id"], store.current()[1])
         self.assertEqual(suggest.listing(self.con)["reviewed"], 2)
 

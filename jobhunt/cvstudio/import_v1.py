@@ -6,8 +6,9 @@
 - Overrides are matched to entries by the name rule of the old code (`NAMED_BY`) one last time, against the
   entry's original name, so an edit made after a rename is kept (the old code dropped it). Every version
   made here gets the same ids, because ids come from the original names.
-- Versions: 1 the CV as it came; then each `cv-overrides.before-*.json` snapshot, oldest first; then the CV
-  with today's overrides, which is put in use.
+- Versions, all in one CV (the lead CV while it is empty, else a CV of its own): 1 the CV as it came; then
+  each `cv-overrides.before-*.json` snapshot, oldest first; then the CV with today's overrides, which is put
+  in use.
 - The check: every string of the printable CV must be found in the imported document. What is not is
   listed in the report and in the last version's `extras["not_found"]`, and a clean import leaves that list empty.
 - Running it again does nothing once a CV has been imported, so the server can start it every time.
@@ -39,6 +40,7 @@ FRIEND = {"site": "cv-built.json", "overrides": "cv-built-overrides.json", "type
           "first": "Your CV from your old Hal", "from": "cv-built.json+overrides"}
 LAST = "With the changes you made in Hal"
 SNAPSHOT = "Your saved copy from {date}"
+IMPORTED_NAME = "Your CV from before"
 
 
 def folder() -> Path:
@@ -106,8 +108,19 @@ def _already(con: sqlite3.Connection) -> bool:
     return con.execute("SELECT 1 FROM cv_versions WHERE origin = 'imported' LIMIT 1").fetchone() is not None
 
 
-def import_into(con: sqlite3.Connection, where: Path | None = None) -> dict:
-    """Imports the old CV as versions, once; returns {versions: [ids], not_found: [strings], skipped: why}."""
+def _target(con: sqlite3.Connection) -> str:
+    """The CV the import goes into: the lead CV while it has no version yet, else a CV of its own."""
+    lead = store.doc(con)
+    if not lead["current_version_id"]:
+        return lead["id"]
+    return store.create(IMPORTED_NAME, star=False, con=con)
+
+
+def import_into(con: sqlite3.Connection, where: Path | None = None, doc_id: str | None = None) -> dict:
+    """Imports the old CV as versions of one CV, once; returns {versions: [ids], not_found: [strings], skipped: why}.
+
+    The CV is `doc_id`, else the lead CV while it has no version, else a new CV that is not starred.
+    """
     if _already(con):
         return {"versions": [], "not_found": [], "skipped": "Your CV was imported before."}
     found = plan(where)
@@ -119,9 +132,9 @@ def import_into(con: sqlite3.Connection, where: Path | None = None) -> dict:
         site = site["cv"]
     overrides = _read(found["overrides"]) if found["overrides"].exists() else []
     stamp = {"from": who["from"], "imported": clock.iso()}
-    store.doc(con)
+    doc_id = doc_id or _target(con)
     con.execute("UPDATE cv_documents SET type_id = ?, look_id = ?, route = 'improve', send = 'hal_copy' "
-                "WHERE id = ?", (who["type"], store.DEFAULT_LOOK, store.DOC_ID))
+                "WHERE id = ?", (who["type"], store.DEFAULT_LOOK, doc_id))
     con.commit()
 
     def version(data: dict, what: str, by: str) -> tuple[str, list[str]]:
@@ -130,7 +143,8 @@ def import_into(con: sqlite3.Connection, where: Path | None = None) -> dict:
         doc.extras.update(stamp)
         if missing:
             doc.extras["not_found"] = missing
-        return store.new_version(doc, origin="imported", what=what, by=by, type_id=who["type"], con=con), missing
+        return store.new_version(doc, origin="imported", what=what, by=by, type_id=who["type"], doc_id=doc_id,
+                                 con=con), missing
 
     made = []
     first, _ = version(apply_overrides(site, []), who["first"].format(date=_date(found["site"])), "baseline")

@@ -1,28 +1,35 @@
 """Routes for adding a CV and checking what Hal read.
 
-- `POST /cv/upload` takes one file (multipart) or `{text}`. The cheap checks (size, kind, pages, a PDF
-  that is only a picture) answer at once with words that say what to do; the file is then stored
-  unchanged and `cv.parse` reads it in the background. A file also goes into Your record's CVs (once: the
-  same file there already is left as it is), so the record knows the CV the person started with.
-- `GET /cv/parse-report` is the "Check what Hal read" dialog: the original on the left (page pictures of a
-  PDF, the paragraphs of a Word file or pasted text) and Hal's reading on the right.
+- `POST /cv/upload` takes one file (multipart) or `{text}` and makes a new CV from it. With `?cv=<id>` it is
+  "Upload a new version of this CV" instead: the reading becomes that CV's next version. The cheap checks
+  (size, kind, pages, a PDF that is only a picture) answer at once with words that say what to do; the file
+  is then stored unchanged and `cv.parse` reads it in the background. A file whose bytes already made a CV
+  starts nothing: the answer names that CV (`duplicate`), so the page selects it instead of making a copy.
+  A file also goes into Your record's CVs (once: the same file there already is left as it is), so the
+  record knows the CVs the person has.
+- `GET /cv/parse-report` is the "Check what Hal read" dialog for one CV: the original on the left (page
+  pictures of a PDF, the paragraphs of a Word file or pasted text) and Hal's reading of the CV's newest file
+  on the right.
 - `PUT /cv/parse-report/{path}` corrects one field and makes a version "You corrected N things Hal misread".
-  A correction goes onto Hal's current copy, so suggestions accepted since the upload are kept.
-- `GET /cv/original` sends the file byte for byte; the store re-checks its SHA-256 on every read.
+  A correction goes onto the CV's current copy, so suggestions accepted since the upload are kept.
+- `GET /cv/original` sends the CV's file byte for byte; the store re-checks its SHA-256 on every read.
+- Every route takes the CV as `?cv=<id>` (`routes.cv_of`), the lead CV when it is left out.
 """
 from __future__ import annotations
 
 import json
 import sqlite3
+from urllib.parse import quote
 
 from jobhunt.core import runner, settings
 from jobhunt.cvstudio import parse, pdfread, store
 from jobhunt.cvstudio.model import CVError
 from jobhunt.cvstudio.parse_actions import fill_empty_settings
+from jobhunt.cvstudio.routes import cv_of
 from jobhunt.web.router import BadRequest, BytesResponse, Conflict, NotFound, route
 
 PAGE_SCALE = 1.5          # page pictures at 108 dots per inch: readable beside Hal's reading, quick to make
-PASTED_NAME = "Pasted CV.txt"
+PASTED_NAME = store.PASTED_NAME
 NO_REPORT_WORDS = "Hal has not read a CV yet. Add your CV first."
 CORRECTED_WHAT = "You corrected {n} Hal misread"
 
@@ -41,18 +48,26 @@ def _upload(req) -> tuple[bytes, str]:
 
 @route("POST", "/api/v2/cv/upload")
 def upload(req) -> dict:
-    """Stores the file unchanged and starts reading it; a file Hal cannot read is refused with the reason."""
+    """Stores the file unchanged and starts reading it into a new CV, or into `?cv=` as its next version; a file
+    Hal cannot read is refused with the reason, and one that already made a CV is answered with that CV."""
+    into = cv_of(req) if req.query.get("cv") else None
     data, name = _upload(req)
     try:
         parse.check(data, name)
     except parse.CVReadError as e:
         raise BadRequest(str(e), field="file") from e
     file_id = store.add_file(data, name, role="baseline")
-    action_id = runner.start("cv.parse", subject="cv.parse", params={"file_id": file_id, "file": name},
+    had = store.cv_for_file(file_id, con=req.con)
+    if had is not None and (into is None or had == into):
+        cv = store.doc(req.con, had)
+        return {"action_id": None, "file_id": file_id,
+                "duplicate": {"id": had, "name": cv["name"], "archived": cv["archived"]}}
+    params = {"file_id": file_id, "file": name, **({"doc_id": into} if into else {})}
+    action_id = runner.start("cv.parse", subject="cv.parse", params=params,
                              replace=True, session_id=req.session_id, remote=req.remote)
     if req.files:
         _to_record(req, data, name)
-    return {"action_id": action_id, "file_id": file_id}
+    return {"action_id": action_id, "file_id": file_id, "duplicate": None}
 
 
 def _to_record(req, data: bytes, name: str) -> None:
@@ -64,13 +79,14 @@ def _to_record(req, data: bytes, name: str) -> None:
     actions.queue(added, session_id=req.session_id, remote=req.remote, why="You added your CV")
 
 
-def latest(con: sqlite3.Connection) -> sqlite3.Row | None:
-    """The newest reading's report row, with its version number and file."""
+def latest(con: sqlite3.Connection, doc_id: str | None = None) -> sqlite3.Row | None:
+    """The newest reading's report row of one CV (the lead CV by default), with its version number and file."""
+    doc_id = doc_id or store.lead_id(con)
     return con.execute("""SELECT r.version_id, r.file_id, r.found, r.items, v.n,
                                  f.name, f.mime, f.pages, f.sha256, f.added
                           FROM cv_parse_reports r JOIN cv_versions v ON v.id = r.version_id
                           LEFT JOIN cv_files f ON f.id = r.file_id
-                          ORDER BY v.n DESC LIMIT 1""").fetchone()
+                          WHERE v.doc_id = ? ORDER BY v.n DESC LIMIT 1""", (doc_id,)).fetchone()
 
 
 def _original(row: sqlite3.Row) -> dict:
@@ -92,15 +108,17 @@ def _from_cv(con: sqlite3.Connection, version_id: str) -> dict[str, str]:
 
 @route("GET", "/api/v2/cv/parse-report")
 def report(req) -> dict:
-    """What Hal read from the newest CV file, row by row, beside the original."""
-    row = latest(req.con)
+    """What Hal read from the CV's newest file, row by row, beside the original."""
+    row = latest(req.con, cv_of(req))
     if row is None:
         # An empty report, not a 404: the setup step and My CV ask for it before any CV is added.
         return {"version_id": None, "n": None, "found": "", "rows": [], "unsure": 0, "original_preview_url": None,
                 "original": None, "file": None, "from_cv": {}}
     original = _original(row)
+    query = f"?cv={quote(req.query['cv'])}" if req.query.get("cv") else ""
+    original["page_urls"] = [u + query for u in original["page_urls"]]
     items = json.loads(row["items"])
-    preview = original["page_urls"][0] if original["page_urls"] else "/api/v2/cv/original"
+    preview = original["page_urls"][0] if original["page_urls"] else "/api/v2/cv/original" + query
     return {"version_id": row["version_id"], "n": row["n"], "found": row["found"], "rows": items,
             "unsure": sum(1 for r in items if not r["sure"]), "original_preview_url": preview,
             "original": original, "file": {"id": row["file_id"], "name": row["name"], "pages": row["pages"],
@@ -115,7 +133,8 @@ def correct(req) -> dict:
     if not isinstance(body.get("value"), str):
         raise BadRequest("Type what your CV should say.", field="value")
     value = body["value"].strip()
-    row = latest(req.con)
+    doc_id = cv_of(req)
+    row = latest(req.con, doc_id)
     if row is None:
         raise NotFound(NO_REPORT_WORDS)
     path = req.params["path"]
@@ -123,7 +142,7 @@ def correct(req) -> dict:
     item = next((i for i in items if i["path"] == path), None)
     if item is None:
         raise NotFound(parse.GONE_WORDS)
-    current_id, doc = store.current()
+    current_id, doc = store.current(doc_id=doc_id)
     try:
         fixed = parse.correct(doc, path, value)
     except LookupError:
@@ -134,11 +153,11 @@ def correct(req) -> dict:
     n = sum(1 for i in items if i.get("corrected"))
     things = "1 thing" if n == 1 else f"{n} things"
     version_id = store.new_version(fixed, origin="corrected", what=CORRECTED_WHAT.format(n=things), by="you",
-                                   parent=current_id)
+                                   parent=current_id, doc_id=doc_id)
     req.con.execute("UPDATE cv_parse_reports SET items = ? WHERE version_id = ?",
                     (json.dumps(items, ensure_ascii=True), row["version_id"]))
     req.con.commit()
-    return {"version_id": version_id, "corrected": n}
+    return {"version_id": version_id, "corrected": n, "n": store.version(version_id)["n"]}
 
 
 def _follow_setting(con: sqlite3.Connection, version_id: str, path: str, old: str, new: str) -> None:
@@ -152,15 +171,17 @@ def _follow_setting(con: sqlite3.Connection, version_id: str, path: str, old: st
         fill_empty_settings({key: new})
 
 
-def _file_id() -> str:
-    doc = store.doc()
+def _file_id(doc_id: str | None) -> str:
+    if doc_id is None:
+        raise NotFound("Hal has no file of your CV. Add your CV first.")
+    doc = store.doc(doc_id=doc_id)
     if doc.get("baseline_file_id"):
         return doc["baseline_file_id"]
     from jobhunt import db
 
     con = db.connect()
     try:
-        row = latest(con)
+        row = latest(con, doc_id)
     finally:
         con.close()
     if row is None or not row["file_id"]:
@@ -184,7 +205,7 @@ def _file_row(file_id: str) -> sqlite3.Row:
 @route("GET", "/api/v2/cv/original")
 def original(req) -> BytesResponse:
     """Your original file, byte for byte."""
-    file_id = _file_id()
+    file_id = _file_id(cv_of(req))
     row = _file_row(file_id)
     try:
         data = store.file_bytes(file_id)
@@ -200,7 +221,7 @@ def page(req) -> BytesResponse:
         number = int(req.params["n"])
     except ValueError as e:
         raise NotFound("There is no such page.") from e
-    file_id = _file_id()
+    file_id = _file_id(cv_of(req))
     data = store.file_bytes(file_id)
     if parse.kind_of(_file_row(file_id)["name"] or "", data) != "pdf":
         raise NotFound("Your CV is not a PDF, so it has no page pictures.")

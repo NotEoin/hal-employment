@@ -52,10 +52,10 @@ def _fresh_example(world) -> dict:
 
 @runner.action("cv.suggest", area="cv", label="Looking at your CV for suggestions",
                why="Your CV, its type or your goal changed", priority=1, exclusive="kind", example=_suggest_example)
-def look_again(ctx) -> dict:
-    """Reviews the CV section by section until six suggestions wait or none are left."""
+def look_again(ctx, doc_id: str | None = None) -> dict:
+    """Reviews one CV (the lead CV by default) section by section until six suggestions wait or none are left."""
     ctx.step("Reading your CV one section at a time")
-    out = suggest.look_again(ctx.con, step=ctx.step)
+    out = suggest.look_again(ctx.con, step=ctx.step, doc_id=doc_id)
     if out["found"]:
         ctx.changed(f"Found {out['found']} new suggestions.")
     else:
@@ -76,8 +76,9 @@ def another(ctx, suggestion_id: str) -> dict:
 
 @runner.action("cv.fresh", area="cv", label="Building a fresh CV", why="You asked Hal to build a fresh CV",
                priority=1, exclusive="kind", example=_fresh_example)
-def build_fresh(ctx, answers: dict, type_id: str) -> dict:
-    """Writes a CV from the interview answers, checks it and suggests fixes for what fails."""
-    out = fresh.make(answers, type_id, step=ctx.step)
+def build_fresh(ctx, answers: dict, type_id: str, doc_id: str | None = None) -> dict:
+    """Writes a CV from the interview answers as a new version of one CV (the lead CV by default), checks it and
+    suggests fixes for what fails."""
+    out = fresh.make(answers, type_id, step=ctx.step, doc_id=doc_id)
     ctx.changed(f"Saved a fresh CV as a new version; {len(out['failing'])} checks to look at.")
     return out

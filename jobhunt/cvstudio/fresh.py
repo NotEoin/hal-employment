@@ -175,8 +175,9 @@ def _ai_profile(doc, type_, answers: dict) -> str | None:
     return gapped
 
 
-def make(answers: dict, type_id: str, *, step=None) -> dict:
-    """Saves a fresh CV as a generated version, checks it and starts suggestions for what fails."""
+def make(answers: dict, type_id: str, *, step=None, doc_id: str | None = None) -> dict:
+    """Saves a fresh CV as a generated version of one CV (the lead CV by default), checks it and starts
+    suggestions for what fails."""
     from jobhunt.cvstudio import checks, model, store, types
 
     type_ = types.load(type_id)
@@ -190,13 +191,13 @@ def make(answers: dict, type_id: str, *, step=None) -> dict:
     if problems:
         raise ValueError("Hal could not build a CV from these answers: " + " ".join(problems))
     vid = store.new_version(doc, origin="generated", what=f"Hal built a fresh CV ({type_.name})", by="hal",
-                            type_id=type_id)
+                            type_id=type_id, doc_id=doc_id)
     if step:
         step("Checking it against your CV type")
     results = checks.for_type(doc, type_)
     con = db.connect()
     try:
-        found = suggest.look_again(con)
+        found = suggest.look_again(con, doc_id=store.version(vid, con=con)["doc_id"])
     finally:
         con.close()
     return {"version_id": vid, "failing": [r["name"] for r in results if not r["ok"]],

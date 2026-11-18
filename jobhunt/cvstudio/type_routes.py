@@ -6,6 +6,7 @@
 - Built-in types are never saved over: the Writing card and "Copy this type to change it" both work on a
   copy, and the answer says so in words the page shows as they are.
 - Comparing two types renders nothing new: it answers the two outlines and the preview addresses the printer serves.
+- Each CV has its own type: the routes act on `?cv=` (the lead CV by default), as every My CV route does.
 """
 from __future__ import annotations
 
@@ -27,8 +28,14 @@ def _store():
     return store
 
 
-def _current_type_id() -> str:
-    return _store().type_in_use()
+def _cv(req: Request) -> str | None:
+    from jobhunt.cvstudio.routes import cv_of
+
+    return cv_of(req)
+
+
+def _current_type_id(doc_id: str | None) -> str:
+    return _store().type_in_use(doc_id=doc_id)
 
 
 def _goal():
@@ -41,8 +48,8 @@ def _goal():
         return None
 
 
-def _set_type(con, type_id: str) -> None:
-    _store().set_type(type_id, con=con)
+def _set_type(con, type_id: str, doc_id: str | None) -> None:
+    _store().set_type(type_id, con=con, doc_id=doc_id)
     con.commit()  # the store joins a transaction already open on `con` rather than committing it
 
 
@@ -56,12 +63,13 @@ def _type_or_404(type_id: str, con) -> cvtypes.CVType:
 @route("GET", "/api/v2/cv/types")
 def list_types(req: Request) -> dict:
     """Every CV type for the picker, the one Hal suggests with its reason, and the Writing card's values."""
+    doc_id = _cv(req)
     try:
-        _, doc = _store().current()
+        _, doc = _store().current(doc_id=doc_id)
     except LookupError:
         doc = None
     sid, why = cvtypes.suggest(_goal(), doc, subject=str(settings.get("you.education.subject") or ""))
-    current = _type_or_404(_current_type_id(), req.con)
+    current = _type_or_404(_current_type_id(doc_id), req.con)
     return {"suggested": {"id": sid, "name": cvtypes.load(sid).name, "why": why},
             "current": {"id": current.id, "name": current.name, "builtin": current.builtin},
             "writing": cvtypes.writing_card(current), "spelling": settings.get("cvdocs.spelling"),
@@ -72,19 +80,21 @@ def list_types(req: Request) -> dict:
 def choose_type(req: Request) -> dict:
     """Uses another CV type: a new version records the change, then Hal works out suggestions to match."""
     t = _type_or_404(str((req.body or {}).get("id") or ""), req.con)
+    doc_id = _cv(req)
     # a type nobody chose is only Hal's suggestion: choosing it, even the one in use, records the choice
-    if _store().type_chosen() and t.id == _store().doc()["type_id"]:
+    if _store().type_chosen(doc_id=doc_id) and t.id == _store().doc(doc_id=doc_id)["type_id"]:
         return {"ok": True, "type": {"id": t.id, "name": t.name}, "version_id": None}
-    _set_type(req.con, t.id)
+    _set_type(req.con, t.id, doc_id)
     version_id = None
     try:
-        _, doc = _store().current()
+        _, doc = _store().current(doc_id=doc_id)
         version_id = _store().new_version(doc, origin="type_change", what=f"Changed the CV type to {t.name}",
-                                          by="you", type_id=t.id)
+                                          by="you", type_id=t.id, doc_id=doc_id)
     except LookupError:
         log.info("no CV yet; only the type was saved")
     if version_id and SUGGEST_KIND in runner.KINDS:
-        runner.start(SUGGEST_KIND, subject="cv", replace=True)
+        runner.start(SUGGEST_KIND, subject="cv", replace=True,
+                     params={"doc_id": _store().version(version_id)["doc_id"]})
     return {"ok": True, "type": {"id": t.id, "name": t.name}, "version_id": version_id}
 
 
@@ -120,10 +130,11 @@ def save_type_source(req: Request) -> dict:
 @route("GET", "/api/v2/cv/types/compare")
 def compare_types(req: Request) -> dict:
     """The current CV under two types side by side: outlines and the preview addresses. No AI."""
-    a = _type_or_404(req.query.get("a") or _current_type_id(), req.con)
+    doc_id = _cv(req)
+    a = _type_or_404(req.query.get("a") or _current_type_id(doc_id), req.con)
     b = _type_or_404(req.query.get("b") or cvtypes.FALLBACK, req.con)
     try:
-        version_id, doc = _store().current()
+        version_id, doc = _store().current(doc_id=doc_id)
     except LookupError as e:
         raise NotFound(NO_CV) from e
     url = f"/api/v2/cv/versions/{quote(version_id)}/preview.html?type="
@@ -143,11 +154,12 @@ def save_writing(req: Request) -> dict:
                          ("results", ("where_have", "rarely"))):
         if key in body and body[key] not in allowed:
             raise BadRequest(f"{key} must be one of: {', '.join(allowed)}.", field=key)
-    current = _type_or_404(_current_type_id(), req.con)
+    doc_id = _cv(req)
+    current = _type_or_404(_current_type_id(doc_id), req.con)
     try:
         t, note = cvtypes.edit_writing(current.id, body, req.con)
     except ValueError as e:
         raise BadRequest(str(e)) from e
     if t.id != current.id:
-        _set_type(req.con, t.id)
+        _set_type(req.con, t.id, doc_id)
     return {"ok": True, "type": {"id": t.id, "name": t.name}, "note": note, "writing": cvtypes.writing_card(t)}

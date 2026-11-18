@@ -134,11 +134,11 @@ def _headline(con: sqlite3.Connection) -> str:
     """The line under the name on the person's CV, read without making a CV when there is none."""
     from jobhunt.cvstudio import store as cv_store
 
-    row = con.execute("SELECT current_version_id FROM cv_documents WHERE id = ?", (cv_store.DOC_ID,)).fetchone()
-    if row is None or not row[0]:
+    vid = cv_store.lead_version_id(con)
+    if not vid:
         return ""
     try:
-        return " ".join(str(cv_store.get(row[0], con=con).headline or "").split())
+        return " ".join(str(cv_store.get(vid, con=con).headline or "").split())
     except LookupError:
         return ""
 

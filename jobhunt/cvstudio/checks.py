@@ -517,13 +517,15 @@ def for_version(con: sqlite3.Connection, version_id: str, doc: Any, t: cvtypes.C
     return {"scanner": scan, "type": checked}
 
 
-def link_suggestions(con: sqlite3.Connection, checked: dict) -> dict:
-    """Each failing check gets the id of the pending suggestion it led to, when there is one ("See suggestion")."""
+def link_suggestions(con: sqlite3.Connection, checked: dict, doc_id: str | None = None) -> dict:
+    """Each failing check gets the id of the CV's pending suggestion it led to, when there is one ("See
+    suggestion"); every CV's when `doc_id` is None."""
     for item in checked["items"]:
         if item["ok"]:
             continue
         row = con.execute("SELECT id FROM cv_suggestions WHERE status = 'pending' AND json_extract(trigger, '$.id') = ?"
-                          " ORDER BY created DESC LIMIT 1", (item["id"],)).fetchone()
+                          " AND (? IS NULL OR doc_id = ?) ORDER BY created DESC LIMIT 1",
+                          (item["id"], doc_id, doc_id)).fetchone()
         item["suggestion_id"] = row["id"] if row else None
     return checked
 
@@ -582,13 +584,14 @@ def columns_of(look_id: str) -> int:
     return 2 if look_id in TWO_COLUMN_LOOKS else 1
 
 
-def current_cv() -> tuple[str, Any, cvtypes.CVType, dict]:
-    """(version id, document, its CV type, the `cv_documents` row); LookupError when there is no CV yet."""
+def current_cv(doc_id: str | None = None) -> tuple[str, Any, cvtypes.CVType, dict]:
+    """(version id, document, its CV type, the `cv_documents` row) of one CV, the lead CV by default;
+    LookupError when there is no CV yet."""
     from jobhunt.cvstudio import store
 
-    row = store.doc()
-    version_id, doc = store.current()
-    type_id = store.type_in_use()
+    row = store.doc(doc_id=doc_id)
+    version_id, doc = store.current(doc_id=row["id"])
+    type_id = store.type_in_use(doc_id=row["id"])
     try:
         t = cvtypes.load(type_id)
     except LookupError:

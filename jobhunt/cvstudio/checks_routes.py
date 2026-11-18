@@ -5,6 +5,8 @@
 - "Against a job" needs no AI on this page: the type's keywords found in the advert, and the job's
   requirements Hal already worked out (`job_requirements`), each with the CV's evidence or a note.
 - "Fix it" and "Does not matter" change only what they name; a fix is a new version made by the person.
+- The checks, Fix it and a recruiter's read are of the CV `?cv=` names (the lead CV by default), as every
+  My CV route; "Does not matter" is about a job, so it holds for every CV.
 """
 from __future__ import annotations
 
@@ -28,9 +30,12 @@ NOTE_MISSING = "The advert asks for this. Your CV does not show it yet."
 NOTE_DESIRABLE = "Desirable, not essential"
 
 
-def _current():
+def _current(req: Request):
+    """The CV `?cv=` names (the lead CV by default): (version id, document, type, row)."""
+    from jobhunt.cvstudio.routes import cv_of
+
     try:
-        return checks.current_cv()
+        return checks.current_cv(cv_of(req))
     except LookupError as e:
         raise NotFound(NO_CV) from e
 
@@ -75,7 +80,7 @@ def against_job(con, job_id: str, cv_text: str, t) -> dict:
 @route("GET", "/api/v2/cv/checks")
 def checks_tab(req: Request) -> dict:
     """The Checks tab: scanner score, the type's checks, a recruiter's read and, with `job_id`, one job."""
-    version_id, doc, t, row = _current()
+    version_id, doc, t, row = _current(req)
     profile = checks.profile_now()
     look = row["look_id"]
     found = checks.for_version(req.con, version_id, doc, t, look, profile, spelling=settings.get("cvdocs.spelling"),
@@ -83,7 +88,7 @@ def checks_tab(req: Request) -> dict:
     job_id = req.query.get("job_id")
     text = "\n".join(checks.doc_lines(doc, profile))
     return {"version_id": version_id, "scanner": found["scanner"],
-            "type": checks.link_suggestions(req.con, found["type"]),
+            "type": checks.link_suggestions(req.con, found["type"], row["id"]),
             "recruiter": _recruiter(req.con, version_id, look),
             "job": against_job(req.con, job_id, text, t) if job_id else None, "jobs": _jobs(req.con)}
 
@@ -95,20 +100,20 @@ def fix_it(req: Request) -> dict:
 
     if req.params["fix_id"] not in checks.FIXES:
         raise NotFound("Hal has no fix for that.")
-    version_id, doc, t, _ = _current()
+    version_id, doc, t, row = _current(req)
     try:
         fixed, what = checks.fix(req.params["fix_id"], doc, t)
     except LookupError as e:
         raise NotFound(str(e)) from e
     new_id = store.new_version(fixed, origin="improved", what=f"You pressed Fix it: {what}", by="you",
-                               parent=version_id)
+                               parent=version_id, doc_id=row["id"])
     return {"version_id": new_id, "what": what}
 
 
 @route("POST", "/api/v2/cv/checks/recruiter")
 def ask_recruiter(req: Request) -> dict:
     """Starts a recruiter's read (an action; the answer arrives on the event stream)."""
-    version_id, doc, t, row = _current()
+    version_id, doc, t, row = _current(req)
     text = "\n".join(checks.doc_lines(doc, checks.profile_now()))
     action_id = runner.start("cv.recruiter", subject="cv.recruiter", replace=True,
                              params={"version_id": version_id, "type_id": t.id, "look_id": row["look_id"],

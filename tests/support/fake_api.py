@@ -66,7 +66,7 @@ MADE_UP_HOME = {"date_words": "Thursday 22 October", "greeting": "Good morning, 
                 "needs": [{"id": "n1", "icon": "file", "tone": "hal", "title": "Check a cover letter", "detail": "",
                            "due": None, "act": {"label": "Open", "route": "apps"}, "urgency": 15}],
                 "new_matches": [], "first_search": None, "week": None, "goal": None, "setup": None, "today": [],
-                "counts": {"jobs": 3, "apps": 1, "inbox": 2, "record": 4, "memory": 1}}
+                "counts": {"jobs": 3, "apps": 1, "inbox": 2, "record": 4, "memory": 1}, "cv_count": 1}
 
 MADE_UP_SEARCH = [{"label": "Museum Assistant, Riverside Trust", "kind": "Job", "route": "job-demo%3A1"},
                   {"label": "Search for jobs now", "kind": "Action", "action": "/jobs/search"}]
@@ -378,7 +378,8 @@ MADE_UP_PAGES = {
     # My CV; the parse report is the real server's answer before any CV is added
     "/cv/parse-report": {"version_id": None, "n": None, "found": "", "rows": [], "unsure": 0,
                          "original_preview_url": None, "original": None, "file": None, "from_cv": {}},
-    "/cv": {"route": "improve", "route_words": "Help me improve it", "send": "hal_copy",
+    "/cv": {"cv": {"id": "main", "name": "My CV", "starred": True, "archived": None, "lead": True}, "count": 1,
+            "route": "improve", "route_words": "Help me improve it", "send": "hal_copy",
             "employers_get": "Employers get: Hal's copy of your CV, version 1.",
             "employers_get_sub": "Every change in it was accepted by you.",
             "type": {"id": "humanities_grad", "name": "Humanities and social science graduate"},
@@ -386,6 +387,11 @@ MADE_UP_PAGES = {
                                                                        "when": "2026-10-20T09:00:00Z"},
             "baseline": None, "glance": {"scanner": None, "type_pass": None, "type_total": None, "pending": 0},
             "not_found": [], "name": "Robin Example", "contact": "Leeds"},
+    "/cv/cvs": {"cvs": [{"id": "main", "name": "My CV", "starred": True, "archived": None, "position": 0,
+                         "lead": True, "current_version_id": "v1-demo", "n": 1, "versions": 1, "file": None,
+                         "type_id": "humanities_grad", "look_id": "classic", "send": "hal_copy",
+                         "created": "2026-10-20T09:00:00Z", "updated": "2026-10-20T09:00:00Z"}],
+                "archived": [], "lead": "main"},
     "/cv/versions": [{"id": "v1-demo", "n": 1, "when": "2026-10-20T09:00:00Z", "what": "A made-up CV", "by": "hal",
                       "origin": "generated", "current": True, "baseline": False, "binned": None}],
     "/cv/document": {"schema": 2, "headline": "History graduate", "contact_snapshot": {}, "closing": "",

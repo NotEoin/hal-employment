@@ -7,6 +7,9 @@ so the page's relative `fonts/<file>` links work in the iframe as they do in the
 
 The PDF and export routes print in the request thread: a CV prints in about a second, and the result is
 cached by the page's hash, so the same version and look print once.
+
+A version is printed with the type, look and layout of the CV it belongs to; "current" and the look and
+export routes take the CV as `?cv=` (the lead CV by default), as every My CV route does.
 """
 from __future__ import annotations
 
@@ -37,16 +40,25 @@ def _type(type_id: str | None) -> Any:
         return None
 
 
-def _layout(store: Any) -> dict:
+def _layout(store: Any, doc_id: str) -> dict:
     try:
-        return store.layout() or {}
+        return store.layout(doc_id=doc_id) or {}
     except (LookupError, ValueError):
         return {}
 
 
-def _version(store: Any, version_id: str) -> Any:
+def _cv(req: Request) -> str | None:
+    from jobhunt.cvstudio.routes import cv_of
+
+    return cv_of(req)
+
+
+def _version(store: Any, version_id: str, doc_id: str | None) -> tuple[Any, str | None]:
+    """(the document, its CV's id): the CV's version in use for `CURRENT`, else that version."""
     try:
-        return store.current()[1] if version_id == CURRENT else store.get(version_id)
+        if version_id == CURRENT:
+            return store.current(doc_id=doc_id)[1], doc_id
+        return store.get(version_id), store.version(version_id)["doc_id"]
     except LookupError as e:
         raise NotFound("That version of your CV is not in Hal's list.") from e
 
@@ -61,17 +73,17 @@ def _look_id(req: Request, row: dict) -> str:
 
 def _parts(req: Request, version_id: str) -> tuple[Any, Any, str, dict]:
     store = _store()
-    row = store.doc()
-    doc = _version(store, version_id)
+    doc, doc_id = _version(store, version_id, _cv(req))
+    row = store.doc(doc_id=doc_id)
     type_ = _type(req.query.get("type") or row.get("type_id"))
-    return doc, type_, _look_id(req, row), _layout(store)
+    return doc, type_, _look_id(req, row), _layout(store, row["id"])
 
 
 @route("GET", "/api/v2/cv/looks")
 def looks_list(req: Request) -> list[dict]:
     """The looks, in gallery order, with the one in use marked."""
     try:
-        chosen = _store().doc().get("look_id") or render.DEFAULT_LOOK
+        chosen = _store().doc(doc_id=_cv(req)).get("look_id") or render.DEFAULT_LOOK
     except Exception:
         log.exception("could not read the chosen look")
         chosen = render.DEFAULT_LOOK
@@ -89,10 +101,11 @@ def choose_look(req: Request) -> dict:
         chosen = render.look(look_id)
     except render.UnknownLook as e:
         raise BadRequest(str(e), field="id") from e
-    _store().set_look(chosen.id, con=req.con)
+    doc_id = _cv(req)
+    _store().set_look(chosen.id, con=req.con, doc_id=doc_id)
     req.con.commit()  # the store joins a transaction already open on `con` rather than committing it
-    events.publish("cv", look=chosen.id)
-    return summary(req.con)
+    events.publish("cv", look=chosen.id, cv=doc_id)
+    return summary(req.con, doc_id)
 
 
 @route("GET", "/api/v2/cv/versions/{version_id}/preview.html")

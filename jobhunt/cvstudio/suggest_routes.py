@@ -3,6 +3,8 @@
 Look again, Try another way and the fresh CV start actions and return their ids. Accept,
 Edit, Undo and Leave it as it is are quick database writes and answer at once; after a decision that makes
 a new version, the next review starts in the background so the next suggestion is worked out from it.
+The list, Look again, Accept all and the fresh CV act on `?cv=` (the lead CV by default); a decision on one
+suggestion acts on that suggestion's CV.
 """
 from __future__ import annotations
 
@@ -21,10 +23,16 @@ log = logging.getLogger(__name__)
 PREFIX = "/api/v2/cv"
 
 
-def _review_next() -> str | None:
-    """Starts a review unless one is running already; the running one sees the new version too."""
+def _cv(req: Request) -> str | None:
+    from jobhunt.cvstudio.routes import cv_of
+
+    return cv_of(req)
+
+
+def _review_next(doc_id: str | None) -> str | None:
+    """Starts a review of one CV unless one is running already; the running one sees the new version too."""
     try:
-        return runner.start("cv.suggest")
+        return runner.start("cv.suggest", params={"doc_id": doc_id} if doc_id else None)
     except RuntimeError as e:
         log.info("a CV review is running already: %s", e)
         return None
@@ -33,13 +41,14 @@ def _review_next() -> str | None:
 @route("GET", PREFIX + "/suggestions")
 def listing(req: Request) -> dict:
     """Suggestions waiting and reviewed, optionally of one kind."""
-    return suggest.listing(req.con, req.query.get("kind") or None)
+    return suggest.listing(req.con, req.query.get("kind") or None, doc_id=_cv(req))
 
 
 @route("POST", PREFIX + "/suggestions/look-again")
 def look_again(req: Request) -> dict:
     """Look again."""
-    return {"action_id": runner.start("cv.suggest")}
+    doc_id = _cv(req)
+    return {"action_id": runner.start("cv.suggest", params={"doc_id": doc_id} if doc_id else None)}
 
 
 @route("POST", PREFIX + "/suggestions/accept-kind")
@@ -48,9 +57,10 @@ def accept_kind(req: Request) -> dict:
     kind = json_body(req).get("kind")
     if kind not in suggest.DETERMINISTIC_KINDS:
         raise BadRequest(f"Accept all works for {', '.join(suggest.DETERMINISTIC_KINDS)} only.", field="kind")
-    out = suggest.accept_kind(req.con, kind)
+    doc_id = _cv(req)
+    out = suggest.accept_kind(req.con, kind, doc_id=doc_id)
     if out["accepted"]:
-        _review_next()
+        _review_next(doc_id)
     return out
 
 
@@ -64,7 +74,7 @@ def accept(req: Request) -> dict:
     if text is not None and not isinstance(text, str):
         raise BadRequest("Send your wording as text.", field="text")
     out = suggest.accept(req.con, req.params["sugg_id"], alt=alt, text=text)
-    _review_next()
+    _review_next(suggest._row(req.con, req.params["sugg_id"])["doc_id"])
     return out
 
 
@@ -88,7 +98,7 @@ def another(req: Request) -> dict:
 def undo(req: Request) -> dict:
     """Undo an accepted suggestion."""
     out = suggest.undo(req.con, req.params["sugg_id"])
-    _review_next()
+    _review_next(suggest._row(req.con, req.params["sugg_id"])["doc_id"])
     return out
 
 
@@ -107,7 +117,9 @@ def build_fresh(req: Request) -> dict:
         raise BadRequest("Send the answers to the questions.", field="answers")
     if not isinstance(type_id, str) or not type_id:
         raise BadRequest("Choose a CV type first.", field="type_id")
-    return {"action_id": runner.start("cv.fresh", params={"answers": answers, "type_id": type_id})}
+    params = {"answers": answers, "type_id": type_id}
+    doc_id = _cv(req)
+    return {"action_id": runner.start("cv.fresh", params={**params, **({"doc_id": doc_id} if doc_id else {})})}
 
 
 @route("GET", PREFIX + "/adjust")

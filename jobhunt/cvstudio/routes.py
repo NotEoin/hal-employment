@@ -1,5 +1,13 @@
-"""The My CV API: the header and "employers get" line, the document, its versions, the bin and the sections.
+"""The My CV API: the person's CVs, and for each the header and "employers get" line, the document, its
+versions, the bin and the sections.
 
+- Every route acts on one CV, named by the query parameter `?cv=<id>` (`cv_of`); without it, the lead CV
+  (`store.lead_id`), so the setup guide, the CLI and older pages keep working with one CV. A query parameter
+  rather than a path part, so the many existing `/cv/...` paths keep their shape. Routes that name a version
+  act on the CV that version belongs to.
+- `GET /cv/cvs` lists the CVs, in use and archived; star, archive (and restore), rename and the starred
+  order have routes of their own, and `DELETE /cv` archives: an application may point at a CV, so a CV is
+  never deleted.
 - Every edit is a new version in the store; nothing here changes a version in place.
 - A document or layout that does not fit schema 2 answers 400 with the field path (`CVError`). Only a save of
   the editor's changes (`PATCH /cv/document`) answers 409, when the version it was made on is no longer in
@@ -34,16 +42,28 @@ def _name_of(module: str, fn: str, item_id: str) -> str:
         return item_id.replace("_", " ").capitalize()
 
 
-def _pending(con) -> int:
-    return con.execute("SELECT count(*) FROM cv_suggestions WHERE doc_id = ? AND status = 'pending'",
-                       (store.DOC_ID,)).fetchone()[0]
-
-
-def _glance(con) -> dict:
-    """The At a glance card: the Checks tab's numbers for the version in use (cached in `cv_checks`)."""
-    out = {"scanner": None, "type_pass": None, "type_total": None, "pending": _pending(con)}
+def cv_of(req) -> str | None:
+    """The CV a request acts on: `?cv=<id>` once checked (404 when there is no such CV), else the lead CV,
+    None while there is no CV at all. It never makes a CV; the store does that on first use."""
+    wanted = req.query.get("cv")
+    if not wanted:
+        return store.lead_id(req.con)
     try:
-        version_id, doc, t, row = checks.current_cv()
+        return store.doc(req.con, wanted)["id"]
+    except store.NoSuchCV as e:
+        raise NotFound("That CV is not in Hal any more.") from e
+
+
+def _pending(con, doc_id: str) -> int:
+    return con.execute("SELECT count(*) FROM cv_suggestions WHERE doc_id = ? AND job_id IS NULL "
+                       "AND status = 'pending'", (doc_id,)).fetchone()[0]
+
+
+def _glance(con, doc_id: str) -> dict:
+    """The At a glance card: the Checks tab's numbers for the CV's version in use (cached in `cv_checks`)."""
+    out = {"scanner": None, "type_pass": None, "type_total": None, "pending": _pending(con, doc_id)}
+    try:
+        version_id, doc, t, row = checks.current_cv(doc_id)
         found = checks.for_version(con, version_id, doc, t, row["look_id"], checks.profile_now(),
                                    spelling=settings.get("cvdocs.spelling"), columns=checks.columns_of(row["look_id"]))
     except Exception:  # the glance is a summary; the page must draw even when the checks cannot run
@@ -54,23 +74,29 @@ def _glance(con) -> dict:
     return out
 
 
-def summary(con) -> dict:
-    """The body of GET /cv: route, send, the employers-get line, type, look, version, file, at a glance,
-    the text the import did not find, and the name and contact line."""
-    d = store.doc(con)
-    vid, doc = store.current(con)
+def summary(con, doc_id: str | None = None) -> dict:
+    """The body of GET /cv for one CV (the lead CV by default): which CV it is and how many there are, route,
+    send, the employers-get line, type, look, version, file, at a glance, the text the import did not find,
+    and the name and contact line."""
+    doc_id = store.doc(con, doc_id)["id"]
+    vid, doc = store.current(con, doc_id)
     v = store.version(vid, con=con)
-    line, sub = store.employers_get(con)
+    line, sub = store.employers_get(con, doc_id)
+    d = store.doc(con, doc_id)
     baseline = None
     if d["baseline_file_id"]:
         f = store.file_row(d["baseline_file_id"], con=con)
         baseline = {"id": f["id"], "name": f["name"], "added": f["added"], "pages": f["pages"], "sha256": f["sha256"]}
-    return {"route": d["route"], "route_words": ROUTE_WORDS[d["route"]], "send": d["send"],
+    type_id = store.type_in_use(con, doc_id)
+    return {"cv": {"id": doc_id, "name": d["name"] or store.DEFAULT_NAME, "starred": bool(d["starred"]),
+                   "archived": d["archived"], "lead": doc_id == store.lead_id(con)},
+            "count": con.execute("SELECT count(*) FROM cv_documents").fetchone()[0],
+            "route": d["route"], "route_words": ROUTE_WORDS[d["route"]], "send": d["send"],
             "employers_get": line, "employers_get_sub": sub,
-            "type": {"id": (t := store.type_in_use(con)), "name": _name_of("jobhunt.cvstudio.types", "load", t)},
+            "type": {"id": type_id, "name": _name_of("jobhunt.cvstudio.types", "load", type_id)},
             "look": {"id": d["look_id"], "name": _name_of("jobhunt.cvstudio.render", "look", d["look_id"])},
             "version": {"id": vid, "n": v["n"], "what": v["what"], "when": v["created"]},
-            "baseline": baseline, "glance": _glance(con),
+            "baseline": baseline, "glance": _glance(con, doc_id),
             "not_found": list(doc.extras.get("not_found") or []), **_profile()}
 
 
@@ -99,38 +125,111 @@ def _note(text: str, *, kind: str = "cv.version", changed: str | None = None) ->
 
 @route("GET", "/api/v2/cv")
 def get_cv(req) -> dict:
-    """The header, the "employers get" line and the glance card."""
-    return summary(req.con)
+    """The header, the "employers get" line and the glance card of `?cv=` (the lead CV by default)."""
+    return summary(req.con, cv_of(req))
 
+
+# ------------------------------------------------------------------------------------------------- the CVs
+
+def _cvs(con) -> dict:
+    return {"cvs": store.documents(con), "archived": store.documents(con, archived=True), "lead": store.lead_id(con)}
+
+
+@route("GET", "/api/v2/cv/cvs")
+def list_cvs(req) -> dict:
+    """The person's CVs in use (starred first, in their order), the archived ones, and the lead CV's id."""
+    if store.lead_id(req.con) is None:
+        store.current(req.con)          # the first visit makes the first CV, as GET /cv does
+    return _cvs(req.con)
+
+
+def _change(req, fn, said: str) -> dict:
+    """Runs `fn(doc_id)` on the CV `?cv=` names (required here), notes it in Activity, answers the list."""
+    if not req.query.get("cv"):
+        raise BadRequest("Say which CV.", field="cv")
+    doc_id = cv_of(req)
+    try:
+        d = fn(doc_id)
+    except CVError as e:
+        raise _bad(e) from e
+    _note(said.format(name=d["name"] or store.DEFAULT_NAME), kind="cv.cvs")
+    return _cvs(req.con)
+
+
+@route("PUT", "/api/v2/cv/star")
+def put_star(req) -> dict:
+    """"Use this for applications": `{on}` for `?cv=`. The last starred CV keeps its star (400 saying why)."""
+    on = bool((req.body or {}).get("on"))
+    return _change(req, lambda d: store.star(d, on, con=req.con),
+                   "Hal uses {name} for applications" if on else "Hal no longer uses {name} for applications")
+
+
+@route("PUT", "/api/v2/cv/archive")
+def put_archive(req) -> dict:
+    """Moves `?cv=` to the archive (`{on: true}`, the default) or restores it (`{on: false}`)."""
+    on = bool((req.body or {}).get("on", True))
+    return _change(req, lambda d: store.archive(d, on, con=req.con),
+                   "Moved {name} to the archive" if on else "Restored {name} from the archive")
+
+
+@route("DELETE", "/api/v2/cv")
+def delete_cv(req) -> dict:
+    """Deleting a CV archives it: applications may point at it, so nothing in it is removed."""
+    return _change(req, lambda d: store.archive(d, True, con=req.con), "Moved {name} to the archive")
+
+
+@route("PUT", "/api/v2/cv/name")
+def put_name(req) -> dict:
+    """Renames `?cv=`."""
+    name = str((req.body or {}).get("name") or "")
+    return _change(req, lambda d: store.rename(d, name, con=req.con), "Renamed a CV to {name}")
+
+
+@route("PUT", "/api/v2/cv/order")
+def put_order(req) -> dict:
+    """The order of the starred CVs: `{ids}`, every starred CV once; the first is the lead CV."""
+    ids = (req.body or {}).get("ids")
+    if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
+        raise BadRequest("Send the CVs' ids in order.", field="ids")
+    try:
+        store.reorder(ids, con=req.con)
+    except CVError as e:
+        raise _bad(e) from e
+    return _cvs(req.con)
+
+
+# ----------------------------------------------------------------------------------------- one CV's parts
 
 @route("PUT", "/api/v2/cv/route")
 def put_route(req) -> dict:
     """How your CV is made; it also sets what employers get."""
     want = str((req.body or {}).get("route") or "")
+    doc_id = cv_of(req)
     try:
-        store.set_route(want, con=req.con)
+        store.set_route(want, con=req.con, doc_id=doc_id)
     except CVError as e:
         raise _bad(e) from e
     _note(f"How your CV is made: {ROUTE_WORDS[want]}", kind="cv.route")
-    return summary(req.con)
+    return summary(req.con, doc_id)
 
 
 @route("PUT", "/api/v2/cv/send")
 def put_send(req) -> dict:
     """What employers get: your original file, or Hal's copy."""
     want = str((req.body or {}).get("send") or "")
+    doc_id = cv_of(req)
     try:
-        store.set_send(want, con=req.con)
+        store.set_send(want, con=req.con, doc_id=doc_id)
     except CVError as e:
         raise _bad(e) from e
     _note(f"Employers now get {SEND_WORDS[want]}", kind="cv.send")
-    return summary(req.con)
+    return summary(req.con, doc_id)
 
 
 @route("GET", "/api/v2/cv/document")
 def get_document(req) -> dict:
-    """The version in use (or `?version=`) as schema 2, with its id and number."""
-    vid = req.query.get("version") or store.current(req.con)[0]
+    """The CV's version in use (or `?version=`) as schema 2, with its id and number."""
+    vid = req.query.get("version") or store.current(req.con, cv_of(req))[0]
     try:
         doc = store.get(vid, con=req.con)
     except LookupError as e:
@@ -141,17 +240,18 @@ def get_document(req) -> dict:
 
 @route("PUT", "/api/v2/cv/document")
 def put_document(req) -> dict:
-    """Saves an edit of the whole document as a new version."""
+    """Saves an edit of the whole document as a new version of the CV."""
     body = req.body or {}
     what = str(body.get("what") or "You edited your CV").strip()
     data = body.get("doc")
     if not isinstance(data, dict):
         raise BadRequest("Send the CV as `doc`.", field="doc")
     data = {k: v for k, v in data.items() if k not in ("version_id", "n")}
+    doc_id = cv_of(req)
     try:
         doc = model.from_dict(data)
-        before = store.current(req.con)[1]
-        vid = store.new_version(doc, origin="manual", what=what, by="you", con=req.con)
+        before = store.current(req.con, doc_id)[1]
+        vid = store.new_version(doc, origin="manual", what=what, by="you", doc_id=doc_id, con=req.con)
     except CVError as e:
         raise _bad(e) from e
     from jobhunt.writing import edits
@@ -164,7 +264,7 @@ def put_document(req) -> dict:
 
 @route("PATCH", "/api/v2/cv/document")
 def patch_document(req) -> dict:
-    """Saves the Edit your CV changes, made on version `base`, as one new version."""
+    """Saves the Edit your CV changes, made on version `base`, as one new version of the CV `base` is in."""
     body = req.body or {}
     base = str(body.get("base") or "")
     if not base:
@@ -194,9 +294,10 @@ def get_record_cards(req) -> list[dict]:
 
 @route("GET", "/api/v2/cv/versions")
 def get_versions(req) -> list[dict]:
-    """Every version of the main CV, newest first; binned ones included and marked."""
-    store.current(req.con)
-    return store.versions(req.con)
+    """Every version of the CV, newest first, numbered from 1; binned ones included and marked."""
+    doc_id = cv_of(req)
+    store.current(req.con, doc_id)
+    return store.versions(req.con, doc_id)
 
 
 def _version_or_404(req, vid: str) -> dict:
@@ -208,14 +309,14 @@ def _version_or_404(req, vid: str) -> dict:
 
 @route("POST", "/api/v2/cv/versions/{vid}/use")
 def use_version(req) -> dict:
-    """Puts a version back in use; the one it replaces is kept."""
+    """Puts a version back in use in its CV; the one it replaces is kept."""
     v = _version_or_404(req, req.params["vid"])
     try:
         store.use(v["id"], con=req.con)
     except CVError as e:
         raise _bad(e) from e
     _note(f"Version {v['n']} of your CV is in use again")
-    return summary(req.con)
+    return summary(req.con, v["doc_id"])
 
 
 @route("DELETE", "/api/v2/cv/versions/{vid}")
@@ -253,7 +354,7 @@ def compare(req) -> dict:
 @route("GET", "/api/v2/cv/layout")
 def get_layout(req) -> dict:
     """Sections in order with their names, limits, locks and Show, and the locked lines."""
-    return store.layout(req.con)
+    return store.layout(req.con, cv_of(req))
 
 
 @route("PUT", "/api/v2/cv/layout")
@@ -267,7 +368,7 @@ def put_layout(req) -> dict:
     if locked is not None and not isinstance(locked, list):
         raise BadRequest("Send the locked lines as a list.", field="locked_lines")
     try:
-        vid = store.set_layout(sections, locked, con=req.con)
+        vid = store.set_layout(sections, locked, con=req.con, doc_id=cv_of(req))
     except (CVError, ValueError) as e:
         raise _bad(CVError(str(e))) from e
     if vid:

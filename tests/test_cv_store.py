@@ -341,5 +341,145 @@ class Routes(unittest.TestCase):
         self.assertIn(("Changed your CV's sections (version 2)", "You changed it on My CV"), [tuple(r) for r in rows])
 
 
+def add_job(job_id: str = "made-up:1") -> None:
+    """A made-up saved job, so a per-job version has a job to belong to."""
+    con = db.connect()
+    try:
+        con.execute("INSERT OR IGNORE INTO jobs (id, source, title, company, url, first_seen, last_seen, status) "
+                    "VALUES (?, 'made-up', 'Archivist', 'Made-up Trust', 'https://example.org/1', '2026-10-01', "
+                    "'2026-10-01', 'ready')", (job_id,))
+        con.commit()
+    finally:
+        con.close()
+
+
+class SeveralCVs(unittest.TestCase):
+    """Each CV keeps its own history, and the lead CV is what callers that name none get."""
+
+    def setUp(self):
+        self.enterContext(cv_home())
+        with at(DAY0):
+            self.first, self.doc = store.current()
+        self.main = store.doc()["id"]
+
+    def other(self, name: str = "Museum roles", words: str = "Museum guide who tells good stories.") -> str:
+        return store.create(name, edited(self.doc, words), origin="uploaded", what="Your file: museum.pdf",
+                            by="baseline")
+
+    def test_each_cv_numbers_its_own_versions_from_one(self):
+        store.new_version(edited(self.doc, "Archive volunteer."), origin="manual", what="Edit", by="you")
+        museum = self.other()
+        self.assertEqual([v["n"] for v in store.versions(doc_id=museum)], [1])
+        store.new_version(edited(self.doc, "Guide for families."), origin="manual", what="Edit", by="you",
+                          doc_id=museum)
+        self.assertEqual([v["n"] for v in store.versions(doc_id=museum)], [2, 1])
+        self.assertEqual([v["n"] for v in store.versions(doc_id=self.main)], [2, 1])
+        self.assertEqual(store.current(doc_id=museum)[1].sections[0].text, "Guide for families.")
+
+    def test_a_job_version_takes_no_number_of_its_cv(self):
+        add_job()
+        job_v = store.new_version(edited(self.doc, "For the trust."), origin="tailored", what="Adjusted",
+                                  by="you", parent=self.first, job_id="made-up:1")
+        self.assertEqual((store.version(job_v)["n"], store.version(job_v)["doc_id"]), (None, self.main))
+        second = store.new_version(edited(self.doc, "Next."), origin="manual", what="Edit", by="you")
+        self.assertEqual(store.version(second)["n"], 2)
+        self.assertNotIn(job_v, [v["id"] for v in store.versions()])
+
+    def test_a_new_cv_leads_and_the_first_starred_in_your_order_is_the_lead(self):
+        store.new_version(edited(self.doc, "Kept."), origin="manual", what="Edit", by="you")
+        museum = self.other()
+        self.assertEqual(store.lead_id(), museum, "a new upload is used as an upload always was")
+        self.assertEqual([d["id"] for d in store.starred()], [museum, self.main])
+        store.reorder([self.main, museum])
+        self.assertEqual((store.lead_id(), store.current()[0]), (self.main, store.doc(doc_id=self.main)
+                                                                  ["current_version_id"]))
+        store.star(self.main, False)
+        self.assertEqual(store.lead_id(), museum)
+
+    def test_the_last_star_stays_and_archiving_hands_it_on(self):
+        store.new_version(edited(self.doc, "Kept."), origin="manual", what="Edit", by="you")
+        museum = self.other()
+        store.star(self.main, False)
+        with self.assertRaisesRegex(CVError, "stays starred"):
+            store.star(museum, False)
+        store.archive(museum)
+        self.assertEqual([(d["id"], d["starred"]) for d in store.documents()], [(self.main, True)])
+        self.assertEqual([d["id"] for d in store.documents(archived=True)], [museum])
+        with self.assertRaisesRegex(CVError, "only CV in use"):
+            store.archive(self.main)
+        store.archive(museum, False)
+        self.assertEqual({d["id"] for d in store.documents()}, {self.main, museum})
+        self.assertEqual([v["n"] for v in store.versions(doc_id=museum)], [1], "an archived CV keeps its history")
+
+    def test_a_cv_can_be_renamed_but_not_to_nothing(self):
+        self.assertEqual(store.rename(self.main, "  Heritage   roles ")["name"], "Heritage roles")
+        with self.assertRaisesRegex(CVError, "name:"):
+            store.rename(self.main, " ")
+        with self.assertRaises(store.NoSuchCV):
+            store.rename("cv-nothere", "Anything")
+
+    def test_your_first_own_cv_sends_the_untouched_starter_to_the_archive(self):
+        museum = self.other()
+        self.assertEqual([d["id"] for d in store.documents()], [museum])
+        self.assertEqual([d["id"] for d in store.documents(archived=True)], [self.main])
+
+    def test_a_file_that_made_a_cv_finds_that_cv(self):
+        fid = store.add_file(b"%PDF made-up", "Museum CV.pdf", role="baseline")
+        museum = store.create("Museum CV", edited(self.doc, "Guide."), origin="uploaded", what="Your file",
+                              by="baseline", file_id=fid)
+        self.assertEqual(store.cv_for_file(fid), museum)
+        self.assertEqual(store.doc(doc_id=museum)["baseline_file_id"], fid)
+        self.assertIsNone(store.cv_for_file("f-nothing"))
+
+
+class SeveralCVRoutes(unittest.TestCase):
+    """The CV list and its changes through the real server; `?cv=` picks the CV every route acts on."""
+
+    def setUp(self):
+        self.hal = self.enterContext(HalServer())
+        self.c = self.hal.signed_in()
+        self.main = self.c.get("/api/v2/cv").json()["cv"]["id"]
+        doc = self.c.get("/api/v2/cv/document").json()
+        doc.pop("version_id")
+        doc.pop("n")
+        self.c.request("PUT", "/api/v2/cv/document", {"doc": doc, "what": "Kept the starter"})
+        self.museum = store.create("Museum roles", model.from_dict(doc), origin="uploaded", what="Your file",
+                                   by="baseline")
+
+    def test_the_list_star_rename_order_archive_and_restore(self):
+        listed = self.c.get("/api/v2/cv/cvs").json()
+        self.assertEqual(([d["id"] for d in listed["cvs"]], listed["lead"]), ([self.museum, self.main], self.museum))
+        q = f"?cv={self.museum}"
+        renamed = self.c.request("PUT", "/api/v2/cv/name" + q, {"name": "Heritage roles"}).json()
+        self.assertEqual(renamed["cvs"][0]["name"], "Heritage roles")
+        ordered = self.c.request("PUT", "/api/v2/cv/order", {"ids": [self.main, self.museum]}).json()
+        self.assertEqual(ordered["lead"], self.main)
+        self.c.request("PUT", "/api/v2/cv/star" + q, {"on": False})
+        refused = self.c.request("PUT", f"/api/v2/cv/star?cv={self.main}", {"on": False})
+        self.assertEqual(refused.status, 400)
+        self.assertIn("stays starred", refused.json()["error"]["message"])
+        gone = self.c.request("DELETE", "/api/v2/cv" + q).json()
+        self.assertEqual([d["id"] for d in gone["archived"]], [self.museum])
+        back = self.c.request("PUT", "/api/v2/cv/archive" + q, {"on": False}).json()
+        self.assertEqual(sorted(d["id"] for d in back["cvs"]), sorted([self.main, self.museum]))
+        self.assertEqual(self.c.request("PUT", "/api/v2/cv/star", {"on": True}).status, 400)
+
+    def test_every_tab_follows_the_chosen_cv(self):
+        q = f"?cv={self.main}"
+        self.assertEqual(self.c.get("/api/v2/cv").json()["cv"]["id"], self.museum)
+        header = self.c.get("/api/v2/cv" + q).json()
+        self.assertEqual((header["cv"]["id"], header["version"]["n"], header["count"]), (self.main, 2, 2))
+        self.assertEqual([v["n"] for v in self.c.get("/api/v2/cv/versions" + q).json()], [2, 1])
+        self.assertEqual([v["n"] for v in self.c.get(f"/api/v2/cv/versions?cv={self.museum}").json()], [1])
+        layout = self.c.get("/api/v2/cv/layout" + q).json()
+        layout["sections"][1]["title"] = "Learning"
+        self.c.request("PUT", "/api/v2/cv/layout" + q, layout)
+        self.assertEqual([v["n"] for v in self.c.get("/api/v2/cv/versions" + q).json()], [3, 2, 1])
+        self.assertEqual([v["n"] for v in self.c.get(f"/api/v2/cv/versions?cv={self.museum}").json()], [1])
+        self.assertEqual(self.c.get("/api/v2/cv/checks" + q).json()["version_id"],
+                         self.c.get("/api/v2/cv/document" + q).json()["version_id"])
+        self.assertEqual(self.c.get("/api/v2/cv?cv=cv-nothere").status, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

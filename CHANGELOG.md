@@ -30,6 +30,10 @@ What changed in each version, in plain words.
 
 ### Fixed
 
+- **A CV you add starts at version 1.** Adding a new CV used to show it as, say, "version 9" of your old one,
+  and each upload made two versions. Now each new file is a CV of its own with one first version, and adding
+  a file Hal already has shows the CV it made from it instead of a copy.
+
 - **A setting you change while an earlier change is still saving keeps your choice.** On a slow computer the
   earlier save's answer could arrive afterwards and put the old value back, for example unticking a box you had
   just ticked on the Settings page.

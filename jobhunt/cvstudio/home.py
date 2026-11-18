@@ -1,7 +1,8 @@
 """What My CV puts on Home: text the one-time import could not place in Hal's copy.
 
 The import of today's CV checks that every piece of text arrived; when some did not, the person
-should look before Hal sends that CV anywhere, so it is a need until a later version holds the text.
+should look before Hal sends that CV anywhere, so it is a need until a later version holds the text. Only the
+lead CV is looked at: it is the one sent when nothing chooses another.
 """
 from __future__ import annotations
 
@@ -16,12 +17,12 @@ SHOWN = 2               # pieces of missing text quoted in the detail line
 
 
 def needs(con) -> list[dict]:
-    """One item when the CV in use still lacks text from the old CV, else none."""
-    row = con.execute("SELECT current_version_id FROM cv_documents WHERE id = ?", (store.DOC_ID,)).fetchone()
-    if row is None or not row[0]:
+    """One item when the lead CV still lacks text from the old CV, else none."""
+    vid = store.lead_version_id(con)
+    if not vid:
         return []       # no CV yet: setup asks for one; Home does not make one by looking
     try:
-        doc = store.get(row[0], con=con)
+        doc = store.get(vid, con=con)
     except Exception:  # Home must draw even when the CV cannot be read; the health check says why
         log.exception("could not read the CV for Home")
         return []
@@ -35,3 +36,8 @@ def needs(con) -> list[dict]:
                        else "1 piece of your old CV is not in Hal's copy"),
              "detail": f"Check them before Hal sends your CV: {quoted}{more}.", "due": None,
              "act": {"label": "Check your CV", "route": "cv-versions"}, "urgency": URGENCY}]
+
+
+def sections(con) -> dict:
+    """How many CVs the person has, archived ones included, so the menu says "My CVs" once there are several."""
+    return {"cv_count": con.execute("SELECT count(*) FROM cv_documents").fetchone()[0]}

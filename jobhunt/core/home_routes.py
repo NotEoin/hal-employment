@@ -151,7 +151,7 @@ def home(con: sqlite3.Connection) -> dict:
                                                                                                  len(new_matches)),
             "needs": needs, "new_matches": new_matches, "first_search": sections.get("first_search"),
             "week": sections.get("week"), "goal": _goal(sections), "setup": sections.get("setup"),
-            "today": today, "counts": counts}
+            "today": today, "counts": counts, "cv_count": sections.get("cv_count", 0)}
 
 
 @route("GET", "/api/v2/home")

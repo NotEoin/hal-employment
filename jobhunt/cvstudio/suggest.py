@@ -22,6 +22,9 @@ Design decisions:
   are resolved back to ids against the version being changed, so a renamed part is caught by the guard.
 - The store's functions open their own connection, so this module commits its own rows before and after
   each store call and never holds a write transaction across one.
+- Suggestions belong to one CV (`cv_suggestions.doc_id`): a review, the list and "Accept all" work on the CV
+  they are given (the lead CV by default), and a decision on one suggestion works on that suggestion's CV. A
+  line preference (keep my wording, lock a line) holds in its own CV only, the others in every CV.
 - A skills list never gives a skill only studied in a course as one the person has (`_studied`, sections plan,
   2026-11-09): a skill whose every source in the record is lecture material
   (`profile.writing.studied_skills`) in a list that is not already labelled as knowledge gets one suggestion,
@@ -57,8 +60,8 @@ FIRST_PERSON = re.compile(r"\b(?:I|I'm|I've|me|[Mm]y|[Ww]e|[Oo]ur)\b")
 # Hal's own gaps, and any bracketed question the AI writes instead: Claude wrote "[what outcome?]" and
 # "[which languages, and what level?]" on 2026-10-23, and a gap of any wording must stop Accept.
 GAP = re.compile(r"\[[^\[\]\n]{1,80}\?\]")
-META_REVIEWED = "cv_suggest_reviewed"       # the version id a full pass last found nothing more in
-DOC_ID = "main"
+META_REVIEWED = "cv_suggest_reviewed:{doc}"  # per CV: the version id a full pass last found nothing more in
+LINE_PREFERENCES = ("keep_wording", "lock_line")   # preferences about one line, so about one CV
 WHOLE_CV = "cv"     # a suggestion's target and reviewer id for the whole CV; the model's own target is ""
 
 ALL_REVIEWED = "All reviewed. Hal will suggest more when your CV, its type or your goal changes."
@@ -141,9 +144,17 @@ def _setting(key: str):
     return settings.get(key)
 
 
-def cv_type(row: dict | None = None):
-    """The CV type Hal's copy uses now."""
-    return _types().load(row["type_id"] if row else _store().type_in_use())
+def cv_type(row: dict | None = None, doc_id: str | None = None):
+    """The CV type a CV uses now (the lead CV by default)."""
+    return _types().load(row["type_id"] if row else _store().type_in_use(doc_id=doc_id))
+
+
+def _doc_of(con: sqlite3.Connection, vid: str) -> str:
+    """The CV a version belongs to."""
+    row = con.execute("SELECT doc_id FROM cv_versions WHERE id = ?", (vid,)).fetchone()
+    if row is None:
+        raise LookupError(f"There is no CV version {vid}.")
+    return row[0]
 
 
 # -- reading the document ---------------------------------------------------------------------------------
@@ -518,23 +529,26 @@ def guard(draft: Draft, ctx: Context) -> Draft | None:
     return draft
 
 
-def context(con: sqlite3.Connection, doc, type_, *, passages: str = "") -> Context:
-    """The guards' view: locks, the person's preferences, fingerprints to skip and the known facts."""
+def context(con: sqlite3.Connection, doc, type_, *, passages: str = "", doc_id: str | None = None) -> Context:
+    """The guards' view of one CV (the lead CV by default): locks, the person's preferences, fingerprints to
+    skip and the known facts."""
     store, model = _store(), _model()
+    doc_id = doc_id or store.doc(con)["id"]
     blocked = {r[0] for r in con.execute(
         "SELECT fingerprint FROM cv_suggestions WHERE doc_id = ? AND job_id IS NULL AND status IN ('left', 'pending')",
-        (DOC_ID,))}
+        (doc_id,))}
     keep, off = set(), set()
-    for r in con.execute("SELECT kind, target, text FROM cv_preferences WHERE active = 1"):
+    for r in con.execute("SELECT kind, target, text FROM cv_preferences WHERE active = 1 "
+                         "AND (doc_id IS NULL OR doc_id = ?)", (doc_id,)):
         if r["kind"] in ("keep_wording", "lock_line") and r["target"]:
             keep.add(r["target"])
         elif r["kind"] == "prefer" and str(r["text"]).startswith("kind_off:") and r["target"]:
             off.add((r["text"].partition(":")[2], r["target"].partition(":")[2]))
     said = " ".join(r[0] for r in con.execute(
-        "SELECT edited FROM cv_suggestions WHERE edited IS NOT NULL AND doc_id = ?", (DOC_ID,)))
+        "SELECT edited FROM cv_suggestions WHERE edited IS NOT NULL AND doc_id = ?", (doc_id,)))
     profile = _profile()
     known = "\n".join([model.plain_text(doc, profile), passages, said])
-    return Context(doc, type_, store.layout(), known, blocked, keep, off)
+    return Context(doc, type_, store.layout(doc_id=doc_id), known, blocked, keep, off)
 
 
 def _profile() -> dict:
@@ -674,27 +688,29 @@ def draft_from_ai(got: dict, sids: list[str], passages: list[dict]) -> Draft | N
 # -- storing and listing ----------------------------------------------------------------------------------
 
 def _insert(con: sqlite3.Connection, draft: Draft, based_on: str, job_id: str | None = None) -> str:
+    """Stores a suggestion on the CV that `based_on` belongs to; returns its id."""
     sid = uuid.uuid4().hex[:12]
     con.execute(
         "INSERT INTO cv_suggestions (id, doc_id, based_on, job_id, section_id, target, op, kind, title, why, "
         "trigger, evidence, before, afters, status, fingerprint, ai, created) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
-        (sid, DOC_ID, based_on, job_id, draft.section_id, draft.target, draft.op, draft.kind, draft.title,
-         draft.why, json.dumps(draft.trigger), json.dumps(draft.evidence), draft.before, json.dumps(draft.afters),
-         draft.fingerprint, draft.ai, clock.iso()))
+        (sid, _doc_of(con, based_on), based_on, job_id, draft.section_id, draft.target, draft.op, draft.kind,
+         draft.title, draft.why, json.dumps(draft.trigger), json.dumps(draft.evidence), draft.before,
+         json.dumps(draft.afters), draft.fingerprint, draft.ai, clock.iso()))
     return sid
 
 
-def _pending(con: sqlite3.Connection) -> list[sqlite3.Row]:
+def _pending(con: sqlite3.Connection, doc_id: str) -> list[sqlite3.Row]:
     return con.execute("SELECT * FROM cv_suggestions WHERE doc_id = ? AND job_id IS NULL AND status = 'pending' "
-                       "ORDER BY created, rowid", (DOC_ID,)).fetchall()
+                       "ORDER BY created, rowid", (doc_id,)).fetchall()
 
 
 def recheck(con: sqlite3.Connection, vid: str, doc) -> int:
-    """Moves pending suggestions onto version `vid`; those whose `before` no longer matches are superseded."""
+    """Moves the pending suggestions of `vid`'s CV onto version `vid`; those whose `before` no longer matches are
+    superseded."""
     model = _model()
     gone = 0
-    for row in _pending(con):
+    for row in _pending(con, _doc_of(con, vid)):
         if row["based_on"] == vid:
             continue
         try:
@@ -716,16 +732,18 @@ def _meta(con: sqlite3.Connection, key: str) -> str | None:
     return row[0] if row else None
 
 
-def look_again(con: sqlite3.Connection, *, step=None, use_ai: bool | None = None) -> dict:
-    """Runs reviewers until `MAX_PENDING` suggestions wait or none are left; says what it found."""
+def look_again(con: sqlite3.Connection, *, step=None, use_ai: bool | None = None, doc_id: str | None = None) -> dict:
+    """Runs reviewers on one CV (the lead CV by default) until `MAX_PENDING` suggestions wait or none are left;
+    says what it found."""
     store = _store()
-    vid, doc = store.current()
-    type_ = cv_type()
+    vid, doc = store.current(doc_id=doc_id)
+    doc_id = _doc_of(con, vid)
+    type_ = cv_type(doc_id=doc_id)
     recheck(con, vid, doc)
     use_ai = ai_ready() if use_ai is None else use_ai
     studied = profile_writing.studied_skills(con)
     found = 0
-    pending = len(_pending(con))
+    pending = len(_pending(con, doc_id))
     finished = True
     for sids in reviewers(doc, type_):
         if pending >= MAX_PENDING:
@@ -734,7 +752,7 @@ def look_again(con: sqlite3.Connection, *, step=None, use_ai: bool | None = None
         if step:
             step(f"Reading {where(doc, 's:' + sids[0]) if sids != [WHOLE_CV] else 'your whole CV'}")
         passages = passages_for(doc, sids) if use_ai and sids != [WHOLE_CV] else []
-        ctx = context(con, doc, type_, passages="\n".join(p.get("text", "") for p in passages))
+        ctx = context(con, doc, type_, passages="\n".join(p.get("text", "") for p in passages), doc_id=doc_id)
         failing = [d for sid in sids for d in checks_for(doc, sid, type_, studied)]
         for draft in failing:
             if pending >= MAX_PENDING:
@@ -756,12 +774,12 @@ def look_again(con: sqlite3.Connection, *, step=None, use_ai: bool | None = None
                 pending += 1
         con.commit()
     if finished and not found:
-        con.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)", (META_REVIEWED, vid))
+        con.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)", (META_REVIEWED.format(doc=doc_id), vid))
     else:
-        con.execute("DELETE FROM meta WHERE k = ?", (META_REVIEWED,))
+        con.execute("DELETE FROM meta WHERE k = ?", (META_REVIEWED.format(doc=doc_id),))
     con.commit()
     events.publish("suggestions")
-    return {"found": found, "pending": pending, "version_id": vid,
+    return {"found": found, "pending": pending, "version_id": vid, "cv": doc_id,
             "state": "nothing_more" if finished and not found and not pending else "ready"}
 
 
@@ -791,21 +809,23 @@ def _looking(con: sqlite3.Connection) -> bool:
     return row is not None
 
 
-def listing(con: sqlite3.Connection, kind: str | None = None) -> dict:
-    """The Suggestions tab: state, counts, kinds, pending and reviewed suggestions."""
+def listing(con: sqlite3.Connection, kind: str | None = None, doc_id: str | None = None) -> dict:
+    """The Suggestions tab of one CV (the lead CV by default): state, counts, kinds, pending and reviewed
+    suggestions."""
     store = _store()
     try:
-        vid, doc = store.current()
+        vid, doc = store.current(doc_id=doc_id)
     except LookupError:
         return {"state": "nothing_more", "reviewed": 0, "total": 0, "kinds": [], "pending": [], "done": [],
                 "message": ALL_REVIEWED}
+    doc_id = _doc_of(con, vid)
     recheck(con, vid, doc)
-    pending = _pending(con)
+    pending = _pending(con, doc_id)
     done = con.execute("SELECT * FROM cv_suggestions WHERE doc_id = ? AND job_id IS NULL AND status IN "
-                       "('accepted', 'edited', 'left') ORDER BY decided DESC, rowid DESC", (DOC_ID,)).fetchall()
+                       "('accepted', 'edited', 'left') ORDER BY decided DESC, rowid DESC", (doc_id,)).fetchall()
     if _looking(con):
         state = "looking"
-    elif not pending and _meta(con, META_REVIEWED) == vid:
+    elif not pending and _meta(con, META_REVIEWED.format(doc=doc_id)) == vid:
         state = "nothing_more"
     else:
         state = "ready"
@@ -860,7 +880,7 @@ def _fresh_pending(con: sqlite3.Connection, sugg_id: str):
     row = _row(con, sugg_id)
     if row["status"] != "pending":
         raise RuntimeError(DECIDED)
-    vid, doc = _store().current()
+    vid, doc = _store().current(doc_id=row["doc_id"])
     recheck(con, vid, doc)
     row = _row(con, sugg_id)
     if row["status"] != "pending":
@@ -897,17 +917,18 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
     recheck(con, new_vid, new_doc)
     events.publish("suggestions")
     return {"version_id": new_vid, "n": _version_n(con, new_vid),
-            "ask_send_copy": _store().doc()["send"] == "original"}
+            "ask_send_copy": _store().doc(doc_id=row["doc_id"])["send"] == "original"}
 
 
-def accept_kind(con: sqlite3.Connection, kind: str) -> dict:
-    """Accepts every pending suggestion of a deterministic kind in one version."""
+def accept_kind(con: sqlite3.Connection, kind: str, doc_id: str | None = None) -> dict:
+    """Accepts every pending suggestion of a deterministic kind in one version of one CV (the lead CV by
+    default)."""
     if kind not in DETERMINISTIC_KINDS:
         raise ValueError(f"Accept all works for {', '.join(DETERMINISTIC_KINDS)} only.")
     store, model = _store(), _model()
-    vid, doc = store.current()
+    vid, doc = store.current(doc_id=doc_id)
     recheck(con, vid, doc)
-    rows = [r for r in _pending(con) if r["kind"] == kind]
+    rows = [r for r in _pending(con, _doc_of(con, vid)) if r["kind"] == kind]
     done = []
     for r in rows:
         try:
@@ -938,7 +959,7 @@ def undo(con: sqlite3.Connection, sugg_id: str) -> dict:
     if row["status"] not in ("accepted", "edited"):
         raise RuntimeError("Only an accepted suggestion can be undone.")
     store, model = _store(), _model()
-    vid, doc = store.current()
+    vid, doc = store.current(doc_id=row["doc_id"])
     accepted = row["edited"] if row["edited"] is not None else json.loads(row["afters"])[row["alt"]]
     try:
         now = shown_at(doc, row["op"], row["target"])
@@ -969,8 +990,9 @@ def leave(con: sqlite3.Connection, sugg_id: str, *, reason: str = "", words: str
                 "WHERE id = ?", (reason or None, words or None, int(bool(remember)), now, sugg_id))
     pref = _preference(row, reason) if remember else None
     if pref:
-        con.execute("INSERT INTO cv_preferences (kind, target, text, from_suggestion, created) VALUES (?, ?, ?, ?, ?)",
-                    (*pref, sugg_id, now))
+        con.execute("INSERT INTO cv_preferences (kind, target, text, from_suggestion, created, doc_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (*pref, sugg_id, now, row["doc_id"] if pref[0] in LINE_PREFERENCES else None))
     con.commit()
     events.publish("suggestions")
     return {"ok": True, "remembered": bool(pref)}
@@ -995,7 +1017,7 @@ def another(con: sqlite3.Connection, sugg_id: str) -> dict:
     afters = json.loads(row["afters"])
     if row["op"] != "replace" or not ai_ready():
         return {"new": False, "message": ONLY_OPTION, "alt": row["alt"]}
-    type_ = cv_type()
+    type_ = cv_type(doc_id=row["doc_id"])
     system = prompts.text("cv_another", con=con, spelling=spelling_words())
     user = json.dumps({"cv_type": type_.name, "writing": type_.writing, "target": row["target"],
                        "now": row["before"], "why": row["why"], "already_shown": afters,
@@ -1006,7 +1028,7 @@ def another(con: sqlite3.Connection, sugg_id: str) -> dict:
         log.info("no other wording for %s: %s", sugg_id, e)
         return {"new": False, "message": ONLY_OPTION, "alt": row["alt"]}
     offered = got.get("afters") or ([got["after"]] if got.get("after") else [])
-    ctx = context(con, doc, type_)
+    ctx = context(con, doc, type_, doc_id=row["doc_id"])
     ctx.blocked = set()
     seen = {" ".join(a.lower().split()) for a in afters}
     for text in offered:
