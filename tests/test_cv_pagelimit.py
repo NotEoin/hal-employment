@@ -23,7 +23,7 @@ from test_cv_fresh import NO_MARKS
 from test_cv_printer import NoBrowsersHere
 from test_cv_render import made_up_cv, profile_of, type_for
 from test_cv_suggest import PROFILE, STAR, TABLE, CvCase
-from test_cv_tailor import JOB, NEW_PROFILE, NEW_TABLE, JobCase, tailoring_ai
+from test_cv_tailor import JOB, NEW_TABLE, JobCase, tailoring_ai
 
 from jobhunt.apply import queries
 from jobhunt.cvstudio import checks, export, fresh, model, pagelimit, printer, store, suggest, tailor
@@ -195,62 +195,87 @@ def three_page_type() -> str:
     return t.id
 
 
-def job_pages(base: int):
-    """A stand-in for drawing a job's CV: `base` pages, and one more for each of Hal's two rewordings on it."""
+YOUR_STAR = "Catalogued 120 parish letters and wrote a guide to them for the public search room"  # your edit
+
+
+def job_pages(base: int, table: int = 1, yours: int = 1):
+    """A stand-in for drawing a job's CV: `base` pages, `table` more with Hal's rewording of the bookshop line
+    and `yours` more with the person's own edit (`YOUR_STAR`). Hal's profile is shorter than the one it
+    replaces, so it adds no page."""
     def count(v1: dict) -> int:
         text = json.dumps(v1)
-        return base + (NEW_PROFILE in text) + (NEW_TABLE in text)
+        return base + table * (NEW_TABLE in text) + yours * (YOUR_STAR in text)
     return mock.patch.object(pagelimit, "drawn_pages", count)
 
 
 class HalKeepsAJobsCvToTheLimit(JobCase):
-    """Adjusting more for a job with the stand-in AI (`test_cv_tailor.tailoring_ai`): it rewords the profile
-    and a line of the bookshop job, and each rewording adds a page by the stand-in count."""
+    """Adjusting more for a job with the stand-in AI (`test_cv_tailor.tailoring_ai`): it reorders, shortens the
+    profile and lengthens a line of the bookshop job, which adds a page by the stand-in count."""
 
     def changes(self) -> dict:
         return {c["target"]: c for c in tailor.shown(JOB["id"])["changes"]}
 
-    def test_hals_rewordings_that_run_over_are_undone_newest_first_and_said(self):
-        store.set_page_limit(2)
-        with fake_ai({"cv_suggest": tailoring_ai}), job_pages(2):
+    def your_edit(self) -> None:
+        """An earlier job's CV holding the person's own edit of the archive line, which `prepare` keeps."""
+        edit = {"id": "y1", "by": tailor.YOU, "op": "replace", "target": STAR, "value": YOUR_STAR}
+        self.con.execute("INSERT INTO job_cvs (job_id, base_version_id, level, changes) VALUES (?, ?, 'more', ?)",
+                         (JOB["id"], store.current()[0], json.dumps([edit])))
+        self.con.commit()
+
+    def test_a_change_that_adds_a_page_over_the_limit_is_undone_and_said(self):
+        store.set_page_limit(1)
+        with fake_ai({"cv_suggest": tailoring_ai}), job_pages(1):
             tailor.prepare(JOB, level="more")
             got = self.changes()
-            self.assertEqual((got[TABLE]["on"], got[TABLE]["held"]), (False, tailor.HELD_FIT), "the newest first")
-            self.assertEqual((got[PROFILE]["on"], got[PROFILE]["held"]), (False, tailor.HELD_FIT))
+            self.assertEqual((got[TABLE]["on"], got[TABLE]["held"]), (False, tailor.HELD_FIT))
+            self.assertTrue(got[PROFILE]["on"], "a change that shortens a line always stays")
             self.assertTrue(all(c["on"] for c in got.values() if c["kind"] == "Moved"), "a reorder adds nothing")
             state = pagelimit.job_state(JOB["id"])
-            self.assertEqual((state["pages"], state["words"]), (2, ""))
-            self.assertEqual(state["note"], "Hal undid 2 of its own changes to keep this CV to 2 pages. "
+            self.assertEqual((state["pages"], state["words"]), (1, ""))
+            self.assertEqual(state["note"], "Hal undid 1 of its own changes to keep this CV to 1 page. "
                                             "Press Redo to use one anyway.")
             tailor.set_change(JOB["id"], got[TABLE]["id"], True)
             state = pagelimit.job_state(JOB["id"])
-            self.assertEqual(state["words"], "This CV is 3 pages. You asked for 2.", "Redo is the person's choice")
+            self.assertEqual(state["words"], "This CV is 2 pages. You asked for 1.", "Redo is the person's choice")
             self.assertEqual(self.changes()[TABLE]["held"], "")
 
-    def test_a_cv_over_the_limit_before_hal_changed_anything_is_kept_as_it_was(self):
+    def test_a_cv_over_its_limit_keeps_every_change_that_adds_no_page(self):
+        # people upgrading with a CV longer than their type's rule lost every adjustment (review, 2026-11-19)
+        store.set_page_limit(2)
+        with fake_ai({"cv_suggest": tailoring_ai}), job_pages(3, table=0):
+            tailor.prepare(JOB, level="more")
+            self.assertTrue(all(c["on"] for c in self.changes().values()))
+            state = pagelimit.job_state(JOB["id"])
+        self.assertEqual((state["words"], state["note"]), ("This CV is 3 pages. You asked for 2.", ""))
+
+    def test_a_cv_over_its_limit_loses_only_the_change_that_adds_a_page_and_says_why(self):
         store.set_page_limit(2)
         with fake_ai({"cv_suggest": tailoring_ai}), job_pages(3):
             tailor.prepare(JOB, level="more")
-            self.assertTrue(all(not c["on"] and c["held"] == tailor.HELD_BASE for c in self.changes().values()))
+            got = self.changes()
+            self.assertEqual([t for t, c in got.items() if not c["on"]], [TABLE])
             state = pagelimit.job_state(JOB["id"])
-            self.assertTrue(state["kept_base"])
-            self.assertEqual(state["words"], "This CV is 3 pages. You asked for 2.")
-            self.assertIn("kept it as it is for this job", state["note"])
+        self.assertEqual(state["note"], "Without Hal's changes your CV is already 3 pages, more than the 2 pages "
+                                        "you asked for. Hal kept its changes that add no page and undid 1 that "
+                                        "would. Press Redo to use one anyway.")
+
+    def test_when_your_own_edit_takes_it_over_the_note_says_so_and_your_edit_stays(self):
+        store.set_page_limit(2)
+        self.your_edit()
+        with fake_ai({"cv_suggest": tailoring_ai}), job_pages(2):
+            tailor.prepare(JOB, level="more")
+            self.assertEqual([t for t, c in self.changes().items() if not c["on"]], [TABLE])
+            self.assertEqual(tailor.shown(JOB["id"])["edits"], 1)
+            state = pagelimit.job_state(JOB["id"])
+        self.assertEqual(state["note"], "Your own edits for this job make it 3 pages, more than the 2 pages you "
+                                        "asked for. Hal kept its changes that add no page and undid 1 that would. "
+                                        "Press Redo to use one anyway.")
 
     def test_with_no_limit_hal_keeps_every_change(self):
         store.set_page_limit(0)
         with fake_ai({"cv_suggest": tailoring_ai}), job_pages(2):
             tailor.prepare(JOB, level="more")
         self.assertTrue(all(c["on"] for c in self.changes().values()))
-
-    def test_the_persons_own_edits_are_never_undone_only_warned_about(self):
-        changes = [{"id": "c1", "kind": "Reworded", "op": "replace", "target": PROFILE, "value": NEW_PROFILE,
-                    "before": "Short", "after": NEW_PROFILE},
-                   {"id": "y1", "by": tailor.YOU, "op": "replace", "target": TABLE, "value": NEW_TABLE}]
-        pages = iter([4, 3])                 # all on, then the person's edit alone: over before Hal
-        tailor.fit(store.current()[1], changes, 2, lambda doc: next(pages))
-        self.assertEqual((changes[0].get("undone"), changes[0].get("held")), (True, tailor.HELD_BASE))
-        self.assertNotIn("undone", changes[1])
 
     def test_the_documents_step_shows_the_count_before_approve(self):
         store.set_page_limit(1)
@@ -323,6 +348,47 @@ class SuggestionsKeepToTheLimit(CvCase):
         self.assertEqual((out["accepted"], out["version_id"]), (0, first))
         self.assertEqual(out["note"], "Hal left out 2 fixes that would make this CV longer than 1 page.")
 
+    def already_over(self) -> None:
+        """Puts a 2-page version in use (filler in the profile) on this 1-page CV, as an upgrade can find it."""
+        vid, doc = store.current()
+        longer = self.text_at(PROFILE) + f" {FILLER}." * FILLER_PER_PAGE
+        doc = model.apply(doc, model.Change("replace", PROFILE, longer))
+        store.new_version(doc, origin="manual", what="Made-up long profile", by="you", parent=vid)
+
+    def test_a_cv_over_its_limit_takes_a_wording_that_adds_no_page(self):
+        # people upgrading with a CV longer than their type's rule lost every suggestion (review, 2026-11-19)
+        self.already_over()
+        sid = self.suggestion([self.text_at(STAR) + f" {FILLER}." * 3], STAR)
+        with stand_in():
+            out = suggest.accept(self.con, sid)
+        self.assertEqual(out["note"], "")
+        self.assertIn(FILLER, self.text_at(STAR))
+
+    def test_a_cv_over_its_limit_is_told_the_real_pages_when_a_wording_adds_one(self):
+        self.already_over()
+        sid = self.suggestion([self.text_at(STAR) + f" {FILLER}." * FILLER_PER_PAGE], STAR)
+        with stand_in(), self.assertRaises(ValueError) as held:
+            suggest.accept(self.con, sid)
+        self.assertEqual(str(held.exception), "Hal's wording would make this CV 3 pages instead of 2, more than the "
+                                              "1 you asked for, so Hal did not use it. Edit the words to use them "
+                                              "anyway.")
+
+    def test_accept_all_on_a_cv_over_its_limit_keeps_the_fixes_that_add_no_page(self):
+        self.already_over()
+        self.fixes(3, 3)
+        with stand_in():
+            out = suggest.accept_kind(self.con, "Dates")
+        self.assertEqual((out["accepted"], out["note"]), (2, ""))
+
+    def test_accept_all_on_a_cv_over_its_limit_leaves_out_what_adds_a_page_with_the_real_pages(self):
+        self.already_over()
+        self.fixes(4, FILLER_PER_PAGE)
+        with stand_in():
+            out = suggest.accept_kind(self.con, "Dates")
+        self.assertEqual(out["accepted"], 1)
+        self.assertEqual(out["note"], "Hal left out 1 fix: with every fix this CV would be 3 pages instead of 2, "
+                                      "more than the 1 you asked for.")
+
     def test_accept_all_with_no_limit_applies_every_fix(self):
         store.set_page_limit(0)
         self.fixes(FILLER_PER_PAGE, FILLER_PER_PAGE)
@@ -344,7 +410,7 @@ class FreshCvKeepsToTheLimit(unittest.TestCase):
             out = fresh.make(NO_MARKS, "humanities_grad")
         self.assertEqual(out["note"], "Hal wrote a shorter profile, so this CV keeps to 1 page.")
         self.assertEqual(store.current()[1].sections[0].text, fresh.profile_line(NO_MARKS))
-        self.assertEqual(p.calls, 2, "a print for each draft tried, no more")
+        self.assertEqual(p.calls, 3, "a print for each draft at most: the AI's, the answers alone, then the plain")
 
     def test_answers_that_alone_run_over_are_all_kept_and_the_real_numbers_said(self):
         answers = {**NO_MARKS, "interests": "Lead a monthly local history walk." + f" {FILLER}." * FILLER_PER_PAGE}
@@ -355,6 +421,17 @@ class FreshCvKeepsToTheLimit(unittest.TestCase):
         doc = store.current()[1]
         self.assertEqual(doc.sections[-1].text, answers["interests"])
         self.assertEqual(doc.sections[0].text, fresh.profile_line(NO_MARKS))
+
+    def test_answers_over_the_limit_keep_hals_profile_unless_it_adds_a_page(self):
+        answers = {**NO_MARKS, "interests": "Lead a monthly local history walk." + f" {FILLER}." * FILLER_PER_PAGE}
+        for extra, kept in ((2, True), (FILLER_PER_PAGE, False)):
+            with self.subTest(extra=extra):
+                said = "History graduate who catalogued parish letters." + f" {FILLER}." * extra
+                with fake_ai({"cv_compose": json.dumps({"summary": said})}), stand_in():
+                    out = fresh.make(answers, "humanities_grad")
+                profile = store.current()[1].sections[0].text
+                self.assertEqual(profile == said, kept)
+                self.assertTrue(out["note"].startswith("This CV is 2 pages, and you asked for 1."))
 
     def test_with_no_limit_nothing_is_printed(self):
         with stand_in() as p:

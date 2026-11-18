@@ -919,12 +919,16 @@ def _words_in(text: str) -> int:
     return len(str(text or "").split())
 
 
-def _held_to_limit(row: sqlite3.Row, doc, new_doc, afters: list[str], alt: int) -> tuple[object, int, str]:
+def _held_to_limit(row: sqlite3.Row, vid: str, doc, new_doc, afters: list[str],
+                   alt: int) -> tuple[object, int, str]:
     """(the document, the wording used, a note): Hal's wording held to the CV's page limit (`pagelimit`).
 
-    Only a wording longer than the words it replaces is counted, and only when the CV has a limit. Over it,
-    Hal tries its other, shorter wordings that fit (saying so in the note); when none fits, ValueError says
-    why and nothing is applied. With no count (no browser can print) the wording is used as before.
+    Hal's wording is held back only when it adds a page over the limit: more pages than version `vid` prints
+    on now, and more than the limit (a 3-page CV with a 2-page limit takes a wording that keeps it at 3). Only
+    a wording longer than the words it replaces is counted, and only when the CV has a limit. When it adds a
+    page, Hal tries its other, shorter wordings (saying so in the note); when none does without one,
+    ValueError says why with the real pages and nothing is applied. With no count (no browser can print, now
+    or for the version in use) the wording is used as before.
     """
     from jobhunt.cvstudio import pagelimit
 
@@ -935,15 +939,21 @@ def _held_to_limit(row: sqlite3.Row, doc, new_doc, afters: list[str], alt: int) 
     pages = pagelimit.count_doc(new_doc, row["doc_id"]) if limit else None
     if pages is None or pages <= limit:
         return new_doc, alt, ""
+    before = pagelimit.measure(vid)
+    if before is None or pages <= before:
+        return new_doc, alt, ""
+    target = max(limit, before)
     model = _model()
     shorter = sorted((i for i, a in enumerate(afters) if _words_in(a) < _words_in(after) and not GAP.search(a)),
                      key=lambda i: _words_in(afters[i]))
     for i in shorter:
         tried = model.apply(doc, change_for(doc, row["op"], row["target"], afters[i]))
         got = pagelimit.count_doc(tried, row["doc_id"])
-        if got is not None and got <= limit:
-            return tried, i, pagelimit.SUGGESTION_SHORTER.format(limit=pagelimit.pages_words(limit))
-    raise ValueError(pagelimit.SUGGESTION_HELD.format(pages=pages, limit=limit))
+        if got is not None and got <= target:
+            note = pagelimit.SUGGESTION_SHORTER_OVER if before > limit else pagelimit.SUGGESTION_SHORTER
+            return tried, i, note.format(pages=pagelimit.pages_words(got), limit=pagelimit.pages_words(limit))
+    held = pagelimit.SUGGESTION_HELD_OVER if before > limit else pagelimit.SUGGESTION_HELD
+    raise ValueError(held.format(pages=pages, before=before, limit=limit))
 
 
 def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, text: str | None = None) -> dict:
@@ -966,7 +976,7 @@ def accept(con: sqlite3.Connection, sugg_id: str, *, alt: int | None = None, tex
     new_doc = _model().apply(doc, change_for(doc, row["op"], row["target"], after))
     note = ""
     if text is None:
-        new_doc, alt, note = _held_to_limit(row, doc, new_doc, afters, alt)
+        new_doc, alt, note = _held_to_limit(row, vid, doc, new_doc, afters, alt)
         after = afters[alt]
     new_vid = _store().new_version(new_doc, origin="improved", what=f"You accepted: {row['title']}", by="you",
                                    parent=vid)
@@ -994,14 +1004,14 @@ def _keep_count(version_id: str) -> None:
     pagelimit.keep(version_id)
 
 
-def _fixes_held_to_limit(start, doc, fixes: list, doc_id: str) -> tuple[object, list, str]:
+def _fixes_held_to_limit(start, vid: str, doc, fixes: list, doc_id: str) -> tuple[object, list, str]:
     """(the document, the fixes kept, a note): Accept all's fixes held to the CV's page limit, as one accepted
-    suggestion is (`_held_to_limit`).
+    suggestion is (`_held_to_limit`): only fixes that add a page over the limit are left out.
 
-    Only fixes that make the CV's text longer are counted. Over the limit, Hal leaves fixes out from the last,
-    counting again after each, at most `pagelimit.HOLD_TRIES` times; when it is still over (or a count fails
-    part way), none is applied, as a job's CV keeps its base. The note says how many were left out. With no
-    limit, or no count at the start, every fix is kept.
+    Only fixes that make the CV's text longer are counted. The target is the limit, or the pages version `vid`
+    prints on now when that is longer already. Over the target, Hal leaves fixes out from the last, counting
+    again after each, at most `pagelimit.HOLD_TRIES` times; when it is still over (or a count fails part way),
+    none is applied. The note gives the real pages. With no limit, or no count at the start, every fix is kept.
     """
     from jobhunt.cvstudio import pagelimit
 
@@ -1009,10 +1019,13 @@ def _fixes_held_to_limit(start, doc, fixes: list, doc_id: str) -> tuple[object, 
     if not fixes or len(model.plain_text(doc, {})) <= len(model.plain_text(start, {})):
         return doc, fixes, ""
     limit = pagelimit.limit_of(doc_id)[0]
-    pages = pagelimit.count_doc(doc, doc_id) if limit else None
-    if pages is None or pages <= limit:
+    every = pagelimit.count_doc(doc, doc_id) if limit else None
+    if every is None or every <= limit:
         return doc, fixes, ""
-    kept = list(fixes)
+    before = pagelimit.measure(vid)
+    if before is None or every <= before:
+        return doc, fixes, ""
+    target, pages, kept = max(limit, before), every, list(fixes)
     for _ in range(pagelimit.HOLD_TRIES):
         if not kept:
             break
@@ -1021,14 +1034,15 @@ def _fixes_held_to_limit(start, doc, fixes: list, doc_id: str) -> tuple[object, 
         for _, change in kept:
             doc = model.apply(doc, change)
         pages = pagelimit.count_doc(doc, doc_id)
-        if pages is not None and pages <= limit:
+        if pages is not None and pages <= target:
             break
-    if pages is None or pages > limit:      # over even with fewer fixes: the CV as it was, as for a job's CV
-        log.info("Accept all: CV %s is over its limit with fewer fixes too; none applied", doc_id)
+    if pages is None or pages > target:      # over even with fewer fixes: the CV as it was, as for a job's CV
+        log.info("Accept all: CV %s would still add a page with fewer fixes; none applied", doc_id)
         doc, kept = start, []
     left = len(fixes) - len(kept)
-    return doc, kept, pagelimit.FIXES_HELD.format(n=left, fixes="fix" if left == 1 else "fixes",
-                                                  limit=pagelimit.pages_words(limit))
+    note = pagelimit.FIXES_HELD_OVER if before > limit else pagelimit.FIXES_HELD
+    return doc, kept, note.format(n=left, fixes="fix" if left == 1 else "fixes", pages=every, before=before,
+                                  limit=limit if before > limit else pagelimit.pages_words(limit))
 
 
 def accept_kind(con: sqlite3.Connection, kind: str, doc_id: str | None = None) -> dict:
@@ -1052,7 +1066,7 @@ def accept_kind(con: sqlite3.Connection, kind: str, doc_id: str | None = None) -
             log.info("skipped suggestion %s in accept all: %s", r["id"], e)
             continue
         fixes.append((r["id"], change))
-    doc, fixes, note = _fixes_held_to_limit(start, doc, fixes, doc_id)
+    doc, fixes, note = _fixes_held_to_limit(start, vid, doc, fixes, doc_id)
     done = [sid for sid, _ in fixes]
     if not done:
         return {"accepted": 0, "version_id": vid, "note": note}

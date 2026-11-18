@@ -21,9 +21,9 @@ are asked only while the person has not edited it, and they are kept in `job_cvs
 documents again uses them too.
 
 Page limit: Hal's changes keep the job's CV to the page limit of the CV it is built from (`pagelimit.limit_of`),
-counted on the PDF employers get (`fit`, in `prepare`). Over it, Hal undoes its own changes that add words,
-newest first, and marks them `held`, so the CV tab says why and Redo puts one back; when the CV was over before
-Hal changed anything, Hal keeps it as it was. The person's edits are never undone, only warned about.
+counted on the PDF employers get (`fit`, in `prepare`). A change of Hal's is undone only when it adds a page
+past the limit (a CV over it already keeps every change that adds no page), newest first, and marked `held`,
+so the CV tab says why and Redo puts one back. The person's edits are never undone, only warned about.
 
 Design decision: a change list entry stores the model change that makes it (`op`, `target`, `value`), and
 the job's CV is always rebuilt from the base version plus the changes still on. Undo and Redo are then order
@@ -75,9 +75,8 @@ ORIGINAL_WHY = ("Adjusting for each job is off while you send your original file
 LEVEL_WORDS = {"little": "Adjusting a little", "more": "Adjusting more"}
 MAIN_LABEL = "your main CV"         # what Copy names the CV it copies into while only one CV is in use
 MIN_PICKS, MAX_PICKS = 3, 5       # "the three to five things the job cares about most" (`cvdocs.pick_first`)
-# `held` on a change of Hal's it undid to keep the job's CV to its page limit (`fit`): to fit, or because the CV
-# was over before Hal changed anything. Redo clears it.
-HELD_FIT, HELD_BASE = "fit", "base"
+# `held` on a change of Hal's it undid because it added a page over the page limit (`fit`). Redo clears it.
+HELD_FIT = "fit"
 # Counts `fit` makes at most: Hal's changes for one job are a title line, a few reorders, the profile line and
 # up to `MAX_BULLETS` lines, and each count draws the CV once (milliseconds).
 FIT_TRIES = 8
@@ -245,9 +244,18 @@ def build(base, changes: list[dict]):
     return doc
 
 
+def _words(text) -> int:
+    return len(str(text or "").split())
+
+
 def _longer(change: dict) -> bool:
     """True when a change of Hal's adds words: its wording is longer than the words it replaced."""
-    return len(str(change.get("after") or "").split()) > len(str(change.get("before") or "").split())
+    return _words(change.get("after")) > _words(change.get("before"))
+
+
+def _shorter(change: dict) -> bool:
+    """True when a change of Hal's takes words away; such a change is never undone to fit."""
+    return _words(change.get("after")) < _words(change.get("before"))
 
 
 def _counted(base, changes: list[dict], count) -> int | None:
@@ -262,10 +270,13 @@ def _counted(base, changes: list[dict], count) -> int | None:
 def fit(base, changes: list[dict], limit: int, count) -> list[dict]:
     """Holds Hal's changes for a job to the page limit; `changes` with some marked undone and `held`.
 
-    `count(doc)` gives a document's pages as employers get it, None when not known. When the CV is over the
-    limit, Hal undoes its own changes that add words, newest first, then its other changes, and counts again
-    after each, at most `FIT_TRIES` times. When the CV is over with none of Hal's changes on, Hal keeps the CV
-    as it was (`HELD_BASE`). The person's own edits are never undone. No limit, or no count: nothing changes.
+    `count(doc)` gives a document's pages as employers get it, None when not known. A change of Hal's is held
+    back only when it adds a page over the limit: the target is the limit, or the pages of the CV with only
+    the person's edits when that is longer already (a 3-page CV with a 2-page limit keeps every change that
+    leaves it at 3). Over the target, Hal undoes its changes that add words, newest first, then those that keep
+    the words' length (a reorder can move a page break), counting after each, at most `FIT_TRIES` times; a
+    change that shortens a line is never undone. The person's own edits are never undone. No limit, or no
+    count: nothing changes.
     """
     hal, yours = _split(changes)
     on = [c for c in hal if not c.get("undone")]
@@ -275,18 +286,30 @@ def fit(base, changes: list[dict], limit: int, count) -> list[dict]:
     if pages is None or pages <= limit:
         return changes
     alone = _counted(base, yours, count)
-    if alone is not None and alone > limit:
-        for c in on:
-            c.update(undone=True, held=HELD_BASE)
-        log.info("a job's CV is %s pages before Hal's changes, over its %s: kept as it was", alone, limit)
+    target = max(limit, alone or 0)
+    if pages <= target:
+        log.info("a job's CV is %s pages before Hal's changes, over its %s; they add no page", alone, limit)
         return changes
-    order = [c for c in reversed(on) if _longer(c)] + [c for c in reversed(on) if not _longer(c)]
+    order = ([c for c in reversed(on) if _longer(c)]
+             + [c for c in reversed(on) if not _longer(c) and not _shorter(c)])
     for c in order[:FIT_TRIES]:
         c.update(undone=True, held=HELD_FIT)
         pages = _counted(base, changes, count)
-        if pages is None or pages <= limit:
+        if pages is None or pages <= target:
             break
     return changes
+
+
+def before_hal(job_id: str, con: sqlite3.Connection | None = None, count=None) -> tuple[int | None, int | None]:
+    """(pages of the job's base CV as it is, pages with the person's own edits for the job), as employers get
+    it (`count`, default `pagelimit.drawn_pages`); for the note that says why Hal held its changes back."""
+    from jobhunt.cvstudio import cv, pagelimit
+
+    count = count or (lambda d: pagelimit.drawn_pages(cv.v1_of(d)))
+    with _conn(con) as c:
+        row = _row(c, job_id)
+        base = _store().get(row["base_version_id"], con=c)
+    return _counted(base, [], count), _counted(base, _split(json.loads(row["changes"]))[1], count)
 
 
 def _split(changes: list[dict]) -> tuple[list[dict], list[dict]]:

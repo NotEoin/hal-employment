@@ -46,14 +46,22 @@ OVER = "This CV is {now}{pages} pages. You asked for {limit}."
 UNKNOWN = "Hal cannot count this CV's pages: no browser on this computer can print it."
 UNKNOWN_JOB = "Hal could not count the pages of this CV."
 HELD = "Hal undid {n} of its own changes to keep this CV to {limit}. Press Redo to use one anyway."
-KEPT_BASE = ("Your CV was already longer than {limit} before Hal changed anything, so Hal kept it as it is "
-             "for this job.")
+HELD_OVER_ALREADY = ("Without Hal's changes your CV is already {alone} pages, more than the {limit} you asked for. "
+                     "Hal kept its changes that add no page and undid {n} that would. Press Redo to use one anyway.")
+HELD_OVER_YOURS = ("Your own edits for this job make it {alone} pages, more than the {limit} you asked for. Hal kept "
+                   "its changes that add no page and undid {n} that would. Press Redo to use one anyway.")
 SUGGESTION_HELD = ("Hal's wording would make this CV {pages} pages, and you asked for {limit}, so Hal did not use "
                    "it. Edit the words to use them anyway.")
+# The same for a CV over its limit already: Hal's wording would add a page to it.
+SUGGESTION_HELD_OVER = ("Hal's wording would make this CV {pages} pages instead of {before}, more than the {limit} "
+                        "you asked for, so Hal did not use it. Edit the words to use them anyway.")
 SUGGESTION_SHORTER = "Hal used its shorter wording, so this CV keeps to {limit}."
+SUGGESTION_SHORTER_OVER = "Hal used its shorter wording, so this CV stays at {pages}."
 FIXES_HELD = "Hal left out {n} {fixes} that would make this CV longer than {limit}."
+FIXES_HELD_OVER = ("Hal left out {n} {fixes}: with every fix this CV would be {pages} pages instead of {before}, "
+                   "more than the {limit} you asked for.")
 HOLD_TRIES = 8                  # prints at most while leaving Hal's fixes out of Accept all, a second or so each
-FRESH_SHORTER ="Hal wrote a shorter profile, so this CV keeps to {limit}."
+FRESH_SHORTER = "Hal wrote a shorter profile, so this CV keeps to {limit}."
 FRESH_NO_PROFILE = ("Hal left out the profile, so this CV keeps to {limit}. Add one on Edit your CV if you "
                     "want it.")
 FRESH_OVER = ("This CV is {pages} pages, and you asked for {limit}. Your answers alone take more room than that, "
@@ -327,11 +335,13 @@ def job_pages(job_id: str, con: sqlite3.Connection | None = None) -> int | None:
 
 
 def job_state(job_id: str, con: sqlite3.Connection | None = None) -> dict | None:
-    """A job's CV against the limit of the CV it was built from: {limit, pages, over, words, held, kept_base,
+    """A job's CV against the limit of the CV it was built from: {limit, pages, over, words, held, before,
     note}; None when there is no job's CV.
 
-    `held` counts Hal's changes it undid to keep to the limit, `kept_base` is True when the CV was over before
-    Hal changed anything, so Hal kept it as it was, and `note` says either in plain words.
+    `held` counts Hal's changes it undid because they added a page over the limit (`tailor.fit`). With any,
+    `before` is the pages without Hal's changes when that is over the limit already (else None), and `note`
+    says what Hal did: kept to the limit, or kept from adding a page to a CV that was over before, by itself
+    or by the person's own edits for the job.
     """
     from jobhunt.cvstudio import tailor
 
@@ -341,14 +351,15 @@ def job_state(job_id: str, con: sqlite3.Connection | None = None) -> dict | None
             return None
         limit, _ = limit_of(store.version(row["base_version_id"], con=c)["doc_id"], c)
         pages = job_pages(job_id, c)
-    changes = [x for x in json.loads(row["changes"]) if x.get("undone")]
-    held = sum(1 for x in changes if x.get("held") == tailor.HELD_FIT)
-    kept_base = any(x.get("held") == tailor.HELD_BASE for x in changes)
+        held = sum(1 for x in json.loads(row["changes"]) if x.get("undone") and x.get("held") == tailor.HELD_FIT)
+        base, alone = tailor.before_hal(job_id, c) if held and limit else (None, None)
+    before = alone if alone is not None and alone > limit else None
     note = ""
-    if kept_base:
-        note = KEPT_BASE.format(limit=pages_words(limit))
+    if held and before is not None:
+        over_itself = base is not None and base > limit
+        note = (HELD_OVER_ALREADY if over_itself else HELD_OVER_YOURS).format(
+            alone=before, limit=pages_words(limit), n=held)
     elif held:
         note = HELD.format(n=held, limit=pages_words(limit))
     return {"limit": limit, "pages": pages, "over": pages is not None and bool(limit) and pages > limit,
-            "words": words(pages, limit, job=True), "held": held, "kept_base": kept_base, "note": note}
-
+            "words": words(pages, limit, job=True), "held": held, "before": before, "note": note}

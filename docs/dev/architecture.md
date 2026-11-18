@@ -614,18 +614,23 @@ runs: tests use `tests/support/fake_claude/`.
   file in a global), kept in `job_cvs.pages` keyed by the hash of `tailor.v1`; with the original file sent,
   `cv_files.pages`. `pagelimit.job_state` is `pages` on `tailor.editor` and `docs.cv.pages` on the
   application, which the CV tab and the approve box show.
-- Hal's changes keep to the limit. `tailor.fit` runs in `tailor.prepare`: over the limit, it undoes Hal's
-  changes that add words newest first, then the others, counting after each (`FIT_TRIES`), and marks them
-  `held: "fit"`; when the base with the person's edits is over by itself, every change of Hal's is undone with
-  `held: "base"`. The person's edits are never undone; `set_change` drops `held` on Redo. `suggest.accept`
-  holds Hal's own wording (`_held_to_limit`): a longer wording that prints over is swapped for a shorter
-  alternative that fits (`note`), else ValueError (409) and nothing is applied; edited text is not held.
-  `suggest.accept_kind` (Accept all) holds its fixes the same way (`_fixes_held_to_limit`): when they lengthen
-  the text and print over, fixes are left out from the last (at most `pagelimit.HOLD_TRIES` prints), or none
-  is applied when fewer still do not fit; `note` says how many were left out.
-  `fresh.make` holds its profile line (`fresh.within_limit`): drafts with the AI's profile, the plain
-  `profile_line`, then none, the first that prints within the limit is saved; when the answers alone are
-  over, the first draft is kept and `note` gives the pages.
+- Hal's changes keep to the limit, by one rule: a change of Hal's is held back only when it adds a page AND
+  the result is over the limit, so the target is the limit or the pages without Hal's change, whichever is
+  more. A CV already over its limit (the limit defaults to the type's rule, so an upgrade can find one) keeps
+  every change that adds no page.
+  `tailor.fit` runs in `tailor.prepare`: the pages without Hal's changes are the base with the person's
+  edits; over the target it undoes Hal's changes that add words newest first, then those of the same length,
+  never one that shortens a line, counting after each (`FIT_TRIES`), and marks them `held: "fit"`. The person's
+  edits are never undone; `set_change` drops `held` on Redo. `pagelimit.job_state` words the note from
+  `tailor.before_hal` (the base alone, and with the person's edits), so it says whether the CV or the
+  person's own edits made it long. `suggest.accept` holds Hal's own wording (`_held_to_limit`) against the
+  version in use (`pagelimit.measure`): a longer wording that adds a page past the limit is swapped for a
+  shorter alternative that does not (`note`), else ValueError (409) with the real pages. `suggest.accept_kind`
+  (Accept all) does the same for its fixes (`_fixes_held_to_limit`), leaving them out from the last (at most
+  `pagelimit.HOLD_TRIES` prints), or applying none when fewer still add a page. Edited text is never held.
+  `fresh.make` (`fresh.within_limit`) saves the first draft (the AI's profile, the plain `profile_line`, no
+  profile) that adds no page past the larger of the limit and the answers alone; `note` gives the pages
+  when the answers alone are over.
 
 ## Looks and printing (`cvstudio/render.py`, `printer.py`, `export.py`)
 

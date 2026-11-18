@@ -185,30 +185,39 @@ def _without_profile(doc) -> object:
 
 
 def within_limit(drafts: list, doc_id: str) -> tuple[object, str]:
-    """(the draft to save, a note): the first of `drafts` whose printed pages keep to CV `doc_id`'s limit.
+    """(the draft to save, a note): the first of `drafts` whose Hal's own words add no page over CV `doc_id`'s
+    limit.
 
     `drafts` hold the same answers with less of Hal's own words each (its AI profile, its plain profile, no
-    profile), at most `len(drafts)` prints. With no limit or no count (no browser) the first is used. When
-    none fits, the first is kept, the person's answers whole, and the note gives the real numbers.
+    profile last), at most `len(drafts)` prints. The target is the limit, or the pages of the last draft (the
+    answers with the least of Hal's words) when that is longer already, so Hal's profile is dropped only when
+    it adds a page. With no limit or no count (no browser) the first is used. When the answers alone are over,
+    the note gives the real pages of the draft saved; the answers are never cut.
     """
     from jobhunt.cvstudio import pagelimit
 
     limit = pagelimit.limit_of(doc_id)[0]
     if not limit:
         return drafts[0], ""
-    first = None
-    for i, draft in enumerate(drafts):
-        pages = pagelimit.count_doc(draft, doc_id)
-        if pages is None:
-            return drafts[0], ""
-        first = pages if first is None else first
-        if pages <= limit:
-            if i == 0:
-                return draft, ""
-            profiled = any(s.kind == "summary" for s in draft.sections)
-            note = pagelimit.FRESH_SHORTER if profiled else pagelimit.FRESH_NO_PROFILE
-            return draft, note.format(limit=pagelimit.pages_words(limit))
-    return drafts[0], pagelimit.FRESH_OVER.format(pages=first, limit=limit)
+    counted: dict[int, int | None] = {}
+
+    def pages(i: int) -> int | None:
+        if i not in counted:
+            counted[i] = pagelimit.count_doc(drafts[i], doc_id)
+        return counted[i]
+
+    if pages(0) is None or pages(0) <= limit:
+        return drafts[0], ""
+    least = pages(len(drafts) - 1)
+    if least is None:
+        return drafts[0], ""
+    target = max(limit, least)
+    i = next(i for i in range(len(drafts)) if (pages(i) or 0) <= target)    # the last always meets it
+    if target > limit:
+        return drafts[i], pagelimit.FRESH_OVER.format(pages=pages(i), limit=limit)
+    profiled = any(s.kind == "summary" for s in drafts[i].sections)
+    note = pagelimit.FRESH_SHORTER if profiled else pagelimit.FRESH_NO_PROFILE
+    return drafts[i], note.format(limit=pagelimit.pages_words(limit))
 
 
 def make(answers: dict, type_id: str, *, step=None, doc_id: str | None = None) -> dict:

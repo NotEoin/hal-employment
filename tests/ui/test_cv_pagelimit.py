@@ -156,7 +156,9 @@ class JobCvLength(unittest.TestCase):
                 note = p.page.locator(".cv-job .cv-length")
                 p.shows(note, "the warning on the CV tab")
                 self.assertIn(over, note.inner_text())
-                self.assertIn("Hal undid 1 of its own changes to keep this CV to 2 pages.", note.inner_text())
+                # the stand-in prints every CV on 3 pages, so the CV is over before Hal changes anything
+                self.assertIn("Without Hal's changes your CV is already 3 pages", note.inner_text())
+                self.assertIn("undid 1 that would", note.inner_text())
                 held = p.page.locator("article[data-change='c1']", has_text="Undone by Hal to keep to your page limit")
                 p.shows(held, "why Hal undid its change")
                 self.assertTrue(p.page.locator("button:has-text('Approve and fill in the form')").is_enabled())

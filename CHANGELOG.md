@@ -31,12 +31,13 @@ What changed in each version, in plain words.
   for example "This CV is now 3 pages. You asked for 2." Your save always stands, and the length check on
   **Checks** uses the same count. Where no browser can print, Hal says it cannot count the pages.
 
-- **Hal keeps its own changes inside your length.** When Hal adjusts a CV for a job, it undoes its own
-  changes that would make the CV longer than you asked, newest first, and says so beside each one; **Redo**
-  puts one back. When you accept a suggestion, Hal uses a shorter wording that fits, or leaves the line and
-  says why; **Accept all** leaves out the fixes that would not fit. **Build me a fresh CV** writes a shorter profile, or none, to fit. Your own lines and answers are
-  never cut. An application's CV tab and its Documents step say how many pages the CV employers get is
-  before you approve.
+- **Hal keeps its own changes inside your length.** A change of Hal's is held back only when it would add a
+  page and take the CV past the length you chose. When Hal adjusts a CV for a job, it undoes such changes,
+  newest first, and says so beside each one; **Redo** puts one back. When you accept a suggestion, Hal uses
+  a shorter wording, or leaves the line and says why with the pages; **Accept all** leaves out the fixes that
+  would add a page. **Build me a fresh CV** writes a shorter profile, or none. A CV that is already longer
+  than you asked keeps all of Hal's help that adds no page. Your own lines and answers are never cut. An
+  application's CV tab and its Documents step say how many pages the CV employers get is before you approve.
 
 ### Fixed
 

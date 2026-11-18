@@ -335,19 +335,21 @@ and never stops a save: what to shorten is your choice. The length check on **Ch
 To count the pages Hal prints the CV with a browser, which takes a second or so, once for each version. On a
 computer where no browser can print, Hal says it cannot count the pages, rather than guess.
 
-Hal keeps its own changes inside the length you chose:
+Hal keeps its own changes inside the length you chose. A change of Hal's is held back only when it would add
+a page and take the CV past that length; a CV that is already longer keeps every change that adds no page.
 
-- **For a job.** When Hal adjusts your CV for an application and its changes would make the CV longer than
-  you asked, Hal undoes its own changes that add words, newest first, until it fits. Each one says **Undone
-  by Hal to keep to your page limit**, and **Redo** puts it back if you want it anyway. If your CV is already
-  longer before Hal changes anything, Hal uses it as it is for that job and says so on the CV tab.
-- **Suggestions.** When you accept Hal's wording on **Suggestions** and it would make the CV longer than you
-  asked, Hal uses a shorter wording of the same suggestion that fits, or leaves the line as it is and tells
-  you why. Words you edit yourself are always used. **Accept all** does the same: it leaves out the fixes
-  that would make the CV too long, last first, and says how many.
+- **For a job.** When Hal adjusts your CV for an application and a change of its own would add a page past
+  your length, Hal undoes it, the ones that add words first, newest first. Changes that shorten a line always
+  stay. Each change Hal undid says **Undone by Hal to keep to your page limit**, and **Redo** puts it back if
+  you want it anyway. When your CV, or your own edits for that job, already make it longer than you asked,
+  the CV tab says so with the number of pages.
+- **Suggestions.** When you accept Hal's wording on **Suggestions** and it would add a page past your length,
+  Hal uses a shorter wording of the same suggestion, or leaves the line as it is and tells you the pages.
+  Words you edit yourself are always used. **Accept all** does the same: it leaves out the fixes that would
+  add a page, last first, and says how many.
 - **Build me a fresh CV.** Hal writes a shorter profile, or leaves the profile out, when its own words would
-  make the new CV longer than you asked. Your answers are never cut: when they alone are longer, Hal keeps
-  them all and says how many pages the CV is.
+  add a page past your length. Your answers are never cut: when they alone are longer, Hal keeps them all and
+  says how many pages the CV is.
 
 An application's CV tab and its **Documents** step count the pages of the PDF employers get for that job and
 warn you before you approve, for example "This CV is 3 pages. You asked for 2." You can still approve it.
