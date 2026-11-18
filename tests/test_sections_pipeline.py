@@ -321,6 +321,16 @@ class Pipeline(unittest.TestCase):
         self.assertEqual((done["result"]["read"], done["result"]["missing"]), (2, 1))
         self.assertEqual(states, ["read", "read"])
 
+    def test_a_read_that_read_something_raises_the_record_revision_and_one_that_read_nothing_does_not(self):
+        with home() as (con, _, _):
+            ids = pipeline.add_uploads(con, "document", [Incoming("award.md", AWARD.encode())])["added"]
+            before = record.revision(con)
+            runner.run(actions.KIND, params={"ids": ids})
+            after_read = record.revision(con)
+            runner.run(actions.KIND, params={"ids": [999]})
+            self.assertEqual(record.revision(con), after_read)
+        self.assertGreater(after_read, before)
+
     def test_the_action_tells_open_pages_the_profile_changed_once_it_has_read(self):
         """A starred piece of coursework became a project card only after its read, and the Projects tab, which
         follows `profile` events, kept showing the cards from before it (2026-11-09)."""

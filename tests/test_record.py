@@ -89,6 +89,14 @@ class Record(unittest.TestCase):
         # A second sync leaves the note alone, since the document has not changed.
         self.assertEqual(record.sync()["converted"], [])
 
+    def test_a_new_index_raises_the_record_revision_and_a_sync_with_nothing_new_does_not(self):
+        before = record.revision()
+        self.note("Awards/prize.md", "# Prizes\n\nNamed on the dean's list for 2025.\n")
+        record.sync()
+        changed = record.revision()
+        record.sync()
+        self.assertEqual((changed, record.revision()), (before + 1, before + 1))
+
     def test_a_pdf_table_is_read_in_columns_not_as_a_guessed_markdown_table(self):
         """A transcript's credits and mark stay apart: MarkItDown's guessed table ran them into one cell ("20 68")."""
         (self.vault / "transcript.pdf").write_bytes(tiny_pdf(["Code     Module Title          Credits  Mark",

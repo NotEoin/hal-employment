@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from jobhunt import record
 from jobhunt.core import events, runner, work
 from jobhunt.sections import actions
 from jobhunt.sections.sorting import store as sorts
@@ -95,6 +96,8 @@ def accept_sort(ctx, sort_id: int, add_id: int | None = None) -> dict:
     out["matched"] = sorts.rematch(ctx.con, int(sort_id))
     if moving:
         out["set_aside"] = move.after_accept(ctx.con, int(sort_id), states)
+    if out["starred"] or moving:    # starred projects lead the letters; the reads raised it for the cards
+        record.bump_revision(ctx.con)
     events.publish("sort", sort_id=int(sort_id))
     if out["matched"]:
         ctx.changed(f"{out['matched']} more files found their course or job; accept them too.")

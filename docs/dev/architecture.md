@@ -1281,6 +1281,22 @@ only, so a resumed ingest is not counted as fast), counts by stage, state and ca
 `not_downloaded` with the first paths, recent errors, `by_rules` and whether it was a read `again`. Web links are read by `ingest/web.py` when it is
 present (`fetch(urls, page_cap=)`), imported lazily; without it the ingest says web links are not
 available yet.
+## The record's revision (`record.revision`, `record.bump_revision`)
+
+One number in `meta` (`record.REVISION_KEY`), 0 until the record first changes, raised by one whenever what
+Hal writes from changes:
+
+- `record._save`, when a sync writes a new search index (a sync with nothing new saves nothing);
+- the end of a `record.sources` read that read any source (also the project refresh and `record.sort_accept`,
+  which read through `read_all`), and of `record.sort_accept` when it starred projects or moved a record;
+- the end of every `record.ingest`, and a sorting of the tiers (`profile.actions.sort`) that sorted any;
+- the person's own changes: every card change under `/api/v2/profile` and, under `/api/v2/record/sources`,
+  changing, putting back an earlier read of, or removing a source.
+
+A stopped read raises it too, since what it read is kept; a read that fails does not. `bump_revision(con)`
+commits `con`, so it is called once the change is committed or ready to be. A failed raise in `_save` is
+logged, not raised: the index is saved, and only an out-of-date mark is missed.
+
 ## Sections of the record (`jobhunt/sections/`)
 
 The person adds each source to a section of Your record, and the section says what it is and whose it is,

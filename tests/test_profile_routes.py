@@ -11,7 +11,7 @@ from support import fake_api
 from support.api import HalServer
 from support.people import HUMANITIES
 
-from jobhunt import db
+from jobhunt import db, record
 from jobhunt.core import events
 from jobhunt.evidence.routes import file_id
 from jobhunt.profile import store
@@ -108,6 +108,15 @@ class ProfileRoutes(unittest.TestCase):
         self.assertEqual(len(job["conflicts"]), 1)
         self.assertEqual(page["conflicts"], job["conflicts"])
         self.assertEqual(self.c.get("/api/v2/profile/pets").status, 404)
+
+    def test_the_persons_own_changes_raise_the_record_revision(self):
+        ids = self.seed()
+        with closing(db.connect()) as con:
+            before = record.revision(con)
+        self.assertEqual(self.c.post(f"/api/v2/profile/items/{ids['basic']}/hide").status, 200)
+        self.assertEqual(self.c.post("/api/v2/profile/confirm-many", {"ids": [ids["skill"]]}).status, 200)
+        with closing(db.connect()) as con:
+            self.assertEqual(record.revision(con), before + 2)
 
     def test_edit_confirm_hide_and_delete_round_trip(self):
         ids = self.seed()

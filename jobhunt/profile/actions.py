@@ -36,6 +36,10 @@ def sort(ctx) -> dict[str, int]:
         ctx.changed(f"Sorted {sorted_now} of your experiences.")
     if counts["unjudged"]:
         ctx.changed(f"{counts['unjudged']} experiences wait until Hal's AI can look at them.")
+    if sorted_now:      # the tiers decide which experiences the documents lead with
+        from jobhunt import record
+
+        record.bump_revision(ctx.con)
     events.publish("profile", tiers=True)
     return counts
 

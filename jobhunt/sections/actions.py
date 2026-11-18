@@ -5,10 +5,12 @@ The person waits for it on the page, so it runs at priority 1, and two of them m
 uploads); each source is read in its own transactions (`pipeline.read`), so they never cross. It is resumable:
 after a restart it reads the same sources again, which gives the same result. When it has read any (or kept one
 out), it publishes a `profile` event naming them, as a read changes the cards: the profile tabs follow those
-events, not the action's, and kept showing the cards from before a read (2026-11-09). The refresh runs in the
-background, so it waits behind what the person asked for (priority 2), one at a time (`exclusive="kind"`).
-Bulk and background reads (read-waiting, more than `BULK_FILES` files, the refresh) are batch work for Hal's
-gateway; a few files added on the page are not, as batch work waits behind every other request.
+events, not the action's, and kept showing the cards from before a read (2026-11-09). A read that read any
+also raises the record's revision (`record.bump_revision`), so documents written before it show out of date.
+The refresh runs in the background, so it waits behind what the person asked for (priority 2), one at a time
+(`exclusive="kind"`). Bulk and background reads (read-waiting, more than `BULK_FILES` files, the refresh) are
+batch work for Hal's gateway; a few files added on the page are not, as batch work waits behind every other
+request.
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ import json
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 
-from jobhunt import ai
+from jobhunt import ai, record
 from jobhunt.ai.hal_gateway import as_batch
 from jobhunt.core import events, runner
 from jobhunt.sections import pipeline, store
@@ -78,15 +80,14 @@ def read_all(ctx, ids: list, allowed: set[int], *, batch: bool = False) -> dict:
     else:
         with ctx.con:
             ctx.con.executemany("UPDATE record_sources SET state = 'new' WHERE id = ?", [(i,) for i in todo])
-    with as_batch() if batch else contextlib.nullcontext():
-        reading = _Reading(ctx, out, todo, allowed)
-        workers = max(1, ai.at_once())
-        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="record-read") as pool:
-            try:
-                reading.run(pool, workers)
-            finally:
-                for job in reading.in_hand.values():
-                    job.cancel()
+    try:
+        reading = _read(ctx, out, todo, allowed, batch)
+    except runner.Stopped:
+        if out["read"]:     # the sources read before the stop are kept
+            record.bump_revision(ctx.con)
+        raise
+    if out["read"]:
+        record.bump_revision(ctx.con)
     gone = reading.gone
     if out["read"] or out["kept_out"]:
         events.publish("profile", sources=[int(i) for i in todo])
@@ -102,6 +103,20 @@ def read_all(ctx, ids: list, allowed: set[int], *, batch: bool = False) -> dict:
     if out["kept_out"]:
         ctx.changed(f"{out['kept_out']} kept out because they look private.")
     return out
+
+
+def _read(ctx, out: dict, todo: list[int], allowed: set[int], batch: bool) -> _Reading:
+    """Reads `todo` with as many workers as the AI serves at once; returns the finished reading."""
+    with as_batch() if batch else contextlib.nullcontext():
+        reading = _Reading(ctx, out, todo, allowed)
+        workers = max(1, ai.at_once())
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="record-read") as pool:
+            try:
+                reading.run(pool, workers)
+            finally:
+                for job in reading.in_hand.values():
+                    job.cancel()
+    return reading
 
 
 class _Reading:

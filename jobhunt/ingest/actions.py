@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from jobhunt import record
 from jobhunt.core import runner
 from jobhunt.ingest import engine, items, privacy, roles
 from jobhunt.profile import actions as profile_actions
@@ -62,11 +63,24 @@ def ingest(ctx, batch: str, folders: list | None = None, uploads: list | None = 
 
     `origins` maps a folder or upload to where the person said it came from (`roles.ORIGINS`).
     """
-    def step(text: str) -> None:
-        ctx.step(text, total=STEPS)
-
     if allow and not items.seen_paths(ctx.con, batch):
         privacy.requeue(ctx.con, batch, allow)
+
+    # every read changes the record, and a stop keeps the items read so far
+    try:
+        out = _ingest(ctx, batch, folders=folders, uploads=uploads, drop=drop, urls=urls, again=again, tidy=tidy,
+                      origins=origins)
+    except runner.Stopped:
+        record.bump_revision(ctx.con)
+        raise
+    record.bump_revision(ctx.con)
+    return out
+
+
+def _ingest(ctx, batch: str, *, folders: list | None, uploads: list | None, drop: bool, urls: list | None,
+            again: bool, tidy: bool, origins: dict | None) -> dict:
+    def step(text: str) -> None:
+        ctx.step(text, total=STEPS)
 
     out = engine.run(ctx.con, batch, folders=folders or [], uploads=uploads or [], drop=drop, urls=urls or [],
                      again=again, tidy=tidy, step=step, progress=ctx.progress, origins=origins or {})

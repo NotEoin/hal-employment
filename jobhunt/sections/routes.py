@@ -4,7 +4,9 @@ and removing a source.
 The paths sit under `/api/v2/record/sources`: `/api/v2/sources` is the job sites Hal searches
 (`find/source_routes.py`). Reading takes a while, so adding a source or asking to read it again starts the
 `record.sources` action and returns its id at once; the page follows that action's events. Every change
-publishes a `profile` event with the source's id, so open pages read their lists again.
+publishes a `profile` event with the source's id, so open pages read their lists again. A change to what a
+source gives (its card, star or section, putting back an earlier read, removing it) also raises the record's
+revision (`record.bump_revision`); an added source raises it when its read ends.
 
 Shapes, exactly as sent:
 
@@ -207,6 +209,7 @@ def change(req: Request) -> dict:
     except ValueError as e:
         raise BadRequest(str(e)) from e
     again = any(k in body for k in REREAD_ON)
+    record.bump_revision(req.con)
     events.publish("profile", source_id=got["id"])
     return {**got, "action_id": _start(req, [got["id"]], why="You changed where a source of your record goes")
             if again else None}
@@ -241,6 +244,7 @@ def go_back(req: Request) -> dict:
         out = revisions.go_back(req.con, got["id"])
     except LookupError as e:
         raise NotFound(str(e)) from e
+    record.bump_revision(req.con)
     events.publish("profile", source_id=got["id"])
     return {**store.get(req.con, got["id"]), "hidden": out["hidden"]}
 
@@ -263,5 +267,6 @@ def split_by_folder(req: Request) -> dict:
 def remove(req: Request) -> dict:
     """Removes a source with its note and facts; the cards it alone named are hidden."""
     out = pipeline.remove(req.con, req.params["source_id"])
+    record.bump_revision(req.con)
     events.publish("profile", source_id=int(req.params["source_id"]))
     return out

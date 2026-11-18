@@ -103,9 +103,13 @@ Routes:
   {"action_id"}, or 409 while one is running.
 - `POST /api/v2/profile/confirm-many` and `.../hide-many` {"ids": [3, 4]}: changes them all with one event;
   {"ids": [3, 4]}. An empty list is 400; an unknown id is 404 and changes nothing.
+
+Every change the person makes here raises the record's revision (`record.bump_revision`), as it changes what
+Hal writes from.
 """
 from __future__ import annotations
 
+from jobhunt import record
 from jobhunt.core import events, runner
 from jobhunt.evidence.routes import file_id
 from jobhunt.profile import actions, check, conflicts, contexts, duplicates, store, tiers
@@ -200,7 +204,8 @@ def of_kind(req: Request) -> dict:
             "conflicts": [c for c in conflicts.listing(req.con) if ids & set(c["item_ids"])]}
 
 
-def _changed(item: dict) -> dict:
+def _changed(req: Request, item: dict) -> dict:
+    record.bump_revision(req.con)   # what the person changed is what Hal writes from next
     events.publish("profile", item_id=item["id"])
     return with_files(item)
 
@@ -216,7 +221,7 @@ def _fields(body) -> dict:
 def edit(req: Request) -> dict:
     """Changes an item's fields; it becomes the person's own."""
     try:
-        return _changed(store.edit(req.con, req.params["item_id"], _fields(req.body)))
+        return _changed(req, store.edit(req.con, req.params["item_id"], _fields(req.body)))
     except ValueError as e:
         raise BadRequest(str(e), field="fields") from e
 
@@ -224,14 +229,14 @@ def edit(req: Request) -> dict:
 @route("POST", PREFIX + "/items/{item_id}/confirm")
 def confirm(req: Request) -> dict:
     """The person checked this item and it is right."""
-    return _changed(store.confirm(req.con, req.params["item_id"]))
+    return _changed(req, store.confirm(req.con, req.params["item_id"]))
 
 
 @route("POST", PREFIX + "/items/{item_id}/unmerge")
 def unmerge(req: Request) -> dict:
     """Takes the cards Hal merged into this one back out; Hal never merges them on its own again."""
     try:
-        return _changed(duplicates.undo(req.con, req.params["item_id"]))
+        return _changed(req, duplicates.undo(req.con, req.params["item_id"]))
     except ValueError as e:
         raise BadRequest(str(e)) from e
 
@@ -243,7 +248,7 @@ def same_as(req: Request) -> dict:
     if not isinstance(into, int) or isinstance(into, bool):
         raise BadRequest("Pick the card this one is the same as.", field="into")
     try:
-        return _changed(duplicates.same_as(req.con, req.params["item_id"], into))
+        return _changed(req, duplicates.same_as(req.con, req.params["item_id"], into))
     except ValueError as e:
         raise BadRequest(str(e), field="into") from e
 
@@ -253,7 +258,7 @@ def set_tier(req: Request) -> dict:
     """The person puts an experience in a tier; Hal never changes it after this."""
     tier = str((req.body or {}).get("tier") or "") if isinstance(req.body, dict) else ""
     try:
-        return _changed(tiers.set_tier(req.con, req.params["item_id"], tier))
+        return _changed(req, tiers.set_tier(req.con, req.params["item_id"], tier))
     except ValueError as e:
         raise BadRequest(str(e), field="tier") from e
 
@@ -263,7 +268,7 @@ def set_star(req: Request) -> dict:
     """The person stars a project or job, or takes the star off; no read changes it after this."""
     on = (req.body or {}).get("star") if isinstance(req.body, dict) else None
     try:
-        return _changed(store.set_star(req.con, req.params["item_id"], on))
+        return _changed(req, store.set_star(req.con, req.params["item_id"], on))
     except ValueError as e:
         raise BadRequest(str(e), field="star") from e
 
@@ -273,7 +278,7 @@ def set_context(req: Request) -> dict:
     """The person says where an experience was done; Hal never changes it after this."""
     context = str((req.body or {}).get("context") or "") if isinstance(req.body, dict) else ""
     try:
-        return _changed(contexts.set_context(req.con, req.params["item_id"], context))
+        return _changed(req, contexts.set_context(req.con, req.params["item_id"], context))
     except ValueError as e:
         raise BadRequest(str(e), field="context") from e
 
@@ -291,7 +296,7 @@ def sort_tiers(req: Request) -> dict:
 @route("POST", PREFIX + "/items/{item_id}/hide")
 def hide(req: Request) -> dict:
     """Keeps the item out of documents; it stays hidden when its file is read again."""
-    return _changed(store.hide(req.con, req.params["item_id"]))
+    return _changed(req, store.hide(req.con, req.params["item_id"]))
 
 
 def _many(req: Request, change) -> dict:
@@ -300,6 +305,7 @@ def _many(req: Request, change) -> dict:
         done = change(req.con, ids)
     except ValueError as e:
         raise BadRequest(str(e), field="ids") from e
+    record.bump_revision(req.con)
     events.publish("profile", item_ids=done)
     return {"ids": done}
 
@@ -321,7 +327,7 @@ def add(req: Request) -> dict:
     """Adds an item the person typed in."""
     kind = str((req.body or {}).get("kind") or "") if isinstance(req.body, dict) else ""
     try:
-        return _changed(store.add_by_hand(req.con, kind, _fields(req.body)))
+        return _changed(req, store.add_by_hand(req.con, kind, _fields(req.body)))
     except ValueError as e:
         raise BadRequest(str(e), field="kind" if kind not in store.KINDS else "fields") from e
 
@@ -330,6 +336,7 @@ def add(req: Request) -> dict:
 def delete(req: Request) -> None:
     """Deletes an item the person added by hand."""
     store.delete(req.con, req.params["item_id"])
+    record.bump_revision(req.con)
     events.publish("profile", item_id=req.params["item_id"])
 
 
@@ -342,5 +349,6 @@ def resolve(req: Request) -> dict:
                                       keep_item=body.get("keep_item"), keep_all=bool(body.get("keep_all")))
     except ValueError as e:
         raise BadRequest(str(e)) from e
+    record.bump_revision(req.con)
     events.publish("profile", conflict_id=done["id"])
     return done

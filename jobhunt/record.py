@@ -29,6 +29,12 @@ not place were used as the person's own work in letters (2026-11-06). Each passa
 `hal` and `tier` in the index for this; an index made before that (`INDEX_VERSION`) is read again in full
 on the next `sync`. `ask` still searches every passage: a question about the record may be about course
 material too.
+
+The record's revision (`revision`, `bump_revision`) rises whenever what Hal writes from changes: a new search
+index (`_save`), the end of a read of what the person added (`record.sources`, `record.sort_accept`), a bulk
+read (`record.ingest`) and the person's own edits of their cards and sources. It is the `meta` row
+`REVISION_KEY`, so every process sees one number. Document
+writes stamp the revision they read (`documents.written_from`), so a later change shows them out of date.
 """
 import hashlib
 import json
@@ -37,6 +43,7 @@ import math
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -95,6 +102,7 @@ MAX_CHARS = 1200  # a passage's size: a paragraph or two, enough to quote from
 # The index's layout. 2: each passage carries its note's `role`, `hal`, `tier` and `doc_type` (2026-11-07);
 # an index of another version is read again in full by `sync`.
 INDEX_VERSION = 2
+REVISION_KEY = "record_revision"
 OWN_ROLE = "own"          # `ingest/roles.py`'s role for the person's own documents
 ARCHIVE_TIER = "archive"  # a note kept in the record but never used for writing
 # CVs and letters reach a writer only as the person's current CV, which every writer is given whole: older CV
@@ -444,6 +452,46 @@ def _save(index: dict) -> None:
     tmp.write_text(json.dumps(index), encoding="utf-8")
     tmp.replace(_live("INDEX"))
     _CACHE.clear()
+    try:
+        bump_revision()
+    except sqlite3.Error:
+        # the index is saved, which is what the person asked for; documents written before it then only miss
+        # their out-of-date mark, so this is logged rather than raised
+        log.exception("the record changed but its revision could not be raised")
+
+
+def revision(con: sqlite3.Connection | None = None) -> int:
+    """The record's revision: 0 until it first changes, then one more on every change."""
+    from jobhunt import db
+
+    own = con is None
+    con = con or db.connect()
+    try:
+        row = con.execute("SELECT v FROM meta WHERE k = ?", (REVISION_KEY,)).fetchone()
+        return int(row[0]) if row else 0
+    finally:
+        if own:
+            con.close()
+
+
+def bump_revision(con: sqlite3.Connection | None = None) -> int:
+    """Raises the record's revision by one, commits, and returns it.
+
+    It commits `con` too, so call it once the change is committed or ready to be: an open write held after it
+    would keep the runner's writer thread, and anything waiting on it, waiting.
+    """
+    from jobhunt import db
+
+    own = con is None
+    con = con or db.connect()
+    try:
+        con.execute("INSERT OR IGNORE INTO meta (k, v) VALUES (?, '0')", (REVISION_KEY,))
+        con.execute("UPDATE meta SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT) WHERE k = ?", (REVISION_KEY,))
+        con.commit()
+        return revision(con)
+    finally:
+        if own:
+            con.close()
 
 
 # Search by meaning ------------------------------------------------------------------------
