@@ -29,6 +29,11 @@ What changed in each version, in plain words.
   button moves up beside the reason. If you changed the documents yourself, Hal asks first: **Keep my
   edits** is chosen for you, or **Write everything fresh**.
 
+- **See which applications are out of date on the board.** A card on the Applications board shows **Out
+  of date** with the reason when your record or your CV changed since Hal wrote its documents. **Write the
+  out-of-date documents again** at the top of the Getting ready column rewrites them all, keeping your edits,
+  behind anything you ask Hal for on screen. Hal never does this by itself.
+
 - **Add your CV as a Markdown file.** Hal now reads CVs written in Markdown (.md): the top heading is your
   name, `##` headings are sections and `###` headings are jobs, qualifications or projects. Bold, italic
   and link marks are left out of what Hal keeps.

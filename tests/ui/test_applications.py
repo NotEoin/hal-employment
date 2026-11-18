@@ -11,7 +11,7 @@ import contextlib
 import json
 import unittest
 
-from support.fake_api import MADE_UP_APP, FakeServer, FakeState
+from support.fake_api import MADE_UP_APP, MADE_UP_BOARD, FakeServer, FakeState
 from support.ui import AppPage, chromium, skip_unless_browser
 
 APP = "app-demo%3A1"
@@ -69,6 +69,33 @@ class ApplicationsTest(unittest.TestCase):
         self.assertGreaterEqual(box["x"], column["x"])
         self.assertLessEqual(box["x"] + box["width"], column["x"] + column["width"])
         self.assertEqual(round(column["width"]), 230)
+
+    def test_out_of_date_cards_say_why_and_the_column_writes_them_again_after_asking(self) -> None:
+        state = apps_state()
+        board = json.loads(json.dumps(MADE_UP_BOARD))
+        board["columns"][0]["items"][0].update(out_of_date="Your CV changed since Hal wrote these", rewritable=True)
+        state.pages["/applications"] = board
+        p = self.tab(self.serve(state), "narrow").open("apps")
+        ready = p.page.locator(".colm", has_text="Getting ready")
+        button = ready.get_by_role("button", name="Write the out-of-date documents again (1)")
+        button.wait_for()
+        card = ready.locator(".acard", has_text="Library Assistant")
+        self.assertIn("Out of date", card.inner_text())
+        self.assertIn("Your CV changed since Hal wrote these.", card.inner_text())
+        fit = button.evaluate("b => [b.scrollWidth, b.clientWidth]")
+        self.assertLessEqual(fit[0], fit[1], "the button's words wrap inside it in a narrow column")
+        button.click()
+        dialog = p.page.locator("[role=dialog]")
+        dialog.wait_for()
+        self.assertIn("1 application?", dialog.inner_text())
+        self.assertIn("keeps your own edits", dialog.inner_text())
+        self.assertIn("behind anything you ask Hal for on screen", dialog.inner_text())
+        self.assertEqual(state.posts, [], "nothing is written before you say yes")
+        dialog.get_by_role("button", name="Write them again").click()
+        p.page.wait_for_selector("text=Hal will write the documents again")
+        self.assertEqual(state.posts, [("/api/v2/applications/rewrite-out-of-date", {"ids": ["demo:2"]})])
+        self.assertEqual(p.sideways(), 0)
+        self.assertEqual(p.errors, [])
 
     def test_approving_shows_the_first_application_guide_then_the_form_step(self) -> None:
         state = apps_state()

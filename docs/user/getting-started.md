@@ -209,6 +209,11 @@ asks first: **Keep my edits** (chosen for you) puts your own changes back into t
 
 If Hal could not write an application's documents, its Documents step says why and offers the same button.
 
+On the Applications board, a card whose documents are out of date shows **Out of date** and the reason. To
+bring them up to date at once, press **Write the out-of-date documents again** at the top of the Getting
+ready column. It takes every application there that is out of date and not yet approved, keeps your edits,
+and runs behind anything you ask Hal for on screen.
+
 Hal never rewrites an application you have approved or sent. To change approved documents, press **Change
 the documents** first (see below).
 

@@ -2,7 +2,10 @@
    The columns and their help words come from GET /applications, so the board and the server never
    disagree about where an application stands. When two or more applications wait for approval, "Approve
    all" approves their documents together and Hal starts every form; it still never presses Submit. "Make the
-   missing documents" starts Hal again on every application whose documents stopped before they were made. */
+   missing documents" starts Hal again on every application whose documents stopped before they were made.
+   A card whose documents are out of date (`out_of_date`, the reason) carries an "Out of date" chip, and "Write
+   the out-of-date documents again" rewrites those not approved or sent, keeping the person's edits; nothing
+   is rewritten without that press. */
 import { html, cx, useState } from "../core/html.js";
 import { post } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
@@ -13,12 +16,14 @@ import { Head, Seg, Empty } from "../ui/controls.js";
 const REFRESH_ON = [ev => ev.type === "action" || ev.type === "activity"];
 const approvable = c => c.items.filter(a => a.approvable);
 const remakeable = c => c.items.filter(a => a.remakeable);
+const rewritable = c => c.items.filter(a => a.rewritable);
 
 /** One card on the board. */
 function Card({ a }) {
   return html`<button type="button" class="acard" onClick=${() => go(route("app", a.id))}><span class="org">${a.org}</span>
     <b>${a.title}</b><span class=${cx("chip w", a.tone)}>${a.tone === "hal" && html`<span class="eye sm busy" aria-hidden="true"></span>`}${a.next}</span>
-    ${a.note && html`<span class="small sub">${a.note}</span>`}</button>`;
+    ${a.note && html`<span class="small sub">${a.note}</span>`}
+    ${a.out_of_date && html`<span class="chip w warn">Out of date</span><span class="small sub">${a.out_of_date}.</span>`}</button>`;
 }
 
 /** Approves every application waiting for approval, after one question. */
@@ -46,6 +51,24 @@ async function remakeAll(items) {
   } catch (err) { toast(err.message); }
 }
 
+/** Writes the documents again for every out-of-date application in a column, keeping the person's edits,
+    after one question that says how many and that it waits behind what they ask for on screen. */
+async function rewriteAll(items) {
+  const n = items.length;
+  const yes = await ask({ title: "Write the documents again for " + n + (n === 1 ? " application?" : " applications?"),
+    icon: "refresh", yes: "Write them again",
+    text: "Hal writes the CV, letter, message and answers again from your record and your CV as they are now, and "
+      + "keeps your own edits. This runs behind anything you ask Hal for on screen, so it can take a while. Nothing is sent." });
+  if (!yes) return;
+  try {
+    const r = await post("/applications/rewrite-out-of-date", { ids: items.map(a => a.id) });
+    invalidate("/applications*");
+    const started = Object.keys(r.started || {}).length;
+    toast("Hal will write the documents again for " + started + (started === 1 ? " application." : " applications.")
+      + ((r.skipped || []).length ? " " + r.skipped.length + " changed meanwhile and were left as they are." : ""));
+  } catch (err) { toast(err.message); }
+}
+
 /** The Applications page. */
 export function Apps() {
   const { data, error } = useApi("/applications", { on: REFRESH_ON });
@@ -64,6 +87,8 @@ export function Apps() {
           onClick=${() => approveAll(approvable(c))}>Approve all ${approvable(c).length}</button>`}
         ${remakeable(c).length > 0 && html`<button type="button" class="btn small colm-action"
           onClick=${() => remakeAll(remakeable(c))}>Make the missing documents (${remakeable(c).length})</button>`}
+        ${rewritable(c).length > 0 && html`<button type="button" class="btn small colm-action"
+          onClick=${() => rewriteAll(rewritable(c))}>Write the out-of-date documents again (${rewritable(c).length})</button>`}
         ${c.items.map(a => html`<${Card} a=${a} />`)}
         ${!c.items.length && html`<p class="small sub" style="margin:8px 4px">Nothing here yet.</p>`}</section>`)}</div>`
       : html`<div class="card">${all.map(a => html`<div class="li" style="align-items:center"><div class="grow"><b>${a.title}</b>
