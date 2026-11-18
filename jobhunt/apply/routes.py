@@ -8,7 +8,7 @@ requirements the person ticked while `cvdocs.pick_first` asks first.
 """
 from __future__ import annotations
 
-from jobhunt.apply import actions, queries
+from jobhunt.apply import actions, queries, rewrite
 from jobhunt.core import activity
 from jobhunt.cvstudio import edit, store, tailor
 from jobhunt.cvstudio.model import CVError
@@ -171,8 +171,15 @@ def copy_to_main(req: Request) -> dict:
 
 @route("POST", PREFIX + "/{app_id}/documents/redo")
 def redo(req: Request) -> dict:
-    """Make the documents again."""
-    return {"action_id": actions.start("docs.prepare", _id(req), **who(req))}
+    """Write the documents again from the record and the CV as they are now; `fresh` true writes everything
+    fresh, else the person's own edits are kept. 409 with the reason for an approved, sent or closed
+    application, or one whose form Hal is filling."""
+    body = json_body(req)
+    try:
+        return {"action_id": actions.write_again(req.con, _id(req), keep_edits=not body.get("fresh"), **who(req),
+                                                 priority=NOW)}
+    except rewrite.NotNow as e:
+        raise Conflict(str(e)) from e
 
 
 @route("POST", PREFIX + "/{app_id}/documents/reopen")

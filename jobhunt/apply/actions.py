@@ -23,7 +23,7 @@ from collections import defaultdict
 from typing import Any
 
 from jobhunt import browser, db, documents
-from jobhunt.apply import driver
+from jobhunt.apply import driver, rewrite
 from jobhunt.apply.queries import column_of, load_app, load_job, mark_applied, set_app, site_of
 from jobhunt.core import runner, settings, work
 from jobhunt.cvstudio import tailor
@@ -67,15 +67,25 @@ def _prepare_example(world: Any) -> dict:
 @runner.action("docs.prepare", area="documents", label="Writing your documents for {title} at {company}",
                why="You pressed Apply with Hal at {time}. Documents come first.", priority=1,
                resumable=True, example=_prepare_example)
-def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
+def prepare(ctx, job_id: str, time: str = "", open_check: bool = True, again: bool = False,
+            keep_edits: bool = True) -> dict:
     """Moves a job to Getting ready and makes its documents; nothing is opened or sent.
 
     Resumable: a restart part way through starts it again by itself, since a queue of jobs left every one
     stalled under Getting ready after a restart (testers, 2026-11-04). Starting again only rewrites the drafts.
+
+    Without `again` a job that has its pack keeps it and only its PDFs are made again. With `again` (Write the
+    documents again, `write_again`) the pack is written afresh from the record and the CV as they are now, and
+    the person's own edits are put back unless `keep_edits` is false (`apply/rewrite.py`); an application
+    approved or sent meanwhile is left as it is.
     """
     from jobhunt import pack
 
     job = load_job(ctx.con, job_id)
+    left = rewrite.refusal(ctx.con, job_id, in_action=True) if again else None
+    if left:
+        ctx.step(left)
+        return {"job_id": job_id, "left": True}
     if job["status"] in ("new", "shortlisted", "ready"):
         db.set_status(ctx.con, job_id, "applying", "chosen from the queue")
         ctx.con.commit()
@@ -83,6 +93,8 @@ def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
     if open_check and settings.get("cvdocs.check_open") and _advert_closed(ctx.con, job):
         ctx.step("The advert has closed, so Hal wrote nothing for it")
         return {"job_id": job_id, "closed": True}
+    if again:
+        return _written_again(ctx, job, keep_edits)
     if not documents.summary(job)["has_pack"]:
         ctx.step("Writing your CV and cover letter for this job")
         pack.build(ctx.con, job_id, ctx=ctx)   # the record passages the letter used go under Activity "Used"
@@ -94,6 +106,20 @@ def prepare(ctx, job_id: str, time: str = "", open_check: bool = True) -> dict:
              "Hal drafted no cover letter for this job; write one on the Cover letter tab, or check that Hal's AI "
              "is working in Settings")
     return {"job_id": job_id}
+
+
+def _written_again(ctx, job, keep_edits: bool) -> dict:
+    """The `again` part of `prepare`: the pack afresh, then the new drafts saved with the person's work."""
+    from jobhunt import pack
+
+    before = rewrite.edits_now(ctx.con, job)
+    ctx.step("Writing your CV and cover letter again from your record and CV as they are now")
+    pack.build(ctx.con, job["id"], ctx=ctx)
+    ctx.step("Putting your own edits back and making the PDFs" if keep_edits and before
+             else "Making the PDFs of your CV and cover letter")
+    docs = rewrite.save_again(ctx.con, job, before, keep_edits=keep_edits)
+    ctx.changed("Hal wrote the documents again. Read them before you approve.")
+    return {"job_id": job["id"], "kept_edits": bool(keep_edits and before), "letter": bool(docs.get("letter"))}
 
 
 def _picks_example(world: Any) -> dict:
@@ -224,6 +250,22 @@ def apply_with_hal(con, job_id: str, *, session_id: str | None = None) -> str:
 
     return start("docs.prepare", job_id, params={"time": clock.now_utc().strftime("%H:%M")},
                  session_id=session_id)
+
+
+AGAIN_WHY = "You pressed Write the documents again"
+
+
+def write_again(con, job_id: str, *, keep_edits: bool = True, why: str = AGAIN_WHY, session_id: str | None = None,
+                helper_id: str | None = None, remote: bool = False, priority: int | None = None) -> str:
+    """Write the documents again: starts `docs.prepare` with `again`; returns its id.
+
+    `rewrite.NotNow` when the application is approved, sent or closed, or Hal is filling its form, which
+    starting here would stop. `priority` 0 for the button on the application page; a bulk run takes the
+    kind's own, behind what the person asks for on screen.
+    """
+    rewrite.check(con, job_id)
+    return start("docs.prepare", job_id, params={"again": True, "keep_edits": bool(keep_edits)}, why=why,
+                 session_id=session_id, helper_id=helper_id, remote=remote, priority=priority)
 
 
 def _merge_edits(docs: dict, body: dict) -> dict:

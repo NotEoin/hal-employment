@@ -270,6 +270,31 @@ class Routes(unittest.TestCase):
         row = self.con.execute("SELECT status, open_state FROM jobs WHERE id = ?", (job_id("sorrel-ready"),)).fetchone()
         self.assertEqual((row["status"], row["open_state"]), ("closed", "closed"))
 
+    def test_make_the_documents_again_really_writes_them_again_keeping_your_edits_unless_fresh(self):
+        # a regression: redo skipped the pack whenever one existed and only made the PDFs again (2026-11-18)
+        from jobhunt import pack
+        from jobhunt.apply import rewrite
+        from jobhunt.core import settings
+
+        settings.set("cvdocs.check_open", False, by="you")
+        self.addCleanup(settings.reset, "cvdocs.check_open")
+        self.start_applying("sorrel-ready")
+        built, kept = [], []
+        with mock.patch.object(pack, "build", lambda con, jid, **k: built.append(jid)), \
+                mock.patch.object(documents, "summary", lambda job: {"has_pack": True}), \
+                mock.patch.object(rewrite, "save_again", lambda con, job, before, keep_edits: kept.append(keep_edits)
+                                  or {}):
+            self.wait(self.c.post(self.url("sorrel-ready", "/documents/redo")).json()["action_id"])
+            self.wait(self.c.post(self.url("sorrel-ready", "/documents/redo"), {"fresh": True}).json()["action_id"])
+        self.assertEqual((built, kept), ([job_id("sorrel-ready")] * 2, [True, False]))
+
+    def test_make_the_documents_again_is_refused_for_an_approved_application(self):
+        self.start_applying("sorrel-ready")
+        self.put_app("sorrel-ready", approved_at=db.now(), stage="form")
+        r = self.c.post(self.url("sorrel-ready", "/documents/redo"))
+        self.assertEqual(r.status, 409, r.text)
+        self.assertIn("Change the documents", r.text)
+
     def test_hal_waits_for_you_as_long_as_preferences_say(self):
         # testers: "Wait for you to sign in ... for up to" was shown but never read; Hal always waited 15 minutes
         from jobhunt.core import settings

@@ -352,6 +352,25 @@ def set_change(job_id: str, change_id: str, on: bool, con: sqlite3.Connection | 
     return shown(job_id, con)
 
 
+def drop_your_edits(job_id: str, con: sqlite3.Connection | None = None) -> int:
+    """Takes the person's own edits out of the job's CV, leaving Hal's changes; returns how many went.
+
+    For writing the documents again fresh: the CV is base plus changes, so this leaves the CV `prepare` made
+    as if the person had never edited it. RuntimeError once approved.
+    """
+    with _conn(con) as c, _store().writing(c):
+        row = _row(c, job_id)
+        if row["approved"]:
+            raise RuntimeError(APPROVED)
+        hal, yours = _split(json.loads(row["changes"]))
+        if yours:
+            c.execute("UPDATE job_cvs SET changes = ? WHERE job_id = ?", (json.dumps(hal), job_id))
+            c.commit()
+    if yours:
+        events.publish("application", id=job_id)
+    return len(yours)
+
+
 def _made(job_id: str, con: sqlite3.Connection | None) -> tuple[sqlite3.Row, object, object]:
     """(the row, the base version, the base with Hal's changes still on)."""
     with _conn(con) as c:

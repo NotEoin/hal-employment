@@ -247,6 +247,15 @@ processes, once a second. Payloads carry ids, never private data.
   `documents.written_from(con, job_id)` reads it, None for a pack written before, and a value below
   `record.revision()` means the documents are out of date. The worker does not start a pack while a record
   update is in hand (`replenish.step` says it waits) and builds its packs as document writes.
+- Write the documents again (`apply/rewrite.py`, `actions.write_again`, `POST .../documents/redo`) starts
+  `docs.prepare` with `again`: the pack is built afresh even when `pack.md` exists, `tailor.prepare` makes the
+  job's CV again from the CV in use (creating the `job_cvs` row of an older application, which moves it to the
+  line-by-line editor), and `rewrite.save_again` saves the new drafts. The person's own work is what differs
+  from the old pack's drafts (`rewrite.kept_edits`, read before the build) plus their `by: "you"` CV edits; it
+  is put back unless the request says `fresh`, which also calls `tailor.drop_your_edits`. Hal's undone
+  changes are not carried over. `rewrite.refusal` refuses an approved, sent or closed application and one
+  whose form an `apply.*` action is filling, as `actions.start` replaces the action holding the job; the
+  action checks again when it runs, as an approval may land while it waits.
 - The kinds `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`, `apply.adopt`
   and `apply.match_tab` wrap the driver, so each run has steps, Stop and an Activity row.
 - The form driver's API in `core/runner.py` is keyed by job (`run_action`, `stop_action`, `ACTIONS`), so

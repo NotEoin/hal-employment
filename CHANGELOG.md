@@ -41,6 +41,13 @@ What changed in each version, in plain words.
   and each upload made two versions. Now each new file is a CV of its own with one first version, and adding
   a file Hal already has shows the CV it made from it instead of a copy.
 
+- **Making the documents again really writes them again.** Before, Hal only made the PDFs again from the
+  letter and answers it had already written, so a change to your record or your CV never reached them. Now
+  Hal writes the letter, the message, the answers and the job's CV again from your record and your CV as they
+  are now. Your own edits are kept unless you choose to write everything fresh, and Hal never rewrites an
+  application you have approved or sent. An application written by an older Hal also gets the line-by-line
+  CV editor this way.
+
 - **A setting you change while an earlier change is still saving keeps your choice.** On a slow computer the
   earlier save's answer could arrive afterwards and put the old value back, for example unticking a box you had
   just ticked on the Settings page.
