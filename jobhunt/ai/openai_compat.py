@@ -39,7 +39,7 @@ MAX_TOKENS = 16384
 RETRY_TEMPERATURE = 0.7         # a second try at an answer that ran on
 TRIES = 2                       # an answer that ran on is asked once more, never more
 RAN_ON = ("The AI's answer ran on without finishing, twice. Try again; if it keeps happening, choose another "
-          "model in Settings, Hal's brain.")
+          "AI for that job in Settings, Hal's brain.")
 
 
 def _address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -160,7 +160,7 @@ class OpenAICompatBackend:
 
     def embed(self, texts: list[str], model: str) -> list[list[float]]:
         """Not offered: record search by meaning uses Ollama."""
-        raise LLMUnavailable("Searching by meaning needs the AI on this computer (Ollama).")
+        raise LLMUnavailable("Searching by meaning needs the AI on this computer.")
 
 
 def _refused(e: urllib.error.HTTPError) -> LLMUnavailable:

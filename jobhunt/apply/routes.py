@@ -208,7 +208,8 @@ def copy_to_main(req: Request) -> dict:
     try:
         vid = tailor.copy_to_main(job_id, target, base, req.con, dict(queries.load_job(req.con, job_id)))
     except store.StaleVersion as e:
-        raise Conflict("Your main CV changed since this page opened. Nothing was copied.") from e
+        label = tailor.main_label(job_id, req.con)
+        raise Conflict(f"{label[:1].upper()}{label[1:]} changed since this page opened. Nothing was copied.") from e
     except CVError as e:
         msg = str(e).split(": ", 1)[-1]
         raise BadRequest(msg[:1].upper() + msg[1:] + ".", field="target") from e

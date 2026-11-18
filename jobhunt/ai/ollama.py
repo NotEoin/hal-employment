@@ -23,7 +23,7 @@ STATUS_TIMEOUT_S = 3            # a running Ollama answers /api/tags in millisec
 DEFAULT_TIMEOUT_S = 300
 JSON_TEMPERATURE = 0.1
 EMBED_HINT = "embed"            # embedding models cannot chat, so they are never picked for a role
-NOT_RUNNING = "Hal cannot reach the AI on this computer. Start Ollama, or choose another AI in Settings."
+NOT_RUNNING = "Hal cannot reach the AI on this computer. Start it again, or choose another AI in Settings."
 
 
 class OllamaBackend:
@@ -105,7 +105,8 @@ class OllamaBackend:
         """The model for a role left empty in Settings: the largest chat model, or the smallest for `quick`."""
         chat_models = [m for m in self.models() if EMBED_HINT not in m.lower()]
         if not chat_models:
-            raise LLMUnavailable("There is no model in the AI on this computer yet.", kind="unavailable")
+            raise LLMUnavailable("The AI on this computer has nothing installed to answer with yet.",
+                                 kind="unavailable")
         return chat_models[-1] if role == "quick" else chat_models[0]
 
     def embed(self, texts: list[str], model: str) -> list[list[float]]:

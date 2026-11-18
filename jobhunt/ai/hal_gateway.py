@@ -213,7 +213,7 @@ class GatewayBackend(OpenAICompatBackend):
 
     def _open(self, req: urllib.request.Request, timeout: float) -> Any:
         if not self.loopback:
-            raise LLMUnavailable(f"Hal's gateway must be on this computer, not at {self.url}, so the token "
+            raise LLMUnavailable(f"Hal's gateway must be on this computer, not at {self.url}, so Hal's key to it "
                                  "stays here.")
         try:
             reply = self._opener.open(req, timeout=timeout)
@@ -228,8 +228,8 @@ class GatewayBackend(OpenAICompatBackend):
         host = reply.headers.get(REMOTE_HEADER)
         if host:
             reply.close()
-            raise LLMUnavailable(f"Hal's gateway sent this to an online model at {host}; Hal mode only uses "
-                                 "the local model.", kind="local_only")
+            raise LLMUnavailable(f"Hal's gateway sent this to an online AI at {host}; Hal mode only uses "
+                                 "the AI on this computer.", kind="local_only")
         return reply
 
     def _listed(self) -> list[dict]:
@@ -274,8 +274,9 @@ class GatewayBackend(OpenAICompatBackend):
         except urllib.error.HTTPError as e:
             raise LLMUnavailable(f"Hal's gateway refused the request ({e.code}).") from e
         if model in remote:
-            raise LLMUnavailable(f"{model} is an online model behind Hal's gateway; Hal mode only uses the local "
-                                 "model. Choose a local one in Settings, Hal's brain.", kind="local_only")
+            raise LLMUnavailable(f"{model} is an online AI behind Hal's gateway; Hal mode only uses the AI on "
+                                 "this computer. Choose one on this computer in Settings, Hal's brain.",
+                                 kind="local_only")
         return super().chat(req, model)
 
     def status(self) -> Status:

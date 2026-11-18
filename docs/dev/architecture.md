@@ -2300,7 +2300,9 @@ Conventions for pages and dialogs:
 - Server data: `useApi(path, { on: [ev => ...] })`; `core/events.js` `stalePaths` maps each event to the
   paths it makes stale.
 - Words: text for Advanced and Details panels goes in a literal preceded by `/* details */`, which the
-  words test skips.
+  words test skips. The test also reads every message the Python code raises (`tests/ui/test_words.py`
+  `scan_server`), as routes show them as they are; a check of the code's own arguments is listed in
+  `SERVER_INTERNAL` with its reason.
 - State that follows a prop or the route is synced with `useLayoutEffect`, not `useEffect`: Preact runs
   effects after the next frame, so a plain effect shows the old value for one paint and a quick click or key
   press can act on it, as `pages/job.js` does.

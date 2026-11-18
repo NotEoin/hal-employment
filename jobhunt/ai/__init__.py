@@ -193,7 +193,7 @@ def model_for(be: Backend, role: str) -> str:
         return pick(role)
     found = be.models()
     if not found:
-        raise LLMUnavailable("There is no model to use yet.")
+        raise LLMUnavailable("There is no AI to use yet.")
     return found[0]
 
 

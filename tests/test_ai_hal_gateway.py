@@ -263,7 +263,7 @@ class Gateway(InHome):
         with self.assertRaises(LLMUnavailable) as caught:
             GatewayBackend(self.url, self.token).chat(ai.ChatRequest(system="s", user="u", timeout=5),
                                                       "made-up-model")
-        self.assertIn("online model", str(caught.exception))
+        self.assertIn("online AI", str(caught.exception))
 
     def test_the_token_is_never_sent_off_this_computer(self):
         # any address in `ai.hal_url` got the owner token, so a wrong or planted address could collect it

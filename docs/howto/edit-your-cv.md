@@ -50,8 +50,8 @@ Hal's on a line you also changed, your words stay.
 | --- | --- |
 | **Approve and fill in the form** cannot be pressed, and the step says to save or discard your changes | Press **Save changes** or **Discard changes** on the CV tab first. |
 | "This job's CV changed since you started editing. Your changes are not saved." | The job's CV was saved from another window meanwhile. Copy what you want to keep, press **Start again from this job's CV now**, and make the changes again. |
-| "Your main CV changed since this page opened. Nothing was copied." | Your main CV changed after you opened the application. Reload the page, then press **Copy to my main CV** again. |
-| "Your main CV already has these lines." | Nothing to copy: the entry reads the same on both. |
+| "Your main CV changed since this page opened. Nothing was copied." (with several CVs in use, the CV's name: "Your Museum CV changed ...") | That CV changed after you opened the application. Reload the page, then press the copy button again. |
+| "Your main CV already has these lines." (or "Your Museum CV ...") | Nothing to copy: the entry reads the same on both. |
 | The CV tab shows only Hal's changes, with no editor | Hal wrote this application's documents before CVs could be edited line by line. Use **Undo** on Hal's changes, or change your main CV on **My CV**. |
 | "Save or discard your changes first." after **Undo** or **Copy to my main CV** | Save or discard your edits, then press it again. |
 | **Adjust my CV for these** cannot be pressed | Tick three to five of the requirements, not fewer or more. |

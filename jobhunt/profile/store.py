@@ -893,10 +893,10 @@ def set_star(con: sqlite3.Connection, item_id, on: bool) -> dict:
     kind that takes no star or `on` that is not true or false.
     """
     if not isinstance(on, bool):
-        raise ValueError("Say whether the card is starred: true or false.")
+        raise ValueError("Say whether the card is in your showcase: true or false.")
     row = _row(con, item_id)
     if row["kind"] not in STAR_KINDS:
-        raise ValueError("Only projects and jobs can be starred.")
+        raise ValueError("Only projects and jobs can go in your showcase.")
     with con:
         con.execute("UPDATE profile_items SET star = ?, star_by = ?, updated = ? WHERE id = ?",
                     (int(on), STAR_BY_YOU, db.now(), row["id"]))

@@ -65,6 +65,7 @@ INSERT_CHUNK = 500         # rows written per statement batch, so a big sort com
 # A project folder copied into Hal's data folder is held in memory once, like an upload from the page.
 FOLDER_BYTES_MAX = UPLOAD_MAX_BODY
 CHANGEABLE = {"section", "doc_kind", "target_id", "ticked", "star"}
+FLAG_WORDS = {"ticked": "ticked", "star": "in your showcase"}   # each flag as the review table says it
 UNTICKED = ("lecture",)    # sections whose proposals start unticked: the person ticks the modules they want
 UNREAD = ("new", "reading")  # source states of a file not read yet: a stopped add takes it out again
 READ_KINDS = ("record.sources", "record.sort_accept")   # the actions that read sources, timed for the estimate
@@ -374,9 +375,10 @@ def change_row(con: sqlite3.Connection, row_id, changes: dict) -> dict:
     for flag in ("ticked", "star"):
         if flag in changes:
             if not isinstance(changes[flag], bool):
-                raise ValueError(f"Say whether it is {flag}: true or false.")
+                raise ValueError(f"Say whether it is {FLAG_WORDS[flag]}: true or false.")
             if flag == "star" and sets.get("section", r["section"]) != "project":
-                raise ValueError("Only a project can be a showcase piece here; star coursework on its course.")
+                raise ValueError("Only a project can go in your showcase here; showcase coursework on its "
+                                 "course.")
             sets[flag] = int(changes[flag])
     if sets:
         with con:

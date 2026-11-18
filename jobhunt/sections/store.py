@@ -338,9 +338,9 @@ def change(con: sqlite3.Connection, source_id, changes: dict) -> dict:
         sets["target_id"] = target_card(con, section, changes.get("target_id", r["target_id"] if not moved else None))
     if "starred" in changes:
         if not isinstance(changes["starred"], bool):
-            raise ValueError("Say whether it is starred: true or false.")
+            raise ValueError("Say whether it is in your showcase: true or false.")
         if section.id not in STAR_SECTIONS:
-            raise ValueError(f"{section.label} cannot be starred.")
+            raise ValueError(f"{section.label} cannot go in your showcase.")
         sets["starred"] = int(changes["starred"])
     if "module" in changes:
         sets["module"] = _module(con, section, sets.get("target_id", r["target_id"]), changes["module"])

@@ -624,7 +624,7 @@ def _api(path: str, run: _Run) -> Any:
 def _github(url: str, run: _Run) -> None:
     parts = [urllib.parse.unquote(p) for p in urllib.parse.urlsplit(url).path.split("/") if p]
     if not parts or parts[0] in GITHUB_OWN:
-        raise LinkError("This is one of GitHub's own pages. Give the link to your profile or a repository.")
+        raise LinkError("This is one of GitHub's own pages. Give the link to your profile or a project.")
     if run.token is None:
         run.token = _github_token() or ""
     try:
@@ -644,7 +644,7 @@ def _github(url: str, run: _Run) -> None:
 def _github_one_repo(owner: str, name: str, run: _Run) -> None:
     data = _api(f"/repos/{_q(owner)}/{_q(name)}", run)
     if not data:
-        raise LinkError("GitHub has no public repository at this link. Check it was copied whole.")
+        raise LinkError("GitHub has no public project at this link. Check it was copied whole.")
     run.pages.append(_repo_page(data, run))
     run.tick(run.pages[-1].url)
 

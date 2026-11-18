@@ -608,7 +608,23 @@ class JobCv(unittest.TestCase):
         self.assertEqual(again.status, 400)
         self.assertIn("Your main CV already has these lines", again.json()["error"]["message"])
         stale = self.c.post(self.url("/cv/copy"), {"base": self.main, "target": SHOP})
-        self.assertEqual(stale.status, 409)
+        self.assertEqual((stale.status, stale.json()["error"]["message"]),
+                         (409, "Your main CV changed since this page opened. Nothing was copied."))
+
+    def test_a_stale_copy_names_the_cv_the_application_was_built_from_when_several_are_in_use(self):
+        from test_cv_suggest import made_up_cv
+
+        store.rename(store.version(self.main)["doc_id"], "Bookshop CV")
+        museum = store.create("Museum CV", made_up_cv(), origin="uploaded", what="Your file", by="baseline")
+        store.star(museum, True)
+        same = self.c.post(self.url("/cv/copy"), {"base": self.main, "target": SHOP})
+        self.assertEqual(same.json()["error"]["message"], "Your Bookshop CV already has these lines.")
+        opened = self.c.get(self.url("/cv")).json()["version_id"]
+        self.save(opened, {"op": "replace", "target": TABLE + "/text", "value": MINE})
+        self.assertEqual(self.c.post(self.url("/cv/copy"), {"base": self.main, "target": SHOP}).status, 200)
+        stale = self.c.post(self.url("/cv/copy"), {"base": self.main, "target": SHOP})
+        self.assertEqual((stale.status, stale.json()["error"]["message"]),
+                         (409, "Your Bookshop CV changed since this page opened. Nothing was copied."))
 
     def test_copy_to_my_main_cv_marks_only_your_lines_as_your_words(self):
         # regression: lines Hal reworded for the job reached the main CV marked as the person's own words

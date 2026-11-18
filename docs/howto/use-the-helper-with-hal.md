@@ -78,6 +78,6 @@ yourself; it never switches by itself.
 | A read says "Hal's gateway is giving the graphics card to someone else" | Hal's chat or voice, or another job, has the card. The read tries again by itself. |
 | A batch read waits with "waiting for VRAM" in `gpu-light ls` | The job asked for the whole card. Submit it with `--vram 1`, as in step 7: the job itself uses no graphics memory, and the gateway's own claim reserves the model. |
 | "Hal's gateway did not accept the token" | The token was rotated or revoked. Save the new one in the token file; no restart is needed. |
-| "... is an online model behind Hal's gateway" | Choose a local model under **Settings**, **Hal's brain**, or clear the model setting so Hal picks one. |
+| "... is an online AI behind Hal's gateway" | Choose a local model under **Settings**, **Hal's brain**, or clear the model setting so Hal picks one. |
 | "jobhunt_root is not set" from a Hal jobs tool | Add `jobhunt_root` under `[jobs]` as in step 6. |
 | AI mode still says "On its own" | Pick **Hal's local model** in Settings, or run the `settings set ai.provider hal` command above. |

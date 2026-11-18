@@ -102,6 +102,7 @@ class Follows(Baseline):
         opened = tailor.editor(self.job["id"], self.con)
         self.assertEqual((opened["main_doc_id"], opened["main_version_id"], opened["main_label"]),
                          (self.museum, store.current(self.con, self.museum)[0], "your Museum CV"))
+        self.assertEqual(tailor.main_label(self.job["id"], self.con), "your Museum CV", "the stale copy's words")
 
     def test_picking_hals_own_pick_again_makes_it_hals_choice_once_more(self):
         with self.hal_picks(self.museum, reason="Hal's made-up reason."):

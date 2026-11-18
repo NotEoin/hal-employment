@@ -10,9 +10,11 @@ It reads every string literal and template text in `jobhunt/web/static/app/**/*.
 
 Every file must pass (the test is strict).
 
-The messages the CV code (`jobhunt/cvstudio`) raises are scanned too, as the routes send them to the page's
-toasts as they are: literals, f-strings and module constants given to `raise`, with "star" in any form banned
-there as well. A check of the code's own arguments (`SERVER_INTERNAL`) is left out.
+The messages Hal's own code (`jobhunt`, every package) raises are scanned too, as the routes send them to the
+page's toasts and status lines as they are: literals, f-strings and module constants given to `raise`, with
+"star" in any form banned there as well. Left out are the start-up code that no route reaches
+(`SERVER_SKIPPED`), checks of the code's own arguments (`SERVER_INTERNAL`), and the names of settings as
+Settings shows them (`SETTING_NAMES`), which a message may point to.
 """
 from __future__ import annotations
 
@@ -24,10 +26,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[2] / "jobhunt" / "web" / "static" / "app"
-CV_SERVER = Path(__file__).resolve().parents[2] / "jobhunt" / "cvstudio"
+SERVER = Path(__file__).resolve().parents[2] / "jobhunt"
 STAR_WORDS = re.compile(r"\bstar(s|red|ring)?\b", re.I)
-# a check of the code's own arguments, never of what a person sent: no route passes a person's words to it
-SERVER_INTERNAL = ("role: ",)
+# the database's own upgrade code runs at start, before the server answers any request
+SERVER_SKIPPED = ("core/db/",)
+# checks of the code's own arguments or set-up, never of what a person sent: no route passes a person's words
+# to them (a file's role, the settings catalogue, a caller's open transaction, the remote launcher's template)
+SERVER_INTERNAL = ("role: ", "_: platforms must be among", "a settings change needs its own transaction",
+                   "the launcher template")
+# a setting's label as Settings shows it (`record.github_token`), so the message names what to change
+SETTING_NAMES = re.compile(r"\bGitHub token\b")
 DETAILS = "/* details */"
 HELPER_STEP = "setup/steps/helper.js"
 REMOTE_PAGE = "settings/remote.js"
@@ -247,17 +255,22 @@ def raised_messages(path: Path) -> list[tuple[int, str]]:
     return out
 
 
-def scan_server(root: Path = CV_SERVER) -> list[tuple[str, int, str, str]]:
-    """(file, line, text, problem) for every banned word in a message the CV code raises, plus "star" in any form:
-    "Use this for applications" is the app's only word for a starred CV (STAR names a way to tell examples)."""
+def scan_server(root: Path = SERVER) -> list[tuple[str, int, str, str]]:
+    """(file, line, text, problem) for every banned word in a message Hal's code raises, plus "star" in any form:
+    "Use this for applications" and "Showcase" are the app's words for a star (STAR names a way to tell
+    examples)."""
     hits = []
-    for path in sorted(root.glob("*.py")):
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith(SERVER_SKIPPED):
+            continue
         for line, text in raised_messages(path):
             if text.startswith(SERVER_INTERNAL):
                 continue
-            found = problems(text, path.name) + [f"{m.group(0)!r}: say \"in use for applications\""
-                                                for m in [STAR_WORDS.search(text)] if m]
-            hits += [(path.name, line, text, p) for p in found]
+            words = SETTING_NAMES.sub(" ", text)
+            found = problems(words, rel) + [f"{m.group(0)!r}: say \"in use for applications\" or \"showcase\""
+                                            for m in [STAR_WORDS.search(words)] if m]
+            hits += [(rel, line, text, p) for p in found]
     return hits
 
 
@@ -306,8 +319,9 @@ class WordsTest(unittest.TestCase):
         hits = scan_app()
         self.assertEqual([f"{r}:{n} {t!r}: {p}" for r, n, t, p in hits], [])
 
-    def test_the_cv_codes_messages_use_the_apps_vocabulary(self) -> None:
-        """A stale CV order answered "order: list every starred CV once" in a toast (2026-11-18)."""
+    def test_the_servers_messages_use_the_apps_vocabulary(self) -> None:
+        """A stale CV order answered "order: list every starred CV once" in a toast, and the record page's
+        Showcase button "Only projects and jobs can be starred." (2026-11-18)."""
         hits = scan_server()
         self.assertEqual([f"{r}:{n} {t!r}: {p}" for r, n, t, p in hits], [])
 

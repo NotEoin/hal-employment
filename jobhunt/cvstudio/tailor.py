@@ -502,6 +502,18 @@ def save_edits(job_id: str, base: str, changes: list, con: sqlite3.Connection | 
     return shown(job_id, con)
 
 
+def _main_label(con: sqlite3.Connection, main: str) -> str:
+    """How the page names the CV `main`: "your Museum CV", or `MAIN_LABEL` while only one CV is in use."""
+    from jobhunt.cvstudio import choose
+
+    return choose.your(_store().doc(con, main)["name"]) if len(_store().starred(con)) > 1 else MAIN_LABEL
+
+
+def main_label(job_id: str, con: sqlite3.Connection) -> str:
+    """How the page names the CV the job's CV was built from (`editor`'s `main_label`), for its messages."""
+    return _main_label(con, _store().version(_row(con, job_id)["base_version_id"], con=con)["doc_id"])
+
+
 def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     """The job's CV for Edit your CV in job mode, with what changed marked by `model.diff`.
 
@@ -511,8 +523,6 @@ def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     `main_label` on the page, "your main CV" while only one CV is in use), for Copy to my main CV, which copies
     into that CV.
     """
-    from jobhunt.cvstudio import choose
-
     model = _model()
     row, base, made = _made(job_id, con)
     hal, _ = _split(json.loads(row["changes"]))
@@ -527,8 +537,7 @@ def editor(job_id: str, con: sqlite3.Connection | None = None) -> dict:
     main = _store().version(row["base_version_id"], con=con)["doc_id"]
     return {**model.to_dict(doc), "version_id": _rev(row), "n": None, "job_id": job_id,
             "main_version_id": _store().current(con, main)[0], "main_doc_id": main,
-            "main_label": choose.your(_store().doc(con, main)["name"]) if len(_store().starred(con)) > 1
-            else MAIN_LABEL, "approved": row["approved"],
+            "main_label": _main_label(con, main), "approved": row["approved"],
             "changes": shown(job_id, con)["changes"], "marks": marks}
 
 
@@ -547,6 +556,7 @@ def copy_to_main(job_id: str, target: str, base: str, con: sqlite3.Connection, j
     if not isinstance(entry, model.Entry):
         raise model.CVError("target: choose an entry of this job's CV to copy")
     main = _store().get(base, con=con)
+    label = _main_label(con, _store().version(base, con=con)["doc_id"])
     section = target.split("/")[0]
     try:
         there = model.find(main, target)
@@ -556,11 +566,11 @@ def copy_to_main(job_id: str, target: str, base: str, con: sqlite3.Connection, j
         try:
             model.find(main, section)
         except model.CVError as e:
-            raise model.CVError("target: your main CV no longer has this section, so there is nowhere to copy "
+            raise model.CVError(f"target: {label} no longer has this section, so there is nowhere to copy "
                                 "these lines") from e
         change = model.Change("insert", section, copy.deepcopy(entry))
     elif [b.text for b in there.bullets] == [b.text for b in entry.bullets]:
-        raise model.CVError("target: your main CV already has these lines")
+        raise model.CVError(f"target: {label} already has these lines")
     else:
         change = model.Change("replace", f"{target}/bullets", copy.deepcopy(entry.bullets))
     title = (job or {}).get("title") or "one job"
