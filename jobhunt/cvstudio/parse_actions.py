@@ -16,6 +16,8 @@ file (`baseline_file_id`), so "your original file" means it.
   "Upload a new version", the setup guide, a second tab, or "Use this for applications" in Your record. A
   second request for a file being read follows that reading instead of starting another, so two uploads close
   together never cancel each other (2026-11-18: one subject for every upload let the second stop the first).
+  A request checks for a CV the file made already only when it starts, so a reading that started just as
+  another ended makes no CV: `store.create_for_file` checks again under the write lock and answers that CV.
 - The report ("Check what Hal read") belongs to that version, and corrections to it are new versions.
   Values the CV gives for `you.*` settings fill only settings that are still empty, so nothing the person
   typed is overwritten.
@@ -155,12 +157,14 @@ def parse_cv(ctx, file_id: str, file: str, doc_id: str | None = None, last: bool
         reading = ai_reading
     what = UPLOADED_WHAT.format(name=file)
     if doc_id is None:
-        doc_id = store.create(store.name_for(file, reading.doc), reading.doc, origin="uploaded", what=what,
-                              by="baseline", file_id=file_id, star=not last)
-        if last:
-            store.star(doc_id, True)
+        doc_id, made = store.create_for_file(file_id, store.name_for(file, reading.doc), reading.doc, what=what,
+                                             last=last)
         record_cvs.settle_lead()
         version_id = store.doc(doc_id=doc_id)["current_version_id"]
+        if not made:
+            ctx.changed(f"{file} is your CV \"{store.doc(doc_id=doc_id)['name']}\" already.")
+            return {"version_id": version_id, "cv": doc_id, "n": store.version(version_id)["n"], "found": "",
+                    "pages": pages, "how": reading.how, "unsure": [], "filled": []}
     else:
         version_id = store.new_version(reading.doc, origin="uploaded", what=what, by="baseline", file_id=file_id,
                                        doc_id=doc_id)

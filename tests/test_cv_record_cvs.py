@@ -4,6 +4,7 @@ of the record makes it one of My CVs, in use, and turning it off takes it out of
 The CV files are the made-up ones of `tests/fixtures/cv` (Avery Quillon, Marnie Quillfeather, a scanned CV);
 no AI is used, so the CV reader keeps its rules' reading.
 """
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -15,7 +16,7 @@ from test_sections_routes import ended, form
 
 from jobhunt import record
 from jobhunt.core import paths, runner
-from jobhunt.cvstudio import parse
+from jobhunt.cvstudio import parse, store
 
 FIXTURES = Path(__file__).parent / "fixtures" / "cv"
 WAIT_S = 20
@@ -106,6 +107,50 @@ class RecordCvRoutes(unittest.TestCase):
         cvs = self.c.get("/api/v2/cv/cvs").json()
         self.assertEqual(([c["name"] for c in cvs["cvs"]], cvs["archived"]),
                          (["Avery-Quillon-CV", "Marnie-Quillfeather-CV"], []))
+
+    def test_one_file_read_from_my_cvs_and_your_record_at_once_makes_one_cv(self):
+        """Turning a CV on in Your record while My CVs read the same file started a second reading, and the file
+        became two identical CVs (2026-11-18)."""
+        entered, release = threading.Event(), threading.Event()
+        rules = parse.read_rules
+
+        def held(lines):
+            entered.set()
+            release.wait(WAIT_S)
+            return rules(lines)
+
+        self.to_my_cvs("Marnie-Quillfeather-CV.txt")
+        with mock.patch.object(parse, "read_rules", held):
+            status, out = upload(self.hal, self.c, "Avery-Quillon-CV.md", fixture("Avery-Quillon-CV.md"))
+            self.assertEqual(status, 200, out)
+            self.assertTrue(entered.wait(WAIT_S), "My CVs is reading the file")
+            source = self.listed()["Avery-Quillon-CV.md"]
+            self.assertIsNone(source["my_cv"])
+            pressed = self.use(source["id"], True)
+            self.assertEqual((pressed.status, pressed.json()["action_id"]), (200, out["action_id"]),
+                             "the press follows the reading under way")
+            release.set()
+            ended(out["action_id"])
+        self.idle()
+        names = [c["name"] for c in self.c.get("/api/v2/cv/cvs").json()["cvs"]]
+        self.assertEqual(sorted(names), ["Avery-Quillon-CV", "Marnie-Quillfeather-CV"])
+
+    def test_a_reading_that_ends_after_another_made_the_cv_uses_that_cv(self):
+        """The duplicate check ran only when a request started, so a reading that started just before another
+        ended made a second CV of the same file (2026-11-18)."""
+        first = self.to_my_cvs("Avery-Quillon-CV.md")
+        self.to_my_cvs("Marnie-Quillfeather-CV.txt")
+        self.assertEqual(self.c.request("PUT", f"/api/v2/cv/archive?cv={first}", {"on": True}).status, 200)
+        file_id = store.doc(doc_id=first)["baseline_file_id"]
+        late = runner.start("cv.parse", subject="late reading",
+                            params={"file_id": file_id, "file": "Avery-Quillon-CV.md", "last": True})
+        done = ended(late)
+        self.assertEqual((done["state"], done["result"]["cv"]), ("done", first), done["error"])
+        self.idle()
+        cvs = self.c.get("/api/v2/cv/cvs").json()
+        self.assertEqual(([c["name"] for c in cvs["cvs"]], cvs["archived"]),
+                         (["Marnie-Quillfeather-CV", "Avery-Quillon-CV"], []),
+                         "no second CV; the one there is back in use, last")
 
     def test_a_scanned_cv_or_a_letter_cannot_be_used_and_says_why(self):
         scanned = self.to_record("Scanned-CV.pdf")

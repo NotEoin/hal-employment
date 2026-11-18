@@ -8,7 +8,9 @@ SHA-256, so `store.file_cvs` says which CV of My CVs a record CV is, with no col
 - Turning it on uses the CV the file already made (restored from the archive when it is there) and puts it
   last in the order of the CVs in use, as My CVs' own toggle does. A file that made no CV yet is read by the CV
   reader (`cv.parse`, the rules then the AI) into a new CV named after the file; the request only checks the
-  file (`parse.check`) and starts the action, so the slow part never runs in a request thread.
+  file (`parse.check`) and starts the action, so the slow part never runs in a request thread. A file being
+  read already (an upload on My CVs) is not read twice: the request follows that reading
+  (`parse_actions.start_read`), and the reading makes one CV however many asked (`store.create_for_file`).
 - Turning it off takes it out of use; the store refuses for the last CV in use, in plain words.
 - After either, the lead CV of the record follows (`profile.cvs.settle`): the first CV in use leads the facts.
 - Only a CV of one uploaded file can be used: a folder or zip of files is no one CV file to read.
@@ -26,7 +28,6 @@ import threading
 from collections import OrderedDict
 from pathlib import PurePath
 
-from jobhunt.core import runner
 from jobhunt.cvstudio import parse, render, store
 from jobhunt.cvstudio.model import CVDoc
 from jobhunt.sections import registry
@@ -93,7 +94,8 @@ def use(con: sqlite3.Connection, source_id, on: bool, *, session_id: str | None 
 
     `cv` is the CV of My CVs it is (None while a new one is being read); `action_id` the `cv.parse` reading the
     file into a new CV, else None. `NotUsable` (and `parse.CVReadError`) say why a file cannot be used,
-    `model.CVError` why the last CV in use stays in use, `RuntimeError` (`BUSY`) when the file is being read.
+    `model.CVError` why the last CV in use stays in use, `RuntimeError` (`BUSY`) when the file is being read
+    into another CV ("Upload a new version") or in another window.
     """
     r, data, name = source_file(con, source_id)
     mine = my_cv(con, r)
@@ -110,10 +112,10 @@ def use(con: sqlite3.Connection, source_id, on: bool, *, session_id: str | None 
         return {"cv": mine["id"], "action_id": None}
     parse.check(data, name)
     file_id = store.add_file(data, name, role="baseline", con=con)
+    from jobhunt.cvstudio.parse_actions import start_read  # here, as parse_actions imports this module
+
     try:
-        action_id = runner.start("cv.parse", subject=f"cv.parse:{file_id}",
-                                 params={"file_id": file_id, "file": name, "last": True},
-                                 session_id=session_id, remote=remote)
+        action_id = start_read(file_id, name, last=True, session_id=session_id, remote=remote)
     except RuntimeError as e:
         log.info("not reading %s again: %s", name, e)
         raise RuntimeError(BUSY) from e

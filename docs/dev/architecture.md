@@ -419,7 +419,10 @@ runs: tests use `tests/support/fake_claude/`.
     file has the SHA-256 of a `cv_files` row when a CV of My CVs was read from it, so no column links them.
     `POST /api/v2/record/sources/{id}/use` {on} (`record_routes.py`) uses that CV (restored from the archive,
     then starred last in the order) or, for a file new to My CVs, checks it (`parse.check`) and starts
-    `cv.parse` with `last` (subject `cv.parse:<file id>`, so it never cancels an upload's reading); off
+    `cv.parse` with `last` (`parse_actions.start_read`, so a file My CVs is reading already is followed, not
+    read again). The reading makes its CV with `store.create_for_file`, which checks `cv_for_file` again
+    under the write lock and answers the CV the file made meanwhile (put in use with `last`), so one file
+    never becomes two CVs; off
     un-stars it, and the store's `LAST_STAR` refusal is the 400. The source's shape carries `can_use`,
     `in_use` and `my_cv`. On screen the toggle is `cv/cv-list.js` `UseToggle`, shared by both pages, with
     the words "Use this for applications" and no "star" (the words test bans it for the STAR method). Both

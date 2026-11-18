@@ -358,6 +358,30 @@ def create(name: str, first: CVDoc | None = None, *, origin: str = "", what: str
     return new_id
 
 
+def create_for_file(file_id: str, name: str, first: CVDoc, *, what: str, last: bool = False) -> tuple[str, bool]:
+    """(the CV's id, True) for a new CV read from a kept file (`create`, origin uploaded), or (the CV the file
+    made already, False), checked under the write lock right before the CV is made.
+
+    So two readings of one file that started before either finished (My CVs and Your record at once) make one
+    CV, not two (2026-11-18). A new CV goes first among the CVs in use, or last with `last` (Your record's
+    toggle); with `last` a CV the file made already is put in use too (restored from the archive, then last).
+    """
+    with _conn(None) as c, writing(c):
+        had = cv_for_file(file_id, con=c)
+        if had is None:
+            made = create(name, first, origin="uploaded", what=what, by="baseline", file_id=file_id,
+                          star=not last, con=c)
+            if last:
+                star(made, True, con=c)
+            return made, True
+        if last:
+            if doc(c, had)["archived"]:
+                archive(had, False, con=c)
+            star(had, True, con=c)
+        log.info("file %s made CV %s while it was read: no second CV", file_id, had)
+        return had, False
+
+
 def cv_for_file(file_id: str, con: sqlite3.Connection | None = None) -> str | None:
     """The CV a kept file already made (its own file, or a version read from it); one in use first."""
     with _conn(con) as c:
