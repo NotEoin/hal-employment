@@ -134,7 +134,7 @@ export function Record({ arg }) {
     <div class="rec-tabs"><${Tabs} label="Your record" value=${t} onChange=${setT} tabs=${tabs} /></div>
     ${t === "overview" && html`<div class="grid2"><div class="stack">
         <${SourcesPanel} uid="rec-cvs" heading="Your CVs" parts=${[["cv", null], ["letter", null]]}
-          hint="Add every CV you have; Hal uses the newest as your main one. Cover letters and personal statements only teach Hal how you write."
+          hint="Add every CV you have. Your record follows the first one you use for applications, else the newest. Cover letters and personal statements only teach Hal how you write."
           empty="No CVs yet." />
         <${SortCard} />
         <${IngestCard} /></div>

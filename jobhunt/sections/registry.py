@@ -131,7 +131,7 @@ PROJECT_READERS = {"repo": "repo", "local_folder": "local_folder", "repo_url": "
 
 SECTIONS: dict[str, Section] = {s.id: s for s in (
     Section("cv", "CVs", "CVs", ("cv",), OWN, EVERY_FACT, {ALL_FIELDS: CV_RANK}, "cv",
-            hint="Every CV you have. Hal uses the newest as your main one."),
+            hint="Every CV you have. Your record follows the first one you use for applications, else the newest."),
     Section("letter", "Cover letters and personal statements", "Letters", ("cover_letter", "statement"), OWN, (),
             {ALL_FIELDS: VOICE_ONLY}, "letter",
             hint="Hal reads these only to learn how you write, never as facts about you."),

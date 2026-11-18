@@ -31,26 +31,26 @@ async function act(fn, said) {
 const fileName = rel => rel.split("/").pop().replace(/\.md$/, "");
 
 /** "From:" the files an item came from, each with its quote, a mark when the quote is not in the file, one on a
-    CV that is not your current one (it only fills gaps, `jobhunt/profile/cvs.py`), and for a skill how strongly
+    CV your record does not follow (it only fills gaps, `jobhunt/profile/cvs.py`), and for a skill how strongly
     it shows it ("Done in your coursework: ...", "Studied in ...", jobhunt/profile/strength.py). */
 export function Sources({ evidence }) {
   if (!evidence.length) return null;
   return html`<div class="rec-from"><div class="small sub"><b>From:</b></div><ul class="rec-sources">
     ${evidence.map(e => html`<li key=${e.id}>
       <a href=${FILE_PATH + e.file_id} target="_blank" rel="noopener">${fileName(e.source_rel)}</a>
-      ${e.from_older_cv && html` <${Chip} tone="line">from an older CV<//>`}
+      ${e.from_older_cv && html` <${Chip} tone="line">from another of your CVs<//>`}
       ${!e.verified && html` <${Chip} tone="warn">Quote not found in the file<//>`}
       ${e.strength_words && html`<div class="small sub">${e.strength_words}</div>`}
       ${e.quote && html`<div class="quote">"${e.quote}"</div>`}</li>`)}</ul></div>`;
 }
 
 // Beside a value only an older CV of yours gives: Hal leaves it out of your letters (`profile.writing.older_cv_only`).
-const OlderCv = () => html` <${Chip} tone="warn">only in an older CV<//>`;
+const OlderCv = () => html` <${Chip} tone="warn">only in another of your CVs<//>`;
 // Beside a value only a plan gives (a design document, a proposal): Hal leaves it out of your letters
 // (`profile.writing.planned_only`).
 const Planned = ({ doc }) => html` <${Chip} tone="warn">planned in ${doc}<//>`;
 
-/** A value's chips: only in an older CV, or planned in a document. */
+/** A value's chips: only in another of your CVs, or planned in a document. */
 const marks = (x, older, planned) => html`${older.includes(x) && html`<${OlderCv} />`}${planned[x] && html`<${Planned} doc=${planned[x]} />`}`;
 
 function Value({ type, v, older = [], planned = {} }) {

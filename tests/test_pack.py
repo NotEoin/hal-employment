@@ -1397,7 +1397,7 @@ class CoveredGaps(unittest.TestCase):
                 mock.patch.object(cv, "facts_text", lambda: f"{FACTS['technical_grad']} Tools: GitHub Actions."):
             md = pack.build(a.con, add_job(a.con, "technical_grad")["id"], use_web=False).read_text()
         fit = section(md, "Fit")
-        self.assertIn("| CI/CD | your CV (GitHub Actions) | from your current CV | partial |", fit)
+        self.assertIn("| CI/CD | your CV (GitHub Actions) | from the CV your record follows | partial |", fit)
         self.assertIn("Gaps to address or accept: none found", fit)
         self.assertNotIn("if strict", md)
 

@@ -719,9 +719,9 @@ class OlderCv(unittest.TestCase):
         story = replace(QUILL_STORY, card=card)
         scope = replace(SCOPE, cards=(card, EMPLOYMENT, FERRY, SHOP), known=(*SCOPE.known, "Java"))
         self.assertEqual(paragraphs.sentence_problems("I wrote Quill's indexer in Java.", story, scope),
-                         ["Java is only on an older CV for Quill, never in its own sources; leave it out"])
+                         ["Java is only on another of your CVs for Quill, never in its own sources; leave it out"])
         self.assertEqual(drafts.misplaced_tools("I wrote Quill's indexer in Java.", [card], ["Java"]),
-                         ["I wrote Quill's indexer in Java. (Java is only on an older CV for Quill)"])
+                         ["I wrote Quill's indexer in Java. (Java is only on another of your CVs for Quill)"])
 
 
 if __name__ == "__main__":

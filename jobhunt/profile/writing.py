@@ -285,7 +285,7 @@ def _tags(projects: list[dict]) -> dict[str, str]:
 
 CV_TYPE, OWN_ROLE = "cv", "own"
 YEAR = re.compile(r"\b(?:19|20)\d\d\b")
-OLDER_CV = "only in an older CV"
+OLDER_CV = "only in another of your CVs"
 # The fields of a card a CV may give, each a text or a list (`store.KINDS`); never the name, which is the card.
 CV_FIELDS = {"project": ("summary", "role", "period", "link", "tools"), "job": ("duties", "achievements")}
 # The sections whose sources are a project's own: its code, pages, files or form, and a showcase coursework piece.
@@ -299,7 +299,8 @@ SOURCE_WORDS = {"repo": "from the code project", "repo_url": "from the code proj
                 "dissertation": "from your dissertation", "coursework": "from your coursework",
                 "job_doc": "from the job's documents", "repository": "from the code project",
                 "project": "from the project's files"}
-CURRENT_CV_WORDS, OLDER_CV_WORDS, RECORD_WORDS = "from your current CV", "from an older CV", "from your record"
+CURRENT_CV_WORDS, OLDER_CV_WORDS, RECORD_WORDS = (
+    "from the CV your record follows", "from another of your CVs", "from your record")
 DISSERTATION = "dissertation"      # the document type of the piece marked "This is my dissertation"
 
 

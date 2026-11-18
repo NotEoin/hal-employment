@@ -160,8 +160,8 @@ When two of your projects have similar names, Hal adds a few words of each one's
 name in what the writer reads, and a sentence that gives one of them a tool or a purpose only the other has
 is rewritten the same way. The pack's fit table and the letter's **Evidence** note name each with those few
 words too, and lose a tool given to the wrong one. Each row of the fit table says where its evidence comes
-from, such as "from the code project" or "from your current CV". A tool that only an older CV gives a
-project is never said to be used in it.
+from, such as "from the code project" or "from the CV your record follows". A tool that only another of
+your CVs gives a project is never said to be used in it.
 
 The pack's **Company check** names a registered company as the employer only when the advert's own
 website is on its record, or it is registered in the advert's town and trade at an address that is not a
@@ -404,7 +404,7 @@ Each job, qualification or skill is a card:
 - **Found by Hal**, **Checked by you**, **Edited by you** or **Hidden** says where it stands.
 - **From:** names each file it came from, with the words Hal took from it. Click the name to open the
   file. **Quote not found in the file** means those words are not in the file, so check the fact.
-- **only in an older CV** beside a tool, duty or other detail of a project or job means only a CV your
+- **only in another of your CVs** beside a tool, duty or other detail of a project or job means only a CV your
   record does not follow gives it. The CV your record follows (the first one you use for applications, else
   your newest) speaks for your CVs, so Hal leaves that detail out of your letters, messages and answers
   unless that CV, a repository or another document of your own gives it too. **Edit** the card and remove

@@ -340,8 +340,8 @@ WHERE_JOB = "a job"        # where a job card's work was done, as a story says i
 CV_ONLY_WORDS = "your CV only; no project files back it, so keep to what the CV says"
 CV_FILLED_WORDS = "From your CV, not the project's own sources (say no more than this)"
 DISSERTATION_WORDS = "your dissertation for your degree; call it your dissertation"
-OLDER_CV_JOB_WORDS = ("an older CV only; say only its title, employer, dates and duties as given, and add nothing "
-                      "to them")
+OLDER_CV_JOB_WORDS = ("another of your CVs only, not the CV your record follows; say only its title, employer, "
+                      "dates and duties as given, and add nothing to them")
 
 
 @dataclass(frozen=True)

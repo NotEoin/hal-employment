@@ -179,7 +179,7 @@ class Sources(unittest.TestCase):
                 profile_store.confirm_many(con, [c["id"] for c in profile_store.items(con, "project")])
                 cards = {c["name"]: c for c in writing.cards(con)}
         self.assertEqual(cards[FORM["name"]]["source"], "from what you typed")
-        self.assertEqual(cards["Harbour bot"]["source"], "from your current CV")
+        self.assertEqual(cards["Harbour bot"]["source"], "from the CV your record follows")
         self.assertEqual((cards["Harbour bot"]["tools"], cards["Harbour bot"]["older_cv"]), ([], ["Java"]))
         self.assertTrue(old)
 
@@ -189,7 +189,8 @@ class Sources(unittest.TestCase):
         fit = pack.with_sources({"matches": [{"requirement": "Python", "evidence": "Tide gauge reads tides in Python"},
                                              {"requirement": "Teamwork", "evidence": "Helped first-year students"}]},
                                 cards, "Lab helper\n- Helped first-year students in programming labs")
-        self.assertEqual([m["source"] for m in fit["matches"]], ["from the code project", "from your current CV"])
+        self.assertEqual([m["source"] for m in fit["matches"]],
+                         ["from the code project", "from the CV your record follows"])
 
 
 if __name__ == "__main__":

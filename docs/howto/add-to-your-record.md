@@ -131,7 +131,7 @@ How it works inside is in [Architecture](../dev/architecture.md#sections-of-the-
 | The wrong CV shows **Your record follows this CV** | Press **Use this for applications** on the one you use now, and on My CVs press **Try this CV first** on it. Hal works out your cards again from it. |
 | **Preview** says "This PDF is a picture of a CV, so Hal cannot read it." | Press **Open your file** to see the file itself, or add the Word file or a PDF with text in it. |
 | "Hal needs one CV to use for applications, so this one stays in use." | Turn on **Use this for applications** for another CV first. |
-| A fact says "from an older CV" | Only a CV that does not lead your record gives it. Add it to the CV your record follows if it is still true, or hide it. |
+| A fact says "from another of your CVs" | Only a CV that does not lead your record gives it. Add it to the CV your record follows if it is still true, or hide it. |
 | A module or mark is missing after you added a transcript | Hal reads table rows with a module's name and mark, and lines with a module code and a mark at the end ("HIS2040 Archival Methods 75"). Edit the course's card to add what it missed. |
 | "... is already this course's dissertation." | Press **My dissertation** on the piece marked now to undo it, then mark the right one. |
 | A card disappeared after you pressed **Remove** | It came only from that file, so Hal hid it. Add the file again and the card comes back as you left it. |
