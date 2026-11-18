@@ -256,6 +256,15 @@ processes, once a second. Payloads carry ids, never private data.
   changes are not carried over. `rewrite.refusal` refuses an approved, sent or closed application and one
   whose form an `apply.*` action is filling, as `actions.start` replaces the action holding the job; the
   action checks again when it runs, as an approval may land while it waits.
+- Out of date (`rewrite.out_of_date`, three queries for the whole board): the record's revision above the
+  job's `docs_written_from` stamp, or the job's `job_cvs.base_version_id` no longer the current version of
+  the CV it came from (`cv_versions.doc_id` -> `cv_documents.current_version_id`). A job with no stamp was
+  written before stamps existed, and the revision began counting with them, so any revision above 0 marks it
+  from the record; one with no `job_cvs` row has no CV reason. Only unapproved cards with documents are
+  checked. Board cards carry `out_of_date` (the reason) and `rewritable` (also nothing queued for the job),
+  which `POST /applications/rewrite-out-of-date` takes, keeping edits, at the kind's own priority.
+  `application()` gives `docs.out_of_date`, `docs.own_edits`, `docs.stopped` (`_prepare_stopped`) and the
+  state `failed` when no CV was made and Hal is not making it; a queued `docs.prepare` shows as `writing`.
 - The kinds `apply.fill`, `apply.apply_edits`, `apply.next_page`, `apply.draft_rest`, `apply.adopt`
   and `apply.match_tab` wrap the driver, so each run has steps, Stop and an Activity row.
 - The form driver's API in `core/runner.py` is keyed by job (`run_action`, `stop_action`, `ACTIONS`), so

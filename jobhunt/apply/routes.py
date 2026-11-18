@@ -39,9 +39,11 @@ def _for_each(req: Request, flag: str, missing: str, start) -> dict:
     started, skipped = {}, []
     for ref in ids:
         job_id = queries.resolve(req.con, ref)
-        if job_id in marked:
+        try:
+            if job_id not in marked:
+                raise rewrite.NotNow("changed since the board was drawn")
             started[job_id] = start(job_id)
-        else:
+        except rewrite.NotNow:
             skipped.append(ref)
     return {"started": started, "skipped": skipped}
 
@@ -71,6 +73,21 @@ def remake_missing(req: Request) -> dict:
     """
     return _for_each(req, "remakeable", "Send the applications whose documents to make.",
                      lambda job_id: actions.start("docs.prepare", job_id, **who(req)))
+
+
+BULK_AGAIN_WHY = "You pressed Write the out-of-date documents again"
+
+
+@route("POST", PREFIX + "/rewrite-out-of-date")
+def rewrite_out_of_date(req: Request) -> dict:
+    """Writes the documents again for every application named in `ids` that the board shows as `rewritable`
+    (out of date, not approved or sent, nothing of Hal's queued for it), keeping the person's own edits.
+
+    Each runs as a document write at the kind's own priority, behind anything the person asks for on screen.
+    Nothing regenerates without this request.
+    """
+    return _for_each(req, "rewritable", "Send the applications whose documents to write again.",
+                     lambda job_id: actions.write_again(req.con, job_id, why=BULK_AGAIN_WHY, **who(req)))
 
 
 @route("GET", PREFIX + "/{app_id}")

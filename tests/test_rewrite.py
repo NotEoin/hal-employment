@@ -30,7 +30,9 @@ def letter_of(con, job) -> str:
     return documents.load(con, job)["letter"]
 
 
-class WriteAgain(unittest.TestCase):
+class Written(unittest.TestCase):
+    """A made-up applicant whose documents Hal has written once, with the helpers the tests below share."""
+
     def setUp(self):
         self.writer = FakeWriter(letter=OLD_LETTER)
         self.a = self.enterContext(as_applicant(people.HUMANITIES, self.writer))
@@ -53,6 +55,8 @@ class WriteAgain(unittest.TestCase):
         self.con.execute("UPDATE job_cvs SET changes = ? WHERE job_id = ?", (json.dumps(changes), self.job["id"]))
         self.con.commit()
 
+
+class WriteAgain(Written):
     def test_writing_again_writes_a_new_letter_from_the_changed_record_and_stamps_it(self):
         self.assertIn(OLD_LETTER, letter_of(self.con, self.job))
         self.writer.letter = NEW_LETTER     # what the writer makes of the record once it has changed
@@ -119,6 +123,58 @@ class WriteAgain(unittest.TestCase):
         with mock.patch.object(runner, "running_for", lambda subject: filling):
             with self.assertRaisesRegex(rewrite.NotNow, "filling in the form"):
                 actions.write_again(self.con, self.job["id"])
+
+
+class OutOfDate(Written):
+    """Out of date on the application page and the board, and the failed state, from the same real pack."""
+
+    def page(self) -> dict:
+        return queries.application(self.con, self.job["id"])["docs"]
+
+    def card(self) -> dict:
+        return next(c for col in queries.board(self.con)["columns"] for c in col["items"] if c["id"] == self.job["id"])
+
+    def test_documents_are_up_to_date_until_the_record_changes_and_again_once_rewritten(self):
+        self.assertEqual((self.page()["out_of_date"], self.card()["out_of_date"]), (None, ""))
+        record.bump_revision()
+        self.assertEqual(self.page()["out_of_date"], rewrite.RECORD_MOVED)
+        self.assertEqual((self.card()["out_of_date"], self.card()["rewritable"]), (rewrite.RECORD_MOVED, True))
+        self.again()
+        self.assertIsNone(self.page()["out_of_date"])
+
+    def test_a_new_version_of_your_cv_makes_the_documents_out_of_date(self):
+        store.new_version(store.current(self.con)[1], origin="edited", what="A made-up change", by="you",
+                          con=self.con)
+        self.assertEqual(self.page()["out_of_date"], rewrite.CV_MOVED)
+        record.bump_revision()
+        self.assertEqual(self.card()["out_of_date"], rewrite.BOTH_MOVED)
+
+    def test_documents_written_before_stamps_are_out_of_date_once_the_record_changes(self):
+        self.con.execute("DELETE FROM meta WHERE k = ?", (documents.written_from_key(self.job["id"]),))
+        self.con.commit()
+        if record.revision(self.con) == 0:
+            self.assertIsNone(self.page()["out_of_date"], "nothing has changed since the stamps began")
+        record.bump_revision()
+        self.assertEqual(self.page()["out_of_date"], rewrite.RECORD_MOVED)
+
+    def test_an_approved_application_is_never_called_out_of_date(self):
+        record.bump_revision()
+        self.con.execute("UPDATE applications SET approved_at = ? WHERE job_id = ?", (db.now(), self.job["id"]))
+        self.con.commit()
+        self.assertIsNone(self.page()["out_of_date"])
+        self.assertFalse(self.card()["rewritable"])
+
+    def test_a_write_that_failed_shows_on_the_application_page_with_why(self):
+        # a regression: the page said "ready" with empty tabs, and only the board showed the error (2026-11-18)
+        from jobhunt import pack
+
+        job = add_job(self.con, "technical_grad", status="applying")
+        with mock.patch.object(pack, "build", side_effect=RuntimeError("Hal's AI did not answer")):
+            done = finished(actions.start("docs.prepare", job["id"]), WAIT_S)
+        self.assertEqual(done["state"], "error")
+        docs = queries.application(self.con, job["id"])["docs"]
+        self.assertEqual(docs["state"], "failed")
+        self.assertIn("did not answer", docs["stopped"])
 
 
 DRAFTED = {"letter": "Hal's letter.", "message": "Hal's message.", "message_to": "Ada Penhallow",

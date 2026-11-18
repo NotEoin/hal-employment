@@ -288,6 +288,27 @@ class Routes(unittest.TestCase):
             self.wait(self.c.post(self.url("sorrel-ready", "/documents/redo"), {"fresh": True}).json()["action_id"])
         self.assertEqual((built, kept), ([job_id("sorrel-ready")] * 2, [True, False]))
 
+    def test_write_the_out_of_date_documents_again_takes_only_the_out_of_date_cards_and_keeps_edits(self):
+        from jobhunt import pack
+        from jobhunt.apply import rewrite
+
+        self.start_applying("sorrel-ready", "wexford-ready")
+        stale, fine = job_id("sorrel-ready"), job_id("wexford-ready")
+        kept = []
+        with mock.patch.object(queries, "_has_documents", lambda job: True), \
+                mock.patch.object(rewrite, "out_of_date", lambda con, ids: {stale: rewrite.RECORD_MOVED}
+                                  if stale in ids else {}), \
+                mock.patch.object(pack, "build", lambda con, jid, **k: None), \
+                mock.patch.object(rewrite, "save_again", lambda con, job, before, keep_edits: kept.append(keep_edits)
+                                  or {}):
+            cards = {c["id"]: c for col in self.c.get("/api/v2/applications").json()["columns"] for c in col["items"]}
+            self.assertEqual((cards[stale]["out_of_date"], cards[stale]["rewritable"]), (rewrite.RECORD_MOVED, True))
+            self.assertEqual((cards[fine]["out_of_date"], cards[fine]["rewritable"]), ("", False))
+            r = self.c.post("/api/v2/applications/rewrite-out-of-date", {"ids": [stale, fine]})
+            self.assertEqual(r.status, 200, r.text)
+            self.wait(r.json()["started"][stale])
+        self.assertEqual((list(r.json()["started"]), r.json()["skipped"], kept), ([stale], [fine], [True]))
+
     def test_make_the_documents_again_is_refused_for_an_approved_application(self):
         self.start_applying("sorrel-ready")
         self.put_app("sorrel-ready", approved_at=db.now(), stage="form")

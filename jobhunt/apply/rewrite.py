@@ -1,5 +1,5 @@
-"""Write the documents again: which applications may be rewritten, and what of the person's own work a
-rewrite keeps.
+"""Write the documents again: which applications may be rewritten, which are out of date, and what of the
+person's own work a rewrite keeps.
 
 The rewrite itself is `docs.prepare` with `again` (`apply/actions.py`): it builds the pack from the record and
 the CV as they are now (`pack.build`, which stamps the record revision, `documents.mark_written_from`, and makes
@@ -19,13 +19,25 @@ Design decisions, each with its reason:
 - Approved and sent applications are never rewritten (`refusal`): the employer may already have them, and an
   approval fixed what the form is filled with. A form fill in progress for the job is refused too, as
   `actions.start` replaces the action holding the job and would stop the fill without a word.
+- Out of date (`out_of_date`) is worked out for every card in one pass: the record's revision against the
+  `meta` stamps (one query), and each job's CV base against the current version of the CV it came from (one
+  join). Documents written before stamps existed have none; the revision began counting together with the
+  stamps (2026-11-18), so a revision above 0 means the record changed after every one of them was written,
+  and they are called out of date from the record. A job's CV from before `job_cvs` has no base to compare,
+  so its CV reason is never shown.
 """
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 
-from jobhunt import documents
+from jobhunt import documents, record
 from jobhunt.core import runner
+
+# What the page and the board say about documents out of date, by what moved.
+RECORD_MOVED = "Your record changed since Hal wrote these"
+CV_MOVED = "Your CV changed since Hal wrote these"
+BOTH_MOVED = "Your record and your CV changed since Hal wrote these"
 
 # Why a rewrite is refused, in the words the page shows.
 APPROVED = ("You approved these documents, so Hal leaves them as they are. Press \"Change the documents\" to "
@@ -150,3 +162,40 @@ def save_again(con: sqlite3.Connection, job, before: dict, *, keep_edits: bool) 
     con.commit()
     return docs
 
+
+# ------------------------------------------------------------------------------------------ out of date
+
+def _stamps(con: sqlite3.Connection) -> dict[str, int]:
+    prefix = documents.WRITTEN_FROM_PREFIX
+    rows = con.execute("SELECT k, v FROM meta WHERE substr(k, 1, ?) = ?", (len(prefix), prefix)).fetchall()
+    return {row[0][len(prefix):]: int(row[1]) for row in rows}
+
+
+def _cv_moved(con: sqlite3.Connection) -> set[str]:
+    """Jobs whose CV, not yet approved, was made from a version that is no longer the one in use of its CV."""
+    rows = con.execute("""SELECT jc.job_id FROM job_cvs jc
+                          JOIN cv_versions v ON v.id = jc.base_version_id
+                          JOIN cv_documents d ON d.id = v.doc_id
+                          WHERE jc.approved IS NULL AND d.current_version_id IS NOT NULL
+                            AND d.current_version_id != jc.base_version_id""").fetchall()
+    return {row[0] for row in rows}
+
+
+def out_of_date(con: sqlite3.Connection, job_ids: Iterable[str]) -> dict[str, str]:
+    """{job id: why its documents are out of date, in plain words} for those of `job_ids` that are.
+
+    The caller passes only jobs whose documents exist and are not approved. Three queries in all, whatever
+    the number of jobs.
+    """
+    wanted = list(job_ids)
+    if not wanted:
+        return {}
+    revision, stamps, cv_moved = record.revision(con), _stamps(con), _cv_moved(con)
+    out = {}
+    for job_id in wanted:
+        stamp = stamps.get(job_id)
+        rec = revision > 0 if stamp is None else stamp < revision
+        cv = job_id in cv_moved
+        if rec or cv:
+            out[job_id] = BOTH_MOVED if rec and cv else RECORD_MOVED if rec else CV_MOVED
+    return out

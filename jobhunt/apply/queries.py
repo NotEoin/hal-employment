@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from jobhunt import browser, db, documents, tasks
+from jobhunt.apply import rewrite
 from jobhunt.core import clock, settings
 from jobhunt.core.runner import ACTIONS, ACTIVE, checkpoint
 
@@ -272,11 +273,28 @@ def _has_documents(job) -> bool:
     return "cv" in documents.files(job)
 
 
+def _active_jobs(con) -> set[str]:
+    """Jobs with an action waiting its turn or under way, in one query for the whole board."""
+    return {r[0] for r in con.execute(f"SELECT DISTINCT job_id FROM actions WHERE job_id IS NOT NULL AND state IN "
+                                      f"({','.join('?' * len(ACTIVE))})", ACTIVE)}
+
+
+def _mark_out_of_date(con, cards: list[dict], approved: set[str]) -> None:
+    """Gives each card `out_of_date` (why, or "") and `rewritable`: out of date, ready to approve and with no
+    action of Hal's queued, so Write the out-of-date documents again can take it. One pass for the board."""
+    stale = rewrite.out_of_date(con, [c["id"] for c in cards if c.get("approvable") and c["id"] not in approved])
+    active = _active_jobs(con) if stale else set()
+    for c in cards:
+        c["out_of_date"] = stale.get(c["id"], "")
+        c["rewritable"] = bool(c["out_of_date"]) and c["id"] not in active
+
+
 def board(con) -> dict:
     """The Applications board: its columns, each card's next step, and the Closed list."""
     columns = {key: [] for key, _, _ in COLUMNS}
-    closed = []
-    for r in con.execute("""SELECT j.*, a.stage, a.number FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
+    closed, approved = [], set()
+    for r in con.execute("""SELECT j.*, a.stage, a.number, a.approved_at FROM jobs j
+                            LEFT JOIN applications a ON a.job_id = j.id
                             WHERE j.status IN ('applying','applied','assessment','interview','offer')
                                OR (j.status IN ('rejected','withdrawn','closed','skipped') AND a.job_id IS NOT NULL)
                             ORDER BY a.number IS NULL, a.number DESC, j.id""").fetchall():
@@ -292,6 +310,9 @@ def board(con) -> dict:
                              "approvable": col == "ready" and not busy and _has_documents(r),
                              "remakeable": col == "ready" and not busy and not _has_documents(r)
                              and not _queued(con, r["id"])})
+        if r["approved_at"]:
+            approved.add(r["id"])
+    _mark_out_of_date(con, [c for col in columns.values() for c in col], approved)
     for col in IN_PROGRESS:
         order = in_progress_ids(con)
         columns[col].sort(key=lambda c: order.index(c["id"]) if c["id"] in order else len(order))
@@ -443,13 +464,12 @@ def application(con, ref: str) -> dict:
     docs = documents.load(con, r)
     letter = docs.get("letter") or ""
     notes = _letter_notes(r, docs) if letter else {}
-    entry = ACTIONS.get(job_id) or {}
-    writing = ([{"text": entry.get("message") or entry.get("name") or "", "state": "running"}]
-               if col == "ready" and _busy(job_id) else None)
-    held = _running_for(job_id) if _busy(job_id) else None
+    writing = _writing(con, job_id) if col == "ready" else None
+    held = _running_for(job_id) if _busy(job_id) or writing else None
     form = app["form"]
     filled, total, to_check = _form_counts(form)
     files = documents.files(r)
+    again = _again(con, r, row, step, files) if col == "ready" and not writing else {}
     out = {
         "id": job_id, "number": row["number"] if row is not None else None, "job": job_card(r), "step": step,
         "steps": steps, "nav": nav(con, job_id), "column": col, "action_id": held["id"] if held else None,
@@ -457,7 +477,9 @@ def application(con, ref: str) -> dict:
         "closed": _closed_why(con, r) if r["status"] in CLOSED_STATUSES else None,
         "first_time": not settings.get("setup.first_app_seen"),
         "docs": {"state": "writing" if writing else "approved" if step > 1 or (row is not None and row["approved_at"])
-                 else "ready",
+                 else "failed" if again.get("failed") else "ready",
+                 "stopped": again.get("stopped"), "out_of_date": again.get("out_of_date"),
+                 "own_edits": bool(again.get("own_edits")),
                  "writing": writing, "approved_at": (row["approved_at"] if row is not None else None)
                  or docs.get("approved") or None,
                  "cv": {"changes": _cv_changes(r, docs), "preview_url": _file_url(files.get("cv")),
@@ -506,6 +528,35 @@ def application(con, ref: str) -> dict:
     if step == 4:
         out["interview"] = {"when": None, "where": None, "prep_md": app["prep"] or "", "questions": []}
     return out
+
+
+WAITING_TO_WRITE = "Waiting for Hal to start writing, after the work ahead of it"
+
+
+def _writing(con, job_id: str) -> list[dict] | None:
+    """The Documents step's writing state: what Hal is doing while it works on the application, or that a
+    write is queued for it; None otherwise. A queued write shows too, so nobody edits documents that are about
+    to be written again."""
+    if _busy(job_id):
+        entry = ACTIONS.get(job_id) or {}
+        return [{"text": entry.get("message") or entry.get("name") or "", "state": "running"}]
+    queued = con.execute(f"""SELECT 1 FROM actions WHERE job_id = ? AND kind = 'docs.prepare'
+                             AND state IN ({','.join('?' * len(ACTIVE))})""", (job_id, *ACTIVE)).fetchone()
+    return [{"text": WAITING_TO_WRITE, "state": "running"}] if queued else None
+
+
+def _again(con, job, row, step: int, files: dict) -> dict:
+    """What the Documents step says about writing them again: `failed` (the last write failed or stopped before
+    the CV was made, and Hal is not making them now), `stopped` (why the last write did
+    not finish), `out_of_date` (why, `rewrite.out_of_date`) and `own_edits` (`rewrite.has_own_edits`, so the
+    page asks before writing everything fresh)."""
+    if step > 1 or (row is not None and row["approved_at"]):
+        return {}
+    stopped = _prepare_stopped(con, job["id"]) if not _queued(con, job["id"]) else ""
+    if "cv" not in files and stopped:
+        return {"failed": True, "stopped": stopped}
+    return {"stopped": stopped or None, "out_of_date": rewrite.out_of_date(con, [job["id"]]).get(job["id"]),
+            "own_edits": rewrite.has_own_edits(con, job)}
 
 
 SENT_WORDS = {"site_confirmed": "The site said it was received after you pressed Submit.",
