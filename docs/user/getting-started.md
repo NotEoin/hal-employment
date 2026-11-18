@@ -308,7 +308,8 @@ numbered from 1.
 - **Use this for applications** (the button with a star icon) marks the CVs Hal may use for applications.
   A new CV is in use and tried first. **Try this CV first** puts another CV in use at the front. Hal always
   keeps one CV in use, so the last one stays on until you turn on another. The same button is on each CV
-  under **Your CVs** on Your record, and turning it on there adds that CV here.
+  under **Your CVs** on Your record, and turning it on there adds that CV here. For each application, Hal
+  builds on the CV in use that fits the advert best (see "Which CV an application is built from").
 - The first CV in use is also the CV your record follows: its jobs, dates and grades come first on your
   cards, and your other CVs only fill gaps.
 - **Rename** changes a CV's name. Hal names a new CV after its file.
