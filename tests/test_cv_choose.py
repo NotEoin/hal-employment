@@ -4,17 +4,20 @@ lead CV with a reason when comparing fails. Every CV and advert here is made up.
 """
 import threading
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 import support  # noqa: F401 - the temporary home, before any jobhunt import
 from test_cv_store import cv_home
 
-from jobhunt import ai, db, pack
+from jobhunt import ai, db, documents, pack
 from jobhunt.ai.fake import FakeBackend
+from jobhunt.apply import queries
 from jobhunt.cvstudio import choose, model, score, store, tailor
 
 WAIT_S = 20          # bounds a thread that would otherwise hang the test
 SETTLE_S = 0.5       # long enough for an unlocked write to store its choice
+READ_S = 5           # a page reading an application answers well inside this
 
 ADVERT = {"id": "made-up:1", "title": "Backend engineer",
           "description": "Requirements:\nPython, SQL, Docker, AWS and Linux for our services. Git and testing."}
@@ -186,25 +189,31 @@ class OneChoicePerJob(unittest.TestCase):
             read = []
             reader = threading.Thread(target=lambda: read.append(choose.base_doc(ADVERT["id"])))
             second.start()
+            second.join(WAIT_S)           # the person's pick is stored at once, while Hal's write still runs
             reader.start()
-            second.join(SETTLE_S)         # without the lock the person's pick is stored here, then overwritten
+            reader.join(SETTLE_S)
+            self.assertFalse(reader.is_alive(), "a read never waits for a write")
             release.set()
-            for t in (first, second, reader):
-                t.join(WAIT_S)
-        self.assertEqual(choose.base_doc(ADVERT["id"]), self.backend)
+            first.join(WAIT_S)
+        self.assertEqual(choose.base_doc(ADVERT["id"]), self.backend, "Hal's older choice did not overwrite it")
         self.assertEqual(choose.kept(con, ADVERT["id"]).by, choose.YOU)
-        self.assertIn(read[0], (self.ai_cv, self.backend), "a read waits for a stored choice, never None mid-write")
+        self.assertEqual(read, [self.backend])
 
-    def test_writing_the_documents_holds_the_choice_until_the_jobs_cv_is_stored(self):
-        entered, release = threading.Event(), threading.Event()
-        hals = choose.Choice(self.ai_cv, store.current(doc_id=self.ai_cv)[0])
+    def pack_waiting(self, step: str, entered: threading.Event, release: threading.Event):
+        """`pack._build` in a thread, held at `step` ("choose": Hal comparing the CVs; "write": the letter and
+        the rest of the pack, before its job's CV) until `release`; the rest of the pack is its job's CV only."""
+        real_choose = choose.choose
 
-        def choosing(con, job, *, again):     # the pack's choice, made before the person picks another CV
-            entered.set()
-            release.wait(WAIT_S)
-            return hals
+        def choosing(con, job):
+            if step == "choose":
+                entered.set()
+                release.wait(WAIT_S)
+            return replace(real_choose(con, job), doc_id=self.ai_cv, version_id=store.current(doc_id=self.ai_cv)[0])
 
-        def written(con, job, base, use_web, ctx, fresh):   # the rest of the pack: only its job's CV
+        def written(con, job, base, use_web, ctx, fresh):
+            if step == "write":
+                entered.set()
+                release.wait(WAIT_S)
             return tailor.prepare(dict(job), level="no", base=base, con=con)
 
         def build() -> None:
@@ -214,20 +223,44 @@ class OneChoicePerJob(unittest.TestCase):
             finally:
                 con.close()
 
-        with mock.patch.object(choose, "for_writing", choosing), mock.patch.object(pack, "_build_on", written):
-            first = threading.Thread(target=build)
-            first.start()
-            self.assertTrue(entered.wait(WAIT_S))
-            con = db.connect()
-            self.addCleanup(con.close)
-            picked = choose.by_you(con, ADVERT, self.backend)
-            second = threading.Thread(target=tailor.prepare, args=(ADVERT,), kwargs={"base": picked, "level": "no"})
-            second.start()
-            second.join(SETTLE_S)         # without the lock the person's pick is stored here, then overwritten
-            release.set()
-            for t in (first, second):
-                t.join(WAIT_S)
+        self.enterContext(mock.patch.object(choose, "choose", choosing))
+        self.enterContext(mock.patch.object(pack, "_build_on", written))
+        thread = threading.Thread(target=build)
+        thread.start()
+        self.assertTrue(entered.wait(WAIT_S))
+        return thread
+
+    def test_change_cv_pressed_while_the_documents_are_written_is_the_cv_they_end_on(self):
+        entered, release = threading.Event(), threading.Event()
+        writing = self.pack_waiting("choose", entered, release)
+        con = db.connect()
+        self.addCleanup(con.close)
+        tailor.prepare(ADVERT, level="no", base=choose.by_you(con, ADVERT, self.backend), con=con)
+        release.set()
+        writing.join(WAIT_S)
+        self.assertFalse(writing.is_alive())
         self.assertEqual(choose.base_doc(ADVERT["id"]), self.backend)
+
+    def test_the_application_reads_at_once_while_its_documents_are_written(self):
+        # 2.3.1's first lock was held for the whole pack, so opening the application waited up to 15 minutes
+        entered, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        writing = self.pack_waiting("write", entered, release)
+        con = db.connect()
+        self.addCleanup(con.close)
+        con.execute("INSERT INTO applications (job_id, stage, updated) VALUES (?, 'documents', ?)",
+                    (ADVERT["id"], db.now()))
+        con.commit()
+        job = dict(con.execute("SELECT * FROM jobs WHERE id = ?", (ADVERT["id"],)).fetchone())
+        got = []
+        reader = threading.Thread(target=lambda: got.append((documents.cv_file_name(job),
+                                                             queries.application(con, ADVERT["id"])["id"])))
+        reader.start()
+        reader.join(READ_S)
+        self.assertFalse(reader.is_alive(), "reading the application waited for the documents being written")
+        self.assertEqual(got[0][1], ADVERT["id"])
+        release.set()
+        writing.join(WAIT_S)
 
 
 if __name__ == "__main__":

@@ -20,10 +20,13 @@ Design decisions, each with its reason:
 - The choice is kept with the job's CV (`job_cvs.base_choice`, migration 0034, with `base_version_id`), as
   {by, reason, pick, scores}: `by` "you" for a CV the person picked, which a rewrite keeps (on that CV's
   version in use then), and "hal" for Hal's, which a rewrite makes again (`for_writing`).
-- One choice per job at a time (`job_lock`): `tailor.prepare` chooses and stores under it and `base_doc` reads
-  under it, so two document writes for one job (Hal's adjusting and the person's Change CV, say) cannot each
-  choose a CV and store different answers, the later one undoing the person's pick (review of 2.3.0,
-  2026-11-18). The lock is per process, as Hal's writes all run in the one server.
+- A choice Hal made never overwrites one stored after it (review of 2.3.0, 2026-11-18). `for_writing` notes
+  what was stored when it chose (`Choice.seen`, from `stored_now`); `tailor.prepare` stores under the job's lock
+  (`job_lock`) only while that still holds, else builds again on what is stored now, so the person's Change CV
+  pressed during a long write stands. The lock covers that check and the store (milliseconds), never the AI
+  calls, and readers (`base_doc`, every page that shows an application) take no lock at all: opening an
+  application while Hal writes its documents never waits (2026-11-19). The lock is per process, as Hal's
+  writes all run in the one server.
 """
 from __future__ import annotations
 
@@ -58,10 +61,9 @@ FALLBACK = "Hal could not compare your CVs this time, so it used the first one i
 NO_SKILLS = "This advert names none of the skills Hal compares, so Hal used the first CV in your list."
 YOU_CHOSE = "You chose this CV for this application."
 
-# A job's CV is chosen, then made with a few AI calls (each with its own timeout), then stored; a second
-# write for the same job waits this long for the first to store its choice.
-LOCK_WAIT_S = 900
-SECONDS_PER_MINUTE = 60
+# The job's lock is held only to check and store its choice (milliseconds); this bounds a store that hangs.
+LOCK_WAIT_S = 30
+NOT_READ = "not read"     # `Choice.seen` of a choice not made from what was stored (the person's own pick)
 
 _VECTORS: dict[tuple[str, str], list[float]] = {}
 _VECTORS_LOCK = threading.Lock()
@@ -80,6 +82,7 @@ class Choice:
     pick: str = ""                      # the CV Hal would pick, marked in the switch dialog
     scores: list[dict] = field(default_factory=list)
     hal_reason: str = ""                # why Hal picks `pick`, kept while the person's own choice stands
+    seen: object = NOT_READ             # what was stored when Hal chose (`stored_now`); `NOT_READ` for your pick
 
     def stored(self) -> str:
         """The JSON kept in `job_cvs.base_choice`."""
@@ -274,37 +277,42 @@ def kept(con: sqlite3.Connection, job_id: str) -> Choice | None:
 
 @contextlib.contextmanager
 def job_lock(job_id: str) -> Iterator[None]:
-    """Holds one job's choice of CV while it is chosen and stored (`tailor.prepare`) or read (`base_doc`).
+    """Holds one job's choice of CV while a write checks it and stores (`tailor.prepare`); never around AI calls.
 
-    Re-entrant, so a write that reads its own choice does not wait for itself. TimeoutError, in plain words,
-    when another write for the job holds it past `LOCK_WAIT_S`.
+    Re-entrant. TimeoutError, in plain words, when another write for the job holds it past `LOCK_WAIT_S`.
     """
     with _JOB_LOCKS_LOCK:
         lock = _JOB_LOCKS.setdefault(job_id, threading.RLock())
     if not lock.acquire(timeout=LOCK_WAIT_S):
-        raise TimeoutError("Hal was still making this job's CV after "
-                           f"{LOCK_WAIT_S // SECONDS_PER_MINUTE} minutes. Try again.")
+        raise TimeoutError("Hal could not save this job's CV just now. Try again.")
     try:
         yield
     finally:
         lock.release()
 
 
+def stored_now(con: sqlite3.Connection, job_id: str) -> tuple | None:
+    """What is stored for the job's choice now (`base_version_id`, `base_choice`); None when nothing is."""
+    row = con.execute("SELECT base_version_id, base_choice FROM job_cvs WHERE job_id = ?", (job_id,)).fetchone()
+    return (row["base_version_id"], row["base_choice"]) if row else None
+
+
 def base_doc(job_id: str, con: sqlite3.Connection | None = None) -> str | None:
-    """The CV the job's documents are built from; None while it has no job's CV (an older application, or
-    none written yet). It waits while another write for the job is choosing and storing (`job_lock`), so it
-    never answers with a choice that write is about to replace."""
-    with job_lock(job_id), _conn(con) as c:
+    """The CV the job's documents are built from, as stored now; None while it has no job's CV (an older
+    application, or none written yet: callers then use the lead CV, as the documents step names it). It
+    takes no lock and never chooses, so a page reading an application never waits for a write."""
+    with _conn(con) as c:
         found = kept(c, job_id)
     return found.doc_id if found else None
 
 
 def for_writing(con: sqlite3.Connection, job: dict, *, again: bool) -> Choice:
-    """The CV to build the job's documents on, on its version in use now.
+    """The CV to build the job's documents on, on its version in use now, with what was stored then (`seen`).
 
     A CV the person picked is kept, as is Hal's own pick unless `again` (the documents are written afresh,
     `pack.build`), when Hal chooses again. A kept CV that went to the archive is chosen again.
     """
+    seen = stored_now(con, job["id"])
     old = kept(con, job["id"])
     if old is not None:
         try:
@@ -312,8 +320,8 @@ def for_writing(con: sqlite3.Connection, job: dict, *, again: bool) -> Choice:
         except store.NoSuchCV:
             archived = True
         if not archived and (old.by == YOU or not again):
-            return replace(old, version_id=store.current(con, old.doc_id)[0])
-    return choose(con, job)
+            return replace(old, version_id=store.current(con, old.doc_id)[0], seen=seen)
+    return replace(choose(con, job), seen=seen)
 
 
 def by_you(con: sqlite3.Connection, job: dict, doc_id: str) -> Choice:

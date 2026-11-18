@@ -500,10 +500,13 @@ runs: tests use `tests/support/fake_claude/`.
   order wins unless another fits by more than `LEAD_MARGIN`. The reason names what each CV covers. With one
   CV in use there is no comparison and no AI call; when comparing fails the lead CV is used and the reason
   says so.
-- `choose.job_lock(job_id)` (a re-entrant lock per job, `LOCK_WAIT_S`) is held by `tailor.prepare` from
-  choosing the CV to storing `job_cvs`, by `pack._build` for the whole pack (its choice is made at the start
-  and stored by `tailor.prepare` near the end), and by `choose.base_doc` while it reads, so two document writes
-  for one job store their choices in turn and a reader never sees one about to be replaced.
+- A choice Hal made never overwrites one stored after it. `choose.for_writing` notes what was stored when it
+  chose (`Choice.seen`, `choose.stored_now`); `tailor.prepare` checks that under `choose.job_lock(job_id)` (held
+  for the check and the store only, `LOCK_WAIT_S` 30 s) and, when another write stored meanwhile (the
+  person's Change CV during a pack), builds the job's CV again on the stored choice, up to `CHOICE_TRIES`;
+  the person's own pick (`by_you`, `seen` not read) always stores. Readers take no lock: `choose.base_doc`
+  reads what is stored, None before any job's CV (callers use the lead CV), so opening an application while
+  Hal writes never waits.
 - An application's choice is kept with its job's CV: the CV is the one `job_cvs.base_version_id` belongs to,
   and `job_cvs.base_choice` (migration 0034) holds `{by, reason, pick, hal_reason, scores}` as JSON
   (`Choice.stored`, `choose.kept`). `choose.for_writing(con, job, again=...)` is the CV to write on, on its

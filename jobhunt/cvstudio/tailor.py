@@ -81,6 +81,8 @@ HELD_FIT, HELD_BASE = "fit", "base"
 # Counts `fit` makes at most: Hal's changes for one job are a title line, a few reorders, the profile line and
 # up to `MAX_BULLETS` lines, and each count draws the CV once (milliseconds).
 FIT_TRIES = 8
+# Builds of a job's CV at most when its stored choice keeps changing under it (`prepare`); the last stores.
+CHOICE_TRIES = 3
 
 
 def _store():
@@ -308,30 +310,41 @@ def prepare(job: dict, *, level: str | None = None, priorities: list[str] | None
     CV the job's CV was built on before, else the CV Hal chooses for it (`choose.for_writing`). The person's
     own edits from an earlier row are kept after Hal's new changes; an edit that no longer fits the new CV is
     left out and logged. RuntimeError once approved, as `drop_your_edits`: the approved CV is what the form is
-    filled with, and only `reopen` lets it change. The CV is chosen and stored under the job's lock
-    (`choose.job_lock`), so a second write for the job waits and then builds on what this one stored.
+    filled with, and only `reopen` lets it change.
+
+    A choice Hal made (`base.seen` read) is stored only while what it saw is still stored, checked under the
+    job's lock (`choose.job_lock`), which covers that check and the store, never the AI calls. When another
+    write stored a choice meanwhile (the person's Change CV during a long write), the CV is built again on
+    that one, up to `CHOICE_TRIES` times, so the person's choice stands.
     """
     from jobhunt.cvstudio import choose
 
-    with choose.job_lock(job["id"]):
-        return _prepare(job, level=level, priorities=priorities, base=base, con=con)
+    tries = 1
+    while True:
+        if base is None:
+            with _conn(con) as c:
+                base = choose.for_writing(c, job, again=False)
+        made = _prepare(job, level=level, priorities=priorities, base=base, con=con, check=tries < CHOICE_TRIES)
+        if made is not None:
+            return made
+        log.info("job %s: its CV choice changed while Hal built it; building on the stored one", job["id"])
+        tries, base = tries + 1, None
 
 
 def _prepare(job: dict, *, level: str | None, priorities: list[str] | None, base,
-             con: sqlite3.Connection | None) -> dict:
-    """`prepare` while holding the job's lock."""
+             con: sqlite3.Connection | None, check: bool) -> dict | None:
+    """One try of `prepare`: None, nothing stored, when `check` finds the stored choice moved since `base`."""
     from jobhunt.cvstudio import choose, cv, pagelimit
 
     model = _model()
-    if base is None:
-        with _conn(con) as c:
-            base = choose.for_writing(c, job, again=False)
     used, why = level_for(level, base.doc_id)
     doc, changes = for_job(job, level=level, priorities=priorities, base=base)
     with _conn(con) as c:
         limit = pagelimit.limit_of(base.doc_id, c)[0]
         start = _store().get(base.version_id, con=c)
-    with _conn(con) as c, _store().writing(c):
+    with choose.job_lock(job["id"]), _conn(con) as c, _store().writing(c):
+        if check and base.seen != choose.NOT_READ and choose.stored_now(c, job["id"]) != base.seen:
+            return None
         old = c.execute("SELECT changes, approved FROM job_cvs WHERE job_id = ?", (job["id"],)).fetchone()
         if old is not None and old["approved"]:
             raise RuntimeError(APPROVED)
