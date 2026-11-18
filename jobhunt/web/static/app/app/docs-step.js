@@ -15,7 +15,13 @@
 
    While "Ask me what the job cares about first" (`cvdocs.pick_first`) is on, the CV tab first lists the
    job's requirements (`docs.cv.pick`, from `tailor.to_pick`) to tick three to five of; one button sends
-   them and Hal makes the job's CV again from them. Approve waits for that too. */
+   them and Hal makes the job's CV again from them. Approve waits for that too.
+
+   "Write the documents again" is always offered before approval; when the documents are out of date
+   (`docs.out_of_date`) or the last write stopped (`docs.stopped`) it moves into a note above with the reason.
+   With edits of the person's own (`docs.own_edits`) it asks first (dialogs/rewrite.js), and with changes not
+   yet saved it asks for those first. When Hal made no documents (`docs.state` "failed") the step says why and
+   offers the same button. */
 import { html, cx, useState } from "../core/html.js";
 import { post, put } from "../core/api.js";
 import { toast, openDialog, invalidate } from "../core/store.js";
@@ -51,6 +57,29 @@ async function reopen(a, reload) {
 }
 
 const copy = text => copyText(text);
+const sentence = text => (text || "").replace(/\.\s*$/, "") + ".";
+
+/** Write the documents again from the record and CV as they are now. With edits of the person's own it asks
+    first (dialogs/rewrite.js); with changes on the page not yet saved it asks for those to be saved first, so
+    Hal knows which edits are theirs. */
+async function writeAgain(a, unsaved, reload) {
+  if (unsaved) { toast("Save or discard your changes first, then write the documents again."); return; }
+  if (a.docs.own_edits) { openDialog("rewrite", { app: a, then: reload }); return; }
+  try {
+    await post(appPath(a) + "/documents/redo", {});
+    invalidate("/applications*");
+    toast("Hal is writing the documents again.");
+    if (reload) reload();
+  } catch (err) { toast(err.message); }
+}
+
+/** The Documents step when Hal has no documents to show: why, and the button to write them again. */
+function Failed({ a, reload }) {
+  return html`<section class="card" role="status"><div class="row"><div class="ic warn"><${Icon} n="warn" /></div>
+      <h2 class="h2" style="margin:0">Hal could not write the documents for this job</h2></div>
+    <p class="sub" style="margin-top:8px">${sentence(a.docs.stopped)} Nothing was sent and no form was opened.</p>
+    <div class="row"><button type="button" class="btn primary" onClick=${() => writeAgain(a, false, reload)}><${Icon} n="refresh" c="s" />Write the documents again</button></div></section>`;
+}
 
 /** The PDF Hal will upload, drawn in the page; nothing when there is no file yet. */
 function Pdf({ url, label }) {
@@ -114,6 +143,7 @@ export function DocsStep({ a, reload, onApproved }) {
       ${a.column === "form" && html`<button type="button" class="btn small" onClick=${() => reopen(a, reload)}>Change the documents</button>`}
       <button type="button" class="btn small" onClick=${() => go("docs-" + (a.number || ""))}>Open in Documents</button></div></section>`;
   }
+  if (d.state === "failed") return html`<${Failed} a=${a} reload=${reload} />`;
   const edits = { letter, message, answers };
   const onApprove = () => (a.first_time ? openDialog("firstapp", { app: a, edits, then: onApproved }) : approve(a, edits, onApproved));
   const toggle = async (c, on) => {
@@ -127,14 +157,24 @@ export function DocsStep({ a, reload, onApproved }) {
   const original = d.cv.sent_as === "original";
   const pick = d.cv.pick || [];
   const editable = d.cv.schema === 2 && !original && !pick.length;
+  const unsaved = cvDirty || letter !== d.letter.text || message !== d.message.text
+    || JSON.stringify(answers) !== JSON.stringify(d.answers);
+  const again = () => writeAgain(a, unsaved, reload);
+  const behind = d.out_of_date || d.stopped;
   return html`
+    ${behind && html`<div class="note warn again" role="status" style="margin-bottom:12px"><${Icon} n="warn" /><div class="grow">
+        <b>${d.out_of_date ? sentence(d.out_of_date) : "Hal could not write these again: " + sentence(d.stopped)}</b>
+        <div class="small">${d.out_of_date ? "Write them again to use what changed. Hal asks before it replaces any edits of your own."
+          : "These are the documents from before. Try again, or check them and approve them as they are."}</div></div>
+      <button type="button" class="btn primary small" onClick=${again}><${Icon} n="refresh" c="s" />Write the documents again</button></div>`}
     <div class="approve"><div class="ic info"><${Icon} n="file" /></div><div class="grow"><b>Check what Hal made for this job, then approve it.</b>
       <div class="small">After you approve, Hal opens the employer's form and fills it in. It never presses Submit.</div>
       ${cvDirty && html`<div class="small" role="status">Save or discard your changes to the CV before you approve.</div>`}
       ${pick.length > 0 && html`<div class="small" role="status">Tick what this job cares about most on the CV tab before you approve.</div>`}</div>
       <button type="button" class="btn primary" disabled=${cvDirty || pick.length > 0} onClick=${onApprove}>Approve and fill in the form</button>
       <button type="button" class="btn" onClick=${() => openDialog("askchange", { app: a })}>Ask for changes</button>
-      <button type="button" class="btn quiet" onClick=${() => openDialog("critique", { app: a })}><${Icon} n="eye" c="s" />Critique as a recruiter</button></div>
+      <button type="button" class="btn quiet" onClick=${() => openDialog("critique", { app: a })}><${Icon} n="eye" c="s" />Critique as a recruiter</button>
+      ${!behind && html`<button type="button" class="btn quiet" onClick=${again}><${Icon} n="refresh" c="s" />Write the documents again</button>`}</div>
     <${UncheckedNote} />
     <${Tabs} label="Documents" value=${tab} onChange=${setTab} tabs=${[["cv", "CV", plural(changes.filter(c => c.on).length, "change")],
       ["letter", "Cover letter", ""], ["answers", "Answers", answers.length || ""], ["message", "Message", ""]]} />

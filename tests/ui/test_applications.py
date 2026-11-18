@@ -120,6 +120,56 @@ class ApplicationsTest(unittest.TestCase):
         self.assertEqual([path for path, _ in state.posts], ["/api/v2/applications/demo%3A1/restore"])
         self.assertEqual(p.errors, [])
 
+    def documents_step(self, **docs) -> FakeState:
+        """An application on its Documents step, not approved, with `docs` over the made-up documents."""
+        state = apps_state()
+        state.pages[APP_PATH].update(step=1, column="ready", form=None, first_time=False)
+        state.pages[APP_PATH]["docs"].update({"state": "ready", "approved_at": None, **docs})
+        state.pages[APP_PATH]["steps"][0].update(state="now", note="Waiting for you")
+        return state
+
+    def test_out_of_date_documents_say_why_and_ask_before_replacing_your_edits(self) -> None:
+        state = self.documents_step(out_of_date="Your record changed since Hal wrote these", own_edits=True)
+        p = self.tab(self.serve(state), "narrow").open(APP)
+        note = p.page.locator(".note.again")
+        note.wait_for()
+        self.assertIn("Your record changed since Hal wrote these.", note.inner_text())
+        note.get_by_role("button", name="Write the documents again").click()
+        dialog = p.page.locator("[role=dialog]")
+        dialog.get_by_role("radio", name="Keep my edits").wait_for()
+        self.assertEqual(dialog.get_by_role("radio", name="Keep my edits").get_attribute("aria-checked"), "true")
+        self.assertEqual(state.posts, [], "nothing is written before you choose")
+        dialog.get_by_role("radio", name="Write everything fresh").click()
+        dialog.get_by_role("button", name="Write them again").click()
+        p.page.wait_for_selector("text=Hal is writing everything fresh.")
+        self.assertEqual(state.posts, [("/api/v2/applications/demo%3A1/documents/redo", {"fresh": True})])
+        self.assertEqual(p.sideways(), 0)
+        self.assertEqual(p.errors, [])
+
+    def test_with_no_edits_of_your_own_hal_writes_again_without_asking(self) -> None:
+        state = self.documents_step()
+        p = self.tab(self.serve(state)).open(APP)
+        p.page.wait_for_selector(".approve")
+        self.assertEqual(p.page.locator(".note.again").count(), 0)
+        p.page.locator(".approve").get_by_role("button", name="Write the documents again").click()
+        p.page.wait_for_selector("text=Hal is writing the documents again.")
+        self.assertEqual(state.posts, [("/api/v2/applications/demo%3A1/documents/redo", {})])
+        self.assertEqual(p.page.locator("[role=dialog]").count(), 0)
+        self.assertEqual(p.errors, [])
+
+    def test_a_write_that_failed_says_why_on_the_documents_step(self) -> None:
+        # a regression: the step showed empty tabs and "ready", and only the board said what went wrong (2026-11-18)
+        state = self.documents_step(state="failed", stopped="Hal's AI did not answer")
+        p = self.tab(self.serve(state)).open(APP)
+        p.page.wait_for_selector("text=Hal could not write the documents for this job")
+        self.assertIn("Hal's AI did not answer.", p.page.locator("section.card[role=status]").inner_text())
+        self.assertEqual(p.page.locator("text=Approve and fill in the form").count(), 0)
+        p.page.click("text=Write the documents again")
+        p.page.wait_for_selector("text=Hal is writing the documents again.")
+        self.assertEqual([path for path, _ in state.posts], ["/api/v2/applications/demo%3A1/documents/redo"])
+        self.assertEqual(p.serious_axe(), [])
+        self.assertEqual(p.errors, [])
+
     def test_while_hal_works_the_form_step_shows_no_stuck_hint_and_no_submit_words(self) -> None:
         state = apps_state()
         state.pages[APP_PATH].update(action_id="a1")

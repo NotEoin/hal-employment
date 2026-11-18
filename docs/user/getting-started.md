@@ -196,6 +196,22 @@ they quote. Your name and contact details are taken out before the AI reads them
 comments on your age, gaps or background. It is Hal's opinion, and nothing is changed. Without Hal's AI,
 you still get the writing rules' comments, line by line.
 
+### Writing the documents again
+
+After you change your record or your CV, the documents Hal already wrote still say what it knew then. An
+application whose documents are out of date says so on its Documents step: "Your record changed since Hal
+wrote these" or "Your CV changed since Hal wrote these". Hal never rewrites them by itself.
+
+Press **Write the documents again** on the Documents step. Hal writes the CV, the cover letter, the message
+and the answers again from your record and your CV as they are now. If you changed any of them yourself, Hal
+asks first: **Keep my edits** (chosen for you) puts your own changes back into the new documents, and
+**Write everything fresh** replaces them too. Changes of Hal's that you undid are not carried over.
+
+If Hal could not write an application's documents, its Documents step says why and offers the same button.
+
+Hal never rewrites an application you have approved or sent. To change approved documents, press **Change
+the documents** first (see below).
+
 ### When Hal gets stuck before the form
 
 If Hal stops on the advert or a page before the form, open the form yourself in Hal's browser window: press

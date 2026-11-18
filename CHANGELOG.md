@@ -24,6 +24,11 @@ What changed in each version, in plain words.
   the top says "Waiting for your record to finish updating". If your record changes while Hal is writing,
   Hal writes those documents again from the new record instead of keeping ones that are already out of date.
 
+- **Write the documents again.** An application's Documents step has a **Write the documents again**
+  button. When your record or your CV changed since Hal wrote the documents, the step says which, and the
+  button moves up beside the reason. If you changed the documents yourself, Hal asks first: **Keep my
+  edits** is chosen for you, or **Write everything fresh**.
+
 - **Add your CV as a Markdown file.** Hal now reads CVs written in Markdown (.md): the top heading is your
   name, `##` headings are sections and `###` headings are jobs, qualifications or projects. Bold, italic
   and link marks are left out of what Hal keeps.
@@ -47,6 +52,9 @@ What changed in each version, in plain words.
   are now. Your own edits are kept unless you choose to write everything fresh, and Hal never rewrites an
   application you have approved or sent. An application written by an older Hal also gets the line-by-line
   CV editor this way.
+
+- **When Hal could not write an application's documents, its page says why.** Before, the Documents step
+  showed empty tabs, and only the Applications board said something went wrong.
 
 - **A setting you change while an earlier change is still saving keeps your choice.** On a slow computer the
   earlier save's answer could arrive afterwards and put the old value back, for example unticking a box you had
