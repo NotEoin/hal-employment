@@ -30,6 +30,12 @@ class Pairs(unittest.TestCase):
         self.assertEqual(plain("(*Hamlet*), **Lear**."), "(Hamlet), Lear.")
         self.assertEqual(runs("*Hamlet*'s ghost")[0], Run("Hamlet", italic=True))
 
+    def test_of_two_crossing_pairs_the_one_opened_later_stays_stars(self) -> None:
+        # it gave all-italic "a b c" and lost the bold (review, 2026-11-18)
+        self.assertEqual(runs("**a *b** c*"), [Run("a *b", bold=True), Run(" c*")])
+        self.assertEqual(runs("*a **b* c**"), [Run("a **b", italic=True), Run(" c**")])
+        self.assertEqual(runs("*a **b***"), [Run("a ", italic=True), Run("b", bold=True, italic=True)])
+
     def test_a_pair_never_spans_a_line_break(self) -> None:
         self.assertEqual(plain("one *star\nand* another"), "one *star\nand* another")
 

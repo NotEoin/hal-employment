@@ -22,6 +22,9 @@ Design decisions, each with its reason:
 - A pair never spans a line break: text with several lines is read one line at a time.
 - Only http, https and mailto links count. Any other `[words](address)` stays text, so a page never gets a
   `javascript:` link from a CV.
+- Pairs nest but never cross: a closing run pairs with the nearest opening run of the same count (or of
+  three stars, bold and italic together), and opening runs left inside it stay text, so of two crossing
+  pairs the one opened later shows its stars ("**a *b** c*" is bold "a *b" then " c*").
 - `\\*`, `\\[` and `\\]` write a star or a bracket that is never a mark. `to_text` adds them only when the
   text would otherwise read back differently, so a hand-typed "C*" is never rewritten as "C\\*".
 - A style change inside a word ("Py**thon**") cannot be written under these rules; `to_text` drops that
@@ -150,14 +153,22 @@ def _tokens(s: str, links: bool) -> list[_Tok]:
     return toks
 
 
+def _fits(opener: str, closer: str) -> bool:
+    """True when an opening and a closing star run can pair: the same count, or either one three stars."""
+    return len(opener) == len(closer) or MAX_STARS in (len(opener), len(closer))
+
+
 def _pair_up(toks: list[_Tok]) -> None:
-    """Matches closing star runs with the nearest opening ones and marks what lies between as bold or italic."""
+    """Matches closing star runs with the nearest opening ones that fit and marks what lies between as bold or
+    italic. Opening runs left between a pair stay text, so of two crossing pairs ("**a *b** c*") the one
+    opened later is shown as stars."""
     for j, closer in enumerate(toks):
         if closer.kind != "stars" or not closer.closes:
             continue
         while closer.text:
             k = next((k for k in range(j - 1, -1, -1)
-                      if toks[k].kind == "stars" and toks[k].opens and toks[k].text), None)
+                      if toks[k].kind == "stars" and toks[k].opens and toks[k].text
+                      and _fits(toks[k].text, closer.text)), None)
             if k is None:
                 break
             opener = toks[k]

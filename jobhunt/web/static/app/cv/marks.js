@@ -73,12 +73,17 @@ function tokens(s, links) {
   return toks;
 }
 
+// An opening and a closing star run pair when they have the same count or either is three stars (`inline._fits`).
+const fits = (opener, closer) => opener.length === closer.length || opener.length === MAX_STARS || closer.length === MAX_STARS;
+
+/* Pairs nest but never cross, as `inline._pair_up`: a closing run takes the nearest opening run that fits, and
+   opening runs left inside it stay text. */
 function pairUp(toks) {
   toks.forEach((closer, j) => {
     if (closer.kind !== "stars" || !closer.closes) return;
     while (closer.text) {
       let k = j - 1;
-      while (k >= 0 && !(toks[k].kind === "stars" && toks[k].opens && toks[k].text)) k--;
+      while (k >= 0 && !(toks[k].kind === "stars" && toks[k].opens && toks[k].text && fits(toks[k].text, closer.text))) k--;
       if (k < 0) break;
       const opener = toks[k];
       const use = closer.text.length >= 2 && opener.text.length >= 2 ? 2 : 1;
