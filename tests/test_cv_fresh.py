@@ -50,7 +50,7 @@ class FreshCv(unittest.TestCase):
         self.assertEqual(vid, out["version_id"])
         type_ = types.load("humanities_grad")
         self.assertEqual(model.validate(doc, type_), [])
-        self.assertTrue(all(r["ok"] for r in checks.for_type(doc, type_)))
+        self.assertFalse([r for r in checks.for_type(doc, type_) if r["ok"] is False])   # length: not printed yet
         self.assertEqual([s.id for s in doc.sections],
                          ["summary", "education", "volunteering", "experience", "skills", "interests"])
         self.assertEqual(doc.sections[0].title, "Profile")

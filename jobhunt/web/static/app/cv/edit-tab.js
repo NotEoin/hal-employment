@@ -3,7 +3,9 @@
    editor opened, as one new version; so Undo is Versions. When that version is no longer in use (a
    suggestion accepted, a version used again) the server answers 409 and the editor says so, keeping the
    person's changes on screen until they choose. While there are changes, leaving the tab, the page or
-   Hal asks first (core/router.js `guardLeave`).
+   Hal asks first (core/router.js `guardLeave`). After a save Hal counts the printed pages (GET /cv/pages,
+   about a second) and warns, in the server's words, when the CV is now longer than its "Keep this CV to";
+   the save itself never waits for that.
 
    With `job`, the same editor works on one application's CV (the documents step, app/docs-step.js):
    it reads and saves /applications/<id>/cv, lists Hal's changes for the job with Undo and Redo
@@ -28,6 +30,7 @@ const FROM_RECORD = { experience: "job", volunteering: "job", education: "educat
   certifications: "certificate" };
 const NOTHING_SAVED = "Your changes are not saved.";
 const SAVE_FIRST = "Save or discard your changes first.";
+const PAGES_SAVED = "/cv/pages?saved=1";   // the length after a save, printed once (cvstudio/pagelimit.py)
 
 function fresh(entry, kind) {
   return { ...entry, id: newId(kind), bullets: entry.bullets.map(b => ({ ...b, id: newId("line") })) };
@@ -79,6 +82,7 @@ export function EditTab({ setT, job }) {
   const [changes, setChanges] = useState([]);
   const [stale, setStale] = useState("");
   const [busy, setBusy] = useState(false);
+  const [length, setLength] = useState("");
   const opened = doc && doc.version_id;
   useEffect(() => { if (base && (!doc || (!changes.length && base.version_id !== doc.version_id))) setDoc(base); }, [base]);
   const dirty = !!doc && !!base && changes.length > 0;
@@ -121,6 +125,8 @@ export function EditTab({ setT, job }) {
       } else {
         invalidate("/cv*");
         toast("Saved your CV as version " + out.n + ". To undo, use an older version.", () => setT("versions"), "Versions");
+        setLength("");
+        api("GET", cvUrl(PAGES_SAVED)).then(p => setLength(p.words || "")).catch(() => setLength(""));
       }
     } catch (err) {
       if (err.code === "conflict") setStale(err.message);
@@ -157,6 +163,7 @@ export function EditTab({ setT, job }) {
       <div class="row">${dirty && html`<span class="small" role="status">You have changes you have not saved.</span>`}
         <button type="button" class="btn quiet small" disabled=${!dirty || busy} onClick=${discard}>Discard changes</button>
         <button type="button" class="btn primary" disabled=${!dirty || busy} onClick=${save}>Save changes</button></div></div>
+    ${length && html`<div class="cv-length" role="status"><${Note} icon="warn" tone="warn">${length}<//></div>`}
     ${stale && html`<${Note} icon="warn" tone="warn"><b>${stale}</b> ${job ? "This job's CV was changed somewhere else, for example in another window."
       : "Your CV was changed somewhere else, for example by a suggestion you accepted."} Copy anything you want to keep, then start again from ${job ? "this job's CV" : "your CV"} as it is now.
       <div style="margin-top:8px"><button type="button" class="btn small" onClick=${restart}>${job ? "Start again from this job's CV now" : "Start again from your CV now"}</button></div><//>`}

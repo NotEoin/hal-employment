@@ -48,6 +48,7 @@ Hal's on a line you also changed, your words stay.
 
 | Symptom | Fix |
 | --- | --- |
+| "This CV is now 3 pages. You asked for 2." after **Save changes** | Your changes are saved. Shorten or hide some lines and save again, or choose a longer **Keep this CV to** on **Type and look** ([how long your CV is](../user/getting-started.md#how-long-your-cv-is)). |
 | **Approve and fill in the form** cannot be pressed, and the step says to save or discard your changes | Press **Save changes** or **Discard changes** on the CV tab first. |
 | "This job's CV changed since you started editing. Your changes are not saved." | The job's CV was saved from another window meanwhile. Copy what you want to keep, press **Start again from this job's CV now**, and make the changes again. |
 | "Your main CV changed since this page opened. Nothing was copied." (with several CVs in use, the CV's name: "Your Museum CV changed ...") | That CV changed after you opened the application. Reload the page, then press the copy button again. |

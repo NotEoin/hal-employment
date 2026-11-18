@@ -413,12 +413,14 @@ def dump(t: CVType) -> str:
     return "\n".join(lines) + "\n"
 
 
-WRITING_FIELDS = ("pages", "tone", "format", "results", "never_use")
+# The page limit is not here: it is each CV's own "Keep this CV to" (`pagelimit.limit_of`), and a type's `pages`
+# is only its default, so the Writing card no longer copies a type to change a length (2026-11-18).
+WRITING_FIELDS = ("tone", "format", "results", "never_use")
 
 
 def writing_card(t: CVType) -> dict:
     """The Writing card's values for a type."""
-    return {"pages": t.pages, "tone": t.writing.get("tone", "plain"),
+    return {"tone": t.writing.get("tone", "plain"),
             "format": "paragraphs" if t.writing.get("style") == "paragraphs" else "bullets",
             "results": t.writing.get("results", "where_have"), "never_use": list(t.writing.get("banned", []))}
 
@@ -434,7 +436,6 @@ def edit_writing(type_id: str, changes: dict, con: sqlite3.Connection | None = N
         t = copy(type_id, con=con)
         note = f"Built-in types stay as they are, so Hal made a copy called \"{t.name}\" from {base_name}."
     writing = dict(t.writing)
-    pages = changes.get("pages", t.pages)
     if "tone" in changes:
         writing["tone"] = changes["tone"]
     if "format" in changes:
@@ -446,8 +447,7 @@ def edit_writing(type_id: str, changes: dict, con: sqlite3.Connection | None = N
         if not _strings(words):
             raise ValueError("Never use must be a list of words and phrases.")
         writing["banned"] = [w.strip() for w in words if w.strip()]
-    edited = dataclasses.replace(t, pages=pages, writing=writing,
-                                 length_words="" if pages != t.pages else t.length_words)
+    edited = dataclasses.replace(t, writing=writing)
     saved = save_source(t.id, dump(edited), con)
     return saved, note
 

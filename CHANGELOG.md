@@ -2,6 +2,25 @@
 
 What changed in each version, in plain words.
 
+## Unreleased
+
+### What's new
+
+- **Choose how long each CV is.** On **My CV**, **Type and look**, the new **Length** card has **Keep this
+  CV to**: no limit, one page or two pages, for each CV on its own. Until you choose, a CV follows its CV
+  type, as before. The length is no longer on the Writing card, so changing it no longer makes a copy of
+  the type.
+
+- **Real page counts.** Hal counts the pages of your CV as it prints in your look, instead of guessing from
+  the number of words. After you save in **Edit your CV**, Hal says when the CV runs longer than you asked,
+  for example "This CV is now 3 pages. You asked for 2." Your save always stands, and the length check on
+  **Checks** uses the same count. Where no browser can print, Hal says it cannot count the pages.
+
+### Fixed
+
+- **A long CV prints whole.** A CV more than a page longer than its CV type's length could not be printed
+  or downloaded as a PDF. It now prints however long it is.
+
 ## 2.3.0 (2026-11-18)
 
 ### What's new

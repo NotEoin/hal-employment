@@ -159,8 +159,10 @@ class Copies(unittest.TestCase):
             self.assertEqual(t.writing["tone"], "formal")
             self.assertEqual(t.writing["banned"], ["synergy"])
             self.assertEqual(cvtypes.load("humanities_grad").writing["tone"], "plain")
-            again, note = cvtypes.edit_writing(t.id, {"pages": 1})
-            self.assertEqual((again.id, again.pages, note), (t.id, 1, ""))
+            again, note = cvtypes.edit_writing(t.id, {"results": "rarely"})
+            self.assertEqual((again.id, again.writing["results"], note), (t.id, "rarely", ""))
+            with self.assertRaises(ValueError):    # a length is each CV's own "Keep this CV to" now
+                cvtypes.edit_writing(t.id, {"pages": 1})
             self.assertEqual(again.based_on, "humanities_grad")
             with self.assertRaises(PermissionError):
                 cvtypes.save_source("humanities_grad", cvtypes.source("humanities_grad"))

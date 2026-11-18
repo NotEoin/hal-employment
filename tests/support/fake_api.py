@@ -407,7 +407,7 @@ MADE_UP_PAGES = {
     "/cv/types": {
         "suggested": {"id": "general_grad", "name": "Graduate, any subject", "why": "You are a graduate."},
         "current": {"id": "humanities_grad", "name": "Humanities and social science graduate", "builtin": True},
-        "writing": {"pages": 1, "tone": "plain", "format": "bullets", "results": "where_have",
+        "writing": {"tone": "plain", "format": "bullets", "results": "where_have",
                     "never_use": ["passionate"]},
         "spelling": "en-GB",
         "types": [{"id": "humanities_grad", "name": "Humanities and social science graduate",
@@ -446,6 +446,8 @@ MADE_UP_PAGES = {
                                      "reason": None, "op": "replace", "can_accept_all": True, "ai": False,
                                      "result_version_id": None}]},
     "/cv/adjust": {"level": "little", "setting": "little", "pick_first": False, "forced_no": ""},
+    "/cv/pages": {"limit": 2, "chosen": False, "choices": [[0, "No limit"], [1, "One page"], [2, "Two pages"]],
+                  "pages": 2, "counted": True, "over": False, "words": ""},
 }
 # Made-up replies for POST routes a page calls as it draws (the goal step asks what Hal understood).
 MADE_UP_POSTS = {

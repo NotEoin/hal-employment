@@ -32,10 +32,12 @@ function Recruiter({ r, typeName, onAsk, busy }) {
       <button class="btn quiet small" disabled=${busy} onClick=${onAsk}>${busy ? "Reading your CV" : r ? "Ask again" : "Ask for a recruiter's read"}</button></div></section>`;
 }
 
+// A check Hal cannot decide yet (`ok` null: the length before the CV could be printed) is neither passed nor
+// failed, and shows its note.
 function TypeChecks({ t }) {
   return html`<section class="card"><h2 class="h2">Checks for your CV type</h2><p class="small sub">${t.name}.</p>
     ${t.items.map(i => html`<div class="li" key=${i.id} style="padding:9px 2px;align-items:center">
-      <span class=${cx("flag", i.ok ? "ok" : "check")} role="img" aria-label=${i.ok ? "Passes" : "Needs a look"}><${Icon} n=${i.ok ? "check" : "warn"} c="s" /></span>
+      <span class=${cx("flag", i.ok ? "ok" : "check")} role="img" aria-label=${i.ok ? "Passes" : i.ok === null ? "Not known yet" : "Needs a look"}><${Icon} n=${i.ok ? "check" : i.ok === null ? "info" : "warn"} c="s" /></span>
       <div class="grow small">${i.name}${!i.ok && i.note && html`<div class="sub">${i.note}</div>`}</div>
       ${!i.ok && i.suggestion_id && html`<button class="btn quiet small" onClick=${() => go("cv-sugg")}>See suggestion</button>`}</div>`)}</section>`;
 }

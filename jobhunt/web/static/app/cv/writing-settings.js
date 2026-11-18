@@ -1,6 +1,7 @@
-/* The Writing card of My CV, Type and look. Length, tone, entries, numbers and "Never
-   use" are part of the CV type, so a change to a built-in type first makes a copy, and the card says so in
-   the server's words. Spelling is the "CV and documents" setting of the same name. */
+/* The Writing card of My CV, Type and look. Tone, entries, numbers and "Never use" are part
+   of the CV type, so a change to a built-in type first makes a copy, and the card says so in the server's
+   words. Spelling is the "CV and documents" setting of the same name. A CV's length is not here: it is the
+   CV's own "Keep this CV to" on the Length card (cv/page-limit.js). */
 import { html, useState } from "../core/html.js";
 import { put } from "../core/api.js";
 import { useApi, toast, invalidate } from "../core/store.js";
@@ -10,7 +11,6 @@ import { Icon } from "../ui/icons.js";
 import { cvUrl } from "./chosen.js";
 
 const TYPES = "/cv/types";
-const PAGES = [[1, "1 page"], [2, "Up to 2 pages"], [0, "As needed"]];
 const TONES = [["plain", "Plain"], ["formal", "Formal"], ["confident", "Confident"]];
 const FORMATS = [["bullets", "Bullets"], ["paragraphs", "Short paragraphs"]];
 const SPELLINGS = [["en-GB", "UK English"], ["en-US", "US English"]];
@@ -38,7 +38,6 @@ export function WritingSettings() {
     try { await put("/settings/cvdocs.spelling", { value: v }); invalidate("/cv*"); toast("Saved"); }
     catch (err) { toast(err.message); }
   };
-  const pages = PAGES.some(([v]) => v === w.pages) ? w.pages : 2;
   const add = e => {
     e.preventDefault();
     const t = word.trim();
@@ -48,7 +47,6 @@ export function WritingSettings() {
   };
   return html`<section class="card"><h2 class="h2">Writing</h2>
     <p class="small sub">For ${data.current.name}.${data.current.builtin ? " Changing these makes your own copy of this type." : ""}</p>
-    <${Row} lab="Length"><${Seg} label="Length" value=${pages} options=${PAGES} onChange=${v => save({ pages: v })} /><//>
     <${Row} lab="Tone"><${Seg} label="Tone" value=${w.tone} options=${TONES} onChange=${v => save({ tone: v })} /><//>
     <${Row} lab="Entries as"><${Seg} label="Entries as" value=${w.format} options=${FORMATS} onChange=${v => save({ format: v })} /><//>
     <${Row} lab="Spelling"><${Seg} label="Spelling" value=${data.spelling} options=${SPELLINGS} onChange=${spelling} /><//>

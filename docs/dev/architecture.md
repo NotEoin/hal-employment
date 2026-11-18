@@ -552,6 +552,18 @@ runs: tests use `tests/support/fake_claude/`.
   PDF when given one, else the document's own text, so the same CV always gets the same score.
   `type_checks` runs the type's checks by id (weight 0 switches one off). `recruiter_read` is the AI's
   opinion and part of no score.
+- A CV's page limit (`cvstudio/pagelimit.py`, migration 0035) has one source: `cv_documents.page_limit`
+  ("Keep this CV to", 0, 1 or 2, set by `store.set_page_limit`), else the type's `pages` while it is NULL
+  (`pagelimit.limit_of`). The Writing card no longer edits a type's `pages`. The length check
+  (`pages_within`) holds the printed count to that limit and is `ok: None` with no count; the 500-words-a-page
+  estimate is gone.
+- Page counts are real: `pagelimit.measure(version_id)` prints the version as Download PDF does (the CV's
+  stored type, look, layout and contact details) with the browser printer only, never the simple PDF, and
+  keeps the count in `cv_versions.pages` keyed by the printed page's hash (`pages_key`), so each version and
+  look prints once; a print that fails keeps NULL with the key, so it is not retried until the page changes.
+  `GET /api/v2/cv/pages` (`pagelimit.state`) prints when needed; the editor calls it after a save, and the
+  Length card (`cv/page-limit.js`) when it opens. `PUT /api/v2/cv/pages` sets the limit. In a test run no
+  browser prints for a count unless `HAL_TEST_REAL_PRINT=1`; tests set `pagelimit.PRINT` to a stand-in.
 
 ## Looks and printing (`cvstudio/render.py`, `printer.py`, `export.py`)
 
@@ -562,8 +574,9 @@ runs: tests use `tests/support/fake_claude/`.
 - `printer.to_pdf` prints with Microsoft Edge on Windows, Playwright's Chromium on Linux, and an ordinary
   Chromium, Chrome or Edge only when Playwright is missing; never a snap or flatpak browser, which cannot
   read Hal's temporary files. 60 s timeout, and the whole process tree is ended when it runs out. Every PDF
-  is checked (opens, page count, name, first section title). When no browser can print, `pdf.draw_view`
-  draws a simple PDF itself and Activity says why.
+  is checked (opens, has pages, name, first section title). A CV is printed whole however long it is
+  (`export.cv_pdf` passes no page bound; 2.3.0 refused a CV over its type's length by more than a page).
+  When no browser can print, `pdf.draw_view` draws a simple PDF itself and Activity says why.
 - `export.py` gives PDF, Word (WordprocessingML written with the standard library), plain text, JSON Resume
   1.0.0 and `cv.json`. PDFs are cached in `cache/cv-print/` by the page's hash.
 

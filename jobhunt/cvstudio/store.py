@@ -22,6 +22,8 @@
   cannot be binned.
 - Uploaded files are kept as `cv/files/<sha256>.<ext>`, read-only, and their SHA-256 is checked on every
   read, so "your original file, byte for byte" stays true. `cv_for_file` finds the CV a file already made.
+- "Keep this CV to" is `cv_documents.page_limit`, NULL until the person chooses; `pagelimit.limit_of` is the
+  one reader, so the CV type's rule stands in for it in one place only.
 - Writes take SQLite's write lock first (`BEGIN IMMEDIATE`), so two requests saving at once get versions
   N and N+1, never a clash. Each change publishes the event "cv" with the CV's id as `cv`.
 - A save made on one version (`new_version(..., base=...)`) is refused with `StaleVersion` when another version
@@ -67,6 +69,7 @@ STALE_ORDER = "Your list of CVs changed since this page opened. Reload the page 
 ARCHIVED = "This CV is in the archive. Restore it first."
 STARTER_WHAT = "A starting CV made from your settings"
 PASTED_NAME = "Pasted CV.txt"      # the file name pasted text is kept under
+PAGE_LIMITS = (0, 1, 2)            # "Keep this CV to": no limit, one page, two pages (`cv_documents.page_limit`)
 READ_ONLY = stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
 _COLUMNS = ("id, name, starred, archived, position, current_version_id, baseline_file_id, type_id, look_id, "
             "route, send, created, updated")
@@ -848,3 +851,17 @@ def set_look(look_id: str, con: sqlite3.Connection | None = None, doc_id: str | 
         doc_id = _doc_id(c, doc_id)
         with writing(c):
             _update_doc(c, doc_id, look_id=look_id)
+
+
+def set_page_limit(pages: int, con: sqlite3.Connection | None = None, doc_id: str | None = None) -> None:
+    """Records "Keep this CV to" for a CV: 0 (no limit), 1 or 2 pages (`PAGE_LIMITS`); CVError otherwise.
+
+    Read it through `pagelimit.limit_of`, which falls back to the CV type's rule while none is chosen.
+    """
+    if isinstance(pages, bool) or pages not in PAGE_LIMITS:
+        raise CVError("pages: choose no limit, one page or two pages")
+    with _conn(con) as c:
+        doc_id = _doc_id(c, doc_id)
+        with writing(c):
+            _update_doc(c, doc_id, page_limit=pages)
+    _publish("pages", doc_id, pages=pages)

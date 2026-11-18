@@ -80,11 +80,14 @@ def against_job(con, job_id: str, cv_text: str, t) -> dict:
 @route("GET", "/api/v2/cv/checks")
 def checks_tab(req: Request) -> dict:
     """The Checks tab: scanner score, the type's checks, a recruiter's read and, with `job_id`, one job."""
+    from jobhunt.cvstudio import pagelimit
+
     version_id, doc, t, row = _current(req)
     profile = checks.profile_now()
     look = row["look_id"]
     found = checks.for_version(req.con, version_id, doc, t, look, profile, spelling=settings.get("cvdocs.spelling"),
-                               columns=checks.columns_of(look))
+                               columns=checks.columns_of(look), pages=pagelimit.known(version_id, req.con)[0],
+                               limit=pagelimit.limit_of(row["id"], req.con)[0])
     job_id = req.query.get("job_id")
     text = "\n".join(checks.doc_lines(doc, profile))
     return {"version_id": version_id, "scanner": found["scanner"],

@@ -200,5 +200,5 @@ def make(answers: dict, type_id: str, *, step=None, doc_id: str | None = None) -
         found = suggest.look_again(con, doc_id=store.version(vid, con=con)["doc_id"])
     finally:
         con.close()
-    return {"version_id": vid, "failing": [r["name"] for r in results if not r["ok"]],
+    return {"version_id": vid, "failing": [r["name"] for r in results if r["ok"] is False],
             "checks": len(results), "suggestions": found["pending"]}

@@ -150,8 +150,6 @@ def save_writing(req: Request) -> dict:
     body = {k: v for k, v in (req.body or {}).items() if k in cvtypes.WRITING_FIELDS}
     if not body:
         raise BadRequest("Nothing to change on the Writing card.")
-    if "pages" in body and (isinstance(body["pages"], bool) or body["pages"] not in range(cvtypes.MAX_PAGES + 1)):
-        raise BadRequest("CV length must be 0 (as needed) to 4 pages.", field="pages")
     for key, allowed in (("tone", tuple(cvtypes.TONES)), ("format", ("bullets", "paragraphs")),
                          ("results", ("where_have", "rarely"))):
         if key in body and body[key] not in allowed:

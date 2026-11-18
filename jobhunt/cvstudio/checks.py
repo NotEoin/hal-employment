@@ -7,6 +7,8 @@ CV against one job.
 - Type checks are plain functions keyed by the ids a CV type's `[checks]` table names; a weight of 0
   switches a check off. They run on the CV as the type shows it (`types.arrange`), so a humanities CV is
   judged by humanities limits and a technical CV by technical ones.
+- The length check holds the printed page count (`pagelimit`) to the CV's own page limit, not its type's;
+  with no count it says the length is not known, never a word estimate (2.3.0 guessed 500 words a page).
 - "Fix it" never touches a locked section, entry or line.
 - Results are cached in `cv_checks` by version and look, keyed also by the type, the profile and the
   spelling setting, so a GET never redoes the work and any change that matters redoes it.
@@ -52,7 +54,6 @@ WIDE_LINES = 6                   # lines with text in separate columns before a 
 TOP_CHARS = 700                  # how far down the first page "at the top" reaches
 EMAIL_POINTS, PHONE_POINTS = 8, 7
 SYMBOL_POINTS = (10, 7, 5, 2)    # points kept with 0, 1, 2 or 3 dropped symbols; none from 4 on
-WORDS_PER_PAGE = 500             # a one-column A4 CV at 10 to 11 pt holds about 450 to 550 words
 RESULT_SHARE = 0.3               # share of lines with a result before "Bullets show a result" passes
 BACKED_SHARE = 0.7               # share of listed skills shown in use before "Each skill is shown in use" passes
 DATED_KINDS = ("education", "experience", "volunteering", "research", "teaching")
@@ -105,6 +106,7 @@ CHECK_NAMES = {
     "availability_line": "Says when you are free to start",
 }
 PAGES_NAMES = {1: "One page", 2: "Two pages or fewer"}
+PAGES_UNKNOWN = "Not known yet: Hal counts the pages once it can print this CV."
 
 
 # Reading a document ------------------------------------------------------------------------------------------
@@ -234,6 +236,7 @@ class _In:
     text: str
     pages: int | None
     spelling: str
+    limit: int
 
 
 def _summary(c: _In) -> str:
@@ -297,12 +300,11 @@ def _no_personal_data(c: _In) -> tuple[bool, str]:
     return not found, f"Remove: {', '.join(found)}." if found else ""
 
 
-def _pages_within(c: _In) -> tuple[bool, str]:
-    if not c.type_.pages:
-        return True, ""
-    pages = c.pages if c.pages is not None else max(1, -(-len(c.text.split()) // WORDS_PER_PAGE))
-    how = "" if c.pages is not None else "about "
-    return pages <= c.type_.pages, f"{how}{pages} {'page' if pages == 1 else 'pages'}."
+def _pages_within(c: _In) -> tuple[bool | None, str]:
+    """The printed page count against the CV's limit; None (not known) with no count, never an estimate."""
+    if c.pages is None:
+        return None, PAGES_UNKNOWN
+    return c.pages <= c.limit, f"{c.pages} {'page' if c.pages == 1 else 'pages'}."
 
 
 def _one_spelling(c: _In) -> tuple[bool, str]:
@@ -401,26 +403,33 @@ CHECKS = {"profile_evidence": _profile_evidence, "result_bullets": _result_bulle
           "availability_line": _availability_line}
 
 
-def check_name(check_id: str, t: cvtypes.CVType) -> str:
-    """What a check is called on screen; the length check names the type's page limit."""
+def check_name(check_id: str, t: cvtypes.CVType, limit: int | None = None) -> str:
+    """What a check is called on screen; the length check names the page limit (`limit`, else the type's)."""
     if check_id == "pages_within":
-        return PAGES_NAMES.get(t.pages, f"{t.pages} pages or fewer")
+        limit = t.pages if limit is None else limit
+        return PAGES_NAMES.get(limit, f"{limit} pages or fewer")
     return CHECK_NAMES[check_id]
 
 
 def type_checks(doc: Any, t: cvtypes.CVType, profile: dict, *, pages: int | None = None,
-                spelling: str = "en-GB") -> dict:
-    """The type's checks on the CV as the type shows it: {type_id, name, items, passed, total}."""
+                limit: int | None = None, spelling: str = "en-GB") -> dict:
+    """The type's checks on the CV as the type shows it: {type_id, name, items, passed, total}.
+
+    `pages` is the printed page count (None when not known) and `limit` the CV's page limit
+    (`pagelimit.limit_of`); a document that is no CV's yet has its type's rule. The length check is left out
+    with no limit; with no count its `ok` is None (not known), which is not counted as passed.
+    """
+    limit = t.pages if limit is None else limit
     shown = cvtypes.arrange(doc, t)
-    c = _In(shown, t, profile, "\n".join(doc_lines(shown, profile)), pages, spelling)
+    c = _In(shown, t, profile, "\n".join(doc_lines(shown, profile)), pages, spelling, limit)
     items = []
     for cid, weight in t.checks.items():
-        if not weight or (cid == "pages_within" and not t.pages):
+        if not weight or (cid == "pages_within" and not limit):
             continue
         ok, note = CHECKS[cid](c)
-        items.append({"id": cid, "name": check_name(cid, t), "ok": ok, "weight": weight, "note": note,
+        items.append({"id": cid, "name": check_name(cid, t, limit), "ok": ok, "weight": weight, "note": note,
                       "suggestion_id": None})
-    return {"type_id": t.id, "name": t.name, "items": items, "passed": sum(i["ok"] for i in items),
+    return {"type_id": t.id, "name": t.name, "items": items, "passed": sum(i["ok"] is True for i in items),
             "total": len(items)}
 
 
@@ -485,28 +494,34 @@ def fix(fix_id: str, doc: Any, t: cvtypes.CVType) -> tuple[Any, str]:
 
 # Cache ------------------------------------------------------------------------------------------------------
 
-def cache_key(t: cvtypes.CVType, profile: dict, spelling: str, pdf_sha: str | None) -> str:
+def cache_key(t: cvtypes.CVType, profile: dict, spelling: str, pdf_sha: str | None, pages: int | None = None,
+              limit: int | None = None) -> str:
     """What the cached results depend on besides the version and look."""
-    body = json.dumps([t.id, t.source, profile, spelling, pdf_sha], sort_keys=True)
-    return hashlib.sha1(body.encode("utf-8")).hexdigest()[:16]
+    body = json.dumps([t.id, t.source, profile, spelling, pdf_sha, pages, limit], sort_keys=True)
+    return hashlib.sha1(body.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def for_version(con: sqlite3.Connection, version_id: str, doc: Any, t: cvtypes.CVType, look_id: str, profile: dict,
-                *, spelling: str = "en-GB", pdf: Path | None = None, columns: int = 1) -> dict:
-    """The scanner score and type checks of one version and look, from `cv_checks` when nothing changed."""
+                *, spelling: str = "en-GB", pdf: Path | None = None, columns: int = 1, pages: int | None = None,
+                limit: int | None = None) -> dict:
+    """The scanner score and type checks of one version and look, from `cv_checks` when nothing changed.
+
+    `pages` is the version's printed page count when known without `pdf` (`pagelimit.known`), and `limit` the
+    CV's page limit (`pagelimit.limit_of`).
+    """
     from jobhunt import db
 
     pdf_sha = hashlib.sha256(pdf.read_bytes()).hexdigest() if pdf is not None else None
-    key = cache_key(t, profile, spelling, pdf_sha)
+    pages = pdfread.pages(pdf) if pdf is not None else pages
+    key = cache_key(t, profile, spelling, pdf_sha, pages, limit)
     row = con.execute("SELECT scanner, type_checks FROM cv_checks WHERE version_id = ? AND look_id = ?",
                       (version_id, look_id)).fetchone()
     if row and row["scanner"] and row["type_checks"]:
         cached = json.loads(row["type_checks"])
         if cached.get("key") == key:
             return {"scanner": json.loads(row["scanner"]), "type": cached["result"]}
-    pages = pdfread.pages(pdf) if pdf is not None else None
     scan = scanner(doc, profile, pdf=pdf, columns=columns)
-    checked = type_checks(doc, t, profile, pages=pages, spelling=spelling)
+    checked = type_checks(doc, t, profile, pages=pages, limit=limit, spelling=spelling)
     con.execute("INSERT INTO cv_checks (version_id, look_id, pdf_sha, scanner, type_checks, at)"
                 " VALUES (?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT (version_id, look_id) DO UPDATE SET pdf_sha = excluded.pdf_sha,"
@@ -521,7 +536,7 @@ def link_suggestions(con: sqlite3.Connection, checked: dict, doc_id: str | None 
     """Each failing check gets the id of the CV's pending suggestion it led to, when there is one ("See
     suggestion"); every CV's when `doc_id` is None."""
     for item in checked["items"]:
-        if item["ok"]:
+        if item["ok"] is not False:
             continue
         row = con.execute("SELECT id FROM cv_suggestions WHERE status = 'pending' AND json_extract(trigger, '$.id') = ?"
                           " AND (? IS NULL OR doc_id = ?) ORDER BY created DESC LIMIT 1",

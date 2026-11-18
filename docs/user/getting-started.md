@@ -320,6 +320,20 @@ numbered from 1.
 If you had uploaded several CVs before this version of Hal, each upload is now a CV of its own. The one you
 were using is starred and the others are in the archive.
 
+## How long your CV is
+
+Each CV has its own length. Open **My CV**, **Type and look**, and choose **Keep this CV to**: **No limit**,
+**One page** or **Two pages**. Until you choose, the CV follows its CV type: each type's card shows its
+**Length**, such as one page for a student and no limit for an academic CV.
+
+Hal counts the pages of the CV as it prints, in the look you chose, and says "It prints on 2 pages now".
+When the CV runs longer than you asked, Hal tells you, for example "This CV is now 3 pages. You asked for
+2." It shows that after each save in **Edit your CV** and on the **Length** card. Hal never cuts your lines
+and never stops a save: what to shorten is your choice. The length check on **Checks** uses the same count.
+
+To count the pages Hal prints the CV with a browser, which takes a second or so, once for each version. On a
+computer where no browser can print, Hal says it cannot count the pages, rather than guess.
+
 ## Sorting a big folder into your record
 
 If you have a folder of everything from your studies and jobs (an old laptop's Documents, a university

@@ -13,6 +13,8 @@ versions, the bin and the sections.
 - A document or layout that does not fit schema 2 answers 400 with the field path (`CVError`). Only a save of
   the editor's changes (`PATCH /cv/document`) answers 409, when the version it was made on is no longer in
   use, so the person can reload and keep what they want.
+- `GET /cv/pages` prints in the request thread, as the PDF routes do: once per version and printed page, so
+  the editor asks right after a save and gets the count in about a second (`pagelimit`).
 - The CV type and look names come from `types.load` and `render.look`; an id neither knows (a type copy
   that was deleted) is shown in words, so the page never fails over a name.
 """
@@ -22,7 +24,7 @@ import importlib
 import logging
 
 from jobhunt.core import activity, settings
-from jobhunt.cvstudio import checks, edit, model, record_cvs, store
+from jobhunt.cvstudio import checks, edit, model, pagelimit, record_cvs, store
 from jobhunt.cvstudio.model import CVError
 from jobhunt.web.router import BadRequest, Conflict, NotFound, route
 
@@ -66,7 +68,8 @@ def _glance(con, doc_id: str) -> dict:
     try:
         version_id, doc, t, row = checks.current_cv(doc_id)
         found = checks.for_version(con, version_id, doc, t, row["look_id"], checks.profile_now(),
-                                   spelling=settings.get("cvdocs.spelling"), columns=checks.columns_of(row["look_id"]))
+                                   spelling=settings.get("cvdocs.spelling"), columns=checks.columns_of(row["look_id"]),
+                                   pages=pagelimit.known(version_id, con)[0], limit=pagelimit.limit_of(doc_id, con)[0])
     except Exception:  # the glance is a summary; the page must draw even when the checks cannot run
         log.exception("could not work out the CV checks for the glance card")
         return out
@@ -287,6 +290,26 @@ def patch_document(req) -> dict:
     n = store.version(vid, con=req.con)["n"]
     _note(f"Saved your CV as version {n}: {what}")
     return {"version_id": vid, "n": n}
+
+
+@route("GET", "/api/v2/cv/pages", slow=True)
+def get_pages(req) -> dict:
+    """"Keep this CV to" and the version in use's printed pages (`pagelimit.state`), printing it once when it
+    has no count yet; `?saved=1` words the warning for right after a save ("This CV is now 3 pages")."""
+    return pagelimit.state(cv_of(req), req.con, now=req.query.get("saved") == "1")
+
+
+@route("PUT", "/api/v2/cv/pages")
+def put_pages(req) -> dict:
+    """Sets "Keep this CV to" (`{pages}`: 0 for no limit, 1 or 2) for `?cv=`; answers as GET without printing."""
+    pages = (req.body or {}).get("pages")
+    doc_id = cv_of(req)
+    try:
+        store.set_page_limit(pages, con=req.con, doc_id=doc_id)
+    except CVError as e:
+        raise _bad(e) from e
+    _note(f"Keep this CV to: {pagelimit.CHOICE_WORDS[pages].lower()}", kind="cv.pages")
+    return pagelimit.state(doc_id, req.con, count=False)
 
 
 @route("GET", "/api/v2/cv/record-cards")

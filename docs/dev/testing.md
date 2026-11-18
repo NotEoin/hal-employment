@@ -21,6 +21,10 @@ export HAL_EMPLOYMENT_HOME="$PWD/.tmp-home" HAL_TEST_MODE=1 HAL_EMPLOYMENT_PORT=
 HAL_TEST_BROWSER=1 .venv/bin/python -m unittest discover tests   # browser tests on
 ```
 
+A test run never starts a browser to count a CV's pages, even with browser tests on: the count is "not
+known" unless a test gives a stand-in printer (`cvstudio.pagelimit.PRINT`). Set `HAL_TEST_REAL_PRINT=1` too
+to count with the real printer.
+
 On Windows (PowerShell), with git on `PATH` for the importer's tests:
 
 ```powershell

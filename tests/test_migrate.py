@@ -336,6 +336,27 @@ class OldDatabases(Folder):
         self.assertEqual(docs, {"main": ("Museum CV", 1, "f-a", "v2-c"),
                                 "cv-v3-c": ("Library CV", 0, "f-b", "v3-c")})
 
+    def test_a_cv_keeps_following_its_type_and_has_no_count_at_version_35(self):
+        """A CV, a version and a job's CV from 2.3.0 arrive with no page limit chosen (so the CV type's rule
+        stands, as before) and no page counts, which are made when next asked for."""
+        con = self.open()
+        up_to_34 = migrate.discover()[:34]
+        with mock.patch.object(migrate, "LATEST", 34), mock.patch.object(migrate, "discover", return_value=up_to_34):
+            self.run_migrate(con)
+        con.execute("INSERT INTO cv_documents (id, route, send, current_version_id, type_id, look_id, created, "
+                    "updated, name, starred, position) VALUES ('main', 'improve', 'hal_copy', 'v1-c', "
+                    "'humanities_grad', 'classic', 'x', 'x', 'Museum CV', 1, 0)")
+        con.execute("INSERT INTO cv_versions (id, doc_id, n, origin, data, what, by, created) "
+                    "VALUES ('v1-c', 'main', 1, 'imported', '{}', 'made up', 'you', '2026-11-01T09:00:00Z')")
+        con.execute("INSERT INTO job_cvs (job_id, base_version_id, level, changes) "
+                    "VALUES ('made-up:1', 'v1-c', 'little', '[]')")
+        con.commit()
+        self.assertEqual(self.run_migrate(con), [35])
+        self.assertEqual(con.execute("SELECT name, page_limit FROM cv_documents").fetchall(), [("Museum CV", None)])
+        self.assertEqual(con.execute("SELECT pages, pages_key FROM cv_versions").fetchall(), [(None, None)])
+        self.assertEqual(con.execute("SELECT level, pages, pages_key FROM job_cvs").fetchall(),
+                         [("little", None, None)])
+
     def test_settings_revision_starts_at_zero(self):
         con = self.open()
         self.run_migrate(con)
@@ -347,8 +368,8 @@ class Runner(Folder):
 
     def test_migrations_are_numbered_one_to_latest_with_no_gaps(self):
         numbers = [m.number for m in migrate.discover()]
-        self.assertEqual(numbers, list(range(1, 35)))
-        self.assertEqual(migrate.LATEST, 34)
+        self.assertEqual(numbers, list(range(1, 36)))
+        self.assertEqual(migrate.LATEST, 35)
         self.assertTrue(all(m.title and m.title[0].isupper() for m in migrate.discover()))
 
     def test_no_migration_holds_destructive_sql_but_the_one_allowed(self):

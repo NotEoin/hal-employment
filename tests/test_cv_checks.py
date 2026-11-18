@@ -61,7 +61,7 @@ class ScannerScore(unittest.TestCase):
 class TypeChecks(unittest.TestCase):
     def test_a_humanities_cv_is_checked_by_humanities_rules(self):
         cv, profile = humanities_cv(), profile_of(HUMANITIES)
-        humanities = checks.type_checks(cv, cvtypes.load("humanities_grad"), profile)
+        humanities = checks.type_checks(cv, cvtypes.load("humanities_grad"), profile, pages=2)
         ids = [i["id"] for i in humanities["items"]]
         self.assertEqual(ids, list(cvtypes.load("humanities_grad").checks))
         self.assertNotIn("projects_with_evidence", ids)

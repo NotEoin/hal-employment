@@ -55,16 +55,21 @@ def fold_for_simple_pdf(text: str) -> str:
 
 
 def cv_pdf(doc: Any, type_: Any, look_id: str, profile: dict, out: Path, *, layout: dict | None = None,
-           why: str = "") -> dict:
-    """Prints a CV to `out` with the printer, falling back to the simple PDF; the printer's result."""
+           why: str = "", simple: bool = True) -> dict:
+    """Prints a CV to `out` with the printer, falling back to the simple PDF; the printer's result.
+
+    With `simple` False there is no fallback, so `printer.PrintError` when no browser can print (a page count
+    must be the look's own). No page count is too many: a CV over its page limit is the person's choice and
+    is printed whole (2.3.0 refused one more than a page over its type's rule).
+    """
     from jobhunt.cvstudio import pdf as cvpdf
 
     v = render.view(doc, type_, profile, layout=layout)
     html = render.html_of(v, look_id)
     first = v.sections[0].title if v.sections else ""
-    pages = int(getattr(type_, "pages", 0) or 0)
-    return printer.to_pdf(html, out, expect_name=v.name, max_pages=pages or 0, expect_text=[first],
-                          fallback=lambda path: cvpdf.draw_view(v, path), fold=fold_for_simple_pdf, why=why)
+    fallback = (lambda path: cvpdf.draw_view(v, path)) if simple else None
+    return printer.to_pdf(html, out, expect_name=v.name, max_pages=0, expect_text=[first], fallback=fallback,
+                          fold=fold_for_simple_pdf, why=why)
 
 
 # ---------------------------------------------------------------------------------------------- Word
