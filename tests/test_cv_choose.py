@@ -9,7 +9,7 @@ from unittest import mock
 import support  # noqa: F401 - the temporary home, before any jobhunt import
 from test_cv_store import cv_home
 
-from jobhunt import ai, db
+from jobhunt import ai, db, pack
 from jobhunt.ai.fake import FakeBackend
 from jobhunt.cvstudio import choose, model, score, store, tailor
 
@@ -194,6 +194,40 @@ class OneChoicePerJob(unittest.TestCase):
         self.assertEqual(choose.base_doc(ADVERT["id"]), self.backend)
         self.assertEqual(choose.kept(con, ADVERT["id"]).by, choose.YOU)
         self.assertIn(read[0], (self.ai_cv, self.backend), "a read waits for a stored choice, never None mid-write")
+
+    def test_writing_the_documents_holds_the_choice_until_the_jobs_cv_is_stored(self):
+        entered, release = threading.Event(), threading.Event()
+        hals = choose.Choice(self.ai_cv, store.current(doc_id=self.ai_cv)[0])
+
+        def choosing(con, job, *, again):     # the pack's choice, made before the person picks another CV
+            entered.set()
+            release.wait(WAIT_S)
+            return hals
+
+        def written(con, job, base, use_web, ctx, fresh):   # the rest of the pack: only its job's CV
+            return tailor.prepare(dict(job), level="no", base=base, con=con)
+
+        def build() -> None:
+            con = db.connect()
+            try:
+                pack._build(con, ADVERT["id"], False, None, None)
+            finally:
+                con.close()
+
+        with mock.patch.object(choose, "for_writing", choosing), mock.patch.object(pack, "_build_on", written):
+            first = threading.Thread(target=build)
+            first.start()
+            self.assertTrue(entered.wait(WAIT_S))
+            con = db.connect()
+            self.addCleanup(con.close)
+            picked = choose.by_you(con, ADVERT, self.backend)
+            second = threading.Thread(target=tailor.prepare, args=(ADVERT,), kwargs={"base": picked, "level": "no"})
+            second.start()
+            second.join(SETTLE_S)         # without the lock the person's pick is stored here, then overwritten
+            release.set()
+            for t in (first, second):
+                t.join(WAIT_S)
+        self.assertEqual(choose.base_doc(ADVERT["id"]), self.backend)
 
 
 if __name__ == "__main__":
